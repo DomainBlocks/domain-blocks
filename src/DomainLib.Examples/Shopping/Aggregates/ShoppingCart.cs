@@ -52,6 +52,11 @@ namespace DomainLib.Examples.Shopping.Aggregates
 
         private ShoppingCart Apply(ItemAddedToShoppingCart @event)
         {
+            if (Id != @event.Id)
+            {
+                throw new InvalidOperationException("Attempted to add an item for a shopping cart with a different ID");
+            }
+            
             var newItems = new List<string>(Items) {@event.Item};
             return new ShoppingCart {Id = Id, Items = newItems};
         }
