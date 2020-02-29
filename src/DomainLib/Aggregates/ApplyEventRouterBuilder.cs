@@ -7,24 +7,24 @@ namespace DomainLib.Aggregates
     /// <summary>
     /// Mutable class for building an EventRouter.
     /// </summary>
-    public class EventRouterBuilder<TAggregateRoot, TDomainEventBase> :
+    public class ApplyEventRouterBuilder<TAggregateRoot, TDomainEventBase> :
         IEnumerable<KeyValuePair<Type, ApplyEvent<TAggregateRoot, TDomainEventBase>>>
     {
         private readonly List<KeyValuePair<Type, ApplyEvent<TAggregateRoot, TDomainEventBase>>> _routes =
             new List<KeyValuePair<Type, ApplyEvent<TAggregateRoot, TDomainEventBase>>>();
 
-        public void Add<TDomainEvent>(Func<TAggregateRoot, TDomainEvent, TAggregateRoot> applier)
+        public void Add<TDomainEvent>(Func<TAggregateRoot, TDomainEvent, TAggregateRoot> eventApplier)
             where TDomainEvent : TDomainEventBase
         {
             var route = KeyValuePair.Create<Type, ApplyEvent<TAggregateRoot, TDomainEventBase>>(
-                typeof(TDomainEvent), (agg, e) => applier(agg, (TDomainEvent) e));
+                typeof(TDomainEvent), (agg, e) => eventApplier(agg, (TDomainEvent) e));
 
             _routes.Add(route);
         }
 
-        public EventRouter<TAggregateRoot, TDomainEventBase> Build()
+        public ApplyEventRouter<TAggregateRoot, TDomainEventBase> Build()
         {
-            return new EventRouter<TAggregateRoot, TDomainEventBase>(this);
+            return new ApplyEventRouter<TAggregateRoot, TDomainEventBase>(this);
         }
 
         IEnumerator IEnumerable.GetEnumerator()

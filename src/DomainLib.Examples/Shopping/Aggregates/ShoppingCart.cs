@@ -6,41 +6,43 @@ using DomainLib.Examples.Shopping.Events;
 
 namespace DomainLib.Examples.Shopping.Aggregates
 {
-    using ShoppingCartCommandResult = CommandResult<ShoppingCart, IDomainEvent>;
-    
     // Demonstrates an immutable aggregate, but it could equally be mutable.
     // Note: the immutable implementation could be better. It's just for demo purposes.
     public class ShoppingCart
     {
-        public static readonly EventRouter<ShoppingCart, IDomainEvent> EventRouter;
+        private static readonly ApplyEventRouter<ShoppingCart, IDomainEvent> ApplyEventRouter;
 
         static ShoppingCart()
         {
-            EventRouter = new EventRouterBuilder<ShoppingCart, IDomainEvent>
-            {
-                (ShoppingCart x, ShoppingCartCreated y) => x.Apply(y),
-                (ShoppingCart x, ItemAddedToShoppingCart y) => x.Apply(y)
-            }.Build();
+            var routes = new ApplyEventRouterBuilder<ShoppingCart, IDomainEvent>();
+           
+            routes.Add<ShoppingCartCreated>((agg, e) => agg.Apply(e));
+            routes.Add<ItemAddedToShoppingCart>((agg, e) => agg.Apply(e));
+            
+            ApplyEventRouter = routes.Build();
         }
         
         public Guid? Id { get; private set; }
         public IReadOnlyList<string> Items { get; private set; } = new List<string>();
 
-        public ShoppingCartCommandResult Handle(AddItemToShoppingCart command)
+        public static ShoppingCart FromEvents(IEnumerable<IDomainEvent> events) =>
+            ApplyEventRouter.Route(new ShoppingCart(), events);
+
+        public ICommandResult<ShoppingCart, IDomainEvent> Execute(AddItemToShoppingCart command)
         {
-            var result = new ShoppingCartCommandResult(this).WithEventRouter(EventRouter);
+            var context = CommandExecutionContext.Create(this, ApplyEventRouter);
 
             var isNew = Id == null;
             if (isNew)
             {
                 var shoppingCartCreated = new ShoppingCartCreated(command.Id);
-                result = result.ApplyEvent(shoppingCartCreated);
+                context = context.ApplyEvent(shoppingCartCreated);
             }
 
             var itemAddedToShoppingCart = new ItemAddedToShoppingCart(command.Id, command.Item);
-            result = result.ApplyEvent(itemAddedToShoppingCart);
+            context = context.ApplyEvent(itemAddedToShoppingCart);
 
-            return result;
+            return context.Result;
         }
 
         private ShoppingCart Apply(ShoppingCartCreated @event)
