@@ -11,8 +11,8 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\DomainLib.Examples\DomainLib.Examples.csproj" />
-      <ProjectReference Include="..\DomainLib\DomainLib.csproj" />
+      <ProjectReference Include="..\..\DomainLib\DomainLib.csproj" />
+      <ProjectReference Include="..\Shopping.Domain\Shopping.Domain.csproj" />
     </ItemGroup>
 
 </Project>

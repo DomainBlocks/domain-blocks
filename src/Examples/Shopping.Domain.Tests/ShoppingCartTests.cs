@@ -1,11 +1,11 @@
 ﻿using System;
 using System.Linq;
-using DomainLib.Examples.Shopping.Aggregates;
-using DomainLib.Examples.Shopping.Commands;
-using DomainLib.Examples.Shopping.Events;
 using NUnit.Framework;
+using Shopping.Domain.Aggregates;
+using Shopping.Domain.Commands;
+using Shopping.Domain.Events;
 
-namespace DomainLib.Examples.Tests.Shopping
+namespace Shopping.Domain.Tests
 { 
     [TestFixture]
     public class ShoppingCartTests
