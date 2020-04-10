@@ -1,6 +1,6 @@
 using System;
 
-namespace DomainLib.Examples.Shopping.Events
+namespace Shopping.Domain.Events
 {
     public class ShoppingCartCreated : IDomainEvent
     {

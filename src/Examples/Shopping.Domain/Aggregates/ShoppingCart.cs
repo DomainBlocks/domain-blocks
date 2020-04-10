@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using DomainLib.Aggregates;
-using DomainLib.Examples.Shopping.Commands;
-using DomainLib.Examples.Shopping.Events;
+using Shopping.Domain.Commands;
+using Shopping.Domain.Events;
 
-namespace DomainLib.Examples.Shopping.Aggregates
+namespace Shopping.Domain.Aggregates
 {
     // Demonstrates an immutable aggregate, but it could equally be mutable.
     // Note: the immutable implementation could be better. It's just for demo purposes.

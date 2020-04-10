@@ -1,10 +1,10 @@
 using System;
 
-namespace DomainLib.Examples.Shopping.Events
+namespace Shopping.Domain.Commands
 {
-    public class ItemAddedToShoppingCart : IDomainEvent
+    public class AddItemToShoppingCart
     {
-        public ItemAddedToShoppingCart(Guid id, string item)
+        public AddItemToShoppingCart(Guid id, string item)
         {
             Id = id;
             Item = item;
