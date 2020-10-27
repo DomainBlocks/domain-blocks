@@ -4,6 +4,12 @@ using NUnit.Framework;
 
 namespace DomainLib.Tests.Aggregates
 {
+    public static class EventNames
+    {
+        public const string SomethingHappened = "SomethingHappened";
+        public const string SomethingElseHappened = "SomethingElseHappened";
+    }
+
     [TestFixture]
     public class ApplyEventRouterTests
     {
@@ -77,10 +83,27 @@ namespace DomainLib.Tests.Aggregates
             Assert.That(newState.OtherState, Is.Null);
         }
 
+        [Test]
+        public void EventNamesAreMappedWhenEventRoutesAreAdded()
+        {
+            var builder = new ApplyEventRouterBuilder<MyAggregateRoot, IEvent>();
+            builder.Add<SomethingHappened>((agg, e) => agg.ApplyEvent(e));
+            builder.Add<SomethingElseHappened>((agg, e) => agg.ApplyEvent(e));
+
+            var router = builder.Build();
+
+            Assert.That(router.EventNameMap.GetEventNameForClrType(typeof(SomethingHappened)),
+                Is.EqualTo(EventNames.SomethingHappened));
+
+            Assert.That(router.EventNameMap.GetEventNameForClrType(typeof(SomethingElseHappened)),
+                        Is.EqualTo(EventNames.SomethingElseHappened));
+        }
+
         private interface IEvent
         {
         }
 
+        [EventName(EventNames.SomethingHappened)]
         private class SomethingHappened : IEvent
         {
             public SomethingHappened(string state)
@@ -90,7 +113,8 @@ namespace DomainLib.Tests.Aggregates
 
             public string State { get; }
         }
-        
+
+        [EventName(EventNames.SomethingElseHappened)]
         private class SomethingElseHappened : IEvent
         {
             public SomethingElseHappened(string otherState)

@@ -13,6 +13,8 @@ namespace DomainLib.Aggregates
         private readonly List<KeyValuePair<Type, ApplyEvent<TAggregateRoot, TDomainEventBase>>> _routes =
             new List<KeyValuePair<Type, ApplyEvent<TAggregateRoot, TDomainEventBase>>>();
 
+        private readonly IEventNameMap _eventNameMap = new EventNameMap();
+
         public void Add<TDomainEvent>(Func<TAggregateRoot, TDomainEvent, TAggregateRoot> eventApplier)
             where TDomainEvent : TDomainEventBase
         {
@@ -20,11 +22,12 @@ namespace DomainLib.Aggregates
                 typeof(TDomainEvent), (agg, e) => eventApplier(agg, (TDomainEvent) e));
 
             _routes.Add(route);
+            _eventNameMap.RegisterEvent<TDomainEvent>();
         }
 
         public ApplyEventRouter<TAggregateRoot, TDomainEventBase> Build()
         {
-            return new ApplyEventRouter<TAggregateRoot, TDomainEventBase>(this);
+            return new ApplyEventRouter<TAggregateRoot, TDomainEventBase>(this, _eventNameMap);
         }
 
         IEnumerator IEnumerable.GetEnumerator()

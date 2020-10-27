@@ -1,7 +1,9 @@
 using System;
+using DomainLib.Aggregates;
 
 namespace Shopping.Domain.Events
 {
+    [EventName("ShoppingCartCreated")]
     public class ShoppingCartCreated : IDomainEvent
     {
         public ShoppingCartCreated(Guid id)
@@ -10,5 +12,6 @@ namespace Shopping.Domain.Events
         }
 
         public Guid Id { get; }
+        
     }
 }

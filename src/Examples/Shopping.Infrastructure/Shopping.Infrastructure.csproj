@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\DomainLib.Persistence.EventStore\DomainLib.Persistence.EventStore.csproj" />
+    <ProjectReference Include="..\..\DomainLib\DomainLib.csproj" />
+    <ProjectReference Include="..\Shopping.Domain\Shopping.Domain.csproj" />
+  </ItemGroup>
+
+</Project>
