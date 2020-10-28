@@ -21,9 +21,11 @@ namespace DomainLib.Persistence.EventStore
         public async Task<long> SaveEventsAsync<TEvent>(string streamName, long expectedStreamVersion, IEnumerable<TEvent> events)
         {
             var eventDatas = events.Select(e => _serializer.ToEventData(e));
+
+            var streamVersion = MapStreamVersionToEventStoreStreamVersion(expectedStreamVersion);
             
             // TODO: Handle failure cases
-            var writeResult = await _connection.AppendToStreamAsync(streamName, expectedStreamVersion, eventDatas);
+            var writeResult = await _connection.AppendToStreamAsync(streamName, streamVersion, eventDatas);
 
             return writeResult.NextExpectedVersion;
         }
@@ -49,6 +51,17 @@ namespace DomainLib.Persistence.EventStore
             var events = eventsSlice.Events;
 
             return events.Select(e => _serializer.DeserializeEvent<TEvent>(e.OriginalEvent.Data, e.OriginalEvent.EventType));
+        }
+
+        private static long MapStreamVersionToEventStoreStreamVersion(long streamVersion)
+        {
+            switch (streamVersion)
+            {
+                case StreamVersion.Any:
+                    return ExpectedVersion.Any;
+                default:
+                    return streamVersion;
+            }
         }
     }
 }
