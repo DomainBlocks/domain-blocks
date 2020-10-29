@@ -11,6 +11,7 @@
     </ItemGroup>
 
     <ItemGroup>
+      <ProjectReference Include="..\DomainLib.Persistence\DomainLib.Serialization.csproj" />
       <ProjectReference Include="..\DomainLib\DomainLib.csproj" />
     </ItemGroup>
 
