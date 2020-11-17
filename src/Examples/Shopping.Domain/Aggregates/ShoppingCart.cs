@@ -1,65 +1,88 @@
+using Shopping.Domain.Commands;
+using Shopping.Domain.Events;
 using System;
 using System.Collections.Generic;
 using DomainLib.Aggregates;
-using Shopping.Domain.Commands;
-using Shopping.Domain.Events;
+using DomainLib.Aggregates.Registration;
 
 namespace Shopping.Domain.Aggregates
 {
-    // Demonstrates an immutable aggregate, but it could equally be mutable.
+    // Demonstrates immutable state, but it could equally be mutable.
     // Note: the immutable implementation could be better. It's just for demo purposes.
-    public class ShoppingCart
+    public class ShoppingCartState
     {
-        private static readonly ApplyEventRouter<ShoppingCart, IDomainEvent> ApplyEventRouter;
-
-        static ShoppingCart()
+        public ShoppingCartState()
         {
-            var routes = new ApplyEventRouterBuilder<ShoppingCart, IDomainEvent>();
-           
-            routes.Add<ShoppingCartCreated>((agg, e) => agg.Apply(e));
-            routes.Add<ItemAddedToShoppingCart>((agg, e) => agg.Apply(e));
-            
-            ApplyEventRouter = routes.Build();
         }
 
-        public IEventNameMap EventNameMap { get; } = ApplyEventRouter.EventNameMap;
-        public Guid? Id { get; private set; }
-        public IReadOnlyList<string> Items { get; private set; } = new List<string>();
-
-        public static ShoppingCart FromEvents(IEnumerable<IDomainEvent> events) =>
-            ApplyEventRouter.Route(new ShoppingCart(), events);
-
-        public ICommandResult<ShoppingCart, IDomainEvent> Execute(AddItemToShoppingCart command)
+        public ShoppingCartState(Guid? id)
         {
-            var context = CommandExecutionContext.Create(this, ApplyEventRouter);
+            Id = id;
+            Items = new List<string>();
+        }
 
-            var isNew = Id == null;
+        public ShoppingCartState(Guid? id, IReadOnlyList<string> items)
+        {
+            Id = id;
+            Items = items;
+        }
+
+        public Guid? Id { get;  }
+        public IReadOnlyList<string> Items { get; }
+
+        public static ShoppingCartState FromEvents(EventDispatcher<IDomainEvent> eventDispatcher,
+                                                   IEnumerable<IDomainEvent> events) =>
+            eventDispatcher.DispatchEvents(new ShoppingCartState(), events);
+    }
+    
+    public static class ShoppingCartFunctions
+    {
+        public static void Register(AggregateRegistryBuilder<object, IDomainEvent> aggregateRegistryBuilder)
+        {
+            aggregateRegistryBuilder.Register<ShoppingCartState>(aggregate =>
+            {
+                aggregate.PersistenceKey(id => $"shoppingCart-{id}");
+                aggregate.SnapshotKey(id => $"shoppingCartSnapshot-{id}");
+
+                aggregate.Command<AddItemToShoppingCart>()
+                         .RoutesTo(Execute);
+
+                aggregate.Event<ShoppingCartCreated>()
+                         .RoutesTo(Apply)
+                         .HasName(ShoppingCartCreated.EventName);
+
+                aggregate.Event<ItemAddedToShoppingCart>()
+                         .RoutesTo(Apply)
+                         .HasName(ItemAddedToShoppingCart.EventName);
+            });
+        }
+
+        private static IEnumerable<IDomainEvent> Execute(Func<ShoppingCartState> getState, AddItemToShoppingCart command)
+        {
+            var isNew = getState().Id == null;
+
             if (isNew)
             {
-                var shoppingCartCreated = new ShoppingCartCreated(command.Id);
-                context = context.ApplyEvent(shoppingCartCreated);
+                yield return new ShoppingCartCreated(command.Id);
             }
 
-            var itemAddedToShoppingCart = new ItemAddedToShoppingCart(command.Id, command.Item);
-            context = context.ApplyEvent(itemAddedToShoppingCart);
-
-            return context.Result;
+            yield return new ItemAddedToShoppingCart(command.Id, command.Item);
         }
 
-        private ShoppingCart Apply(ShoppingCartCreated @event)
+        private static ShoppingCartState Apply(ShoppingCartState currentState, ShoppingCartCreated @event)
         {
-            return new ShoppingCart {Id = @event.Id};
+            return new ShoppingCartState(@event.Id);
         }
 
-        private ShoppingCart Apply(ItemAddedToShoppingCart @event)
+        private static ShoppingCartState Apply(ShoppingCartState currentState, ItemAddedToShoppingCart @event)
         {
-            if (Id != @event.Id)
+            if (currentState.Id != @event.Id)
             {
                 throw new InvalidOperationException("Attempted to add an item for a shopping cart with a different ID");
             }
-            
-            var newItems = new List<string>(Items) {@event.Item};
-            return new ShoppingCart {Id = Id, Items = newItems};
+
+            var newItems = new List<string>(currentState.Items) { @event.Item };
+            return new ShoppingCartState(currentState.Id, newItems);
         }
     }
 }

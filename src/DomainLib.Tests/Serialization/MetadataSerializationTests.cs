@@ -3,8 +3,10 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using DomainLib.Aggregates;
 using DomainLib.Persistence;
 using DomainLib.Serialization;
+using NSubstitute;
 using NUnit.Framework;
 
 namespace DomainLib.Tests.Serialization
@@ -121,7 +123,7 @@ namespace DomainLib.Tests.Serialization
         [Test]
         public void SerializationWorksWhenNoMetadataContext()
         {
-            var serializer = new JsonEventSerializer();
+            var serializer = new JsonEventSerializer(GetFakeEventNameMap());
 
             var @event = new TestEvent("Some Value");
             var persistenceData = serializer.GetPersistenceData(@event);
@@ -133,7 +135,7 @@ namespace DomainLib.Tests.Serialization
         public void EmptyMetaDataContextDoesNotIncludeDefaults()
         {
             var emptyMetadataContext = EventMetadataContext.CreateEmpty();
-            var serializer = new JsonEventSerializer();
+            var serializer = new JsonEventSerializer(GetFakeEventNameMap());
             serializer.UseMetaDataContext(emptyMetadataContext);
 
             emptyMetadataContext.AddEntry(StaticKey, StaticValue);
@@ -163,8 +165,10 @@ namespace DomainLib.Tests.Serialization
 
         private static IEventSerializer CreateJsonSerializerWithMetadata(Action<EventMetadataContext> applyCustomMetadata = null)
         {
+
+
             var metadataContext = EventMetadataContext.CreateWithDefaults(TestServiceName);
-            var serializer = new JsonEventSerializer();
+            var serializer = new JsonEventSerializer(GetFakeEventNameMap());
             serializer.UseMetaDataContext(metadataContext);
 
             applyCustomMetadata?.Invoke(metadataContext);
@@ -178,6 +182,14 @@ namespace DomainLib.Tests.Serialization
                                  .ToDictionary(x => x.Key, x => x.Value);
         }
 
+        private static IEventNameMap GetFakeEventNameMap()
+        {
+            var substitute = Substitute.For<IEventNameMap>();
+            substitute.GetEventNameForClrType(Arg.Any<Type>()).Returns(args => ((Type) args[0]).Name);
+
+            return substitute;
+        }
+
         public class TestEvent
         {
             public TestEvent(string value)
@@ -189,4 +201,6 @@ namespace DomainLib.Tests.Serialization
         }
     }
 
+
+    
 }

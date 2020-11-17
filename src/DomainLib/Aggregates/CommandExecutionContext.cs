@@ -3,29 +3,27 @@ namespace DomainLib.Aggregates
     public static class CommandExecutionContext
     {
         public static CommandExecutionContext<TAggregateRoot, TDomainEventBase>
-            Create<TAggregateRoot, TDomainEventBase>(
-                TAggregateRoot aggregateRoot,
-                ApplyEventRouter<TAggregateRoot, TDomainEventBase> applyEventRouter)
+            Create<TAggregateRoot, TDomainEventBase>(EventDispatcher<TDomainEventBase> eventDispatcher,
+                                                     TAggregateRoot aggregateRoot)
         {
             var commandResult = new CommandResult<TAggregateRoot, TDomainEventBase>(aggregateRoot);
-            return new CommandExecutionContext<TAggregateRoot, TDomainEventBase>(commandResult, applyEventRouter);
+            return new CommandExecutionContext<TAggregateRoot, TDomainEventBase>(eventDispatcher, commandResult);
         }
     }
-    
+
     /// <summary>
     /// Applies state mutations to an aggregate root by routing the events that occur as part of executing a command
     /// to their appropriate "apply event" methods.
     /// </summary>
-    public class CommandExecutionContext<TAggregateRoot, TDomainEventBase>
+    public sealed class CommandExecutionContext<TAggregateRoot, TDomainEventBase>
     {
-        private readonly ApplyEventRouter<TAggregateRoot, TDomainEventBase> _applyEventRouter;
+        private readonly EventDispatcher<TDomainEventBase> _eventDispatcher;
 
-        public CommandExecutionContext(
-            CommandResult<TAggregateRoot, TDomainEventBase> commandResult,
-            ApplyEventRouter<TAggregateRoot, TDomainEventBase> applyEventRouter)
+        public CommandExecutionContext(EventDispatcher<TDomainEventBase> eventDispatcher,
+                                       CommandResult<TAggregateRoot, TDomainEventBase> commandResult)
         {
+            _eventDispatcher = eventDispatcher;
             Result = commandResult;
-            _applyEventRouter = applyEventRouter;
         }
         
         /// <summary>
@@ -39,9 +37,9 @@ namespace DomainLib.Aggregates
         public CommandExecutionContext<TAggregateRoot, TDomainEventBase> ApplyEvent<TDomainEvent>(TDomainEvent @event)
             where TDomainEvent : TDomainEventBase
         {
-            var newState = _applyEventRouter.Route(Result.NewState, @event);
+            var newState = _eventDispatcher.DispatchEvent(Result.NewState, @event);
             var newResult = Result.WithNewState(newState, @event);
-            return new CommandExecutionContext<TAggregateRoot, TDomainEventBase>(newResult, _applyEventRouter);
+            return new CommandExecutionContext<TAggregateRoot, TDomainEventBase>(_eventDispatcher, newResult);
         }
     }
 }

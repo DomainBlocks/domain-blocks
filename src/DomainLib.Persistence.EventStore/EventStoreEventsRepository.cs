@@ -9,6 +9,7 @@ namespace DomainLib.Persistence.EventStore
 {
     public class EventStoreEventsRepository : IEventsRepository
     {
+        
         private readonly IEventStoreConnection _connection;
         private readonly IEventSerializer _serializer;
 
@@ -21,7 +22,6 @@ namespace DomainLib.Persistence.EventStore
         public async Task<long> SaveEventsAsync<TEvent>(string streamName, long expectedStreamVersion, IEnumerable<TEvent> events)
         {
             var eventDatas = events.Select(e => _serializer.ToEventData(e));
-
             var streamVersion = MapStreamVersionToEventStoreStreamVersion(expectedStreamVersion);
             
             // TODO: Handle failure cases
@@ -30,10 +30,10 @@ namespace DomainLib.Persistence.EventStore
             return writeResult.NextExpectedVersion;
         }
 
-        public async Task<IEnumerable<TEvent>> LoadEventsAsync<TEvent>(string streamName)
+        public async Task<TEvent[]> LoadEventsAsync<TEvent>(string streamName, long startPosition = 0)
         {
             // TODO: Handle large streams in  batches
-            var eventsSlice = await _connection.ReadStreamEventsForwardAsync(streamName, 0, ClientApiConstants.MaxReadSize, false);
+            var eventsSlice = await _connection.ReadStreamEventsForwardAsync(streamName, startPosition, ClientApiConstants.MaxReadSize, false);
 
             switch (eventsSlice.Status)
             {
@@ -50,7 +50,8 @@ namespace DomainLib.Persistence.EventStore
 
             var events = eventsSlice.Events;
 
-            return events.Select(e => _serializer.DeserializeEvent<TEvent>(e.OriginalEvent.Data, e.OriginalEvent.EventType));
+            return events.Select(e => _serializer.DeserializeEvent<TEvent>(e.OriginalEvent.Data, e.OriginalEvent.EventType))
+                         .ToArray();
         }
 
         private static long MapStreamVersionToEventStoreStreamVersion(long streamVersion)

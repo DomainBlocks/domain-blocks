@@ -1,12 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
 
 namespace DomainLib.Aggregates
 {
-    // ReSharper disable once InconsistentNaming
-    public class EventNameMap : IEventNameMap
+    internal sealed class EventNameMap : IEventNameMap
     {
         private readonly Dictionary<string, Type> _eventNameToTypeMap;
         private readonly Dictionary<Type, string> _eventTypeToNameMap;
@@ -17,14 +14,13 @@ namespace DomainLib.Aggregates
             _eventTypeToNameMap = new Dictionary<Type, string>();
         }
         
-        public void RegisterEvent<TEvent>(bool throwOnConflict = true)
+        public void RegisterEvent<TEvent>(string eventName, bool throwOnConflict = true)
         {
-            RegisterEvent(typeof(TEvent), throwOnConflict);
+            RegisterEvent(typeof(TEvent), eventName, throwOnConflict);
         }
 
-        public void RegisterEvent(Type clrType, bool throwOnConflict = true)
+        public void RegisterEvent(Type clrType, string eventName, bool throwOnConflict = true)
         {
-            var eventName = DetermineEventNameForClrType(clrType);
             RegisterEventName(eventName, clrType, throwOnConflict);
         }
 
@@ -42,51 +38,10 @@ namespace DomainLib.Aggregates
         {
             return _eventTypeToNameMap.TryGetValue(clrType, out var eventName)
                 ? eventName
-                : DetermineEventNameForClrType(clrType);
+                : throw new UnknownEventNameException($"Could not find event name for type {clrType.FullName}");
         }
 
-        IEnumerable<KeyValuePair<string, Type>> IEventNameMap.GetNameToTypeMappings()
-        {
-            return _eventNameToTypeMap.ToImmutableDictionary();
-        }
-
-        public void Merge(IEventNameMap other, bool throwOnConflict = true)
-        {
-            foreach (var (key, value) in other.GetNameToTypeMappings())
-            {
-                RegisterEventName(key, value, throwOnConflict);
-            }
-        }
-
-        private static string DetermineEventNameForClrType(Type clrType)
-        {
-            // When determining the event name for a given type, we follow a three step process.
-            // 1) If there is an EventNameAttribute on the type, we use the event name from that.
-            // 2) If there is a public static field with the name 'EventName' on the type, use that
-            // 3) Use the name of the type
-
-            var eventNameAttribute = clrType
-                                     .GetCustomAttributes(typeof(EventNameAttribute), true)
-                                     .Cast<EventNameAttribute>()
-                                     .ToList();
-
-            // We shouldn't be able to get here as the attribute is restricted to prevent 
-            // multiple uses. Defensive check to avoid any ambiguity 
-            if (eventNameAttribute.Count > 1)
-            {
-                throw new InvalidOperationException($"Found more than one EventNameAttribute for type {clrType.FullName}");
-            }
-
-            if (eventNameAttribute.Count == 1)
-            {
-                return eventNameAttribute[0].EventName;
-            }
-            
-            var eventName = clrType.GetField("EventName")?.GetValue(null) as string;
-            
-            return !string.IsNullOrEmpty(eventName) ? eventName : clrType.Name;
-        }
-
+        // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Local
         private void RegisterEventName(string eventName, Type clrType, bool throwOnConflict = true)
         {
             if (throwOnConflict && 

@@ -1,6 +1,7 @@
-﻿using System;
-using DomainLib.Aggregates;
+﻿using DomainLib.Aggregates.Registration;
 using NUnit.Framework;
+using System;
+using System.Collections.Generic;
 
 namespace DomainLib.Tests.Aggregates
 {
@@ -11,16 +12,20 @@ namespace DomainLib.Tests.Aggregates
     }
 
     [TestFixture]
-    public class ApplyEventRouterTests
+    public class AggregateRegistrationTests
     {
         [Test]
         public void EventIsRoutedAndApplied()
         {
-            // Setup the event router.
-            var builder = new ApplyEventRouterBuilder<MyAggregateRoot, IEvent>();
-            builder.Add<SomethingHappened>((agg, e) => agg.ApplyEvent(e));
-            builder.Add<SomethingElseHappened>((agg, e) => agg.ApplyEvent(e));
-            var router = builder.Build();
+            // Setup the aggregate registry.
+            var builder = new AggregateRegistryBuilder<object, IEvent>();
+            builder.Register<MyAggregateRoot>(agg =>
+            {
+                agg.Event<SomethingHappened>().RoutesTo((a, e) => a.ApplyEvent(e)).HasName(EventNames.SomethingHappened);
+                agg.Event<SomethingElseHappened>().RoutesTo((a, e) => a.ApplyEvent(e)).HasName(EventNames.SomethingElseHappened);
+            });
+
+            var registry = builder.Build();
             
             // Set up the initial state.
             var initialState = new MyAggregateRoot();
@@ -30,7 +35,7 @@ namespace DomainLib.Tests.Aggregates
             var event2 = new SomethingElseHappened("Bar");
             
             // Route the events.
-            var newState = router.Route(initialState, event1, event2);
+            var newState = registry.EventDispatcher.DispatchEvents(initialState, event1, event2);
             
             Assert.That(newState.State, Is.EqualTo("Foo"));
             Assert.That(newState.OtherState, Is.EqualTo("Bar"));
@@ -39,10 +44,14 @@ namespace DomainLib.Tests.Aggregates
         [Test]
         public void MissingEventRouteThrowsException()
         {
-            // Setup the event router.
-            var builder = new ApplyEventRouterBuilder<MyAggregateRoot, IEvent>();
-            builder.Add<SomethingHappened>((agg, e) => agg.ApplyEvent(e));
-            var router = builder.Build();
+            // Setup the aggregate registry.
+            var builder = new AggregateRegistryBuilder<object, IEvent>();
+            builder.Register<MyAggregateRoot>(agg =>
+            {
+                agg.Event<SomethingHappened>().RoutesTo((a, e) => a.ApplyEvent(e)).HasName(EventNames.SomethingHappened);
+            });
+
+            var registry = builder.Build();
 
             // Set up the initial state.
             var initialState = new MyAggregateRoot();
@@ -52,8 +61,8 @@ namespace DomainLib.Tests.Aggregates
             var event2 = new SomethingElseHappened("Bar");
 
             // Route the events.
-            var exception = Assert.Throws<InvalidOperationException>(() => router.Route(initialState, event1, event2));
-            const string expectedMessage = "No route or default route found when attempting to apply " +
+            var exception = Assert.Throws<InvalidOperationException>(() => registry.EventDispatcher.DispatchEvents(initialState, event1, event2));
+            const string expectedMessage = "No route or default route found when attempting to apply event " +
                                            "SomethingElseHappened to MyAggregateRoot";
             Assert.That(exception.Message, Is.EqualTo(expectedMessage));
         }
@@ -61,11 +70,15 @@ namespace DomainLib.Tests.Aggregates
         [Test]
         public void DefaultEventRouteIsInvokedWhenSpecified()
         {
-            // Setup the event router.
-            var builder = new ApplyEventRouterBuilder<MyAggregateRoot, IEvent>();
-            builder.Add<SomethingHappened>((agg, e) => agg.ApplyEvent(e));
-            builder.Add<IEvent>((agg, e) => agg.DefaultApplyEvent(e)); // Default route
-            var router = builder.Build();
+            // Setup the aggregate registry.
+            var builder = new AggregateRegistryBuilder<object, IEvent>();
+            builder.Register<MyAggregateRoot>(agg =>
+            {
+                agg.Event<SomethingHappened>().RoutesTo((a, e) => a.ApplyEvent(e)).HasName(EventNames.SomethingHappened);
+                agg.Event<IEvent>().RoutesTo((a, e) => a.DefaultApplyEvent(e));
+            });
+
+            var registry = builder.Build();
 
             // Set up the initial state.
             var initialState = new MyAggregateRoot();
@@ -75,7 +88,7 @@ namespace DomainLib.Tests.Aggregates
             var event2 = new SomethingElseHappened("Bar");
 
             // Route the events.
-            var newState = router.Route(initialState, event1, event2);
+            var newState = registry.EventDispatcher.DispatchEvents(initialState, event1, event2);
             
             Assert.That(newState.State, Is.EqualTo("Foo"));
             
@@ -84,26 +97,85 @@ namespace DomainLib.Tests.Aggregates
         }
 
         [Test]
-        public void EventNamesAreMappedWhenEventRoutesAreAdded()
+        public void EventNamesAreMappedWhenEventsAreRegisteredWithName()
         {
-            var builder = new ApplyEventRouterBuilder<MyAggregateRoot, IEvent>();
-            builder.Add<SomethingHappened>((agg, e) => agg.ApplyEvent(e));
-            builder.Add<SomethingElseHappened>((agg, e) => agg.ApplyEvent(e));
+            // Setup the aggregate registry.
+            var builder = new AggregateRegistryBuilder<object, IEvent>();
+            builder.Register<MyAggregateRoot>(agg =>
+            {
+                agg.Event<SomethingHappened>().RoutesTo((a, e) => a.ApplyEvent(e)).HasName(EventNames.SomethingHappened);
+                agg.Event<SomethingElseHappened>().RoutesTo((a, e) => a.ApplyEvent(e)).HasName(EventNames.SomethingElseHappened);
+            });
 
-            var router = builder.Build();
+            var registry = builder.Build();
 
-            Assert.That(router.EventNameMap.GetEventNameForClrType(typeof(SomethingHappened)),
-                Is.EqualTo(EventNames.SomethingHappened));
+            Assert.That(registry.EventNameMap.GetEventNameForClrType(typeof(SomethingHappened)),
+                        Is.EqualTo(EventNames.SomethingHappened));
 
-            Assert.That(router.EventNameMap.GetEventNameForClrType(typeof(SomethingElseHappened)),
+            Assert.That(registry.EventNameMap.GetEventNameForClrType(typeof(SomethingElseHappened)),
                         Is.EqualTo(EventNames.SomethingElseHappened));
+        }
+
+        [Test]
+        public void CommandIsRoutedAndApplied()
+        {
+            // Setup the aggregate registry.
+            var builder = new AggregateRegistryBuilder<object, IEvent>();
+            builder.Register<MyAggregateRoot>(agg =>
+            {
+                agg.Command<DoSomething>().RoutesTo((a, c) => a().ExecuteCommand(a, c));
+                agg.Event<SomethingHappened>().RoutesTo((a, e) => a.ApplyEvent(e)).HasName(EventNames.SomethingHappened);
+            });
+
+            var registry = builder.Build();
+
+            // Set up the initial state.
+            var initialState = new MyAggregateRoot();
+
+            // Create command to execute on the aggregate.
+            var cmd = new DoSomething("Foo");
+
+            // Execute the command
+            var result = registry.CommandDispatcher.Dispatch(initialState, cmd);
+
+            Func<SomethingHappened, SomethingHappened, bool> eventComparer = (a, b) => a.State == b.State;
+
+            Assert.That(result.NewState.State, Is.EqualTo("Foo"));
+            Assert.That(result.AppliedEvents,
+                        Is.EquivalentTo(new object[] {new SomethingHappened("Foo")})
+                          .Using(eventComparer));
+        }
+
+        [Test]
+        public void MissingCommentRegistrationThrowsException()
+        {
+            // Setup the aggregate registry.
+            var builder = new AggregateRegistryBuilder<object, IEvent>();
+            builder.Register<MyAggregateRoot>(agg =>
+            {
+                agg.Command<DoSomething>().RoutesTo((a, c) => a().ExecuteCommand(a, c));
+                agg.Event<SomethingHappened>().RoutesTo((a, e) => a.ApplyEvent(e)).HasName(EventNames.SomethingHappened);
+            });
+
+            var registry = builder.Build();
+
+            // Set up the initial state.
+            var initialState = new MyAggregateRoot();
+
+            // Create command to execute on the aggregate.
+            var cmd = new DoSomethingElse("Foo");
+
+            // Route the events.
+            var exception = Assert.Throws<InvalidOperationException>(() => registry.CommandDispatcher.Dispatch(initialState, cmd));
+            const string expectedMessage = "No route found when attempting to apply command " +
+                                           "DoSomethingElse to MyAggregateRoot";
+            Assert.That(exception.Message, Is.EqualTo(expectedMessage));
         }
 
         private interface IEvent
         {
         }
 
-        [EventName(EventNames.SomethingHappened)]
         private class SomethingHappened : IEvent
         {
             public SomethingHappened(string state)
@@ -114,7 +186,6 @@ namespace DomainLib.Tests.Aggregates
             public string State { get; }
         }
 
-        [EventName(EventNames.SomethingElseHappened)]
         private class SomethingElseHappened : IEvent
         {
             public SomethingElseHappened(string otherState)
@@ -123,6 +194,26 @@ namespace DomainLib.Tests.Aggregates
             }
 
             public string OtherState { get; }
+        }
+
+        private class DoSomething
+        {
+            public DoSomething(string state)
+            {
+                State = state;
+            }
+
+            public string State { get; }
+        }
+
+        private class DoSomethingElse
+        {
+            public DoSomethingElse(string state)
+            {
+                State = state;
+            }
+
+            public string State { get; }
         }
 
         private class MyAggregateRoot
@@ -139,6 +230,16 @@ namespace DomainLib.Tests.Aggregates
 
             public string State { get; }
             public string OtherState { get; }
+
+            public IEnumerable<IEvent> ExecuteCommand(Func<MyAggregateRoot> getState, DoSomething command)
+            {
+                yield return new SomethingHappened(command.State);
+            }
+
+            public IEnumerable<IEvent> ExecuteCommand(Func<MyAggregateRoot> getState, DoSomethingElse command)
+            {
+                yield return new SomethingHappened(command.State);
+            }
 
             public MyAggregateRoot ApplyEvent(SomethingHappened @event)
             {

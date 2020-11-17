@@ -1,25 +1,33 @@
-﻿using System;
-using System.Linq;
-using System.Threading.Tasks;
-using NUnit.Framework;
+﻿using NUnit.Framework;
 using Shopping.Domain.Aggregates;
 using Shopping.Domain.Commands;
 using Shopping.Domain.Events;
+using System;
+using System.Linq;
+using DomainLib.Aggregates;
+using DomainLib.Aggregates.Registration;
 
 namespace Shopping.Domain.Tests
-{ 
+{
     [TestFixture]
     public class ShoppingCartTests
     {
         [Test]
         public void RoundTripTest()
         {
+            var aggregateRegistryBuilder = AggregateRegistryBuilder.Create<object, IDomainEvent>();
+            ShoppingCartFunctions.Register(aggregateRegistryBuilder);
             var shoppingCartId = Guid.NewGuid(); // This could come from a sequence, or could be the customer's ID.
 
+            var aggregateRegistry = aggregateRegistryBuilder.Build();
+
+            var commandDispatcher = aggregateRegistry.CommandDispatcher;
+            var eventDispatcher = aggregateRegistry.EventDispatcher;
+
             // Execute the first command.
-            var initialState = new ShoppingCart();
+            var initialState = new ShoppingCartState();
             var command1 = new AddItemToShoppingCart(shoppingCartId, "First Item");
-            var result1 = initialState.Execute(command1);
+            var result1 = commandDispatcher.Dispatch(initialState, command1);
             
             // Check the updated aggregate root state.
             Assert.That(result1.NewState.Id, Is.EqualTo(shoppingCartId));
@@ -33,7 +41,7 @@ namespace Shopping.Domain.Tests
 
             // Execute the second command to the result of the first command.
             var command2 = new AddItemToShoppingCart(shoppingCartId, "Second Item");
-            var result2 = result1.NewState.Execute(command2);
+            var result2 = commandDispatcher.Dispatch(result1.NewState, command2);
             
             // Check the updated aggregate root state.
             Assert.That(result2.NewState.Id, Is.EqualTo(shoppingCartId));
@@ -48,7 +56,7 @@ namespace Shopping.Domain.Tests
             // The aggregate event log is the sum total of all events from both commands.
             // Simulate loading from the event log.
             var eventLog = result1.AppliedEvents.Concat(result2.AppliedEvents);
-            var loadedAggregate = ShoppingCart.FromEvents(eventLog);
+            var loadedAggregate = ShoppingCartState.FromEvents(eventDispatcher, eventLog);
             
             // Check the loaded aggregate root state.
             Assert.That(loadedAggregate.Id, Is.EqualTo(shoppingCartId));

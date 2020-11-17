@@ -6,6 +6,6 @@ namespace DomainLib.Persistence
     public interface IEventsRepository
     {
         Task<long> SaveEventsAsync<TEvent>(string streamName, long expectedStreamVersion, IEnumerable<TEvent> events);
-        Task<IEnumerable<TEvent>> LoadEventsAsync<TEvent>(string streamName);
+        Task<TEvent[]> LoadEventsAsync<TEvent>(string streamName, long startPosition = 0);
     }
 }
