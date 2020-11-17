@@ -18,6 +18,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\DomainLib.Persistence.EventStore\DomainLib.Persistence.EventStore.csproj" />
     <ProjectReference Include="..\..\DomainLib.Persistence\DomainLib.Serialization.csproj" />
+    <ProjectReference Include="..\..\DomainLib.Serialization.Json\DomainLib.Serialization.Json.csproj" />
+    <ProjectReference Include="..\..\DomainLib.Serialization\DomainLib.Serialization.csproj" />
     <ProjectReference Include="..\Shopping.Infrastructure\Shopping.Infrastructure.csproj" />
   </ItemGroup>
 

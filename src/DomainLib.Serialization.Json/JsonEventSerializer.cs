@@ -1,11 +1,10 @@
-﻿using DomainLib.Aggregates;
-using DomainLib.Persistence;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using DomainLib.Aggregates;
 
-namespace DomainLib.Serialization
+namespace DomainLib.Serialization.Json
 {
     public class JsonEventSerializer : IEventSerializer
     {

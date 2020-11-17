@@ -1,7 +1,6 @@
 ﻿using System;
-using DomainLib.Persistence;
 
-namespace DomainLib.Serialization
+namespace DomainLib.Serialization.Json
 {
     public readonly struct JsonEventPersistenceData : IEventPersistenceData
     {

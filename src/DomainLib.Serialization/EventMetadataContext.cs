@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 
-namespace DomainLib.Persistence
+namespace DomainLib.Serialization
 {
     public static class MetadataKeys
     {
