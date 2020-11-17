@@ -13,13 +13,17 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainLib.Tests", "DomainLi
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Examples", "Examples", "{083A78FB-1B77-4383-868C-D9D3EB0E682E}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainLib.Serialization", "DomainLib.Persistence\DomainLib.Serialization.csproj", "{9DB7AC64-6806-4C20-A9C8-99CB4AE20F57}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainLib.Serialization", "DomainLib.Serialization\DomainLib.Serialization.csproj", "{9DB7AC64-6806-4C20-A9C8-99CB4AE20F57}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainLib.Persistence.EventStore", "DomainLib.Persistence.EventStore\DomainLib.Persistence.EventStore.csproj", "{10159135-E0DC-4ABC-9956-228D69E3653E}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shopping.Infrastructure", "Examples\Shopping.Infrastructure\Shopping.Infrastructure.csproj", "{B3F13EA6-5E1C-41AE-97C5-C94AD16734E7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shopping.Infrastructure.Tests", "Examples\Shopping.Infrastructure.Tests\Shopping.Infrastructure.Tests.csproj", "{94C7E8B3-87C9-4CC3-9177-B1D5164B2D7D}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shopping.Infrastructure.Tests", "Examples\Shopping.Infrastructure.Tests\Shopping.Infrastructure.Tests.csproj", "{94C7E8B3-87C9-4CC3-9177-B1D5164B2D7D}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainLib.Persistence", "DomainLib.Persistence\DomainLib.Persistence.csproj", "{94E5BD41-3570-4EE8-B6FA-15EBED519492}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainLib.Serialization.Json", "DomainLib.Serialization.Json\DomainLib.Serialization.Json.csproj", "{386E9A6A-03A3-4B98-8AFC-203B67E060A5}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -59,6 +63,14 @@ Global
 		{94C7E8B3-87C9-4CC3-9177-B1D5164B2D7D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{94C7E8B3-87C9-4CC3-9177-B1D5164B2D7D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{94C7E8B3-87C9-4CC3-9177-B1D5164B2D7D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{94E5BD41-3570-4EE8-B6FA-15EBED519492}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{94E5BD41-3570-4EE8-B6FA-15EBED519492}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{94E5BD41-3570-4EE8-B6FA-15EBED519492}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{94E5BD41-3570-4EE8-B6FA-15EBED519492}.Release|Any CPU.Build.0 = Release|Any CPU
+		{386E9A6A-03A3-4B98-8AFC-203B67E060A5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{386E9A6A-03A3-4B98-8AFC-203B67E060A5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{386E9A6A-03A3-4B98-8AFC-203B67E060A5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{386E9A6A-03A3-4B98-8AFC-203B67E060A5}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

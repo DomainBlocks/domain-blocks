@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using DomainLib.Serialization;
 using EventStore.ClientAPI;
 
 namespace DomainLib.Persistence.EventStore

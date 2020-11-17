@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace DomainLib.Persistence
+namespace DomainLib.Serialization
 {
     public interface IEventPersistenceData
     {

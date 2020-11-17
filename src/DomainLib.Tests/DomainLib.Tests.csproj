@@ -12,7 +12,9 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\DomainLib.Persistence\DomainLib.Serialization.csproj" />
+      <ProjectReference Include="..\DomainLib.Persistence\DomainLib.Persistence.csproj" />
+      <ProjectReference Include="..\DomainLib.Serialization.Json\DomainLib.Serialization.Json.csproj" />
+      <ProjectReference Include="..\DomainLib.Serialization\DomainLib.Serialization.csproj" />
       <ProjectReference Include="..\DomainLib\DomainLib.csproj" />
     </ItemGroup>
 
