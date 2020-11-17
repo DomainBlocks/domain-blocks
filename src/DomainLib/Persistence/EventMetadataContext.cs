@@ -12,7 +12,7 @@ namespace DomainLib.Persistence
         public const string UtcDateTime = "UtcDataTime";
     }
 
-    public class EventMetadataContext
+    public sealed class EventMetadataContext
     {
         private readonly Dictionary<string, string> _metaDataEntries = new Dictionary<string, string>();
         private readonly Dictionary<string, Func<string>> _lazyEntries = new Dictionary<string, Func<string>>();
@@ -70,9 +70,11 @@ namespace DomainLib.Persistence
             _lazyEntries.Add(key, valueFunc);
         }
 
-        public IEnumerable<KeyValuePair<string, string>> BuildMetadata()
+        public IEnumerable<KeyValuePair<string, string>> BuildMetadata(params KeyValuePair<string, string>[] additionalEntries)
         {
-            return _metaDataEntries.Concat(EvaluateLazyEntries());
+            return _metaDataEntries
+                   .Concat(EvaluateLazyEntries())
+                   .Concat(additionalEntries);
         }
 
         private IEnumerable<KeyValuePair<string, string>> EvaluateLazyEntries()

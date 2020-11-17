@@ -1,6 +1,7 @@
 ﻿using DomainLib.Aggregates;
 using DomainLib.Persistence;
 using System;
+using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -9,11 +10,12 @@ namespace DomainLib.Serialization
     public class JsonEventSerializer : IEventSerializer
     {
         private readonly JsonSerializerOptions _options;
-        private readonly IEventNameMap _eventNameMap = new EventNameMap();
+        private readonly IEventNameMap _eventNameMap;
         private EventMetadataContext _metadataContext;
 
-        public JsonEventSerializer()
+        public JsonEventSerializer(IEventNameMap eventNameMap)
         {
+            _eventNameMap = eventNameMap ?? throw new ArgumentNullException(nameof(eventNameMap));
             _options = new JsonSerializerOptions
             {
                 WriteIndented = true,
@@ -21,8 +23,9 @@ namespace DomainLib.Serialization
             };
         }
 
-        public JsonEventSerializer(JsonSerializerOptions options)
+        public JsonEventSerializer(IEventNameMap eventNameMap, JsonSerializerOptions options)
         {
+            _eventNameMap = eventNameMap ?? throw new ArgumentNullException(nameof(eventNameMap));
             _options = options ?? throw new ArgumentNullException(nameof(options));
         }
 
@@ -32,18 +35,12 @@ namespace DomainLib.Serialization
             _options.Converters.Add(customConverter);
         }
 
-        public void RegisterEventTypeMappings(IEventNameMap eventNameMap)
-        {
-            if (eventNameMap == null) throw new ArgumentNullException(nameof(eventNameMap));
-            _eventNameMap.Merge(eventNameMap);
-        }
-
         public void UseMetaDataContext(EventMetadataContext metadataContext)
         {
             _metadataContext = metadataContext ?? throw new ArgumentNullException(nameof(metadataContext));
         }
 
-        public IEventPersistenceData GetPersistenceData(object @event)
+        public IEventPersistenceData GetPersistenceData(object @event, params KeyValuePair<string, string>[] additionalMetadata)
         {
             if (@event == null) throw new ArgumentNullException(nameof(@event));
 
@@ -51,7 +48,7 @@ namespace DomainLib.Serialization
             var eventData = JsonSerializer.SerializeToUtf8Bytes(@event, _options);
             var eventMetadata = _metadataContext == null
                 ? null
-                : JsonSerializer.SerializeToUtf8Bytes(_metadataContext.BuildMetadata(), _options);
+                : JsonSerializer.SerializeToUtf8Bytes(_metadataContext.BuildMetadata(additionalMetadata), _options);
 
             return new JsonEventPersistenceData(Guid.NewGuid(),
                                                 eventName,
@@ -74,6 +71,14 @@ namespace DomainLib.Serialization
 
             var runtTimeType = typeof(TEvent);
             throw new InvalidEventTypeException($"Cannot cast event of type {eventName} to {runtTimeType.FullName}", eventName, runtTimeType.FullName);
+        }
+
+        public Dictionary<string, string> DeserializeMetadata(byte[] metadataBytes)
+        {
+            if (metadataBytes == null) throw new ArgumentNullException(nameof(metadataBytes));
+
+            var metadata = JsonSerializer.Deserialize<Dictionary<string, string>>(metadataBytes);
+            return metadata;
         }
     }
 }
