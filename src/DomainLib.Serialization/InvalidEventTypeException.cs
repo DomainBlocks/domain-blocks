@@ -4,7 +4,7 @@ using System.Runtime.Serialization;
 namespace DomainLib.Serialization
 {
     [Serializable]
-    public class InvalidEventTypeException : Exception
+    public class InvalidEventTypeException : EventDeserializeException
     {
         public string SerializedEventType { get; }
         public string ClrTypeName { get; }

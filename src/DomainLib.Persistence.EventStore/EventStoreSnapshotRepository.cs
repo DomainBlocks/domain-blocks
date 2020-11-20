@@ -1,9 +1,7 @@
-﻿using System;
+﻿using DomainLib.Serialization;
+using EventStore.ClientAPI;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using DomainLib.Serialization;
-using EventStore.ClientAPI;
-using EventStore.ClientAPI.Exceptions;
 
 namespace DomainLib.Persistence.EventStore
 {
@@ -27,20 +25,8 @@ namespace DomainLib.Persistence.EventStore
 
         public async Task<Snapshot<TState>> LoadSnapshot<TState>(string streamName)
         {
-            var eventsSlice = await _connection.ReadStreamEventsBackwardAsync(streamName, 0, 1, false);
-
-            switch (eventsSlice.Status)
-            {
-                case SliceReadStatus.Success:
-                    break;
-                case SliceReadStatus.StreamNotFound:
-                    // TOOO: Better exception
-                    throw new InvalidOperationException($"Unable to find stream {streamName}");
-                case SliceReadStatus.StreamDeleted:
-                    throw new StreamDeletedException(streamName);
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
+            var eventsSlice = (await _connection.ReadStreamEventsBackwardAsync(streamName, 0, 1, false))
+                .ThrowIfNotSuccess(streamName);
 
             var @event = eventsSlice.Events[0];
 

@@ -1,8 +1,8 @@
-﻿using System;
+﻿using DomainLib.Aggregates;
+using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using DomainLib.Aggregates;
 
 namespace DomainLib.Serialization.Json
 {
@@ -60,12 +60,19 @@ namespace DomainLib.Serialization.Json
             if (eventData == null) throw new ArgumentNullException(nameof(eventData));
             if (eventName == null) throw new ArgumentNullException(nameof(eventName));
 
-            var clrType = _eventNameMap.GetClrTypeForEventName(eventName);
-            var evt = JsonSerializer.Deserialize(eventData, clrType, _options);
-
-            if (evt is TEvent @event)
+            try
             {
-                return @event;
+                var clrType = _eventNameMap.GetClrTypeForEventName(eventName);
+                var evt = JsonSerializer.Deserialize(eventData, clrType, _options);
+
+                if (evt is TEvent @event)
+                {
+                    return @event;
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new EventDeserializeException("Unable to deserialize event", ex);
             }
 
             var runtTimeType = typeof(TEvent);

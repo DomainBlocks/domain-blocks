@@ -8,6 +8,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using DomainLib.Testing;
 
 namespace DomainLib.Tests.Serialization
 {
@@ -123,7 +124,7 @@ namespace DomainLib.Tests.Serialization
         [Test]
         public void SerializationWorksWhenNoMetadataContext()
         {
-            var serializer = new JsonEventSerializer(GetFakeEventNameMap());
+            var serializer = new JsonEventSerializer(Fakes.EventNameMap);
 
             var @event = new TestEvent("Some Value");
             var persistenceData = serializer.GetPersistenceData(@event);
@@ -135,7 +136,7 @@ namespace DomainLib.Tests.Serialization
         public void EmptyMetaDataContextDoesNotIncludeDefaults()
         {
             var emptyMetadataContext = EventMetadataContext.CreateEmpty();
-            var serializer = new JsonEventSerializer(GetFakeEventNameMap());
+            var serializer = new JsonEventSerializer(Fakes.EventNameMap);
             serializer.UseMetaDataContext(emptyMetadataContext);
 
             emptyMetadataContext.AddEntry(StaticKey, StaticValue);
@@ -168,7 +169,7 @@ namespace DomainLib.Tests.Serialization
 
 
             var metadataContext = EventMetadataContext.CreateWithDefaults(TestServiceName);
-            var serializer = new JsonEventSerializer(GetFakeEventNameMap());
+            var serializer = new JsonEventSerializer(Fakes.EventNameMap);
             serializer.UseMetaDataContext(metadataContext);
 
             applyCustomMetadata?.Invoke(metadataContext);
@@ -180,14 +181,6 @@ namespace DomainLib.Tests.Serialization
         {
             return JsonSerializer.Deserialize<List<KeyValuePair<string, string>>>(persistenceData.EventMetadata)
                                  .ToDictionary(x => x.Key, x => x.Value);
-        }
-
-        private static IEventNameMap GetFakeEventNameMap()
-        {
-            var substitute = Substitute.For<IEventNameMap>();
-            substitute.GetEventNameForClrType(Arg.Any<Type>()).Returns(args => ((Type) args[0]).Name);
-
-            return substitute;
         }
 
         public class TestEvent

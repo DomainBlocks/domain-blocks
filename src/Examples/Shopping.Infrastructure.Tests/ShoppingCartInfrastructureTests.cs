@@ -1,7 +1,8 @@
 ﻿using DomainLib.Aggregates.Registration;
+using DomainLib.EventStore.Testing;
 using DomainLib.Persistence;
 using DomainLib.Persistence.EventStore;
-using DomainLib.Serialization;
+using DomainLib.Serialization.Json;
 using EventStore.ClientAPI;
 using NUnit.Framework;
 using Shopping.Domain.Aggregates;
@@ -10,7 +11,6 @@ using Shopping.Domain.Events;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
-using DomainLib.Serialization.Json;
 
 namespace Shopping.Infrastructure.Tests
 {

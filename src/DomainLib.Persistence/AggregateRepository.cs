@@ -37,7 +37,7 @@ namespace DomainLib.Persistence
             var state = _eventDispatcher.DispatchEvents(initialAggregateState, events);
 
             // Double check this for off-by-one errors
-            var newVersion = loadStartPosition + events.Length - 1;
+            var newVersion = loadStartPosition + events.Count - 1;
             return new VersionedAggregateState<TAggregateState>(state, newVersion);
         }
 

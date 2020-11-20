@@ -1,10 +1,10 @@
-﻿using EventStore.ClientAPI;
+﻿using System;
+using System.Threading.Tasks;
+using EventStore.ClientAPI;
 using EventStore.ClientAPI.Embedded;
 using NUnit.Framework;
-using System;
-using System.Threading.Tasks;
 
-namespace Shopping.Infrastructure.Tests
+namespace DomainLib.EventStore.Testing
 {
     [SetUpFixture]
     public abstract class EmbeddedEventStoreTest : IDisposable
