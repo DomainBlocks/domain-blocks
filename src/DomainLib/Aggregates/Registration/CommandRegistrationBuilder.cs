@@ -1,6 +1,7 @@
 ﻿namespace DomainLib.Aggregates.Registration
 {
-    public sealed class CommandRegistrationBuilder<TAggregate, TCommandBase, TCommand, TEventBase> where TCommand : TCommandBase
+    public sealed class CommandRegistrationBuilder<TAggregate, TCommandBase, TCommand, TEventBase>
+        where TCommand : TCommandBase
     {
         private readonly AggregateRegistryBuilder<TCommandBase, TEventBase> _aggregateRegistryBuilder;
 
@@ -9,7 +10,8 @@
             _aggregateRegistryBuilder = aggregateRegistryBuilder;
         }
 
-        public CommandRegistrationBuilder<TAggregate, TCommandBase, TCommand, TEventBase> RoutesTo(ExecuteCommand<TAggregate, TCommand, TEventBase> executeCommand)
+        public CommandRegistrationBuilder<TAggregate, TCommandBase, TCommand, TEventBase> RoutesTo(
+            ExecuteCommand<TAggregate, TCommand, TEventBase> executeCommand)
         {
             _aggregateRegistryBuilder.RegisterCommandRoute(executeCommand);
             return this;

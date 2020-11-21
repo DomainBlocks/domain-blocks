@@ -29,6 +29,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainLib.EventStore.Testin
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainLib.Testing", "DomainLib.Testing\DomainLib.Testing.csproj", "{D169B6EA-A094-47B4-BCD5-187E8E857489}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainLib.Serialization.Json.Tests", "DomainLib.Serialization.Json.Tests\DomainLib.Serialization.Json.Tests.csproj", "{22CF038A-3535-421B-A1B1-8F855C0A542F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -83,6 +85,10 @@ Global
 		{D169B6EA-A094-47B4-BCD5-187E8E857489}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D169B6EA-A094-47B4-BCD5-187E8E857489}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D169B6EA-A094-47B4-BCD5-187E8E857489}.Release|Any CPU.Build.0 = Release|Any CPU
+		{22CF038A-3535-421B-A1B1-8F855C0A542F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{22CF038A-3535-421B-A1B1-8F855C0A542F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{22CF038A-3535-421B-A1B1-8F855C0A542F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{22CF038A-3535-421B-A1B1-8F855C0A542F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
