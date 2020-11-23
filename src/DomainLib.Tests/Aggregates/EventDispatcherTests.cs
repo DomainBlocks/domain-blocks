@@ -29,7 +29,7 @@ namespace DomainLib.Tests.Aggregates
             var event2 = new SomethingElseHappened("Bar");
             
             // Route the events.
-            var newState = registry.EventDispatcher.DispatchEvents(initialState, event1, event2);
+            var newState = registry.EventDispatcher.ImmutableDispatch(initialState, event1, event2);
             
             Assert.That(newState.State, Is.EqualTo("Foo"));
             Assert.That(newState.OtherState, Is.EqualTo("Bar"));
@@ -55,7 +55,7 @@ namespace DomainLib.Tests.Aggregates
             var event2 = new SomethingElseHappened("Bar");
 
             // Route the events.
-            var exception = Assert.Throws<InvalidOperationException>(() => registry.EventDispatcher.DispatchEvents(initialState, event1, event2));
+            var exception = Assert.Throws<InvalidOperationException>(() => registry.EventDispatcher.ImmutableDispatch(initialState, event1, event2));
             const string expectedMessage = "No route or default route found when attempting to apply event " +
                                            "SomethingElseHappened to MyAggregateRoot";
             Assert.That(exception.Message, Is.EqualTo(expectedMessage));
@@ -82,7 +82,7 @@ namespace DomainLib.Tests.Aggregates
             var event2 = new SomethingElseHappened("Bar");
 
             // Route the events.
-            var newState = registry.EventDispatcher.DispatchEvents(initialState, event1, event2);
+            var newState = registry.EventDispatcher.ImmutableDispatch(initialState, event1, event2);
             
             Assert.That(newState.State, Is.EqualTo("Foo"));
             

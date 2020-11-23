@@ -8,8 +8,16 @@
         {
             _aggregateRegistryBuilder = aggregateRegistryBuilder;
         }
+        
+        public EventRegistrationBuilder<TAggregate, TCommandBase, TEventBase, TEvent> RoutesTo(
+            ApplyEvent<TAggregate, TEvent> applyEvent)
+        {
+            _aggregateRegistryBuilder.RegisterEventRoute(applyEvent);
+            return this;
+        }
 
-        public EventRegistrationBuilder<TAggregate, TCommandBase, TEventBase, TEvent> RoutesTo(ApplyEvent<TAggregate, TEvent> applyEvent)
+        public EventRegistrationBuilder<TAggregate, TCommandBase, TEventBase, TEvent> RoutesTo(
+            ImmutableApplyEvent<TAggregate, TEvent> applyEvent)
         {
             _aggregateRegistryBuilder.RegisterEventRoute(applyEvent);
             return this;

@@ -30,15 +30,15 @@ namespace Shopping.Infrastructure.Tests
             var initialState = new ShoppingCartState();
             
             var command1 = new AddItemToShoppingCart(shoppingCartId, "First Item");
-            var result1 = aggregateRegistry.CommandDispatcher.Dispatch(initialState, command1);
+            var (newState1, events1) = aggregateRegistry.CommandDispatcher.ImmutableDispatch(initialState, command1);
 
             // Execute the second command to the result of the first command.
             var command2 = new AddItemToShoppingCart(shoppingCartId, "Second Item");
-            var result2 = aggregateRegistry.CommandDispatcher.Dispatch(result1.NewState, command2);
+            var (newState2, events2) = aggregateRegistry.CommandDispatcher.ImmutableDispatch(newState1, command2);
 
-            Assert.That(result2.NewState.Id.HasValue, "Expected ShoppingCart ID to be set");
+            Assert.That(newState2.Id.HasValue, "Expected ShoppingCart ID to be set");
 
-            var eventsToPersist = result1.AppliedEvents.Concat(result2.AppliedEvents).ToList();
+            var eventsToPersist = events1.Concat(events2).ToList();
 
             var serializer = new JsonEventSerializer(aggregateRegistry.EventNameMap);
             var eventsRepository = new EventStoreEventsRepository(EventStoreConnection, serializer);
@@ -49,7 +49,7 @@ namespace Shopping.Infrastructure.Tests
                                                                             aggregateRegistry.EventDispatcher,
                                                                             aggregateRegistry.AggregateMetadataMap);
 
-            var nextEventVersion = await aggregateRepository.SaveAggregate<ShoppingCartState>(result2.NewState.Id.ToString(),
+            var nextEventVersion = await aggregateRepository.SaveAggregate<ShoppingCartState>(newState2.Id.ToString(),
                                                                                               ExpectedVersion.NoStream,
                                                                                               eventsToPersist);
             var expectedNextEventVersion = eventsToPersist.Count - 1;
