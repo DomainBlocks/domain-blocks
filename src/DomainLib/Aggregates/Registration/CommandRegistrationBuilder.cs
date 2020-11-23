@@ -9,9 +9,16 @@
         {
             _aggregateRegistryBuilder = aggregateRegistryBuilder;
         }
-
+        
         public CommandRegistrationBuilder<TAggregate, TCommandBase, TCommand, TEventBase> RoutesTo(
             ExecuteCommand<TAggregate, TCommand, TEventBase> executeCommand)
+        {
+            _aggregateRegistryBuilder.RegisterCommandRoute(executeCommand);
+            return this;
+        }
+
+        public CommandRegistrationBuilder<TAggregate, TCommandBase, TCommand, TEventBase> RoutesTo(
+            ImmutableExecuteCommand<TAggregate, TCommand, TEventBase> executeCommand)
         {
             _aggregateRegistryBuilder.RegisterCommandRoute(executeCommand);
             return this;

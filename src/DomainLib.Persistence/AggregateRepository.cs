@@ -34,7 +34,7 @@ namespace DomainLib.Persistence
             }
 
             var events = await _repository.LoadEventsAsync<TEventBase>(streamName, loadStartPosition);
-            var state = _eventDispatcher.DispatchEvents(initialAggregateState, events);
+            var state = _eventDispatcher.ImmutableDispatch(initialAggregateState, events);
 
             // Double check this for off-by-one errors
             var newVersion = loadStartPosition + events.Count - 1;

@@ -1,7 +1,7 @@
 ﻿namespace DomainLib.Aggregates
 {
     /// <summary>
-    /// Applies a domain event to an aggregate root, and returns the updated state.
+    /// Applies a domain event to a mutable aggregate root.
     /// </summary>
-    public delegate TAggregate ApplyEvent<TAggregate, in TEvent>(TAggregate aggregate, TEvent @event);
+    public delegate void ApplyEvent<in TAggregate, in TEvent>(TAggregate aggregate, TEvent @event);
 }

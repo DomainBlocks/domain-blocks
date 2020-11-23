@@ -17,7 +17,8 @@ namespace DomainLib.Tests.Aggregates
             builder.Register<MyAggregateRoot>(agg =>
             {
                 agg.Command<DoSomething>().RoutesTo((a, c) => a().ExecuteCommand(a, c));
-                agg.Event<SomethingHappened>().RoutesTo((a, e) => a.ApplyEvent(e)).HasName(EventNames.SomethingHappened);
+                agg.Event<SomethingHappened>().RoutesTo((a, e) => a.ApplyEvent(e))
+                    .HasName(EventNames.SomethingHappened);
             });
 
             var registry = builder.Build();
@@ -29,14 +30,12 @@ namespace DomainLib.Tests.Aggregates
             var cmd = new DoSomething("Foo");
 
             // Execute the command
-            var result = registry.CommandDispatcher.Dispatch(initialState, cmd);
+            var (newState, events) = registry.CommandDispatcher.ImmutableDispatch(initialState, cmd);
 
             Func<SomethingHappened, SomethingHappened, bool> eventComparer = (a, b) => a.State == b.State;
 
-            Assert.That(result.NewState.State, Is.EqualTo("Foo"));
-            Assert.That(result.AppliedEvents,
-                        Is.EquivalentTo(new object[] {new SomethingHappened("Foo")})
-                          .Using(eventComparer));
+            Assert.That(newState.State, Is.EqualTo("Foo"));
+            Assert.That(events, Is.EquivalentTo(new object[] { new SomethingHappened("Foo") }).Using(eventComparer));
         }
 
         [Test]
@@ -59,7 +58,7 @@ namespace DomainLib.Tests.Aggregates
             var cmd = new DoSomethingElse();
 
             // Route the events.
-            var exception = Assert.Throws<InvalidOperationException>(() => registry.CommandDispatcher.Dispatch(initialState, cmd));
+            var exception = Assert.Throws<InvalidOperationException>(() => registry.CommandDispatcher.ImmutableDispatch(initialState, cmd));
             const string expectedMessage = "No route found when attempting to apply command " +
                                            "DoSomethingElse to MyAggregateRoot";
             Assert.That(exception.Message, Is.EqualTo(expectedMessage));
@@ -76,7 +75,7 @@ namespace DomainLib.Tests.Aggregates
 
             aggregateRegistryBuilder.Register<object>(x =>
             {
-                x.Command<TestCommand>().RoutesTo((_, cmd) => new List<TestEvent> {new TestEvent(cmd.Name)});
+                x.Command<TestCommand>().RoutesTo((Func<object> _, TestCommand cmd) => new List<TestEvent> {new(cmd.Name)});
                 x.Event<TestEvent>().RoutesTo((state, e) =>
                 {
                     loggedMessages.Add(e.Name);
@@ -84,7 +83,7 @@ namespace DomainLib.Tests.Aggregates
                 }).HasName("TestEvent");
             });
 
-            aggregateRegistryBuilder.Build().CommandDispatcher.Dispatch(new object(), new TestCommand("My command"));
+            aggregateRegistryBuilder.Build().CommandDispatcher.ImmutableDispatch(new object(), new TestCommand("My command"));
 
             Assert.That(loggedMessages, Is.EquivalentTo(new List<string>
             {
