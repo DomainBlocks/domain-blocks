@@ -9,7 +9,7 @@ namespace DomainLib.EventStore.Testing
     [SetUpFixture]
     public abstract class EmbeddedEventStoreTest : IDisposable
     {
-        protected IEventStoreConnection EventStoreConnection { get; private set; }
+        protected internal IEventStoreConnection EventStoreConnection { get; private set; }
 
         [OneTimeSetUp]
         public async Task SetUp()

@@ -11,6 +11,12 @@ namespace DomainLib.Aggregates.Registration
             _aggregateRegistryBuilder = aggregateRegistryBuilder;
         }
 
+        public AggregateKeyBuilder<TAggregate, TCommandBase, TEventBase> Id(Func<TAggregate, string> getPersistenceId)
+        {
+            _aggregateRegistryBuilder.RegisterAggregateIdFunc(getPersistenceId);
+            return new AggregateKeyBuilder<TAggregate, TCommandBase, TEventBase>(_aggregateRegistryBuilder);
+        }
+
         public CommandRegistrationBuilder<TAggregate, TCommandBase, TCommand, TEventBase> Command<TCommand>() where TCommand : TCommandBase
         {
             return new(_aggregateRegistryBuilder);
@@ -21,15 +27,6 @@ namespace DomainLib.Aggregates.Registration
             return new(_aggregateRegistryBuilder);
         }
 
-        public AggregateRegistrationBuilder<TAggregate, TCommandBase, TEventBase> PersistenceKey(Func<string, string> getPersistenceKey)
-        {
-            _aggregateRegistryBuilder.RegisterAggregateStreamName<TAggregate>(getPersistenceKey);
-            return this;
-        }
 
-        public AggregateRegistrationBuilder<TAggregate, TCommandBase, TEventBase> SnapshotKey(Func<TAggregate, string> getSnapshotKey)
-        {
-            return this;
-        }
     }
 }

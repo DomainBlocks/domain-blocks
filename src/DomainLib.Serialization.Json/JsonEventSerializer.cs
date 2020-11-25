@@ -1,6 +1,7 @@
 ﻿using DomainLib.Aggregates;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -39,12 +40,18 @@ namespace DomainLib.Serialization.Json
             _metadataContext = metadataContext ?? throw new ArgumentNullException(nameof(metadataContext));
         }
 
-        public IEventPersistenceData GetPersistenceData(object @event, params KeyValuePair<string, string>[] additionalMetadata)
+        public IEventPersistenceData GetPersistenceData(object @event, string eventNameOverride = null, params KeyValuePair<string, string>[] additionalMetadata)
         {
             if (@event == null) throw new ArgumentNullException(nameof(@event));
 
-            var eventName = _eventNameMap.GetEventNameForClrType(@event.GetType());
+            var eventName = eventNameOverride ?? _eventNameMap.GetEventNameForClrType(@event.GetType());
             var eventData = JsonSerializer.SerializeToUtf8Bytes(@event, _options);
+
+            if (additionalMetadata.Length > 0 && _metadataContext == null)
+            {
+                _metadataContext = EventMetadataContext.CreateEmpty();
+            }
+
             var eventMetadata = _metadataContext == null
                 ? null
                 : JsonSerializer.SerializeToUtf8Bytes(_metadataContext.BuildMetadata(additionalMetadata), _options);
@@ -55,14 +62,14 @@ namespace DomainLib.Serialization.Json
                                                 eventMetadata);
         }
 
-        public TEvent DeserializeEvent<TEvent>(byte[] eventData, string eventName)
+        public TEvent DeserializeEvent<TEvent>(byte[] eventData, string eventName, Type typeOverride = null)
         {
             if (eventData == null) throw new ArgumentNullException(nameof(eventData));
             if (eventName == null) throw new ArgumentNullException(nameof(eventName));
 
             try
             {
-                var clrType = _eventNameMap.GetClrTypeForEventName(eventName);
+                var clrType = typeOverride ?? _eventNameMap.GetClrTypeForEventName(eventName);
                 var evt = JsonSerializer.Deserialize(eventData, clrType, _options);
 
                 if (evt is TEvent @event)
@@ -83,7 +90,9 @@ namespace DomainLib.Serialization.Json
         {
             if (metadataBytes == null) throw new ArgumentNullException(nameof(metadataBytes));
 
-            var metadata = JsonSerializer.Deserialize<Dictionary<string, string>>(metadataBytes);
+            var metadata = JsonSerializer.Deserialize<IList<KeyValuePair<string, string>>>(metadataBytes)
+                                         .ToDictionary(x => x.Key, x => x.Value);
+                               
             return metadata;
         }
     }

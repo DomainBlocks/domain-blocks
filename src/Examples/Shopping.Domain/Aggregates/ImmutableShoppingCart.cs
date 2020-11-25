@@ -41,8 +41,9 @@ namespace Shopping.Domain.Aggregates
         {
             aggregateRegistryBuilder.Register<ShoppingCartState>(aggregate =>
             {
-                aggregate.PersistenceKey(id => $"shoppingCart-{id}");
-                aggregate.SnapshotKey(id => $"shoppingCartSnapshot-{id}");
+                aggregate.Id(o => o.Id?.ToString())
+                         .PersistenceKey(id => $"shoppingCart-{id}")
+                         .SnapshotKey(id => $"shoppingCartSnapshot-{id}");
 
                 aggregate.Command<AddItemToShoppingCart>()
                          .RoutesTo(Execute);

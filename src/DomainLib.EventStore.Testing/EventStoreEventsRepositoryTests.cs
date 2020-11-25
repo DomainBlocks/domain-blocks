@@ -4,8 +4,6 @@ using DomainLib.Serialization.Json;
 using DomainLib.Testing;
 using NUnit.Framework;
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using DomainLib.Serialization;
@@ -21,7 +19,9 @@ namespace DomainLib.EventStore.Testing
         public async Task EventsCanBeSaved(int eventCount)
         {
             var repo = CreateRepository();
-            var nextVersion = await repo.SaveEventsAsync(RandomStreamName(), StreamVersion.NewStream, GenerateTestEvents(eventCount));
+            var nextVersion = await repo.SaveEventsAsync(EventStoreTestHelpers.RandomStreamName(), 
+                                                         StreamVersion.NewStream, 
+                                                         EventStoreTestHelpers.GenerateTestEvents(eventCount));
 
             Assert.That(nextVersion, Is.EqualTo(eventCount-1));
         }
@@ -32,7 +32,9 @@ namespace DomainLib.EventStore.Testing
             Assert.ThrowsAsync<ArgumentNullException>(async () =>
             {
                 var repo = CreateRepository();
-                await repo.SaveEventsAsync<TestEvent>(RandomStreamName(), StreamVersion.NewStream, null);
+                await repo.SaveEventsAsync<TestEvent>(EventStoreTestHelpers.RandomStreamName(), 
+                                                      StreamVersion.NewStream, 
+                                                      null);
             });
         }
 
@@ -42,7 +44,9 @@ namespace DomainLib.EventStore.Testing
             Assert.ThrowsAsync<ArgumentNullException>(async () =>
             {
                 var repo = CreateRepository();
-                await repo.SaveEventsAsync(null, StreamVersion.NewStream, GenerateTestEvents(2));
+                await repo.SaveEventsAsync(null, 
+                                           StreamVersion.NewStream, 
+                                           EventStoreTestHelpers.GenerateTestEvents(2));
             });
         }
 
@@ -50,7 +54,9 @@ namespace DomainLib.EventStore.Testing
         public async Task EmptyEventArrayDoesNotCauseExceptionOnSave()
         {
             var repo = CreateRepository();
-            var nextVersion = await repo.SaveEventsAsync(RandomStreamName(), StreamVersion.NewStream, new TestEvent[]{});
+            var nextVersion = await repo.SaveEventsAsync(EventStoreTestHelpers.RandomStreamName(), 
+                                                         StreamVersion.NewStream, 
+                                                         new TestEvent[]{});
 
             Assert.That(nextVersion, Is.EqualTo(-1));
         }
@@ -60,8 +66,10 @@ namespace DomainLib.EventStore.Testing
         public async Task EventsCanBeLoaded(int eventCount)
         {
             var repo = CreateRepository();
-            var streamName = RandomStreamName();
-            await repo.SaveEventsAsync(streamName, StreamVersion.NewStream, GenerateTestEvents(eventCount));
+            var streamName = EventStoreTestHelpers.RandomStreamName();
+            await repo.SaveEventsAsync(streamName, 
+                                       StreamVersion.NewStream, 
+                                       EventStoreTestHelpers.GenerateTestEvents(eventCount));
 
             var events = await repo.LoadEventsAsync<TestEvent>(streamName);
 
@@ -77,8 +85,8 @@ namespace DomainLib.EventStore.Testing
         public async Task HandlerFunctionIsCalledIfEventCannotBeRead()
         {
             var repo = CreateRepository();
-            var streamName = RandomStreamName();
-            var version = await repo.SaveEventsAsync(streamName, StreamVersion.NewStream, GenerateTestEvents(2));
+            var streamName = EventStoreTestHelpers.RandomStreamName();
+            var version = await repo.SaveEventsAsync(streamName, StreamVersion.NewStream, EventStoreTestHelpers.GenerateTestEvents(2));
 
             var badEventDataString = "This is not JSON. It should fail on deserialize";
             var badEventData = new EventData(Guid.NewGuid(), nameof(TestEvent), true, Encoding.UTF8.GetBytes(badEventDataString), new byte[0]);
@@ -122,26 +130,5 @@ namespace DomainLib.EventStore.Testing
 
             return repo;
         }
-
-        private static string RandomStreamName()
-        {
-            return $"someStream-{Guid.NewGuid()}";
-        }
-
-        private static IEnumerable<TestEvent> GenerateTestEvents(int number)
-        {
-            return Enumerable.Range(1, number).Select(n => new TestEvent(n));
-        }
     }
-
-    public class TestEvent
-    {
-        public TestEvent(int number)
-        {
-            Number = number;
-        }
-
-        public int Number { get; }
-    }
-
 }
