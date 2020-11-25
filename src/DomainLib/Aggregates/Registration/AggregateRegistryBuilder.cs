@@ -76,7 +76,25 @@ namespace DomainLib.Aggregates.Registration
             _eventNameMap.RegisterEvent<TEvent>(eventName);
         }
 
-        internal void RegisterAggregateStreamName<TAggregate>(Func<string, string> getStreamName)
+        internal void RegisterAggregateIdFunc<TAggregate>(Func<TAggregate, string> getId)
+        {
+            var aggregateMetadata = GetOrAddAggregateMetadata<TAggregate>();
+            aggregateMetadata.GetIdentifier = o => getId((TAggregate) o);
+        }
+
+        internal void RegisterAggregateKey<TAggregate>(Func<string, string> getPersistenceKey)
+        {
+            var aggregateMetadata = GetOrAddAggregateMetadata<TAggregate>();
+            aggregateMetadata.GetKeyFromIdentifier = getPersistenceKey;
+        }
+
+        internal void RegisterAggregateSnapshotKey<TAggregate>(Func<string, string> getSnapshotKey)
+        {
+            var aggregateMetadata = GetOrAddAggregateMetadata<TAggregate>();
+            aggregateMetadata.GetSnapshotKeyFromIdentifier = getSnapshotKey;
+        }
+
+        private AggregateMetadata GetOrAddAggregateMetadata<TAggregate>()
         {
             var aggregateType = typeof(TAggregate);
             if (!_aggregateMetadataMap.TryGetValue(aggregateType, out var aggregateMetadata))
@@ -85,7 +103,7 @@ namespace DomainLib.Aggregates.Registration
                 _aggregateMetadataMap.Add(aggregateType, aggregateMetadata);
             }
 
-            aggregateMetadata.GetKeyFromIdentifier = getStreamName;
+            return aggregateMetadata;
         }
     }
 }
