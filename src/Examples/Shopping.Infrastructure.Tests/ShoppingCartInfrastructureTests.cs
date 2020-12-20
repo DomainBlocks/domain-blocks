@@ -29,11 +29,11 @@ namespace Shopping.Infrastructure.Tests
             // Execute the first command.
             var initialState = new ShoppingCartState();
             
-            var command1 = new AddItemToShoppingCart(shoppingCartId, "First Item");
+            var command1 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "First Item");
             var (newState1, events1) = aggregateRegistry.CommandDispatcher.ImmutableDispatch(initialState, command1);
 
             // Execute the second command to the result of the first command.
-            var command2 = new AddItemToShoppingCart(shoppingCartId, "Second Item");
+            var command2 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "Second Item");
             var (newState2, events2) = aggregateRegistry.CommandDispatcher.ImmutableDispatch(newState1, command2);
 
             Assert.That(newState2.Id.HasValue, "Expected ShoppingCart ID to be set");
@@ -65,8 +65,8 @@ namespace Shopping.Infrastructure.Tests
             Assert.That(loadedVersion, Is.EqualTo(2));
             Assert.That(loadedState.Id, Is.EqualTo(shoppingCartId));
             Assert.That(loadedState.Items, Has.Count.EqualTo(2));
-            Assert.That(loadedState.Items[0], Is.EqualTo("First Item"));
-            Assert.That(loadedState.Items[1], Is.EqualTo("Second Item"));
+            Assert.That(loadedState.Items[0].Name, Is.EqualTo("First Item"));
+            Assert.That(loadedState.Items[1].Name, Is.EqualTo("Second Item"));
         }
     }
 }

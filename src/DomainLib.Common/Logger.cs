@@ -3,7 +3,7 @@ using System.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace DomainLib
+namespace DomainLib.Common
 {
     public static class Logger
     {

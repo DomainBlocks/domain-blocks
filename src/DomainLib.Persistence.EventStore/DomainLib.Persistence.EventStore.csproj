@@ -10,6 +10,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\DomainLib.Common\DomainLib.Common.csproj" />
     <ProjectReference Include="..\DomainLib.Persistence\DomainLib.Persistence.csproj" />
     <ProjectReference Include="..\DomainLib.Serialization\DomainLib.Serialization.csproj" />
     <ProjectReference Include="..\DomainLib\DomainLib.csproj" />

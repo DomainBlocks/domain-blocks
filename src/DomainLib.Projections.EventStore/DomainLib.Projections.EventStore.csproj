@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="EventStore.Client" Version="20.6.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DomainLib.Projections\DomainLib.Projections.csproj" />
+    <ProjectReference Include="..\DomainLib.Serialization\DomainLib.Serialization.csproj" />
+  </ItemGroup>
+
+</Project>
