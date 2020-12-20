@@ -1,9 +1,10 @@
-﻿using System;
+﻿using DomainLib.Common;
 using DomainLib.Serialization;
 using EventStore.ClientAPI;
+using Microsoft.Extensions.Logging;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
 
 namespace DomainLib.Persistence.EventStore
 {

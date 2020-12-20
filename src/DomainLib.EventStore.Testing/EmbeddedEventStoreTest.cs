@@ -18,7 +18,7 @@ namespace DomainLib.EventStore.Testing
 
             var node = nodeBuilder.Build();
             await node.StartAsync(true);
-
+            
             var connection = EmbeddedEventStoreConnection.Create(node);
             await connection.ConnectAsync();
 

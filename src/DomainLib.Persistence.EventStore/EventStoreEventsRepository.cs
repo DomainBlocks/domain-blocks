@@ -1,4 +1,5 @@
-﻿using DomainLib.Serialization;
+﻿using DomainLib.Common;
+using DomainLib.Serialization;
 using EventStore.ClientAPI;
 using Microsoft.Extensions.Logging;
 using System;

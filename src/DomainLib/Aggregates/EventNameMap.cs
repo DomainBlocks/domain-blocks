@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace DomainLib.Aggregates
 {
-    internal sealed class EventNameMap : IEventNameMap
+    public sealed class EventNameMap : IEventNameMap
     {
         private readonly Dictionary<string, Type> _eventNameToTypeMap;
         private readonly Dictionary<Type, string> _eventTypeToNameMap;
