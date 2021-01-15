@@ -5,19 +5,30 @@ using DomainLib.Aggregates;
 
 namespace DomainLib.Persistence
 {
-    public sealed class AggregateRepository<TEventBase> : IAggregateRepository<TEventBase>
+    public static class AggregateRepository
     {
-        private readonly IEventsRepository _repository;
+        public static AggregateRepository<TEventBase, TRawData> Create<TEventBase, TRawData>(IEventsRepository<TRawData> repository,
+                                                                                             ISnapshotRepository snapshotRepository,
+                                                                                             EventDispatcher<TEventBase> eventDispatcher,
+                                                                                             AggregateMetadataMap metadataMap)
+        {
+            return new AggregateRepository<TEventBase, TRawData>(repository, snapshotRepository, eventDispatcher, metadataMap);
+        }
+    }
+
+    public sealed class AggregateRepository<TEventBase, TRawData> : IAggregateRepository<TEventBase>
+    {
+        private readonly IEventsRepository<TRawData> _eventsRepository;
         private readonly ISnapshotRepository _snapshotRepository;
         private readonly EventDispatcher<TEventBase> _eventDispatcher;
         private readonly AggregateMetadataMap _metadataMap;
 
-        public AggregateRepository(IEventsRepository repository, 
+        public AggregateRepository(IEventsRepository<TRawData> eventsRepository, 
                                    ISnapshotRepository snapshotRepository, 
                                    EventDispatcher<TEventBase> eventDispatcher, 
                                    AggregateMetadataMap metadataMap)
         {
-            _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+            _eventsRepository = eventsRepository ?? throw new ArgumentNullException(nameof(eventsRepository));
             _snapshotRepository = snapshotRepository ?? throw new ArgumentNullException(nameof(snapshotRepository));
             _eventDispatcher = eventDispatcher ?? throw new ArgumentNullException(nameof(eventDispatcher));
             _metadataMap = metadataMap ?? throw new ArgumentNullException(nameof(metadataMap));
@@ -69,7 +80,7 @@ namespace DomainLib.Persistence
                                                     "was supplied onto which to append events");
             }
 
-            var events = await _repository.LoadEventsAsync<TEventBase>(streamName, loadStartPosition);
+            var events = await _eventsRepository.LoadEventsAsync<TEventBase>(streamName, loadStartPosition);
             var state = _eventDispatcher.ImmutableDispatch(stateToAppendEventsTo, events);
             var newVersion = loadStartPosition + events.Count - 1;
 
@@ -83,7 +94,7 @@ namespace DomainLib.Persistence
 
             var aggregateMetadata = _metadataMap.GetForType<TAggregateState>();
             var streamName = aggregateMetadata.GetKeyFromIdentifier(id);
-            return await _repository.SaveEventsAsync(streamName, expectedVersion, eventsToApply);
+            return await _eventsRepository.SaveEventsAsync(streamName, expectedVersion, eventsToApply);
         }
 
         public async Task SaveSnapshot<TAggregateState>(VersionedAggregateState<TAggregateState> versionedState)

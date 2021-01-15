@@ -98,7 +98,7 @@ namespace DomainLib.EventStore.Testing
             string erroredEventData = null;
             Guid? erroredEventId = null;
 
-            void OnEventError(IEventPersistenceData e)
+            void OnEventError(IEventPersistenceData<byte[]> e)
             {
                 erroredEventCount++;
                 erroredEventData = Encoding.UTF8.GetString(e.EventData);
@@ -123,9 +123,9 @@ namespace DomainLib.EventStore.Testing
             });
         }
 
-        private IEventsRepository CreateRepository()
+        private IEventsRepository<byte[]> CreateRepository()
         {
-            var serializer = new JsonEventSerializer(Fakes.EventNameMap);
+            var serializer = new JsonBytesEventSerializer(Fakes.EventNameMap);
             var repo = new EventStoreEventsRepository(EventStoreConnection, serializer);
 
             return repo;

@@ -9,14 +9,14 @@ using System.Threading.Tasks;
 
 namespace DomainLib.Persistence.EventStore
 {
-    public class EventStoreEventsRepository : IEventsRepository
+    public class EventStoreEventsRepository : IEventsRepository<byte[]>
     {
         private static readonly ILogger<EventStoreEventsRepository> Log = Logger.CreateFor<EventStoreEventsRepository>();
         private readonly IEventStoreConnection _connection;
-        private readonly IEventSerializer _serializer;
+        private readonly IEventSerializer<byte[]> _serializer;
         private const int MaxWriteBatchSize = 4095;
 
-        public EventStoreEventsRepository(IEventStoreConnection connection, IEventSerializer serializer)
+        public EventStoreEventsRepository(IEventStoreConnection connection, IEventSerializer<byte[]> serializer)
         {
             _connection = connection ?? throw new ArgumentNullException(nameof(connection));
             _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
@@ -104,7 +104,7 @@ namespace DomainLib.Persistence.EventStore
             return writeResult.NextExpectedVersion;
         }
 
-        public async Task<IList<TEvent>> LoadEventsAsync<TEvent>(string streamName, long startPosition = 0, Action<IEventPersistenceData> onEventError = null)
+        public async Task<IList<TEvent>> LoadEventsAsync<TEvent>(string streamName, long startPosition = 0, Action<IEventPersistenceData<byte[]>> onEventError = null)
         {
             if (streamName == null) throw new ArgumentNullException(nameof(streamName));
             var sliceStartPosition = startPosition;

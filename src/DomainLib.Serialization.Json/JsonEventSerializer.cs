@@ -7,15 +7,18 @@ using System.Text.Json.Serialization;
 
 namespace DomainLib.Serialization.Json
 {
-    public class JsonEventSerializer : IEventSerializer
+    public class JsonEventSerializer<TRawData> : IEventSerializer<TRawData>
     {
         private readonly JsonSerializerOptions _options;
         private readonly IEventNameMap _eventNameMap;
+        private readonly IEventSerializationAdapter<TRawData> _adapter;
+        private readonly JsonEventDeserializer _deserializer = new JsonEventDeserializer();
         private EventMetadataContext _metadataContext;
 
-        public JsonEventSerializer(IEventNameMap eventNameMap)
+        public JsonEventSerializer(IEventNameMap eventNameMap, IEventSerializationAdapter<TRawData> adapter)
         {
             _eventNameMap = eventNameMap ?? throw new ArgumentNullException(nameof(eventNameMap));
+            _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
             _options = new JsonSerializerOptions
             {
                 WriteIndented = true,
@@ -23,9 +26,10 @@ namespace DomainLib.Serialization.Json
             };
         }
 
-        public JsonEventSerializer(IEventNameMap eventNameMap, JsonSerializerOptions options)
+        public JsonEventSerializer(IEventNameMap eventNameMap, IEventSerializationAdapter<TRawData> adapter, JsonSerializerOptions options)
         {
             _eventNameMap = eventNameMap ?? throw new ArgumentNullException(nameof(eventNameMap));
+            _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
             _options = options ?? throw new ArgumentNullException(nameof(options));
         }
 
@@ -40,12 +44,12 @@ namespace DomainLib.Serialization.Json
             _metadataContext = metadataContext ?? throw new ArgumentNullException(nameof(metadataContext));
         }
 
-        public IEventPersistenceData GetPersistenceData(object @event, string eventNameOverride = null, params KeyValuePair<string, string>[] additionalMetadata)
+        public IEventPersistenceData<TRawData> GetPersistenceData(object @event, string eventNameOverride = null, params KeyValuePair<string, string>[] additionalMetadata)
         {
             if (@event == null) throw new ArgumentNullException(nameof(@event));
 
             var eventName = eventNameOverride ?? _eventNameMap.GetEventNameForClrType(@event.GetType());
-            var eventData = JsonSerializer.SerializeToUtf8Bytes(@event, _options);
+            var eventData = _adapter.ToRawData(JsonSerializer.SerializeToUtf8Bytes(@event, _options));
 
             if (additionalMetadata.Length > 0 && _metadataContext == null)
             {
@@ -53,44 +57,26 @@ namespace DomainLib.Serialization.Json
             }
 
             var eventMetadata = _metadataContext == null
-                ? null
-                : JsonSerializer.SerializeToUtf8Bytes(_metadataContext.BuildMetadata(additionalMetadata), _options);
+                ? default
+                : _adapter.ToRawData(JsonSerializer.SerializeToUtf8Bytes(_metadataContext.BuildMetadata(additionalMetadata), _options));
 
-            return new JsonEventPersistenceData(Guid.NewGuid(),
-                                                eventName,
-                                                eventData,
-                                                eventMetadata);
+            return new JsonEventPersistenceData<TRawData>(Guid.NewGuid(),
+                                                          eventName,
+                                                          eventData,
+                                                          eventMetadata);
         }
 
-        public TEvent DeserializeEvent<TEvent>(byte[] eventData, string eventName, Type typeOverride = null)
+        public TEvent DeserializeEvent<TEvent>(TRawData eventData, string eventName, Type typeOverride = null)
         {
-            if (eventData == null) throw new ArgumentNullException(nameof(eventData));
-            if (eventName == null) throw new ArgumentNullException(nameof(eventName));
-
-            try
-            {
-                var clrType = typeOverride ?? _eventNameMap.GetClrTypeForEventName(eventName);
-                var evt = JsonSerializer.Deserialize(eventData, clrType, _options);
-
-                if (evt is TEvent @event)
-                {
-                    return @event;
-                }
-            }
-            catch (Exception ex)
-            {
-                throw new EventDeserializeException("Unable to deserialize event", ex);
-            }
-
-            var runtTimeType = typeof(TEvent);
-            throw new InvalidEventTypeException($"Cannot cast event of type {eventName} to {runtTimeType.FullName}", eventName, runtTimeType.FullName);
+            var clrType = typeOverride ?? _eventNameMap.GetClrTypeForEventName(eventName);
+            return _deserializer.DeserializeEvent<TEvent>(_adapter.FromRawData(eventData), eventName, clrType, _options);
         }
 
-        public Dictionary<string, string> DeserializeMetadata(byte[] metadataBytes)
+        public Dictionary<string, string> DeserializeMetadata(TRawData rawMetadata)
         {
-            if (metadataBytes == null) throw new ArgumentNullException(nameof(metadataBytes));
+            if (rawMetadata == null) throw new ArgumentNullException(nameof(rawMetadata));
 
-            var metadata = JsonSerializer.Deserialize<IList<KeyValuePair<string, string>>>(metadataBytes)
+            var metadata = JsonSerializer.Deserialize<IList<KeyValuePair<string, string>>>(_adapter.FromRawData(rawMetadata))
                                          .ToDictionary(x => x.Key, x => x.Value);
                                
             return metadata;

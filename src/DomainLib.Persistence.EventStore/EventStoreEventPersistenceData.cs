@@ -4,24 +4,24 @@ using EventStore.ClientAPI;
 
 namespace DomainLib.Persistence.EventStore
 {
-    public class EventStoreEventPersistenceData : IEventPersistenceData
+    public class EventStoreEventPersistenceData : IEventPersistenceData<byte[]>
     {
         private EventStoreEventPersistenceData(Guid eventId, string eventName, bool isJsonBytes, byte[] eventData, byte[] eventMetadata)
         {
             EventId = eventId;
             EventName = eventName;
-            IsJsonBytes = isJsonBytes;
+            IsJson = isJsonBytes;
             EventData = eventData;
             EventMetadata = eventMetadata;
         }
 
         public Guid EventId { get; }
         public string EventName { get; }
-        public bool IsJsonBytes { get; }
+        public bool IsJson { get; }
         public byte[] EventData { get; }
         public byte[] EventMetadata { get; }
 
-        public static IEventPersistenceData FromRecordedEvent(RecordedEvent recordedEvent)
+        public static IEventPersistenceData<byte[]> FromRecordedEvent(RecordedEvent recordedEvent)
         {
             return new EventStoreEventPersistenceData(recordedEvent.EventId,
                                                       recordedEvent.EventType,
