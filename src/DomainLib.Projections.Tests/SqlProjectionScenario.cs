@@ -65,14 +65,13 @@ namespace DomainLib.Projections.Sql.Tests
                            .ExecutesCustomSql(DeleteCustomSqlEvent.CustomSqlText);
 
             var registry = registryBuilder.Build();
-            var serializer = new JsonEventSerializer(new EventNameMap());
             var dispatcherConfig = EventDispatcherConfiguration.ReadModelDefaults with { ProjectionHandlerTimeout =
                                        TimeSpan.FromHours(2)};
 
             var dispatcher = new EventDispatcher<object>(Publisher,
                                                          registry.EventProjectionMap,
                                                          registry.EventContextMap,
-                                                         serializer,
+                                                         new JsonEventDeserializer(),
                                                          registry.EventNameMap,
                                                          dispatcherConfig);
 

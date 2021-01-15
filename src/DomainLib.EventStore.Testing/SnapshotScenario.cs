@@ -15,7 +15,7 @@ namespace DomainLib.EventStore.Testing
         private readonly TestAggregateState _initialState;
         private EmbeddedEventStoreTest _test;
         private CommandDispatcher<TestCommand, TestEvent> _commandDispatcher;
-        private AggregateRepository<TestEvent> _aggregateRepository;
+        private AggregateRepository<TestEvent, byte[]> _aggregateRepository;
         private Guid _id;
         private List<TestEvent> _uncommittedEvents = new();
         private long _aggregateVersion = StreamVersion.NewStream;
@@ -94,13 +94,13 @@ namespace DomainLib.EventStore.Testing
 
             var registry = registryBuilder.Build();
 
-            var serializer = new JsonEventSerializer(registry.EventNameMap);
+            var serializer = new JsonBytesEventSerializer(registry.EventNameMap);
 
             _commandDispatcher = registry.CommandDispatcher;
             var snapshotRepository = new EventStoreSnapshotRepository(_test.EventStoreConnection, serializer);
             var eventsRepository = new EventStoreEventsRepository(_test.EventStoreConnection, serializer);
 
-            _aggregateRepository = new AggregateRepository<TestEvent>(eventsRepository, snapshotRepository, registry.EventDispatcher, registry.AggregateMetadataMap);
+            _aggregateRepository = AggregateRepository.Create(eventsRepository, snapshotRepository, registry.EventDispatcher, registry.AggregateMetadataMap);
         }
     }
 }

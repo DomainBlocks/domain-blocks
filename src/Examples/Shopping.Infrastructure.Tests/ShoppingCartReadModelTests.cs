@@ -1,5 +1,4 @@
-﻿using DomainLib.Aggregates;
-using DomainLib.Aggregates.Registration;
+﻿using DomainLib.Aggregates.Registration;
 using DomainLib.Common;
 using DomainLib.EventStore.Testing;
 using DomainLib.Persistence;
@@ -40,15 +39,12 @@ namespace Shopping.Infrastructure.Tests
 
             var registry = projectionRegistryBuilder.Build();
 
-            // TODO: EventNameMap isn't actually used here as we deserialize differently on the read side.
-            // We need to fix this so that we don't have to pass an empty instance in
-            var serializer = new JsonEventSerializer(new EventNameMap());
             var eventPublisher = new EventStoreEventPublisher(EventStoreConnection);
 
             var eventStream = new ProjectionDispatcher(eventPublisher,
                                                        registry.EventProjectionMap,
                                                        registry.EventContextMap,
-                                                       serializer,
+                                                       new JsonEventDeserializer(),
                                                        registry.EventNameMap,
                                                        EventDispatcherConfiguration.ReadModelDefaults);
             await WriteEventsToStream();
@@ -87,14 +83,14 @@ namespace Shopping.Infrastructure.Tests
 
             var eventsToPersist = events1.Concat(events2).Concat(events3).ToList();
 
-            var serializer = new JsonEventSerializer(aggregateRegistry.EventNameMap);
+            var serializer = new JsonBytesEventSerializer(aggregateRegistry.EventNameMap);
             var eventsRepository = new EventStoreEventsRepository(EventStoreConnection, serializer);
             var snapshotRepository = new EventStoreSnapshotRepository(EventStoreConnection, serializer);
 
-            var aggregateRepository = new AggregateRepository<IDomainEvent>(eventsRepository,
-                                                                            snapshotRepository,
-                                                                            aggregateRegistry.EventDispatcher,
-                                                                            aggregateRegistry.AggregateMetadataMap);
+            var aggregateRepository = AggregateRepository.Create(eventsRepository,
+                                                                 snapshotRepository,
+                                                                 aggregateRegistry.EventDispatcher,
+                                                                 aggregateRegistry.AggregateMetadataMap);
 
             var nextEventVersion = await aggregateRepository.SaveAggregate<ShoppingCartState>(newState3.Id.ToString(),
                                                                                               ExpectedVersion.NoStream,

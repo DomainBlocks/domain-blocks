@@ -14,9 +14,9 @@ namespace DomainLib.Persistence.EventStore
         private const string SnapshotEventName = "Snapshot";
         private static readonly ILogger<EventStoreSnapshotRepository> Log = Logger.CreateFor<EventStoreSnapshotRepository>();
         private readonly IEventStoreConnection _connection;
-        private readonly IEventSerializer _serializer;
+        private readonly IEventSerializer<byte[]> _serializer;
 
-        public EventStoreSnapshotRepository(IEventStoreConnection connection, IEventSerializer serializer)
+        public EventStoreSnapshotRepository(IEventStoreConnection connection, IEventSerializer<byte[]> serializer)
         {
             _connection = connection;
             _serializer = serializer;

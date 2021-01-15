@@ -1,5 +1,4 @@
 ﻿using Dapper;
-using DomainLib.Aggregates;
 using DomainLib.Common;
 using DomainLib.Projections.Sql;
 using DomainLib.Projections.Sql.Tests.Fakes;
@@ -110,16 +109,13 @@ namespace DomainLib.Projections.Sqlite.Tests
 
             var registry = projectionRegistryBuilder.Build();
 
-            // TODO: EventNameMap isn't actually used here as we deserialize differently on the read side.
-            // We need to fix this so that we don't have to pass an empty instance in
-            var serializer = new JsonEventSerializer(new EventNameMap());
             var eventPublisher = new FakeJsonEventPublisher();
             _publisher = eventPublisher;
 
             var eventDispatcher = new EventDispatcher<object>(eventPublisher,
                                                               registry.EventProjectionMap,
                                                               registry.EventContextMap,
-                                                              serializer,
+                                                              new JsonEventDeserializer(),
                                                               registry.EventNameMap,
                                                               EventDispatcherConfiguration.ReadModelDefaults with {
                                                                   ProjectionHandlerTimeout = TimeSpan.FromMinutes(5)});

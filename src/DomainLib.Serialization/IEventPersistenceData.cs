@@ -2,12 +2,12 @@
 
 namespace DomainLib.Serialization
 {
-    public interface IEventPersistenceData
+    public interface IEventPersistenceData<out TRawData>
     {
         Guid EventId { get; }
         string EventName { get; }
-        bool IsJsonBytes { get; }
-        byte[] EventData { get; }
-        byte[] EventMetadata { get; }
+        bool IsJson { get; }
+        TRawData EventData { get; }
+        TRawData EventMetadata { get; }
     }
 }

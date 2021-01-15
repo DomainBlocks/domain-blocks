@@ -15,20 +15,20 @@ namespace DomainLib.Projections
         private readonly EventProjectionMap _projectionMap;
         private readonly EventContextMap _eventContextMap;
         private readonly EventDispatcherConfiguration _configuration;
-        private readonly IEventSerializer _serializer;
+        private readonly IEventDeserializer _deserializer;
         private readonly IProjectionEventNameMap _projectionEventNameMap;
 
         public EventDispatcher(IEventPublisher<byte[]> publisher,
                                EventProjectionMap projectionMap,
                                EventContextMap eventContextMap,
-                               IEventSerializer serializer,
+                               IEventDeserializer serializer,
                                IProjectionEventNameMap projectionEventNameMap,
                                EventDispatcherConfiguration configuration)
         {
             _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
             _projectionMap = projectionMap ?? throw new ArgumentNullException(nameof(projectionMap));
             _eventContextMap = eventContextMap ?? throw new ArgumentNullException(nameof(eventContextMap));
-            _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+            _deserializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
             _projectionEventNameMap =
                 projectionEventNameMap ?? throw new ArgumentNullException(nameof(projectionEventNameMap));
             _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
@@ -79,7 +79,7 @@ namespace DomainLib.Projections
                 TEventBase @event;
                 try
                 {
-                    @event = _serializer.DeserializeEvent<TEventBase>(eventData, eventType, type);
+                    @event = _deserializer.DeserializeEvent<TEventBase>(eventData, eventType, type);
                 }
                 catch (Exception e)
                 {

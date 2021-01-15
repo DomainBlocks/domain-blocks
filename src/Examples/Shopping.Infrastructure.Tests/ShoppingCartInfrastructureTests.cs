@@ -40,14 +40,14 @@ namespace Shopping.Infrastructure.Tests
 
             var eventsToPersist = events1.Concat(events2).ToList();
 
-            var serializer = new JsonEventSerializer(aggregateRegistry.EventNameMap);
+            var serializer = new JsonBytesEventSerializer(aggregateRegistry.EventNameMap);
             var eventsRepository = new EventStoreEventsRepository(EventStoreConnection, serializer);
             var snapshotRepository = new EventStoreSnapshotRepository(EventStoreConnection, serializer);
 
-            var aggregateRepository = new AggregateRepository<IDomainEvent>(eventsRepository, 
-                                                                            snapshotRepository, 
-                                                                            aggregateRegistry.EventDispatcher,
-                                                                            aggregateRegistry.AggregateMetadataMap);
+            var aggregateRepository = AggregateRepository.Create(eventsRepository,
+                                                                 snapshotRepository,
+                                                                 aggregateRegistry.EventDispatcher,
+                                                                 aggregateRegistry.AggregateMetadataMap);
 
             var nextEventVersion = await aggregateRepository.SaveAggregate<ShoppingCartState>(newState2.Id.ToString(),
                                                                                               ExpectedVersion.NoStream,
