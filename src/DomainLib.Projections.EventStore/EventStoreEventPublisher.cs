@@ -10,23 +10,19 @@ namespace DomainLib.Projections.EventStore
         private readonly IEventStoreConnection _connection;
         private Func<EventNotification<byte[]>, Task> _onEvent;
         private EventStoreCatchUpSubscription _subscription;
-        
+        private readonly EventStoreDroppedSubscriptionHandler _subscriptionDroppedHandler;
+        private Position _lastProcessedPosition;
+
         public EventStoreEventPublisher(IEventStoreConnection connection)
         {
             _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+            _subscriptionDroppedHandler = new EventStoreDroppedSubscriptionHandler(Stop, ReSubscribeAfterDrop);
         }
 
         public Task StartAsync(Func<EventNotification<byte[]>, Task> onEvent)
         {
             _onEvent = onEvent ?? throw new ArgumentNullException(nameof(onEvent));
-            var settings = CatchUpSubscriptionFilteredSettings.Default;
-            _subscription = _connection.FilteredSubscribeToAllFrom(Position.Start,
-                                                                   Filter.ExcludeSystemEvents,
-                                                                   settings,
-                                                                   HandleEvent,
-                                                                   OnLiveProcessingStarted,
-                                                                   OnSubscriptionDropped,
-                                                                   new UserCredentials("admin", "changeit"));
+            SubscribeToEventStore(Position.Start);
 
             return Task.CompletedTask;
         }
@@ -41,23 +37,44 @@ namespace DomainLib.Projections.EventStore
             _subscription.Stop();
         }
 
+        private void SubscribeToEventStore(Position position)
+        {
+            _subscription = _connection.FilteredSubscribeToAllFrom(position,
+                                                                   Filter.ExcludeSystemEvents,
+                                                                   CatchUpSubscriptionFilteredSettings.Default,
+                                                                   HandleEvent,
+                                                                   OnLiveProcessingStarted,
+                                                                   OnSubscriptionDropped,
+                                                                   new UserCredentials("admin", "changeit"));
+        }
+
         private async Task HandleEvent(EventStoreCatchUpSubscription subscription, ResolvedEvent resolvedEvent)
         {
             var notification = EventNotification.FromEvent(resolvedEvent.Event.Data,
                                                            resolvedEvent.Event.EventType,
                                                            resolvedEvent.Event.EventId);
             await _onEvent(notification);
+
+            if (resolvedEvent.OriginalPosition.HasValue)
+            {
+                _lastProcessedPosition = resolvedEvent.OriginalPosition.Value;
+            }
         }
 
-        private void OnLiveProcessingStarted(EventStoreCatchUpSubscription arg1)
+        private void OnLiveProcessingStarted(EventStoreCatchUpSubscription subscription)
         {
             _onEvent(EventNotification.CaughtUp<byte[]>());
         }
 
         private void OnSubscriptionDropped(EventStoreCatchUpSubscription subscription, SubscriptionDropReason reason, Exception exception)
         {
-            // TODO: Need to handle this
-            // https://github.com/daniel-smith/domain-lib/issues/29
+            _subscriptionDroppedHandler.HandleDroppedSubscription(reason, exception);
+        }
+
+        private Task ReSubscribeAfterDrop()
+        {
+            SubscribeToEventStore(_lastProcessedPosition);
+            return Task.CompletedTask;
         }
     }
 }

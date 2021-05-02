@@ -23,7 +23,7 @@ using ProjectionDispatcher = DomainLib.Projections.EventDispatcher<Shopping.Doma
 namespace Shopping.Infrastructure.Tests
 {
     [TestFixture]
-    public class ShoppingCartReadModelTests : EmbeddedEventStoreTest
+    public class ShoppingCartEndToEndTests : EmbeddedEventStoreTest
     {
         [Test]
         [Ignore("Need to figure out a better end to end test")]
@@ -33,25 +33,65 @@ namespace Shopping.Infrastructure.Tests
                                                                        .AddConsole());
 
             Logger.SetLoggerFactory(loggerFactory);
+            
+            await SetUpReadModelProjections();
+            await SetUpProcessManagerProjections();
+
+            await WriteEventsToStream();
+
+            await Task.Delay(200);
+        }
+
+        private async Task SetUpReadModelProjections()
+        {
             var projectionRegistryBuilder = new ProjectionRegistryBuilder();
 
             ShoppingCartSummarySqlProjection.Register(projectionRegistryBuilder);
 
             var registry = projectionRegistryBuilder.Build();
 
-            var eventPublisher = new EventStoreEventPublisher(EventStoreConnection);
+            var readModelEventPublisher = new EventStoreEventPublisher(EventStoreConnection);
 
-            var eventStream = new ProjectionDispatcher(eventPublisher,
-                                                       registry.EventProjectionMap,
-                                                       registry.EventContextMap,
-                                                       new JsonEventDeserializer(),
-                                                       registry.EventNameMap,
-                                                       EventDispatcherConfiguration.ReadModelDefaults);
-            await WriteEventsToStream();
+            var readModelDispatcher = new ProjectionDispatcher(readModelEventPublisher,
+                                                               registry.EventProjectionMap,
+                                                               registry.EventContextMap,
+                                                               new JsonEventDeserializer(),
+                                                               registry.EventNameMap,
+                                                               EventDispatcherConfiguration.ReadModelDefaults);
 
-            await eventStream.StartAsync();
 
-            await Task.Delay(200);
+            await readModelDispatcher.StartAsync();
+        }
+
+        private async Task SetUpProcessManagerProjections()
+        {
+            var credentials = new UserCredentials("admin", "changeit");
+
+            var settings = PersistentSubscriptionSettings.Create()
+                                                         .StartFromCurrent()
+                                                         .PreferDispatchToSingle();
+
+            var stream = "ShoppingCartProcess";
+            var groupName = "SubscriptionGroup1";
+            
+            await EventStoreConnection.CreatePersistentSubscriptionAsync(stream, groupName, settings, credentials.ToEsUserCredentials());
+            
+            
+            
+            var processProjectionRegistryBuilder = new ProjectionRegistryBuilder();
+
+            ShoppingCartProcess.Register(processProjectionRegistryBuilder);
+            var processRegistry = processProjectionRegistryBuilder.Build();
+            
+            var persistentSubscriptionDescriptor = new EventStorePersistentConnectionDescriptor(stream, groupName, 10, credentials);
+            var processEventPublisher = new AcknowledgingEventStoreEventPublisher(EventStoreConnection, persistentSubscriptionDescriptor);
+
+            var processDispatcher = new ProjectionDispatcher(processEventPublisher,
+                                                             processRegistry.EventProjectionMap,
+                                                             processRegistry.EventContextMap,
+                                                             new JsonEventDeserializer(),
+                                                             processRegistry.EventNameMap,
+                                                             EventDispatcherConfiguration.ReadModelDefaults);
         }
 
         private async Task WriteEventsToStream()
@@ -128,5 +168,14 @@ namespace Shopping.Infrastructure.Tests
             {nameof(ItemAddedToShoppingCart.CartId), new SqlColumnDefinitionBuilder().Name("CartId").Type(DbType.String).Build() },
             {nameof(ItemAddedToShoppingCart.Item), new SqlColumnDefinitionBuilder().Name("Item").Type(DbType.String).Build() },
         };
+    }
+
+    public class ShoppingCartProcess
+    {
+        public static void Register(ProjectionRegistryBuilder builder)
+        {
+            builder.Event<ItemRemovedFromShoppingCart>()
+                   .FromName(ItemRemovedFromShoppingCart.EventName);
+        }
     }
 }
