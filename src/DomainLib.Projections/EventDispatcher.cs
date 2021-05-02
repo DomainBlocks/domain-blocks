@@ -130,7 +130,7 @@ namespace DomainLib.Projections
                     }
                 }
 
-                Log.LogTrace("Run all projections for event ID {EventId}", eventId);
+                Log.LogTrace("All projections completed for event ID {EventId}", eventId);
 
                 var afterEventActions = contextsForEvent.Select(c => c.OnAfterHandleEvent());
                 await Task.WhenAll(afterEventActions).ConfigureAwait(false);
