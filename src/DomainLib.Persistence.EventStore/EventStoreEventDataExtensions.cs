@@ -1,19 +1,20 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using DomainLib.Serialization;
-using EventStore.ClientAPI;
+using EventStore.Client;
 
 namespace DomainLib.Persistence.EventStore
 {
     public static class EventStoreEventDataExtensions
     {
-        public static EventData ToEventData(this IEventSerializer<byte[]> @eventSerializer, object @event, string eventNameOverride = null, params KeyValuePair<string, string>[] additionalMetadata)
+        public static EventData ToEventData(this IEventSerializer<ReadOnlyMemory<byte>> @eventSerializer, object @event, string eventNameOverride = null, params KeyValuePair<string, string>[] additionalMetadata)
         {
             var eventPersistenceData = eventSerializer.GetPersistenceData(@event, eventNameOverride, additionalMetadata);
-            return new EventData(eventPersistenceData.EventId,
+            return new EventData(Uuid.FromGuid(eventPersistenceData.EventId),
                                  eventPersistenceData.EventName,
-                                 eventPersistenceData.IsJson,
                                  eventPersistenceData.EventData,
-                                 eventPersistenceData.EventMetadata);
+                                 eventPersistenceData.EventMetadata,
+                                 eventPersistenceData.ContentType);
         }
     }
 }

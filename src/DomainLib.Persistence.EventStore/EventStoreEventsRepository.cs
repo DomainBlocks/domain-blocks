@@ -1,24 +1,23 @@
-﻿using DomainLib.Common;
-using DomainLib.Serialization;
-using EventStore.ClientAPI;
-using Microsoft.Extensions.Logging;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using DomainLib.Common;
+using DomainLib.Serialization;
+using EventStore.Client;
+using Microsoft.Extensions.Logging;
 
 namespace DomainLib.Persistence.EventStore
 {
-    public class EventStoreEventsRepository : IEventsRepository<byte[]>
+    public class EventStoreEventsRepository : IEventsRepository<ReadOnlyMemory<byte>>
     {
         private static readonly ILogger<EventStoreEventsRepository> Log = Logger.CreateFor<EventStoreEventsRepository>();
-        private readonly IEventStoreConnection _connection;
-        private readonly IEventSerializer<byte[]> _serializer;
-        private const int MaxWriteBatchSize = 4095;
+        private readonly EventStoreClient _client;
+        private readonly IEventSerializer<ReadOnlyMemory<byte>> _serializer;
 
-        public EventStoreEventsRepository(IEventStoreConnection connection, IEventSerializer<byte[]> serializer)
+        public EventStoreEventsRepository(EventStoreClient client, IEventSerializer<ReadOnlyMemory<byte>> serializer)
         {
-            _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+            _client = client ?? throw new ArgumentNullException(nameof(client));
             _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
             Log.LogDebug("EventStoreEventsRepository created using {SerializerType} serializer", serializer.GetType().Name);
         }
@@ -39,11 +38,11 @@ namespace DomainLib.Persistence.EventStore
                 throw;
             }
 
-            var streamVersion = MapStreamVersionToEventStoreStreamVersion(expectedStreamVersion);
+            var streamVersion = MapStreamVersionToEventStoreStreamRevision(expectedStreamVersion);
             if (eventDatas.Length == 0)
             {
                 Log.LogWarning("No events in batch. Exiting");
-                return streamVersion;
+                return streamVersion.ToInt64();
             }
 
             // Use the ID of the first event in the batch as an identifier for the whole write to ES
@@ -57,43 +56,16 @@ namespace DomainLib.Persistence.EventStore
                 foreach (var eventData in eventDatas)
                 {
                     Log.LogTrace("Event to append {EventId}. EventType {EventType}. WriteId {WriteId}. " +
-                                     "EventBytes {EventBytes}. MetadataBytes {MetadataBytes}. IsJson {IsJson} ",
-                                     eventData.EventId, eventData.Type, writeId, eventData.Data, eventData.Metadata, eventData.IsJson);
+                                     "EventBytes {EventBytes}. MetadataBytes {MetadataBytes}. ContentType {ContentType} ",
+                                     eventData.EventId, eventData.Type, writeId, eventData.Data, eventData.Metadata, eventData.ContentType);
                 }
             }
 
-            WriteResult writeResult;
+            IWriteResult writeResult;
             try
             {
-                if (eventDatas.Length <= MaxWriteBatchSize)
-                {
-                    writeResult = await _connection.AppendToStreamAsync(streamName, streamVersion, eventDatas);
-                    Log.LogDebug("Written events to stream. WriteId {WriteId}", writeId);
-                }
-                else
-                {
-                    using var transaction = await _connection.StartTransactionAsync(streamName, streamVersion);
-                    Log.LogDebug("Writing events as transaction. Transaction Id {TransactionId}. Write Id {WriteId}", transaction.TransactionId, writeId);
-                    var sliceStartPosition = 0;
-                    var eventsToSave = true;
-
-                    while (eventsToSave)
-                    {
-                        var eventsSlice = eventDatas.Skip(sliceStartPosition).Take(MaxWriteBatchSize);
-                        await transaction.WriteAsync(eventsSlice);
-                        Log.LogDebug("Slice written to transaction {TransactionId}. Write Id {WriteId}", transaction.TransactionId, writeId);
-
-                        sliceStartPosition += MaxWriteBatchSize;
-
-                        if (sliceStartPosition >= eventDatas.Length)
-                        {
-                            eventsToSave = false;
-                        }
-                    }
-
-                    writeResult = await transaction.CommitAsync();
-                    Log.LogDebug("Transaction {TransactionId} committed. Write Id {WriteId}", transaction.TransactionId, writeId);
-                }
+                writeResult = await _client.AppendToStreamAsync(streamName, streamVersion, eventDatas);
+                Log.LogDebug("Written events to stream. WriteId {WriteId}", writeId);
             }
             catch (Exception ex)
             {
@@ -101,63 +73,59 @@ namespace DomainLib.Persistence.EventStore
                 throw;
             }
 
-            return writeResult.NextExpectedVersion;
+            return writeResult.NextExpectedStreamRevision.ToInt64();
         }
 
-        public async Task<IList<TEvent>> LoadEventsAsync<TEvent>(string streamName, long startPosition = 0, Action<IEventPersistenceData<byte[]>> onEventError = null)
+        public async Task<IList<TEvent>> LoadEventsAsync<TEvent>(string streamName, long startPosition = 0, Action<IEventPersistenceData<ReadOnlyMemory<byte>>> onEventError = null)
         {
             if (streamName == null) throw new ArgumentNullException(nameof(streamName));
-            var sliceStartPosition = startPosition;
             var events = new List<TEvent>();
 
-            StreamEventsSlice eventsSlice;
-            do
+            try
             {
-                try
-                {
-                    eventsSlice = (await _connection.ReadStreamEventsForwardAsync(streamName, sliceStartPosition, ClientApiConstants.MaxReadSize, false))
-                        .ThrowIfNotSuccess(streamName);
+                var readStreamResult =
+                    _client.ReadStreamAsync(Direction.Forwards,
+                                            streamName,
+                                            StreamPosition.FromInt64(startPosition));
 
-                    foreach (var resolvedEvent in eventsSlice.Events)
+                await foreach (var resolvedEvent in readStreamResult)
+                {
+                    try
                     {
-                        try
+                        events.Add(_serializer.DeserializeEvent<TEvent>(resolvedEvent.OriginalEvent.Data,
+                                                                        resolvedEvent.OriginalEvent.EventType));
+                    }
+                    catch (EventDeserializeException e)
+                    {
+                        if (onEventError == null)
                         {
-                            events.Add(_serializer.DeserializeEvent<TEvent>(resolvedEvent.OriginalEvent.Data, resolvedEvent.OriginalEvent.EventType));
+                            Log.LogWarning(e,
+                                           "Error deserializing event and no error handler set up. This may cause data inconsistencies");
                         }
-                        catch (EventDeserializeException e)
+                        else
                         {
-                            if (onEventError == null)
-                            {
-                                Log.LogWarning(e, "Error deserializing event and no error handler set up. This may cause data inconsistencies");
-                            }
-                            else
-                            {
-                                onEventError(EventStoreEventPersistenceData.FromRecordedEvent(resolvedEvent.Event));
-                                Log.LogInformation(e, "Error deserializing event. Calling onEventError handler");
-                            }
+                            onEventError(EventStoreEventPersistenceData.FromRecordedEvent(resolvedEvent.Event));
+                            Log.LogInformation(e, "Error deserializing event. Calling onEventError handler");
                         }
                     }
-
-                    sliceStartPosition = eventsSlice.NextEventNumber;
-
                 }
-                catch (Exception ex)
-                {
-                    Log.LogError(ex, "Unable to load events from {StreamName}", streamName);
-                    throw;
-                }
-            } while (!eventsSlice.IsEndOfStream);
+
+            }
+            catch (Exception ex)
+            {
+                Log.LogError(ex, "Unable to load events from {StreamName}", streamName);
+                throw;
+            }
 
             return events;
         }
 
-        private static long MapStreamVersionToEventStoreStreamVersion(long streamVersion)
+        private static StreamRevision MapStreamVersionToEventStoreStreamRevision(long streamVersion)
         {
             return streamVersion switch
             {
-                StreamVersion.Any => ExpectedVersion.Any,
-                StreamVersion.NewStream => ExpectedVersion.NoStream,
-                _ => streamVersion
+                StreamVersion.NewStream => StreamRevision.None,
+                _ => StreamRevision.FromInt64(streamVersion)
             };
         }
     }

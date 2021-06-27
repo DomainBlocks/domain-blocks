@@ -6,7 +6,7 @@ namespace DomainLib.Serialization
     {
         Guid EventId { get; }
         string EventName { get; }
-        bool IsJson { get; }
+        string ContentType { get; }
         TRawData EventData { get; }
         TRawData EventMetadata { get; }
     }

@@ -1,9 +1,8 @@
-﻿using System;
-using DomainLib.Aggregates.Registration;
+﻿using DomainLib.Aggregates.Registration;
 using DomainLib.Persistence;
 using DomainLib.Persistence.EventStore;
 using DomainLib.Serialization.Json;
-using EventStore.ClientAPI;
+using EventStore.Client;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -15,17 +14,17 @@ namespace DomainLib.EventStore.AspNetCore
         /// <summary>
         /// Adds an aggregate repository that uses EventStoreDb to persist events 
         /// </summary>
-        public static void AddEventStoreAggregateRepository(this IServiceCollection services,
-                                                            IConfiguration configuration,
-                                                            AggregateRegistry<object, object> aggregateRegistry)
+        public static IServiceCollection AddEventStoreAggregateRepository(this IServiceCollection services,
+                                                                          IConfiguration configuration,
+                                                                          AggregateRegistry<object, object> aggregateRegistry)
         {
-            AddEventStoreAggregateRepository<object, object>(services, configuration, aggregateRegistry);
+            return AddEventStoreAggregateRepository<object, object>(services, configuration, aggregateRegistry);
         }
 
         /// <summary>
         /// Adds an aggregate repository that uses EventStoreDb to persist events 
         /// </summary>
-        public static void AddEventStoreAggregateRepository<TCommandBase, TEventBase>(this IServiceCollection services,
+        public static IServiceCollection AddEventStoreAggregateRepository<TCommandBase, TEventBase>(this IServiceCollection services,
             IConfiguration configuration,
             AggregateRegistry<TCommandBase, TEventBase> aggregateRegistry)
         {
@@ -37,16 +36,10 @@ namespace DomainLib.EventStore.AspNetCore
             {
                 var options = provider.GetRequiredService<IOptions<EventStoreConnectionOptions>>();
 
-                var connectionSettings = ConnectionSettings.Create().DisableTls().Build();
-                var connection = EventStoreConnection.Create(connectionSettings, options.Value.Uri);
+                var settings = EventStoreClientSettings.Create(options.Value.ConnectionString);
+                var connection = new EventStoreClient(settings);
 
                 return connection;
-            });
-
-            services.AddHostedService(provider =>
-            {
-                var connection = provider.GetRequiredService<IEventStoreConnection>();
-                return new EventStoreConnectionHostedService(connection);
             });
 
             // TODO: It would be nice to be able to customize the serializer through the service registration
@@ -54,7 +47,7 @@ namespace DomainLib.EventStore.AspNetCore
 
             services.AddSingleton<IAggregateRepository<TEventBase>>(provider =>
             {
-                var connection = provider.GetRequiredService<IEventStoreConnection>();
+                var connection = provider.GetRequiredService<EventStoreClient>();
 
                 var eventsRepository = new EventStoreEventsRepository(connection, serializer);
                 var snapshotRepository = new EventStoreSnapshotRepository(connection, serializer);
@@ -66,6 +59,8 @@ namespace DomainLib.EventStore.AspNetCore
             });
 
             services.AddSingleton(aggregateRegistry.CommandDispatcher);
+
+            return services;
         }
     }
 }

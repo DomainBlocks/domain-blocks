@@ -69,14 +69,14 @@ namespace DomainLib.Serialization.Json
         public TEvent DeserializeEvent<TEvent>(TRawData eventData, string eventName, Type typeOverride = null)
         {
             var clrType = typeOverride ?? _eventNameMap.GetClrTypeForEventName(eventName);
-            return _deserializer.DeserializeEvent<TEvent>(_adapter.FromRawData(eventData), eventName, clrType, _options);
+            return _deserializer.DeserializeEvent<TEvent>(_adapter.FromRawData(eventData).Span, eventName, clrType, _options);
         }
 
         public Dictionary<string, string> DeserializeMetadata(TRawData rawMetadata)
         {
             if (rawMetadata == null) throw new ArgumentNullException(nameof(rawMetadata));
 
-            var metadata = JsonSerializer.Deserialize<IList<KeyValuePair<string, string>>>(_adapter.FromRawData(rawMetadata))
+            var metadata = JsonSerializer.Deserialize<IList<KeyValuePair<string, string>>>(_adapter.FromRawData(rawMetadata).Span)
                                          .ToDictionary(x => x.Key, x => x.Value);
                                
             return metadata;

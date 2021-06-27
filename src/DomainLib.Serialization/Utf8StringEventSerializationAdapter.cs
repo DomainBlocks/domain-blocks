@@ -1,17 +1,18 @@
-﻿using System.Text;
+﻿using System;
+using System.Text;
 
 namespace DomainLib.Serialization
 {
     public class Utf8StringEventSerializationAdapter : IEventSerializationAdapter<string>
     {
-        public byte[] FromRawData(string rawEventData)
+        public ReadOnlyMemory<byte> FromRawData(string rawEventData)
         {
             return Encoding.UTF8.GetBytes(rawEventData);
         }
 
-        public string ToRawData(byte[] bytes)
+        public string ToRawData(ReadOnlyMemory<byte> bytes)
         {
-            return Encoding.UTF8.GetString(bytes);
+            return Encoding.UTF8.GetString(bytes.Span);
         }
     }
 }
