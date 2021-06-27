@@ -25,7 +25,7 @@
     <ProjectReference Include="..\..\DomainLib.Projections\DomainLib.Projections.csproj" />
     <ProjectReference Include="..\..\DomainLib.Serialization.Json\DomainLib.Serialization.Json.csproj" />
     <ProjectReference Include="..\..\DomainLib.Serialization\DomainLib.Serialization.csproj" />
-    <ProjectReference Include="..\Shopping.Infrastructure\Shopping.Infrastructure.csproj" />
+    <ProjectReference Include="..\Shopping.Domain\Shopping.Domain.csproj" />
   </ItemGroup>
 
 </Project>
