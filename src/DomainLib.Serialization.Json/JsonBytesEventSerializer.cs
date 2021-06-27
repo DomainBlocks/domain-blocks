@@ -1,9 +1,10 @@
-﻿using System.Text.Json;
+﻿using System;
+using System.Text.Json;
 using DomainLib.Aggregates;
 
 namespace DomainLib.Serialization.Json
 {
-    public class JsonBytesEventSerializer : JsonEventSerializer<byte[]>
+    public class JsonBytesEventSerializer : JsonEventSerializer<ReadOnlyMemory<byte>>
     {
         public JsonBytesEventSerializer(IEventNameMap eventNameMap) : 
             base(eventNameMap, new ByteArrayEventSerializationAdapter())

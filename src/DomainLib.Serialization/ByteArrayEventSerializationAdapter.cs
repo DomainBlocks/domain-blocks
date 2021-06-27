@@ -1,13 +1,15 @@
-﻿namespace DomainLib.Serialization
+﻿using System;
+
+namespace DomainLib.Serialization
 {
-    public class ByteArrayEventSerializationAdapter : IEventSerializationAdapter<byte[]>
+    public class ByteArrayEventSerializationAdapter : IEventSerializationAdapter<ReadOnlyMemory<byte>>
     {
-        public byte[] FromRawData(byte[] rawEventData)
+        public ReadOnlyMemory<byte> FromRawData(ReadOnlyMemory<byte> rawEventData)
         {
             return rawEventData;
         }
 
-        public byte[] ToRawData(byte[] bytes)
+        public ReadOnlyMemory<byte> ToRawData(ReadOnlyMemory<byte> bytes)
         {
             return bytes;
         }

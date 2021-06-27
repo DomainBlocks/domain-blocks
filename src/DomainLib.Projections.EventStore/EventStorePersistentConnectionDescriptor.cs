@@ -1,5 +1,5 @@
 ﻿using System;
-using EventStore.ClientAPI.SystemData;
+using EventStore.Client;
 
 namespace DomainLib.Projections.EventStore
 {
