@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "Shopping.Api";
+
+package shoppingApi;
+
+// The greeting service definition.
+service ShoppingService {
+  // Sends a greeting
+  rpc Subscribe (stream Request) returns (stream Response);
+}
+
+message Request {
+	RequestHeader Header = 1;
+	oneof CommandMessage {
+		AddItemToShoppingCart addItem = 2;
+		RemoveItemFromShoppingCart removeItem = 3;
+		SaveItemForLater saveForLater = 4;
+	}
+}
+
+message RequestHeader {
+	MessageIdentifier identifier = 1;
+	RequestSource source = 2;
+	string messageType = 3;
+}
+
+message MessageIdentifier {
+	string correlationId = 1;
+	string causationId = 2;
+	string transactionId = 3;
+}
+
+message RequestSource {
+	string sourceUser = 1;
+	string sourceSystem = 2;
+	google.protobuf.Timestamp requestedAt = 3;
+}
+
+message AddItemToShoppingCart {
+  string cartId = 1;
+  string ItemId = 2;
+  string ItemName = 3;
+}
+
+message RemoveItemFromShoppingCart {
+  string cartId = 1;
+  string ItemId = 2;
+}
+
+message SaveItemForLater {
+  string cartId = 1;
+  string ItemId = 2;
+}
+
+
+message ResponseHeader {
+	MessageIdentifier identifier = 1;
+}
+
+message ResponseBody {
+	oneof ResponseMessage {
+	  CommandAcknowledgement commandAck = 1;
+	  DataResponse data = 2;
+	}
+}
+
+message Response {
+	ResponseHeader Header = 1;
+	ResponseBody Body = 2;
+}
+
+message CommandAcknowledgement {
+	bool success = 1;
+}
+
+message DataResponse {
+	oneof DataResponse {
+		string myString = 1;
+		int32 myInt = 2;
+	}
+}
+
+
