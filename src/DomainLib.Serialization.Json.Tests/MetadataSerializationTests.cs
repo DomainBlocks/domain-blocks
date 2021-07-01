@@ -125,7 +125,7 @@ namespace DomainLib.Serialization.Json.Tests
             var @event = new TestEvent("Some Value");
             var persistenceData = serializer.GetPersistenceData(@event);
 
-            Assert.That(persistenceData.EventMetadata, Is.Null);
+            Assert.That(persistenceData.EventMetadata, Is.EqualTo(ReadOnlyMemory<byte>.Empty));
         }
 
         [Test]
@@ -160,7 +160,7 @@ namespace DomainLib.Serialization.Json.Tests
             Assert.That(metadata[MetadataKeys.UtcDateTime], Is.Not.Null);
         }
 
-        private static IEventSerializer<byte[]> CreateJsonSerializerWithMetadata(Action<EventMetadataContext> applyCustomMetadata = null)
+        private static IEventSerializer<ReadOnlyMemory<byte>> CreateJsonSerializerWithMetadata(Action<EventMetadataContext> applyCustomMetadata = null)
         {
 
 
@@ -173,9 +173,9 @@ namespace DomainLib.Serialization.Json.Tests
             return serializer;
         }
 
-        private static IDictionary<string, string> GetMetadataFromEventPersistenceData(IEventPersistenceData<byte[]> persistenceData)
+        private static IDictionary<string, string> GetMetadataFromEventPersistenceData(IEventPersistenceData<ReadOnlyMemory<byte>> persistenceData)
         {
-            return JsonSerializer.Deserialize<List<KeyValuePair<string, string>>>(persistenceData.EventMetadata)
+            return JsonSerializer.Deserialize<List<KeyValuePair<string, string>>>(persistenceData.EventMetadata.Span)
                                  .ToDictionary(x => x.Key, x => x.Value);
         }
 
