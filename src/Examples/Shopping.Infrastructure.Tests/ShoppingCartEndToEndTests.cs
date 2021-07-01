@@ -8,7 +8,6 @@ using DomainLib.Projections.EventStore;
 using DomainLib.Projections.Sql;
 using DomainLib.Projections.Sqlite;
 using DomainLib.Serialization.Json;
-using EventStore.ClientAPI;
 using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using Shopping.Domain.Aggregates;
@@ -18,12 +17,14 @@ using System;
 using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
+using EventStore.Client;
 using ProjectionDispatcher = DomainLib.Projections.EventDispatcher<Shopping.Domain.Events.IDomainEvent>;
+using UserCredentials = DomainLib.Common.UserCredentials;
 
 namespace Shopping.Infrastructure.Tests
 {
     [TestFixture]
-    public class ShoppingCartEndToEndTests : EmbeddedEventStoreTest
+    public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
     {
         [Test]
         [Ignore("Need to figure out a better end to end test")]
@@ -50,7 +51,7 @@ namespace Shopping.Infrastructure.Tests
 
             var registry = projectionRegistryBuilder.Build();
 
-            var readModelEventPublisher = new EventStoreEventPublisher(EventStoreConnection);
+            var readModelEventPublisher = new EventStoreEventPublisher(EventStoreClient);
 
             var readModelDispatcher = new ProjectionDispatcher(readModelEventPublisher,
                                                                registry.EventProjectionMap,
@@ -67,14 +68,12 @@ namespace Shopping.Infrastructure.Tests
         {
             var credentials = new UserCredentials("admin", "changeit");
 
-            var settings = PersistentSubscriptionSettings.Create()
-                                                         .StartFromCurrent()
-                                                         .PreferDispatchToSingle();
+            var settings = new PersistentSubscriptionSettings(startFrom: StreamPosition.End);
 
             var stream = "ShoppingCartProcess";
             var groupName = "SubscriptionGroup1";
             
-            await EventStoreConnection.CreatePersistentSubscriptionAsync(stream, groupName, settings, credentials.ToEsUserCredentials());
+            await PersistentSubscriptionsClient.CreateAsync(stream, groupName, settings, credentials.ToEsUserCredentials());
             
             
             
@@ -84,7 +83,7 @@ namespace Shopping.Infrastructure.Tests
             var processRegistry = processProjectionRegistryBuilder.Build();
             
             var persistentSubscriptionDescriptor = new EventStorePersistentConnectionDescriptor(stream, groupName, 10, credentials);
-            var processEventPublisher = new AcknowledgingEventStoreEventPublisher(EventStoreConnection, persistentSubscriptionDescriptor);
+            var processEventPublisher = new AcknowledgingEventStoreEventPublisher(PersistentSubscriptionsClient, persistentSubscriptionDescriptor);
 
             var processDispatcher = new ProjectionDispatcher(processEventPublisher,
                                                              processRegistry.EventProjectionMap,
@@ -124,8 +123,8 @@ namespace Shopping.Infrastructure.Tests
             var eventsToPersist = events1.Concat(events2).Concat(events3).ToList();
 
             var serializer = new JsonBytesEventSerializer(aggregateRegistry.EventNameMap);
-            var eventsRepository = new EventStoreEventsRepository(EventStoreConnection, serializer);
-            var snapshotRepository = new EventStoreSnapshotRepository(EventStoreConnection, serializer);
+            var eventsRepository = new EventStoreEventsRepository(EventStoreClient, serializer);
+            var snapshotRepository = new EventStoreSnapshotRepository(EventStoreClient, serializer);
 
             var aggregateRepository = AggregateRepository.Create(eventsRepository,
                                                                  snapshotRepository,
@@ -133,7 +132,7 @@ namespace Shopping.Infrastructure.Tests
                                                                  aggregateRegistry.AggregateMetadataMap);
 
             var nextEventVersion = await aggregateRepository.SaveAggregate<ShoppingCartState>(newState3.Id.ToString(),
-                                                                                              ExpectedVersion.NoStream,
+                                                                                              StreamRevision.None.ToInt64(),
                                                                                               eventsToPersist);
             var expectedNextEventVersion = eventsToPersist.Count - 1;
 

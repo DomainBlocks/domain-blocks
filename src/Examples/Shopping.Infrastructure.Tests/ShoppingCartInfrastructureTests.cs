@@ -1,21 +1,21 @@
-﻿using DomainLib.Aggregates.Registration;
+﻿using System;
+using System.Linq;
+using System.Threading.Tasks;
+using DomainLib.Aggregates.Registration;
 using DomainLib.EventStore.Testing;
 using DomainLib.Persistence;
 using DomainLib.Persistence.EventStore;
 using DomainLib.Serialization.Json;
-using EventStore.ClientAPI;
+using EventStore.Client;
 using NUnit.Framework;
 using Shopping.Domain.Aggregates;
 using Shopping.Domain.Commands;
 using Shopping.Domain.Events;
-using System;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace Shopping.Infrastructure.Tests
 {
     [TestFixture]
-    public class ShoppingCartInfrastructureTests : EmbeddedEventStoreTest
+    public class ShoppingCartInfrastructureTests : EventStoreIntegrationTest
     {
        [Test]
         public async Task PersistedRoundTripTest()
@@ -41,8 +41,8 @@ namespace Shopping.Infrastructure.Tests
             var eventsToPersist = events1.Concat(events2).ToList();
 
             var serializer = new JsonBytesEventSerializer(aggregateRegistry.EventNameMap);
-            var eventsRepository = new EventStoreEventsRepository(EventStoreConnection, serializer);
-            var snapshotRepository = new EventStoreSnapshotRepository(EventStoreConnection, serializer);
+            var eventsRepository = new EventStoreEventsRepository(EventStoreClient, serializer);
+            var snapshotRepository = new EventStoreSnapshotRepository(EventStoreClient, serializer);
 
             var aggregateRepository = AggregateRepository.Create(eventsRepository,
                                                                  snapshotRepository,
@@ -50,7 +50,7 @@ namespace Shopping.Infrastructure.Tests
                                                                  aggregateRegistry.AggregateMetadataMap);
 
             var nextEventVersion = await aggregateRepository.SaveAggregate<ShoppingCartState>(newState2.Id.ToString(),
-                                                                                              ExpectedVersion.NoStream,
+                                                                                              StreamRevision.None.ToInt64(),
                                                                                               eventsToPersist);
             var expectedNextEventVersion = eventsToPersist.Count - 1;
 

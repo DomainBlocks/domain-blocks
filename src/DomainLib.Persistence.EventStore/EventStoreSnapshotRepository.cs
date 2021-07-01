@@ -36,7 +36,7 @@ namespace DomainLib.Persistence.EventStore
                                             KeyValuePair.Create(SnapshotVersionMetadataKey, snapshotVersion.ToString()))
                 };
 
-                await _client.AppendToStreamAsync(snapshotKey, StreamRevision.FromInt64(snapshotVersion), snapshotData);
+                await _client.AppendToStreamAsync(snapshotKey, StreamState.Any, snapshotData);
             }
             catch (Exception ex)
             {

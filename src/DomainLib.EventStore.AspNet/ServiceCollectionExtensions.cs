@@ -37,9 +37,9 @@ namespace DomainLib.EventStore.AspNetCore
                 var options = provider.GetRequiredService<IOptions<EventStoreConnectionOptions>>();
 
                 var settings = EventStoreClientSettings.Create(options.Value.ConnectionString);
-                var connection = new EventStoreClient(settings);
+                var client = new EventStoreClient(settings);
 
-                return connection;
+                return client;
             });
 
             // TODO: It would be nice to be able to customize the serializer through the service registration
