@@ -51,6 +51,11 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainLib.EventStore.AspNet
 EndProject
 Project("{E53339B2-1760-4266-BCC7-CA923CBCF16C}") = "Shopping.Api.DockerCompose", "Examples\Shopping.Api.DockerCompose.dcproj", "{B494CB62-63D3-4514-8272-51F8AD6C61E4}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "_Solution Items", "_Solution Items", "{8A122EA1-8627-4264-A1FF-DD5D642D3D19}"
+	ProjectSection(SolutionItems) = preProject
+		docker-compose.test.yml = docker-compose.test.yml
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
