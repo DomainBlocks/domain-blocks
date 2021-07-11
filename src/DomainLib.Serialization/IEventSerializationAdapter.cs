@@ -1,8 +1,10 @@
-﻿namespace DomainLib.Serialization
+﻿using System;
+
+namespace DomainLib.Serialization
 {
     public interface IEventSerializationAdapter<TRawData>
     {
-        byte[] FromRawData(TRawData rawEventData);
-        TRawData ToRawData(byte[] bytes);
+        ReadOnlyMemory<byte> FromRawData(TRawData rawEventData);
+        TRawData ToRawData(ReadOnlyMemory<byte> bytes);
     }
 }

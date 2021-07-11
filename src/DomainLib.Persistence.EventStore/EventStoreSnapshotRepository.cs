@@ -1,10 +1,10 @@
-﻿using DomainLib.Common;
-using DomainLib.Serialization;
-using EventStore.ClientAPI;
-using Microsoft.Extensions.Logging;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using DomainLib.Common;
+using DomainLib.Serialization;
+using EventStore.Client;
+using Microsoft.Extensions.Logging;
 
 namespace DomainLib.Persistence.EventStore
 {
@@ -13,13 +13,13 @@ namespace DomainLib.Persistence.EventStore
         private const string SnapshotVersionMetadataKey = "SnapshotVersion";
         private const string SnapshotEventName = "Snapshot";
         private static readonly ILogger<EventStoreSnapshotRepository> Log = Logger.CreateFor<EventStoreSnapshotRepository>();
-        private readonly IEventStoreConnection _connection;
-        private readonly IEventSerializer<byte[]> _serializer;
+        private readonly EventStoreClient _client;
+        private readonly IEventSerializer<ReadOnlyMemory<byte>> _serializer;
 
-        public EventStoreSnapshotRepository(IEventStoreConnection connection, IEventSerializer<byte[]> serializer)
+        public EventStoreSnapshotRepository(EventStoreClient client, IEventSerializer<ReadOnlyMemory<byte>> serializer)
         {
-            _connection = connection;
-            _serializer = serializer;
+            _client = client ?? throw new ArgumentNullException(nameof(client));
+            _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         }
 
         public async Task SaveSnapshotAsync<TState>(string snapshotKey, long snapshotVersion, TState snapshotState)
@@ -29,8 +29,14 @@ namespace DomainLib.Persistence.EventStore
                 if (snapshotKey == null) throw new ArgumentNullException(nameof(snapshotKey));
                 if (snapshotState == null) throw new ArgumentNullException(nameof(snapshotState));
 
-                var snapshotData = _serializer.ToEventData(snapshotState, SnapshotEventName, KeyValuePair.Create(SnapshotVersionMetadataKey, snapshotVersion.ToString()));
-                await _connection.AppendToStreamAsync(snapshotKey, ExpectedVersion.Any, snapshotData);
+                var snapshotData = new[]
+                {
+                    _serializer.ToEventData(snapshotState,
+                                            SnapshotEventName,
+                                            KeyValuePair.Create(SnapshotVersionMetadataKey, snapshotVersion.ToString()))
+                };
+
+                await _client.AppendToStreamAsync(snapshotKey, StreamState.Any, snapshotData);
             }
             catch (Exception ex)
             {
@@ -46,28 +52,24 @@ namespace DomainLib.Persistence.EventStore
             try
             {
                 if (snapshotKey == null) throw new ArgumentNullException(nameof(snapshotKey));
-                var eventsSlice = (await _connection.ReadStreamEventsBackwardAsync(snapshotKey, StreamPosition.End, 1, false));
+                var readStreamResult = _client.ReadStreamAsync(Direction.Backwards, snapshotKey, StreamPosition.End, 1);
+                var readState = await readStreamResult.ReadState;
 
-                Snapshot<TState> GetSnapshotFromSlice(StreamEventsSlice slice)
+                if (readState == ReadState.StreamNotFound ||
+                    !await readStreamResult.MoveNextAsync())
                 {
-
-                    var @event = slice.Events[0];
-
-                    var snapshotData = _serializer.DeserializeEvent<TState>(@event.OriginalEvent.Data, 
-                                                                            @event.OriginalEvent.EventType, 
-                                                                            typeof(TState));
-                    var snapshotVersion = long.Parse(_serializer.DeserializeMetadata(@event.OriginalEvent.Metadata)[SnapshotVersionMetadataKey]);
-
-                    return new Snapshot<TState>(snapshotData, snapshotVersion);
+                    return (false, null);
                 }
+                
+                var resolvedEvent = readStreamResult.Current;
 
-                return eventsSlice.Status switch
-                {
-                    SliceReadStatus.Success => (true, GetSnapshotFromSlice(eventsSlice)),
-                    SliceReadStatus.StreamNotFound => (false, null),
-                    SliceReadStatus.StreamDeleted => throw new StreamDeletedException(snapshotKey),
-                    _ => throw new ArgumentOutOfRangeException()
-                };
+                var snapshotData = _serializer.DeserializeEvent<TState>(resolvedEvent.OriginalEvent.Data,
+                                                                        resolvedEvent.OriginalEvent.EventType,
+                                                                        typeof(TState));
+                var snapshotVersion = long.Parse(_serializer.DeserializeMetadata(resolvedEvent.OriginalEvent.Metadata)[SnapshotVersionMetadataKey]);
+
+                return (true, new Snapshot<TState>(snapshotData, snapshotVersion));
+
             }
             catch (Exception ex)
             {

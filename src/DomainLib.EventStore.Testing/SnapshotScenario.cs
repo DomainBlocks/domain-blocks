@@ -13,11 +13,10 @@ namespace DomainLib.EventStore.Testing
     public class SnapshotScenario
     {
         private readonly TestAggregateState _initialState;
-        private EmbeddedEventStoreTest _test;
+        private EventStoreIntegrationTest _test;
         private CommandDispatcher<TestCommand, TestEvent> _commandDispatcher;
-        private AggregateRepository<TestEvent, byte[]> _aggregateRepository;
+        private AggregateRepository<TestEvent, ReadOnlyMemory<byte>> _aggregateRepository;
         private Guid _id;
-        private List<TestEvent> _uncommittedEvents = new();
         private long _aggregateVersion = StreamVersion.NewStream;
         public TestAggregateState AggregateState { get; private set; }
 
@@ -28,7 +27,7 @@ namespace DomainLib.EventStore.Testing
             AggregateState = _initialState;
         }
 
-        public void Initialise(EmbeddedEventStoreTest test)
+        public void Initialise(EventStoreIntegrationTest test)
         {
             _test = test;
             SetupRepositories();
@@ -97,8 +96,8 @@ namespace DomainLib.EventStore.Testing
             var serializer = new JsonBytesEventSerializer(registry.EventNameMap);
 
             _commandDispatcher = registry.CommandDispatcher;
-            var snapshotRepository = new EventStoreSnapshotRepository(_test.EventStoreConnection, serializer);
-            var eventsRepository = new EventStoreEventsRepository(_test.EventStoreConnection, serializer);
+            var snapshotRepository = new EventStoreSnapshotRepository(_test.EventStoreClient, serializer);
+            var eventsRepository = new EventStoreEventsRepository(_test.EventStoreClient, serializer);
 
             _aggregateRepository = AggregateRepository.Create(eventsRepository, snapshotRepository, registry.EventDispatcher, registry.AggregateMetadataMap);
         }

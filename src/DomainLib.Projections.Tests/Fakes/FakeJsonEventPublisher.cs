@@ -6,12 +6,12 @@ using NUnit.Framework;
 
 namespace DomainLib.Projections.Sql.Tests.Fakes
 {
-    public class FakeJsonEventPublisher : IEventPublisher<byte[]>
+    public class FakeJsonEventPublisher : IEventPublisher<ReadOnlyMemory<byte>>
     {
-        private Func<EventNotification<byte[]>, Task> _onEvent;
+        private Func<EventNotification<ReadOnlyMemory<byte>>, Task> _onEvent;
         public bool IsStarted { get; private set; }
 
-        public Task StartAsync(Func<EventNotification<byte[]>, Task> onEvent)
+        public Task StartAsync(Func<EventNotification<ReadOnlyMemory<byte>>, Task> onEvent)
         {
             _onEvent = onEvent;
             IsStarted = true;
@@ -26,14 +26,14 @@ namespace DomainLib.Projections.Sql.Tests.Fakes
         public async Task SendEvent(object @event, string eventType, Guid? eventId = null)
         {
             AssertPublisherStarted();
-            var byteArray = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(@event));
-            await _onEvent(EventNotification.FromEvent(byteArray, eventType, eventId ?? Guid.NewGuid()));
+            var bytes = new ReadOnlyMemory<byte>(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(@event)));
+            await _onEvent(EventNotification.FromEvent(bytes, eventType, eventId ?? Guid.NewGuid()));
         }
 
         public async Task SendCaughtUp()
         {
             AssertPublisherStarted();
-            await _onEvent(EventNotification.CaughtUp<byte[]>());
+            await _onEvent(EventNotification.CaughtUp<ReadOnlyMemory<byte>>());
         }
 
         private void AssertPublisherStarted()

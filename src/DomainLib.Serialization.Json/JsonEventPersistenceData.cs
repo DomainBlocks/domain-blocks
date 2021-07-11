@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Net.Mime;
 
 namespace DomainLib.Serialization.Json
 {
@@ -8,14 +9,14 @@ namespace DomainLib.Serialization.Json
         {
             EventId = eventId;
             EventName = eventName;
-            IsJson = true;
+            ContentType = MediaTypeNames.Application.Json;
             EventData = eventData;
             EventMetadata = eventMetadata;
         }
 
         public Guid EventId { get; }
         public string EventName { get; }
-        public bool IsJson { get; }
+        public string ContentType { get; }
         public TRawData EventData { get; }
         public TRawData EventMetadata { get; }
     }

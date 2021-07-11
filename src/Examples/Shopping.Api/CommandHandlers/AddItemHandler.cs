@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DomainLib.Aggregates;
 using DomainLib.Persistence;
-using EventStore.ClientAPI;
+using EventStore.Client;
 using Shopping.Domain.Aggregates;
 using Shopping.Domain.Events;
 
@@ -29,7 +29,7 @@ namespace Shopping.Api.CommandHandlers
                                                                       itemId,
                                                                       request.ItemName));
 
-            await Repository.SaveAggregate<ShoppingCartState>(request.CartId, ExpectedVersion.NoStream, events);
+            await Repository.SaveAggregate<ShoppingCartState>(request.CartId, StreamRevision.None.ToInt64(), events);
         }
     }
 }
