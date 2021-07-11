@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 namespace DomainLib.EventStore.Testing
 {
     [TestFixture]
-    public class AggregateRepositoryTests : EmbeddedEventStoreTest
+    public class AggregateRepositoryTests : EventStoreIntegrationTest
     {
         private SnapshotScenario Scenario { get; set; }
 

@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Threading.Tasks;
 using DomainLib.Common;
-using EventStore.ClientAPI;
+using EventStore.Client;
 using Microsoft.Extensions.Logging;
 
 namespace DomainLib.Projections.EventStore
@@ -22,48 +22,31 @@ namespace DomainLib.Projections.EventStore
             _resubscribe = resubscribe;
         }
         
-        public void HandleDroppedSubscription(SubscriptionDropReason reason, Exception exception)
+        public void HandleDroppedSubscription(SubscriptionDroppedReason reason, Exception exception)
         {
             switch (reason)
             {
-                case SubscriptionDropReason.UserInitiated:
-                    Log.LogInformation("User initiated EventStore subscription drop. Stopping event publisher");
+                case SubscriptionDroppedReason.Disposed:
+                    Log.LogInformation("Subscription was disposed. Stopping event publisher");
                     _stop();
                     break;
-                case SubscriptionDropReason.NotAuthenticated:
-                case SubscriptionDropReason.AccessDenied:
+                case SubscriptionDroppedReason.SubscriberError:
                     Log.LogCritical(exception,
-                                    $"Error subscribing to EventStore. Stopping event publisher. Reason {reason}");
+                                    $"Exception occurred in subscriber. Stopping event publisher. Reason {reason}");
                     _stop();
                     break;
-                case SubscriptionDropReason.SubscribingError:
-                case SubscriptionDropReason.CatchUpError:
-                case SubscriptionDropReason.ServerError:
-                case SubscriptionDropReason.EventHandlerException:
-                case SubscriptionDropReason.Unknown:
-                case SubscriptionDropReason.NotFound:
+                case SubscriptionDroppedReason.ServerError:
                     Log.LogCritical(exception,
-                                    $"Exception occurred in EventStore subscription. Stopping event publisher. Reason {reason}");
+                                    $"Server error in EventStore subscription. Stopping event publisher. Reason {reason}");
                     _stop();
-                    break;
-                case SubscriptionDropReason.PersistentSubscriptionDeleted:
-                    Log.LogError(exception, "Persistent subscription was deleted. Stopping event publisher");
-                    _stop();
-                    break;
-                case SubscriptionDropReason.ConnectionClosed:
-                    Log.LogCritical(exception, "Underlying EventStore connection was closed. Stopping event publisher");
-                    _stop();
-                    break;
-                case SubscriptionDropReason.ProcessingQueueOverflow:
-                case SubscriptionDropReason.MaxSubscribersReached:
-                    Log.LogWarning(exception, "Transient error in EventStore connection. Attempting to resubscribe");
-                    TryToResubscribe().Wait();
                     break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(reason), reason, null);
             }
         }
         
+        // TODO: Need to better understand the new reasons for subscriptions being dropped
+        // to see if it still makes sense to try resubscribing
         private async Task TryToResubscribe()
         {
             if (_subscribeAttempts > _maxSubscribeAttempts)

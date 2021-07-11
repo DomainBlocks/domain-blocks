@@ -57,6 +57,4 @@ namespace Shopping.Api
             return registryBuilder.Build();
         }
     }
-
-
 }

@@ -1,31 +1,32 @@
-﻿using DomainLib.Common;
-using EventStore.ClientAPI;
-using Microsoft.Extensions.Logging;
-using System;
+﻿using System;
+using System.Threading;
 using System.Threading.Tasks;
+using DomainLib.Common;
+using EventStore.Client;
+using Microsoft.Extensions.Logging;
 
 namespace DomainLib.Projections.EventStore
 {
-    public class AcknowledgingEventStoreEventPublisher : IEventPublisher<byte[]>, IDisposable
+    public class AcknowledgingEventStoreEventPublisher : IEventPublisher<ReadOnlyMemory<byte>>, IDisposable
     {
         private static readonly ILogger<AcknowledgingEventStoreEventPublisher> Log = 
             Logger.CreateFor<AcknowledgingEventStoreEventPublisher>();
-        private readonly IEventStoreConnection _connection;
-        private Func<EventNotification<byte[]>, Task> _onEvent;
+        private readonly EventStorePersistentSubscriptionsClient _client;
+        private Func<EventNotification<ReadOnlyMemory<byte>>, Task> _onEvent;
         private readonly EventStorePersistentConnectionDescriptor _persistentConnectionDescriptor;
-        private EventStorePersistentSubscriptionBase _subscription;
-        private EventStoreDroppedSubscriptionHandler _subscriptionDroppedHandler;
+        private PersistentSubscription _subscription;
+        private readonly EventStoreDroppedSubscriptionHandler _subscriptionDroppedHandler;
 
-        public AcknowledgingEventStoreEventPublisher(IEventStoreConnection connection, 
+        public AcknowledgingEventStoreEventPublisher(EventStorePersistentSubscriptionsClient client, 
                                                      EventStorePersistentConnectionDescriptor persistentConnectionDescriptor)
         {
-            _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+            _client = client ?? throw new ArgumentNullException(nameof(client));
             _persistentConnectionDescriptor = persistentConnectionDescriptor;
             _subscriptionDroppedHandler = new EventStoreDroppedSubscriptionHandler(Stop, ReSubscribeAfterDrop);
 
         }
 
-        public async Task StartAsync(Func<EventNotification<byte[]>, Task> onEvent)
+        public async Task StartAsync(Func<EventNotification<ReadOnlyMemory<byte>>, Task> onEvent)
         {
             _onEvent = onEvent ?? throw new ArgumentNullException(nameof(onEvent));
             await SubscribeToPersistentSubscription();
@@ -38,10 +39,10 @@ namespace DomainLib.Projections.EventStore
 
         public void Dispose()
         {
-            _subscription.Stop(_persistentConnectionDescriptor.SubscriptionStopTimeout);
+            _subscription.Dispose();
         }
 
-        private async Task HandleEvent(EventStorePersistentSubscriptionBase subscription, ResolvedEvent resolvedEvent, int? arg3)
+        private async Task HandleEvent(PersistentSubscription subscription, ResolvedEvent resolvedEvent, int? arg3, CancellationToken token)
         {
             // TODO: I'm not sure awaiting here is the best move if we want to utilize the ES buffer properly
             // It might be better to return straight away and then ack/nack as and when we finish processing
@@ -51,7 +52,7 @@ namespace DomainLib.Projections.EventStore
 
         private async Task SubscribeToPersistentSubscription()
         {
-            _subscription = await _connection.ConnectToPersistentSubscriptionAsync(_persistentConnectionDescriptor.Stream,
+            _subscription = await _client.SubscribeAsync(_persistentConnectionDescriptor.Stream,
                                 _persistentConnectionDescriptor.GroupName,
                                 HandleEvent,
                                 OnSubscriptionDropped,
@@ -61,15 +62,15 @@ namespace DomainLib.Projections.EventStore
                                 false);
         }
 
-        private async Task TryHandlingEvent(EventStorePersistentSubscriptionBase subscription, ResolvedEvent resolvedEvent, int retryNumber)
+        private async Task TryHandlingEvent(PersistentSubscription subscription, ResolvedEvent resolvedEvent, int retryNumber)
         {
             try
             {
                 var notification = EventNotification.FromEvent(resolvedEvent.Event.Data,
                                                                resolvedEvent.Event.EventType,
-                                                               resolvedEvent.Event.EventId);
+                                                               resolvedEvent.Event.EventId.ToGuid());
                 await _onEvent(notification);
-                subscription.Acknowledge(resolvedEvent);
+                await subscription.Ack(resolvedEvent);
                 Log.LogTrace("Handled and acknowledged event {EventId}", resolvedEvent.Event.EventId);
             }
             catch (Exception ex)
@@ -86,16 +87,17 @@ namespace DomainLib.Projections.EventStore
                                     resolvedEvent.Event.EventId,
                                     _persistentConnectionDescriptor.Stream,
                                     _persistentConnectionDescriptor.GroupName);
-                    
-                    subscription.Fail(resolvedEvent,
-                                      PersistentSubscriptionNakEventAction.Stop,
-                                      "Stopping subscription after unhandled exception trying to process event");
+
+                    await subscription.Nack(PersistentSubscriptionNakEventAction.Stop,
+                                            "Stopping subscription after unhandled exception trying to process event",
+                                            resolvedEvent);
+
                     throw;
                 }
             }
         }
 
-        private async Task RetryHandlingEventOrFail(EventStorePersistentSubscriptionBase subscription,
+        private async Task RetryHandlingEventOrFail(PersistentSubscription subscription,
                                                     ResolvedEvent resolvedEvent, 
                                                     int retryNumber)
         {
@@ -124,19 +126,17 @@ namespace DomainLib.Projections.EventStore
                 };
 
                 var reason = $"{actionDescription} event {resolvedEvent.Event.EventId} after maximum retries reached " +
-                             $"and event could not be processed successfully";
+                              "and event could not be processed successfully";
 
                 Log.LogError($"Could not handle event {{EventId}} after maximum retries. {actionDescription} event",
                              resolvedEvent.Event.EventId);
 
-                subscription.Fail(resolvedEvent,
-                                  failureAction,
-                                  reason);
+                await subscription.Nack(failureAction, reason, resolvedEvent);
             }
         }
 
-        private void OnSubscriptionDropped(EventStorePersistentSubscriptionBase subscription,
-                                           SubscriptionDropReason reason,
+        private void OnSubscriptionDropped(PersistentSubscription subscription,
+                                           SubscriptionDroppedReason reason,
                                            Exception exception)
         {
             _subscriptionDroppedHandler.HandleDroppedSubscription(reason, exception);

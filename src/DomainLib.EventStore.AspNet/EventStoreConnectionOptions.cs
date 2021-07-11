@@ -1,5 +1,4 @@
-﻿using System;
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 
 namespace DomainLib.EventStore.AspNetCore
 {
@@ -8,6 +7,6 @@ namespace DomainLib.EventStore.AspNetCore
         public const string ConfigSection = "EventStore";
 
         [Required]
-        public Uri Uri { get; set; }
+        public string ConnectionString { get; set; }
     }
 }

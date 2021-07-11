@@ -4,15 +4,17 @@ using DomainLib.Serialization.Json;
 using DomainLib.Testing;
 using NUnit.Framework;
 using System;
+using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using DomainLib.Serialization;
-using EventStore.ClientAPI;
+using EventStore.Client;
 
 namespace DomainLib.EventStore.Testing
 {
     [TestFixture]
-    public class EventStoreEventsRepositoryTests : EmbeddedEventStoreTest
+    public class EventStoreEventsRepositoryTests : EventStoreIntegrationTest
     {
         [TestCase(2, Description = "Small batch that can be saved in one round trip")]
         [TestCase(5000, Description = "Large batch that will need a transaction")]
@@ -89,20 +91,26 @@ namespace DomainLib.EventStore.Testing
             var version = await repo.SaveEventsAsync(streamName, StreamVersion.NewStream, EventStoreTestHelpers.GenerateTestEvents(2));
 
             var badEventDataString = "This is not JSON. It should fail on deserialize";
-            var badEventData = new EventData(Guid.NewGuid(), nameof(TestEvent), true, Encoding.UTF8.GetBytes(badEventDataString), new byte[0]);
-            var newVersion = (await EventStoreConnection.AppendToStreamAsync(streamName, version, badEventData)).NextExpectedVersion;
+            var badEventData = new EventData(Uuid.NewUuid(), nameof(TestEvent), Encoding.UTF8.GetBytes(badEventDataString));
+            var nextStreamRevision =
+                (await EventStoreClient.AppendToStreamAsync(streamName,
+                                                            StreamRevision.FromInt64(version),
+                                                            EnumerableEx.Return(badEventData))).NextExpectedStreamRevision;
 
-            Assert.That(newVersion, Is.EqualTo(version + 1)); // If the bad event data is saved, the version should increment
+            // If the bad event data is saved, the version should increment
+            var expectedStreamRevision = StreamRevision.FromInt64(version + 1);
+
+            Assert.That(nextStreamRevision, Is.EqualTo(expectedStreamRevision)); 
 
             int erroredEventCount = 0;
             string erroredEventData = null;
-            Guid? erroredEventId = null;
+            Uuid? erroredEventId = null;
 
-            void OnEventError(IEventPersistenceData<byte[]> e)
+            void OnEventError(IEventPersistenceData<ReadOnlyMemory<byte>> e)
             {
                 erroredEventCount++;
-                erroredEventData = Encoding.UTF8.GetString(e.EventData);
-                erroredEventId = e.EventId;
+                erroredEventData = Encoding.UTF8.GetString(e.EventData.Span);
+                erroredEventId = Uuid.FromGuid(e.EventId);
             }
 
             var loadedEvents = await repo.LoadEventsAsync<TestEvent>(streamName, onEventError: OnEventError);
@@ -123,10 +131,10 @@ namespace DomainLib.EventStore.Testing
             });
         }
 
-        private IEventsRepository<byte[]> CreateRepository()
+        private IEventsRepository<ReadOnlyMemory<byte>> CreateRepository()
         {
             var serializer = new JsonBytesEventSerializer(Fakes.EventNameMap);
-            var repo = new EventStoreEventsRepository(EventStoreConnection, serializer);
+            var repo = new EventStoreEventsRepository(EventStoreClient, serializer);
 
             return repo;
         }

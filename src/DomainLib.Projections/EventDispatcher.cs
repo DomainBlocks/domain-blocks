@@ -11,14 +11,14 @@ namespace DomainLib.Projections
     public sealed class EventDispatcher<TEventBase>
     {
         private static readonly ILogger<EventDispatcher<TEventBase>> Log = Logger.CreateFor<EventDispatcher<TEventBase>>();
-        private readonly IEventPublisher<byte[]> _publisher;
+        private readonly IEventPublisher<ReadOnlyMemory<byte>> _publisher;
         private readonly EventProjectionMap _projectionMap;
         private readonly EventContextMap _eventContextMap;
         private readonly EventDispatcherConfiguration _configuration;
         private readonly IEventDeserializer _deserializer;
         private readonly IProjectionEventNameMap _projectionEventNameMap;
 
-        public EventDispatcher(IEventPublisher<byte[]> publisher,
+        public EventDispatcher(IEventPublisher<ReadOnlyMemory<byte>> publisher,
                                EventProjectionMap projectionMap,
                                EventContextMap eventContextMap,
                                IEventDeserializer serializer,
@@ -52,7 +52,7 @@ namespace DomainLib.Projections
             }
         }
 
-        private async Task HandleEventNotificationAsync(EventNotification<byte[]> notification)
+        private async Task HandleEventNotificationAsync(EventNotification<ReadOnlyMemory<byte>> notification)
         {
             switch (notification.NotificationKind)
             {
@@ -70,7 +70,7 @@ namespace DomainLib.Projections
             }
         }
 
-        private async Task HandleEventAsync(byte[] eventData, string eventType, Guid eventId)
+        private async Task HandleEventAsync(ReadOnlyMemory<byte> eventData, string eventType, Guid eventId)
         {
             var tasks = new List<Task>();
 
@@ -79,7 +79,7 @@ namespace DomainLib.Projections
                 TEventBase @event;
                 try
                 {
-                    @event = _deserializer.DeserializeEvent<TEventBase>(eventData, eventType, type);
+                    @event = _deserializer.DeserializeEvent<TEventBase>(eventData.Span, eventType, type);
                 }
                 catch (Exception e)
                 {

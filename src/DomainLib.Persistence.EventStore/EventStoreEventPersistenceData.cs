@@ -1,31 +1,35 @@
 ﻿using System;
 using DomainLib.Serialization;
-using EventStore.ClientAPI;
+using EventStore.Client;
 
 namespace DomainLib.Persistence.EventStore
 {
-    public class EventStoreEventPersistenceData : IEventPersistenceData<byte[]>
+    public class EventStoreEventPersistenceData : IEventPersistenceData<ReadOnlyMemory<byte>>
     {
-        private EventStoreEventPersistenceData(Guid eventId, string eventName, bool isJsonBytes, byte[] eventData, byte[] eventMetadata)
+        private EventStoreEventPersistenceData(Guid eventId,
+                                               string eventName,
+                                               string contentType,
+                                               ReadOnlyMemory<byte> eventData,
+                                               ReadOnlyMemory<byte> eventMetadata)
         {
             EventId = eventId;
             EventName = eventName;
-            IsJson = isJsonBytes;
+            ContentType = contentType;
             EventData = eventData;
             EventMetadata = eventMetadata;
         }
 
         public Guid EventId { get; }
         public string EventName { get; }
-        public bool IsJson { get; }
-        public byte[] EventData { get; }
-        public byte[] EventMetadata { get; }
+        public string ContentType { get; }
+        public ReadOnlyMemory<byte> EventData { get; }
+        public ReadOnlyMemory<byte> EventMetadata { get; }
 
-        public static IEventPersistenceData<byte[]> FromRecordedEvent(RecordedEvent recordedEvent)
+        public static IEventPersistenceData<ReadOnlyMemory<byte>> FromRecordedEvent(EventRecord recordedEvent)
         {
-            return new EventStoreEventPersistenceData(recordedEvent.EventId,
+            return new EventStoreEventPersistenceData(recordedEvent.EventId.ToGuid(),
                                                       recordedEvent.EventType,
-                                                      recordedEvent.IsJson,
+                                                      recordedEvent.ContentType,
                                                       recordedEvent.Data,
                                                       recordedEvent.Metadata);
         }
