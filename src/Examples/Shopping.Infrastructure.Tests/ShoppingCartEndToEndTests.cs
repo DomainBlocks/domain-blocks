@@ -17,7 +17,9 @@ using System;
 using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
+using DomainLib.Projections.EntityFramework;
 using EventStore.Client;
+using Microsoft.EntityFrameworkCore;
 using ProjectionDispatcher = DomainLib.Projections.EventDispatcher<Shopping.Domain.Events.IDomainEvent>;
 using UserCredentials = DomainLib.Common.UserCredentials;
 
@@ -169,6 +171,7 @@ namespace Shopping.Infrastructure.Tests
         };
     }
 
+
     public class ShoppingCartProcess
     {
         public static void Register(ProjectionRegistryBuilder builder)
@@ -177,4 +180,6 @@ namespace Shopping.Infrastructure.Tests
                    .FromName(ItemRemovedFromShoppingCart.EventName);
         }
     }
+
+
 }

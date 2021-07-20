@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <PackageReference Include="EventStore.Client.Grpc.Streams" Version="21.2.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="5.0.7" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="5.0.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="5.0.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="5.0.0" />
@@ -15,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DomainLib.Persistence.EventStore\DomainLib.Persistence.EventStore.csproj" />
+    <ProjectReference Include="..\DomainLib.Projections.EventStore\DomainLib.Projections.EventStore.csproj" />
     <ProjectReference Include="..\DomainLib.Serialization.Json\DomainLib.Serialization.Json.csproj" />
     <ProjectReference Include="..\DomainLib\DomainLib.csproj" />
   </ItemGroup>

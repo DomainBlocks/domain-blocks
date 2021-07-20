@@ -1,11 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>netstandard2.1</TargetFramework>
+        <TargetFramework>net5.0</TargetFramework>
     </PropertyGroup>
 
     <ItemGroup>
       <ProjectReference Include="..\..\DomainLib\DomainLib.csproj" />
+      <ProjectReference Include="..\Shopping.Events\Shopping.Events.csproj" />
     </ItemGroup>
 
 </Project>
