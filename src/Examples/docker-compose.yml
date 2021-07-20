@@ -1,7 +1,7 @@
 version: '3.7'
 
 networks:
-  shopping-api-example:
+  shopping-example:
     driver: bridge
 
 services:
@@ -32,7 +32,7 @@ services:
         source: eventstore-volume-logs
         target: /var/log/eventstore
     networks:
-      - shopping-api-example
+      - shopping-example
 
   shopping.api:
     container_name: shopping.api
@@ -46,7 +46,21 @@ services:
     depends_on:
       - shopping.eventstore
     networks:
-      - shopping-api-example
+      - shopping-example
+
+  shopping.readmodel:
+    container_name: shopping.readmodel
+    build:
+      context: .
+      dockerfile: ./Shopping.ReadModel/Dockerfile
+    image: shopping.readmodel
+    ports:
+      - "5010:80"
+      - "5011:443"
+    depends_on:
+      - shopping.eventstore
+    networks:
+      - shopping-example
 
 volumes:
   eventstore-volume-data:
