@@ -5,12 +5,12 @@ namespace DomainLib.Projections.Sql
 {
     public static class SqlContextProvider
     {
-        private static readonly ConcurrentDictionary<SqlContextKey, SqlContext> SqlContexts = new();
+        private static readonly ConcurrentDictionary<SqlContextKey, SqlProjectionContext> SqlContexts = new();
 
-        public static SqlContext GetOrCreateContext(IDbConnector connector, ISqlDialect sqlDialect)
+        public static SqlProjectionContext GetOrCreateContext(IDbConnector connector, ISqlDialect sqlDialect)
         {
             return SqlContexts.GetOrAdd(new SqlContextKey(connector, sqlDialect),
-                                        key => new SqlContext(key.DbConnector, key.SqlDialect));
+                                        key => new SqlProjectionContext(key.DbConnector, key.SqlDialect));
         }
 
         private readonly struct SqlContextKey : IEquatable<SqlContextKey>

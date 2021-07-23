@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -11,13 +12,20 @@ namespace DomainLib.Projections.EntityFramework
     {
         private readonly TProjection _projection;
         private Func<TContext, TEvent, Task> _executeAction;
+
+        // ReSharper disable once StaticMemberInGenericType
+        private static readonly ConcurrentDictionary<DbContext, EntityFrameworkProjectionContext> ProjectionContexts = new();
         
         public EntityFrameworkProjectionBuilder(EventProjectionBuilder<TEvent> builder, TProjection projection)
         {
             if (builder == null) throw new ArgumentNullException(nameof(builder));
             _projection = projection ?? throw new ArgumentNullException(nameof(projection));
             builder.RegisterProjectionBuilder(this);
-            builder.RegisterContextForEvent(new EntityFrameworkContext(_projection.DbContext));
+
+            var projectionContext = ProjectionContexts.GetOrAdd(_projection.DbContext,
+                                         dbContext => new EntityFrameworkProjectionContext(dbContext));
+
+            builder.RegisterContextForEvent(projectionContext);
         }
 
         public EntityFrameworkProjectionBuilder<TEvent, TProjection, TContext> Executes(

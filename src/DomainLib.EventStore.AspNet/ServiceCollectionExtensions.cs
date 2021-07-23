@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Threading;
-using System.Threading.Tasks;
 using DomainLib.Aggregates.Registration;
 using DomainLib.Persistence;
 using DomainLib.Persistence.EventStore;
@@ -11,7 +9,6 @@ using EventStore.Client;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 namespace DomainLib.EventStore.AspNetCore
@@ -111,52 +108,12 @@ namespace DomainLib.EventStore.AspNetCore
                 var dbContext = dispatcherScope.ServiceProvider.GetRequiredService<TDbContext>();
                 var publisher = new EventStoreEventPublisher(client);
 
-                return new EventDispatcherHostedService<TEventBase, TDbContext>(new ProjectionRegistryBuilder(),
-                                                                                    publisher,
-                                                                                    dbContext,
-                                                                                    onRegisteringProjections);
+                return new EventDispatcherHostedService<TEventBase>(new ProjectionRegistryBuilder(),
+                                                                    publisher,
+                                                                    x => onRegisteringProjections(x, dbContext));
             });
 
             return services;
-        }
-    }
-
-    public class EventDispatcherHostedService<TEventBase, TDbContext> : IHostedService where TDbContext : DbContext
-    {
-        private readonly ProjectionRegistryBuilder _registryBuilder;
-        private readonly EventStoreEventPublisher _publisher;
-        private readonly TDbContext _dbContext;
-        private readonly Action<ProjectionRegistryBuilder, TDbContext> _onRegisteringProjections;
-
-        public EventDispatcherHostedService(ProjectionRegistryBuilder registryBuilder,
-                                            EventStoreEventPublisher publisher,
-                                            TDbContext dbContext,
-                                            Action<ProjectionRegistryBuilder, TDbContext> onRegisteringProjections)
-        {
-            _registryBuilder = registryBuilder;
-            _publisher = publisher;
-            _dbContext = dbContext;
-            _onRegisteringProjections = onRegisteringProjections;
-        }
-
-        public async Task StartAsync(CancellationToken cancellationToken)
-        {
-            _onRegisteringProjections(_registryBuilder, _dbContext);
-            var projectionRegistry = _registryBuilder.Build();
-
-            var dispatcher = new EventDispatcher<TEventBase>(_publisher,
-                                                             projectionRegistry.EventProjectionMap,
-                                                             projectionRegistry.EventContextMap,
-                                                             new JsonEventDeserializer(),
-                                                             projectionRegistry.EventNameMap,
-                                                             EventDispatcherConfiguration.ReadModelDefaults);
-
-            await dispatcher.StartAsync();
-        }
-
-        public Task StopAsync(CancellationToken cancellationToken)
-        {
-            return Task.CompletedTask;
         }
     }
 }
