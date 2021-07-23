@@ -57,7 +57,7 @@ namespace Shopping.Infrastructure.Tests
 
             var readModelDispatcher = new ProjectionDispatcher(readModelEventPublisher,
                                                                registry.EventProjectionMap,
-                                                               registry.EventContextMap,
+                                                               registry.ProjectionContextMap,
                                                                new JsonEventDeserializer(),
                                                                registry.EventNameMap,
                                                                EventDispatcherConfiguration.ReadModelDefaults);
@@ -89,7 +89,7 @@ namespace Shopping.Infrastructure.Tests
 
             var processDispatcher = new ProjectionDispatcher(processEventPublisher,
                                                              processRegistry.EventProjectionMap,
-                                                             processRegistry.EventContextMap,
+                                                             processRegistry.ProjectionContextMap,
                                                              new JsonEventDeserializer(),
                                                              processRegistry.EventNameMap,
                                                              EventDispatcherConfiguration.ReadModelDefaults);

@@ -5,16 +5,16 @@ namespace DomainLib.Projections
     public class ProjectionRegistry
     {
         public ProjectionRegistry(EventProjectionMap eventProjectionMap,
-                                  EventContextMap eventContextMap,
+                                  ProjectionContextMap projectionContextMap,
                                   IProjectionEventNameMap eventNameMap)
         {
             EventProjectionMap = eventProjectionMap ?? throw new ArgumentNullException(nameof(eventProjectionMap));
-            EventContextMap = eventContextMap ?? throw new ArgumentNullException(nameof(eventContextMap));
+            ProjectionContextMap = projectionContextMap ?? throw new ArgumentNullException(nameof(projectionContextMap));
             EventNameMap = eventNameMap ?? throw new ArgumentNullException(nameof(eventNameMap));
         }
 
         public EventProjectionMap EventProjectionMap { get; }
         public IProjectionEventNameMap EventNameMap { get; }
-        public EventContextMap EventContextMap { get; }
+        public ProjectionContextMap ProjectionContextMap { get; }
     }
 }

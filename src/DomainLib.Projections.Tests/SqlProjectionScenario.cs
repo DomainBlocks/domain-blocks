@@ -70,7 +70,7 @@ namespace DomainLib.Projections.Sql.Tests
 
             var dispatcher = new EventDispatcher<object>(Publisher,
                                                          registry.EventProjectionMap,
-                                                         registry.EventContextMap,
+                                                         registry.ProjectionContextMap,
                                                          new JsonEventDeserializer(),
                                                          registry.EventNameMap,
                                                          dispatcherConfig);

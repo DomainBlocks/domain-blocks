@@ -2,7 +2,7 @@
 
 namespace DomainLib.Projections
 {
-    public interface IContext
+    public interface IProjectionContext
     {
         Task OnSubscribing();
         Task OnCaughtUp();

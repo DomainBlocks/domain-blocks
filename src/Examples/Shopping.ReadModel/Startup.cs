@@ -27,8 +27,6 @@ namespace Shopping.ReadModel
                                                              options.UseNpgsql(Configuration
                                                                                    .GetConnectionString("Default")));
 
-            services.AddTransient<ReadModelDbInitializer>();
-
             services.AddReadModel<IDomainEvent, ShoppingCartDbContext>(Configuration,
                                                                        (builder, dbContext) =>
                                                                        {

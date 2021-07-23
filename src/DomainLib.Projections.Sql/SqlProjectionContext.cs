@@ -9,9 +9,9 @@ using System.Threading.Tasks;
 
 namespace DomainLib.Projections.Sql
 {
-    public sealed class SqlContext : IContext
+    public sealed class SqlProjectionContext : IProjectionContext
     {
-        private static readonly ILogger<SqlContext> Log = Logger.CreateFor<SqlContext>();
+        private static readonly ILogger<SqlProjectionContext> Log = Logger.CreateFor<SqlProjectionContext>();
         private readonly ISqlDialect _sqlDialect;
         private readonly HashSet<ISqlProjection> _projections = new();
         private readonly SqlContextSettings _settings;
@@ -20,7 +20,7 @@ namespace DomainLib.Projections.Sql
         private IDbTransaction _activeTransaction;
         private bool _isProcessingLiveEvents;
 
-        public SqlContext(IDbConnector connector, ISqlDialect sqlDialect)
+        public SqlProjectionContext(IDbConnector connector, ISqlDialect sqlDialect)
         {
             if (connector == null) throw new ArgumentNullException(nameof(connector));
             _sqlDialect = sqlDialect ?? throw new ArgumentNullException(nameof(sqlDialect));
