@@ -88,6 +88,13 @@ namespace DomainLib.Persistence.EventStore
                                             streamName,
                                             StreamPosition.FromInt64(startPosition));
 
+                var readState = await readStreamResult.ReadState;
+
+                if (readState == ReadState.StreamNotFound)
+                {
+                    return events;
+                }
+
                 await foreach (var resolvedEvent in readStreamResult)
                 {
                     try
@@ -109,7 +116,6 @@ namespace DomainLib.Persistence.EventStore
                         }
                     }
                 }
-
             }
             catch (Exception ex)
             {
