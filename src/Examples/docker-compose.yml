@@ -62,6 +62,17 @@ services:
     networks:
       - shopping-example
 
+  database:
+    image: postgres:13.3
+    container_name: shopping.db
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    networks:
+      - shopping-example
+
 volumes:
   eventstore-volume-data:
   eventstore-volume-logs:
