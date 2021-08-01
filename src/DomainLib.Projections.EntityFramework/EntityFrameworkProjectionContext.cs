@@ -23,13 +23,6 @@ namespace DomainLib.Projections.EntityFramework
         {
             try
             {
-                //var connection = _dbContext.Database.GetDbConnection();
-                //if (connection.State == ConnectionState.Closed)
-                //{
-                //    await connection.OpenAsync().ConfigureAwait(false);
-                //}
-
-                await _dbContext.Database.EnsureDeletedAsync().ConfigureAwait(false);
                 await _dbContext.Database.EnsureCreatedAsync().ConfigureAwait(false);
 
                 _isProcessingLiveEvents = false;
