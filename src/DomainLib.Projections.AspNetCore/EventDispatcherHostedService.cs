@@ -2,8 +2,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 using DomainLib.Projections;
-using DomainLib.Projections.EventStore;
-using DomainLib.Serialization.Json;
+using DomainLib.Serialization;
 using Microsoft.Extensions.Hosting;
 
 namespace DomainLib.EventStore.AspNetCore
@@ -11,15 +10,18 @@ namespace DomainLib.EventStore.AspNetCore
     public class EventDispatcherHostedService<TEventBase> : IHostedService
     {
         private readonly ProjectionRegistryBuilder _registryBuilder;
-        private readonly EventStoreEventPublisher _publisher;
+        private readonly IEventPublisher<ReadOnlyMemory<byte>> _publisher;
+        private readonly IEventDeserializer _eventDeserializer;
         private readonly Action<ProjectionRegistryBuilder> _onRegisteringProjections;
 
         public EventDispatcherHostedService(ProjectionRegistryBuilder registryBuilder,
-                                            EventStoreEventPublisher publisher,
+                                            IEventPublisher<ReadOnlyMemory<byte>> publisher,
+                                            IEventDeserializer eventDeserializer,
                                             Action<ProjectionRegistryBuilder> onRegisteringProjections)
         {
             _registryBuilder = registryBuilder;
             _publisher = publisher;
+            _eventDeserializer = eventDeserializer;
             _onRegisteringProjections = onRegisteringProjections;
         }
 
@@ -31,7 +33,7 @@ namespace DomainLib.EventStore.AspNetCore
             var dispatcher = new EventDispatcher<TEventBase>(_publisher,
                                                              projectionRegistry.EventProjectionMap,
                                                              projectionRegistry.ProjectionContextMap,
-                                                             new JsonEventDeserializer(),
+                                                             _eventDeserializer,
                                                              projectionRegistry.EventNameMap,
                                                              EventDispatcherConfiguration.ReadModelDefaults);
 

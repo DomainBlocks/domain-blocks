@@ -23,7 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\DomainLib.EventStore.AspNet\DomainLib.EventStore.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\DomainLib.EventStore.AspNet\DomainLib.Persistence.EventStore.AspNetCore.csproj" />
     <ProjectReference Include="..\Shopping.Domain\Shopping.Domain.csproj" />
   </ItemGroup>
 
