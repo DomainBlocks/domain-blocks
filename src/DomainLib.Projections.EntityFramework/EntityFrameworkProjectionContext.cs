@@ -23,7 +23,9 @@ namespace DomainLib.Projections.EntityFramework
         {
             try
             {
-                await _dbContext.Database.EnsureCreatedAsync().ConfigureAwait(false);
+                var database = _dbContext.Database;
+                await database.EnsureDeletedAsync().ConfigureAwait(false);
+                await database.EnsureCreatedAsync().ConfigureAwait(false);
 
                 _isProcessingLiveEvents = false;
             }
