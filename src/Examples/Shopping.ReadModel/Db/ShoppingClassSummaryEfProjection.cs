@@ -33,10 +33,7 @@ namespace Shopping.ReadModel.Db
                    .ToEfProjection<ItemRemovedFromShoppingCart, ShoppingClassSummaryEfProjection, ShoppingCartDbContext>(shoppingCartSummary)
                    .Executes(async (context, evt) =>
                    {
-                       var item =
-                           await context.ShoppingCartSummaryItems.SingleOrDefaultAsync(
-                            i => i.CartId == evt.CartId &&
-                                 i.Id == evt.Id);
+                       var item = await context.ShoppingCartSummaryItems.FindAsync(evt.Id);
 
                        if (item != null)
                        {
