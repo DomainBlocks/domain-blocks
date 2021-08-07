@@ -25,7 +25,13 @@ namespace Shopping.Api
         {
             services.AddGrpc();
             services.AddMediatR(typeof(Startup));
-            services.AddEventStoreAggregateRepository(_configuration, ConfigureAggregateRegistry());
+            services.AddAggregateRepository(_configuration,
+                                            options =>
+                                            {
+                                                options.UseEventStoreDbForEvents();
+                                                options.UseEventStoreDbForSnapshots();
+                                            },
+                                            ConfigureAggregateRegistry());
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

@@ -47,7 +47,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Projections", "Projections"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shopping.Api", "Examples\Shopping.Api\Shopping.Api.csproj", "{401032B5-7C6B-4BB3-9FC7-66619B326812}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainLib.EventStore.AspNetCore", "DomainLib.EventStore.AspNet\DomainLib.EventStore.AspNetCore.csproj", "{ADD1DE5C-B4AA-4DE2-9500-543F85D63E8F}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainLib.Persistence.EventStore.AspNetCore", "DomainLib.EventStore.AspNet\DomainLib.Persistence.EventStore.AspNetCore.csproj", "{ADD1DE5C-B4AA-4DE2-9500-543F85D63E8F}"
 EndProject
 Project("{E53339B2-1760-4266-BCC7-CA923CBCF16C}") = "Shopping.DockerCompose", "Examples\Shopping.DockerCompose.dcproj", "{B494CB62-63D3-4514-8272-51F8AD6C61E4}"
 EndProject
@@ -56,11 +56,21 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "_Solution Items", "_Solutio
 		docker-compose.test.yml = docker-compose.test.yml
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainLib.Projections.EntityFramework", "DomainLib.Projections.EntityFramework\DomainLib.Projections.EntityFramework.csproj", "{10CC3451-DB78-463A-8702-1D5EC85E87D5}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainLib.Projections.EntityFramework", "DomainLib.Projections.EntityFramework\DomainLib.Projections.EntityFramework.csproj", "{10CC3451-DB78-463A-8702-1D5EC85E87D5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shopping.ReadModel", "Examples\Shopping.ReadModel\Shopping.ReadModel.csproj", "{E99B1405-331E-49F2-ACB5-7CA04775DEDE}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shopping.ReadModel", "Examples\Shopping.ReadModel\Shopping.ReadModel.csproj", "{E99B1405-331E-49F2-ACB5-7CA04775DEDE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shopping.Events", "Examples\Shopping.Events\Shopping.Events.csproj", "{BC5E2846-A445-4C7D-AF92-EA5DF375640A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shopping.Events", "Examples\Shopping.Events\Shopping.Events.csproj", "{BC5E2846-A445-4C7D-AF92-EA5DF375640A}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Asp.Net", "Asp.Net", "{58CD75DE-F1E9-4BBD-8945-0BB392EDC8EE}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainLib.Projections.AspNetCore", "DomainLib.Projections.AspNetCore\DomainLib.Projections.AspNetCore.csproj", "{EDC85C49-2BA1-4730-85E1-22CFCE91991A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainLib.EventStore.Common.AspNetCore", "DomainLib.EventStore.Common.AspNetCore\DomainLib.EventStore.Common.AspNetCore.csproj", "{80E0876A-FA44-4586-9BE5-1063E38FB99B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainLib.Projections.EventStore.AspNetCore", "DomainLib.Projections.EventStore.AspNetCore\DomainLib.Projections.EventStore.AspNetCore.csproj", "{16BD681C-AB6E-4E59-992E-C6FDCE5F4FAE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainLib.Serialization.Json.AspNetCore", "DomainLib.Serialization.Json.AspNetCore\DomainLib.Serialization.Json.AspNetCore.csproj", "{C9B16836-89F0-4778-AC88-08589718C1C0}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -168,6 +178,22 @@ Global
 		{BC5E2846-A445-4C7D-AF92-EA5DF375640A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{BC5E2846-A445-4C7D-AF92-EA5DF375640A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{BC5E2846-A445-4C7D-AF92-EA5DF375640A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EDC85C49-2BA1-4730-85E1-22CFCE91991A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EDC85C49-2BA1-4730-85E1-22CFCE91991A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EDC85C49-2BA1-4730-85E1-22CFCE91991A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EDC85C49-2BA1-4730-85E1-22CFCE91991A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{80E0876A-FA44-4586-9BE5-1063E38FB99B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{80E0876A-FA44-4586-9BE5-1063E38FB99B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{80E0876A-FA44-4586-9BE5-1063E38FB99B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{80E0876A-FA44-4586-9BE5-1063E38FB99B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{16BD681C-AB6E-4E59-992E-C6FDCE5F4FAE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{16BD681C-AB6E-4E59-992E-C6FDCE5F4FAE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{16BD681C-AB6E-4E59-992E-C6FDCE5F4FAE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{16BD681C-AB6E-4E59-992E-C6FDCE5F4FAE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C9B16836-89F0-4778-AC88-08589718C1C0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C9B16836-89F0-4778-AC88-08589718C1C0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C9B16836-89F0-4778-AC88-08589718C1C0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C9B16836-89F0-4778-AC88-08589718C1C0}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -183,10 +209,15 @@ Global
 		{14A5C5DC-92CA-4158-BCC2-4D00DF8A35F9} = {EB200888-007B-45F9-B48D-FEBF2BAF6F5F}
 		{04EEB093-7525-4E8E-941F-D144B6F71CC2} = {EB200888-007B-45F9-B48D-FEBF2BAF6F5F}
 		{401032B5-7C6B-4BB3-9FC7-66619B326812} = {083A78FB-1B77-4383-868C-D9D3EB0E682E}
+		{ADD1DE5C-B4AA-4DE2-9500-543F85D63E8F} = {58CD75DE-F1E9-4BBD-8945-0BB392EDC8EE}
 		{B494CB62-63D3-4514-8272-51F8AD6C61E4} = {083A78FB-1B77-4383-868C-D9D3EB0E682E}
 		{10CC3451-DB78-463A-8702-1D5EC85E87D5} = {EB200888-007B-45F9-B48D-FEBF2BAF6F5F}
 		{E99B1405-331E-49F2-ACB5-7CA04775DEDE} = {083A78FB-1B77-4383-868C-D9D3EB0E682E}
 		{BC5E2846-A445-4C7D-AF92-EA5DF375640A} = {083A78FB-1B77-4383-868C-D9D3EB0E682E}
+		{EDC85C49-2BA1-4730-85E1-22CFCE91991A} = {58CD75DE-F1E9-4BBD-8945-0BB392EDC8EE}
+		{80E0876A-FA44-4586-9BE5-1063E38FB99B} = {58CD75DE-F1E9-4BBD-8945-0BB392EDC8EE}
+		{16BD681C-AB6E-4E59-992E-C6FDCE5F4FAE} = {58CD75DE-F1E9-4BBD-8945-0BB392EDC8EE}
+		{C9B16836-89F0-4778-AC88-08589718C1C0} = {58CD75DE-F1E9-4BBD-8945-0BB392EDC8EE}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {BA018103-0F59-4D7F-9119-099BF2CC020F}

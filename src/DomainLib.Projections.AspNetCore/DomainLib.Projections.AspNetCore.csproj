@@ -15,10 +15,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DomainLib.Persistence.EventStore\DomainLib.Persistence.EventStore.csproj" />
-    <ProjectReference Include="..\DomainLib.Projections.EventStore\DomainLib.Projections.EventStore.csproj" />
-    <ProjectReference Include="..\DomainLib.Serialization.Json\DomainLib.Serialization.Json.csproj" />
-    <ProjectReference Include="..\DomainLib\DomainLib.csproj" />
+    <ProjectReference Include="..\DomainLib.Projections\DomainLib.Projections.csproj" />
   </ItemGroup>
+
 
 </Project>
