@@ -3,7 +3,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using DomainLib.Aggregates;
 using DomainLib.Persistence;
-using EventStore.Client;
 using Shopping.Domain.Aggregates;
 using Shopping.Domain.Events;
 
@@ -19,17 +18,17 @@ namespace Shopping.Api.CommandHandlers
 
         protected override async Task HandleImpl(AddItemToShoppingCart request, CancellationToken cancellationToken)
         {
-            var initialAggregateState = new ShoppingCartState();
+            var loadedState = await Repository.LoadAggregate(request.CartId, new ShoppingCartState());
 
             var cartId = Guid.Parse(request.CartId);
             var itemId = Guid.Parse(request.ItemId);
 
-            var (_, events) = CommandDispatcher.ImmutableDispatch(initialAggregateState,
+            var (_, events) = CommandDispatcher.ImmutableDispatch(loadedState.AggregateState,
                                                                   new Domain.Commands.AddItemToShoppingCart(cartId,
                                                                       itemId,
                                                                       request.ItemName));
 
-            await Repository.SaveAggregate<ShoppingCartState>(request.CartId, StreamRevision.None.ToInt64(), events);
+            await Repository.SaveAggregate<ShoppingCartState>(request.CartId, loadedState.Version, events);
         }
     }
 }

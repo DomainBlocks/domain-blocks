@@ -13,21 +13,21 @@ namespace DomainLib.Projections
         private static readonly ILogger<EventDispatcher<TEventBase>> Log = Logger.CreateFor<EventDispatcher<TEventBase>>();
         private readonly IEventPublisher<ReadOnlyMemory<byte>> _publisher;
         private readonly EventProjectionMap _projectionMap;
-        private readonly EventContextMap _eventContextMap;
+        private readonly ProjectionContextMap _projectionContextMap;
         private readonly EventDispatcherConfiguration _configuration;
         private readonly IEventDeserializer _deserializer;
         private readonly IProjectionEventNameMap _projectionEventNameMap;
 
         public EventDispatcher(IEventPublisher<ReadOnlyMemory<byte>> publisher,
                                EventProjectionMap projectionMap,
-                               EventContextMap eventContextMap,
+                               ProjectionContextMap projectionContextMap,
                                IEventDeserializer serializer,
                                IProjectionEventNameMap projectionEventNameMap,
                                EventDispatcherConfiguration configuration)
         {
             _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
             _projectionMap = projectionMap ?? throw new ArgumentNullException(nameof(projectionMap));
-            _eventContextMap = eventContextMap ?? throw new ArgumentNullException(nameof(eventContextMap));
+            _projectionContextMap = projectionContextMap ?? throw new ArgumentNullException(nameof(projectionContextMap));
             _deserializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
             _projectionEventNameMap =
                 projectionEventNameMap ?? throw new ArgumentNullException(nameof(projectionEventNameMap));
@@ -44,9 +44,9 @@ namespace DomainLib.Projections
             Log.LogDebug("Event publisher started");
         }
 
-        private async Task ForAllContexts(Func<IContext, Task> contextAction)
+        private async Task ForAllContexts(Func<IProjectionContext, Task> contextAction)
         {
-            foreach (var context in _eventContextMap.GetAllContexts())
+            foreach (var context in _projectionContextMap.GetAllContexts())
             {
                 await contextAction(context).ConfigureAwait(false); 
             }
@@ -99,7 +99,7 @@ namespace DomainLib.Projections
             {
                 Log.LogTrace("Handling event ID {EventId}", eventId);
                 var eventType = @event.GetType();
-                var contextsForEvent = _eventContextMap.GetContextsForEventType(eventType);
+                var contextsForEvent = _projectionContextMap.GetContextsForEventType(eventType);
 
                 var beforeEventActions = contextsForEvent.Select(c => c.OnBeforeHandleEvent());
                 Log.LogTrace("Context OnBeforeHandleEvent hooks called for event ID {EventId}", eventId);

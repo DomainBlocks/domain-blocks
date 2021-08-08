@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Hosting;
 
-namespace Shopping.Api
+namespace Shopping.ReadModel
 {
     public class Program
     {
@@ -15,6 +15,7 @@ namespace Shopping.Api
                 .ConfigureWebHostDefaults(webBuilder =>
                 {
                     webBuilder.UseStartup<Startup>();
+
                 });
     }
 }

@@ -9,7 +9,7 @@ namespace DomainLib.Projections
         private readonly IList<IEventProjectionBuilder> _eventProjectionBuilders = new List<IEventProjectionBuilder>();
         private readonly EventProjectionMap _eventProjectionMap = new();
         private readonly ProjectionEventNameMap _eventNameMap = new();
-        private readonly EventContextMap _eventContextMap = new();
+        private readonly ProjectionContextMap _projectionContextMap = new();
 
         public EventProjectionBuilder<TEvent> Event<TEvent>()
         {
@@ -26,7 +26,7 @@ namespace DomainLib.Projections
                 _eventProjectionMap.AddProjectionFunc(eventType, projectionType, func);
             }
 
-            return new ProjectionRegistry(_eventProjectionMap, _eventContextMap, _eventNameMap);
+            return new ProjectionRegistry(_eventProjectionMap, _projectionContextMap, _eventNameMap);
         }
 
         internal void RegisterEventName<TEvent>(string name)
@@ -35,10 +35,10 @@ namespace DomainLib.Projections
             _eventNameMap.RegisterTypeForEventName<TEvent>(name);
         }
 
-        internal void RegisterContextForEvent<TEvent>(IContext context)
+        internal void RegisterContextForEvent<TEvent>(IProjectionContext projectionContext)
         {
-            if (context == null) throw new ArgumentNullException(nameof(context));
-            _eventContextMap.RegisterContextForEvent<TEvent>(context);
+            if (projectionContext == null) throw new ArgumentNullException(nameof(projectionContext));
+            _projectionContextMap.RegisterProjectionContext<TEvent>(projectionContext);
         }
     }
 }
