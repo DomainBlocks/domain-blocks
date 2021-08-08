@@ -31,7 +31,7 @@ namespace DomainLib.Projections.EventStore
 
         public void Dispose()
         {
-            _subscription.Dispose();
+            _subscription?.Dispose();
         }
 
         private async Task SubscribeToEventStore(Position position)

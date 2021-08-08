@@ -31,10 +31,10 @@ namespace DomainLib.Projections
             return this;
         }
 
-        public void RegisterContextForEvent(IContext context)
+        public void RegisterContextForEvent(IProjectionContext projectionContext)
         {
-            if (context == null) throw new ArgumentNullException(nameof(context));
-            _builder.RegisterContextForEvent<TEvent>(context);
+            if (projectionContext == null) throw new ArgumentNullException(nameof(projectionContext));
+            _builder.RegisterContextForEvent<TEvent>(projectionContext);
         }
 
         public void RegisterProjectionBuilder(IProjectionBuilder projectionBuilder)

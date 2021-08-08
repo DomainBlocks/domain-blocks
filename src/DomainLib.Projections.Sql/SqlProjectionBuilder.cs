@@ -16,7 +16,7 @@ namespace DomainLib.Projections.Sql
         private readonly TSqlProjection _sqlProjection;
         private readonly IDbConnector _connector;
         private readonly ISqlDialect _sqlDialect;
-        private readonly SqlContext _context;
+        private readonly SqlProjectionContext _projectionContext;
         private bool _executesUpsert;
         private bool _executesDelete;
         private string _customSqlCommandText;
@@ -29,10 +29,10 @@ namespace DomainLib.Projections.Sql
             _sqlProjection = sqlProjection ?? throw new ArgumentNullException(nameof(sqlProjection));
             _connector = sqlProjection.DbConnector;
             _sqlDialect = sqlProjection.SqlDialect;
-            _context = SqlContextProvider.GetOrCreateContext(sqlProjection.DbConnector, sqlProjection.SqlDialect);
-            _context.RegisterProjection(_sqlProjection);
+            _projectionContext = SqlContextProvider.GetOrCreateContext(sqlProjection.DbConnector, sqlProjection.SqlDialect);
+            _projectionContext.RegisterProjection(_sqlProjection);
             builder.RegisterProjectionBuilder(this);
-            builder.RegisterContextForEvent(_context);
+            builder.RegisterContextForEvent(_projectionContext);
             _parameterBindingMap = CreateReflectedParameterBindingMap();
         }
 
@@ -119,7 +119,7 @@ namespace DomainLib.Projections.Sql
                 commandTextBuilder.Append(_customSqlCommandText);
             }
 
-            var dbCommand = _context.Connection.CreateCommand();
+            var dbCommand = _projectionContext.Connection.CreateCommand();
             dbCommand.CommandText = commandTextBuilder.ToString();
 
             return async @event =>
