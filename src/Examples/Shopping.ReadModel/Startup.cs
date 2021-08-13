@@ -1,4 +1,6 @@
-using DomainLib.EventStore.AspNetCore;
+using DomainLib.Projections.AspNetCore;
+using DomainLib.Projections.EventStore.AspNetCore;
+using DomainLib.Projections.Serialization.Json.AspNetCore;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
@@ -28,6 +30,11 @@ namespace Shopping.ReadModel
                                                                                    .GetConnectionString("Default")));
 
             services.AddReadModel<IDomainEvent, ShoppingCartDbContext>(Configuration,
+                                                                       options =>
+                                                                       {
+                                                                           options.UseEventStorePublishedEvents();
+                                                                           options.UseJsonDeserialization();
+                                                                       },
                                                                        (builder, dbContext) =>
                                                                        {
                                                                            ShoppingClassSummaryEfProjection

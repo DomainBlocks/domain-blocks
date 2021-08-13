@@ -1,5 +1,7 @@
 ﻿using DomainLib.Aggregates.Registration;
-using DomainLib.EventStore.AspNetCore;
+using DomainLib.Persistence.AspNetCore;
+using DomainLib.Persistence.EventStore.AspNetCore;
+using DomainLib.Serialization.Json.AspNetCore;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -30,6 +32,7 @@ namespace Shopping.Api
                                             {
                                                 options.UseEventStoreDbForEvents();
                                                 options.UseEventStoreDbForSnapshots();
+                                                options.UseJsonSerialization();
                                             },
                                             ConfigureAggregateRegistry());
         }
