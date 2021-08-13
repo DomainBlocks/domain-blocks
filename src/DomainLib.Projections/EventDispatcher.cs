@@ -8,20 +8,20 @@ using Microsoft.Extensions.Logging;
 
 namespace DomainLib.Projections
 {
-    public sealed class EventDispatcher<TEventBase>
+    public sealed class EventDispatcher<TRawData, TEventBase>
     {
-        private static readonly ILogger<EventDispatcher<TEventBase>> Log = Logger.CreateFor<EventDispatcher<TEventBase>>();
-        private readonly IEventPublisher<ReadOnlyMemory<byte>> _publisher;
+        private static readonly ILogger<EventDispatcher<TRawData, TEventBase>> Log = Logger.CreateFor<EventDispatcher<TRawData, TEventBase>>();
+        private readonly IEventPublisher<TRawData> _publisher;
         private readonly EventProjectionMap _projectionMap;
         private readonly ProjectionContextMap _projectionContextMap;
         private readonly EventDispatcherConfiguration _configuration;
-        private readonly IEventDeserializer _deserializer;
+        private readonly IEventDeserializer<TRawData> _deserializer;
         private readonly IProjectionEventNameMap _projectionEventNameMap;
 
-        public EventDispatcher(IEventPublisher<ReadOnlyMemory<byte>> publisher,
+        public EventDispatcher(IEventPublisher<TRawData> publisher,
                                EventProjectionMap projectionMap,
                                ProjectionContextMap projectionContextMap,
-                               IEventDeserializer serializer,
+                               IEventDeserializer<TRawData> serializer,
                                IProjectionEventNameMap projectionEventNameMap,
                                EventDispatcherConfiguration configuration)
         {
@@ -52,7 +52,7 @@ namespace DomainLib.Projections
             }
         }
 
-        private async Task HandleEventNotificationAsync(EventNotification<ReadOnlyMemory<byte>> notification)
+        private async Task HandleEventNotificationAsync(EventNotification<TRawData> notification)
         {
             switch (notification.NotificationKind)
             {
@@ -70,7 +70,7 @@ namespace DomainLib.Projections
             }
         }
 
-        private async Task HandleEventAsync(ReadOnlyMemory<byte> eventData, string eventType, Guid eventId)
+        private async Task HandleEventAsync(TRawData eventData, string eventType, Guid eventId)
         {
             var tasks = new List<Task>();
 
@@ -79,7 +79,7 @@ namespace DomainLib.Projections
                 TEventBase @event;
                 try
                 {
-                    @event = _deserializer.DeserializeEvent<TEventBase>(eventData.Span, eventType, type);
+                    @event = _deserializer.DeserializeEvent<TEventBase>(eventData, eventType, type);
                 }
                 catch (Exception e)
                 {

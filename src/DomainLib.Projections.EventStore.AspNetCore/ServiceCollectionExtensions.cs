@@ -1,34 +1,24 @@
 ﻿using System;
-using DomainLib.EventStore.AspNetCore;
+using DomainLib.EventStore.Common.AspNetCore;
+using DomainLib.Projections.AspNetCore;
 using EventStore.Client;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 
 namespace DomainLib.Projections.EventStore.AspNetCore
 {
-    public static class ServiceCollectionExtensions
+    public static class ProjectionRegistrationOptionsExtensions
     {
-        public static IServiceCollection AddEventStoreProjections(this IServiceCollection services,
-                                                                  IConfiguration configuration)
+        public static IProjectionRegistrationOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> UseEventStorePublishedEvents(
+            this IProjectionRegistrationOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> builder)
         {
+            builder.ServiceCollection.AddEventStore(builder.Configuration);
+
+            builder.AddEventPublisher(() =>
             {
-                services.AddOptions<EventStoreConnectionOptions>()
-                        .Bind(configuration.GetSection(EventStoreConnectionOptions.ConfigSection))
-                        .ValidateDataAnnotations();
-
-                services.AddSingleton(provider =>
-                {
-                    var options = provider.GetRequiredService<IOptions<EventStoreConnectionOptions>>();
-
-                    var settings = EventStoreClientSettings.Create(options.Value.ConnectionString);
-                    var client = new EventStoreClient(settings);
-
-                    return client;
-                });
-
-                return services;
-            }
+                var eventStoreClient = builder.ServiceProvider.GetRequiredService<EventStoreClient>();
+                return new EventStoreEventPublisher(eventStoreClient);
+            });
+            return builder;
         }
     }
 }

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net5.0</TargetFramework>
@@ -9,11 +9,10 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="5.0.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="5.0.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="5.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="5.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="5.0.0" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\DomainLib.EventPersistence.AspNetCore\DomainLib.Persistence.AspNetCore.csproj" />
     <ProjectReference Include="..\DomainLib.EventStore.Common.AspNetCore\DomainLib.EventStore.Common.AspNetCore.csproj" />
     <ProjectReference Include="..\DomainLib.Persistence.EventStore\DomainLib.Persistence.EventStore.csproj" />
     <ProjectReference Include="..\DomainLib.Serialization.Json\DomainLib.Serialization.Json.csproj" />

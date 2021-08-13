@@ -69,7 +69,7 @@ namespace DomainLib.Serialization.Json
         public TEvent DeserializeEvent<TEvent>(TRawData eventData, string eventName, Type typeOverride = null)
         {
             var clrType = typeOverride ?? _eventNameMap.GetClrTypeForEventName(eventName);
-            return _deserializer.DeserializeEvent<TEvent>(_adapter.FromRawData(eventData).Span, eventName, clrType, _options);
+            return _deserializer.DeserializeEvent<TEvent>(_adapter.FromRawData(eventData), eventName, clrType, _options);
         }
 
         public Dictionary<string, string> DeserializeMetadata(TRawData rawMetadata)

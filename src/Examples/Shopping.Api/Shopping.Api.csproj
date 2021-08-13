@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\DomainLib.EventStore.AspNet\DomainLib.Persistence.EventStore.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\DomainLib.Serialization.Json.AspNetCore\DomainLib.Serialization.Json.AspNetCore.csproj" />
     <ProjectReference Include="..\Shopping.Domain\Shopping.Domain.csproj" />
   </ItemGroup>
 

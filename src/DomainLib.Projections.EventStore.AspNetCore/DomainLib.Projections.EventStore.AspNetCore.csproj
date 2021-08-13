@@ -5,14 +5,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="EventStore.Client.Grpc" Version="21.2.0" />
-    <PackageReference Include="EventStore.Client.Grpc.Streams" Version="21.2.0" />
+
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="5.0.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="5.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\DomainLib.EventStore.Common.AspNetCore\DomainLib.EventStore.Common.AspNetCore.csproj" />
+    <ProjectReference Include="..\DomainLib.Projections.AspNetCore\DomainLib.Projections.AspNetCore.csproj" />
+    <ProjectReference Include="..\DomainLib.Projections.EventStore\DomainLib.Projections.EventStore.csproj" />
   </ItemGroup>
 
 </Project>
