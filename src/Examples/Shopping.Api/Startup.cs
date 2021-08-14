@@ -30,9 +30,8 @@ namespace Shopping.Api
             services.AddAggregateRepository(_configuration,
                                             options =>
                                             {
-                                                options.UseEventStoreDbForEvents();
-                                                options.UseEventStoreDbForSnapshots();
-                                                options.UseJsonSerialization();
+                                                options.UseEventStoreDbForEventsAndSnapshots()
+                                                       .UseJsonSerialization();
                                             },
                                             ConfigureAggregateRegistry());
         }
