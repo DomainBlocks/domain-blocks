@@ -8,18 +8,17 @@ namespace DomainLib.Projections.AspNetCore
     public interface IProjectionRegistrationOptionsBuilderInfrastructure<TRawData>
     {
         IConfiguration Configuration { get; }
-        IServiceProvider ServiceProvider { get; }
         IServiceCollection ServiceCollection { get; }
 
         ProjectionRegistrationOptionsBuilder<TRawData> AddEventPublisher(
-            Func<IEventPublisher<TRawData>> getEventPublisher);
+            Func<IServiceProvider, IEventPublisher<TRawData>> getEventPublisher);
 
         ProjectionRegistrationOptionsBuilder<TRawData> AddEventDeserializer(
-            Func<IEventDeserializer<TRawData>> getEventDeserializer);
+            Func<IServiceProvider, IEventDeserializer<TRawData>> getEventDeserializer);
 
-        ProjectionRegistrationOptions<TRawData> Build();
+        ProjectionRegistrationOptions<TRawData> Build(IServiceProvider serviceProvider);
 
         ProjectionRegistrationOptionsBuilder<TRawData> AddProjectionRegistrations(
-            Action<ProjectionRegistryBuilder> onRegisteringProjections);
+            Action<IServiceProvider, ProjectionRegistryBuilder> onRegisteringProjections);
     }
 }

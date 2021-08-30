@@ -13,9 +13,9 @@ namespace DomainLib.Persistence.EventStore.AspNetCore
         {
             builder.ServiceCollection.AddEventStore(builder.Configuration);
 
-            builder.AddEventsRepository(serializer =>
+            builder.AddEventsRepository((provider, serializer) =>
             {
-                var eventStoreClient = builder.ServiceProvider.GetRequiredService<EventStoreClient>();
+                var eventStoreClient = provider.GetRequiredService<EventStoreClient>();
                 return new EventStoreEventsRepository(eventStoreClient, serializer);
             });
 
@@ -27,9 +27,9 @@ namespace DomainLib.Persistence.EventStore.AspNetCore
         {
             builder.ServiceCollection.AddEventStore(builder.Configuration);
 
-            builder.AddSnapshotRepository(serializer =>
+            builder.AddSnapshotRepository((provider, serializer) =>
             {
-                var eventStoreClient = builder.ServiceProvider.GetRequiredService<EventStoreClient>();
+                var eventStoreClient = provider.GetRequiredService<EventStoreClient>();
                 return new EventStoreSnapshotRepository(eventStoreClient, serializer);
             });
 
@@ -41,15 +41,15 @@ namespace DomainLib.Persistence.EventStore.AspNetCore
         {
             builder.ServiceCollection.AddEventStore(builder.Configuration);
 
-            builder.AddEventsRepository(serializer =>
+            builder.AddEventsRepository((provider, serializer) =>
             {
-                var eventStoreClient = builder.ServiceProvider.GetRequiredService<EventStoreClient>();
+                var eventStoreClient = provider.GetRequiredService<EventStoreClient>();
                 return new EventStoreEventsRepository(eventStoreClient, serializer);
             });
 
-            builder.AddSnapshotRepository(serializer =>
+            builder.AddSnapshotRepository((provider, serializer) =>
             {
-                var eventStoreClient = builder.ServiceProvider.GetRequiredService<EventStoreClient>();
+                var eventStoreClient = provider.GetRequiredService<EventStoreClient>();
                 return new EventStoreSnapshotRepository(eventStoreClient, serializer);
             });
 

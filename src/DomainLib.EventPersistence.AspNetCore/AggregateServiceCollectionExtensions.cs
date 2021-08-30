@@ -28,15 +28,15 @@ namespace DomainLib.Persistence.AspNetCore
             Action<AggregateRegistrationOptionsBuilder<ReadOnlyMemory<byte>>> buildAggregateOptions,
             AggregateRegistry<TCommandBase, TEventBase> aggregateRegistry)
         {
+            var optionsBuilder =
+                new AggregateRegistrationOptionsBuilder<ReadOnlyMemory<byte>>(services, configuration);
+            buildAggregateOptions(optionsBuilder);
+
             services.AddSingleton<IAggregateRepository<TEventBase>>(provider =>
             {
-                var optionsBuilder =
-                    new AggregateRegistrationOptionsBuilder<ReadOnlyMemory<byte>>(services, configuration, provider);
-                buildAggregateOptions(optionsBuilder);
-
                 var aggregateOptions =
                     ((IAggregateRegistrationOptionsBuilderInfrastructure<ReadOnlyMemory<byte>>)optionsBuilder)
-                    .Build(aggregateRegistry.EventNameMap);
+                    .Build(provider, aggregateRegistry.EventNameMap);
 
                 return AggregateRepository.Create(aggregateOptions.EventsRepository,
                                                   aggregateOptions.SnapshotRepository,

@@ -9,7 +9,7 @@ namespace DomainLib.Projections.Serialization.Json.AspNetCore
         public static IProjectionRegistrationOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> UseJsonDeserialization(
             this IProjectionRegistrationOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> builder)
         {
-            builder.AddEventDeserializer(() => new JsonEventDeserializer());
+            builder.AddEventDeserializer(_ => new JsonEventDeserializer());
             return builder;
         }
     }

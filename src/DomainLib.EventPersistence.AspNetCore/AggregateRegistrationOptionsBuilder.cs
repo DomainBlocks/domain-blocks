@@ -9,21 +9,19 @@ namespace DomainLib.Persistence.AspNetCore
     public class AggregateRegistrationOptionsBuilder<TRawData> : IAggregateRegistrationOptionsBuilderInfrastructure<TRawData>
     {
         public IConfiguration Configuration { get; }
-        public IServiceProvider ServiceProvider { get; }
         public IServiceCollection ServiceCollection { get; }
-        private Func<IEventSerializer<TRawData>, IEventsRepository<TRawData>> _getEventsRepository;
-        private Func<IEventSerializer<TRawData>, ISnapshotRepository>  _getSnapshotRepository;
+        private Func<IServiceProvider, IEventSerializer<TRawData>, IEventsRepository<TRawData>> _getEventsRepository;
+        private Func<IServiceProvider, IEventSerializer<TRawData>, ISnapshotRepository>  _getSnapshotRepository;
         private Func<IEventNameMap, IEventSerializer<TRawData>> _getEventSerializer;
 
-        public AggregateRegistrationOptionsBuilder(IServiceCollection serviceCollection, IConfiguration configuration, IServiceProvider serviceProvider)
+        public AggregateRegistrationOptionsBuilder(IServiceCollection serviceCollection, IConfiguration configuration)
         {
             ServiceCollection = serviceCollection;
             Configuration = configuration;
-            ServiceProvider = serviceProvider;
         }
 
         AggregateRegistrationOptionsBuilder<TRawData> IAggregateRegistrationOptionsBuilderInfrastructure<TRawData>.
-            AddEventsRepository(Func<IEventSerializer<TRawData>, IEventsRepository<TRawData>> getEventsRepository)
+            AddEventsRepository(Func<IServiceProvider, IEventSerializer<TRawData>, IEventsRepository<TRawData>> getEventsRepository)
         {
             _getEventsRepository = getEventsRepository ?? throw new ArgumentNullException(nameof(getEventsRepository));
 
@@ -31,7 +29,7 @@ namespace DomainLib.Persistence.AspNetCore
         }
 
         AggregateRegistrationOptionsBuilder<TRawData> IAggregateRegistrationOptionsBuilderInfrastructure<TRawData>.
-            AddSnapshotRepository(Func<IEventSerializer<TRawData>, ISnapshotRepository> getSnapshotRepository)
+            AddSnapshotRepository(Func<IServiceProvider, IEventSerializer<TRawData>, ISnapshotRepository> getSnapshotRepository)
         {
             _getSnapshotRepository =
                 getSnapshotRepository ?? throw new ArgumentNullException(nameof(getSnapshotRepository));
@@ -45,11 +43,13 @@ namespace DomainLib.Persistence.AspNetCore
             return this;
         }
 
-        AggregateRegistrationOptions<TRawData> IAggregateRegistrationOptionsBuilderInfrastructure<TRawData>.Build(IEventNameMap eventNameMap)
+        AggregateRegistrationOptions<TRawData> IAggregateRegistrationOptionsBuilderInfrastructure<TRawData>.Build(
+            IServiceProvider serviceProvider,
+            IEventNameMap eventNameMap)
         {
             var serializer = _getEventSerializer(eventNameMap);
-            var eventsRepository = _getEventsRepository(serializer);
-            var snapshotRepository = _getSnapshotRepository(serializer);
+            var eventsRepository = _getEventsRepository(serviceProvider, serializer);
+            var snapshotRepository = _getSnapshotRepository(serviceProvider, serializer);
 
             return new AggregateRegistrationOptions<TRawData>(eventsRepository, snapshotRepository, serializer);
         }
