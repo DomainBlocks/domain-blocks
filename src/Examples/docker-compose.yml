@@ -37,8 +37,8 @@ services:
   shopping.api:
     container_name: shopping.api
     build:
-      context: .
-      dockerfile: ./Shopping.Api/Dockerfile
+      context: ../
+      dockerfile: ./Examples/Shopping.Api/Dockerfile
     image: shopping.api
     ports:
       - "5000:80"
@@ -51,8 +51,8 @@ services:
   shopping.readmodel:
     container_name: shopping.readmodel
     build:
-      context: .
-      dockerfile: ./Shopping.ReadModel/Dockerfile
+      context: ../
+      dockerfile: ./Examples/Shopping.ReadModel/Dockerfile
     image: shopping.readmodel
     ports:
       - "5010:80"
