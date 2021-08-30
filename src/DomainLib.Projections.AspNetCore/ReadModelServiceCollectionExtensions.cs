@@ -19,14 +19,14 @@ namespace DomainLib.Projections.AspNetCore
             IConfiguration configuration,
             Action<ProjectionRegistrationOptionsBuilder<ReadOnlyMemory<byte>>> buildProjectionOptions)
         {
+            var optionsBuilder =
+                new ProjectionRegistrationOptionsBuilder<ReadOnlyMemory<byte>>(services, configuration);
+            buildProjectionOptions(optionsBuilder);
+
             services.AddHostedService(provider =>
             {
-                var optionsBuilder =
-                    new ProjectionRegistrationOptionsBuilder<ReadOnlyMemory<byte>>(services, configuration, provider);
-                buildProjectionOptions(optionsBuilder);
-
                 var projectionOptions =
-                    ((IProjectionRegistrationOptionsBuilderInfrastructure<ReadOnlyMemory<byte>>)optionsBuilder).Build();
+                    ((IProjectionRegistrationOptionsBuilderInfrastructure<ReadOnlyMemory<byte>>)optionsBuilder).Build(provider);
 
                 return new
                     EventDispatcherHostedService<ReadOnlyMemory<byte>, TEventBase>(new ProjectionRegistryBuilder(),

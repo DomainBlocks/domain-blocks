@@ -19,7 +19,7 @@ namespace DomainLib.Projections.EntityFramework.AspNetCore
     public class EntityFrameworkProjectionRegistrationBuilder<TDbContext> where TDbContext : DbContext
     {
         private readonly IProjectionRegistrationOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> _infrastructure;
-        private Action<ProjectionRegistryBuilder> _onRegisteringProjections;
+        private Action<IServiceProvider, ProjectionRegistryBuilder> _onRegisteringProjections;
 
         public EntityFrameworkProjectionRegistrationBuilder(IProjectionRegistrationOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> infrastructure)
         {
@@ -28,16 +28,17 @@ namespace DomainLib.Projections.EntityFramework.AspNetCore
 
         public void WithProjections(Action<ProjectionRegistryBuilder, TDbContext> onRegisteringProjections)
         {
-            var dispatcherScope = _infrastructure.ServiceProvider.CreateScope();
-            var dbContext = dispatcherScope.ServiceProvider.GetRequiredService<TDbContext>();
-
-            _onRegisteringProjections = builder => onRegisteringProjections(builder, dbContext);
-
+            _onRegisteringProjections = (provider, builder) =>
+            {
+                var dispatcherScope = provider.CreateScope();
+                var dbContext = dispatcherScope.ServiceProvider.GetRequiredService<TDbContext>();
+                onRegisteringProjections(builder, dbContext);
+            };
         }
 
-        public Action<ProjectionRegistryBuilder> Build()
+        public Action<IServiceProvider, ProjectionRegistryBuilder> Build()
         {
-            return _onRegisteringProjections;
+            return (provider, builder) => _onRegisteringProjections(provider, builder);
         }
     }
 }

@@ -1,4 +1,3 @@
-using System;
 using DomainLib.Projections.AspNetCore;
 using DomainLib.Projections.EntityFramework.AspNetCore;
 using DomainLib.Projections.EventStore.AspNetCore;
@@ -10,7 +9,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.OpenApi.Models;
-using Shopping.Domain.Events;
 using Shopping.ReadModel.Db;
 
 namespace Shopping.ReadModel
@@ -31,18 +29,14 @@ namespace Shopping.ReadModel
                                                              options.UseNpgsql(Configuration
                                                                                    .GetConnectionString("Default")));
 
-            services.AddReadModel<IDomainEvent>(Configuration,
-                                                options =>
-                                                {
-                                                    options.UseEventStorePublishedEvents()
-                                                           .UseJsonDeserialization()
-                                                           .UseEntityFramework<ShoppingCartDbContext>()
-                                                           .WithProjections((builder, dbContext) =>
-                                                           {
-                                                               ShoppingClassSummaryEfProjection.Register(builder,
-                                                                   dbContext);
-                                                           });
-                                                });
+            services.AddReadModel(Configuration,
+                                  options =>
+                                  {
+                                      options.UseEventStorePublishedEvents()
+                                             .UseJsonDeserialization()
+                                             .UseEntityFramework<ShoppingCartDbContext>()
+                                             .WithProjections(ShoppingClassSummaryEfProjection.Register);
+                                  });
 
             services.AddControllers();
             services.AddSwaggerGen(c =>

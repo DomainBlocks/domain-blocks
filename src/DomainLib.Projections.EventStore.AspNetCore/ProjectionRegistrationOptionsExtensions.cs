@@ -13,9 +13,9 @@ namespace DomainLib.Projections.EventStore.AspNetCore
         {
             builder.ServiceCollection.AddEventStore(builder.Configuration);
 
-            builder.AddEventPublisher(() =>
+            builder.AddEventPublisher(provider =>
             {
-                var eventStoreClient = builder.ServiceProvider.GetRequiredService<EventStoreClient>();
+                var eventStoreClient = provider.GetRequiredService<EventStoreClient>();
                 return new EventStoreEventPublisher(eventStoreClient);
             });
             return builder;
