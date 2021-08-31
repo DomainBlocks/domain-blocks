@@ -1,4 +1,8 @@
-﻿using DomainLib.Aggregates.Registration;
+﻿using System;
+using System.Data;
+using System.Linq;
+using System.Threading.Tasks;
+using DomainLib.Aggregates.Registration;
 using DomainLib.Common;
 using DomainLib.EventStore.Testing;
 using DomainLib.Persistence;
@@ -8,19 +12,13 @@ using DomainLib.Projections.EventStore;
 using DomainLib.Projections.Sql;
 using DomainLib.Projections.Sqlite;
 using DomainLib.Serialization.Json;
+using EventStore.Client;
 using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using Shopping.Domain.Aggregates;
 using Shopping.Domain.Commands;
 using Shopping.Domain.Events;
-using System;
-using System.Data;
-using System.Linq;
-using System.Threading.Tasks;
-using DomainLib.Projections.EntityFramework;
-using EventStore.Client;
-using Microsoft.EntityFrameworkCore;
-using ProjectionDispatcher = DomainLib.Projections.EventDispatcher<Shopping.Domain.Events.IDomainEvent>;
+using ProjectionDispatcher = DomainLib.Projections.EventDispatcher<System.ReadOnlyMemory<byte>, Shopping.Domain.Events.IDomainEvent>;
 using UserCredentials = DomainLib.Common.UserCredentials;
 
 namespace Shopping.Infrastructure.Tests

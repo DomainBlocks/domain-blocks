@@ -20,7 +20,7 @@ namespace DomainLib.Projections.Sqlite.Tests
     public class InMemoryDbTests
     {
         private FakeJsonEventPublisher _publisher;
-        private EventDispatcher<object> _eventDispatcher;
+        private EventDispatcher<ReadOnlyMemory<byte>, object> _eventDispatcher;
         private IDbConnection _connection;
         private SqliteDbConnector _dbConnector;
 
@@ -112,13 +112,17 @@ namespace DomainLib.Projections.Sqlite.Tests
             var eventPublisher = new FakeJsonEventPublisher();
             _publisher = eventPublisher;
 
-            var eventDispatcher = new EventDispatcher<object>(eventPublisher,
-                                                              registry.EventProjectionMap,
-                                                              registry.ProjectionContextMap,
-                                                              new JsonEventDeserializer(),
-                                                              registry.EventNameMap,
-                                                              EventDispatcherConfiguration.ReadModelDefaults with {
-                                                                  ProjectionHandlerTimeout = TimeSpan.FromMinutes(5)});
+            var eventDispatcher = new EventDispatcher<ReadOnlyMemory<byte>, object>(eventPublisher,
+                registry.EventProjectionMap,
+                registry.ProjectionContextMap,
+                new JsonEventDeserializer(),
+                registry.EventNameMap,
+                EventDispatcherConfiguration
+                        .ReadModelDefaults with
+                    {
+                        ProjectionHandlerTimeout =
+                        TimeSpan.FromMinutes(5)
+                    });
             _eventDispatcher = eventDispatcher;
         }
 

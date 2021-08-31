@@ -1,5 +1,4 @@
 ﻿using System;
-using DomainLib.Aggregates;
 using DomainLib.Projections.Sql.Tests.Fakes;
 using DomainLib.Serialization.Json;
 
@@ -8,7 +7,7 @@ namespace DomainLib.Projections.Sql.Tests
     public class SqlProjectionScenario
     {
         public FakeJsonEventPublisher Publisher { get; } = new();
-        public EventDispatcher<object> Dispatcher { get; private set; }
+        public EventDispatcher<ReadOnlyMemory<byte>, object> Dispatcher { get; private set; }
         public FakeDbConnector DbConnector { get; private set; }
         public static EventDispatcherConfiguration DefaultDispatcherConfig { get; } = EventDispatcherConfiguration.ReadModelDefaults with
             {
@@ -68,12 +67,12 @@ namespace DomainLib.Projections.Sql.Tests
             var dispatcherConfig = EventDispatcherConfiguration.ReadModelDefaults with { ProjectionHandlerTimeout =
                                        TimeSpan.FromHours(2)};
 
-            var dispatcher = new EventDispatcher<object>(Publisher,
-                                                         registry.EventProjectionMap,
-                                                         registry.ProjectionContextMap,
-                                                         new JsonEventDeserializer(),
-                                                         registry.EventNameMap,
-                                                         dispatcherConfig);
+            var dispatcher = new EventDispatcher<ReadOnlyMemory<byte>, object>(Publisher,
+                                                                               registry.EventProjectionMap,
+                                                                               registry.ProjectionContextMap,
+                                                                               new JsonEventDeserializer(),
+                                                                               registry.EventNameMap,
+                                                                               dispatcherConfig);
 
             Dispatcher = dispatcher;
         }
