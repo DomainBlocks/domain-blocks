@@ -14,23 +14,17 @@ namespace DomainLib.Serialization.Json
         private readonly IEventSerializationAdapter<TRawData> _adapter;
         private readonly JsonEventDeserializer _deserializer = new JsonEventDeserializer();
         private EventMetadataContext _metadataContext;
-
-        public JsonEventSerializer(IEventNameMap eventNameMap, IEventSerializationAdapter<TRawData> adapter)
+        
+        public JsonEventSerializer(IEventNameMap eventNameMap, IEventSerializationAdapter<TRawData> adapter, JsonSerializerOptions options = null)
         {
             _eventNameMap = eventNameMap ?? throw new ArgumentNullException(nameof(eventNameMap));
             _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
-            _options = new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                AllowTrailingCommas = false,
-            };
-        }
-
-        public JsonEventSerializer(IEventNameMap eventNameMap, IEventSerializationAdapter<TRawData> adapter, JsonSerializerOptions options)
-        {
-            _eventNameMap = eventNameMap ?? throw new ArgumentNullException(nameof(eventNameMap));
-            _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
-            _options = options ?? throw new ArgumentNullException(nameof(options));
+            _options = options ??
+                       new JsonSerializerOptions
+                       {
+                           WriteIndented = true,
+                           AllowTrailingCommas = false,
+                       };
         }
 
         public void RegisterConverter(JsonConverter customConverter)
@@ -69,7 +63,7 @@ namespace DomainLib.Serialization.Json
         public TEvent DeserializeEvent<TEvent>(TRawData eventData, string eventName, Type typeOverride = null)
         {
             var clrType = typeOverride ?? _eventNameMap.GetClrTypeForEventName(eventName);
-            return _deserializer.DeserializeEvent<TEvent>(_adapter.FromRawData(eventData).Span, eventName, clrType, _options);
+            return _deserializer.DeserializeEvent<TEvent>(_adapter.FromRawData(eventData), eventName, clrType, _options);
         }
 
         public Dictionary<string, string> DeserializeMetadata(TRawData rawMetadata)

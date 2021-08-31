@@ -1,5 +1,7 @@
 ﻿using DomainLib.Aggregates.Registration;
-using DomainLib.EventStore.AspNetCore;
+using DomainLib.Persistence.AspNetCore;
+using DomainLib.Persistence.EventStore.AspNetCore;
+using DomainLib.Serialization.Json.AspNetCore;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -25,7 +27,13 @@ namespace Shopping.Api
         {
             services.AddGrpc();
             services.AddMediatR(typeof(Startup));
-            services.AddEventStoreAggregateRepository(_configuration, ConfigureAggregateRegistry());
+            services.AddAggregateRepository(_configuration,
+                                            options =>
+                                            {
+                                                options.UseEventStoreDbForEventsAndSnapshots()
+                                                       .UseJsonSerialization();
+                                            },
+                                            ConfigureAggregateRegistry());
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

@@ -3,17 +3,16 @@ using System.Text.Json;
 
 namespace DomainLib.Serialization.Json
 {
-    public class JsonEventDeserializer : IEventDeserializer
+    public class JsonEventDeserializer : IEventDeserializer<ReadOnlyMemory<byte>>
     {
-        public TEventBase DeserializeEvent<TEventBase>(ReadOnlySpan<byte> eventData, string eventName, Type eventType, JsonSerializerOptions options = null)
+        public TEventBase DeserializeEvent<TEventBase>(ReadOnlyMemory<byte> eventData, string eventName, Type eventType, JsonSerializerOptions options = null)
         {
-            if (eventData == null) throw new ArgumentNullException(nameof(eventData));
             if (eventName == null) throw new ArgumentNullException(nameof(eventName));
             if (eventType == null) throw new ArgumentNullException(nameof(eventType));
 
             try
             {
-                var evt = JsonSerializer.Deserialize(eventData, eventType, options);
+                var evt = JsonSerializer.Deserialize(eventData.Span, eventType, options);
 
                 if (evt is TEventBase @event)
                 {

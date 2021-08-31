@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
-namespace DomainLib.EventStore.AspNetCore
+namespace DomainLib.EventStore.Common.AspNetCore
 {
     public class EventStoreConnectionOptions
     {
