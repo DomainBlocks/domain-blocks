@@ -1,4 +1,4 @@
-# domain-lib
+# DomainBlocks
 
 This library is intented to be a set of patterns and tools for use in projects that aim to apply concepts from DDD and event sourcing.
 
@@ -10,7 +10,7 @@ This library is intented to be a set of patterns and tools for use in projects t
 
 **What separates this from the myriad of similar libraries already out there?**
 
-A lot of other similar libraries tend to be some variation of the [NEventStore.Domain](https://github.com/NEventStore/NEventStore.Domain) project. This is certainly not a criticism of that project, and we all owe much to the concepts and patterns it has contributed to the community. However, there are areas in the design that domain-lib aims to improve upon.
+A lot of other similar libraries tend to be some variation of the [NEventStore.Domain](https://github.com/NEventStore/NEventStore.Domain) project. This is certainly not a criticism of that project, and we all owe much to the concepts and patterns it has contributed to the community. However, there are areas in the design that DomainBlocks aims to improve upon.
 
 For example, take the typical kind of interface seen for an aggregate root:
 
