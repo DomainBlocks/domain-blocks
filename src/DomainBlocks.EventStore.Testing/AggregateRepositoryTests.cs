@@ -64,10 +64,10 @@ namespace DomainBlocks.EventStore.Testing
 
 
         [SetUp]
-        public void TestSetUp()
+        public async Task TestSetUp()
         {
             Scenario = new SnapshotScenario();
-            Scenario.Initialise(this);
+            await Scenario.Initialise(this);
         }
 
     }
