@@ -1,40 +1,41 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Threading.Tasks;
 using DomainBlocks.Aggregates;
+using DomainBlocks.Aggregates.Registration;
 
 namespace DomainBlocks.Persistence
 {
     public static class AggregateRepository
     {
-        public static AggregateRepository<TEventBase, TRawData> Create<TEventBase, TRawData>(IEventsRepository<TRawData> repository,
+        public static AggregateRepository<TCommandBase, TEventBase, TRawData> Create<TCommandBase, TEventBase, TRawData>(IEventsRepository<TRawData> repository,
                                                                                              ISnapshotRepository snapshotRepository,
-                                                                                             EventDispatcher<TEventBase> eventDispatcher,
-                                                                                             AggregateMetadataMap metadataMap)
+                                                                                             AggregateRegistry<TCommandBase, TEventBase> aggregateRegistry)
         {
-            return new AggregateRepository<TEventBase, TRawData>(repository, snapshotRepository, eventDispatcher, metadataMap);
+            return new AggregateRepository<TCommandBase, TEventBase, TRawData>(repository, snapshotRepository, aggregateRegistry);
         }
     }
 
-    public sealed class AggregateRepository<TEventBase, TRawData> : IAggregateRepository<TEventBase>
+    public sealed class AggregateRepository<TCommandBase, TEventBase, TRawData> : IAggregateRepository<TCommandBase, TEventBase>
     {
         private readonly IEventsRepository<TRawData> _eventsRepository;
         private readonly ISnapshotRepository _snapshotRepository;
         private readonly EventDispatcher<TEventBase> _eventDispatcher;
         private readonly AggregateMetadataMap _metadataMap;
+        private readonly CommandDispatcher<TCommandBase, TEventBase> _commandDispatcher;
 
         public AggregateRepository(IEventsRepository<TRawData> eventsRepository, 
-                                   ISnapshotRepository snapshotRepository, 
-                                   EventDispatcher<TEventBase> eventDispatcher, 
-                                   AggregateMetadataMap metadataMap)
+                                   ISnapshotRepository snapshotRepository,
+                                   AggregateRegistry<TCommandBase, TEventBase> aggregateRegistry)
         {
+            if (aggregateRegistry == null) throw new ArgumentNullException(nameof(aggregateRegistry));
             _eventsRepository = eventsRepository ?? throw new ArgumentNullException(nameof(eventsRepository));
             _snapshotRepository = snapshotRepository ?? throw new ArgumentNullException(nameof(snapshotRepository));
-            _eventDispatcher = eventDispatcher ?? throw new ArgumentNullException(nameof(eventDispatcher));
-            _metadataMap = metadataMap ?? throw new ArgumentNullException(nameof(metadataMap));
+            _eventDispatcher = aggregateRegistry.EventDispatcher;
+            _metadataMap = aggregateRegistry.AggregateMetadataMap;
+            _commandDispatcher = aggregateRegistry.CommandDispatcher;
         }
 
-        public async Task<LoadedAggregateState<TAggregateState>> LoadAggregate<TAggregateState>(string id,
+        public async Task<LoadedAggregate<TAggregateState, TCommandBase, TEventBase>> LoadAggregate<TAggregateState>(string id,
                                                                                                    TAggregateState initialAggregateState,
                                                                                                    AggregateLoadStrategy loadStrategy = AggregateLoadStrategy.PreferSnapshot)
         {
@@ -84,17 +85,27 @@ namespace DomainBlocks.Persistence
             var state = _eventDispatcher.ImmutableDispatch(stateToAppendEventsTo, events);
             var newVersion = loadStartPosition + events.Count - 1;
 
-            return new LoadedAggregateState<TAggregateState>(state, newVersion, snapshotVersion, events.Count);
+            return LoadedAggregate.Create(state, id, _commandDispatcher, newVersion, snapshotVersion, events.Count);
         }
 
-        public async Task<long> SaveAggregate<TAggregateState>(string id, long expectedVersion, IEnumerable<TEventBase> eventsToApply)
+        public async Task<long> SaveAggregate<TAggregateState>(LoadedAggregate<TAggregateState, TCommandBase, TEventBase> loadedAggregate,
+                                                               Func<LoadedAggregate<TAggregateState, TCommandBase, TEventBase>, bool> snapshotPredicate = null)
         {
-            if (id == null) throw new ArgumentNullException(nameof(id));
-            if (eventsToApply == null) throw new ArgumentNullException(nameof(eventsToApply));
+            if (loadedAggregate == null) throw new ArgumentNullException(nameof(loadedAggregate));
+            snapshotPredicate ??= x => false;
 
             var aggregateMetadata = _metadataMap.GetForType<TAggregateState>();
-            var streamName = aggregateMetadata.GetKeyFromIdentifier(id);
-            return await _eventsRepository.SaveEventsAsync(streamName, expectedVersion, eventsToApply);
+            var streamName = aggregateMetadata.GetKeyFromIdentifier(loadedAggregate.Id);
+            var newVersion = await _eventsRepository.SaveEventsAsync(streamName, loadedAggregate.Version, loadedAggregate.EventsToPersist);
+
+            if (snapshotPredicate(loadedAggregate))
+            {
+                var snapshotStreamId = aggregateMetadata.GetSnapshotKeyFromAggregate(loadedAggregate.AggregateState);
+
+                await _snapshotRepository.SaveSnapshotAsync(snapshotStreamId, loadedAggregate.Version, loadedAggregate.AggregateState);
+            }
+
+            return newVersion;
         }
 
         public async Task SaveSnapshot<TAggregateState>(VersionedAggregateState<TAggregateState> versionedState)

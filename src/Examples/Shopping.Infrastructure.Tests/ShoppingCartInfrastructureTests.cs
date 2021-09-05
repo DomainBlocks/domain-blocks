@@ -6,7 +6,6 @@ using DomainBlocks.EventStore.Testing;
 using DomainBlocks.Persistence;
 using DomainBlocks.Persistence.EventStore;
 using DomainBlocks.Serialization.Json;
-using EventStore.Client;
 using NUnit.Framework;
 using Shopping.Domain.Aggregates;
 using Shopping.Domain.Commands;
@@ -25,20 +24,6 @@ namespace Shopping.Infrastructure.Tests
             var shoppingCartId = Guid.NewGuid(); // This could come from a sequence, or could be the customer's ID.
 
             var aggregateRegistry = registryBuilder.Build();
-            
-            // Execute the first command.
-            var initialState = new ShoppingCartState();
-            
-            var command1 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "First Item");
-            var (newState1, events1) = aggregateRegistry.CommandDispatcher.ImmutableDispatch(initialState, command1);
-
-            // Execute the second command to the result of the first command.
-            var command2 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "Second Item");
-            var (newState2, events2) = aggregateRegistry.CommandDispatcher.ImmutableDispatch(newState1, command2);
-
-            Assert.That(newState2.Id.HasValue, "Expected ShoppingCart ID to be set");
-
-            var eventsToPersist = events1.Concat(events2).ToList();
 
             var serializer = new JsonBytesEventSerializer(aggregateRegistry.EventNameMap);
             var eventsRepository = new EventStoreEventsRepository(EventStoreClient, serializer);
@@ -46,12 +31,23 @@ namespace Shopping.Infrastructure.Tests
 
             var aggregateRepository = AggregateRepository.Create(eventsRepository,
                                                                  snapshotRepository,
-                                                                 aggregateRegistry.EventDispatcher,
-                                                                 aggregateRegistry.AggregateMetadataMap);
+                                                                 aggregateRegistry);
 
-            var nextEventVersion = await aggregateRepository.SaveAggregate<ShoppingCartState>(newState2.Id.ToString(),
-                                                                                              StreamRevision.None.ToInt64(),
-                                                                                              eventsToPersist);
+            var loadedAggregate = await aggregateRepository.LoadAggregate(shoppingCartId.ToString(), new ShoppingCartState());
+
+            // Execute the first command.
+            var command1 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "First Item");
+            loadedAggregate.ImmutableDispatchCommand(command1);
+
+            // Execute the second command to the result of the first command.
+            var command2 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "Second Item");
+            loadedAggregate.ImmutableDispatchCommand(command2);
+
+            Assert.That(loadedAggregate.AggregateState.Id.HasValue, "Expected ShoppingCart ID to be set");
+
+            var eventsToPersist = loadedAggregate.EventsToPersist.ToList();
+
+            var nextEventVersion = await aggregateRepository.SaveAggregate(loadedAggregate);
             var expectedNextEventVersion = eventsToPersist.Count - 1;
 
             Assert.That(nextEventVersion, Is.EqualTo(expectedNextEventVersion));
