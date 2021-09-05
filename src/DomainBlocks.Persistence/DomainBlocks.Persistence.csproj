@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DomainBlocks.Serialization\DomainBlocks.Serialization.csproj" />
+    <ProjectReference Include="..\DomainBlocks\DomainBlocks.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -2,24 +2,24 @@
 using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
-using DomainLib.Aggregates.Registration;
-using DomainLib.Common;
-using DomainLib.EventStore.Testing;
-using DomainLib.Persistence;
-using DomainLib.Persistence.EventStore;
-using DomainLib.Projections;
-using DomainLib.Projections.EventStore;
-using DomainLib.Projections.Sql;
-using DomainLib.Projections.Sqlite;
-using DomainLib.Serialization.Json;
+using DomainBlocks.Aggregates.Registration;
+using DomainBlocks.Common;
+using DomainBlocks.EventStore.Testing;
+using DomainBlocks.Persistence;
+using DomainBlocks.Persistence.EventStore;
+using DomainBlocks.Projections;
+using DomainBlocks.Projections.EventStore;
+using DomainBlocks.Projections.Sql;
+using DomainBlocks.Projections.Sqlite;
+using DomainBlocks.Serialization.Json;
 using EventStore.Client;
 using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using Shopping.Domain.Aggregates;
 using Shopping.Domain.Commands;
 using Shopping.Domain.Events;
-using ProjectionDispatcher = DomainLib.Projections.EventDispatcher<System.ReadOnlyMemory<byte>, Shopping.Domain.Events.IDomainEvent>;
-using UserCredentials = DomainLib.Common.UserCredentials;
+using ProjectionDispatcher = DomainBlocks.Projections.EventDispatcher<System.ReadOnlyMemory<byte>, Shopping.Domain.Events.IDomainEvent>;
+using UserCredentials = DomainBlocks.Common.UserCredentials;
 
 namespace Shopping.Infrastructure.Tests
 {

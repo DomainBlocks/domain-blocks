@@ -4,7 +4,7 @@ using Shopping.Domain.Commands;
 using Shopping.Domain.Events;
 using System;
 using System.Linq;
-using DomainLib.Aggregates.Registration;
+using DomainBlocks.Aggregates.Registration;
 
 namespace Shopping.Domain.Tests
 {
