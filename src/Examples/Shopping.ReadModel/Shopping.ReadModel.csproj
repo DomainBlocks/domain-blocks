@@ -19,10 +19,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\DomainLib.Projections.EntityFramework.AspNetCore\DomainLib.Projections.EntityFramework.AspNetCore.csproj" />
-    <ProjectReference Include="..\..\DomainLib.Projections.EntityFramework\DomainLib.Projections.EntityFramework.csproj" />
-    <ProjectReference Include="..\..\DomainLib.Projections.EventStore.AspNetCore\DomainLib.Projections.EventStore.AspNetCore.csproj" />
-    <ProjectReference Include="..\..\DomainLib.Projections.Serialization.Json.AspNetCore\DomainLib.Projections.Serialization.Json.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\DomainBlocks.Projections.EntityFramework.AspNetCore\DomainBlocks.Projections.EntityFramework.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\DomainBlocks.Projections.EntityFramework\DomainBlocks.Projections.EntityFramework.csproj" />
+    <ProjectReference Include="..\..\DomainBlocks.Projections.EventStore.AspNetCore\DomainBlocks.Projections.EventStore.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\DomainBlocks.Projections.Serialization.Json.AspNetCore\DomainBlocks.Projections.Serialization.Json.AspNetCore.csproj" />
     <ProjectReference Include="..\Shopping.Events\Shopping.Events.csproj" />
   </ItemGroup>
 

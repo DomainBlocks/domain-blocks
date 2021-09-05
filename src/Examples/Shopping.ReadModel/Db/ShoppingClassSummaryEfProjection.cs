@@ -1,7 +1,7 @@
 using System.Linq;
 using System.Threading.Tasks;
-using DomainLib.Projections;
-using DomainLib.Projections.EntityFramework;
+using DomainBlocks.Projections;
+using DomainBlocks.Projections.EntityFramework;
 using Shopping.Domain.Events;
 using Shopping.ReadModel.Db.Model;
 

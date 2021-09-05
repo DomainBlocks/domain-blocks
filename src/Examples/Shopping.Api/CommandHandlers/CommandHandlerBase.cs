@@ -1,8 +1,8 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using DomainLib.Aggregates;
-using DomainLib.Persistence;
+using DomainBlocks.Aggregates;
+using DomainBlocks.Persistence;
 using MediatR;
 using Shopping.Domain.Events;
 

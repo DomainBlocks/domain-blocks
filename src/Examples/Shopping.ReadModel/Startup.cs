@@ -1,7 +1,7 @@
-using DomainLib.Projections.AspNetCore;
-using DomainLib.Projections.EntityFramework.AspNetCore;
-using DomainLib.Projections.EventStore.AspNetCore;
-using DomainLib.Projections.Serialization.Json.AspNetCore;
+using DomainBlocks.Projections.AspNetCore;
+using DomainBlocks.Projections.EntityFramework.AspNetCore;
+using DomainBlocks.Projections.EventStore.AspNetCore;
+using DomainBlocks.Projections.Serialization.Json.AspNetCore;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;

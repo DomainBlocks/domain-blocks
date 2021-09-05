@@ -3,8 +3,8 @@ using Shopping.Domain.Events;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using DomainLib.Aggregates;
-using DomainLib.Aggregates.Registration;
+using DomainBlocks.Aggregates;
+using DomainBlocks.Aggregates.Registration;
 
 namespace Shopping.Domain.Aggregates
 {

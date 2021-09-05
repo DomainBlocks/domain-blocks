@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net5.0</TargetFramework>
+    <AssemblyName>DomainBlocks.Persistence.EventStore.AspNetCore</AssemblyName>
+    <RootNamespace>DomainBlocks.Persistence.EventStore.AspNetCore</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="EventStore.Client.Grpc.Streams" Version="21.2.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="5.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="5.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="5.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DomainBlocks.EventPersistence.AspNetCore\DomainBlocks.Persistence.AspNetCore.csproj" />
+    <ProjectReference Include="..\DomainBlocks.EventStore.Common.AspNetCore\DomainBlocks.EventStore.Common.AspNetCore.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Persistence.EventStore\DomainBlocks.Persistence.EventStore.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Serialization.Json\DomainBlocks.Serialization.Json.csproj" />
+    <ProjectReference Include="..\DomainBlocks\DomainBlocks.csproj" />
+  </ItemGroup>
+
+</Project>

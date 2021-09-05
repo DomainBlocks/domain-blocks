@@ -1,7 +1,7 @@
-﻿using DomainLib.Aggregates.Registration;
-using DomainLib.Persistence.AspNetCore;
-using DomainLib.Persistence.EventStore.AspNetCore;
-using DomainLib.Serialization.Json.AspNetCore;
+﻿using DomainBlocks.Aggregates.Registration;
+using DomainBlocks.Persistence.AspNetCore;
+using DomainBlocks.Persistence.EventStore.AspNetCore;
+using DomainBlocks.Serialization.Json.AspNetCore;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
