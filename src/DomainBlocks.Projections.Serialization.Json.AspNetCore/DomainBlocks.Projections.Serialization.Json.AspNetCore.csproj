@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net5.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DomainBlocks.Projections.AspNetCore\DomainBlocks.Projections.AspNetCore.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Serialization.Json\DomainBlocks.Serialization.Json.csproj" />
+  </ItemGroup>
+
+</Project>

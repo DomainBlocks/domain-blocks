@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net5.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="EventStore.Client.Grpc.Streams" Version="21.2.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="5.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DomainBlocks.Common\DomainBlocks.Common.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Persistence\DomainBlocks.Persistence.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Serialization\DomainBlocks.Serialization.csproj" />
+    <ProjectReference Include="..\DomainBlocks\DomainBlocks.csproj" />
+  </ItemGroup>
+
+</Project>

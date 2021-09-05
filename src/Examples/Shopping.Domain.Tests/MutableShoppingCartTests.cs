@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Linq;
-using DomainLib.Aggregates.Registration;
+using DomainBlocks.Aggregates.Registration;
 using NUnit.Framework;
 using Shopping.Domain.Aggregates;
 using Shopping.Domain.Commands;

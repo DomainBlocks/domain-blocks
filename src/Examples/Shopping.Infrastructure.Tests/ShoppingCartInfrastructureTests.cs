@@ -1,11 +1,11 @@
 ﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
-using DomainLib.Aggregates.Registration;
-using DomainLib.EventStore.Testing;
-using DomainLib.Persistence;
-using DomainLib.Persistence.EventStore;
-using DomainLib.Serialization.Json;
+using DomainBlocks.Aggregates.Registration;
+using DomainBlocks.EventStore.Testing;
+using DomainBlocks.Persistence;
+using DomainBlocks.Persistence.EventStore;
+using DomainBlocks.Serialization.Json;
 using EventStore.Client;
 using NUnit.Framework;
 using Shopping.Domain.Aggregates;
