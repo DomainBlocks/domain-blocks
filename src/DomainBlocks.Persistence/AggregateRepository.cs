@@ -35,11 +35,12 @@ namespace DomainBlocks.Persistence
             _commandDispatcher = aggregateRegistry.CommandDispatcher;
         }
 
-        public async Task<LoadedAggregate<TAggregateState, TCommandBase, TEventBase>> LoadAggregate<TAggregateState>(string id,
-                                                                                                   TAggregateState initialAggregateState,
-                                                                                                   AggregateLoadStrategy loadStrategy = AggregateLoadStrategy.PreferSnapshot)
+        public async Task<LoadedAggregate<TAggregateState, TCommandBase, TEventBase>> LoadAggregate<TAggregateState>(string id, AggregateLoadStrategy loadStrategy = AggregateLoadStrategy.PreferSnapshot)
         {
             if (id == null) throw new ArgumentNullException(nameof(id));
+
+            var aggregateMetadata = _metadataMap.GetForType<TAggregateState>();
+            var initialAggregateState = (TAggregateState)aggregateMetadata.GetInitialState?.Invoke();
 
             // If we choose to load solely from an event stream, then we need some initial state 
             // onto which to apply the events.
@@ -49,7 +50,7 @@ namespace DomainBlocks.Persistence
             }
 
             var stateToAppendEventsTo = initialAggregateState;
-            var aggregateMetadata = _metadataMap.GetForType<TAggregateState>();
+            
             var streamName = aggregateMetadata.GetKeyFromIdentifier(id);
             long loadStartPosition = 0;
             long? snapshotVersion = null;
@@ -92,11 +93,17 @@ namespace DomainBlocks.Persistence
                                                                Func<LoadedAggregate<TAggregateState, TCommandBase, TEventBase>, bool> snapshotPredicate = null)
         {
             if (loadedAggregate == null) throw new ArgumentNullException(nameof(loadedAggregate));
-            snapshotPredicate ??= x => false;
+            if (loadedAggregate.HasBeenSaved)
+            {
+                throw new ArgumentException("Aggregate has already been saved and must be loaded from persistence " +
+                                            "before being saved again");
+            }
 
+            snapshotPredicate ??= x => false;
             var aggregateMetadata = _metadataMap.GetForType<TAggregateState>();
             var streamName = aggregateMetadata.GetKeyFromIdentifier(loadedAggregate.Id);
             var newVersion = await _eventsRepository.SaveEventsAsync(streamName, loadedAggregate.Version, loadedAggregate.EventsToPersist);
+            loadedAggregate.HasBeenSaved = true;
 
             if (snapshotPredicate(loadedAggregate))
             {

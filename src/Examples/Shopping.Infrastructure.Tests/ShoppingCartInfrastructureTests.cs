@@ -33,7 +33,7 @@ namespace Shopping.Infrastructure.Tests
                                                                  snapshotRepository,
                                                                  aggregateRegistry);
 
-            var loadedAggregate = await aggregateRepository.LoadAggregate(shoppingCartId.ToString(), new ShoppingCartState());
+            var loadedAggregate = await aggregateRepository.LoadAggregate<ShoppingCartState>(shoppingCartId.ToString());
 
             // Execute the first command.
             var command1 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "First Item");
@@ -52,7 +52,7 @@ namespace Shopping.Infrastructure.Tests
 
             Assert.That(nextEventVersion, Is.EqualTo(expectedNextEventVersion));
 
-            var loadedData = await aggregateRepository.LoadAggregate(shoppingCartId.ToString(), new ShoppingCartState());
+            var loadedData = await aggregateRepository.LoadAggregate<ShoppingCartState>(shoppingCartId.ToString());
 
             var loadedState = loadedData.AggregateState;
             var loadedVersion = loadedData.Version;

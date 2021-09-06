@@ -10,7 +10,6 @@ namespace DomainBlocks.EventStore.Testing
 {
     public class SnapshotScenario
     {
-        private readonly TestAggregateState _initialState;
         private EventStoreIntegrationTest _test;
         private AggregateRepository<TestCommand, TestEvent, ReadOnlyMemory<byte>> _aggregateRepository;
         private LoadedAggregate<TestAggregateState, TestCommand, TestEvent> _loadedAggregate;
@@ -21,8 +20,6 @@ namespace DomainBlocks.EventStore.Testing
         public SnapshotScenario()
         {
             _id = Guid.NewGuid();
-            _initialState = new TestAggregateState(_id, 0);
-            AggregateState = _initialState;
         }
 
         public async Task Initialise(EventStoreIntegrationTest test)
@@ -63,7 +60,7 @@ namespace DomainBlocks.EventStore.Testing
 
         private async Task<LoadedAggregate<TestAggregateState, TestCommand, TestEvent>> LoadLatestState(AggregateLoadStrategy loadStrategy)
         {
-            var loadedAggregate = await _aggregateRepository.LoadAggregate(_id.ToString(), _initialState, loadStrategy);
+            var loadedAggregate = await _aggregateRepository.LoadAggregate<TestAggregateState>(_id.ToString(), loadStrategy);
             _aggregateVersion = loadedAggregate.Version;
             AggregateState = loadedAggregate.AggregateState;
 
