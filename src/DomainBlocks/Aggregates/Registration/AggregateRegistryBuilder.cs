@@ -76,6 +76,12 @@ namespace DomainBlocks.Aggregates.Registration
             _eventNameMap.RegisterEvent<TEvent>(eventName);
         }
 
+        internal void RegisterInitialStateFunc<TAggregate>(Func<TAggregate> getState)
+        {
+            var aggregateMetadata = GetOrAddAggregateMetadata<TAggregate>();
+            aggregateMetadata.GetInitialState = () => getState();
+        }
+
         internal void RegisterAggregateIdFunc<TAggregate>(Func<TAggregate, string> getId)
         {
             var aggregateMetadata = GetOrAddAggregateMetadata<TAggregate>();

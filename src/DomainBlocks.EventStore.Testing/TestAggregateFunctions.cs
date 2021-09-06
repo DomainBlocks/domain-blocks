@@ -10,7 +10,8 @@ namespace DomainBlocks.EventStore.Testing
         {
             builder.Register<TestAggregateState>(agg =>
             {
-                agg.Id(x => x.Id.ToString())
+                agg.InitialState(() => new TestAggregateState(Guid.NewGuid(), 0))
+                   .Id(x => x.Id.ToString())
                    .PersistenceKey(id => $"testAggregate-{id}")
                    .SnapshotKey(id => $"testAggregateSnapshot-{id}");
 

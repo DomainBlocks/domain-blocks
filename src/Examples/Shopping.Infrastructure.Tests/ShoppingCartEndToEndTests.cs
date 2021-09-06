@@ -113,7 +113,7 @@ namespace Shopping.Infrastructure.Tests
                                                                  aggregateRegistry);
 
             // Execute the first command.
-            var loadedAggregate = await aggregateRepository.LoadAggregate(shoppingCartId.ToString(), new ShoppingCartState());
+            var loadedAggregate = await aggregateRepository.LoadAggregate<ShoppingCartState>(shoppingCartId.ToString());
 
             var command1 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "First Item");
             loadedAggregate.ImmutableDispatchCommand(command1);

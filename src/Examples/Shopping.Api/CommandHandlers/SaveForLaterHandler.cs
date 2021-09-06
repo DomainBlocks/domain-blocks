@@ -15,7 +15,7 @@ namespace Shopping.Api.CommandHandlers
 
         protected override async Task HandleImpl(SaveItemForLater request, CancellationToken cancellationToken)
         {
-            var loadedAggregate = await Repository.LoadAggregate(request.CartId, new ShoppingCartState());
+            var loadedAggregate = await Repository.LoadAggregate<ShoppingCartState>(request.CartId);
 
             var cartId = Guid.Parse(request.CartId);
             var itemId = Guid.Parse(request.ItemId);

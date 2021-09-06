@@ -65,5 +65,6 @@ namespace DomainBlocks.Persistence
         public long? SnapshotVersion { get; }
         public long EventsLoadedCount { get; }
         public IEnumerable<TEventBase> EventsToPersist { get; private set; }
+        internal bool HasBeenSaved { get; set; }
     }
 }

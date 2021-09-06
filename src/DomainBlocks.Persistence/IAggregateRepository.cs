@@ -6,7 +6,6 @@ namespace DomainBlocks.Persistence
     public interface IAggregateRepository<TCommandBase, TEventBase>
     {
         Task<LoadedAggregate<TAggregateState, TCommandBase, TEventBase>> LoadAggregate<TAggregateState>(string id,
-            TAggregateState initialAggregateState,
             AggregateLoadStrategy loadStrategy = AggregateLoadStrategy.PreferSnapshot);
 
         Task<long> SaveAggregate<TAggregateState>(

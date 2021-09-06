@@ -4,6 +4,7 @@ namespace DomainBlocks.Aggregates
 {
     public sealed class AggregateMetadata
     {
+        public Func<object> GetInitialState { get; internal set; }
         public Func<object, string> GetIdentifier { get; internal set; }
         public Func<string, string> GetKeyFromIdentifier { get; internal set; }
         public Func<string, string> GetSnapshotKeyFromIdentifier { get; internal set; }
