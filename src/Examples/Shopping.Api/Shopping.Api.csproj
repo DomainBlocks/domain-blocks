@@ -12,6 +12,18 @@
     <Protobuf Include="Protos\shoppingApi.proto" GrpcServices="Both" />
   </ItemGroup>
 
+  <PropertyGroup>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Don't include the output from a previous source generator execution into future runs; the */** trick here ensures that there's
+  at least one subdirectory, which is our key that it's coming from a source generator as opposed to something that is coming from
+  some other tool. -->
+    <Compile Remove="$(CompilerGeneratedFilesOutputPath)/*/**/*.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Grpc.AspNetCore" Version="2.34.0" />
     <PackageReference Include="Grpc.Tools" Version="2.37.1">
@@ -25,6 +37,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\DomainBlocks.EventStore.AspNet\DomainBlocks.Persistence.EventStore.AspNetCore.csproj" />
     <ProjectReference Include="..\..\DomainBlocks.Serialization.Json.AspNetCore\DomainBlocks.Serialization.Json.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\DomainBlocks.SourceGenerators\DomainBlocks.SourceGenerators.csproj" OutputItemType="Analyzer" />
     <ProjectReference Include="..\Shopping.Domain\Shopping.Domain.csproj" />
   </ItemGroup>
 
