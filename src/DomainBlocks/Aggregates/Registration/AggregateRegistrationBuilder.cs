@@ -11,6 +11,12 @@ namespace DomainBlocks.Aggregates.Registration
             _aggregateRegistryBuilder = aggregateRegistryBuilder;
         }
 
+        public AggregateRegistrationBuilder<TAggregate, TCommandBase, TEventBase> InitialState(Func<TAggregate> getInitialState)
+        {
+            _aggregateRegistryBuilder.RegisterInitialStateFunc(getInitialState);
+            return this;
+        }
+
         public AggregateKeyBuilder<TAggregate, TCommandBase, TEventBase> Id(Func<TAggregate, string> getPersistenceId)
         {
             _aggregateRegistryBuilder.RegisterAggregateIdFunc(getPersistenceId);

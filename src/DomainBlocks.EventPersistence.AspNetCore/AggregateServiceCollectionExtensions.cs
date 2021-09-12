@@ -32,7 +32,7 @@ namespace DomainBlocks.Persistence.AspNetCore
                 new AggregateRegistrationOptionsBuilder<ReadOnlyMemory<byte>>(services, configuration);
             buildAggregateOptions(optionsBuilder);
 
-            services.AddSingleton<IAggregateRepository<TEventBase>>(provider =>
+            services.AddSingleton<IAggregateRepository<TCommandBase, TEventBase>>(provider =>
             {
                 var aggregateOptions =
                     ((IAggregateRegistrationOptionsBuilderInfrastructure<ReadOnlyMemory<byte>>)optionsBuilder)
@@ -40,8 +40,7 @@ namespace DomainBlocks.Persistence.AspNetCore
 
                 return AggregateRepository.Create(aggregateOptions.EventsRepository,
                                                   aggregateOptions.SnapshotRepository,
-                                                  aggregateRegistry.EventDispatcher,
-                                                  aggregateRegistry.AggregateMetadataMap);
+                                                  aggregateRegistry);
             });
 
             services.AddSingleton(aggregateRegistry.CommandDispatcher);
