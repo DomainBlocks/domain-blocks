@@ -1,16 +1,17 @@
-﻿using System.Collections.Generic;
+﻿using System;
 using System.Threading.Tasks;
 
 namespace DomainBlocks.Persistence
 {
-    public interface IAggregateRepository<in TEventBase>
+    public interface IAggregateRepository<TCommandBase, TEventBase>
     {
-        Task<LoadedAggregateState<TAggregateState>> LoadAggregate<TAggregateState>(string id,
-                                                                                   TAggregateState initialAggregateState,
-                                                                                   AggregateLoadStrategy loadStrategy = AggregateLoadStrategy.PreferSnapshot);
-        Task<long> SaveAggregate<TAggregateState>(string id, long expectedVersion, IEnumerable<TEventBase> eventsToApply);
+        Task<LoadedAggregate<TAggregateState, TCommandBase, TEventBase>> LoadAggregate<TAggregateState>(string id,
+            AggregateLoadStrategy loadStrategy = AggregateLoadStrategy.PreferSnapshot);
+
+        Task<long> SaveAggregate<TAggregateState>(
+            LoadedAggregate<TAggregateState, TCommandBase, TEventBase> loadedAggregate,
+            Func<LoadedAggregate<TAggregateState, TCommandBase, TEventBase>, bool> snapshotPredicate = null);
+
         Task SaveSnapshot<TAggregateState>(VersionedAggregateState<TAggregateState> versionedState);
-
-
     }
 }
