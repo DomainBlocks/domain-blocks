@@ -24,7 +24,7 @@ namespace DomainBlocks.Projections.SqlStreamStore
         public async Task StartAsync(Func<EventNotification<string>, Task> onEvent)
         {
             _onEvent = onEvent ?? throw new ArgumentNullException(nameof(onEvent));
-            await SubscribeToStore(null);
+            await SubscribeToStore(null).ConfigureAwait(false);
         }
 
         public void Stop()
@@ -53,7 +53,7 @@ namespace DomainBlocks.Projections.SqlStreamStore
                                                         });
             // TODO: allow this to be configured
             _subscription.MaxCountPerRead = 1000;
-            await _subscription.Started;
+            await _subscription.Started.ConfigureAwait(false);
         }
 
         private async Task StreamMessageReceived(IAllStreamSubscription subscription, StreamMessage streamMessage, CancellationToken cancellationToken)
@@ -71,13 +71,13 @@ namespace DomainBlocks.Projections.SqlStreamStore
             var notification = EventNotification.FromEvent(await message.GetJsonData(),
                                                            message.Type,
                                                            message.MessageId);
-            await _onEvent(notification);
+            await _onEvent(notification).ConfigureAwait(false);
             _lastProcessedPosition = message.Position;
         }
 
         private async Task ReSubscribeAfterDrop()
         {
-            await SubscribeToStore(_lastProcessedPosition);
+            await SubscribeToStore(_lastProcessedPosition).ConfigureAwait(false);
         }
     }
 }

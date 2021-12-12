@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.29806.167
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainBlocks", "DomainBlocks\DomainBlocks.csproj", "{3A908D35-70E7-4DA2-8FC2-1F664CE350FF}"
 EndProject
@@ -78,9 +78,11 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainBlocks.Projections.Se
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainBlocks.Projections.EntityFramework.AspNetCore", "DomainBlocks.Projections.EntityFramework.AspNetCore\DomainBlocks.Projections.EntityFramework.AspNetCore.csproj", "{F6208EFD-F681-4F9D-9EE7-68EF8CD0D574}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Persistence.SqlStreamStore", "DomainBlocks.Persistence.SqlStreamStore\DomainBlocks.Persistence.SqlStreamStore.csproj", "{321E4855-0FAB-4F35-9423-73BBD698AC5F}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainBlocks.Persistence.SqlStreamStore", "DomainBlocks.Persistence.SqlStreamStore\DomainBlocks.Persistence.SqlStreamStore.csproj", "{321E4855-0FAB-4F35-9423-73BBD698AC5F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Projections.SqlStreamStore", "DomainBlocks.Projections.SqlStreamStore\DomainBlocks.Projections.SqlStreamStore.csproj", "{621D660D-4636-4476-9FDF-A04E0532AFAB}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainBlocks.Projections.SqlStreamStore", "DomainBlocks.Projections.SqlStreamStore\DomainBlocks.Projections.SqlStreamStore.csproj", "{621D660D-4636-4476-9FDF-A04E0532AFAB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Persistence.SqlStreamStore.AspNetCore", "DomainBlocks.Persistence.SqlStreamStore.AspNetCore\DomainBlocks.Persistence.SqlStreamStore.AspNetCore.csproj", "{C829DF4A-DEC4-4AA1-B9BF-3C4F7526C720}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -224,6 +226,10 @@ Global
 		{621D660D-4636-4476-9FDF-A04E0532AFAB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{621D660D-4636-4476-9FDF-A04E0532AFAB}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{621D660D-4636-4476-9FDF-A04E0532AFAB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C829DF4A-DEC4-4AA1-B9BF-3C4F7526C720}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C829DF4A-DEC4-4AA1-B9BF-3C4F7526C720}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C829DF4A-DEC4-4AA1-B9BF-3C4F7526C720}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C829DF4A-DEC4-4AA1-B9BF-3C4F7526C720}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -252,6 +258,7 @@ Global
 		{CEDFB229-53AF-4D24-B1C4-F2AFF084E022} = {58CD75DE-F1E9-4BBD-8945-0BB392EDC8EE}
 		{F6208EFD-F681-4F9D-9EE7-68EF8CD0D574} = {58CD75DE-F1E9-4BBD-8945-0BB392EDC8EE}
 		{621D660D-4636-4476-9FDF-A04E0532AFAB} = {EB200888-007B-45F9-B48D-FEBF2BAF6F5F}
+		{C829DF4A-DEC4-4AA1-B9BF-3C4F7526C720} = {58CD75DE-F1E9-4BBD-8945-0BB392EDC8EE}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {BA018103-0F59-4D7F-9119-099BF2CC020F}
