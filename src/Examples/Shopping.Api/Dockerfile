@@ -6,10 +6,10 @@ EXPOSE 443
 FROM mcr.microsoft.com/dotnet/sdk:5.0 AS build
 WORKDIR /src
 COPY ["Examples/Shopping.Api/Shopping.Api.csproj", "Examples/Shopping.Api/"]
-COPY ["DomainBlocks.EventStore.AspNet/DomainBlocks.EventStore.AspNetCore.csproj", "DomainBlocks.EventStore.AspNet/"]
+COPY ["DomainBlocks.Persistence.SqlStreamStore.AspNetCore/DomainBlocks.Persistence.SqlStreamStore.AspNetCore.csproj", "DomainBlocks.Persistence.SqlStreamStore.AspNetCore/"]x
 COPY ["DomainBlocks/DomainBlocks.csproj", "DomainBlocks/"]
 COPY ["DomainBlocks.Common/DomainBlocks.Common.csproj", "DomainBlocks.Common/"]
-COPY ["DomainBlocks.Persistence.EventStore/DomainBlocks.Persistence.EventStore.csproj", "DomainBlocks.Persistence.EventStore/"]
+COPY ["DomainBlocks.Persistence.SqlStreamStore/DomainBlocks.Persistence.SqlStreamStore.csproj", "DomainBlocks.Persistence.SqlStreamStore/"]
 COPY ["DomainBlocks.Persistence/DomainBlocks.Persistence.csproj", "DomainBlocks.Persistence/"]
 COPY ["DomainBlocks.Serialization/DomainBlocks.Serialization.csproj", "DomainBlocks.Serialization/"]
 COPY ["DomainBlocks.Serialization.Json/DomainBlocks.Serialization.Json.csproj", "DomainBlocks.Serialization.Json/"]
