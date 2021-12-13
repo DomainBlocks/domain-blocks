@@ -146,8 +146,9 @@ namespace DomainBlocks.Persistence.SqlStreamStore
 
             return expectedStreamVersion switch
             {
-                StreamVersion.NewStream => ExpectedVersion.NoStream,
+                StreamVersion.NewStream => ExpectedVersion.EmptyStream,
                 StreamVersion.Any => ExpectedVersion.Any,
+                StreamVersion.NoStream => ExpectedVersion.NoStream,
                 _ => (int)expectedStreamVersion
             };
         }
