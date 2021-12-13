@@ -20,7 +20,6 @@
     </PackageReference>
     <PackageReference Include="MediatR.Extensions.Microsoft.DependencyInjection" Version="9.0.0" />
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.10.14" />
-    <PackageReference Include="SqlStreamStore" Version="1.2.0" />
   </ItemGroup>
 
   <ItemGroup>
