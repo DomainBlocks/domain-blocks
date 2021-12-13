@@ -1,7 +1,5 @@
-﻿using System;
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using SqlStreamStore;
 
 namespace DomainBlocks.Persistence.SqlStreamStore.AspNetCore
@@ -17,7 +15,7 @@ namespace DomainBlocks.Persistence.SqlStreamStore.AspNetCore
                     .Bind(configuration.GetSection(SqlStreamStoreConnectionOptions.ConfigSection))
                     .ValidateDataAnnotations();
 
-            services.AddSingleton(provider =>
+            services.AddSingleton(_ =>
             {
                 if (_sqlStreamStore == null)
                 {
@@ -25,12 +23,7 @@ namespace DomainBlocks.Persistence.SqlStreamStore.AspNetCore
                     {
                         if (_sqlStreamStore == null)
                         {
-                            var options = provider.GetRequiredService<IOptions<SqlStreamStoreConnectionOptions>>();
-
-                            var settings = new PostgresStreamStoreSettings(options.Value.ConnectionString);
-                            _sqlStreamStore = new PostgresStreamStore(settings);
-
-                            ((PostgresStreamStore)_sqlStreamStore).CreateSchemaIfNotExists().Wait();
+                            _sqlStreamStore = new InMemoryStreamStore();
                         }
                     }
                 }
