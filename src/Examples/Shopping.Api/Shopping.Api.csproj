@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net5.0</TargetFramework>
@@ -20,11 +20,9 @@
     </PackageReference>
     <PackageReference Include="MediatR.Extensions.Microsoft.DependencyInjection" Version="9.0.0" />
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.10.14" />
-    <PackageReference Include="Npgsql" Version="6.0.1" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\DomainBlocks.EventStore.AspNet\DomainBlocks.Persistence.EventStore.AspNetCore.csproj" />
     <ProjectReference Include="..\..\DomainBlocks.Persistence.SqlStreamStore.AspNetCore\DomainBlocks.Persistence.SqlStreamStore.AspNetCore.csproj" />
     <ProjectReference Include="..\..\DomainBlocks.Serialization.Json.AspNetCore\DomainBlocks.Serialization.Json.AspNetCore.csproj" />
     <ProjectReference Include="..\Shopping.Domain\Shopping.Domain.csproj" />

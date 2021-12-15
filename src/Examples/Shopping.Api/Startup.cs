@@ -1,7 +1,5 @@
-﻿using System;
-using DomainBlocks.Aggregates.Registration;
+﻿using DomainBlocks.Aggregates.Registration;
 using DomainBlocks.Persistence.AspNetCore;
-using DomainBlocks.Persistence.EventStore.AspNetCore;
 using DomainBlocks.Persistence.SqlStreamStore.AspNetCore;
 using DomainBlocks.Serialization.Json.AspNetCore;
 using MediatR;
