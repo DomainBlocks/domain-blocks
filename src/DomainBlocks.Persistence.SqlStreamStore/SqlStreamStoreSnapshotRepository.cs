@@ -23,7 +23,8 @@ namespace DomainBlocks.Persistence.SqlStreamStore
 
         public Task<(bool isSuccess, Snapshot<TState> snapshot)> TryLoadSnapshotAsync<TState>(string snapshotKey)
         {
-            throw new NotImplementedException();
+            (bool, Snapshot<TState>) result = (false, default);
+            return Task.FromResult(result);
         }
     }
 }
