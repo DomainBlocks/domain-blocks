@@ -1,9 +1,7 @@
-name: .NET
+name: Build And Publish
 
 on:
   push:
-    branches: [ develop ]
-  pull_request:
     branches: [ develop ]
   create:
     branches: 
@@ -51,6 +49,7 @@ jobs:
     
     - name: Pack and Publish
       run: |
+        dotnet sln ./DomainBlocks.sln remove Examples/Shopping.DockerCompose.dcproj
         dotnet pack -c Release -o ./packages/ --include-symbols --include-source -p:SymbolPackageFormat=snupkg
-        dotnet nuget push ./packages/*.nupkg -s 'https://api.nuget.org/v3/index.json' -k ${{secrets.NUGET_TEST_KEY}}
+        dotnet nuget push "./packages/*.nupkg" -s 'https://api.nuget.org/v3/index.json' -k ${{secrets.NUGET_TEST_KEY}}
       working-directory: ./src
