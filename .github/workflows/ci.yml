@@ -22,7 +22,7 @@ jobs:
       uses: dotnet/nbgv@v0.4
       with:
         setAllVars: true
-      working-directory: ./src
+        path: ./src
       
     - name: Set up EventStoreDB
       run: docker-compose -f docker-compose.test.yml up -d
