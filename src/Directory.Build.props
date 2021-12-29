@@ -3,6 +3,7 @@
         <TargetFramework>netstandard2.1</TargetFramework>
         <LangVersion>9.0</LangVersion>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
     </PropertyGroup>
     
     <ItemGroup Condition="'${MSBuildProjectExtension)' != '.dcproj'">
