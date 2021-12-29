@@ -49,8 +49,6 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shopping.Api", "Examples\Sh
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainBlocks.Persistence.EventStore.AspNetCore", "DomainBlocks.EventStore.AspNet\DomainBlocks.Persistence.EventStore.AspNetCore.csproj", "{ADD1DE5C-B4AA-4DE2-9500-543F85D63E8F}"
 EndProject
-Project("{E53339B2-1760-4266-BCC7-CA923CBCF16C}") = "Shopping.DockerCompose", "Examples\Shopping.DockerCompose.dcproj", "{B494CB62-63D3-4514-8272-51F8AD6C61E4}"
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "_Solution Items", "_Solution Items", "{8A122EA1-8627-4264-A1FF-DD5D642D3D19}"
 	ProjectSection(SolutionItems) = preProject
 		docker-compose.test.yml = docker-compose.test.yml
@@ -182,10 +180,6 @@ Global
 		{ADD1DE5C-B4AA-4DE2-9500-543F85D63E8F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{ADD1DE5C-B4AA-4DE2-9500-543F85D63E8F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{ADD1DE5C-B4AA-4DE2-9500-543F85D63E8F}.Release|Any CPU.Build.0 = Release|Any CPU
-		{B494CB62-63D3-4514-8272-51F8AD6C61E4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{B494CB62-63D3-4514-8272-51F8AD6C61E4}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{B494CB62-63D3-4514-8272-51F8AD6C61E4}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{B494CB62-63D3-4514-8272-51F8AD6C61E4}.Release|Any CPU.Build.0 = Release|Any CPU
 		{10CC3451-DB78-463A-8702-1D5EC85E87D5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{10CC3451-DB78-463A-8702-1D5EC85E87D5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{10CC3451-DB78-463A-8702-1D5EC85E87D5}.Release|Any CPU.ActiveCfg = Release|Any CPU
