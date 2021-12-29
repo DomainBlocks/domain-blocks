@@ -4,6 +4,7 @@
     <TargetFramework>net5.0</TargetFramework>
     <AssemblyName>DomainBlocks.Projections.AspNetCore</AssemblyName>
     <RootNamespace>DomainBlocks.Projections.AspNetCore</RootNamespace>
+    <IsPackable>true</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,0 +1,13 @@
+<Project>
+    <PropertyGroup>
+        <TargetFramework>netstandard2.1</TargetFramework>
+        <LangVersion>9.0</LangVersion>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    </PropertyGroup>
+    
+    <ItemGroup Condition="'${MSBuildProjectExtension)' != '.dcproj'">
+        <PackageReference Include="Nerdbank.GitVersioning">
+            <Version>3.4.244</Version>
+        </PackageReference>
+    </ItemGroup>
+</Project>

@@ -4,6 +4,7 @@
     <TargetFramework>net5.0</TargetFramework>
     <AssemblyName>DomainBlocks.Persistence.AspNetCore</AssemblyName>
     <RootNamespace>DomainBlocks.Persistence.AspNetCore</RootNamespace>
+    <IsPackable>true</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>
