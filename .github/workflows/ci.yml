@@ -5,6 +5,9 @@ on:
     branches: [ develop ]
   pull_request:
     branches: [ develop ]
+  create:
+    branches: 
+      - release/**
 
 jobs:
   build:
@@ -13,19 +16,41 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+      with:
+          fetch-depth: 0 # for nbgv
+    
     - name: Set up EventStoreDB
       run: docker-compose -f docker-compose.test.yml up -d
       working-directory: ./src    
+    
     - name: Setup .NET
       uses: actions/setup-dotnet@v1
       with:
         dotnet-version: 5.0.101
+    
+    - name: Dotnet Tools restore
+      run: dotnet tool restore
+      
+    - name: Get version
+      run: dotnet nbgv get-version   
+    
     - name: Restore dependencies
       run: dotnet restore
       working-directory: ./src
+    
     - name: Build
       run: dotnet build --no-restore
       working-directory: ./src
+    
     - name: Test
       run: dotnet test --no-build --verbosity normal
       working-directory: ./src
+
+    - name: Remove Docker Compose project # required for nuget pack.
+      run: dotnet sln ./DomainBlocks.sln remove Examples/Shopping.DockerCompose.dcproj
+    
+    - name: Pack nuget packages
+      run: dotnet pack -c Release -o ./packages/ --include-symbols --include-source -p:SymbolPackageFormat=snupkg
+    
+    - name: Publish nuget packages
+      run: dotnet nuget push ./packages/*.nupkg -Source 'https://api.nuget.org/v3/index.json' -ApiKey ${{secrets.NUGET_TEST_KEY}}
