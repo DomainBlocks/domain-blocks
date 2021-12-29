@@ -22,7 +22,8 @@ jobs:
       uses: dotnet/nbgv@v0.4
       with:
         setAllVars: true
-
+      working-directory: ./src
+      
     - name: Set up EventStoreDB
       run: docker-compose -f docker-compose.test.yml up -d
       working-directory: ./src    
@@ -32,12 +33,6 @@ jobs:
       with:
         dotnet-version: 5.0.101
 
-    - name: Dotnet get-version
-      run: |
-        dotnet tool restore
-        dotnet nbgv get-version 
-      
-      working-directory: ./src
     - name: Restore dependencies
       run: dotnet restore
       working-directory: ./src
@@ -57,5 +52,5 @@ jobs:
     - name: Pack and Publish
       run: |
         dotnet pack -c Release -o ./packages/ --include-symbols --include-source -p:SymbolPackageFormat=snupkg
-        dotnet nuget push ./packages/*.nupkg -Source 'https://api.nuget.org/v3/index.json' -ApiKey ${{secrets.NUGET_TEST_KEY}}
+        dotnet nuget push ./packages/*.nupkg -s 'https://api.nuget.org/v3/index.json' -k ${{secrets.NUGET_TEST_KEY}}
       working-directory: ./src
