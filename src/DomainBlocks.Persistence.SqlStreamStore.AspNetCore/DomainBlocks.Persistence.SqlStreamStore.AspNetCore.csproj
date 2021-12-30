@@ -13,6 +13,7 @@
 	<ItemGroup>
     <ProjectReference Include="..\DomainBlocks.EventPersistence.AspNetCore\DomainBlocks.Persistence.AspNetCore.csproj" />
     <ProjectReference Include="..\DomainBlocks.Persistence.SqlStreamStore\DomainBlocks.Persistence.SqlStreamStore.csproj" />
+    <ProjectReference Include="..\DomainBlocks.SqlStreamStore.Common.AspNetCore\DomainBlocks.SqlStreamStore.Common.AspNetCore.csproj" />
   </ItemGroup>
 
 </Project>

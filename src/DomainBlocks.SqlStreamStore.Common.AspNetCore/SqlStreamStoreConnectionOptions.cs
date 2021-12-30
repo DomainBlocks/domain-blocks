@@ -1,7 +1,6 @@
-﻿using System;
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 
-namespace DomainBlocks.Persistence.SqlStreamStore.AspNetCore
+namespace DomainBlocks.SqlStreamStore.Common.AspNetCore
 {
 
     public class SqlStreamStoreConnectionOptions

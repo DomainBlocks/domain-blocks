@@ -1,4 +1,5 @@
 ﻿using DomainBlocks.Persistence.AspNetCore;
+using DomainBlocks.SqlStreamStore.Common.AspNetCore;
 using Microsoft.Extensions.DependencyInjection;
 using SqlStreamStore;
 

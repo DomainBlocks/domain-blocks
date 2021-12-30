@@ -7,10 +7,10 @@ namespace DomainBlocks.Projections.EntityFramework.AspNetCore
 {
     public static class ProjectionRegistrationOptionsExtensions
     {
-        public static EntityFrameworkProjectionRegistrationBuilder<TDbContext> UseEntityFramework<TDbContext>(
-            this IProjectionRegistrationOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> builder) where TDbContext : DbContext
+        public static EntityFrameworkProjectionRegistrationBuilder<TDbContext> UseEntityFramework<TDbContext, TRawData>(
+            this IProjectionRegistrationOptionsBuilderInfrastructure<TRawData> builder) where TDbContext : DbContext
         {
-            var entityFrameworkProjectionBuilder = new EntityFrameworkProjectionRegistrationBuilder<TDbContext>(builder);
+            var entityFrameworkProjectionBuilder = new EntityFrameworkProjectionRegistrationBuilder<TDbContext>();
             builder.AddProjectionRegistrations(entityFrameworkProjectionBuilder.Build());
             return entityFrameworkProjectionBuilder;
         }
@@ -18,12 +18,10 @@ namespace DomainBlocks.Projections.EntityFramework.AspNetCore
 
     public class EntityFrameworkProjectionRegistrationBuilder<TDbContext> where TDbContext : DbContext
     {
-        private readonly IProjectionRegistrationOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> _infrastructure;
         private Action<IServiceProvider, ProjectionRegistryBuilder> _onRegisteringProjections;
 
-        public EntityFrameworkProjectionRegistrationBuilder(IProjectionRegistrationOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> infrastructure)
+        public EntityFrameworkProjectionRegistrationBuilder()
         {
-            _infrastructure = infrastructure;
         }
 
         public void WithProjections(Action<ProjectionRegistryBuilder, TDbContext> onRegisteringProjections)
