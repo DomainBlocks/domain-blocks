@@ -70,7 +70,7 @@ namespace DomainBlocks.Projections.Sql.Tests
             var dispatcher = new EventDispatcher<ReadOnlyMemory<byte>, object>(Publisher,
                                                                                registry.EventProjectionMap,
                                                                                registry.ProjectionContextMap,
-                                                                               new JsonEventDeserializer(),
+                                                                               new JsonBytesEventDeserializer(),
                                                                                registry.EventNameMap,
                                                                                dispatcherConfig);
 

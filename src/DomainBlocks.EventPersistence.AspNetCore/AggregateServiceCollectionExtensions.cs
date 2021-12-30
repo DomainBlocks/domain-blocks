@@ -9,7 +9,7 @@ namespace DomainBlocks.Persistence.AspNetCore
     public static class AggregateServiceCollectionExtensions
     {
         /// <summary>
-        /// Adds an aggregate repository that uses EventStoreDb to persist events 
+        /// Adds an aggregate repository to persist events 
         /// </summary>
         public static IServiceCollection AddAggregateRepository(this IServiceCollection services,
                                                                           IConfiguration configuration,

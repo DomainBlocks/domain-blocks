@@ -3,7 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using SqlStreamStore;
 
-namespace DomainBlocks.Persistence.SqlStreamStore.AspNetCore
+namespace DomainBlocks.SqlStreamStore.Common.AspNetCore
 {
     public static class SqlStreamStoreServiceConfigurationExtensions
     {
