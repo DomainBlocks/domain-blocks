@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using SqlStreamStore;
 
 namespace DomainBlocks.SqlStreamStore.Common.AspNetCore
@@ -7,7 +8,7 @@ namespace DomainBlocks.SqlStreamStore.Common.AspNetCore
     public static class SqlStreamStoreServiceConfigurationExtensions
     {
         private static readonly object SyncLock = new();
-        private static IStreamStore _sqlStreamStore;
+        private static PostgresStreamStore _sqlStreamStore;
 
         public static IServiceCollection AddPostgresSqlStreamStore(this IServiceCollection services, IConfiguration configuration)
         {
@@ -23,12 +24,11 @@ namespace DomainBlocks.SqlStreamStore.Common.AspNetCore
                     {
                         if (_sqlStreamStore == null)
                         {
-                            _sqlStreamStore = new InMemoryStreamStore();
-//                            var options = provider.GetRequiredService<IOptions<SqlStreamStoreConnectionOptions>>();
+                            var options = provider.GetRequiredService<IOptions<SqlStreamStoreConnectionOptions>>();
 
-                            // var settings = new PostgresStreamStoreSettings(options.Value.ConnectionString);
-                            // _sqlStreamStore = new PostgresStreamStore(settings);
-                            //_sqlStreamStore.CreateSchemaIfNotExists().Wait();
+                            var settings = new PostgresStreamStoreSettings(options.Value.ConnectionString);
+                            _sqlStreamStore = new PostgresStreamStore(settings);
+                            _sqlStreamStore.CreateSchemaIfNotExists().Wait();
                         }
                     }
                 }
