@@ -9,7 +9,7 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="5.0.0" />
     <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="5.0.0" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="5.0.0" />
-    <PackageReference Include="SqlStreamStore" Version="1.2.0" />
+    <PackageReference Include="SqlStreamStore.Postgres" Version="1.2.0-beta.8" />
   </ItemGroup>
 
 </Project>
