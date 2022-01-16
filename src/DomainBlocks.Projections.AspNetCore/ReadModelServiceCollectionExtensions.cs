@@ -38,7 +38,7 @@ namespace DomainBlocks.Projections.AspNetCore
                 }
 
                 return new
-                    EventDispatcherHostedService<ReadOnlyMemory<byte>, TEventBase>(new ProjectionRegistryBuilder(),
+                    EventDispatcherHostedService<string, TEventBase>(new ProjectionRegistryBuilder(),
                         projectionOptions.EventPublisher,
                         projectionOptions.EventSerializer,
                         projectionOptions.OnRegisteringProjections);
