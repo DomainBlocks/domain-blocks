@@ -3,9 +3,10 @@
   <PropertyGroup>
     <TargetFramework>net5.0</TargetFramework>
   </PropertyGroup>
-	<ItemGroup>
-		<PackageReference Include="SqlStreamStore.Postgres" Version="1.2.0-beta.8" />
-	</ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SqlStreamStore" Version="1.2.0-beta.8" />
+  </ItemGroup>
 	<ItemGroup>
 		<ProjectReference Include="..\DomainBlocks.Persistence\DomainBlocks.Persistence.csproj" />
 	</ItemGroup>
