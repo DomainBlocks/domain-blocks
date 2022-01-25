@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 
 namespace DomainBlocks.Projections.AspNetCore
 {
+
     public class EventDispatcherHostedService<TRawData, TEventBase> : IHostedService
     {
         private readonly ProjectionRegistryBuilder _registryBuilder;

@@ -6,6 +6,15 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace DomainBlocks.Persistence.AspNetCore
 {
+
+    public interface IAggregateRegistrationOptionsBuilderInfrastructure
+    {
+        AggregateRegistrationOptionsBuilder<TRawData> RawEventDataType<TRawData>();
+
+        AggregateRegistrationOptions<TRawData> Build<TRawData>(IServiceProvider serviceProvider,
+                                                               IEventNameMap eventNameMap);
+    }
+
     public interface IAggregateRegistrationOptionsBuilderInfrastructure<TRawData>
     {
         IConfiguration Configuration { get; }

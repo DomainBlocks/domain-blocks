@@ -1,6 +1,6 @@
 ﻿using DomainBlocks.Aggregates.Registration;
 using DomainBlocks.Persistence.AspNetCore;
-using DomainBlocks.Persistence.EventStore.AspNetCore;
+using DomainBlocks.Persistence.SqlStreamStore.AspNetCore;
 using DomainBlocks.Serialization.Json.AspNetCore;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
@@ -30,7 +30,8 @@ namespace Shopping.Api
             services.AddAggregateRepository(_configuration,
                                             options =>
                                             {
-                                                options.UseEventStoreDbForEventsAndSnapshots()
+                                                options.RawEventDataType<string>()
+                                                       .UseSqlStreamStoreForEventsAndSnapshots()
                                                        .UseJsonSerialization();
                                             },
                                             ConfigureAggregateRegistry());

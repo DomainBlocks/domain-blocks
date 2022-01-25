@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net5.0</TargetFramework>
@@ -23,7 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\DomainBlocks.EventStore.AspNet\DomainBlocks.Persistence.EventStore.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\DomainBlocks.Persistence.SqlStreamStore.AspNetCore\DomainBlocks.Persistence.SqlStreamStore.AspNetCore.csproj" />
     <ProjectReference Include="..\..\DomainBlocks.Serialization.Json.AspNetCore\DomainBlocks.Serialization.Json.AspNetCore.csproj" />
     <ProjectReference Include="..\Shopping.Domain\Shopping.Domain.csproj" />
   </ItemGroup>

@@ -5,11 +5,13 @@ namespace DomainBlocks.Projections.AspNetCore
 {
     public class ProjectionRegistrationOptions<TRawData>
     {
-        public ProjectionRegistrationOptions(IEventPublisher<TRawData> eventPublisher, IEventDeserializer<TRawData> eventSerializer, Action<ProjectionRegistryBuilder> onRegisteringProjections)
+        public ProjectionRegistrationOptions(IEventPublisher<TRawData> eventPublisher,
+            IEventDeserializer<TRawData> eventSerializer, Action<ProjectionRegistryBuilder> onRegisteringProjections)
         {
-            EventPublisher = eventPublisher;
-            EventSerializer = eventSerializer;
-            OnRegisteringProjections = onRegisteringProjections;
+            EventPublisher = eventPublisher ?? throw new ArgumentNullException(nameof(eventPublisher));
+            EventSerializer = eventSerializer ?? throw new ArgumentNullException(nameof(eventSerializer));
+            OnRegisteringProjections = onRegisteringProjections ??
+                                       throw new ArgumentNullException(nameof(onRegisteringProjections));
         }
 
         public IEventPublisher<TRawData> EventPublisher { get; }

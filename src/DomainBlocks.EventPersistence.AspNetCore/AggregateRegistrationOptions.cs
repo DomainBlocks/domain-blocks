@@ -5,7 +5,8 @@ namespace DomainBlocks.Persistence.AspNetCore
 {
     public class AggregateRegistrationOptions<TRawData>
     {
-        public AggregateRegistrationOptions(IEventsRepository<TRawData> eventsRepository, ISnapshotRepository snapshotRepository, IEventSerializer<TRawData> eventSerializer)
+        public AggregateRegistrationOptions(IEventsRepository<TRawData> eventsRepository,
+            ISnapshotRepository snapshotRepository, IEventSerializer<TRawData> eventSerializer)
         {
             EventsRepository = eventsRepository ?? throw new ArgumentNullException(nameof(eventsRepository));
             SnapshotRepository = snapshotRepository ?? throw new ArgumentNullException(nameof(snapshotRepository));

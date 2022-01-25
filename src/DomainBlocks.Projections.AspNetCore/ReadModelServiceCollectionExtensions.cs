@@ -8,7 +8,7 @@ namespace DomainBlocks.Projections.AspNetCore
     {
         public static IServiceCollection AddReadModel(this IServiceCollection services,
                                                       IConfiguration configuration,
-                                                      Action<ProjectionRegistrationOptionsBuilder<ReadOnlyMemory<byte>>>
+                                                      Action<ProjectionRegistrationOptionsBuilder>
                                                           buildProjectionOptions)
         {
             return services.AddReadModel<object>(configuration, buildProjectionOptions);
@@ -17,19 +17,28 @@ namespace DomainBlocks.Projections.AspNetCore
         public static IServiceCollection AddReadModel<TEventBase>(
             this IServiceCollection services,
             IConfiguration configuration,
-            Action<ProjectionRegistrationOptionsBuilder<ReadOnlyMemory<byte>>> buildProjectionOptions)
+            Action<ProjectionRegistrationOptionsBuilder> buildProjectionOptions)
         {
-            var optionsBuilder =
-                new ProjectionRegistrationOptionsBuilder<ReadOnlyMemory<byte>>(services, configuration);
+            var optionsBuilder = new ProjectionRegistrationOptionsBuilder(services, configuration);
             buildProjectionOptions(optionsBuilder);
+
+            var rawDataType = optionsBuilder.RawDataType;
+            var typedBuildMethod =
+                typeof(IProjectionRegistrationOptionsBuilderInfrastructure)
+                    .GetMethod(nameof(IProjectionRegistrationOptionsBuilderInfrastructure.Build))
+                    ?.MakeGenericMethod(rawDataType);
 
             services.AddHostedService(provider =>
             {
-                var projectionOptions =
-                    ((IProjectionRegistrationOptionsBuilderInfrastructure<ReadOnlyMemory<byte>>)optionsBuilder).Build(provider);
+                dynamic projectionOptions = typedBuildMethod?.Invoke(optionsBuilder, new[] { provider as object });
+
+                if (projectionOptions == null)
+                {
+                    throw new InvalidOperationException("Unable to build projection registrations");
+                }
 
                 return new
-                    EventDispatcherHostedService<ReadOnlyMemory<byte>, TEventBase>(new ProjectionRegistryBuilder(),
+                    EventDispatcherHostedService<string, TEventBase>(new ProjectionRegistryBuilder(),
                         projectionOptions.EventPublisher,
                         projectionOptions.EventSerializer,
                         projectionOptions.OnRegisteringProjections);

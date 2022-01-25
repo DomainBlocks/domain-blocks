@@ -3,16 +3,16 @@ using System.Text.Json;
 
 namespace DomainBlocks.Serialization.Json
 {
-    public class JsonEventDeserializer : IEventDeserializer<ReadOnlyMemory<byte>>
+    public class JsonStringEventDeserializer : IEventDeserializer<string>
     {
-        public TEventBase DeserializeEvent<TEventBase>(ReadOnlyMemory<byte> eventData, string eventName, Type eventType, JsonSerializerOptions options = null)
+        public TEventBase DeserializeEvent<TEventBase>(string eventData, string eventName, Type eventType, JsonSerializerOptions options = null)
         {
             if (eventName == null) throw new ArgumentNullException(nameof(eventName));
             if (eventType == null) throw new ArgumentNullException(nameof(eventType));
 
             try
             {
-                var evt = JsonSerializer.Deserialize(eventData.Span, eventType, options);
+                var evt = JsonSerializer.Deserialize(eventData, eventType, options);
 
                 if (evt is TEventBase @event)
                 {

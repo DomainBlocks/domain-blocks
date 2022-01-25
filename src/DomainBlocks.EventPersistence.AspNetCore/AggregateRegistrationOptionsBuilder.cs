@@ -6,6 +6,36 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace DomainBlocks.Persistence.AspNetCore
 {
+    public class AggregateRegistrationOptionsBuilder : IAggregateRegistrationOptionsBuilderInfrastructure
+    {
+        private readonly IServiceCollection _serviceCollection;
+        private readonly IConfiguration _configuration;
+        private object _typedRegistrationOptionsBuilder;
+        private Type _rawDataType;
+
+        public AggregateRegistrationOptionsBuilder(IServiceCollection serviceCollection, IConfiguration configuration)
+        {
+            _serviceCollection = serviceCollection;
+            _configuration = configuration;
+        }
+
+        public AggregateRegistrationOptionsBuilder<TRawData> RawEventDataType<TRawData>()
+        {
+            _rawDataType = typeof(TRawData);
+            _typedRegistrationOptionsBuilder = new AggregateRegistrationOptionsBuilder<TRawData>(_serviceCollection, _configuration);
+            return (AggregateRegistrationOptionsBuilder<TRawData>)_typedRegistrationOptionsBuilder;
+        }
+
+        public Type RawDataType => _rawDataType;
+        
+        public AggregateRegistrationOptions<TRawData> Build<TRawData>(IServiceProvider serviceProvider,
+                                                                      IEventNameMap eventNameMap)
+        {
+            return ((IAggregateRegistrationOptionsBuilderInfrastructure<TRawData>)
+                       _typedRegistrationOptionsBuilder).Build(serviceProvider, eventNameMap);
+        }
+    }
+
     public class AggregateRegistrationOptionsBuilder<TRawData> : IAggregateRegistrationOptionsBuilderInfrastructure<TRawData>
     {
         public IConfiguration Configuration { get; }
