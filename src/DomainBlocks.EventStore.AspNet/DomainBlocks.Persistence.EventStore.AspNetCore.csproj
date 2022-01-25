@@ -4,6 +4,7 @@
     <TargetFramework>net5.0</TargetFramework>
     <AssemblyName>DomainBlocks.Persistence.EventStore.AspNetCore</AssemblyName>
     <RootNamespace>DomainBlocks.Persistence.EventStore.AspNetCore</RootNamespace>
+    <IsPackable>true</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>
