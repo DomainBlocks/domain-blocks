@@ -115,7 +115,7 @@ namespace DomainBlocks.Projections.Sqlite.Tests
             var eventDispatcher = new EventDispatcher<ReadOnlyMemory<byte>, object>(eventPublisher,
                 registry.EventProjectionMap,
                 registry.ProjectionContextMap,
-                new JsonEventDeserializer(),
+                new JsonBytesEventDeserializer(),
                 registry.EventNameMap,
                 EventDispatcherConfiguration
                         .ReadModelDefaults with

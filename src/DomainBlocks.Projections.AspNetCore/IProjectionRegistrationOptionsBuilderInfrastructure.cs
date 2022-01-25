@@ -5,6 +5,13 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace DomainBlocks.Projections.AspNetCore
 {
+    public interface IProjectionRegistrationOptionsBuilderInfrastructure
+    {
+        ProjectionRegistrationOptionsBuilder<TRawData> RawEventDataType<TRawData>();
+
+        ProjectionRegistrationOptions<TRawData> Build<TRawData>(IServiceProvider serviceProvider);
+    }
+
     public interface IProjectionRegistrationOptionsBuilderInfrastructure<TRawData>
     {
         IConfiguration Configuration { get; }

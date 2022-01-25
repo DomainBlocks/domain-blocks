@@ -12,7 +12,7 @@ namespace DomainBlocks.Serialization.Json
         private readonly JsonSerializerOptions _options;
         private readonly IEventNameMap _eventNameMap;
         private readonly IEventSerializationAdapter<TRawData> _adapter;
-        private readonly JsonEventDeserializer _deserializer = new JsonEventDeserializer();
+        private readonly JsonBytesEventDeserializer _deserializer = new JsonBytesEventDeserializer();
         private EventMetadataContext _metadataContext;
         
         public JsonEventSerializer(IEventNameMap eventNameMap, IEventSerializationAdapter<TRawData> adapter, JsonSerializerOptions options = null)

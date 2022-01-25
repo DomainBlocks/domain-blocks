@@ -12,5 +12,12 @@ namespace DomainBlocks.Serialization.Json.AspNetCore
             builder.AddEventSerializer(eventNameMap => new JsonBytesEventSerializer(eventNameMap, serializerOptions));
             return builder;
         }
+
+        public static IAggregateRegistrationOptionsBuilderInfrastructure<string> UseJsonSerialization(
+            this IAggregateRegistrationOptionsBuilderInfrastructure<string> builder, JsonSerializerOptions serializerOptions = null)
+        {
+            builder.AddEventSerializer(eventNameMap => new JsonStringEventSerializer(eventNameMap, serializerOptions));
+            return builder;
+        }
     }
 }
