@@ -2,10 +2,8 @@ name: Build.NET
 
 on:
   push:
-    branches: 
-        - '*'
-        - '!master'
-
+    branches-ignore:  
+      - 'develop'
 
 jobs:
   build:
