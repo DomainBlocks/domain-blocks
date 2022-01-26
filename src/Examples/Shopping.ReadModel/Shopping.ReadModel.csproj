@@ -5,6 +5,7 @@
     <UserSecretsId>ebe0a980-4982-4eec-8d8e-229ac3118458</UserSecretsId>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
     <DockerfileContext>..\..</DockerfileContext>
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>
