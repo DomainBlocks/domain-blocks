@@ -24,7 +24,7 @@ namespace DomainBlocks.Projections.EntityFramework
             try
             {
                 var database = _dbContext.Database;
-                await database.EnsureDeletedAsync().ConfigureAwait(false);
+                // await database.EnsureDeletedAsync().ConfigureAwait(false);
                 await database.EnsureCreatedAsync().ConfigureAwait(false);
 
                 _isProcessingLiveEvents = false;
