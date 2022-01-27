@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using DomainBlocks.Common;
@@ -107,27 +108,28 @@ namespace DomainBlocks.Projections
 
                 if (_projectionMap.TryGetValue(eventType, out var projections))
                 {
-                    var tasks = new List<Task>();
-                    var timeoutTask = Task.Delay(_configuration.ProjectionHandlerTimeout);
+                    var stopwatch = new Stopwatch();
+                    stopwatch.Start();
 
                     foreach (var (_, executeAsync) in projections)
                     {
-                        tasks.Add(executeAsync(@event));
-                    }
+                        await executeAsync(@event);
 
-                    var projectionsTask = Task.WhenAll(tasks);
-                    await Task.WhenAny(timeoutTask, projectionsTask).ConfigureAwait(false);
-
-                    if (timeoutTask.IsCompleted)
-                    {
-                        Log.LogError("Timed out waiting for projections for event if {EventId}", eventId);
-                        if (!_configuration.ContinueAfterTimeout)
+                        // Timeout is best effort as it's only able to check
+                        // after each projection finishes.
+                        if (stopwatch.Elapsed >= _configuration.ProjectionHandlerTimeout)
                         {
-                            _publisher.Stop();
-                            throw new
-                                TimeoutException($"Stopping event stream after timeout handling event ID {eventId}");
+                            Log.LogError("Timed out waiting for projections for event if {EventId}", eventId);
+                            if (!_configuration.ContinueAfterTimeout)
+                            {
+                                _publisher.Stop();
+                                throw new
+                                    TimeoutException(
+                                        $"Stopping event stream after timeout handling event ID {eventId}");
+                            }
                         }
                     }
+                    stopwatch.Stop();
                 }
 
                 Log.LogTrace("All projections completed for event ID {EventId}", eventId);
