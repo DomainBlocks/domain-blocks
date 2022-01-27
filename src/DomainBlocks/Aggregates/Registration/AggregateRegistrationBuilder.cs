@@ -32,7 +32,5 @@ namespace DomainBlocks.Aggregates.Registration
         {
             return new(_aggregateRegistryBuilder);
         }
-
-
     }
 }

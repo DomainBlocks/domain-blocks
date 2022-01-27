@@ -113,7 +113,7 @@ namespace DomainBlocks.Projections
 
                     foreach (var (_, executeAsync) in projections)
                     {
-                        await executeAsync(@event);
+                        await executeAsync(@event).ConfigureAwait(false);
 
                         // Timeout is best effort as it's only able to check
                         // after each projection finishes.
@@ -135,7 +135,12 @@ namespace DomainBlocks.Projections
                 Log.LogTrace("All projections completed for event ID {EventId}", eventId);
 
                 var afterEventActions = contextsForEvent.Select(c => c.OnAfterHandleEvent());
-                await Task.WhenAll(afterEventActions).ConfigureAwait(false);
+                
+                foreach (var action in afterEventActions)
+                {
+                    await action.ConfigureAwait(false);
+                }
+
                 Log.LogTrace("Context OnAfterHandleEvent hooks called for event ID {EventId}", eventId);
             }
             catch (Exception ex)
