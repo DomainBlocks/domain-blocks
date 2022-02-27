@@ -142,12 +142,10 @@ namespace Shopping.Infrastructure.Tests
             var shoppingCartSummary = new ShoppingCartSummarySqlProjection();
 
             builder.Event<ItemAddedToShoppingCart>()
-                   .FromName(ItemAddedToShoppingCart.EventName)
                    .ToSqlProjection(shoppingCartSummary)
                    .ExecutesUpsert();
 
             builder.Event<ItemRemovedFromShoppingCart>()
-                   .FromName(ItemRemovedFromShoppingCart.EventName)
                    .ToSqlProjection(shoppingCartSummary)
                    .ExecutesDelete();
         }
