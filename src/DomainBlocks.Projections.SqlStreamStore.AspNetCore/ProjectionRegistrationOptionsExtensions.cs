@@ -7,8 +7,8 @@ namespace DomainBlocks.Projections.SqlStreamStore.AspNetCore
 {
     public static class ProjectionRegistrationOptionsExtensions
     {
-        public static IProjectionRegistrationOptionsBuilderInfrastructure<string> UseSqlStreamStorePublishedEvents(
-            this IProjectionRegistrationOptionsBuilderInfrastructure<string> builder)
+        public static IProjectionRegistrationOptionsBuilderInfrastructure<SqlStreamStoreRawEvent> UseSqlStreamStorePublishedEvents(
+            this IProjectionRegistrationOptionsBuilderInfrastructure<SqlStreamStoreRawEvent> builder)
         {
             builder.ServiceCollection.AddPostgresSqlStreamStore(builder.Configuration);
 

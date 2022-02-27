@@ -78,9 +78,10 @@ namespace DomainBlocks.Projections
             foreach (var type in _projectionEventNameMap.GetClrTypesForEventName(eventType))
             {
                 TEventBase @event;
+                EventMetadata metadata;
                 try
                 {
-                    @event = _deserializer.DeserializeEvent<TEventBase>(eventData, eventType, type);
+                    (@event, metadata) = _deserializer.DeserializeEventAndMetadata<TEventBase>(eventData, eventType, type);
                 }
                 catch (Exception e)
                 {
@@ -88,13 +89,13 @@ namespace DomainBlocks.Projections
                     throw;
                 }
 
-                tasks.Add(DispatchEventToProjections(@event, eventId));
+                tasks.Add(DispatchEventToProjections(@event, metadata, eventId));
             }
 
             await Task.WhenAll(tasks).ConfigureAwait(false);
         }
 
-        private async Task DispatchEventToProjections(TEventBase @event, Guid eventId)
+        private async Task DispatchEventToProjections(TEventBase @event, EventMetadata metadata, Guid eventId)
         {
             try
             {
@@ -113,7 +114,7 @@ namespace DomainBlocks.Projections
 
                     foreach (var (_, executeAsync) in projections)
                     {
-                        await executeAsync(@event).ConfigureAwait(false);
+                        await executeAsync(@event, metadata).ConfigureAwait(false);
 
                         // Timeout is best effort as it's only able to check
                         // after each projection finishes.

@@ -122,7 +122,7 @@ namespace DomainBlocks.Projections.Sql
             var dbCommand = _projectionContext.Connection.CreateCommand();
             dbCommand.CommandText = commandTextBuilder.ToString();
 
-            return async @event =>
+            return async (@event, _) =>
             {
                 _connector.BindParameters(dbCommand, (TEvent) @event, _sqlProjection.Columns, _parameterBindingMap);
 

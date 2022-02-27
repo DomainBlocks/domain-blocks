@@ -8,8 +8,8 @@ namespace DomainBlocks.Projections.EventStore.AspNetCore
 {
     public static class ProjectionRegistrationOptionsExtensions
     {
-        public static IProjectionRegistrationOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> UseEventStorePublishedEvents(
-            this IProjectionRegistrationOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> builder)
+        public static IProjectionRegistrationOptionsBuilderInfrastructure<EventStoreRawEvent> UseEventStorePublishedEvents(
+            this IProjectionRegistrationOptionsBuilderInfrastructure<EventStoreRawEvent> builder)
         {
             builder.ServiceCollection.AddEventStore(builder.Configuration);
 

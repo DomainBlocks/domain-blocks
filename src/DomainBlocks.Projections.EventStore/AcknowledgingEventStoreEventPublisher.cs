@@ -7,12 +7,12 @@ using Microsoft.Extensions.Logging;
 
 namespace DomainBlocks.Projections.EventStore
 {
-    public class AcknowledgingEventStoreEventPublisher : IEventPublisher<ReadOnlyMemory<byte>>, IDisposable
+    public class AcknowledgingEventStoreEventPublisher : IEventPublisher<EventStoreRawEvent>, IDisposable
     {
         private static readonly ILogger<AcknowledgingEventStoreEventPublisher> Log = 
             Logger.CreateFor<AcknowledgingEventStoreEventPublisher>();
         private readonly EventStorePersistentSubscriptionsClient _client;
-        private Func<EventNotification<ReadOnlyMemory<byte>>, Task> _onEvent;
+        private Func<EventNotification<EventStoreRawEvent>, Task> _onEvent;
         private readonly EventStorePersistentConnectionDescriptor _persistentConnectionDescriptor;
         private PersistentSubscription _subscription;
         private readonly EventStoreDroppedSubscriptionHandler _subscriptionDroppedHandler;
@@ -26,7 +26,7 @@ namespace DomainBlocks.Projections.EventStore
 
         }
 
-        public async Task StartAsync(Func<EventNotification<ReadOnlyMemory<byte>>, Task> onEvent)
+        public async Task StartAsync(Func<EventNotification<EventStoreRawEvent>, Task> onEvent)
         {
             _onEvent = onEvent ?? throw new ArgumentNullException(nameof(onEvent));
             await SubscribeToPersistentSubscription();
@@ -66,7 +66,7 @@ namespace DomainBlocks.Projections.EventStore
         {
             try
             {
-                var notification = EventNotification.FromEvent(resolvedEvent.Event.Data,
+                var notification = EventNotification.FromEvent(EventStoreRawEvent.FromResolvedEvent(resolvedEvent),
                                                                resolvedEvent.Event.EventType,
                                                                resolvedEvent.Event.EventId.ToGuid());
                 await _onEvent(notification);

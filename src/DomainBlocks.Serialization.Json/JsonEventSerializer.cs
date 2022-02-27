@@ -12,7 +12,6 @@ namespace DomainBlocks.Serialization.Json
         private readonly JsonSerializerOptions _options;
         private readonly IEventNameMap _eventNameMap;
         private readonly IEventSerializationAdapter<TRawData> _adapter;
-        private readonly JsonBytesEventDeserializer _deserializer = new JsonBytesEventDeserializer();
         private EventMetadataContext _metadataContext;
         
         public JsonEventSerializer(IEventNameMap eventNameMap, IEventSerializationAdapter<TRawData> adapter, JsonSerializerOptions options = null)
@@ -63,7 +62,7 @@ namespace DomainBlocks.Serialization.Json
         public TEvent DeserializeEvent<TEvent>(TRawData eventData, string eventName, Type typeOverride = null)
         {
             var clrType = typeOverride ?? _eventNameMap.GetClrTypeForEventName(eventName);
-            return _deserializer.DeserializeEvent<TEvent>(_adapter.FromRawData(eventData), eventName, clrType, _options);
+            return _deserializer.DeserializeEventAndMetdata<TEvent>(_adapter.FromRawData(eventData), eventName, clrType, _options);
         }
 
         public Dictionary<string, string> DeserializeMetadata(TRawData rawMetadata)
