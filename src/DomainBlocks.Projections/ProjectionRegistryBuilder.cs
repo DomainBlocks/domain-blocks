@@ -16,6 +16,11 @@ namespace DomainBlocks.Projections
             var builder = new EventProjectionBuilder<TEvent>(this);
             _eventProjectionBuilders.Add(builder);
 
+            // Default event name to the .NET type.
+            // This can be overridden by explicitly
+            // specifying a name/names in the fluent builder
+            RegisterDefaultEventName<TEvent>();
+
             return builder;
         }
 
@@ -29,10 +34,17 @@ namespace DomainBlocks.Projections
             return new ProjectionRegistry(_eventProjectionMap, _projectionContextMap, _eventNameMap);
         }
 
-        internal void RegisterEventName<TEvent>(string name)
+        private void RegisterDefaultEventName<TEvent>()
         {
-            if (name == null) throw new ArgumentNullException(nameof(name));
-            _eventNameMap.RegisterTypeForEventName<TEvent>(name);
+            _eventNameMap.RegisterDefaultEventName<TEvent>();
+        }
+
+        internal void OverrideEventNames<TEvent>(params string[] names)
+        {
+            if (names == null) throw new ArgumentNullException(nameof(names));
+            if (names.Length == 0) throw new ArgumentException("Value cannot be an empty collection.", nameof(names));
+
+            _eventNameMap.OverrideEventNames<TEvent>(names);
         }
 
         internal void RegisterContextForEvent<TEvent>(IProjectionContext projectionContext)

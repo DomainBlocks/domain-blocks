@@ -75,8 +75,6 @@ namespace Shopping.Infrastructure.Tests
             
             await PersistentSubscriptionsClient.CreateAsync(stream, groupName, settings, credentials.ToEsUserCredentials());
             
-            
-            
             var processProjectionRegistryBuilder = new ProjectionRegistryBuilder();
 
             ShoppingCartProcess.Register(processProjectionRegistryBuilder);
@@ -165,7 +163,6 @@ namespace Shopping.Infrastructure.Tests
             {nameof(ItemAddedToShoppingCart.Item), new SqlColumnDefinitionBuilder().Name("Item").Type(DbType.String).Build() },
         };
     }
-
 
     public class ShoppingCartProcess
     {
