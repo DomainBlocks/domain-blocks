@@ -4,10 +4,10 @@ using EventStore.Client;
 
 namespace DomainBlocks.Projections.EventStore
 {
-    public class EventStoreEventPublisher : IEventPublisher<ReadOnlyMemory<byte>>, IDisposable
+    public class EventStoreEventPublisher : IEventPublisher<EventStoreRawEvent>, IDisposable
     {
         private readonly EventStoreClient _client;
-        private Func<EventNotification<ReadOnlyMemory<byte>>, Task> _onEvent;
+        private Func<EventNotification<EventStoreRawEvent>, Task> _onEvent;
         private StreamSubscription _subscription;
         private readonly EventStoreDroppedSubscriptionHandler _subscriptionDroppedHandler;
         private Position _lastProcessedPosition;
@@ -18,7 +18,7 @@ namespace DomainBlocks.Projections.EventStore
             _subscriptionDroppedHandler = new EventStoreDroppedSubscriptionHandler(Stop, ReSubscribeAfterDrop);
         }
 
-        public async Task StartAsync(Func<EventNotification<ReadOnlyMemory<byte>>, Task> onEvent)
+        public async Task StartAsync(Func<EventNotification<EventStoreRawEvent>, Task> onEvent)
         {
             _onEvent = onEvent ?? throw new ArgumentNullException(nameof(onEvent));
             await SubscribeToEventStore(Position.Start);
@@ -38,7 +38,7 @@ namespace DomainBlocks.Projections.EventStore
         {
             async Task SendEventNotification(ResolvedEvent resolvedEvent)
             {
-                var notification = EventNotification.FromEvent(resolvedEvent.Event.Data,
+                var notification = EventNotification.FromEvent(EventStoreRawEvent.FromResolvedEvent(resolvedEvent),
                                                                resolvedEvent.Event.EventType,
                                                                resolvedEvent.Event.EventId.ToGuid());
                 await _onEvent(notification);
@@ -56,7 +56,7 @@ namespace DomainBlocks.Projections.EventStore
                 await SendEventNotification(historicEvent);
             }
 
-            await _onEvent(EventNotification.CaughtUp<ReadOnlyMemory<byte>>());
+            await _onEvent(EventNotification.CaughtUp<EventStoreRawEvent>());
 
             _subscription = await _client.SubscribeToAllAsync(_lastProcessedPosition,
                                                               (_, evt, _) => SendEventNotification(evt),
