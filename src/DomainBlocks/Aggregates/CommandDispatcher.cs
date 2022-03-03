@@ -21,6 +21,8 @@ namespace DomainBlocks.Aggregates
             _eventDispatcher = eventDispatcher ?? throw new ArgumentNullException(nameof(eventDispatcher));
         }
 
+        public bool HasImmutableRegistrations => _registrations.ImmutableRoutes.Any();
+
         public IReadOnlyList<TEventBase> Dispatch<TAggregate>(TAggregate aggregateRoot, TCommandBase command)
         {
             var commandType = command.GetType();
