@@ -6,7 +6,7 @@ on:
       - develop
   create:
     branches: 
-      - release/**
+      - 'release/**'
 
 jobs:
   build:
@@ -45,12 +45,10 @@ jobs:
       working-directory: ./src
 
     - name: Remove Docker Compose project # required for nuget pack.
-      if: github.event.pull_request.merged == true  
       run: dotnet sln ./DomainBlocks.sln remove Examples/Shopping.DockerCompose.dcproj
       working-directory: ./src
     
     - name: Pack and Publish
-      if: github.event.pull_request.merged == true  
       run: |
         dotnet pack -c Release -o ./packages/ --include-symbols --include-source -p:SymbolPackageFormat=snupkg
         dotnet nuget push "./packages/*.nupkg" -s 'https://api.nuget.org/v3/index.json' -k ${{secrets.NUGET_TEST_KEY}}
