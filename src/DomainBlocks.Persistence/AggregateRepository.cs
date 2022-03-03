@@ -83,7 +83,18 @@ namespace DomainBlocks.Persistence
             }
 
             var events = await _eventsRepository.LoadEventsAsync<TEventBase>(streamName, loadStartPosition);
-            var state = _eventDispatcher.ImmutableDispatch(stateToAppendEventsTo, events);
+
+            TAggregateState state;
+            if (_commandDispatcher.HasImmutableRegistrations)
+            {
+                state = _eventDispatcher.ImmutableDispatch(stateToAppendEventsTo, events);
+            }
+            else
+            {
+                _eventDispatcher.Dispatch(stateToAppendEventsTo);
+                state = stateToAppendEventsTo;
+            }
+            
             var newVersion = loadStartPosition + events.Count - 1;
 
             return LoadedAggregate.Create(state, id, _commandDispatcher, newVersion, snapshotVersion, events.Count);
