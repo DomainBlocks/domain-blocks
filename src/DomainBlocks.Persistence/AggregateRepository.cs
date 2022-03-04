@@ -91,7 +91,7 @@ namespace DomainBlocks.Persistence
             }
             else
             {
-                _eventDispatcher.Dispatch(stateToAppendEventsTo);
+                _eventDispatcher.Dispatch(stateToAppendEventsTo, events);
                 state = stateToAppendEventsTo;
             }
             
