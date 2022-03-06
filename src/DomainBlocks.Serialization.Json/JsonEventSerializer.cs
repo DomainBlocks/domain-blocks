@@ -1,9 +1,8 @@
-﻿using DomainBlocks.Aggregates;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using DomainBlocks.Aggregates;
 
 namespace DomainBlocks.Serialization.Json
 {
@@ -11,10 +10,10 @@ namespace DomainBlocks.Serialization.Json
     {
         private readonly JsonSerializerOptions _options;
         private readonly IEventNameMap _eventNameMap;
-        private readonly IEventSerializationAdapter<TRawData> _adapter;
+        private readonly IJsonSerializationAdapter<TRawData> _adapter;
         private EventMetadataContext _metadataContext;
         
-        public JsonEventSerializer(IEventNameMap eventNameMap, IEventSerializationAdapter<TRawData> adapter, JsonSerializerOptions options = null)
+        public JsonEventSerializer(IEventNameMap eventNameMap, IJsonSerializationAdapter<TRawData> adapter, JsonSerializerOptions options = null)
         {
             _eventNameMap = eventNameMap ?? throw new ArgumentNullException(nameof(eventNameMap));
             _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
@@ -42,7 +41,7 @@ namespace DomainBlocks.Serialization.Json
             if (@event == null) throw new ArgumentNullException(nameof(@event));
 
             var eventName = eventNameOverride ?? _eventNameMap.GetEventNameForClrType(@event.GetType());
-            var eventData = _adapter.ToRawData(JsonSerializer.SerializeToUtf8Bytes(@event, _options));
+            var eventData = _adapter.Serialize(@event, _options);
 
             if (additionalMetadata.Length > 0 && _metadataContext == null)
             {
@@ -51,7 +50,7 @@ namespace DomainBlocks.Serialization.Json
 
             var eventMetadata = _metadataContext == null
                 ? default
-                : _adapter.ToRawData(JsonSerializer.SerializeToUtf8Bytes(_metadataContext.BuildMetadata(additionalMetadata), _options));
+                : _adapter.Serialize(_metadataContext.BuildMetadata(additionalMetadata), _options);
 
             return new JsonEventPersistenceData<TRawData>(Guid.NewGuid(),
                                                           eventName,
@@ -61,16 +60,36 @@ namespace DomainBlocks.Serialization.Json
 
         public TEvent DeserializeEvent<TEvent>(TRawData eventData, string eventName, Type typeOverride = null)
         {
+            if (eventData == null) throw new ArgumentNullException(nameof(eventData));
+            if (eventName == null) throw new ArgumentNullException(nameof(eventName));
             var clrType = typeOverride ?? _eventNameMap.GetClrTypeForEventName(eventName);
-            return _deserializer.DeserializeEventAndMetdata<TEvent>(_adapter.FromRawData(eventData), eventName, clrType, _options);
+
+            try
+            {
+                var evt = _adapter.Deserialize(eventData, clrType, _options);
+
+                if (evt is TEvent typedEvent)
+                {
+                    return typedEvent;
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                throw;
+            }
+
+            var runtTimeType = typeof(TEvent);
+            throw new InvalidEventTypeException($"Cannot cast event of type {eventName} to {runtTimeType.FullName}",
+                                                eventName,
+                                                runtTimeType.FullName);
         }
 
-        public Dictionary<string, string> DeserializeMetadata(TRawData rawMetadata)
+        public EventMetadata DeserializeMetadata(TRawData rawMetadata)
         {
             if (rawMetadata == null) throw new ArgumentNullException(nameof(rawMetadata));
 
-            var metadata = JsonSerializer.Deserialize<IList<KeyValuePair<string, string>>>(_adapter.FromRawData(rawMetadata).Span)
-                                         .ToDictionary(x => x.Key, x => x.Value);
+            var metadata = _adapter.Deserialize<EventMetadata>(rawMetadata, _options);
                                
             return metadata;
         }
