@@ -85,7 +85,7 @@ namespace DomainBlocks.Projections
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine(e);
+                    Log.LogError(e, "Exception occurred with deserializing event");
                     throw;
                 }
 
