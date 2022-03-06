@@ -19,8 +19,13 @@ namespace Shopping.ReadModel.Db
 
             modelBuilder.Entity<ShoppingCartSummaryItem>()
                         .HasKey(i => i.Id);
+
+            modelBuilder.Entity<ShoppingCartHistory>()
+                        .HasKey(i => i.Id);
         }
 
         public DbSet<ShoppingCartSummaryItem> ShoppingCartSummaryItems { get; set; }
+
+        public DbSet<ShoppingCartHistory> ShoppingCartHistory { get; set; }
     }
 }
