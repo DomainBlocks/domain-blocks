@@ -13,7 +13,6 @@ namespace Shopping.ReadModel.Db
             var shoppingCartSummary = new ShoppingClassSummaryEfProjection();
 
             builder.Event<ItemAddedToShoppingCart>()
-                   .FromName(ItemAddedToShoppingCart.EventName)
                    .ToEfProjection(shoppingCartSummary, dbContext)
                    .Executes((context, evt) =>
                    {
@@ -26,7 +25,6 @@ namespace Shopping.ReadModel.Db
                    });
 
             builder.Event<ItemRemovedFromShoppingCart>()
-                   .FromName(ItemRemovedFromShoppingCart.EventName)
                    .ToEfProjection(shoppingCartSummary, dbContext)
                    .ExecutesAsync(async (context, evt) =>
                    {
