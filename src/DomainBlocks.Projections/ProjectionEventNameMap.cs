@@ -45,7 +45,20 @@ namespace DomainBlocks.Projections
 
         public void RegisterDefaultEventName<TEvent>()
         {
-            _defaultEventNameMap.Add(GetDefaultEventName<TEvent>(), typeof(TEvent));
+            var defaultEventName = GetDefaultEventName<TEvent>();
+            if (!_defaultEventNameMap.ContainsKey(defaultEventName))
+            {
+                _defaultEventNameMap.Add(defaultEventName, typeof(TEvent));
+            }
+            else
+            {
+                if (_defaultEventNameMap[defaultEventName] != typeof(TEvent))
+                {
+                    throw new InvalidOperationException($"The name {defaultEventName} has already been registered " +
+                                                        $"to type {_defaultEventNameMap[defaultEventName].FullName}. " +
+                                                        $"Cannot also register is to type {typeof(TEvent).FullName}");
+                }
+            }
         }
 
         private static string GetDefaultEventName<TEvent>()
