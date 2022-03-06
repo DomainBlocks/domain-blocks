@@ -19,8 +19,14 @@ namespace DomainBlocks.Projections.EventStore
             try
             {
                 var evt = JsonSerializer.Deserialize(rawEvent.Data.Span, eventType, options);
-                var metadata = JsonSerializer.Deserialize<EventMetadata>(rawEvent.Metadata.Span, options);
 
+                var metadata = EventMetadata.Empty;
+
+                if (rawEvent.Metadata.Length > 0)
+                {
+                    metadata = JsonSerializer.Deserialize<EventMetadata>(rawEvent.Metadata.Span, options);
+                }
+                
                 if (evt is TEventBase @event)
                 {
                     return (@event, metadata);

@@ -75,14 +75,13 @@ namespace DomainBlocks.Serialization.Json
             }
             catch (Exception e)
             {
-                Console.WriteLine(e);
-                throw;
+                throw new EventDeserializeException("Unable to deserialize event", e);
             }
 
-            var runtTimeType = typeof(TEvent);
-            throw new InvalidEventTypeException($"Cannot cast event of type {eventName} to {runtTimeType.FullName}",
+            var runTimeType = typeof(TEvent);
+            throw new InvalidEventTypeException($"Cannot cast event of type {eventName} to {runTimeType.FullName}",
                                                 eventName,
-                                                runtTimeType.FullName);
+                                                runTimeType.FullName);
         }
 
         public EventMetadata DeserializeMetadata(TRawData rawMetadata)

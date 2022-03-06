@@ -2,7 +2,6 @@ using DomainBlocks.Projections;
 using DomainBlocks.Projections.EntityFramework;
 using Shopping.Domain.Events;
 using Shopping.ReadModel.Db.Model;
-using System.Threading.Tasks;
 
 namespace Shopping.ReadModel.Db
 {
