@@ -80,7 +80,7 @@ namespace DomainBlocks.EventStore.Testing
         private void SetupRepositories()
         {
             var registryBuilder = AggregateRegistryBuilder.Create<TestCommand, TestEvent>();
-            TestAggregateFunctions.Register(registryBuilder);
+            TestAggregateFunctions.Register(registryBuilder, _id);
 
             var registry = registryBuilder.Build();
 

@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text.Json;
 using DomainBlocks.Testing;
 using NUnit.Framework;
@@ -175,8 +174,7 @@ namespace DomainBlocks.Serialization.Json.Tests
 
         private static IDictionary<string, string> GetMetadataFromEventPersistenceData(IEventPersistenceData<ReadOnlyMemory<byte>> persistenceData)
         {
-            return JsonSerializer.Deserialize<List<KeyValuePair<string, string>>>(persistenceData.EventMetadata.Span)
-                                 .ToDictionary(x => x.Key, x => x.Value);
+            return JsonSerializer.Deserialize<EventMetadata>(persistenceData.EventMetadata.Span);
         }
 
         public class TestEvent
