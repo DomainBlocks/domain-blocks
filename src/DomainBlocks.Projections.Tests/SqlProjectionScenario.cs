@@ -1,13 +1,14 @@
 ﻿using System;
+using DomainBlocks.Projections.EventStore;
 using DomainBlocks.Projections.Sql.Tests.Fakes;
-using DomainBlocks.Serialization.Json;
+using EventStore.Client;
 
 namespace DomainBlocks.Projections.Sql.Tests
 {
     public class SqlProjectionScenario
     {
         public FakeJsonEventPublisher Publisher { get; } = new();
-        public EventDispatcher<ReadOnlyMemory<byte>, object> Dispatcher { get; private set; }
+        public EventDispatcher<EventRecord, object> Dispatcher { get; private set; }
         public FakeDbConnector DbConnector { get; private set; }
         public static EventDispatcherConfiguration DefaultDispatcherConfig { get; } = EventDispatcherConfiguration.ReadModelDefaults with
             {
@@ -67,12 +68,12 @@ namespace DomainBlocks.Projections.Sql.Tests
             var dispatcherConfig = EventDispatcherConfiguration.ReadModelDefaults with { ProjectionHandlerTimeout =
                                        TimeSpan.FromHours(2)};
 
-            var dispatcher = new EventDispatcher<ReadOnlyMemory<byte>, object>(Publisher,
-                                                                               registry.EventProjectionMap,
-                                                                               registry.ProjectionContextMap,
-                                                                               new JsonBytesEventDeserializer(),
-                                                                               registry.EventNameMap,
-                                                                               dispatcherConfig);
+            var dispatcher = new EventDispatcher<EventRecord, object>(Publisher,
+                                                                      registry.EventProjectionMap,
+                                                                      registry.ProjectionContextMap,
+                                                                      new EventRecordJsonDeserializer(),
+                                                                      registry.EventNameMap,
+                                                                      dispatcherConfig);
 
             Dispatcher = dispatcher;
         }

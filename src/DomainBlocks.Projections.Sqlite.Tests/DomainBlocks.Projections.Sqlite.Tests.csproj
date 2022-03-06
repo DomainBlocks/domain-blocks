@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <PackageReference Include="Dapper" Version="2.0.78" />
+    <PackageReference Include="EventStore.Client.Grpc" Version="21.2.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="5.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.8.3" />
     <PackageReference Include="NSubstitute" Version="4.2.2" />
@@ -19,6 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\DomainBlocks.Projections.EventStore\DomainBlocks.Projections.EventStore.csproj" />
     <ProjectReference Include="..\DomainBlocks.Projections.Sqlite\DomainBlocks.Projections.Sqlite.csproj" />
     <ProjectReference Include="..\DomainBlocks.Projections.Sql\DomainBlocks.Projections.Sql.csproj" />
     <ProjectReference Include="..\DomainBlocks.Projections.Tests\DomainBlocks.Projections.Sql.Tests.csproj" />

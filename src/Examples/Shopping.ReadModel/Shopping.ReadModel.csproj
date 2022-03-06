@@ -23,7 +23,6 @@
     <ProjectReference Include="..\..\DomainBlocks.Projections.EntityFramework.AspNetCore\DomainBlocks.Projections.EntityFramework.AspNetCore.csproj" />
     <ProjectReference Include="..\..\DomainBlocks.Projections.EntityFramework\DomainBlocks.Projections.EntityFramework.csproj" />
     <ProjectReference Include="..\..\DomainBlocks.Projections.EventStore.AspNetCore\DomainBlocks.Projections.EventStore.AspNetCore.csproj" />
-    <ProjectReference Include="..\..\DomainBlocks.Projections.Serialization.Json.AspNetCore\DomainBlocks.Projections.Serialization.Json.AspNetCore.csproj" />
     <ProjectReference Include="..\..\DomainBlocks.Projections.SqlStreamStore.AspNetCore\DomainBlocks.Projections.SqlStreamStore.AspNetCore.csproj" />
     <ProjectReference Include="..\Shopping.Events\Shopping.Events.csproj" />
   </ItemGroup>

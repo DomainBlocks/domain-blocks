@@ -18,7 +18,7 @@ using NUnit.Framework;
 using Shopping.Domain.Aggregates;
 using Shopping.Domain.Commands;
 using Shopping.Domain.Events;
-using ProjectionDispatcher = DomainBlocks.Projections.EventDispatcher<DomainBlocks.Projections.EventStore.EventStoreRawEvent, Shopping.Domain.Events.IDomainEvent>;
+using ProjectionDispatcher = DomainBlocks.Projections.EventDispatcher<EventStore.Client.EventRecord, Shopping.Domain.Events.IDomainEvent>;
 using UserCredentials = DomainBlocks.Common.UserCredentials;
 
 namespace Shopping.Infrastructure.Tests
@@ -56,7 +56,7 @@ namespace Shopping.Infrastructure.Tests
             var readModelDispatcher = new ProjectionDispatcher(readModelEventPublisher,
                                                                registry.EventProjectionMap,
                                                                registry.ProjectionContextMap,
-                                                               new EventStoreEventDeserializer(),
+                                                               new EventRecordJsonDeserializer(),
                                                                registry.EventNameMap,
                                                                EventDispatcherConfiguration.ReadModelDefaults);
 
@@ -86,7 +86,7 @@ namespace Shopping.Infrastructure.Tests
             var processDispatcher = new ProjectionDispatcher(processEventPublisher,
                                                              processRegistry.EventProjectionMap,
                                                              processRegistry.ProjectionContextMap,
-                                                             new EventStoreEventDeserializer(),
+                                                             new EventRecordJsonDeserializer(),
                                                              processRegistry.EventNameMap,
                                                              EventDispatcherConfiguration.ReadModelDefaults);
         }

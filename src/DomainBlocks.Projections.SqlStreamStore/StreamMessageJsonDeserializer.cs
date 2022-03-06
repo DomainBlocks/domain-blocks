@@ -1,24 +1,23 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Text.Json;
 using DomainBlocks.Serialization;
 
-namespace DomainBlocks.Projections.EventStore
+namespace DomainBlocks.Projections.SqlStreamStore
 {
-    public class EventStoreEventDeserializer : IEventDeserializer<EventStoreRawEvent>
+    public class StreamMessageJsonDeserializer : IEventDeserializer<StreamMessageWrapper>
     {
-        public (TEventBase, EventMetadata) DeserializeEventAndMetadata<TEventBase>(EventStoreRawEvent rawEvent,
-                                                                                    string eventName,
-                                                                                    Type eventType,
-                                                                                    JsonSerializerOptions options = null)
+        public (TEventBase, EventMetadata) DeserializeEventAndMetadata<TEventBase>(StreamMessageWrapper streamMessage,
+                                                                                   string eventName,
+                                                                                   Type eventType,
+                                                                                   JsonSerializerOptions options = null)
         {
             if (eventName == null) throw new ArgumentNullException(nameof(eventName));
             if (eventType == null) throw new ArgumentNullException(nameof(eventType));
 
             try
             {
-                var evt = JsonSerializer.Deserialize(rawEvent.EventData.Span, eventType, options);
-                var metadata = JsonSerializer.Deserialize<EventMetadata>(rawEvent.Metadata.Span, options);
+                var evt = JsonSerializer.Deserialize(streamMessage.JsonData, eventType, options);
+                var metadata = JsonSerializer.Deserialize<EventMetadata>(streamMessage.JsonMetadata, options);
 
                 if (evt is TEventBase @event)
                 {
