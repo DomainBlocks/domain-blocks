@@ -5,6 +5,8 @@ namespace DomainBlocks.Serialization
     public class EventMetadata : Dictionary<string, string>
     {
 
+        public static readonly EventMetadata Empty = new EventMetadata();
+
         public static EventMetadata FromKeyValuePairs(IEnumerable<KeyValuePair<string, string>> pairs)
         {
             var metadata = new EventMetadata();

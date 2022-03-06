@@ -17,8 +17,12 @@ namespace DomainBlocks.Projections.SqlStreamStore
             try
             {
                 var evt = JsonSerializer.Deserialize(streamMessage.JsonData, eventType, options);
-                var metadata = JsonSerializer.Deserialize<EventMetadata>(streamMessage.JsonMetadata, options);
 
+                var metadata = EventMetadata.Empty;
+                if (streamMessage.JsonMetadata != null)
+                {
+                    metadata = JsonSerializer.Deserialize<EventMetadata>(streamMessage.JsonMetadata, options);
+                }
                 if (evt is TEventBase @event)
                 {
                     return (@event, metadata);

@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Reflection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace DomainBlocks.Projections.AspNetCore
 {
@@ -37,11 +39,28 @@ namespace DomainBlocks.Projections.AspNetCore
                     throw new InvalidOperationException("Unable to build projection registrations");
                 }
 
-                return new
-                    EventDispatcherHostedService<string, TEventBase>(new ProjectionRegistryBuilder(),
-                        projectionOptions.EventPublisher,
-                        projectionOptions.EventSerializer,
-                        projectionOptions.OnRegisteringProjections);
+                var typedEventDispatcherHostedService = typeof(EventDispatcherHostedService<,>)
+                    .MakeGenericType(rawDataType, typeof(TEventBase));
+
+                var constructorMethod = typedEventDispatcherHostedService.GetConstructor(new Type[]
+                {
+                    typeof(ProjectionRegistryBuilder),
+                    projectionOptions.EventPublisher.GetType(),
+                    projectionOptions.EventSerializer.GetType(),
+                    projectionOptions.OnRegisteringProjections
+                                     .GetType()
+                });
+
+                var eventDispatcher = (IEventDispatcherHostedService)constructorMethod?.Invoke(new object[]
+                {
+                    new ProjectionRegistryBuilder(),
+                    projectionOptions.EventPublisher,
+                    projectionOptions.EventSerializer,
+                    projectionOptions.OnRegisteringProjections
+                });
+
+
+                return eventDispatcher;
             });
 
             return services;
