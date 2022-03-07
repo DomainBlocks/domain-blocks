@@ -1,3 +1,5 @@
+using System;
+using DomainBlocks.Projections;
 using DomainBlocks.Projections.AspNetCore;
 using DomainBlocks.Projections.EntityFramework.AspNetCore;
 using DomainBlocks.Projections.SqlStreamStore;
@@ -35,7 +37,11 @@ namespace Shopping.ReadModel
                                   {
                                       options.UseSqlStreamStorePublishedEvents()
                                              .UseEntityFramework<ShoppingCartDbContext, StreamMessageWrapper>()
-                                             .WithProjections(ShoppingClassSummaryEfProjection.Register);
+                                             .WithProjections((builder, dbContext) =>
+                                             {
+                                                 ShoppingClassSummaryEfProjection.Register(builder, dbContext);
+                                                 ShoppingCartHistoryEfProjection.Register(builder, dbContext);
+                                             });
                                   });
 
             services.AddControllers();

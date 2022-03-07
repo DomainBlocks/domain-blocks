@@ -40,4 +40,49 @@ namespace Shopping.ReadModel.Db
         {
         }
     }
+
+    public class ShoppingCartHistoryEfProjection
+    {
+        public static void Register(ProjectionRegistryBuilder builder, ShoppingCartDbContext dbContext)
+        {
+            var projection = new ShoppingCartHistoryEfProjection();
+
+            builder.Event<ShoppingCartCreated>()
+                   .ToEfProjection(projection, dbContext)
+                   .Executes((context, evt) =>
+                   {
+                       context.ShoppingCartHistory.Add(new ShoppingCartHistory
+                       {
+                           CartId = evt.Id,
+                           EventName = "Created"
+                       });
+                   });
+
+            builder.Event<ItemAddedToShoppingCart>()
+                   .ToEfProjection(projection, dbContext)
+                   .Executes((context, evt) =>
+                   {
+                       context.ShoppingCartHistory.Add(new ShoppingCartHistory
+                       {
+                           CartId = evt.CartId,
+                           EventName = "Item Added"
+                       });
+                   });
+
+            builder.Event<ItemRemovedFromShoppingCart>()
+                   .ToEfProjection(projection, dbContext)
+                   .Executes((context, evt) =>
+                   {
+                       context.ShoppingCartHistory.Add(new ShoppingCartHistory
+                       {
+                           CartId = evt.CartId,
+                           EventName = "Item Removed"
+                       });
+                   });
+        }
+
+        private ShoppingCartHistoryEfProjection()
+        {
+        }
+    }
 }
