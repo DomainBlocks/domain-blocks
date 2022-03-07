@@ -7,25 +7,25 @@ namespace DomainBlocks.Projections.AspNetCore
 {
     public interface IProjectionRegistrationOptionsBuilderInfrastructure
     {
-        ProjectionRegistrationOptionsBuilder<TRawData> RawEventDataType<TRawData>();
+        IConfiguration Configuration { get; }
+        IServiceCollection ServiceCollection { get; }
+
+        ProjectionRegistrationOptionsBuilder<TRawData> TypedAs<TRawData>();
 
         ProjectionRegistrationOptions<TRawData> Build<TRawData>(IServiceProvider serviceProvider);
     }
 
-    public interface IProjectionRegistrationOptionsBuilderInfrastructure<TRawData>
+    public interface IProjectionRegistrationOptionsBuilderInfrastructure<TRawData> : IProjectionRegistrationOptionsBuilderInfrastructure
     {
-        IConfiguration Configuration { get; }
-        IServiceCollection ServiceCollection { get; }
-
-        ProjectionRegistrationOptionsBuilder<TRawData> AddEventPublisher(
+        ProjectionRegistrationOptionsBuilder<TRawData> UseEventPublisher(
             Func<IServiceProvider, IEventPublisher<TRawData>> getEventPublisher);
 
-        ProjectionRegistrationOptionsBuilder<TRawData> AddEventDeserializer(
+        ProjectionRegistrationOptionsBuilder<TRawData> UseEventDeserializer(
             Func<IServiceProvider, IEventDeserializer<TRawData>> getEventDeserializer);
 
         ProjectionRegistrationOptions<TRawData> Build(IServiceProvider serviceProvider);
 
-        ProjectionRegistrationOptionsBuilder<TRawData> AddProjectionRegistrations(
+        ProjectionRegistrationOptionsBuilder<TRawData> UseProjectionRegistrations(
             Action<IServiceProvider, ProjectionRegistryBuilder> onRegisteringProjections);
     }
 }

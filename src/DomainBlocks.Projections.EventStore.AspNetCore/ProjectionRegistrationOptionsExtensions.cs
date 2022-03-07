@@ -8,16 +8,29 @@ namespace DomainBlocks.Projections.EventStore.AspNetCore
 {
     public static class ProjectionRegistrationOptionsExtensions
     {
-        public static IProjectionRegistrationOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> UseEventStorePublishedEvents(
-            this IProjectionRegistrationOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> builder)
+        public static ProjectionRegistrationOptionsBuilder<EventRecord> UseEventStorePublishedEvents(
+            this ProjectionRegistrationOptionsBuilder builder)
         {
             builder.ServiceCollection.AddEventStore(builder.Configuration);
+            var builderInfrastructure = (IProjectionRegistrationOptionsBuilderInfrastructure)builder;
 
-            builder.AddEventPublisher(provider =>
+            var typedBuilder = builderInfrastructure.TypedAs<EventRecord>();
+            var typedBuilderInfrastructure = (IProjectionRegistrationOptionsBuilderInfrastructure<EventRecord>)typedBuilder;
+
+            typedBuilderInfrastructure.UseEventPublisher(provider =>
             {
-                var eventStoreClient = provider.GetRequiredService<EventStoreClient>();
-                return new EventStoreEventPublisher(eventStoreClient);
+                var streamStore = provider.GetRequiredService<EventStoreClient>();
+                return new EventStoreEventPublisher(streamStore);
             });
+
+            return typedBuilder;
+        }
+
+        public static ProjectionRegistrationOptionsBuilder<EventRecord> UseJsonDeserialization(
+            this ProjectionRegistrationOptionsBuilder<EventRecord> builder)
+        {
+            var builderInfrastructure = (IProjectionRegistrationOptionsBuilderInfrastructure<EventRecord>)builder;
+            builderInfrastructure.UseEventDeserializer(_ => new EventRecordJsonDeserializer());
             return builder;
         }
     }

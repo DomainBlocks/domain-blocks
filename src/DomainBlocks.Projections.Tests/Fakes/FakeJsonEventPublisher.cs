@@ -1,17 +1,20 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Net.Mime;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using EventStore.Client;
 using NUnit.Framework;
 
 namespace DomainBlocks.Projections.Sql.Tests.Fakes
 {
-    public class FakeJsonEventPublisher : IEventPublisher<ReadOnlyMemory<byte>>
+    public class FakeJsonEventPublisher : IEventPublisher<EventRecord>
     {
-        private Func<EventNotification<ReadOnlyMemory<byte>>, Task> _onEvent;
+        private Func<EventNotification<EventRecord>, Task> _onEvent;
         public bool IsStarted { get; private set; }
 
-        public Task StartAsync(Func<EventNotification<ReadOnlyMemory<byte>>, Task> onEvent)
+        public Task StartAsync(Func<EventNotification<EventRecord>, Task> onEvent)
         {
             _onEvent = onEvent;
             IsStarted = true;
@@ -26,14 +29,29 @@ namespace DomainBlocks.Projections.Sql.Tests.Fakes
         public async Task SendEvent(object @event, string eventType, Guid? eventId = null)
         {
             AssertPublisherStarted();
-            var bytes = new ReadOnlyMemory<byte>(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(@event)));
-            await _onEvent(EventNotification.FromEvent(bytes, eventType, eventId ?? Guid.NewGuid()));
+            var data = new ReadOnlyMemory<byte>(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(@event)));
+            var eventMetadata = new Dictionary<string, string>
+            {
+                { "type", eventType },
+                { "created", DateTimeOffset.UtcNow.Ticks.ToString() },
+                { "content-type", MediaTypeNames.Application.Json },
+            };
+
+            var eventRecord = new EventRecord("dummyStreamId",
+                                              Uuid.FromGuid(eventId ?? Guid.NewGuid()),
+                                              StreamPosition.Start,
+                                              Position.Start,
+                                              eventMetadata,
+                                              data,
+                                              null);
+
+            await _onEvent(EventNotification.FromEvent(eventRecord, eventRecord.EventType, eventRecord.EventId.ToGuid()));
         }
 
         public async Task SendCaughtUp()
         {
             AssertPublisherStarted();
-            await _onEvent(EventNotification.CaughtUp<ReadOnlyMemory<byte>>());
+            await _onEvent(EventNotification.CaughtUp<EventRecord>());
         }
 
         private void AssertPublisherStarted()

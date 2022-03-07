@@ -11,6 +11,9 @@ using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
+using DomainBlocks.Projections.EventStore;
+using EventStore.Client;
+
 // ReSharper disable UnusedAutoPropertyAccessor.Local
 // ReSharper disable ClassNeverInstantiated.Local
 
@@ -20,7 +23,7 @@ namespace DomainBlocks.Projections.Sqlite.Tests
     public class InMemoryDbTests
     {
         private FakeJsonEventPublisher _publisher;
-        private EventDispatcher<ReadOnlyMemory<byte>, object> _eventDispatcher;
+        private EventDispatcher<EventRecord, object> _eventDispatcher;
         private IDbConnection _connection;
         private SqliteDbConnector _dbConnector;
 
@@ -112,10 +115,10 @@ namespace DomainBlocks.Projections.Sqlite.Tests
             var eventPublisher = new FakeJsonEventPublisher();
             _publisher = eventPublisher;
 
-            var eventDispatcher = new EventDispatcher<ReadOnlyMemory<byte>, object>(eventPublisher,
+            var eventDispatcher = new EventDispatcher<EventRecord, object>(eventPublisher,
                 registry.EventProjectionMap,
                 registry.ProjectionContextMap,
-                new JsonBytesEventDeserializer(),
+                new EventRecordJsonDeserializer(),
                 registry.EventNameMap,
                 EventDispatcherConfiguration
                         .ReadModelDefaults with

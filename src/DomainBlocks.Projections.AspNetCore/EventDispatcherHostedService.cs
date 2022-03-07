@@ -6,8 +6,11 @@ using Microsoft.Extensions.Hosting;
 
 namespace DomainBlocks.Projections.AspNetCore
 {
+    public interface IEventDispatcherHostedService : IHostedService
+    {
+    }
 
-    public class EventDispatcherHostedService<TRawData, TEventBase> : IHostedService
+    public class EventDispatcherHostedService<TRawData, TEventBase> : IEventDispatcherHostedService
     {
         private readonly ProjectionRegistryBuilder _registryBuilder;
         private readonly IEventPublisher<TRawData> _publisher;

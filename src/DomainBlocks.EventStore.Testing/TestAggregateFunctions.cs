@@ -6,11 +6,11 @@ namespace DomainBlocks.EventStore.Testing
 {
     public class TestAggregateFunctions
     {
-        public static void Register(AggregateRegistryBuilder<TestCommand, TestEvent> builder)
+        public static void Register(AggregateRegistryBuilder<TestCommand, TestEvent> builder, Guid aggregateId)
         {
             builder.Register<TestAggregateState>(agg =>
             {
-                agg.InitialState(() => new TestAggregateState(Guid.NewGuid(), 0))
+                agg.InitialState(() => new TestAggregateState(aggregateId, 0))
                    .Id(x => x.Id.ToString())
                    .PersistenceKey(id => $"testAggregate-{id}")
                    .SnapshotKey(id => $"testAggregateSnapshot-{id}");

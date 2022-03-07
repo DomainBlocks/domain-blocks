@@ -1,7 +1,6 @@
 using DomainBlocks.Projections.AspNetCore;
 using DomainBlocks.Projections.EntityFramework.AspNetCore;
-using DomainBlocks.Projections.EventStore.AspNetCore;
-using DomainBlocks.Projections.Serialization.Json.AspNetCore;
+using DomainBlocks.Projections.SqlStreamStore;
 using DomainBlocks.Projections.SqlStreamStore.AspNetCore;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -11,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.OpenApi.Models;
 using Shopping.ReadModel.Db;
+using SqlStreamStore.Streams;
 
 namespace Shopping.ReadModel
 {
@@ -33,10 +33,8 @@ namespace Shopping.ReadModel
             services.AddReadModel(Configuration,
                                   options =>
                                   {
-                                      options.RawEventDataType<string>()
-                                          .UseSqlStreamStorePublishedEvents()
-                                             .UseJsonDeserialization()
-                                             .UseEntityFramework<ShoppingCartDbContext, string>()
+                                      options.UseSqlStreamStorePublishedEvents()
+                                             .UseEntityFramework<ShoppingCartDbContext, StreamMessageWrapper>()
                                              .WithProjections(ShoppingClassSummaryEfProjection.Register);
                                   });
 
