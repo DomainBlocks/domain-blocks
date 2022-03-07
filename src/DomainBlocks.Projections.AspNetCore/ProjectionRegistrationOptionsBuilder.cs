@@ -7,25 +7,26 @@ namespace DomainBlocks.Projections.AspNetCore
 {
     public class ProjectionRegistrationOptionsBuilder : IProjectionRegistrationOptionsBuilderInfrastructure
     {
-        private readonly IServiceCollection _serviceCollection;
-        private readonly IConfiguration _configuration;
         private object _typedRegistrationOptionsBuilder;
         private Type _rawDataType;
 
         public ProjectionRegistrationOptionsBuilder(IServiceCollection serviceCollection, IConfiguration configuration)
         {
-            _serviceCollection = serviceCollection;
-            _configuration = configuration;
+            ServiceCollection = serviceCollection;
+            Configuration = configuration;
         }
 
         public Type RawDataType => _rawDataType;
 
-        public ProjectionRegistrationOptionsBuilder<TRawData> RawEventDataType<TRawData>()
+        ProjectionRegistrationOptionsBuilder<TRawData> IProjectionRegistrationOptionsBuilderInfrastructure.TypedAs<TRawData>()
         {
             _rawDataType = typeof(TRawData);
-            _typedRegistrationOptionsBuilder = new ProjectionRegistrationOptionsBuilder<TRawData>(_serviceCollection, _configuration);
+            _typedRegistrationOptionsBuilder = new ProjectionRegistrationOptionsBuilder<TRawData>(ServiceCollection, Configuration);
             return (ProjectionRegistrationOptionsBuilder<TRawData>)_typedRegistrationOptionsBuilder;
         }
+
+        public IConfiguration Configuration { get; }
+        public IServiceCollection ServiceCollection { get; }
 
         public ProjectionRegistrationOptions<TRawData> Build<TRawData>(IServiceProvider serviceProvider)
         {
@@ -34,38 +35,34 @@ namespace DomainBlocks.Projections.AspNetCore
         }
     }
 
-    public class ProjectionRegistrationOptionsBuilder<TRawData> : IProjectionRegistrationOptionsBuilderInfrastructure<TRawData>
+    public class ProjectionRegistrationOptionsBuilder<TRawData> : ProjectionRegistrationOptionsBuilder, 
+        IProjectionRegistrationOptionsBuilderInfrastructure<TRawData>
     {
         private Func<IServiceProvider, IEventPublisher<TRawData>> _getEventPublisher;
         private Func<IServiceProvider, IEventDeserializer<TRawData>> _getEventDeserializer;
         private Action<IServiceProvider, ProjectionRegistryBuilder> _onRegisteringProjections;
 
         public ProjectionRegistrationOptionsBuilder(IServiceCollection serviceCollection,
-                                                    IConfiguration configuration)
+                                                    IConfiguration configuration) : base(serviceCollection, configuration)
         {
-            ServiceCollection = serviceCollection;
-            Configuration = configuration;
         }
 
-        public IConfiguration Configuration { get; }
-        public IServiceCollection ServiceCollection { get; }
-
         ProjectionRegistrationOptionsBuilder<TRawData> IProjectionRegistrationOptionsBuilderInfrastructure<TRawData>.
-            AddEventPublisher(Func<IServiceProvider, IEventPublisher<TRawData>> getEventPublisher)
+            UseEventPublisher(Func<IServiceProvider, IEventPublisher<TRawData>> getEventPublisher)
         {
             _getEventPublisher = getEventPublisher ?? throw new ArgumentNullException(nameof(getEventPublisher));
             return this;
         }
 
         ProjectionRegistrationOptionsBuilder<TRawData> IProjectionRegistrationOptionsBuilderInfrastructure<TRawData>.
-            AddEventDeserializer(Func<IServiceProvider, IEventDeserializer<TRawData>> getEventDeserializer)
+            UseEventDeserializer(Func<IServiceProvider, IEventDeserializer<TRawData>> getEventDeserializer)
         {
             _getEventDeserializer =
                 getEventDeserializer ?? throw new ArgumentNullException(nameof(getEventDeserializer));
             return this;
         }
 
-        ProjectionRegistrationOptionsBuilder<TRawData> IProjectionRegistrationOptionsBuilderInfrastructure<TRawData>.AddProjectionRegistrations(
+        ProjectionRegistrationOptionsBuilder<TRawData> IProjectionRegistrationOptionsBuilderInfrastructure<TRawData>.UseProjectionRegistrations(
             Action<IServiceProvider, ProjectionRegistryBuilder> onRegisteringProjections)
         {
             _onRegisteringProjections = onRegisteringProjections;

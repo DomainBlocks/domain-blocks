@@ -17,17 +17,13 @@ namespace DomainBlocks.Projections
         public EventProjectionBuilder<TEvent> FromName(string name)
         {
             if (name == null) throw new ArgumentNullException(nameof(name));
-            _builder.RegisterEventName<TEvent>(name);
+            _builder.OverrideEventNames<TEvent>(name);
             return this;
         }
 
         public EventProjectionBuilder<TEvent> FromNames(params string[] names)
         {
-            foreach (var name in names)
-            {
-                _builder.RegisterEventName<TEvent>(name);
-            }
-
+            _builder.OverrideEventNames<TEvent>(names);
             return this;
         }
 

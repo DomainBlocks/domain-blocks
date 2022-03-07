@@ -1,5 +1,3 @@
-using System.Linq;
-using System.Threading.Tasks;
 using DomainBlocks.Projections;
 using DomainBlocks.Projections.EntityFramework;
 using Shopping.Domain.Events;
@@ -7,15 +5,14 @@ using Shopping.ReadModel.Db.Model;
 
 namespace Shopping.ReadModel.Db
 {
-    public class ShoppingClassSummaryEfProjection : IEntityFrameworkProjection<ShoppingCartDbContext>
+    public class ShoppingClassSummaryEfProjection
     {
         public static void Register(ProjectionRegistryBuilder builder, ShoppingCartDbContext dbContext)
         {
-            var shoppingCartSummary = new ShoppingClassSummaryEfProjection(dbContext);
+            var shoppingCartSummary = new ShoppingClassSummaryEfProjection();
 
             builder.Event<ItemAddedToShoppingCart>()
-                   .FromName(ItemAddedToShoppingCart.EventName)
-                   .ToEfProjection<ItemAddedToShoppingCart, ShoppingClassSummaryEfProjection, ShoppingCartDbContext>(shoppingCartSummary)
+                   .ToEfProjection(shoppingCartSummary, dbContext)
                    .Executes((context, evt) =>
                    {
                        context.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem
@@ -24,14 +21,11 @@ namespace Shopping.ReadModel.Db
                            Id = evt.Id,
                            ItemDescription = evt.Item
                        });
-
-                       return Task.CompletedTask;
                    });
 
             builder.Event<ItemRemovedFromShoppingCart>()
-                   .FromName(ItemRemovedFromShoppingCart.EventName)
-                   .ToEfProjection<ItemRemovedFromShoppingCart, ShoppingClassSummaryEfProjection, ShoppingCartDbContext>(shoppingCartSummary)
-                   .Executes(async (context, evt) =>
+                   .ToEfProjection(shoppingCartSummary, dbContext)
+                   .ExecutesAsync(async (context, evt) =>
                    {
                        var item = await context.ShoppingCartSummaryItems.FindAsync(evt.Id);
 
@@ -42,11 +36,8 @@ namespace Shopping.ReadModel.Db
                    });
         }
 
-        private ShoppingClassSummaryEfProjection(ShoppingCartDbContext dbContext)
+        private ShoppingClassSummaryEfProjection()
         {
-            DbContext = dbContext;
         }
-
-        public ShoppingCartDbContext DbContext { get; }
     }
 }

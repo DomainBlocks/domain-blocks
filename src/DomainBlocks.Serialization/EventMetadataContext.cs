@@ -70,11 +70,11 @@ namespace DomainBlocks.Serialization
             _lazyEntries.Add(key, valueFunc);
         }
 
-        public IEnumerable<KeyValuePair<string, string>> BuildMetadata(params KeyValuePair<string, string>[] additionalEntries)
+        public EventMetadata BuildMetadata(params KeyValuePair<string, string>[] additionalEntries)
         {
-            return _metaDataEntries
-                   .Concat(EvaluateLazyEntries())
-                   .Concat(additionalEntries);
+            return EventMetadata.FromKeyValuePairs(_metaDataEntries
+                                                   .Concat(EvaluateLazyEntries())
+                                                   .Concat(additionalEntries));
         }
 
         private IEnumerable<KeyValuePair<string, string>> EvaluateLazyEntries()

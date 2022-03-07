@@ -18,7 +18,7 @@ using NUnit.Framework;
 using Shopping.Domain.Aggregates;
 using Shopping.Domain.Commands;
 using Shopping.Domain.Events;
-using ProjectionDispatcher = DomainBlocks.Projections.EventDispatcher<System.ReadOnlyMemory<byte>, Shopping.Domain.Events.IDomainEvent>;
+using ProjectionDispatcher = DomainBlocks.Projections.EventDispatcher<EventStore.Client.EventRecord, Shopping.Domain.Events.IDomainEvent>;
 using UserCredentials = DomainBlocks.Common.UserCredentials;
 
 namespace Shopping.Infrastructure.Tests
@@ -56,7 +56,7 @@ namespace Shopping.Infrastructure.Tests
             var readModelDispatcher = new ProjectionDispatcher(readModelEventPublisher,
                                                                registry.EventProjectionMap,
                                                                registry.ProjectionContextMap,
-                                                               new JsonBytesEventDeserializer(),
+                                                               new EventRecordJsonDeserializer(),
                                                                registry.EventNameMap,
                                                                EventDispatcherConfiguration.ReadModelDefaults);
 
@@ -75,8 +75,6 @@ namespace Shopping.Infrastructure.Tests
             
             await PersistentSubscriptionsClient.CreateAsync(stream, groupName, settings, credentials.ToEsUserCredentials());
             
-            
-            
             var processProjectionRegistryBuilder = new ProjectionRegistryBuilder();
 
             ShoppingCartProcess.Register(processProjectionRegistryBuilder);
@@ -88,7 +86,7 @@ namespace Shopping.Infrastructure.Tests
             var processDispatcher = new ProjectionDispatcher(processEventPublisher,
                                                              processRegistry.EventProjectionMap,
                                                              processRegistry.ProjectionContextMap,
-                                                             new JsonBytesEventDeserializer(),
+                                                             new EventRecordJsonDeserializer(),
                                                              processRegistry.EventNameMap,
                                                              EventDispatcherConfiguration.ReadModelDefaults);
         }
@@ -144,12 +142,10 @@ namespace Shopping.Infrastructure.Tests
             var shoppingCartSummary = new ShoppingCartSummarySqlProjection();
 
             builder.Event<ItemAddedToShoppingCart>()
-                   .FromName(ItemAddedToShoppingCart.EventName)
                    .ToSqlProjection(shoppingCartSummary)
                    .ExecutesUpsert();
 
             builder.Event<ItemRemovedFromShoppingCart>()
-                   .FromName(ItemRemovedFromShoppingCart.EventName)
                    .ToSqlProjection(shoppingCartSummary)
                    .ExecutesDelete();
         }
@@ -165,7 +161,6 @@ namespace Shopping.Infrastructure.Tests
             {nameof(ItemAddedToShoppingCart.Item), new SqlColumnDefinitionBuilder().Name("Item").Type(DbType.String).Build() },
         };
     }
-
 
     public class ShoppingCartProcess
     {

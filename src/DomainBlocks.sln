@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.31702.278
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.32112.339
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainBlocks", "DomainBlocks\DomainBlocks.csproj", "{3A908D35-70E7-4DA2-8FC2-1F664CE350FF}"
 EndProject
@@ -74,8 +74,6 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainBlocks.Serialization.Json.AspNetCore", "DomainBlocks.Serialization.Json.AspNetCore\DomainBlocks.Serialization.Json.AspNetCore.csproj", "{C9B16836-89F0-4778-AC88-08589718C1C0}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainBlocks.Persistence.AspNetCore", "DomainBlocks.EventPersistence.AspNetCore\DomainBlocks.Persistence.AspNetCore.csproj", "{5290CDE4-6033-433C-BA69-92397AEB6EBA}"
-EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainBlocks.Projections.Serialization.Json.AspNetCore", "DomainBlocks.Projections.Serialization.Json.AspNetCore\DomainBlocks.Projections.Serialization.Json.AspNetCore.csproj", "{CEDFB229-53AF-4D24-B1C4-F2AFF084E022}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainBlocks.Projections.EntityFramework.AspNetCore", "DomainBlocks.Projections.EntityFramework.AspNetCore\DomainBlocks.Projections.EntityFramework.AspNetCore.csproj", "{F6208EFD-F681-4F9D-9EE7-68EF8CD0D574}"
 EndProject
@@ -217,10 +215,6 @@ Global
 		{5290CDE4-6033-433C-BA69-92397AEB6EBA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5290CDE4-6033-433C-BA69-92397AEB6EBA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5290CDE4-6033-433C-BA69-92397AEB6EBA}.Release|Any CPU.Build.0 = Release|Any CPU
-		{CEDFB229-53AF-4D24-B1C4-F2AFF084E022}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{CEDFB229-53AF-4D24-B1C4-F2AFF084E022}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{CEDFB229-53AF-4D24-B1C4-F2AFF084E022}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{CEDFB229-53AF-4D24-B1C4-F2AFF084E022}.Release|Any CPU.Build.0 = Release|Any CPU
 		{F6208EFD-F681-4F9D-9EE7-68EF8CD0D574}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{F6208EFD-F681-4F9D-9EE7-68EF8CD0D574}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F6208EFD-F681-4F9D-9EE7-68EF8CD0D574}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -273,7 +267,6 @@ Global
 		{16BD681C-AB6E-4E59-992E-C6FDCE5F4FAE} = {C2C699A9-185A-441E-BC62-406BB8667650}
 		{C9B16836-89F0-4778-AC88-08589718C1C0} = {58CD75DE-F1E9-4BBD-8945-0BB392EDC8EE}
 		{5290CDE4-6033-433C-BA69-92397AEB6EBA} = {58CD75DE-F1E9-4BBD-8945-0BB392EDC8EE}
-		{CEDFB229-53AF-4D24-B1C4-F2AFF084E022} = {58CD75DE-F1E9-4BBD-8945-0BB392EDC8EE}
 		{F6208EFD-F681-4F9D-9EE7-68EF8CD0D574} = {58CD75DE-F1E9-4BBD-8945-0BB392EDC8EE}
 		{621D660D-4636-4476-9FDF-A04E0532AFAB} = {EB200888-007B-45F9-B48D-FEBF2BAF6F5F}
 		{C829DF4A-DEC4-4AA1-B9BF-3C4F7526C720} = {462C6C79-8591-4742-9EF0-090A8A5B8F1B}

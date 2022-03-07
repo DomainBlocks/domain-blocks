@@ -4,13 +4,13 @@ namespace DomainBlocks.Projections.EntityFramework
 {
     public static class EventProjectionBuilderExtensions
     {
-        public static EntityFrameworkProjectionBuilder<TEvent, TProjection, TContext> ToEfProjection<TEvent,
-            TProjection, TContext>(
+        public static EntityFrameworkProjectionBuilder<TEvent, TProjection, TDbContext> ToEfProjection<TEvent,
+            TProjection, TDbContext>(
             this EventProjectionBuilder<TEvent> builder,
-            TProjection projection) where TContext : DbContext
-            where TProjection : IEntityFrameworkProjection<TContext>
+            TProjection projection, TDbContext dbContext)
+            where TDbContext : DbContext
         {
-            return new(builder, projection);
+            return new (builder, projection, dbContext);
         }
     }
 }
