@@ -135,13 +135,11 @@ namespace DomainBlocks.Projections
 
                 Log.LogTrace("All projections completed for event ID {EventId}", eventId);
 
-                var afterEventActions = contextsForEvent.Select(c => c.OnAfterHandleEvent());
-                
-                foreach (var action in afterEventActions)
+                foreach (var projectionContext in contextsForEvent)
                 {
-                    await action.ConfigureAwait(false);
+                    await projectionContext.OnAfterHandleEvent().ConfigureAwait(false);
                 }
-
+                
                 Log.LogTrace("Context OnAfterHandleEvent hooks called for event ID {EventId}", eventId);
             }
             catch (Exception ex)
