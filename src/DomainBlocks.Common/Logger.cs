@@ -20,7 +20,9 @@ namespace DomainBlocks.Common
         /// This should be done once on start-up of your application and not changed again./>
         /// </summary>
         /// <exception cref="InvalidOperationException">Thrown if user tries to change the <see cref="Microsoft.Extensions.Logging.ILoggerFactory" /> once set.</exception>
-        public static void SetLoggerFactory(ILoggerFactory loggerFactory)
+        public static void SetLoggerFactory(
+            ILoggerFactory loggerFactory,
+            bool throwOnSettingLoggerFactoryIfAlreadySet = true)
         {
             if (Interlocked.CompareExchange(ref _userLoggerFactorySet, 1, 0) == 0)
             {
@@ -28,7 +30,8 @@ namespace DomainBlocks.Common
             }
             else
             {
-                throw new InvalidOperationException("LoggerFactory has already been set. Cannot set it again.");
+                if (throwOnSettingLoggerFactoryIfAlreadySet)
+                    throw new InvalidOperationException("LoggerFactory has already been set. Cannot set it again.");
             }
         }
 
