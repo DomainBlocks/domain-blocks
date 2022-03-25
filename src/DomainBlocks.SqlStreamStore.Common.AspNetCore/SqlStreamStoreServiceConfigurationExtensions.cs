@@ -29,14 +29,20 @@ namespace DomainBlocks.SqlStreamStore.Common.AspNetCore
                             var settings = new PostgresStreamStoreSettings(options.Value.ConnectionString);
                             _sqlStreamStore = new PostgresStreamStore(settings);
                             _sqlStreamStore.CreateSchemaIfNotExists().Wait();
+                            _sqlStreamStore.OnDispose += OnPostgresStreamStoreDisposed;
                         }
                     }
                 }
-
+                
                 return _sqlStreamStore;
             });
 
             return services;
+        }
+
+        private static void OnPostgresStreamStoreDisposed()
+        {
+            _sqlStreamStore = null;
         }
     }
 }
