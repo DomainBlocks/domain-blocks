@@ -15,17 +15,17 @@ namespace DomainBlocks.Projections.AspNetCore
         ProjectionRegistrationOptions<TRawData> Build<TRawData>(IServiceProvider serviceProvider);
     }
 
-    public interface IProjectionRegistrationOptionsBuilderInfrastructure<TRawData> : IProjectionRegistrationOptionsBuilderInfrastructure
+    public interface IProjectionRegistrationOptionsBuilderInfrastructure<TEventBase> : IProjectionRegistrationOptionsBuilderInfrastructure
     {
-        ProjectionRegistrationOptionsBuilder<TRawData> UseEventPublisher(
-            Func<IServiceProvider, IEventPublisher<TRawData>> getEventPublisher);
+        ProjectionRegistrationOptionsBuilder<TEventBase> UseEventPublisher(
+            Func<IServiceProvider, IEventPublisher<TEventBase>> getEventPublisher);
 
-        ProjectionRegistrationOptionsBuilder<TRawData> UseEventDeserializer(
-            Func<IServiceProvider, IEventDeserializer<TRawData>> getEventDeserializer);
+        ProjectionRegistrationOptionsBuilder<TEventBase> UseEventDeserializer(
+            Func<IServiceProvider, IEventDeserializer<TEventBase>> getEventDeserializer);
 
-        ProjectionRegistrationOptions<TRawData> Build(IServiceProvider serviceProvider);
+        ProjectionRegistrationOptions<TEventBase> Build(IServiceProvider serviceProvider);
 
-        ProjectionRegistrationOptionsBuilder<TRawData> UseProjectionRegistrations(
+        ProjectionRegistrationOptionsBuilder<TEventBase> UseProjectionRegistrations(
             Action<IServiceProvider, ProjectionRegistryBuilder> onRegisteringProjections);
     }
 }

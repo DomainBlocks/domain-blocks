@@ -18,7 +18,7 @@ using NUnit.Framework;
 using Shopping.Domain.Aggregates;
 using Shopping.Domain.Commands;
 using Shopping.Domain.Events;
-using ProjectionDispatcher = DomainBlocks.Projections.EventDispatcher<EventStore.Client.EventRecord, Shopping.Domain.Events.IDomainEvent>;
+using ProjectionDispatcher = DomainBlocks.Projections.EventDispatcher<Shopping.Domain.Events.IDomainEvent>;
 using UserCredentials = DomainBlocks.Common.UserCredentials;
 
 namespace Shopping.Infrastructure.Tests
@@ -50,14 +50,13 @@ namespace Shopping.Infrastructure.Tests
             ShoppingCartSummarySqlProjection.Register(projectionRegistryBuilder);
 
             var registry = projectionRegistryBuilder.Build();
+            var eventNotificationFactory = new EventStoreEventNotificationFactory(registry.EventNameMap, new EventRecordJsonDeserializer());
 
-            var readModelEventPublisher = new EventStoreEventPublisher(EventStoreClient);
+            var readModelEventPublisher = new EventStoreEventPublisher<IDomainEvent>(EventStoreClient, eventNotificationFactory);
 
             var readModelDispatcher = new ProjectionDispatcher(readModelEventPublisher,
                                                                registry.EventProjectionMap,
                                                                registry.ProjectionContextMap,
-                                                               new EventRecordJsonDeserializer(),
-                                                               registry.EventNameMap,
                                                                EventDispatcherConfiguration.ReadModelDefaults);
 
 
@@ -79,15 +78,18 @@ namespace Shopping.Infrastructure.Tests
 
             ShoppingCartProcess.Register(processProjectionRegistryBuilder);
             var processRegistry = processProjectionRegistryBuilder.Build();
-            
+
+            var eventNotificationFactory = new EventStoreEventNotificationFactory(processRegistry.EventNameMap, 
+                                                                                  new EventRecordJsonDeserializer());
             var persistentSubscriptionDescriptor = new EventStorePersistentConnectionDescriptor(stream, groupName, 10, credentials);
-            var processEventPublisher = new AcknowledgingEventStoreEventPublisher(PersistentSubscriptionsClient, persistentSubscriptionDescriptor);
+            var processEventPublisher =
+                new AcknowledgingEventStoreEventPublisher<IDomainEvent>(PersistentSubscriptionsClient,
+                                                                        persistentSubscriptionDescriptor,
+                                                                        eventNotificationFactory);
 
             var processDispatcher = new ProjectionDispatcher(processEventPublisher,
                                                              processRegistry.EventProjectionMap,
                                                              processRegistry.ProjectionContextMap,
-                                                             new EventRecordJsonDeserializer(),
-                                                             processRegistry.EventNameMap,
                                                              EventDispatcherConfiguration.ReadModelDefaults);
         }
 

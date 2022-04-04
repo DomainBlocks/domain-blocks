@@ -1,18 +1,15 @@
-﻿using Dapper;
-using DomainBlocks.Common;
-using DomainBlocks.Projections.Sql;
-using DomainBlocks.Projections.Sql.Tests.Fakes;
-using DomainBlocks.Projections.Sqlite.Tests.Events;
-using DomainBlocks.Serialization.Json;
-using Microsoft.Extensions.Logging;
-using NUnit.Framework;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
-using DomainBlocks.Projections.EventStore;
-using EventStore.Client;
+using Dapper;
+using DomainBlocks.Common;
+using DomainBlocks.Projections.Sql;
+using DomainBlocks.Projections.Sql.Tests.Fakes;
+using DomainBlocks.Projections.Sqlite.Tests.Events;
+using Microsoft.Extensions.Logging;
+using NUnit.Framework;
 
 // ReSharper disable UnusedAutoPropertyAccessor.Local
 // ReSharper disable ClassNeverInstantiated.Local
@@ -23,7 +20,7 @@ namespace DomainBlocks.Projections.Sqlite.Tests
     public class InMemoryDbTests
     {
         private FakeJsonEventPublisher _publisher;
-        private EventDispatcher<EventRecord, object> _eventDispatcher;
+        private EventDispatcher<object> _eventDispatcher;
         private IDbConnection _connection;
         private SqliteDbConnector _dbConnector;
 
@@ -115,11 +112,9 @@ namespace DomainBlocks.Projections.Sqlite.Tests
             var eventPublisher = new FakeJsonEventPublisher();
             _publisher = eventPublisher;
 
-            var eventDispatcher = new EventDispatcher<EventRecord, object>(eventPublisher,
+            var eventDispatcher = new EventDispatcher<object>(eventPublisher,
                 registry.EventProjectionMap,
                 registry.ProjectionContextMap,
-                new EventRecordJsonDeserializer(),
-                registry.EventNameMap,
                 EventDispatcherConfiguration
                         .ReadModelDefaults with
                     {

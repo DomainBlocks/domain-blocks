@@ -7,26 +7,29 @@ using Microsoft.Extensions.Logging;
 
 namespace DomainBlocks.Projections.EventStore
 {
-    public class AcknowledgingEventStoreEventPublisher : IEventPublisher<EventRecord>, IDisposable
+    public class AcknowledgingEventStoreEventPublisher<TEventBase> : IEventPublisher<TEventBase>, IDisposable
     {
-        private static readonly ILogger<AcknowledgingEventStoreEventPublisher> Log = 
-            Logger.CreateFor<AcknowledgingEventStoreEventPublisher>();
+        private static readonly ILogger<AcknowledgingEventStoreEventPublisher<TEventBase>> Log = 
+            Logger.CreateFor<AcknowledgingEventStoreEventPublisher<TEventBase>>();
         private readonly EventStorePersistentSubscriptionsClient _client;
-        private Func<EventNotification<EventRecord>, Task> _onEvent;
+        private Func<EventNotification<TEventBase>, Task> _onEvent;
         private readonly EventStorePersistentConnectionDescriptor _persistentConnectionDescriptor;
+        private readonly EventStoreEventNotificationFactory _eventNotificationFactory;
         private PersistentSubscription _subscription;
         private readonly EventStoreDroppedSubscriptionHandler _subscriptionDroppedHandler;
 
         public AcknowledgingEventStoreEventPublisher(EventStorePersistentSubscriptionsClient client, 
-                                                     EventStorePersistentConnectionDescriptor persistentConnectionDescriptor)
+                                                     EventStorePersistentConnectionDescriptor persistentConnectionDescriptor,
+                                                     EventStoreEventNotificationFactory eventNotificationFactory)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _persistentConnectionDescriptor = persistentConnectionDescriptor;
+            _eventNotificationFactory = eventNotificationFactory;
             _subscriptionDroppedHandler = new EventStoreDroppedSubscriptionHandler(Stop, ReSubscribeAfterDrop);
 
         }
 
-        public async Task StartAsync(Func<EventNotification<EventRecord>, Task> onEvent)
+        public async Task StartAsync(Func<EventNotification<TEventBase>, Task> onEvent)
         {
             _onEvent = onEvent ?? throw new ArgumentNullException(nameof(onEvent));
             await SubscribeToPersistentSubscription();
@@ -66,7 +69,7 @@ namespace DomainBlocks.Projections.EventStore
         {
             try
             {
-                await _onEvent(resolvedEvent.ToEventNotification());
+                await _onEvent(_eventNotificationFactory.CreateEventNotification<TEventBase>(resolvedEvent));
                 await subscription.Ack(resolvedEvent);
                 Log.LogTrace("Handled and acknowledged event {EventId}", resolvedEvent.Event.EventId);
             }

@@ -8,7 +8,7 @@ namespace DomainBlocks.Projections.Sql.Tests
     public class SqlProjectionScenario
     {
         public FakeJsonEventPublisher Publisher { get; } = new();
-        public EventDispatcher<EventRecord, object> Dispatcher { get; private set; }
+        public EventDispatcher<object> Dispatcher { get; private set; }
         public FakeDbConnector DbConnector { get; private set; }
         public static EventDispatcherConfiguration DefaultDispatcherConfig { get; } = EventDispatcherConfiguration.ReadModelDefaults with
             {
@@ -68,12 +68,10 @@ namespace DomainBlocks.Projections.Sql.Tests
             var dispatcherConfig = EventDispatcherConfiguration.ReadModelDefaults with { ProjectionHandlerTimeout =
                                        TimeSpan.FromHours(2)};
 
-            var dispatcher = new EventDispatcher<EventRecord, object>(Publisher,
-                                                                      registry.EventProjectionMap,
-                                                                      registry.ProjectionContextMap,
-                                                                      new EventRecordJsonDeserializer(),
-                                                                      registry.EventNameMap,
-                                                                      dispatcherConfig);
+            var dispatcher = new EventDispatcher<object>(Publisher,
+                                                         registry.EventProjectionMap,
+                                                         registry.ProjectionContextMap,
+                                                         dispatcherConfig);
 
             Dispatcher = dispatcher;
         }

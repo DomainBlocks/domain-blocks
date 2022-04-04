@@ -1,24 +1,30 @@
 ﻿using System;
 using System.Threading.Tasks;
+using DomainBlocks.Common;
 using EventStore.Client;
+using Microsoft.Extensions.Logging;
+using UserCredentials = EventStore.Client.UserCredentials;
 
 namespace DomainBlocks.Projections.EventStore
 {
-    public class EventStoreEventPublisher : IEventPublisher<EventRecord>, IDisposable
+    public class EventStoreEventPublisher<TEventBase> : IEventPublisher<TEventBase>, IDisposable
     {
+        private static readonly ILogger<EventStoreEventPublisher<TEventBase>> Log = Logger.CreateFor<EventStoreEventPublisher<TEventBase>>();
         private readonly EventStoreClient _client;
-        private Func<EventNotification<EventRecord>, Task> _onEvent;
+        private readonly EventStoreEventNotificationFactory _eventNotificationFactory;
+        private Func<EventNotification<TEventBase>, Task> _onEvent;
         private StreamSubscription _subscription;
         private readonly EventStoreDroppedSubscriptionHandler _subscriptionDroppedHandler;
         private Position _lastProcessedPosition;
 
-        public EventStoreEventPublisher(EventStoreClient client)
+        public EventStoreEventPublisher(EventStoreClient client, EventStoreEventNotificationFactory eventNotificationFactory)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
+            _eventNotificationFactory = eventNotificationFactory;
             _subscriptionDroppedHandler = new EventStoreDroppedSubscriptionHandler(Stop, ReSubscribeAfterDrop);
         }
 
-        public async Task StartAsync(Func<EventNotification<EventRecord>, Task> onEvent)
+        public async Task StartAsync(Func<EventNotification<TEventBase>, Task> onEvent)
         {
             _onEvent = onEvent ?? throw new ArgumentNullException(nameof(onEvent));
             await SubscribeToEventStore(Position.Start);
@@ -38,7 +44,7 @@ namespace DomainBlocks.Projections.EventStore
         {
             async Task SendEventNotification(ResolvedEvent resolvedEvent)
             {
-                await _onEvent(resolvedEvent.ToEventNotification());
+                await _onEvent(_eventNotificationFactory.CreateEventNotification<TEventBase>(resolvedEvent));
 
                 if (resolvedEvent.OriginalPosition.HasValue)
                 {
@@ -53,7 +59,7 @@ namespace DomainBlocks.Projections.EventStore
                 await SendEventNotification(historicEvent);
             }
 
-            await _onEvent(EventNotification.CaughtUp<EventRecord>());
+            await _onEvent(EventNotification.CaughtUp<TEventBase>());
 
             _subscription = await _client.SubscribeToAllAsync(_lastProcessedPosition,
                                                               (_, evt, _) => SendEventNotification(evt),
