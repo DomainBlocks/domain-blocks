@@ -1,5 +1,4 @@
-﻿using System;
-using DomainBlocks.EventStore.Common.AspNetCore;
+﻿using DomainBlocks.EventStore.Common.AspNetCore;
 using DomainBlocks.Projections.AspNetCore;
 using EventStore.Client;
 using Microsoft.Extensions.DependencyInjection;
@@ -8,28 +7,35 @@ namespace DomainBlocks.Projections.EventStore.AspNetCore
 {
     public static class ProjectionRegistrationOptionsExtensions
     {
-        public static ProjectionRegistrationOptionsBuilder<EventRecord> UseEventStorePublishedEvents(
+        public static ProjectionRegistrationOptionsBuilder<object> UseEventStorePublishedEvents(
+            this ProjectionRegistrationOptionsBuilder builder)
+        {
+            return builder.UseEventStorePublishedEvents<object>();
+        }
+
+        public static ProjectionRegistrationOptionsBuilder<TEventBase> UseEventStorePublishedEvents<TEventBase>(
             this ProjectionRegistrationOptionsBuilder builder)
         {
             builder.ServiceCollection.AddEventStore(builder.Configuration);
             var builderInfrastructure = (IProjectionRegistrationOptionsBuilderInfrastructure)builder;
 
-            var typedBuilder = builderInfrastructure.TypedAs<EventRecord>();
-            var typedBuilderInfrastructure = (IProjectionRegistrationOptionsBuilderInfrastructure<EventRecord>)typedBuilder;
+            var typedBuilder = builderInfrastructure.TypedAs<TEventBase>();
+            var typedBuilderInfrastructure = (IProjectionRegistrationOptionsBuilderInfrastructure<TEventBase>)typedBuilder;
 
             typedBuilderInfrastructure.UseEventPublisher(provider =>
             {
-                var streamStore = provider.GetRequiredService<EventStoreClient>();
-                return new EventStoreEventPublisher(streamStore);
+                var client = provider.GetRequiredService<EventStoreClient>();
+                var notificationFactory = provider.GetRequiredService<EventStoreEventNotificationFactory>();
+                return new EventStoreEventPublisher<TEventBase>(client, notificationFactory);
             });
 
             return typedBuilder;
         }
 
-        public static ProjectionRegistrationOptionsBuilder<EventRecord> UseJsonDeserialization(
-            this ProjectionRegistrationOptionsBuilder<EventRecord> builder)
+        public static ProjectionRegistrationOptionsBuilder<TEventBase> UseJsonDeserialization<TEventBase>(
+            this ProjectionRegistrationOptionsBuilder<TEventBase> builder)
         {
-            var builderInfrastructure = (IProjectionRegistrationOptionsBuilderInfrastructure<EventRecord>)builder;
+            var builderInfrastructure = (IProjectionRegistrationOptionsBuilderInfrastructure<ResolvedEvent>)builder;
             builderInfrastructure.UseEventDeserializer(_ => new EventRecordJsonDeserializer());
             return builder;
         }

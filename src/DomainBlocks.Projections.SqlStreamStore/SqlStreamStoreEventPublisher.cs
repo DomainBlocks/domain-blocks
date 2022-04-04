@@ -7,21 +7,24 @@ using SqlStreamStore.Subscriptions;
 
 namespace DomainBlocks.Projections.SqlStreamStore
 {
-    public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper>, IDisposable
+    public class SqlStreamStoreEventPublisher<TEventBase> : IEventPublisher<TEventBase>, IDisposable
     {
         private readonly IStreamStore _streamStore;
-        private Func<EventNotification<StreamMessageWrapper>, Task> _onEvent;
+        private readonly SqlStreamStoreEventNotificationFactory _notificationFactory;
+        private Func<EventNotification<TEventBase>, Task> _onEvent;
         private IAllStreamSubscription _subscription;
         private readonly SqlStreamStoreDroppedSubscriptionHandler _subscriptionDroppedHandler;
         private long? _lastProcessedPosition;
 
-        public SqlStreamStoreEventPublisher(IStreamStore streamStore)
+        public SqlStreamStoreEventPublisher(IStreamStore streamStore, 
+                                            SqlStreamStoreEventNotificationFactory notificationFactory)
         {
             _streamStore = streamStore;
+            _notificationFactory = notificationFactory;
             _subscriptionDroppedHandler = new SqlStreamStoreDroppedSubscriptionHandler(Stop, ReSubscribeAfterDrop);
         }
 
-        public async Task StartAsync(Func<EventNotification<StreamMessageWrapper>, Task> onEvent)
+        public async Task StartAsync(Func<EventNotification<TEventBase>, Task> onEvent)
         {
             _onEvent = onEvent ?? throw new ArgumentNullException(nameof(onEvent));
             await SubscribeToStore(null).ConfigureAwait(false);
@@ -48,7 +51,7 @@ namespace DomainBlocks.Projections.SqlStreamStore
                                                                 // To avoid ordering issues, we want to ensure no other
                                                                 // event processing is done until our caught up
                                                                 // notification is published , so wait on the task
-                                                                _onEvent(EventNotification.CaughtUp<StreamMessageWrapper>()).Wait();
+                                                                _onEvent(EventNotification.CaughtUp<TEventBase>()).Wait();
                                                             }
                                                         });
             // TODO: allow this to be configured
@@ -66,13 +69,11 @@ namespace DomainBlocks.Projections.SqlStreamStore
             _subscriptionDroppedHandler.HandleDroppedSubscription(reason, exception);
         }
 
-        async Task SendEventNotification(StreamMessage message)
+        private async Task SendEventNotification(StreamMessage message)
         {
             var jsonData = await message.GetJsonData().ConfigureAwait(false);
             var wrapper = new StreamMessageWrapper(message, jsonData);
-            var notification = EventNotification.FromEvent(wrapper,
-                                                           wrapper.Type,
-                                                           wrapper.MessageId);
+            var notification = _notificationFactory.CreateEventNotification<TEventBase>(wrapper);
 
             await _onEvent(notification).ConfigureAwait(false);
             _lastProcessedPosition = message.Position;

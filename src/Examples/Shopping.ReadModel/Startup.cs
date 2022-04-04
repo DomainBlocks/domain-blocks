@@ -2,6 +2,7 @@ using System;
 using DomainBlocks.Projections;
 using DomainBlocks.Projections.AspNetCore;
 using DomainBlocks.Projections.EntityFramework.AspNetCore;
+using DomainBlocks.Projections.EventStore.AspNetCore;
 using DomainBlocks.Projections.SqlStreamStore;
 using DomainBlocks.Projections.SqlStreamStore.AspNetCore;
 using Microsoft.AspNetCore.Builder;
@@ -11,6 +12,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.OpenApi.Models;
+using Shopping.Domain.Events;
 using Shopping.ReadModel.Db;
 using SqlStreamStore.Streams;
 
@@ -35,8 +37,8 @@ namespace Shopping.ReadModel
             services.AddReadModel(Configuration,
                                   options =>
                                   {
-                                      options.UseSqlStreamStorePublishedEvents()
-                                             .UseEntityFramework<ShoppingCartDbContext, StreamMessageWrapper>()
+                                      options.UseEventStorePublishedEvents<IDomainEvent>()
+                                             .UseEntityFramework<ShoppingCartDbContext, IDomainEvent>()
                                              .WithProjections((builder, dbContext) =>
                                              {
                                                  ShoppingClassSummaryEfProjection.Register(builder, dbContext);

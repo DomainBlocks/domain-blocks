@@ -3,9 +3,9 @@ using System.Threading.Tasks;
 
 namespace DomainBlocks.Projections
 {
-    public interface IEventPublisher<TEventData>
+    public interface IEventPublisher<TEventBase>
     {
-        Task StartAsync(Func<EventNotification<TEventData>, Task> onEvent);
+        Task StartAsync(Func<EventNotification<TEventBase>, Task> onEvent);
         void Stop();
     }
 }

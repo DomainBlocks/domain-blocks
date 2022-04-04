@@ -5,31 +5,31 @@ using EventStore.Client;
 
 namespace DomainBlocks.Projections.EventStore
 {
-    public class EventRecordJsonDeserializer : IEventDeserializer<EventRecord>
+    public class EventRecordJsonDeserializer : IEventDeserializer<ResolvedEvent>
     {
-        public (TEventBase, EventMetadata) DeserializeEventAndMetadata<TEventBase>(EventRecord rawEvent,
-                                                                                   string eventName,
-                                                                                   Type eventType,
-                                                                                   JsonSerializerOptions options = null)
+        public IReadEvent<TEventBase> DeserializeEventAndMetadata<TEventBase>(ResolvedEvent rawEvent,
+                                                                              string eventName,
+                                                                              Type eventType,
+                                                                              JsonSerializerOptions options = null)
         {
-            if (rawEvent == null) throw new ArgumentNullException(nameof(rawEvent));
             if (eventName == null) throw new ArgumentNullException(nameof(eventName));
             if (eventType == null) throw new ArgumentNullException(nameof(eventType));
 
             try
             {
-                var evt = JsonSerializer.Deserialize(rawEvent.Data.Span, eventType, options);
+                var eventRecord = rawEvent.Event;
+                var evt = JsonSerializer.Deserialize(eventRecord.Data.Span, eventType, options);
 
                 var metadata = EventMetadata.Empty;
 
-                if (rawEvent.Metadata.Length > 0)
+                if (eventRecord.Metadata.Length > 0)
                 {
-                    metadata = JsonSerializer.Deserialize<EventMetadata>(rawEvent.Metadata.Span, options);
+                    metadata = JsonSerializer.Deserialize<EventMetadata>(eventRecord.Metadata.Span, options);
                 }
-                
+
                 if (evt is TEventBase @event)
                 {
-                    return (@event, metadata);
+                    return new ReadEvent<TEventBase>(eventRecord.EventId.ToGuid(), @event, metadata, eventRecord.EventType);
                 }
             }
             catch (Exception ex)
@@ -38,7 +38,9 @@ namespace DomainBlocks.Projections.EventStore
             }
 
             var runtTimeType = typeof(TEventBase);
-            throw new InvalidEventTypeException($"Cannot cast event of type {eventName} to {runtTimeType.FullName}", eventName, runtTimeType.FullName);
+            throw new InvalidEventTypeException($"Cannot cast event of type {eventName} to {runtTimeType.FullName}",
+                                                eventName,
+                                                runtTimeType.FullName);
         }
     }
 }

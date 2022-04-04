@@ -8,7 +8,7 @@ namespace DomainBlocks.Projections.AspNetCore
     public class ProjectionRegistrationOptionsBuilder : IProjectionRegistrationOptionsBuilderInfrastructure
     {
         private object _typedRegistrationOptionsBuilder;
-        private Type _rawDataType;
+        private Type _eventBaseType;
 
         public ProjectionRegistrationOptionsBuilder(IServiceCollection serviceCollection, IConfiguration configuration)
         {
@@ -16,30 +16,30 @@ namespace DomainBlocks.Projections.AspNetCore
             Configuration = configuration;
         }
 
-        public Type RawDataType => _rawDataType;
+        public Type EventBaseType => _eventBaseType;
 
-        ProjectionRegistrationOptionsBuilder<TRawData> IProjectionRegistrationOptionsBuilderInfrastructure.TypedAs<TRawData>()
+        ProjectionRegistrationOptionsBuilder<TEventBase> IProjectionRegistrationOptionsBuilderInfrastructure.TypedAs<TEventBase>()
         {
-            _rawDataType = typeof(TRawData);
-            _typedRegistrationOptionsBuilder = new ProjectionRegistrationOptionsBuilder<TRawData>(ServiceCollection, Configuration);
-            return (ProjectionRegistrationOptionsBuilder<TRawData>)_typedRegistrationOptionsBuilder;
+            _eventBaseType = typeof(TEventBase);
+            _typedRegistrationOptionsBuilder = new ProjectionRegistrationOptionsBuilder<TEventBase>(ServiceCollection, Configuration);
+            return (ProjectionRegistrationOptionsBuilder<TEventBase>)_typedRegistrationOptionsBuilder;
         }
 
         public IConfiguration Configuration { get; }
         public IServiceCollection ServiceCollection { get; }
 
-        public ProjectionRegistrationOptions<TRawData> Build<TRawData>(IServiceProvider serviceProvider)
+        public ProjectionRegistrationOptions<TEventBase> Build<TEventBase>(IServiceProvider serviceProvider)
         {
-            return ((IProjectionRegistrationOptionsBuilderInfrastructure<TRawData>)
+            return ((IProjectionRegistrationOptionsBuilderInfrastructure<TEventBase>)
                 _typedRegistrationOptionsBuilder).Build(serviceProvider);
         }
     }
 
-    public class ProjectionRegistrationOptionsBuilder<TRawData> : ProjectionRegistrationOptionsBuilder, 
-        IProjectionRegistrationOptionsBuilderInfrastructure<TRawData>
+    public class ProjectionRegistrationOptionsBuilder<TEventBase> : ProjectionRegistrationOptionsBuilder, 
+        IProjectionRegistrationOptionsBuilderInfrastructure<TEventBase>
     {
-        private Func<IServiceProvider, IEventPublisher<TRawData>> _getEventPublisher;
-        private Func<IServiceProvider, IEventDeserializer<TRawData>> _getEventDeserializer;
+        private Func<IServiceProvider, IEventPublisher<TEventBase>> _getEventPublisher;
+        private Func<IServiceProvider, IEventDeserializer<TEventBase>> _getEventDeserializer;
         private Action<IServiceProvider, ProjectionRegistryBuilder> _onRegisteringProjections;
 
         public ProjectionRegistrationOptionsBuilder(IServiceCollection serviceCollection,
@@ -47,36 +47,36 @@ namespace DomainBlocks.Projections.AspNetCore
         {
         }
 
-        ProjectionRegistrationOptionsBuilder<TRawData> IProjectionRegistrationOptionsBuilderInfrastructure<TRawData>.
-            UseEventPublisher(Func<IServiceProvider, IEventPublisher<TRawData>> getEventPublisher)
+        ProjectionRegistrationOptionsBuilder<TEventBase> IProjectionRegistrationOptionsBuilderInfrastructure<TEventBase>.
+            UseEventPublisher(Func<IServiceProvider, IEventPublisher<TEventBase>> getEventPublisher)
         {
             _getEventPublisher = getEventPublisher ?? throw new ArgumentNullException(nameof(getEventPublisher));
             return this;
         }
 
-        ProjectionRegistrationOptionsBuilder<TRawData> IProjectionRegistrationOptionsBuilderInfrastructure<TRawData>.
-            UseEventDeserializer(Func<IServiceProvider, IEventDeserializer<TRawData>> getEventDeserializer)
+        ProjectionRegistrationOptionsBuilder<TEventBase> IProjectionRegistrationOptionsBuilderInfrastructure<TEventBase>.
+            UseEventDeserializer(Func<IServiceProvider, IEventDeserializer<TEventBase>> getEventDeserializer)
         {
             _getEventDeserializer =
                 getEventDeserializer ?? throw new ArgumentNullException(nameof(getEventDeserializer));
             return this;
         }
 
-        ProjectionRegistrationOptionsBuilder<TRawData> IProjectionRegistrationOptionsBuilderInfrastructure<TRawData>.UseProjectionRegistrations(
+        ProjectionRegistrationOptionsBuilder<TEventBase> IProjectionRegistrationOptionsBuilderInfrastructure<TEventBase>.UseProjectionRegistrations(
             Action<IServiceProvider, ProjectionRegistryBuilder> onRegisteringProjections)
         {
             _onRegisteringProjections = onRegisteringProjections;
             return this;
         }
 
-        ProjectionRegistrationOptions<TRawData> IProjectionRegistrationOptionsBuilderInfrastructure<TRawData>.Build(IServiceProvider serviceProvider)
+        ProjectionRegistrationOptions<TEventBase> IProjectionRegistrationOptionsBuilderInfrastructure<TEventBase>.Build(IServiceProvider serviceProvider)
         {
             var eventPublisher = _getEventPublisher(serviceProvider);
             var eventDeserializer = _getEventDeserializer(serviceProvider);
 
-            return new ProjectionRegistrationOptions<TRawData>(eventPublisher,
-                                                               eventDeserializer,
-                                                               builder => _onRegisteringProjections(serviceProvider, builder));
+            return new ProjectionRegistrationOptions<TEventBase>(eventPublisher,
+                                                                 eventDeserializer,
+                                                                 builder => _onRegisteringProjections(serviceProvider, builder));
         }
     }
 }

@@ -6,10 +6,10 @@ namespace DomainBlocks.Projections.SqlStreamStore
 {
     public class StreamMessageJsonDeserializer : IEventDeserializer<StreamMessageWrapper>
     {
-        public (TEventBase, EventMetadata) DeserializeEventAndMetadata<TEventBase>(StreamMessageWrapper streamMessage,
-                                                                                   string eventName,
-                                                                                   Type eventType,
-                                                                                   JsonSerializerOptions options = null)
+        public IReadEvent<TEventBase> DeserializeEventAndMetadata<TEventBase>(StreamMessageWrapper streamMessage,
+                                                                              string eventName,
+                                                                              Type eventType,
+                                                                              JsonSerializerOptions options = null)
         {
             if (eventName == null) throw new ArgumentNullException(nameof(eventName));
             if (eventType == null) throw new ArgumentNullException(nameof(eventType));
@@ -25,7 +25,7 @@ namespace DomainBlocks.Projections.SqlStreamStore
                 }
                 if (evt is TEventBase @event)
                 {
-                    return (@event, metadata);
+                    return new ReadEvent<TEventBase>(streamMessage.MessageId, @event, metadata, eventName);
                 }
             }
             catch (Exception ex)

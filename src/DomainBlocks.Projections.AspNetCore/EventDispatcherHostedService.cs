@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
-using DomainBlocks.Serialization;
 using Microsoft.Extensions.Hosting;
 
 namespace DomainBlocks.Projections.AspNetCore
@@ -10,21 +9,18 @@ namespace DomainBlocks.Projections.AspNetCore
     {
     }
 
-    public class EventDispatcherHostedService<TRawData, TEventBase> : IEventDispatcherHostedService
+    public class EventDispatcherHostedService<TEventBase> : IEventDispatcherHostedService
     {
         private readonly ProjectionRegistryBuilder _registryBuilder;
-        private readonly IEventPublisher<TRawData> _publisher;
-        private readonly IEventDeserializer<TRawData> _eventDeserializer;
+        private readonly IEventPublisher<TEventBase> _publisher;
         private readonly Action<ProjectionRegistryBuilder> _onRegisteringProjections;
 
         public EventDispatcherHostedService(ProjectionRegistryBuilder registryBuilder,
-                                            IEventPublisher<TRawData> publisher,
-                                            IEventDeserializer<TRawData> eventDeserializer,
+                                            IEventPublisher<TEventBase> publisher,
                                             Action<ProjectionRegistryBuilder> onRegisteringProjections)
         {
             _registryBuilder = registryBuilder;
             _publisher = publisher;
-            _eventDeserializer = eventDeserializer;
             _onRegisteringProjections = onRegisteringProjections;
         }
 
@@ -33,12 +29,10 @@ namespace DomainBlocks.Projections.AspNetCore
             _onRegisteringProjections(_registryBuilder);
             var projectionRegistry = _registryBuilder.Build();
 
-            var dispatcher = new EventDispatcher<TRawData, TEventBase>(_publisher,
-                                                                       projectionRegistry.EventProjectionMap,
-                                                                       projectionRegistry.ProjectionContextMap,
-                                                                       _eventDeserializer,
-                                                                       projectionRegistry.EventNameMap,
-                                                                       EventDispatcherConfiguration.ReadModelDefaults);
+            var dispatcher = new EventDispatcher<TEventBase>(_publisher,
+                                                             projectionRegistry.EventProjectionMap,
+                                                             projectionRegistry.ProjectionContextMap,
+                                                             EventDispatcherConfiguration.ReadModelDefaults);
 
             await dispatcher.StartAsync();
         }

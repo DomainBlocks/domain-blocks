@@ -1,34 +1,33 @@
 ﻿using System;
+using System.Collections.Generic;
+using DomainBlocks.Serialization;
 
 namespace DomainBlocks.Projections
 {
-    public readonly struct EventNotification<TEventBase>
+    public class EventNotification<TEventBase>
     {
-        internal EventNotification(EventNotificationKind notificationKind, TEventBase @event, string eventType, Guid eventId)
+        internal EventNotification(EventNotificationKind notificationKind, IEnumerable<IReadEvent<TEventBase>> events)
         {
             NotificationKind = notificationKind;
-            Event = @event;
-            EventType = eventType;
-            EventId = eventId;
+            Events = events;
         }
 
         public EventNotificationKind NotificationKind { get; }
-        public TEventBase Event { get; }
-        public string EventType { get; }
-        public Guid EventId { get; }
+
+        public IEnumerable<IReadEvent<TEventBase>> Events { get; }
     }
 
     public static class EventNotification
     {
         public static EventNotification<TEventBase> CaughtUp<TEventBase>()
         {
-            return new(EventNotificationKind.CaughtUpNotification, default, null, Guid.Empty);
+            return new(EventNotificationKind.CaughtUpNotification, default);
         }
 
-        public static EventNotification<TEventBase> FromEvent<TEventBase>(TEventBase @event, string eventType, Guid eventId)
+        public static EventNotification<TEventBase> FromEvents<TEventBase>(IEnumerable<IReadEvent<TEventBase>> events)
         {
-            if (@event == null) throw new ArgumentNullException(nameof(@event));
-            return new EventNotification<TEventBase>(EventNotificationKind.Event, @event, eventType, eventId);
+            if (events == null) throw new ArgumentNullException(nameof(events));
+            return new EventNotification<TEventBase>(EventNotificationKind.Event, events);
         }
     }
 }
