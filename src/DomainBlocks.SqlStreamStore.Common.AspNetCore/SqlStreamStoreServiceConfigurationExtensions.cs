@@ -27,6 +27,11 @@ namespace DomainBlocks.SqlStreamStore.Common.AspNetCore
                             var options = provider.GetRequiredService<IOptions<SqlStreamStoreConnectionOptions>>();
 
                             var settings = new PostgresStreamStoreSettings(options.Value.ConnectionString);
+                            if (!string.IsNullOrEmpty(options.Value.SchemaName))
+                            {
+                                settings.Schema = options.Value.SchemaName;
+                            }
+
                             _sqlStreamStore = new PostgresStreamStore(settings);
                             _sqlStreamStore.CreateSchemaIfNotExists().Wait();
                             _sqlStreamStore.OnDispose += OnPostgresStreamStoreDisposed;

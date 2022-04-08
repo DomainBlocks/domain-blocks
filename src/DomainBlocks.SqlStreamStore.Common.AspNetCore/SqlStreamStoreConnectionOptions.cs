@@ -9,5 +9,7 @@ namespace DomainBlocks.SqlStreamStore.Common.AspNetCore
 
         [Required]
         public string ConnectionString { get; set; }
+
+        public string SchemaName { get; set; }
     }
 }
