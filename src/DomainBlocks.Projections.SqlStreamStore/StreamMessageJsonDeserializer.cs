@@ -6,22 +6,28 @@ namespace DomainBlocks.Projections.SqlStreamStore
 {
     public class StreamMessageJsonDeserializer : IEventDeserializer<StreamMessageWrapper>
     {
+        private readonly JsonSerializerOptions _serializerOptions;
+
+        public StreamMessageJsonDeserializer(JsonSerializerOptions serializerOptions = null)
+        {
+            _serializerOptions = serializerOptions;
+        }
+
         public (TEventBase, EventMetadata) DeserializeEventAndMetadata<TEventBase>(StreamMessageWrapper streamMessage,
                                                                                    string eventName,
-                                                                                   Type eventType,
-                                                                                   JsonSerializerOptions options = null)
+                                                                                   Type eventType)
         {
             if (eventName == null) throw new ArgumentNullException(nameof(eventName));
             if (eventType == null) throw new ArgumentNullException(nameof(eventType));
 
             try
             {
-                var evt = JsonSerializer.Deserialize(streamMessage.JsonData, eventType, options);
+                var evt = JsonSerializer.Deserialize(streamMessage.JsonData, eventType, _serializerOptions);
 
                 var metadata = EventMetadata.Empty;
                 if (streamMessage.JsonMetadata != null)
                 {
-                    metadata = JsonSerializer.Deserialize<EventMetadata>(streamMessage.JsonMetadata, options);
+                    metadata = JsonSerializer.Deserialize<EventMetadata>(streamMessage.JsonMetadata, _serializerOptions);
                 }
                 if (evt is TEventBase @event)
                 {
