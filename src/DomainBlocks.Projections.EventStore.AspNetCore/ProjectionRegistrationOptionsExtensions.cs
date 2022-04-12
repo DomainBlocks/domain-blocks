@@ -1,4 +1,4 @@
-﻿using System;
+﻿using System.Text.Json;
 using DomainBlocks.EventStore.Common.AspNetCore;
 using DomainBlocks.Projections.AspNetCore;
 using EventStore.Client;
@@ -27,10 +27,10 @@ namespace DomainBlocks.Projections.EventStore.AspNetCore
         }
 
         public static ProjectionRegistrationOptionsBuilder<EventRecord> UseJsonDeserialization(
-            this ProjectionRegistrationOptionsBuilder<EventRecord> builder)
+            this ProjectionRegistrationOptionsBuilder<EventRecord> builder, JsonSerializerOptions serializerOptions = null)
         {
             var builderInfrastructure = (IProjectionRegistrationOptionsBuilderInfrastructure<EventRecord>)builder;
-            builderInfrastructure.UseEventDeserializer(_ => new EventRecordJsonDeserializer());
+            builderInfrastructure.UseEventDeserializer(_ => new EventRecordJsonDeserializer(serializerOptions));
             return builder;
         }
     }

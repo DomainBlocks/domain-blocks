@@ -7,7 +7,6 @@ namespace DomainBlocks.Serialization
     {
         (TEventBase, EventMetadata) DeserializeEventAndMetadata<TEventBase>(TRawData rawEvent,
                                                                             string eventName,
-                                                                            Type eventType,
-                                                                            JsonSerializerOptions options = null);
+                                                                            Type eventType);
     }
 }
