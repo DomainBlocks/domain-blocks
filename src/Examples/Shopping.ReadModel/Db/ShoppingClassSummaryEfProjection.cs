@@ -5,14 +5,12 @@ using Shopping.ReadModel.Db.Model;
 
 namespace Shopping.ReadModel.Db
 {
-    public class ShoppingClassSummaryEfProjection
+    public static class ShoppingClassSummaryEfProjection
     {
         public static void Register(ProjectionRegistryBuilder builder, ShoppingCartDbContext dbContext)
         {
-            var shoppingCartSummary = new ShoppingClassSummaryEfProjection();
-
             builder.Event<ItemAddedToShoppingCart>()
-                   .ToEfProjection(shoppingCartSummary, dbContext)
+                   .ToEfProjection(dbContext)
                    .Executes((context, evt) =>
                    {
                        context.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem
@@ -24,7 +22,7 @@ namespace Shopping.ReadModel.Db
                    });
 
             builder.Event<ItemRemovedFromShoppingCart>()
-                   .ToEfProjection(shoppingCartSummary, dbContext)
+                   .ToEfProjection(dbContext)
                    .ExecutesAsync(async (context, evt) =>
                    {
                        var item = await context.ShoppingCartSummaryItems.FindAsync(evt.Id);
@@ -35,20 +33,14 @@ namespace Shopping.ReadModel.Db
                        }
                    });
         }
-
-        private ShoppingClassSummaryEfProjection()
-        {
-        }
     }
 
-    public class ShoppingCartHistoryEfProjection
+    public static class ShoppingCartHistoryEfProjection
     {
         public static void Register(ProjectionRegistryBuilder builder, ShoppingCartDbContext dbContext)
         {
-            var projection = new ShoppingCartHistoryEfProjection();
-
             builder.Event<ShoppingCartCreated>()
-                   .ToEfProjection(projection, dbContext)
+                   .ToEfProjection(dbContext)
                    .Executes((context, evt) =>
                    {
                        context.ShoppingCartHistory.Add(new ShoppingCartHistory
@@ -59,7 +51,7 @@ namespace Shopping.ReadModel.Db
                    });
 
             builder.Event<ItemAddedToShoppingCart>()
-                   .ToEfProjection(projection, dbContext)
+                   .ToEfProjection(dbContext)
                    .Executes((context, evt) =>
                    {
                        context.ShoppingCartHistory.Add(new ShoppingCartHistory
@@ -70,7 +62,7 @@ namespace Shopping.ReadModel.Db
                    });
 
             builder.Event<ItemRemovedFromShoppingCart>()
-                   .ToEfProjection(projection, dbContext)
+                   .ToEfProjection(dbContext)
                    .Executes((context, evt) =>
                    {
                        context.ShoppingCartHistory.Add(new ShoppingCartHistory
@@ -79,10 +71,6 @@ namespace Shopping.ReadModel.Db
                            EventName = "Item Removed"
                        });
                    });
-        }
-
-        private ShoppingCartHistoryEfProjection()
-        {
         }
     }
 }

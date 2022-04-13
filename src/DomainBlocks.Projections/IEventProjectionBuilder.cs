@@ -5,6 +5,6 @@ namespace DomainBlocks.Projections
 {
     public interface IEventProjectionBuilder
     {
-        IEnumerable<(Type eventType, Type projectionType, RunProjection func)> BuildProjectionFuncs();
+        IEnumerable<(Type eventType, RunProjection func)> BuildProjectionFuncs();
     }
 }
