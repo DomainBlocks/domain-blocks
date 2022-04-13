@@ -1,8 +1,8 @@
-﻿using DomainBlocks.Projections.AspNetCore;
+﻿using System.Text.Json;
+using DomainBlocks.Projections.AspNetCore;
 using DomainBlocks.SqlStreamStore.Common.AspNetCore;
 using Microsoft.Extensions.DependencyInjection;
 using SqlStreamStore;
-using SqlStreamStore.Streams;
 
 namespace DomainBlocks.Projections.SqlStreamStore.AspNetCore
 {
@@ -30,10 +30,10 @@ namespace DomainBlocks.Projections.SqlStreamStore.AspNetCore
         }
 
         public static ProjectionRegistrationOptionsBuilder<StreamMessageWrapper> UseJsonDeserialization(
-            this ProjectionRegistrationOptionsBuilder<StreamMessageWrapper> builder)
+            this ProjectionRegistrationOptionsBuilder<StreamMessageWrapper> builder, JsonSerializerOptions? serializerOptions = null)
         {
             var builderInfrastructure = (IProjectionRegistrationOptionsBuilderInfrastructure<StreamMessageWrapper>)builder;
-            builderInfrastructure.UseEventDeserializer(_ => new StreamMessageJsonDeserializer());
+            builderInfrastructure.UseEventDeserializer(_ => new StreamMessageJsonDeserializer(serializerOptions));
             return builder;
         }
     }
