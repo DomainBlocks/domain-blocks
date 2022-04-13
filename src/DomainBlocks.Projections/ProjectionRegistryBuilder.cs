@@ -26,9 +26,9 @@ namespace DomainBlocks.Projections
 
         public ProjectionRegistry Build()
         {
-            foreach (var (eventType, projectionType, func) in _eventProjectionBuilders.SelectMany(epb => epb.BuildProjectionFuncs()))
+            foreach (var (eventType, func) in _eventProjectionBuilders.SelectMany(epb => epb.BuildProjectionFuncs()))
             {
-                _eventProjectionMap.AddProjectionFunc(eventType, projectionType, func);
+                _eventProjectionMap.AddProjectionFunc(eventType, func);
             }
 
             return new ProjectionRegistry(_eventProjectionMap, _projectionContextMap, _eventNameMap);
