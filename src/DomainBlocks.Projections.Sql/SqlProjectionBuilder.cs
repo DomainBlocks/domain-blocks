@@ -80,9 +80,9 @@ namespace DomainBlocks.Projections.Sql
             return this;
         }
 
-        IEnumerable<(Type eventType, Type projectionType, RunProjection func)> IProjectionBuilder.BuildProjections()
+        IEnumerable<(Type eventType, RunProjection func)> IProjectionBuilder.BuildProjections()
         {
-            return EnumerableEx.Return((typeof(TEvent), typeof(TSqlProjection), BuildDbCommandProjection()));
+            return EnumerableEx.Return((typeof(TEvent), BuildDbCommandProjection()));
         }
 
         private RunProjection BuildDbCommandProjection()

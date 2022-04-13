@@ -112,7 +112,7 @@ namespace DomainBlocks.Projections
                     var stopwatch = new Stopwatch();
                     stopwatch.Start();
 
-                    foreach (var (_, executeAsync) in projections)
+                    foreach (var executeAsync in projections)
                     {
                         await executeAsync(@event, metadata).ConfigureAwait(false);
 

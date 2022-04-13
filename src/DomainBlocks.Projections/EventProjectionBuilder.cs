@@ -43,7 +43,7 @@ namespace DomainBlocks.Projections
             }
         }
 
-        public IEnumerable<(Type eventType, Type projectionType, RunProjection func)> BuildProjectionFuncs()
+        public IEnumerable<(Type eventType, RunProjection func)> BuildProjectionFuncs()
         {
             return _projectionBuilders.SelectMany(pb => pb.BuildProjections());
         }
