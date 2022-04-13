@@ -51,5 +51,5 @@ jobs:
     - name: Pack and Publish
       run: |
         dotnet pack -c Release -o ./packages/ --include-symbols --include-source -p:SymbolPackageFormat=snupkg
-        dotnet nuget push "./packages/*.nupkg" -s 'https://api.nuget.org/v3/index.json' -k ${{secrets.NUGET_TEST_KEY}}
+        dotnet nuget push "./packages/*.nupkg" -s 'https://api.nuget.org/v3/index.json' -k ${{secrets.NUGET_DOMAINBLOCKS_API_KEY}}
       working-directory: ./src
