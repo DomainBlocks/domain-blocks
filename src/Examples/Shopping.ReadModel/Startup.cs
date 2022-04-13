@@ -1,5 +1,3 @@
-using System;
-using DomainBlocks.Projections;
 using DomainBlocks.Projections.AspNetCore;
 using DomainBlocks.Projections.EntityFramework.AspNetCore;
 using DomainBlocks.Projections.SqlStreamStore;
@@ -12,7 +10,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.OpenApi.Models;
 using Shopping.ReadModel.Db;
-using SqlStreamStore.Streams;
 
 namespace Shopping.ReadModel
 {
