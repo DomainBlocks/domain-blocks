@@ -8,20 +8,18 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DomainBlocks.Projections.EntityFramework
 {
-    public class EntityFrameworkProjectionBuilder<TEvent, TProjection, TDbContext> : IProjectionBuilder
+    public class EntityFrameworkProjectionBuilder<TEvent, TDbContext> : IProjectionBuilder
         where TDbContext : DbContext
     {
-        private readonly TProjection _projection;
         private readonly TDbContext _dbContext;
         private Func<TDbContext, TEvent, EventMetadata, Task> _executeAction;
 
         // ReSharper disable once StaticMemberInGenericType
         private static readonly ConcurrentDictionary<DbContext, EntityFrameworkProjectionContext> ProjectionContexts = new();
         
-        public EntityFrameworkProjectionBuilder(EventProjectionBuilder<TEvent> builder, TProjection projection, TDbContext dbContext)
+        public EntityFrameworkProjectionBuilder(EventProjectionBuilder<TEvent> builder, TDbContext dbContext)
         {
             if (builder == null) throw new ArgumentNullException(nameof(builder));
-            _projection = projection;
             _dbContext = dbContext;
             builder.RegisterProjectionBuilder(this);
 
@@ -31,7 +29,7 @@ namespace DomainBlocks.Projections.EntityFramework
             builder.RegisterContextForEvent(projectionContext);
         }
 
-        public EntityFrameworkProjectionBuilder<TEvent, TProjection, TDbContext> Executes(
+        public EntityFrameworkProjectionBuilder<TEvent, TDbContext> Executes(
             Action<TDbContext, TEvent, EventMetadata> executeAction)
         {
             _executeAction = (dbContext, @event, metadata) =>
@@ -43,7 +41,7 @@ namespace DomainBlocks.Projections.EntityFramework
             return this;
         }
 
-        public EntityFrameworkProjectionBuilder<TEvent, TProjection, TDbContext> Executes(
+        public EntityFrameworkProjectionBuilder<TEvent, TDbContext> Executes(
             Action<TDbContext, TEvent> executeAction)
         {
             _executeAction = (dbContext, @event, _) =>
@@ -55,24 +53,24 @@ namespace DomainBlocks.Projections.EntityFramework
             return this;
         }
 
-        public EntityFrameworkProjectionBuilder<TEvent, TProjection, TDbContext> ExecutesAsync(
+        public EntityFrameworkProjectionBuilder<TEvent, TDbContext> ExecutesAsync(
             Func<TDbContext, TEvent, EventMetadata, Task> executeAction)
         {
             _executeAction = executeAction;
             return this;
         }
 
-        public EntityFrameworkProjectionBuilder<TEvent, TProjection, TDbContext> ExecutesAsync(
+        public EntityFrameworkProjectionBuilder<TEvent, TDbContext> ExecutesAsync(
             Func<TDbContext, TEvent, Task> executeAction)
         {
             _executeAction = _executeAction = (dbContext, @event, _) => executeAction(dbContext, @event);
             return this;
         }
 
-        public IEnumerable<(Type eventType, Type projectionType, RunProjection func)> BuildProjections()
+        public IEnumerable<(Type eventType, RunProjection func)> BuildProjections()
         {
             Task RunProjection(object evt, EventMetadata metadata) => _executeAction(_dbContext, (TEvent) evt, metadata);
-            return EnumerableEx.Return((typeof(TEvent), typeof(TProjection), (RunProjection) RunProjection));
+            return EnumerableEx.Return((typeof(TEvent), (RunProjection) RunProjection));
         }
     }
 }
