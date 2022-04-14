@@ -18,6 +18,16 @@ namespace DomainBlocks.Projections.EntityFramework.AspNetCore
             };
         }
 
+        public void WithProjections(Action<ProjectionRegistryBuilder, TDbContext, IServiceProvider> onRegisteringProjections)
+        {
+            _onRegisteringProjections = (provider, builder) =>
+            {
+                var dispatcherScope = provider.CreateScope();
+                var dbContext = dispatcherScope.ServiceProvider.GetRequiredService<TDbContext>();
+                onRegisteringProjections(builder, dbContext, dispatcherScope.ServiceProvider);
+            };
+        }
+
         public Action<IServiceProvider, ProjectionRegistryBuilder> Build()
         {
             return (provider, builder) => _onRegisteringProjections(provider, builder);
