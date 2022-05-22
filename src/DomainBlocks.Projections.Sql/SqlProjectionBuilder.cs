@@ -119,11 +119,11 @@ namespace DomainBlocks.Projections.Sql
                 commandTextBuilder.Append(_customSqlCommandText);
             }
 
-            var dbCommand = _projectionContext.Connection.CreateCommand();
-            dbCommand.CommandText = commandTextBuilder.ToString();
-
             return async (@event, _) =>
             {
+                var dbCommand = _projectionContext.Connection.CreateCommand();
+                dbCommand.CommandText = commandTextBuilder.ToString();
+                
                 _connector.BindParameters(dbCommand, (TEvent) @event, _sqlProjection.Columns, _parameterBindingMap);
 
                 if (Log.IsEnabled(LogLevel.Trace))

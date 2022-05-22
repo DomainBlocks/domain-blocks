@@ -3,7 +3,6 @@ using DomainBlocks.Common;
 using DomainBlocks.Projections.Sql;
 using DomainBlocks.Projections.Sql.Tests.Fakes;
 using DomainBlocks.Projections.Sqlite.Tests.Events;
-using DomainBlocks.Serialization.Json;
 using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using System;
@@ -105,7 +104,7 @@ namespace DomainBlocks.Projections.Sqlite.Tests
             Logger.SetLoggerFactory(loggerFactory);
             var projectionRegistryBuilder = new ProjectionRegistryBuilder();
 
-            _dbConnector = new SqliteDbConnector("Data Source=:memory:;Version=3;Pooling=True;Max Pool Size=100;");
+            _dbConnector = new SqliteDbConnector("Data Source=:memory:");
 
             ShoppingCartSummarySqlProjection.Register(projectionRegistryBuilder, _dbConnector);
             ShoppingCartItemsSqlProjection.Register(projectionRegistryBuilder, _dbConnector);

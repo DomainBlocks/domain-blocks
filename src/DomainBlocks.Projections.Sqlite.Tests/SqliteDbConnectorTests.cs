@@ -3,7 +3,7 @@ using NUnit.Framework;
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Data.SQLite;
+using Microsoft.Data.Sqlite;
 
 namespace DomainBlocks.Projections.Sqlite.Tests
 {
@@ -13,7 +13,7 @@ namespace DomainBlocks.Projections.Sqlite.Tests
         [Test]
         public void ParametersAreBound()
         {
-            var command = new SQLiteConnection().CreateCommand();
+            var command = new SqliteConnection().CreateCommand();
             var @event = new TestEvent(1, 2);
             var columns = new SqlColumnDefinitions()
             {

@@ -3,7 +3,7 @@ using DomainBlocks.Projections.Sql;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Data;
-using System.Data.SQLite;
+using Microsoft.Data.Sqlite;
 
 namespace DomainBlocks.Projections.Sqlite
 {
@@ -18,7 +18,7 @@ namespace DomainBlocks.Projections.Sqlite
                 throw new ArgumentException("Value cannot be null or whitespace.", nameof(connectionString));
             }
 
-            Connection = new SQLiteConnection(connectionString);
+            Connection = new SqliteConnection(connectionString);
         }
 
         public IDbConnection Connection { get; }
@@ -32,17 +32,17 @@ namespace DomainBlocks.Projections.Sqlite
             {
                 foreach (var (name, value) in parameterBindingMap.GetParameterNamesAndValues(@event))
                 {
-                    SQLiteParameter parameter;
+                    SqliteParameter parameter;
                     if (columnDefinitions.TryGetValue(name, out var sqlColumnDefinition))
                     {
-                        parameter = new SQLiteParameter($"@{sqlColumnDefinition.Name}", sqlColumnDefinition.DataType)
+                        parameter = new SqliteParameter($"@{sqlColumnDefinition.Name}", sqlColumnDefinition.DataType)
                             { Value = value };
                     }
                     else 
                     {
                         // Parameter may not be in column definitions if it is custom sql.
-                        // In this case, we don't bind the DbTyp for the parameter
-                        parameter = new SQLiteParameter($"@{name}")
+                        // In this case, we don't bind the DbType for the parameter
+                        parameter = new SqliteParameter($"@{name}", DbType.Object)
                             { Value = value };
                     }
      
