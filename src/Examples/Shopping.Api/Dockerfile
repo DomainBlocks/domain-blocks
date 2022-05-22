@@ -1,12 +1,13 @@
-FROM mcr.microsoft.com/dotnet/aspnet:5.0 AS base
+FROM mcr.microsoft.com/dotnet/aspnet:6.0 AS base
 WORKDIR /app
 EXPOSE 80
 EXPOSE 443
 
-FROM mcr.microsoft.com/dotnet/sdk:5.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
 WORKDIR /src
+COPY ["Directory.Build.props", "."]
 COPY ["Examples/Shopping.Api/Shopping.Api.csproj", "Examples/Shopping.Api/"]
-COPY ["DomainBlocks.Persistence.SqlStreamStore.AspNetCore/DomainBlocks.Persistence.SqlStreamStore.AspNetCore.csproj", "DomainBlocks.Persistence.SqlStreamStore.AspNetCore/"]x
+COPY ["DomainBlocks.Persistence.SqlStreamStore.AspNetCore/DomainBlocks.Persistence.SqlStreamStore.AspNetCore.csproj", "DomainBlocks.Persistence.SqlStreamStore.AspNetCore/"]
 COPY ["DomainBlocks/DomainBlocks.csproj", "DomainBlocks/"]
 COPY ["DomainBlocks.Common/DomainBlocks.Common.csproj", "DomainBlocks.Common/"]
 COPY ["DomainBlocks.Persistence.SqlStreamStore/DomainBlocks.Persistence.SqlStreamStore.csproj", "DomainBlocks.Persistence.SqlStreamStore/"]
