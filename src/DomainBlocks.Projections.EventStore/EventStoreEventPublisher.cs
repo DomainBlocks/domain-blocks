@@ -55,7 +55,7 @@ namespace DomainBlocks.Projections.EventStore
 
             await _onEvent(EventNotification.CaughtUp<EventRecord>());
 
-            _subscription = await _client.SubscribeToAllAsync(_lastProcessedPosition,
+            _subscription = await _client.SubscribeToAllAsync(FromAll.After(_lastProcessedPosition), 
                                                               (_, evt, _) => SendEventNotification(evt),
                                                               false,
                                                               OnSubscriptionDropped,

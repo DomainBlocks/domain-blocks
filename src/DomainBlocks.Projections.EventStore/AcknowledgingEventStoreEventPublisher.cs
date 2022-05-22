@@ -52,14 +52,13 @@ namespace DomainBlocks.Projections.EventStore
 
         private async Task SubscribeToPersistentSubscription()
         {
-            _subscription = await _client.SubscribeAsync(_persistentConnectionDescriptor.Stream,
+            _subscription = await _client.SubscribeToStreamAsync(_persistentConnectionDescriptor.Stream,
                                 _persistentConnectionDescriptor.GroupName,
                                 HandleEvent,
                                 OnSubscriptionDropped,
                                 _persistentConnectionDescriptor
                                     .UserCredentials,
-                                _persistentConnectionDescriptor.BufferSize,
-                                false);
+                                _persistentConnectionDescriptor.BufferSize);
         }
 
         private async Task TryHandlingEvent(PersistentSubscription subscription, ResolvedEvent resolvedEvent, int retryNumber)

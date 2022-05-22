@@ -54,14 +54,15 @@ namespace DomainBlocks.Persistence.EventStore
                 if (snapshotKey == null) throw new ArgumentNullException(nameof(snapshotKey));
                 var readStreamResult = _client.ReadStreamAsync(Direction.Backwards, snapshotKey, StreamPosition.End, 1);
                 var readState = await readStreamResult.ReadState;
+                var asyncEnumerator = readStreamResult.GetAsyncEnumerator();
 
                 if (readState == ReadState.StreamNotFound ||
-                    !await readStreamResult.MoveNextAsync())
+                    !await asyncEnumerator.MoveNextAsync())
                 {
                     return (false, null);
                 }
                 
-                var resolvedEvent = readStreamResult.Current;
+                var resolvedEvent = asyncEnumerator.Current;
 
                 var snapshotData = _serializer.DeserializeEvent<TState>(resolvedEvent.OriginalEvent.Data,
                                                                         resolvedEvent.OriginalEvent.EventType,

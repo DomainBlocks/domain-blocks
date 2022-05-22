@@ -73,7 +73,7 @@ namespace Shopping.Infrastructure.Tests
             var stream = "ShoppingCartProcess";
             var groupName = "SubscriptionGroup1";
             
-            await PersistentSubscriptionsClient.CreateAsync(stream, groupName, settings, credentials.ToEsUserCredentials());
+            await PersistentSubscriptionsClient.CreateAsync(stream, groupName, settings, userCredentials: credentials.ToEsUserCredentials());
             
             var processProjectionRegistryBuilder = new ProjectionRegistryBuilder();
 
