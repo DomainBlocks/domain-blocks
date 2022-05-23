@@ -28,7 +28,7 @@ namespace DomainBlocks.Projections.Sqlite.Tests
                     {"Col2", e => e.Value }
                 });
 
-            var dbConnector = new SqliteDbConnector("not important");
+            var dbConnector = new SqliteDbConnector("Data Source=:memory:");
 
             dbConnector.BindParameters(command, @event, columns, parameterBindingMap);
 
@@ -37,13 +37,13 @@ namespace DomainBlocks.Projections.Sqlite.Tests
             var parameter1 = command.Parameters[0];
 
             Assert.That(parameter1.ParameterName, Is.EqualTo("@Col1"));
-            Assert.That(parameter1.DbType, Is.EqualTo(columns["Col1"].DataType));
+            Assert.That(parameter1.SqliteType, Is.EqualTo(SqliteType.Integer));
             Assert.That(parameter1.Value, Is.EqualTo(1));
 
             var parameter2 = command.Parameters[1];
 
             Assert.That(parameter2.ParameterName, Is.EqualTo("@Col2"));
-            Assert.That(parameter2.DbType, Is.EqualTo(columns["Col2"].DataType));
+            Assert.That(parameter2.SqliteType, Is.EqualTo(SqliteType.Integer));
             Assert.That(parameter2.Value, Is.EqualTo(2));
         }
 

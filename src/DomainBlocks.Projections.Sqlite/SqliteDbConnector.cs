@@ -35,15 +35,13 @@ namespace DomainBlocks.Projections.Sqlite
                     SqliteParameter parameter;
                     if (columnDefinitions.TryGetValue(name, out var sqlColumnDefinition))
                     {
-                        parameter = new SqliteParameter($"@{sqlColumnDefinition.Name}", sqlColumnDefinition.DataType)
-                            { Value = value };
+                        parameter = new SqliteParameter($"@{sqlColumnDefinition.Name}", value);
                     }
-                    else 
+                    else
                     {
                         // Parameter may not be in column definitions if it is custom sql.
                         // In this case, we don't bind the DbType for the parameter
-                        parameter = new SqliteParameter($"@{name}", DbType.Object)
-                            { Value = value };
+                        parameter = new SqliteParameter($"@{name}", value);
                     }
      
                     command.Parameters.Add(parameter);
