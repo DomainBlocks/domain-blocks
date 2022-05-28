@@ -66,22 +66,22 @@ namespace DomainBlocks.Projections.Sqlite.Tests
             var summary = (await ExecuteQuery<ShoppingCartSummaryRow>("SELECT * FROM ShoppingCartSummary")).Single();
 
             Assert.That(items.Count, Is.EqualTo(3));
-            Assert.That(items[0].CartId, Is.EqualTo(cartId.ToString()));
+            Assert.That(Guid.Parse(items[0].CartId), Is.EqualTo(cartId));
             Assert.That(items[0].ItemDescription, Is.EqualTo("Item1"));
             Assert.That(items[0].ItemCost, Is.EqualTo(item1Cost));
-            Assert.That(items[0].Id, Is.EqualTo(item1Id.ToString()));
+            Assert.That(Guid.Parse(items[0].Id), Is.EqualTo(item1Id));
 
-            Assert.That(items[1].CartId, Is.EqualTo(cartId.ToString()));
+            Assert.That(Guid.Parse(items[1].CartId), Is.EqualTo(cartId));
             Assert.That(items[1].ItemDescription, Is.EqualTo("Item2"));
             Assert.That(items[1].ItemCost, Is.EqualTo(item2Cost));
-            Assert.That(items[1].Id, Is.EqualTo(item2Id.ToString()));
+            Assert.That(Guid.Parse(items[1].Id), Is.EqualTo(item2Id));
 
-            Assert.That(items[2].CartId, Is.EqualTo(cartId.ToString()));
+            Assert.That(Guid.Parse(items[2].CartId), Is.EqualTo(cartId));
             Assert.That(items[2].ItemDescription, Is.EqualTo("Item3"));
             Assert.That(items[2].ItemCost, Is.EqualTo(item3Cost));
-            Assert.That(items[2].Id, Is.EqualTo(item3Id.ToString()));
+            Assert.That(Guid.Parse(items[2].Id), Is.EqualTo(item3Id));
 
-            Assert.That(summary.CartId, Is.EqualTo(cartId.ToString()));
+            Assert.That(Guid.Parse(summary.CartId), Is.EqualTo(cartId));
             Assert.That(summary.ItemCount, Is.EqualTo(3));
             Assert.That(summary.TotalCost, Is.EqualTo(item1Cost + item2Cost + item3Cost));
         }
@@ -105,7 +105,7 @@ namespace DomainBlocks.Projections.Sqlite.Tests
             Logger.SetLoggerFactory(loggerFactory);
             var projectionRegistryBuilder = new ProjectionRegistryBuilder();
 
-            _dbConnector = new SqliteDbConnector("Data Source=:memory:;Version=3;Pooling=True;Max Pool Size=100;");
+            _dbConnector = new SqliteDbConnector("Data Source=:memory:");
 
             ShoppingCartSummarySqlProjection.Register(projectionRegistryBuilder, _dbConnector);
             ShoppingCartItemsSqlProjection.Register(projectionRegistryBuilder, _dbConnector);
