@@ -13,74 +13,69 @@ using Microsoft.Extensions.Hosting;
 using Shopping.Domain.Aggregates;
 using Shopping.Domain.Events;
 
-namespace Shopping.Api
+namespace Shopping.Api;
+
+public class Startup
 {
-    public class Startup
+    private readonly IConfiguration _configuration;
+
+    public Startup(IConfiguration configuration)
     {
-        private readonly IConfiguration _configuration;
+        _configuration = configuration;
+    }
 
-        public Startup(IConfiguration configuration)
+    public void ConfigureServices(IServiceCollection services)
+    {
+        services.AddGrpc();
+        services.AddMediatR(typeof(Startup));
+        services.AddAggregateRepository(
+            _configuration,
+            options =>
+            {
+                options.RawEventDataType<string>()
+                    .UseSqlStreamStoreForEventsAndSnapshots()
+                    .UseJsonSerialization();
+            },
+            ConfigureAggregateRegistry());
+    }
+
+    // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
+    public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+    {
+        if (env.IsDevelopment())
         {
-            _configuration = configuration;
+            app.UseDeveloperExceptionPage();
         }
 
-        public void ConfigureServices(IServiceCollection services)
+        app.UseRouting();
+
+        app.UseEndpoints(endpoints =>
         {
-            services.AddGrpc();
-            services.AddMediatR(typeof(Startup));
-            services.AddAggregateRepository(_configuration,
-                                            options =>
-                                            {
-                                                options.RawEventDataType<string>()
-                                                       .UseSqlStreamStoreForEventsAndSnapshots()
-                                                       .UseJsonSerialization();
-                                            },
-                                            ConfigureAggregateRegistry());
-        }
+            endpoints.MapGrpcService<Services.ShoppingService>();
 
-        // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
-        {
-            if (env.IsDevelopment())
-            {
-                app.UseDeveloperExceptionPage();
-            }
-
-            app.UseRouting();
-
-            app.UseEndpoints(endpoints =>
-            {
-                endpoints.MapGrpcService<Services.ShoppingService>();
-
-                endpoints.MapGet("/", async context =>
+            endpoints.MapGet("/",
+                async context =>
                 {
-                    await context.Response.WriteAsync("Communication with gRPC endpoints must be made through a gRPC client. To learn how to create a client, visit: https://go.microsoft.com/fwlink/?linkid=2086909");
+                    await context.Response.WriteAsync(
+                        "Communication with gRPC endpoints must be made through a gRPC client. To learn how to create a client, visit: https://go.microsoft.com/fwlink/?linkid=2086909");
                 });
-            });
-        }
+        });
+    }
 
-        private static AggregateRegistry<object, IDomainEvent> ConfigureAggregateRegistry()
+    private static AggregateRegistry<IDomainEvent> ConfigureAggregateRegistry()
+    {
+        var registryBuilder = AggregateRegistryBuilder.Create<IDomainEvent>();
+
+        registryBuilder.Register<ShoppingCartState>(aggregate =>
         {
-            var registryBuilder = AggregateRegistryBuilder.Create<object, IDomainEvent>();
-            //ShoppingCartFunctions.Register(registryBuilder);
+            aggregate.InitialState(_ => new ShoppingCartState())
+                .Id(o => o.Id?.ToString())
+                .PersistenceKey(id => $"shoppingCart-{id}")
+                .SnapshotKey(id => $"shoppingCartSnapshot-{id}");
 
-            registryBuilder.Register<ShoppingCartState>(aggregate =>
-            {
-                aggregate.InitialState(() => new ShoppingCartState())
-                    .Id(o => o.Id?.ToString())
-                    .PersistenceKey(id => $"shoppingCart-{id}")
-                    .SnapshotKey(id => $"shoppingCartSnapshot-{id}");
+            aggregate.RegisterEvents(ShoppingCartFunctions.RegisterEvents);
+        });
 
-                // aggregate.Command<AddItemToShoppingCart>()
-                //     .RoutesTo(Execute);
-                //
-                // aggregate.Command<RemoveItemFromShoppingCart>()
-                //     .RoutesTo(Execute);
-
-                aggregate.WithEvents(ShoppingCartFunctions.RegisterEvents);
-            });
-
-            return registryBuilder.Build();
-        }
+        return registryBuilder.Build();
     }
 }

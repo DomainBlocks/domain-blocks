@@ -16,10 +16,11 @@ public class MutableShoppingCartTests
     public void RoundTripTest()
     {
         // Wire up event routes for the aggregate.
-        var builder = EventRegistryBuilder.Create<MutableShoppingCart, IDomainEvent>();
+        var builder = EventRegistryBuilder.Create<IDomainEvent>().For<MutableShoppingCart>();
         MutableShoppingCart.RegisterEvents(builder);
         var events = builder.Build();
-        var eventDispatcher = new EventDispatcher<IDomainEvent>(events.EventRoutes);
+        var eventDispatcher = new TrackingEventDispatcher<IDomainEvent>(
+            new EventDispatcher<IDomainEvent>(events.EventRoutes));
             
         // Initial state
         var shoppingCart = new MutableShoppingCart(eventDispatcher);
@@ -28,8 +29,8 @@ public class MutableShoppingCartTests
         var shoppingCartId = Guid.NewGuid(); // This could come from a sequence, or could be the customer's ID.
         var command1 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "First Item");
         shoppingCart.Execute(command1);
-        var events1 = shoppingCart.RaisedEvents;
-        shoppingCart.ClearRaisedEvents();
+        var events1 = eventDispatcher.TrackedEvents;
+        eventDispatcher.ClearTrackedEvents();
             
         // Check the updated aggregate root state.
         Assert.That(shoppingCart.Id, Is.EqualTo(shoppingCartId));
@@ -44,8 +45,8 @@ public class MutableShoppingCartTests
         // Execute the second command to the result of the first command.
         var command2 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "Second Item");
         shoppingCart.Execute(command2);
-        var events2 = shoppingCart.RaisedEvents;
-        shoppingCart.ClearRaisedEvents();
+        var events2 = eventDispatcher.TrackedEvents;
+        eventDispatcher.ClearTrackedEvents();
             
         // Check the updated aggregate root state.
         Assert.That(shoppingCart.Id, Is.EqualTo(shoppingCartId));

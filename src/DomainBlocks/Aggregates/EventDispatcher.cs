@@ -7,7 +7,7 @@ namespace DomainBlocks.Aggregates;
 /// <summary>
 /// Dispatches domain events onto an aggregate and returns an updated aggregate state
 /// </summary>
-public sealed class EventDispatcher<TEventBase>
+public sealed class EventDispatcher<TEventBase> : IEventDispatcher<TEventBase>
 {
     private readonly EventRoutes<TEventBase> _routes;
 
@@ -29,18 +29,6 @@ public sealed class EventDispatcher<TEventBase>
     public TAggregate Dispatch<TAggregate>(TAggregate aggregateRoot, TEventBase @event)
     {
         var eventApplier = _routes.Get<TAggregate>(@event.GetType());
-        var result = eventApplier(aggregateRoot, @event);
-
-        if (_routes.TryGetSideEffect<TAggregate>(@event.GetType(), out var action))
-        {
-            action(aggregateRoot, @event);
-        }
-        
-        if (_routes.TryGetSideEffect<TAggregate>(typeof(TEventBase), out var defaultAction))
-        {
-            defaultAction(aggregateRoot, @event);
-        }
-
-        return result;
+        return eventApplier(aggregateRoot, @event);
     }
 }

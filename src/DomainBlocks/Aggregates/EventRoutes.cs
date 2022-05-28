@@ -6,11 +6,18 @@ namespace DomainBlocks.Aggregates;
 public sealed class EventRoutes<TEventBase>
 {
     private readonly Dictionary<(Type, Type), EventApplier<object, TEventBase>> _routes = new();
-    private readonly Dictionary<(Type, Type), Action<object, TEventBase>> _sideEffects = new();
 
     public void Add<TAggregate, TEvent>(EventApplier<TAggregate, TEvent> eventApplier) where TEvent : TEventBase
     {
         _routes.Add((typeof(TAggregate), typeof(TEvent)), (agg, e) => eventApplier((TAggregate)agg, (TEvent)e));
+    }
+    
+    public void AddRange(EventRoutes<TEventBase> other)
+    {
+        foreach (var (k, v) in other._routes)
+        {
+            _routes.Add(k, v);
+        }
     }
 
     public EventApplier<TAggregate, TEventBase> Get<TAggregate>(Type eventType)
@@ -38,28 +45,5 @@ public sealed class EventRoutes<TEventBase>
         var message = "No route or default route found when attempting to apply event " +
                       $"{eventType.Name} to {typeof(TAggregate).Name}";
         throw new KeyNotFoundException(message);
-    }
-
-    public void AddSideEffect<TAggregate, TEvent>(Action<TAggregate, TEvent> action) where TEvent : TEventBase
-    {
-        _sideEffects.Add((typeof(TAggregate), typeof(TEvent)), (agg, e) => action((TAggregate)agg, (TEvent)e));
-    }
-
-    public bool TryGetSideEffect<TAggregate>(Type eventType, out Action<TAggregate, TEventBase> action)
-    {
-        if (!typeof(TEventBase).IsAssignableFrom(eventType))
-        {
-            throw new ArgumentException();
-        }
-
-        var key = (typeof(TAggregate), eventType);
-        if (_sideEffects.TryGetValue(key, out var eventApplier))
-        {
-            action = (agg, e) => eventApplier(agg, e);
-            return true;
-        }
-
-        action = null;
-        return false;
     }
 }

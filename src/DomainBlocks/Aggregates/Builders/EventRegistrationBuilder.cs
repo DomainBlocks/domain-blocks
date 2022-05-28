@@ -27,12 +27,6 @@ public class EventRegistrationBuilder<TAggregate, TEventBase, TEvent> where TEve
         return this;
     }
     
-    public EventRegistrationBuilder<TAggregate, TEventBase, TEvent> Do(Action<TAggregate, TEvent> action)
-    {
-        _eventRegistryBuilder.EventRoutes.AddSideEffect(action);
-        return this;
-    }
-    
     public EventRegistrationBuilder<TAggregate, TEventBase, TEvent> HasName(string name)
     {
         _eventRegistryBuilder.EventNameMap.RegisterEvent<TEvent>(name);
@@ -40,12 +34,6 @@ public class EventRegistrationBuilder<TAggregate, TEventBase, TEvent> where TEve
     }
 
     public EventRegistrationBuilder<TAggregate, TEventBase, TNextEvent> Event<TNextEvent>()
-        where TNextEvent : TEventBase
-    {
-        return _eventRegistryBuilder.Event<TNextEvent>();
-    }
-    
-    public EventRegistrationBuilder<TAggregate, TEventBase, TNextEvent> When<TNextEvent>()
         where TNextEvent : TEventBase
     {
         return _eventRegistryBuilder.Event<TNextEvent>();

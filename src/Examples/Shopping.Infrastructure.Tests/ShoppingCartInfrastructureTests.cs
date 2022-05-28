@@ -19,29 +19,36 @@ namespace Shopping.Infrastructure.Tests
        [Test]
         public async Task PersistedRoundTripTest()
         {
-            var registryBuilder = AggregateRegistryBuilder.Create<object, IDomainEvent>();
-            ShoppingCartFunctions.Register(registryBuilder);
-            var shoppingCartId = Guid.NewGuid(); // This could come from a sequence, or could be the customer's ID.
+            var aggregateRegistry = AggregateRegistryBuilder.Create<IDomainEvent>()
+                .Register<ShoppingCartState>(builder =>
+                {
+                    builder.InitialState(_ => new ShoppingCartState())
+                        .Id(o => o.Id?.ToString())
+                        .PersistenceKey(id => $"shoppingCart-{id}")
+                        .SnapshotKey(id => $"shoppingCartSnapshot-{id}");
 
-            var aggregateRegistry = registryBuilder.Build();
+                    builder.RegisterEvents(ShoppingCartFunctions.RegisterEvents);
+                })
+                .Build();
+            
+            var shoppingCartId = Guid.NewGuid(); // This could come from a sequence, or could be the customer's ID.
 
             var serializer = new JsonBytesEventSerializer(aggregateRegistry.EventNameMap);
             var eventsRepository = new EventStoreEventsRepository(EventStoreClient, serializer);
             var snapshotRepository = new EventStoreSnapshotRepository(EventStoreClient, serializer);
 
-            var aggregateRepository = AggregateRepository.Create(eventsRepository,
-                                                                 snapshotRepository,
-                                                                 aggregateRegistry);
+            var aggregateRepository =
+                AggregateRepository.Create(eventsRepository, snapshotRepository, aggregateRegistry);
 
             var loadedAggregate = await aggregateRepository.LoadAggregate<ShoppingCartState>(shoppingCartId.ToString());
 
             // Execute the first command.
             var command1 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "First Item");
-            loadedAggregate.ImmutableDispatchCommand(command1);
+            loadedAggregate.ExecuteCommand(x => ShoppingCartFunctions.Execute(x, command1));
 
             // Execute the second command to the result of the first command.
             var command2 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "Second Item");
-            loadedAggregate.ImmutableDispatchCommand(command2);
+            loadedAggregate.ExecuteCommand(x => ShoppingCartFunctions.Execute(x, command2));
 
             Assert.That(loadedAggregate.AggregateState.Id.HasValue, "Expected ShoppingCart ID to be set");
 

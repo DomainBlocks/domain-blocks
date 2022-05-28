@@ -40,9 +40,12 @@ public sealed class AggregateRepository<TEventBase, TRawData> : IAggregateReposi
         if (id == null) throw new ArgumentNullException(nameof(id));
 
         var aggregateMetadata = _metadataMap.GetForType<TAggregateState>();
-        var initialAggregateState = (TAggregateState)aggregateMetadata.GetInitialState?.Invoke();
 
-        // If we choose to load solely from an event stream, then we need some initial state 
+        var trackingEventDispatcher = new TrackingEventDispatcher<TEventBase>(_eventDispatcher);
+        
+        var initialAggregateState =(TAggregateState)aggregateMetadata.GetInitialState?.Invoke(trackingEventDispatcher);
+
+        // If we choose to load solely from an event stream, then we need some initial state
         // onto which to apply the events.
         if (initialAggregateState == null && loadStrategy == AggregateLoadStrategy.UseEventStream)
         {
@@ -85,8 +88,7 @@ public sealed class AggregateRepository<TEventBase, TRawData> : IAggregateReposi
         var state = _eventDispatcher.Dispatch(stateToAppendEventsTo, events);
         var newVersion = loadStartPosition + events.Count - 1;
 
-        return LoadedAggregate.Create<TAggregateState, TEventBase>(
-            state, id, newVersion, snapshotVersion, events.Count);
+        return LoadedAggregate.Create(state, id, newVersion, snapshotVersion, events.Count, trackingEventDispatcher);
     }
 
     public async Task<long> SaveAggregate<TAggregateState>(
@@ -111,8 +113,8 @@ public sealed class AggregateRepository<TEventBase, TRawData> : IAggregateReposi
         {
             var snapshotStreamId = aggregateMetadata.GetSnapshotKeyFromAggregate(loadedAggregate.AggregateState);
 
-            await _snapshotRepository.SaveSnapshotAsync(snapshotStreamId, loadedAggregate.Version,
-                loadedAggregate.AggregateState);
+            await _snapshotRepository.SaveSnapshotAsync(
+                snapshotStreamId, loadedAggregate.Version, loadedAggregate.AggregateState);
         }
 
         return newVersion;

@@ -13,19 +13,19 @@ public static class AggregateServiceCollectionExtensions
         this IServiceCollection services,
         IConfiguration configuration,
         Action<AggregateRepositoryOptionsBuilder> optionsAction,
-        AggregateRegistry<object, object> aggregateRegistry)
+        AggregateRegistry<object> aggregateRegistry)
     {
-        return AddAggregateRepository<object, object>(services, configuration, optionsAction, aggregateRegistry);
+        return AddAggregateRepository<object>(services, configuration, optionsAction, aggregateRegistry);
     }
 
     /// <summary>
     /// Adds an aggregate repository to persist events 
     /// </summary>
-    public static IServiceCollection AddAggregateRepository<TCommandBase, TEventBase>(
+    public static IServiceCollection AddAggregateRepository<TEventBase>(
         this IServiceCollection services,
         IConfiguration configuration,
         Action<AggregateRepositoryOptionsBuilder> optionsAction,
-        AggregateRegistry<TCommandBase, TEventBase> aggregateRegistry)
+        AggregateRegistry<TEventBase> aggregateRegistry)
     {
         var optionsBuilder = new AggregateRepositoryOptionsBuilder(services, configuration);
 
@@ -37,7 +37,7 @@ public static class AggregateServiceCollectionExtensions
                 .GetMethod(nameof(IAggregateRepositoryOptionsBuilderInfrastructure.Build))
                 ?.MakeGenericMethod(rawDataType);
 
-        services.AddSingleton<IAggregateRepository<TCommandBase, TEventBase>>(provider =>
+        services.AddSingleton<IAggregateRepository<TEventBase>>(provider =>
         {
             dynamic aggregateRepositoryOptions = typedBuildMethod?.Invoke(
                 optionsBuilder, new[] { provider, aggregateRegistry.EventNameMap as object });
@@ -52,8 +52,6 @@ public static class AggregateServiceCollectionExtensions
                 aggregateRepositoryOptions.SnapshotRepository,
                 aggregateRegistry);
         });
-
-        services.AddSingleton(aggregateRegistry.CommandDispatcher);
 
         return services;
     }
