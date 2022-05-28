@@ -10,29 +10,24 @@ namespace Shopping.Domain.Aggregates;
 
 public class MutableShoppingCart
 {
-    private readonly EventDispatcher<IDomainEvent> _eventDispatcher;
+    private readonly IEventDispatcher<IDomainEvent> _eventDispatcher;
     private readonly List<ShoppingCartItem> _items = new();
-    private readonly List<IDomainEvent> _raisedEvents = new();
 
-    public MutableShoppingCart(EventDispatcher<IDomainEvent> eventDispatcher)
+    public MutableShoppingCart(IEventDispatcher<IDomainEvent> eventDispatcher)
     {
         _eventDispatcher = eventDispatcher;
     }
     
     public Guid? Id { get; private set; }
     public IReadOnlyList<ShoppingCartItem> Items => _items.AsReadOnly();
-    public IReadOnlyList<IDomainEvent> RaisedEvents => _raisedEvents.ToList().AsReadOnly();
 
     public static void RegisterEvents(EventRegistryBuilder<MutableShoppingCart, IDomainEvent> builder)
     {
         builder
             .Event<ShoppingCartCreated>().RoutesTo((agg, e) => agg.Apply(e))
             .Event<ItemAddedToShoppingCart>().RoutesTo((agg, e) => agg.Apply(e))
-            .Event<ItemRemovedFromShoppingCart>().RoutesTo((agg, e) => agg.Apply(e))
-            .When<IDomainEvent>().Do((agg, e) => { agg._raisedEvents.Add(e); });
+            .Event<ItemRemovedFromShoppingCart>().RoutesTo((agg, e) => agg.Apply(e));
     }
-
-    public void ClearRaisedEvents() => _raisedEvents.Clear();
 
     public void Execute(AddItemToShoppingCart command)
     {

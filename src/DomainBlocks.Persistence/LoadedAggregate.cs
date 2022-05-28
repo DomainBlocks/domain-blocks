@@ -1,28 +1,41 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using DomainBlocks.Aggregates;
 
 namespace DomainBlocks.Persistence;
 
 internal static class LoadedAggregate
 {
     internal static LoadedAggregate<TAggregateState, TEventBase> Create<TAggregateState, TEventBase>(
-        TAggregateState aggregateState, string id, long version, long? snapshotVersion, long eventsLoaded)
+        TAggregateState aggregateState,
+        string id,
+        long version,
+        long? snapshotVersion,
+        long eventsLoaded,
+        TrackingEventDispatcher<TEventBase> trackingEventDispatcher)
     {
         return new LoadedAggregate<TAggregateState, TEventBase>(
-            aggregateState, id, version, snapshotVersion, eventsLoaded);
+            aggregateState, id, version, snapshotVersion, eventsLoaded, trackingEventDispatcher);
     }
 }
 
 public sealed class LoadedAggregate<TAggregateState, TEventBase>
 {
-    internal LoadedAggregate(TAggregateState aggregateState,
+    private readonly TrackingEventDispatcher<TEventBase> _eventDispatcher;
+
+    internal LoadedAggregate(
+        TAggregateState aggregateState,
         string id,
         long version,
         long? snapshotVersion,
-        long eventsLoadedCount)
+        long eventsLoadedCount,
+        TrackingEventDispatcher<TEventBase> eventDispatcher)
     {
-        if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Value cannot be null or whitespace.", nameof(id));
+        if (string.IsNullOrWhiteSpace(id))
+            throw new ArgumentException("Value cannot be null or whitespace.", nameof(id));
+        _eventDispatcher = eventDispatcher;
+
         AggregateState = aggregateState ?? throw new ArgumentNullException(nameof(aggregateState));
         Id = id;
         Version = version;
@@ -42,6 +55,29 @@ public sealed class LoadedAggregate<TAggregateState, TEventBase>
     //     var (newState, events) = _commandDispatcher.ImmutableDispatch(AggregateState, command);
     //     EventsToPersist = EventsToPersist.Concat(events);
     //     AggregateState = newState;
+    // }
+
+    // public void ExecuteCommand(Action<TAggregateState> commandExecutor)
+    // {
+    //     
+    // }
+    //
+    // public void ExecuteCommand(Action<TAggregateState, IEventDispatcher<TEventBase>> commandExecutor)
+    // {
+    //     
+    // }
+    
+    public void ExecuteCommand(Func<TAggregateState, IEnumerable<TEventBase>> commandExecutor)
+    {
+        var events = commandExecutor(AggregateState).ToList();
+        AggregateState = _eventDispatcher.Dispatch(AggregateState, events);
+        EventsToPersist = EventsToPersist.Concat(events);
+        _eventDispatcher.ClearTrackedEvents();
+    }
+
+    // public void ExecuteCommand(Func<TAggregateState, IEventDispatcher<TEventBase>, TAggregateState> commandExecutor)
+    // {
+    //     
     // }
 
     public string Id { get; }

@@ -1,4 +1,5 @@
 ﻿using System;
+using DomainBlocks.Aggregates;
 using DomainBlocks.Aggregates.Builders;
 
 namespace DomainBlocks.Persistence.Builders;
@@ -12,7 +13,8 @@ public sealed class AggregateRegistrationBuilder<TAggregate, TEventBase>
         _aggregateRegistryBuilder = aggregateRegistryBuilder;
     }
 
-    public AggregateRegistrationBuilder<TAggregate, TEventBase> InitialState(Func<TAggregate> getInitialState)
+    public AggregateRegistrationBuilder<TAggregate, TEventBase> InitialState(
+        Func<IEventDispatcher<TEventBase>, TAggregate> getInitialState)
     {
         _aggregateRegistryBuilder.RegisterInitialStateFunc(getInitialState);
         return this;
@@ -24,10 +26,10 @@ public sealed class AggregateRegistrationBuilder<TAggregate, TEventBase>
         return new AggregateKeyBuilder<TAggregate, TEventBase>(_aggregateRegistryBuilder);
     }
 
-    public AggregateRegistrationBuilder<TAggregate, TEventBase> WithEvents(
+    public AggregateRegistrationBuilder<TAggregate, TEventBase> RegisterEvents(
         Action<EventRegistryBuilder<TAggregate, TEventBase>> builderAction)
     {
-        var builder = EventRegistryBuilder.Create<TAggregate, TEventBase>();
+        var builder = _aggregateRegistryBuilder.Events.For<TAggregate>();
         builderAction(builder);
         return this;
     }
