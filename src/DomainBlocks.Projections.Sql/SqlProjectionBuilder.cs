@@ -118,11 +118,13 @@ namespace DomainBlocks.Projections.Sql
                 commandTextBuilder.Append(_customSqlCommandText);
             }
 
-            var dbCommand = _projectionContext.Connection.CreateCommand();
-            dbCommand.CommandText = commandTextBuilder.ToString();
-
             return async (@event, _) =>
             {
+                // The DB command must be created within this func, which is called within a transaction. If it is
+                // called outside the func, the transaction on the command is not set.
+                var dbCommand = _projectionContext.Connection.CreateCommand();
+                dbCommand.CommandText = commandTextBuilder.ToString();
+                
                 _connector.BindParameters(dbCommand, (TEvent) @event, _sqlProjection.Columns, _parameterBindingMap);
 
                 if (Log.IsEnabled(LogLevel.Trace))
