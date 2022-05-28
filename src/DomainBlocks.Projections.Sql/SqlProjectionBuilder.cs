@@ -62,10 +62,9 @@ namespace DomainBlocks.Projections.Sql
             {
                 mappingsDictionary = mappings.ToDictionary(x => x.parameterName, x => x.getParameterValue);
             }
-            catch (InvalidOperationException ex)
+            catch (ArgumentException ex)
             {
-                Log.LogError(ex, "Unable to create parameter binding map for parameter {parameterName}. " +
-                                 "Check you haven't mapped the same parameter more than once");
+                Log.LogError(ex, "Unable to create parameter binding map");
                 throw;
             }
             
