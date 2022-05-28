@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace DomainBlocks.Aggregates
+namespace DomainBlocks.Persistence
 {
     public sealed class AggregateMetadata
     {

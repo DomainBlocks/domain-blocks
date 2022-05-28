@@ -1,8 +1,8 @@
 ﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
-using DomainBlocks.Aggregates.Registration;
 using DomainBlocks.Persistence;
+using DomainBlocks.Persistence.Builders;
 using DomainBlocks.Persistence.EventStore;
 using DomainBlocks.Serialization.Json;
 

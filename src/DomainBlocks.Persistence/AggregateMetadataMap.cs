@@ -1,7 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using DomainBlocks.Aggregates;
 
-namespace DomainBlocks.Aggregates
+namespace DomainBlocks.Persistence
 {
     public sealed class AggregateMetadataMap : Dictionary<Type, AggregateMetadata>
     {

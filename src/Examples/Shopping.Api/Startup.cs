@@ -1,5 +1,6 @@
-﻿using DomainBlocks.Aggregates.Registration;
+﻿using DomainBlocks.Persistence;
 using DomainBlocks.Persistence.AspNetCore;
+using DomainBlocks.Persistence.Builders;
 using DomainBlocks.Persistence.SqlStreamStore.AspNetCore;
 using DomainBlocks.Serialization.Json.AspNetCore;
 using MediatR;
@@ -61,7 +62,23 @@ namespace Shopping.Api
         private static AggregateRegistry<object, IDomainEvent> ConfigureAggregateRegistry()
         {
             var registryBuilder = AggregateRegistryBuilder.Create<object, IDomainEvent>();
-            ShoppingCartFunctions.Register(registryBuilder);
+            //ShoppingCartFunctions.Register(registryBuilder);
+
+            registryBuilder.Register<ShoppingCartState>(aggregate =>
+            {
+                aggregate.InitialState(() => new ShoppingCartState())
+                    .Id(o => o.Id?.ToString())
+                    .PersistenceKey(id => $"shoppingCart-{id}")
+                    .SnapshotKey(id => $"shoppingCartSnapshot-{id}");
+
+                // aggregate.Command<AddItemToShoppingCart>()
+                //     .RoutesTo(Execute);
+                //
+                // aggregate.Command<RemoveItemFromShoppingCart>()
+                //     .RoutesTo(Execute);
+
+                aggregate.WithEvents(ShoppingCartFunctions.RegisterEvents);
+            });
 
             return registryBuilder.Build();
         }

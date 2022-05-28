@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using DomainBlocks.Aggregates;
-using DomainBlocks.Aggregates.Registration;
+using DomainBlocks.Aggregates.Builders;
 
 namespace Shopping.Domain.Aggregates
 {
@@ -50,33 +50,19 @@ namespace Shopping.Domain.Aggregates
     
     public static class ShoppingCartFunctions
     {
-        public static void Register(AggregateRegistryBuilder<object, IDomainEvent> aggregateRegistryBuilder)
+        public static void RegisterEvents(EventRegistryBuilder<ShoppingCartState, IDomainEvent> builder)
         {
-            aggregateRegistryBuilder.Register<ShoppingCartState>(aggregate =>
-            {
-                aggregate.InitialState(() => new ShoppingCartState())
-                         .Id(o => o.Id?.ToString())
-                         .PersistenceKey(id => $"shoppingCart-{id}")
-                         .SnapshotKey(id => $"shoppingCartSnapshot-{id}");
+            builder.Event<ShoppingCartCreated>()
+                .RoutesTo(Apply)
+                .HasName(ShoppingCartCreated.EventName);
 
-                aggregate.Command<AddItemToShoppingCart>()
-                         .RoutesTo(Execute);
-
-                aggregate.Command<RemoveItemFromShoppingCart>()
-                         .RoutesTo(Execute);
-
-                aggregate.Event<ShoppingCartCreated>()
-                         .RoutesTo(Apply)
-                         .HasName(ShoppingCartCreated.EventName);
-
-                aggregate.Event<ItemAddedToShoppingCart>()
-                         .RoutesTo(Apply)
-                         .HasName(ItemAddedToShoppingCart.EventName);
-
-                aggregate.Event<ItemRemovedFromShoppingCart>()
-                         .RoutesTo(Apply)
-                         .HasName(ItemRemovedFromShoppingCart.EventName);
-            });
+            builder.Event<ItemAddedToShoppingCart>()
+                .RoutesTo(Apply)
+                .HasName(ItemAddedToShoppingCart.EventName);
+                
+            builder.Event<ItemRemovedFromShoppingCart>()
+                .RoutesTo(Apply)
+                .HasName(ItemRemovedFromShoppingCart.EventName);
         }
 
         private static IEnumerable<IDomainEvent> Execute(Func<ShoppingCartState> getState, AddItemToShoppingCart command)

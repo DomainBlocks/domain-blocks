@@ -1,4 +1,6 @@
-﻿namespace DomainBlocks.Aggregates.Registration
+﻿using DomainBlocks.Aggregates;
+
+namespace DomainBlocks.Persistence.Builders
 {
     public sealed class CommandRegistrationBuilder<TAggregate, TCommandBase, TCommand, TEventBase>
         where TCommand : TCommandBase

@@ -1,139 +1,145 @@
 ﻿using System;
 using System.Threading.Tasks;
 using DomainBlocks.Aggregates;
-using DomainBlocks.Aggregates.Registration;
 
-namespace DomainBlocks.Persistence
+namespace DomainBlocks.Persistence;
+
+public static class AggregateRepository
 {
-    public static class AggregateRepository
+    public static AggregateRepository<TCommandBase, TEventBase, TRawData> Create<TCommandBase, TEventBase, TRawData>(
+        IEventsRepository<TRawData> eventsRepository,
+        ISnapshotRepository snapshotRepository,
+        AggregateRegistry<TCommandBase, TEventBase> aggregateRegistry)
     {
-        public static AggregateRepository<TCommandBase, TEventBase, TRawData> Create<TCommandBase, TEventBase, TRawData>(IEventsRepository<TRawData> repository,
-                                                                                             ISnapshotRepository snapshotRepository,
-                                                                                             AggregateRegistry<TCommandBase, TEventBase> aggregateRegistry)
-        {
-            return new AggregateRepository<TCommandBase, TEventBase, TRawData>(repository, snapshotRepository, aggregateRegistry);
-        }
+        return new AggregateRepository<TCommandBase, TEventBase, TRawData>(
+            eventsRepository, snapshotRepository, aggregateRegistry);
+    }
+}
+
+public sealed class AggregateRepository<TCommandBase, TEventBase, TRawData>
+    : IAggregateRepository<TCommandBase, TEventBase>
+{
+    private readonly IEventsRepository<TRawData> _eventsRepository;
+    private readonly ISnapshotRepository _snapshotRepository;
+    private readonly EventDispatcher<TEventBase> _eventDispatcher;
+    private readonly AggregateMetadataMap _metadataMap;
+    private readonly CommandDispatcher<TCommandBase, TEventBase> _commandDispatcher;
+
+    public AggregateRepository(
+        IEventsRepository<TRawData> eventsRepository,
+        ISnapshotRepository snapshotRepository,
+        AggregateRegistry<TCommandBase, TEventBase> aggregateRegistry)
+    {
+        if (aggregateRegistry == null) throw new ArgumentNullException(nameof(aggregateRegistry));
+        _eventsRepository = eventsRepository ?? throw new ArgumentNullException(nameof(eventsRepository));
+        _snapshotRepository = snapshotRepository ?? throw new ArgumentNullException(nameof(snapshotRepository));
+        _eventDispatcher = aggregateRegistry.EventDispatcher;
+        _metadataMap = aggregateRegistry.AggregateMetadataMap;
+        _commandDispatcher = aggregateRegistry.CommandDispatcher;
     }
 
-    public sealed class AggregateRepository<TCommandBase, TEventBase, TRawData> : IAggregateRepository<TCommandBase, TEventBase>
+    public async Task<LoadedAggregate<TAggregateState, TCommandBase, TEventBase>> LoadAggregate<TAggregateState>(
+        string id, AggregateLoadStrategy loadStrategy = AggregateLoadStrategy.PreferSnapshot)
     {
-        private readonly IEventsRepository<TRawData> _eventsRepository;
-        private readonly ISnapshotRepository _snapshotRepository;
-        private readonly EventDispatcher<TEventBase> _eventDispatcher;
-        private readonly AggregateMetadataMap _metadataMap;
-        private readonly CommandDispatcher<TCommandBase, TEventBase> _commandDispatcher;
+        if (id == null) throw new ArgumentNullException(nameof(id));
 
-        public AggregateRepository(IEventsRepository<TRawData> eventsRepository, 
-                                   ISnapshotRepository snapshotRepository,
-                                   AggregateRegistry<TCommandBase, TEventBase> aggregateRegistry)
+        var aggregateMetadata = _metadataMap.GetForType<TAggregateState>();
+        var initialAggregateState = (TAggregateState)aggregateMetadata.GetInitialState?.Invoke();
+
+        // If we choose to load solely from an event stream, then we need some initial state 
+        // onto which to apply the events.
+        if (initialAggregateState == null && loadStrategy == AggregateLoadStrategy.UseEventStream)
         {
-            if (aggregateRegistry == null) throw new ArgumentNullException(nameof(aggregateRegistry));
-            _eventsRepository = eventsRepository ?? throw new ArgumentNullException(nameof(eventsRepository));
-            _snapshotRepository = snapshotRepository ?? throw new ArgumentNullException(nameof(snapshotRepository));
-            _eventDispatcher = aggregateRegistry.EventDispatcher;
-            _metadataMap = aggregateRegistry.AggregateMetadataMap;
-            _commandDispatcher = aggregateRegistry.CommandDispatcher;
+            throw new ArgumentNullException(nameof(initialAggregateState));
         }
 
-        public async Task<LoadedAggregate<TAggregateState, TCommandBase, TEventBase>> LoadAggregate<TAggregateState>(string id, AggregateLoadStrategy loadStrategy = AggregateLoadStrategy.PreferSnapshot)
+        var stateToAppendEventsTo = initialAggregateState;
+
+        var streamName = aggregateMetadata.GetKeyFromIdentifier(id);
+        long loadStartPosition = 0;
+        long? snapshotVersion = null;
+
+        if (loadStrategy is AggregateLoadStrategy.UseSnapshot or AggregateLoadStrategy.PreferSnapshot)
         {
-            if (id == null) throw new ArgumentNullException(nameof(id));
+            var snapshotKey = aggregateMetadata.GetSnapshotKeyFromIdentifier(id);
+            var (isSuccess, snapshot) = await _snapshotRepository.TryLoadSnapshotAsync<TAggregateState>(snapshotKey);
 
-            var aggregateMetadata = _metadataMap.GetForType<TAggregateState>();
-            var initialAggregateState = (TAggregateState)aggregateMetadata.GetInitialState?.Invoke();
-
-            // If we choose to load solely from an event stream, then we need some initial state 
-            // onto which to apply the events.
-            if (initialAggregateState == null && loadStrategy == AggregateLoadStrategy.UseEventStream)
+            if (!isSuccess)
             {
-                throw new ArgumentNullException(nameof(initialAggregateState));
-            }
-
-            var stateToAppendEventsTo = initialAggregateState;
-            
-            var streamName = aggregateMetadata.GetKeyFromIdentifier(id);
-            long loadStartPosition = 0;
-            long? snapshotVersion = null;
-
-            if (loadStrategy == AggregateLoadStrategy.UseSnapshot ||
-                loadStrategy == AggregateLoadStrategy.PreferSnapshot)
-            {
-                var snapshotKey = aggregateMetadata.GetSnapshotKeyFromIdentifier(id);
-                var (isSuccess, snapshot) = await _snapshotRepository.TryLoadSnapshotAsync<TAggregateState>(snapshotKey);
-
-                if (!isSuccess)
+                if (loadStrategy == AggregateLoadStrategy.UseSnapshot)
                 {
-                    if (loadStrategy == AggregateLoadStrategy.UseSnapshot)
-                    {
-                        throw new SnapshotDoesNotExistException(snapshotKey);
-                    }
+                    throw new SnapshotDoesNotExistException(snapshotKey);
                 }
-                else
-                {
-                    snapshotVersion = snapshot.Version;
-                    stateToAppendEventsTo = snapshot.SnapshotState;
-                    loadStartPosition = snapshot.Version + 1;
-                }
-            }
-
-            if (stateToAppendEventsTo == null)
-            {
-                throw new InvalidOperationException("Snapshot was not found, and no initial state " +
-                                                    "was supplied onto which to append events");
-            }
-
-            var events = await _eventsRepository.LoadEventsAsync<TEventBase>(streamName, loadStartPosition);
-
-            TAggregateState state;
-            if (_commandDispatcher.HasImmutableRegistrations)
-            {
-                state = _eventDispatcher.ImmutableDispatch(stateToAppendEventsTo, events);
             }
             else
             {
-                _eventDispatcher.Dispatch(stateToAppendEventsTo, events);
-                state = stateToAppendEventsTo;
+                snapshotVersion = snapshot.Version;
+                stateToAppendEventsTo = snapshot.SnapshotState;
+                loadStartPosition = snapshot.Version + 1;
             }
-            
-            var newVersion = loadStartPosition + events.Count - 1;
-
-            return LoadedAggregate.Create(state, id, _commandDispatcher, newVersion, snapshotVersion, events.Count);
         }
 
-        public async Task<long> SaveAggregate<TAggregateState>(LoadedAggregate<TAggregateState, TCommandBase, TEventBase> loadedAggregate,
-                                                               Func<LoadedAggregate<TAggregateState, TCommandBase, TEventBase>, bool> snapshotPredicate = null)
+        if (stateToAppendEventsTo == null)
         {
-            if (loadedAggregate == null) throw new ArgumentNullException(nameof(loadedAggregate));
-            if (loadedAggregate.HasBeenSaved)
-            {
-                throw new ArgumentException("Aggregate has already been saved and must be loaded from persistence " +
-                                            "before being saved again");
-            }
-
-            snapshotPredicate ??= x => false;
-            var aggregateMetadata = _metadataMap.GetForType<TAggregateState>();
-            var streamName = aggregateMetadata.GetKeyFromIdentifier(loadedAggregate.Id);
-            var newVersion = await _eventsRepository.SaveEventsAsync(streamName, loadedAggregate.Version, loadedAggregate.EventsToPersist);
-            loadedAggregate.HasBeenSaved = true;
-
-            if (snapshotPredicate(loadedAggregate))
-            {
-                var snapshotStreamId = aggregateMetadata.GetSnapshotKeyFromAggregate(loadedAggregate.AggregateState);
-
-                await _snapshotRepository.SaveSnapshotAsync(snapshotStreamId, loadedAggregate.Version, loadedAggregate.AggregateState);
-            }
-
-            return newVersion;
+            throw new InvalidOperationException("Snapshot was not found, and no initial state " +
+                                                "was supplied onto which to append events");
         }
 
-        public async Task SaveSnapshot<TAggregateState>(VersionedAggregateState<TAggregateState> versionedState)
+        var events = await _eventsRepository.LoadEventsAsync<TEventBase>(streamName, loadStartPosition);
+
+        TAggregateState state;
+        if (_commandDispatcher.HasImmutableRegistrations)
         {
-            if (versionedState == null) throw new ArgumentNullException(nameof(versionedState));
-
-            var aggregateMetadata = _metadataMap.GetForType<TAggregateState>();
-            var snapshotStreamId = aggregateMetadata.GetSnapshotKeyFromAggregate(versionedState.AggregateState);
-
-            await _snapshotRepository.SaveSnapshotAsync(snapshotStreamId, versionedState.Version, versionedState.AggregateState);
+            state = _eventDispatcher.ImmutableDispatch(stateToAppendEventsTo, events);
         }
+        else
+        {
+            _eventDispatcher.Dispatch(stateToAppendEventsTo, events);
+            state = stateToAppendEventsTo;
+        }
+
+        var newVersion = loadStartPosition + events.Count - 1;
+
+        return LoadedAggregate.Create(state, id, _commandDispatcher, newVersion, snapshotVersion, events.Count);
+    }
+
+    public async Task<long> SaveAggregate<TAggregateState>(
+        LoadedAggregate<TAggregateState, TCommandBase, TEventBase> loadedAggregate,
+        Func<LoadedAggregate<TAggregateState, TCommandBase, TEventBase>, bool> snapshotPredicate = null)
+    {
+        if (loadedAggregate == null) throw new ArgumentNullException(nameof(loadedAggregate));
+        if (loadedAggregate.HasBeenSaved)
+        {
+            throw new ArgumentException("Aggregate has already been saved and must be loaded from persistence " +
+                                        "before being saved again");
+        }
+
+        snapshotPredicate ??= _ => false;
+        var aggregateMetadata = _metadataMap.GetForType<TAggregateState>();
+        var streamName = aggregateMetadata.GetKeyFromIdentifier(loadedAggregate.Id);
+        var newVersion = await _eventsRepository.SaveEventsAsync(
+            streamName, loadedAggregate.Version, loadedAggregate.EventsToPersist);
+        loadedAggregate.HasBeenSaved = true;
+
+        if (snapshotPredicate(loadedAggregate))
+        {
+            var snapshotStreamId = aggregateMetadata.GetSnapshotKeyFromAggregate(loadedAggregate.AggregateState);
+
+            await _snapshotRepository.SaveSnapshotAsync(snapshotStreamId, loadedAggregate.Version,
+                loadedAggregate.AggregateState);
+        }
+
+        return newVersion;
+    }
+
+    public async Task SaveSnapshot<TAggregateState>(VersionedAggregateState<TAggregateState> versionedState)
+    {
+        if (versionedState == null) throw new ArgumentNullException(nameof(versionedState));
+
+        var aggregateMetadata = _metadataMap.GetForType<TAggregateState>();
+        var snapshotStreamId = aggregateMetadata.GetSnapshotKeyFromAggregate(versionedState.AggregateState);
+
+        await _snapshotRepository.SaveSnapshotAsync(
+            snapshotStreamId, versionedState.Version, versionedState.AggregateState);
     }
 }

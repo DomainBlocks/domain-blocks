@@ -1,6 +1,7 @@
 ﻿using System;
+using DomainBlocks.Aggregates.Builders;
 
-namespace DomainBlocks.Aggregates.Registration
+namespace DomainBlocks.Persistence.Builders
 {
     public sealed class AggregateRegistrationBuilder<TAggregate, TCommandBase, TEventBase>
     {
@@ -31,6 +32,14 @@ namespace DomainBlocks.Aggregates.Registration
         public EventRegistrationBuilder<TAggregate, TCommandBase, TEventBase, TEvent> Event<TEvent>() where TEvent : TEventBase
         {
             return new(_aggregateRegistryBuilder);
+        }
+
+        public AggregateRegistrationBuilder<TAggregate, TCommandBase, TEventBase> WithEvents(
+            Action<EventRegistryBuilder<TAggregate, TEventBase>> builderAction)
+        {
+            var builder = EventRegistryBuilder.Create<TAggregate, TEventBase>();
+            builderAction(builder);
+            return this;
         }
     }
 }

@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using DomainBlocks.Aggregates;
+using DomainBlocks.Serialization;
 
-namespace DomainBlocks.Aggregates.Registration
+namespace DomainBlocks.Persistence.Builders
 {
     public static class AggregateRegistryBuilder
     {
@@ -33,16 +35,6 @@ namespace DomainBlocks.Aggregates.Registration
         {
             if (buildAggregateRegistration == null) throw new ArgumentNullException(nameof(buildAggregateRegistration));
             buildAggregateRegistration(new AggregateRegistrationBuilder<TAggregate, TCommandBase, TEventBase>(this));
-        }
-
-        public void RegisterPreCommandHook(Action<TCommandBase> hook)
-        {
-            _commandRegistrations.PreCommandHook = hook;
-        }
-
-        public void RegisterPostCommandHook(Action<TCommandBase> hook)
-        {
-            _commandRegistrations.PostCommandHook = hook;
         }
 
         internal void RegisterCommandRoute<TAggregate, TCommand, TEvent>(

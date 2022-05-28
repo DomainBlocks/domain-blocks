@@ -12,7 +12,8 @@ namespace DomainBlocks.Aggregates
         private readonly EventRoutes<TEventBase> _routes;
         private readonly ImmutableEventRoutes<TEventBase> _immutableRoutes;
 
-        internal EventDispatcher(EventRoutes<TEventBase> eventRoutes, ImmutableEventRoutes<TEventBase> immutableEventRoutes)
+        public EventDispatcher(
+            EventRoutes<TEventBase> eventRoutes, ImmutableEventRoutes<TEventBase> immutableEventRoutes)
         {
             _routes = eventRoutes ?? throw new ArgumentNullException(nameof(eventRoutes));
             _immutableRoutes = immutableEventRoutes ?? throw new ArgumentNullException(nameof(immutableEventRoutes));

@@ -1,4 +1,7 @@
-﻿namespace DomainBlocks.Aggregates.Registration
+﻿using DomainBlocks.Aggregates;
+using DomainBlocks.Serialization;
+
+namespace DomainBlocks.Persistence
 {
     public sealed class AggregateRegistry<TCommandBase, TEventBase>
     {
