@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using DomainBlocks.Aggregates.Registration;
 
 namespace DomainBlocks.Aggregates
 {
@@ -14,7 +13,7 @@ namespace DomainBlocks.Aggregates
         private readonly CommandRegistrations<TCommandBase, TEventBase> _registrations;
         private readonly EventDispatcher<TEventBase> _eventDispatcher;
 
-        internal CommandDispatcher(
+        public CommandDispatcher(
             CommandRegistrations<TCommandBase, TEventBase> registrations, EventDispatcher<TEventBase> eventDispatcher)
         {
             _registrations = registrations ?? throw new ArgumentNullException(nameof(registrations));
@@ -31,8 +30,6 @@ namespace DomainBlocks.Aggregates
 
             if (_registrations.Routes.TryGetValue(routeKey, out var executeCommand))
             {
-                _registrations.PreCommandHook?.Invoke(command);
-
                 // The following code allows invokers of this method to yield return in order to see the side effect of
                 // applying the event to the aggregate.
                 var events = executeCommand(aggregateRoot, command)
@@ -43,12 +40,10 @@ namespace DomainBlocks.Aggregates
                     })
                     .ToList();
                 
-                _registrations.PostCommandHook?.Invoke(command);
-                
                 return events;
             }
 
-            var message = $"No route found when attempting to apply command " +
+            var message = "No route found when attempting to apply command " +
                           $"{commandType.Name} to {aggregateRootType.Name}";
             throw new InvalidOperationException(message);
         }
@@ -62,8 +57,6 @@ namespace DomainBlocks.Aggregates
             
             if (_registrations.ImmutableRoutes.TryGetValue(routeKey, out var executeCommand))
             {
-                _registrations.PreCommandHook?.Invoke(command);
-
                 var initialResult = (newState: aggregateRoot, events: new List<TEventBase>());
                 var currentState = aggregateRoot;
 
@@ -79,12 +72,10 @@ namespace DomainBlocks.Aggregates
                         return newResult;
                     });
 
-                _registrations.PostCommandHook?.Invoke(command);
-
                 return finalResult;
             }
 
-            var message = $"No route found when attempting to apply command " +
+            var message = "No route found when attempting to apply command " +
                           $"{commandType.Name} to {aggregateRootType.Name}";
             throw new InvalidOperationException(message);
         }

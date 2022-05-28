@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using DomainBlocks.Aggregates.Registration;
+using DomainBlocks.Persistence.Builders;
 using DomainBlocks.Tests.Aggregates.Registration;
 using NUnit.Framework;
 
@@ -62,35 +62,6 @@ namespace DomainBlocks.Tests.Aggregates
             const string expectedMessage = "No route found when attempting to apply command " +
                                            "DoSomethingElse to MyAggregateRoot";
             Assert.That(exception.Message, Is.EqualTo(expectedMessage));
-        }
-        
-        [Test]
-        public void PreAndPostCommandHooksAreCalled()
-        {
-            var loggedMessages = new List<string>();
-            
-            var aggregateRegistryBuilder = AggregateRegistryBuilder.Create<TestCommand, TestEvent>();
-            aggregateRegistryBuilder.RegisterPreCommandHook(cmd => loggedMessages.Add($"Pre-command {cmd.Name}"));
-            aggregateRegistryBuilder.RegisterPostCommandHook(cmd => loggedMessages.Add($"Post-command {cmd.Name}"));
-
-            aggregateRegistryBuilder.Register<object>(x =>
-            {
-                x.Command<TestCommand>().RoutesTo((Func<object> _, TestCommand cmd) => new List<TestEvent> {new(cmd.Name)});
-                x.Event<TestEvent>().RoutesTo((state, e) =>
-                {
-                    loggedMessages.Add(e.Name);
-                    return state;
-                }).HasName("TestEvent");
-            });
-
-            aggregateRegistryBuilder.Build().CommandDispatcher.ImmutableDispatch(new object(), new TestCommand("My command"));
-
-            Assert.That(loggedMessages, Is.EquivalentTo(new List<string>
-            {
-                "Pre-command My command",
-                "My command",
-                "Post-command My command"
-            }));
         }
         
         private interface IEvent

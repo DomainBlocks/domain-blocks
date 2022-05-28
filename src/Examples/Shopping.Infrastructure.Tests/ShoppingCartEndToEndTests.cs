@@ -2,10 +2,10 @@
 using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
-using DomainBlocks.Aggregates.Registration;
 using DomainBlocks.Common;
 using DomainBlocks.EventStore.Testing;
 using DomainBlocks.Persistence;
+using DomainBlocks.Persistence.Builders;
 using DomainBlocks.Persistence.EventStore;
 using DomainBlocks.Projections;
 using DomainBlocks.Projections.EventStore;

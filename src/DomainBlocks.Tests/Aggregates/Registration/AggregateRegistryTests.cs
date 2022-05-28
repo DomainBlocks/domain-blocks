@@ -1,4 +1,4 @@
-﻿using DomainBlocks.Aggregates.Registration;
+﻿using DomainBlocks.Persistence.Builders;
 using NUnit.Framework;
 
 namespace DomainBlocks.Tests.Aggregates.Registration

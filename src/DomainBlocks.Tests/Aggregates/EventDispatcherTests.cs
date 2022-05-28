@@ -1,5 +1,5 @@
 ﻿using System;
-using DomainBlocks.Aggregates.Registration;
+using DomainBlocks.Persistence.Builders;
 using DomainBlocks.Tests.Aggregates.Registration;
 using NUnit.Framework;
 

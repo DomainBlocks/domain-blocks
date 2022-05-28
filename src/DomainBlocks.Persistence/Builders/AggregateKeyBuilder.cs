@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace DomainBlocks.Aggregates.Registration
+namespace DomainBlocks.Persistence.Builders
 {
     public class AggregateKeyBuilder<TAggregate, TCommandBase, TEventBase>
     {
