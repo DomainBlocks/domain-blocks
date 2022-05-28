@@ -1,26 +1,25 @@
 ﻿using System;
 
-namespace DomainBlocks.Persistence.Builders
+namespace DomainBlocks.Persistence.Builders;
+
+public class AggregateKeyBuilder<TAggregate, TEventBase>
 {
-    public class AggregateKeyBuilder<TAggregate, TCommandBase, TEventBase>
+    private readonly AggregateRegistryBuilder<TEventBase> _aggregateRegistryBuilder;
+
+    public AggregateKeyBuilder(AggregateRegistryBuilder<TEventBase> aggregateRegistryBuilder)
     {
-        private readonly AggregateRegistryBuilder<TCommandBase, TEventBase> _aggregateRegistryBuilder;
+        _aggregateRegistryBuilder = aggregateRegistryBuilder;
+    }
 
-        public AggregateKeyBuilder(AggregateRegistryBuilder<TCommandBase, TEventBase> aggregateRegistryBuilder)
-        {
-            _aggregateRegistryBuilder = aggregateRegistryBuilder;
-        }
+    public AggregateKeyBuilder<TAggregate, TEventBase> PersistenceKey(Func<string, string> getPersistenceKey)
+    {
+        _aggregateRegistryBuilder.RegisterAggregateKey<TAggregate>(getPersistenceKey);
+        return this;
+    }
 
-        public AggregateKeyBuilder<TAggregate, TCommandBase, TEventBase> PersistenceKey(Func<string, string> getPersistenceKey)
-        {
-            _aggregateRegistryBuilder.RegisterAggregateKey<TAggregate>(getPersistenceKey);
-            return this;
-        }
-
-        public AggregateKeyBuilder<TAggregate, TCommandBase, TEventBase> SnapshotKey(Func<string, string> getSnapshotKey)
-        {
-            _aggregateRegistryBuilder.RegisterAggregateSnapshotKey<TAggregate>(getSnapshotKey);
-            return this;
-        }
+    public AggregateKeyBuilder<TAggregate, TEventBase> SnapshotKey(Func<string, string> getSnapshotKey)
+    {
+        _aggregateRegistryBuilder.RegisterAggregateSnapshotKey<TAggregate>(getSnapshotKey);
+        return this;
     }
 }

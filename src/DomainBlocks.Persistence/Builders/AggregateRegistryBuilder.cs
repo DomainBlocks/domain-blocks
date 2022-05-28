@@ -1,107 +1,62 @@
 ﻿using System;
-using System.Collections.Generic;
 using DomainBlocks.Aggregates;
-using DomainBlocks.Serialization;
 
-namespace DomainBlocks.Persistence.Builders
+namespace DomainBlocks.Persistence.Builders;
+
+public static class AggregateRegistryBuilder
 {
-    public static class AggregateRegistryBuilder
-    {
-        public static AggregateRegistryBuilder<TCommandBase, TEventBase> Create<TCommandBase, TEventBase>()
-        {
-            return new();
-        }
+    public static AggregateRegistryBuilder<TEventBase> Create<TEventBase>() => new();
 
-        public static AggregateRegistryBuilder<object, object> Create()
-        {
-            return Create<object, object>();
-        }
+    public static AggregateRegistryBuilder<object> Create() => Create<object>();
+}
+
+public sealed class AggregateRegistryBuilder<TEventBase>
+{
+    private readonly EventRoutes<TEventBase> _eventRoutes = new();
+    private readonly EventNameMap _eventNameMap = new();
+    private readonly AggregateMetadataMap _aggregateMetadataMap = new();
+
+    public AggregateRegistry<TEventBase> Build() => new(_eventRoutes, _eventNameMap, _aggregateMetadataMap);
+        
+    public void Register<TAggregate>(Action<AggregateRegistrationBuilder<TAggregate, TEventBase>> builderAction)
+    {
+        if (builderAction == null) throw new ArgumentNullException(nameof(builderAction));
+        builderAction(new AggregateRegistrationBuilder<TAggregate, TEventBase>(this));
+    }
+        
+    internal void RegisterInitialStateFunc<TAggregate>(Func<TAggregate> getState)
+    {
+        var aggregateMetadata = GetOrAddAggregateMetadata<TAggregate>();
+        aggregateMetadata.GetInitialState = () => getState();
     }
 
-    public sealed class AggregateRegistryBuilder<TCommandBase, TEventBase>
+    internal void RegisterAggregateIdFunc<TAggregate>(Func<TAggregate, string> getId)
     {
-        private readonly CommandRegistrations<TCommandBase, TEventBase> _commandRegistrations = new();
-        private readonly EventRoutes<TEventBase> _eventRoutes = new();
-        private readonly ImmutableEventRoutes<TEventBase> _immutableEventRoutes = new();
-        private readonly EventNameMap _eventNameMap = new();
-        private readonly AggregateMetadataMap _aggregateMetadataMap = new();
+        var aggregateMetadata = GetOrAddAggregateMetadata<TAggregate>();
+        aggregateMetadata.GetIdentifier = o => getId((TAggregate) o);
+    }
 
-        public AggregateRegistry<TCommandBase, TEventBase> Build()
-        {
-            return new(_commandRegistrations, _eventRoutes, _immutableEventRoutes, _eventNameMap, _aggregateMetadataMap);
-        }
-        
-        public void Register<TAggregate>(Action<AggregateRegistrationBuilder<TAggregate, TCommandBase, TEventBase>> buildAggregateRegistration)
-        {
-            if (buildAggregateRegistration == null) throw new ArgumentNullException(nameof(buildAggregateRegistration));
-            buildAggregateRegistration(new AggregateRegistrationBuilder<TAggregate, TCommandBase, TEventBase>(this));
-        }
+    internal void RegisterAggregateKey<TAggregate>(Func<string, string> getPersistenceKey)
+    {
+        var aggregateMetadata = GetOrAddAggregateMetadata<TAggregate>();
+        aggregateMetadata.GetKeyFromIdentifier = getPersistenceKey;
+    }
 
-        internal void RegisterCommandRoute<TAggregate, TCommand, TEvent>(
-            ExecuteCommand<TAggregate, TCommand, TEvent> executeCommand) where TCommand : TCommandBase
-        {
-            _commandRegistrations.Routes.Add(
-                (typeof(TAggregate), typeof(TCommand)),
-                (agg, cmd) => (IEnumerable<TEventBase>) executeCommand((TAggregate) agg, (TCommand) cmd));
-        }
+    internal void RegisterAggregateSnapshotKey<TAggregate>(Func<string, string> getSnapshotKey)
+    {
+        var aggregateMetadata = GetOrAddAggregateMetadata<TAggregate>();
+        aggregateMetadata.GetSnapshotKeyFromIdentifier = getSnapshotKey;
+    }
 
-        internal void RegisterCommandRoute<TAggregate, TCommand, TEvent>(
-            ImmutableExecuteCommand<TAggregate, TCommand, TEvent> executeCommand) where TCommand : TCommandBase
+    private AggregateMetadata GetOrAddAggregateMetadata<TAggregate>()
+    {
+        var aggregateType = typeof(TAggregate);
+        if (!_aggregateMetadataMap.TryGetValue(aggregateType, out var aggregateMetadata))
         {
-            _commandRegistrations.ImmutableRoutes.Add(
-                (typeof(TAggregate), typeof(TCommand)),
-                (agg, cmd) => (IEnumerable<TEventBase>) executeCommand(() => (TAggregate) agg(), (TCommand) cmd));
-        }
-        
-        internal void RegisterEventRoute<TAggregate, TEvent>(ApplyEvent<TAggregate, TEvent> applyEvent) where TEvent: TEventBase
-        {
-            _eventRoutes.Add((typeof(TAggregate), typeof(TEvent)), (agg, e) => applyEvent((TAggregate)agg, (TEvent)e));
+            aggregateMetadata = new AggregateMetadata();
+            _aggregateMetadataMap.Add(aggregateType, aggregateMetadata);
         }
 
-        internal void RegisterEventRoute<TAggregate, TEvent>(ImmutableApplyEvent<TAggregate, TEvent> applyEvent) where TEvent: TEventBase
-        {
-            _immutableEventRoutes.Add((typeof(TAggregate), typeof(TEvent)), (agg, e) => applyEvent((TAggregate)agg, (TEvent)e));
-        }
-
-        internal void RegisterEventName<TEvent>(string eventName)
-        {
-            _eventNameMap.RegisterEvent<TEvent>(eventName);
-        }
-
-        internal void RegisterInitialStateFunc<TAggregate>(Func<TAggregate> getState)
-        {
-            var aggregateMetadata = GetOrAddAggregateMetadata<TAggregate>();
-            aggregateMetadata.GetInitialState = () => getState();
-        }
-
-        internal void RegisterAggregateIdFunc<TAggregate>(Func<TAggregate, string> getId)
-        {
-            var aggregateMetadata = GetOrAddAggregateMetadata<TAggregate>();
-            aggregateMetadata.GetIdentifier = o => getId((TAggregate) o);
-        }
-
-        internal void RegisterAggregateKey<TAggregate>(Func<string, string> getPersistenceKey)
-        {
-            var aggregateMetadata = GetOrAddAggregateMetadata<TAggregate>();
-            aggregateMetadata.GetKeyFromIdentifier = getPersistenceKey;
-        }
-
-        internal void RegisterAggregateSnapshotKey<TAggregate>(Func<string, string> getSnapshotKey)
-        {
-            var aggregateMetadata = GetOrAddAggregateMetadata<TAggregate>();
-            aggregateMetadata.GetSnapshotKeyFromIdentifier = getSnapshotKey;
-        }
-
-        private AggregateMetadata GetOrAddAggregateMetadata<TAggregate>()
-        {
-            var aggregateType = typeof(TAggregate);
-            if (!_aggregateMetadataMap.TryGetValue(aggregateType, out var aggregateMetadata))
-            {
-                aggregateMetadata = new AggregateMetadata();
-                _aggregateMetadataMap.Add(aggregateType, aggregateMetadata);
-            }
-
-            return aggregateMetadata;
-        }
+        return aggregateMetadata;
     }
 }
