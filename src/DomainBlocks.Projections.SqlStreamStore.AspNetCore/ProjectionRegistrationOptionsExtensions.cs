@@ -29,12 +29,16 @@ namespace DomainBlocks.Projections.SqlStreamStore.AspNetCore
             return typedBuilder;
         }
 
+#nullable enable
         public static ProjectionRegistrationOptionsBuilder<StreamMessageWrapper> UseJsonDeserialization(
-            this ProjectionRegistrationOptionsBuilder<StreamMessageWrapper> builder, JsonSerializerOptions? serializerOptions = null)
+            this ProjectionRegistrationOptionsBuilder<StreamMessageWrapper> builder,
+            JsonSerializerOptions? serializerOptions = null)
         {
-            var builderInfrastructure = (IProjectionRegistrationOptionsBuilderInfrastructure<StreamMessageWrapper>)builder;
+            var builderInfrastructure =
+                (IProjectionRegistrationOptionsBuilderInfrastructure<StreamMessageWrapper>)builder;
             builderInfrastructure.UseEventDeserializer(_ => new StreamMessageJsonDeserializer(serializerOptions));
             return builder;
         }
+#nullable restore
     }
 }
