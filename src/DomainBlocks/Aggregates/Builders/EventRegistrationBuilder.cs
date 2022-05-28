@@ -1,3 +1,5 @@
+using System;
+
 namespace DomainBlocks.Aggregates.Builders;
 
 public class EventRegistrationBuilder<TAggregate, TEventBase, TEvent> where TEvent : TEventBase
@@ -8,19 +10,26 @@ public class EventRegistrationBuilder<TAggregate, TEventBase, TEvent> where TEve
     {
         _eventRegistryBuilder = eventRegistryBuilder;
     }
-
-    public EventRegistrationBuilder<TAggregate, TEventBase, TEvent> RoutesTo(ApplyEvent<TAggregate, TEvent> applyEvent)
+    
+    public EventRegistrationBuilder<TAggregate, TEventBase, TEvent> RoutesTo(Action<TAggregate, TEvent> eventApplier)
     {
-        _eventRegistryBuilder.EventRoutes.Add(
-            (typeof(TAggregate), typeof(TEvent)), (agg, e) => applyEvent((TAggregate)agg, (TEvent)e));
-        return this;
+        return RoutesTo((agg, e) =>
+        {
+            eventApplier(agg, e);
+            return agg;
+        });
     }
 
     public EventRegistrationBuilder<TAggregate, TEventBase, TEvent> RoutesTo(
-        ImmutableApplyEvent<TAggregate, TEvent> applyEvent)
+        EventApplier<TAggregate, TEvent> eventApplier)
     {
-        _eventRegistryBuilder.ImmutableEventRoutes.Add(
-            (typeof(TAggregate), typeof(TEvent)), (agg, e) => applyEvent((TAggregate)agg, (TEvent)e));
+        _eventRegistryBuilder.EventRoutes.Add(eventApplier);
+        return this;
+    }
+    
+    public EventRegistrationBuilder<TAggregate, TEventBase, TEvent> Do(Action<TAggregate, TEvent> action)
+    {
+        _eventRegistryBuilder.EventRoutes.AddSideEffect(action);
         return this;
     }
     
@@ -35,4 +44,12 @@ public class EventRegistrationBuilder<TAggregate, TEventBase, TEvent> where TEve
     {
         return _eventRegistryBuilder.Event<TNextEvent>();
     }
+    
+    public EventRegistrationBuilder<TAggregate, TEventBase, TNextEvent> When<TNextEvent>()
+        where TNextEvent : TEventBase
+    {
+        return _eventRegistryBuilder.Event<TNextEvent>();
+    }
+
+    public EventRegistry<TEventBase> Build() => _eventRegistryBuilder.Build();
 }

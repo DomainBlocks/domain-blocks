@@ -6,39 +6,35 @@ namespace DomainBlocks.Persistence;
 
 public static class AggregateRepository
 {
-    public static AggregateRepository<TCommandBase, TEventBase, TRawData> Create<TCommandBase, TEventBase, TRawData>(
+    public static AggregateRepository<TEventBase, TRawData> Create<TEventBase, TRawData>(
         IEventsRepository<TRawData> eventsRepository,
         ISnapshotRepository snapshotRepository,
-        AggregateRegistry<TCommandBase, TEventBase> aggregateRegistry)
+        AggregateRegistry< TEventBase> aggregateRegistry)
     {
-        return new AggregateRepository<TCommandBase, TEventBase, TRawData>(
-            eventsRepository, snapshotRepository, aggregateRegistry);
+        return new AggregateRepository<TEventBase, TRawData>(eventsRepository, snapshotRepository, aggregateRegistry);
     }
 }
 
-public sealed class AggregateRepository<TCommandBase, TEventBase, TRawData>
-    : IAggregateRepository<TCommandBase, TEventBase>
+public sealed class AggregateRepository<TEventBase, TRawData> : IAggregateRepository<TEventBase>
 {
     private readonly IEventsRepository<TRawData> _eventsRepository;
     private readonly ISnapshotRepository _snapshotRepository;
     private readonly EventDispatcher<TEventBase> _eventDispatcher;
     private readonly AggregateMetadataMap _metadataMap;
-    private readonly CommandDispatcher<TCommandBase, TEventBase> _commandDispatcher;
 
     public AggregateRepository(
         IEventsRepository<TRawData> eventsRepository,
         ISnapshotRepository snapshotRepository,
-        AggregateRegistry<TCommandBase, TEventBase> aggregateRegistry)
+        AggregateRegistry<TEventBase> aggregateRegistry)
     {
         if (aggregateRegistry == null) throw new ArgumentNullException(nameof(aggregateRegistry));
         _eventsRepository = eventsRepository ?? throw new ArgumentNullException(nameof(eventsRepository));
         _snapshotRepository = snapshotRepository ?? throw new ArgumentNullException(nameof(snapshotRepository));
         _eventDispatcher = aggregateRegistry.EventDispatcher;
         _metadataMap = aggregateRegistry.AggregateMetadataMap;
-        _commandDispatcher = aggregateRegistry.CommandDispatcher;
     }
 
-    public async Task<LoadedAggregate<TAggregateState, TCommandBase, TEventBase>> LoadAggregate<TAggregateState>(
+    public async Task<LoadedAggregate<TAggregateState, TEventBase>> LoadAggregate<TAggregateState>(
         string id, AggregateLoadStrategy loadStrategy = AggregateLoadStrategy.PreferSnapshot)
     {
         if (id == null) throw new ArgumentNullException(nameof(id));
@@ -86,26 +82,16 @@ public sealed class AggregateRepository<TCommandBase, TEventBase, TRawData>
         }
 
         var events = await _eventsRepository.LoadEventsAsync<TEventBase>(streamName, loadStartPosition);
-
-        TAggregateState state;
-        if (_commandDispatcher.HasImmutableRegistrations)
-        {
-            state = _eventDispatcher.ImmutableDispatch(stateToAppendEventsTo, events);
-        }
-        else
-        {
-            _eventDispatcher.Dispatch(stateToAppendEventsTo, events);
-            state = stateToAppendEventsTo;
-        }
-
+        var state = _eventDispatcher.Dispatch(stateToAppendEventsTo, events);
         var newVersion = loadStartPosition + events.Count - 1;
 
-        return LoadedAggregate.Create(state, id, _commandDispatcher, newVersion, snapshotVersion, events.Count);
+        return LoadedAggregate.Create<TAggregateState, TEventBase>(
+            state, id, newVersion, snapshotVersion, events.Count);
     }
 
     public async Task<long> SaveAggregate<TAggregateState>(
-        LoadedAggregate<TAggregateState, TCommandBase, TEventBase> loadedAggregate,
-        Func<LoadedAggregate<TAggregateState, TCommandBase, TEventBase>, bool> snapshotPredicate = null)
+        LoadedAggregate<TAggregateState, TEventBase> loadedAggregate,
+        Func<LoadedAggregate<TAggregateState, TEventBase>, bool> snapshotPredicate = null)
     {
         if (loadedAggregate == null) throw new ArgumentNullException(nameof(loadedAggregate));
         if (loadedAggregate.HasBeenSaved)
