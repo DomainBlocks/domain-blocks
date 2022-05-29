@@ -11,14 +11,6 @@ public sealed class EventRoutes<TEventBase>
     {
         _routes.Add((typeof(TAggregate), typeof(TEvent)), (agg, e) => eventApplier((TAggregate)agg, (TEvent)e));
     }
-    
-    public void AddRange(EventRoutes<TEventBase> other)
-    {
-        foreach (var (k, v) in other._routes)
-        {
-            _routes.Add(k, v);
-        }
-    }
 
     public EventApplier<TAggregate, TEventBase> Get<TAggregate>(Type eventType)
     {
