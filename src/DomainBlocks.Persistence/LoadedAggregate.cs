@@ -34,8 +34,9 @@ public sealed class LoadedAggregate<TAggregateState, TEventBase>
     {
         if (string.IsNullOrWhiteSpace(id))
             throw new ArgumentException("Value cannot be null or whitespace.", nameof(id));
-        _eventDispatcher = eventDispatcher;
-
+        
+        _eventDispatcher = eventDispatcher ?? throw new ArgumentNullException(nameof(eventDispatcher));
+        
         AggregateState = aggregateState ?? throw new ArgumentNullException(nameof(aggregateState));
         Id = id;
         Version = version;
@@ -44,47 +45,64 @@ public sealed class LoadedAggregate<TAggregateState, TEventBase>
         EventsToPersist = Enumerable.Empty<TEventBase>();
     }
 
-    // public void DispatchCommand<TCommand>(TCommand command) where TCommand : TCommandBase
-    // {
-    //     var events = _commandDispatcher.Dispatch(AggregateState, command);
-    //     EventsToPersist = EventsToPersist.Concat(events);
-    // }
-    //
-    // public void ImmutableDispatchCommand<TCommand>(TCommand command) where TCommand : TCommandBase
-    // {
-    //     var (newState, events) = _commandDispatcher.ImmutableDispatch(AggregateState, command);
-    //     EventsToPersist = EventsToPersist.Concat(events);
-    //     AggregateState = newState;
-    // }
-
-    // public void ExecuteCommand(Action<TAggregateState> commandExecutor)
-    // {
-    //     
-    // }
-    //
-    // public void ExecuteCommand(Action<TAggregateState, IEventDispatcher<TEventBase>> commandExecutor)
-    // {
-    //     
-    // }
-    
-    public void ExecuteCommand(Func<TAggregateState, IEnumerable<TEventBase>> commandExecutor)
-    {
-        var events = commandExecutor(AggregateState).ToList();
-        AggregateState = _eventDispatcher.Dispatch(AggregateState, events);
-        EventsToPersist = EventsToPersist.Concat(events);
-        _eventDispatcher.ClearTrackedEvents();
-    }
-
-    // public void ExecuteCommand(Func<TAggregateState, IEventDispatcher<TEventBase>, TAggregateState> commandExecutor)
-    // {
-    //     
-    // }
-
-    public string Id { get; }
     public TAggregateState AggregateState { get; private set; }
+    public string Id { get; }
     public long Version { get; }
     public long? SnapshotVersion { get; }
     public long EventsLoadedCount { get; }
     public IEnumerable<TEventBase> EventsToPersist { get; private set; }
     internal bool HasBeenSaved { get; set; }
+    
+    public void ExecuteCommand(Action<TAggregateState> commandExecutor)
+    {
+        // Mutates the aggregate state.
+        commandExecutor(AggregateState);
+
+        // Save any events that were raised on the event dispatcher.
+        EventsToPersist = EventsToPersist.Concat(_eventDispatcher.TrackedEvents);
+        _eventDispatcher.ClearTrackedEvents();
+    }
+    
+    public void ExecuteCommand(Action<TAggregateState, IEventDispatcher<TEventBase>> commandExecutor)
+    {
+        // Mutates the aggregate state.
+        commandExecutor(AggregateState, _eventDispatcher);
+
+        // Save any events that were raised on the event dispatcher.
+        EventsToPersist = EventsToPersist.Concat(_eventDispatcher.TrackedEvents);
+        _eventDispatcher.ClearTrackedEvents();
+    }
+    
+    public void ExecuteCommand(Func<TAggregateState, TAggregateState> commandExecutor)
+    {
+        // Get the new state by executing the command.
+        AggregateState = commandExecutor(AggregateState);
+
+        // Save any events that were raised on the event dispatcher.
+        EventsToPersist = EventsToPersist.Concat(_eventDispatcher.TrackedEvents);
+        _eventDispatcher.ClearTrackedEvents();
+    }
+
+    public void ExecuteCommand(Func<TAggregateState, IEventDispatcher<TEventBase>, TAggregateState> commandExecutor)
+    {
+        // Get the new state by executing the command.
+        AggregateState = commandExecutor(AggregateState, _eventDispatcher);
+
+        // Save any events that were raised on the event dispatcher.
+        EventsToPersist = EventsToPersist.Concat(_eventDispatcher.TrackedEvents);
+        _eventDispatcher.ClearTrackedEvents();
+    }
+    
+    public void ExecuteCommand(Func<TAggregateState, IEnumerable<TEventBase>> commandExecutor)
+    {
+        // Get the events to raise by executing the command. This func is assumed to be immutable.
+        var events = commandExecutor(AggregateState).ToList();
+
+        // Dispatch the events, and get the new state.
+        AggregateState = _eventDispatcher.Dispatch(AggregateState, events);
+
+        // Save the events. Note that any events raised on the event dispatcher by the command executor are ignored.
+        EventsToPersist = EventsToPersist.Concat(events);
+        _eventDispatcher.ClearTrackedEvents();
+    }
 }
