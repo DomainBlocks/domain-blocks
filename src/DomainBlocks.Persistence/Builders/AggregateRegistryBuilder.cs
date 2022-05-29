@@ -19,7 +19,7 @@ public sealed class AggregateRegistryBuilder<TEventBase>
     public AggregateRegistry<TEventBase> Build()
     {
         var eventRegistry = Events.Build();
-        return new(eventRegistry.EventRoutes, eventRegistry.EventNameMap, _aggregateMetadataMap);
+        return new(eventRegistry.EventRouter, eventRegistry.EventNameMap, _aggregateMetadataMap);
     }
 
     public AggregateRegistryBuilder<TEventBase> Register<TAggregate>(
@@ -31,10 +31,10 @@ public sealed class AggregateRegistryBuilder<TEventBase>
     }
 
     internal void RegisterInitialStateFunc<TAggregate>(
-        Func<IEventDispatcher<TEventBase>, TAggregate> initialStateFactory)
+        Func<IAggregateEventRouter<TEventBase>, TAggregate> initialStateFactory)
     {
         var aggregateMetadata = GetOrAddAggregateMetadata<TAggregate>();
-        aggregateMetadata.InitialStateFactory = x => initialStateFactory((IEventDispatcher<TEventBase>)x);
+        aggregateMetadata.InitialStateFactory = x => initialStateFactory((IAggregateEventRouter<TEventBase>)x);
     }
 
     internal void RegisterAggregateIdFunc<TAggregate>(Func<TAggregate, string> idSelector)

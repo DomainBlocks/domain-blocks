@@ -10,12 +10,12 @@ namespace Shopping.Domain.Aggregates;
 
 public class MutableShoppingCart
 {
-    private readonly IEventDispatcher<IDomainEvent> _eventDispatcher;
+    private readonly IAggregateEventRouter<IDomainEvent> _eventRouter;
     private readonly List<ShoppingCartItem> _items = new();
 
-    public MutableShoppingCart(IEventDispatcher<IDomainEvent> eventDispatcher)
+    public MutableShoppingCart(IAggregateEventRouter<IDomainEvent> eventRouter)
     {
-        _eventDispatcher = eventDispatcher;
+        _eventRouter = eventRouter;
     }
     
     public Guid? Id { get; private set; }
@@ -34,10 +34,10 @@ public class MutableShoppingCart
         var isNew = Id == null;
         if (isNew)
         {
-            _eventDispatcher.Dispatch(this, new ShoppingCartCreated(command.CartId));
+            _eventRouter.Send(this, new ShoppingCartCreated(command.CartId));
         }
 
-        _eventDispatcher.Dispatch(this, new ItemAddedToShoppingCart(command.Id, command.CartId, command.Item));
+        _eventRouter.Send(this, new ItemAddedToShoppingCart(command.Id, command.CartId, command.Item));
     }
 
     public void Execute(RemoveItemFromShoppingCart command)
@@ -47,7 +47,7 @@ public class MutableShoppingCart
             throw new InvalidOperationException("Item not in shopping cart");
         }
 
-        _eventDispatcher.Dispatch(this, new ItemRemovedFromShoppingCart(command.Id, command.CartId));
+        _eventRouter.Send(this, new ItemRemovedFromShoppingCart(command.Id, command.CartId));
     }
 
     private void Apply(ShoppingCartCreated @event)

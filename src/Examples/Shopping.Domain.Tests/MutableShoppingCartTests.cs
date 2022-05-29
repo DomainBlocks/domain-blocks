@@ -21,18 +21,17 @@ public class MutableShoppingCartTests
             .For<MutableShoppingCart>(MutableShoppingCart.RegisterEvents)
             .Build();
 
-        var eventDispatcher = new TrackingEventDispatcher<IDomainEvent>(
-            new EventDispatcher<IDomainEvent>(events.EventRoutes));
+        var eventRouter = new TrackingAggregateEventRouter<IDomainEvent>(events.EventRouter);
 
         // Initial state
-        var shoppingCart = new MutableShoppingCart(eventDispatcher);
+        var shoppingCart = new MutableShoppingCart(eventRouter);
 
         // Execute the first command.
         var shoppingCartId = Guid.NewGuid(); // This could come from a sequence, or could be the customer's ID.
         var command1 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "First Item");
         shoppingCart.Execute(command1);
-        var events1 = eventDispatcher.TrackedEvents;
-        eventDispatcher.ClearTrackedEvents();
+        var events1 = eventRouter.TrackedEvents;
+        eventRouter.ClearTrackedEvents();
 
         // Check the updated aggregate root state.
         Assert.That(shoppingCart.Id, Is.EqualTo(shoppingCartId));
@@ -47,8 +46,8 @@ public class MutableShoppingCartTests
         // Execute the second command to the result of the first command.
         var command2 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "Second Item");
         shoppingCart.Execute(command2);
-        var events2 = eventDispatcher.TrackedEvents;
-        eventDispatcher.ClearTrackedEvents();
+        var events2 = eventRouter.TrackedEvents;
+        eventRouter.ClearTrackedEvents();
 
         // Check the updated aggregate root state.
         Assert.That(shoppingCart.Id, Is.EqualTo(shoppingCartId));
@@ -63,8 +62,8 @@ public class MutableShoppingCartTests
         // The aggregate event log is the sum total of all events from both commands.
         // Simulate loading from the event log.
         var eventLog = events1.Concat(events2);
-        var loadedAggregate = new MutableShoppingCart(eventDispatcher);
-        eventDispatcher.Dispatch(loadedAggregate, eventLog);
+        var loadedAggregate = new MutableShoppingCart(eventRouter);
+        eventRouter.Send(loadedAggregate, eventLog);
 
         // Check the loaded aggregate root state.
         Assert.That(loadedAggregate.Id, Is.EqualTo(shoppingCartId));

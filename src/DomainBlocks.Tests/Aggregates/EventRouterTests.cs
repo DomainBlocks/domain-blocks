@@ -6,12 +6,12 @@ using NUnit.Framework;
 namespace DomainBlocks.Tests.Aggregates;
 
 [TestFixture]
-public class EventDispatcherTests
+public class EventRouterTests
 {
     [Test]
     public void EventIsRoutedAndApplied()
     {
-        var registry = EventRegistryBuilder
+        var eventRouter = EventRegistryBuilder
             .OfType<object>()
             .For<MyAggregateRoot>(events =>
             {
@@ -23,9 +23,8 @@ public class EventDispatcherTests
                     .RoutesTo((a, e) => a.ApplyEvent(e))
                     .HasName(EventNames.SomethingElseHappened);
             })
-            .Build();
-
-        var eventDispatcher = new EventDispatcher<object>(registry.EventRoutes);
+            .Build()
+            .EventRouter;
 
         // Set up the initial state.
         var initialState = new MyAggregateRoot();
@@ -35,7 +34,7 @@ public class EventDispatcherTests
         var event2 = new SomethingElseHappened("Bar");
 
         // Route the events.
-        var newState = eventDispatcher.Dispatch(initialState, event1, event2);
+        var newState = eventRouter.Send(initialState, event1, event2);
 
         Assert.That(newState.State, Is.EqualTo("Foo"));
         Assert.That(newState.OtherState, Is.EqualTo("Bar"));
@@ -44,7 +43,7 @@ public class EventDispatcherTests
     [Test]
     public void MissingEventRouteThrowsException()
     {
-        var registry = EventRegistryBuilder
+        var eventRouter = EventRegistryBuilder
             .OfType<object>()
             .For<MyAggregateRoot>(events =>
             {
@@ -52,9 +51,8 @@ public class EventDispatcherTests
                     .RoutesTo((a, e) => a.ApplyEvent(e))
                     .HasName(EventNames.SomethingElseHappened);
             })
-            .Build();
-
-        var eventDispatcher = new EventDispatcher<object>(registry.EventRoutes);
+            .Build()
+            .EventRouter;
 
         // Set up the initial state.
         var initialState = new MyAggregateRoot();
@@ -64,8 +62,7 @@ public class EventDispatcherTests
         var event2 = new SomethingElseHappened("Bar");
 
         // Route the events.
-        var exception =
-            Assert.Throws<KeyNotFoundException>(() => eventDispatcher.Dispatch(initialState, event1, event2));
+        var exception = Assert.Throws<KeyNotFoundException>(() => eventRouter.Send(initialState, event1, event2));
 
         const string expectedMessage = "No route or default route found when attempting to apply event " +
                                        "SomethingElseHappened to MyAggregateRoot";
@@ -76,7 +73,7 @@ public class EventDispatcherTests
     [Test]
     public void DefaultEventRouteIsInvokedWhenSpecified()
     {
-        var registry = EventRegistryBuilder.OfType<IEvent>()
+        var eventRouter = EventRegistryBuilder.OfType<IEvent>()
             .For<MyAggregateRoot>(events =>
             {
                 events.Event<SomethingHappened>()
@@ -86,9 +83,8 @@ public class EventDispatcherTests
                 events.Event<IEvent>()
                     .RoutesTo((a, e) => a.DefaultApplyEvent(e));
             })
-            .Build();
-
-        var eventDispatcher = new EventDispatcher<IEvent>(registry.EventRoutes);
+            .Build()
+            .EventRouter;
 
         // Set up the initial state.
         var initialState = new MyAggregateRoot();
@@ -98,7 +94,7 @@ public class EventDispatcherTests
         var event2 = new SomethingElseHappened("Bar");
 
         // Route the events.
-        var newState = eventDispatcher.Dispatch(initialState, event1, event2);
+        var newState = eventRouter.Send(initialState, event1, event2);
 
         Assert.That(newState.State, Is.EqualTo("Foo"));
 

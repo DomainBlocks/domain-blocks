@@ -13,16 +13,16 @@ internal static class LoadedAggregate
         long version,
         long? snapshotVersion,
         long eventsLoaded,
-        TrackingEventDispatcher<TEventBase> trackingEventDispatcher)
+        TrackingAggregateEventRouter<TEventBase> trackingEventRouter)
     {
         return new LoadedAggregate<TAggregateState, TEventBase>(
-            aggregateState, id, version, snapshotVersion, eventsLoaded, trackingEventDispatcher);
+            aggregateState, id, version, snapshotVersion, eventsLoaded, trackingEventRouter);
     }
 }
 
 public sealed class LoadedAggregate<TAggregateState, TEventBase>
 {
-    private readonly TrackingEventDispatcher<TEventBase> _eventDispatcher;
+    private readonly TrackingAggregateEventRouter<TEventBase> _eventRouter;
 
     internal LoadedAggregate(
         TAggregateState aggregateState,
@@ -30,12 +30,12 @@ public sealed class LoadedAggregate<TAggregateState, TEventBase>
         long version,
         long? snapshotVersion,
         long eventsLoadedCount,
-        TrackingEventDispatcher<TEventBase> eventDispatcher)
+        TrackingAggregateEventRouter<TEventBase> eventRouter)
     {
         if (string.IsNullOrWhiteSpace(id))
             throw new ArgumentException("Value cannot be null or whitespace.", nameof(id));
         
-        _eventDispatcher = eventDispatcher ?? throw new ArgumentNullException(nameof(eventDispatcher));
+        _eventRouter = eventRouter ?? throw new ArgumentNullException(nameof(eventRouter));
         
         AggregateState = aggregateState ?? throw new ArgumentNullException(nameof(aggregateState));
         Id = id;
@@ -58,19 +58,19 @@ public sealed class LoadedAggregate<TAggregateState, TEventBase>
         // Mutates the aggregate state.
         commandExecutor(AggregateState);
 
-        // Save any events that were raised on the event dispatcher.
-        EventsToPersist = EventsToPersist.Concat(_eventDispatcher.TrackedEvents);
-        _eventDispatcher.ClearTrackedEvents();
+        // Save any events that were raised on the event router.
+        EventsToPersist = EventsToPersist.Concat(_eventRouter.TrackedEvents);
+        _eventRouter.ClearTrackedEvents();
     }
     
-    public void ExecuteCommand(Action<TAggregateState, IEventDispatcher<TEventBase>> commandExecutor)
+    public void ExecuteCommand(Action<TAggregateState, IAggregateEventRouter<TEventBase>> commandExecutor)
     {
         // Mutates the aggregate state.
-        commandExecutor(AggregateState, _eventDispatcher);
+        commandExecutor(AggregateState, _eventRouter);
 
-        // Save any events that were raised on the event dispatcher.
-        EventsToPersist = EventsToPersist.Concat(_eventDispatcher.TrackedEvents);
-        _eventDispatcher.ClearTrackedEvents();
+        // Save any events that were raised on the event router.
+        EventsToPersist = EventsToPersist.Concat(_eventRouter.TrackedEvents);
+        _eventRouter.ClearTrackedEvents();
     }
     
     public void ExecuteCommand(Func<TAggregateState, TAggregateState> commandExecutor)
@@ -78,19 +78,19 @@ public sealed class LoadedAggregate<TAggregateState, TEventBase>
         // Get the new state by executing the command.
         AggregateState = commandExecutor(AggregateState);
 
-        // Save any events that were raised on the event dispatcher.
-        EventsToPersist = EventsToPersist.Concat(_eventDispatcher.TrackedEvents);
-        _eventDispatcher.ClearTrackedEvents();
+        // Save any events that were raised on the event router.
+        EventsToPersist = EventsToPersist.Concat(_eventRouter.TrackedEvents);
+        _eventRouter.ClearTrackedEvents();
     }
 
-    public void ExecuteCommand(Func<TAggregateState, IEventDispatcher<TEventBase>, TAggregateState> commandExecutor)
+    public void ExecuteCommand(Func<TAggregateState, IAggregateEventRouter<TEventBase>, TAggregateState> commandExecutor)
     {
         // Get the new state by executing the command.
-        AggregateState = commandExecutor(AggregateState, _eventDispatcher);
+        AggregateState = commandExecutor(AggregateState, _eventRouter);
 
-        // Save any events that were raised on the event dispatcher.
-        EventsToPersist = EventsToPersist.Concat(_eventDispatcher.TrackedEvents);
-        _eventDispatcher.ClearTrackedEvents();
+        // Save any events that were raised on the event router.
+        EventsToPersist = EventsToPersist.Concat(_eventRouter.TrackedEvents);
+        _eventRouter.ClearTrackedEvents();
     }
     
     public void ExecuteCommand(Func<TAggregateState, IEnumerable<TEventBase>> commandExecutor)
@@ -98,11 +98,11 @@ public sealed class LoadedAggregate<TAggregateState, TEventBase>
         // Get the events to raise by executing the command. This func is assumed to be immutable.
         var events = commandExecutor(AggregateState).ToList();
 
-        // Dispatch the events, and get the new state.
-        AggregateState = _eventDispatcher.Dispatch(AggregateState, events);
+        // Send the events, and get the new state.
+        AggregateState = _eventRouter.Send(AggregateState, events);
 
-        // Save the events. Note that any events raised on the event dispatcher by the command executor are ignored.
+        // Save the events. Note that any events raised on the event router by the command executor are ignored.
         EventsToPersist = EventsToPersist.Concat(events);
-        _eventDispatcher.ClearTrackedEvents();
+        _eventRouter.ClearTrackedEvents();
     }
 }
