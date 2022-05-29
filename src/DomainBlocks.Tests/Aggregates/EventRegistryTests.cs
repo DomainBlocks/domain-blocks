@@ -15,14 +15,18 @@ public class EventRegistryTests
     [Test]
     public void EventNamesAreMappedWhenEventsAreRegisteredWithName()
     {
-        var registry = EventRegistryBuilder.Create<object>()
-            .For<MyAggregateRoot>()
-            .Event<SomethingHappened>()
-            .RoutesTo((a, e) => a.ApplyEvent(e))
-            .HasName(EventNames.SomethingHappened)
-            .Event<SomethingElseHappened>()
-            .RoutesTo((a, e) => a.ApplyEvent(e))
-            .HasName(EventNames.SomethingElseHappened)
+        var registry = EventRegistryBuilder
+            .OfType<object>()
+            .For<MyAggregateRoot>(events =>
+            {
+                events.Event<SomethingHappened>()
+                    .RoutesTo((a, e) => a.ApplyEvent(e))
+                    .HasName(EventNames.SomethingHappened);
+
+                events.Event<SomethingElseHappened>()
+                    .RoutesTo((a, e) => a.ApplyEvent(e))
+                    .HasName(EventNames.SomethingElseHappened);
+            })
             .Build();
 
         Assert.That(registry.EventNameMap.GetEventNameForClrType(typeof(SomethingHappened)),

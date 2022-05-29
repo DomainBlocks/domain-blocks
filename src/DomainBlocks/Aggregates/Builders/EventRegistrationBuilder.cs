@@ -38,6 +38,4 @@ public class EventRegistrationBuilder<TAggregate, TEventBase, TEvent> where TEve
     {
         return _eventRegistryBuilder.Event<TNextEvent>();
     }
-
-    public EventRegistry<TEventBase> Build() => _eventRegistryBuilder.Build();
 }

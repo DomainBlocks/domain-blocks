@@ -29,8 +29,7 @@ public sealed class AggregateRegistrationBuilder<TAggregate, TEventBase>
     public AggregateRegistrationBuilder<TAggregate, TEventBase> RegisterEvents(
         Action<EventRegistryBuilder<TAggregate, TEventBase>> builderAction)
     {
-        var builder = _aggregateRegistryBuilder.Events.For<TAggregate>();
-        builderAction(builder);
+        _aggregateRegistryBuilder.Events.For(builderAction);
         return this;
     }
 }
