@@ -21,9 +21,9 @@ public class MutableShoppingCart
     public Guid? Id { get; private set; }
     public IReadOnlyList<ShoppingCartItem> Items => _items.AsReadOnly();
 
-    public static void RegisterEvents(EventRegistryBuilder<MutableShoppingCart, IDomainEvent> builder)
+    public static void RegisterEvents(EventRegistryBuilder<MutableShoppingCart, IDomainEvent> events)
     {
-        builder
+        events
             .Event<ShoppingCartCreated>().RoutesTo((agg, e) => agg.Apply(e))
             .Event<ItemAddedToShoppingCart>().RoutesTo((agg, e) => agg.Apply(e))
             .Event<ItemRemovedFromShoppingCart>().RoutesTo((agg, e) => agg.Apply(e));

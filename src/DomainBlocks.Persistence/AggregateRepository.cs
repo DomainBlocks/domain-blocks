@@ -42,8 +42,9 @@ public sealed class AggregateRepository<TEventBase, TRawData> : IAggregateReposi
         var aggregateMetadata = _metadataMap.GetForType<TAggregateState>();
 
         var trackingEventDispatcher = new TrackingEventDispatcher<TEventBase>(_eventDispatcher);
-        
-        var initialAggregateState =(TAggregateState)aggregateMetadata.GetInitialState?.Invoke(trackingEventDispatcher);
+
+        var initialAggregateState =
+            (TAggregateState)aggregateMetadata.InitialStateFactory?.Invoke(trackingEventDispatcher);
 
         // If we choose to load solely from an event stream, then we need some initial state
         // onto which to apply the events.
@@ -54,13 +55,13 @@ public sealed class AggregateRepository<TEventBase, TRawData> : IAggregateReposi
 
         var stateToAppendEventsTo = initialAggregateState;
 
-        var streamName = aggregateMetadata.GetKeyFromIdentifier(id);
+        var streamName = aggregateMetadata.IdToKeySelector(id);
         long loadStartPosition = 0;
         long? snapshotVersion = null;
 
         if (loadStrategy is AggregateLoadStrategy.UseSnapshot or AggregateLoadStrategy.PreferSnapshot)
         {
-            var snapshotKey = aggregateMetadata.GetSnapshotKeyFromIdentifier(id);
+            var snapshotKey = aggregateMetadata.IdToSnapshotKeySelector(id);
             var (isSuccess, snapshot) = await _snapshotRepository.TryLoadSnapshotAsync<TAggregateState>(snapshotKey);
 
             if (!isSuccess)
@@ -104,17 +105,17 @@ public sealed class AggregateRepository<TEventBase, TRawData> : IAggregateReposi
 
         snapshotPredicate ??= _ => false;
         var aggregateMetadata = _metadataMap.GetForType<TAggregateState>();
-        var streamName = aggregateMetadata.GetKeyFromIdentifier(loadedAggregate.Id);
+        var streamName = aggregateMetadata.IdToKeySelector(loadedAggregate.Id);
         var newVersion = await _eventsRepository.SaveEventsAsync(
             streamName, loadedAggregate.Version, loadedAggregate.EventsToPersist);
         loadedAggregate.HasBeenSaved = true;
 
         if (snapshotPredicate(loadedAggregate))
         {
-            var snapshotStreamId = aggregateMetadata.GetSnapshotKeyFromAggregate(loadedAggregate.AggregateState);
+            var snapshotKey = aggregateMetadata.SnapshotKeySelector(loadedAggregate.AggregateState);
 
             await _snapshotRepository.SaveSnapshotAsync(
-                snapshotStreamId, loadedAggregate.Version, loadedAggregate.AggregateState);
+                snapshotKey, loadedAggregate.Version, loadedAggregate.AggregateState);
         }
 
         return newVersion;
@@ -125,7 +126,7 @@ public sealed class AggregateRepository<TEventBase, TRawData> : IAggregateReposi
         if (versionedState == null) throw new ArgumentNullException(nameof(versionedState));
 
         var aggregateMetadata = _metadataMap.GetForType<TAggregateState>();
-        var snapshotStreamId = aggregateMetadata.GetSnapshotKeyFromAggregate(versionedState.AggregateState);
+        var snapshotStreamId = aggregateMetadata.SnapshotKeySelector(versionedState.AggregateState);
 
         await _snapshotRepository.SaveSnapshotAsync(
             snapshotStreamId, versionedState.Version, versionedState.AggregateState);

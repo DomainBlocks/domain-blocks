@@ -29,11 +29,17 @@ public class EventRegistryTests
             })
             .Build();
 
-        Assert.That(registry.EventNameMap.GetEventNameForClrType(typeof(SomethingHappened)),
+        Assert.That(registry.EventNameMap.GetEventName(typeof(SomethingHappened)),
             Is.EqualTo(EventNames.SomethingHappened));
 
-        Assert.That(registry.EventNameMap.GetEventNameForClrType(typeof(SomethingElseHappened)),
+        Assert.That(registry.EventNameMap.GetEventName(typeof(SomethingElseHappened)),
             Is.EqualTo(EventNames.SomethingElseHappened));
+
+        Assert.That(registry.EventNameMap.GetEventType(EventNames.SomethingHappened),
+            Is.EqualTo(typeof(SomethingHappened)));
+
+        Assert.That(registry.EventNameMap.GetEventType(EventNames.SomethingElseHappened),
+            Is.EqualTo(typeof(SomethingElseHappened)));
     }
 
     private class SomethingHappened

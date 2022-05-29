@@ -29,7 +29,7 @@ public class EventRegistrationBuilder<TAggregate, TEventBase, TEvent> where TEve
     
     public EventRegistrationBuilder<TAggregate, TEventBase, TEvent> HasName(string name)
     {
-        _eventRegistryBuilder.EventNameMap.RegisterEvent<TEvent>(name);
+        _eventRegistryBuilder.EventNameMap.Add<TEvent>(name);
         return this;
     }
 

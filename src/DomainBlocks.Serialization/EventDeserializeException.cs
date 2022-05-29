@@ -1,27 +1,24 @@
 ﻿using System;
 using System.Runtime.Serialization;
 
-namespace DomainBlocks.Serialization
+namespace DomainBlocks.Serialization;
+
+[Serializable]
+public class EventDeserializeException : Exception
 {
-    [Serializable]
-    public class EventDeserializeException : Exception
+    public EventDeserializeException()
     {
-        public EventDeserializeException()
-        {
-        }
+    }
 
-        public EventDeserializeException(string message) : base(message)
-        {
-        }
+    public EventDeserializeException(string message) : base(message)
+    {
+    }
 
-        public EventDeserializeException(string message, Exception inner) : base(message, inner)
-        {
-        }
+    public EventDeserializeException(string message, Exception inner) : base(message, inner)
+    {
+    }
 
-        protected EventDeserializeException(
-            SerializationInfo info,
-            StreamingContext context) : base(info, context)
-        {
-        }
+    protected EventDeserializeException(SerializationInfo info, StreamingContext context) : base(info, context)
+    {
     }
 }
