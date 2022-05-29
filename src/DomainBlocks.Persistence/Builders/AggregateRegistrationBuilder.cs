@@ -14,16 +14,29 @@ public sealed class AggregateRegistrationBuilder<TAggregate, TEventBase>
     }
 
     public AggregateRegistrationBuilder<TAggregate, TEventBase> InitialState(
-        Func<IEventDispatcher<TEventBase>, TAggregate> getInitialState)
+        Func<IEventDispatcher<TEventBase>, TAggregate> initialStateFactory)
     {
-        _aggregateRegistryBuilder.RegisterInitialStateFunc(getInitialState);
+        _aggregateRegistryBuilder.RegisterInitialStateFunc(initialStateFactory);
         return this;
     }
 
-    public AggregateKeyBuilder<TAggregate, TEventBase> Id(Func<TAggregate, string> getPersistenceId)
+    public AggregateRegistrationBuilder<TAggregate, TEventBase> Id(Func<TAggregate, string> idSelector)
     {
-        _aggregateRegistryBuilder.RegisterAggregateIdFunc(getPersistenceId);
-        return new AggregateKeyBuilder<TAggregate, TEventBase>(_aggregateRegistryBuilder);
+        _aggregateRegistryBuilder.RegisterAggregateIdFunc(idSelector);
+        return new AggregateRegistrationBuilder<TAggregate, TEventBase>(_aggregateRegistryBuilder);
+    }
+
+    public AggregateRegistrationBuilder<TAggregate, TEventBase> PersistenceKey(Func<string, string> idToKeySelector)
+    {
+        _aggregateRegistryBuilder.RegisterAggregateKey<TAggregate>(idToKeySelector);
+        return this;
+    }
+
+    public AggregateRegistrationBuilder<TAggregate, TEventBase> SnapshotKey(
+        Func<string, string> idToSnapshotKeySelector)
+    {
+        _aggregateRegistryBuilder.RegisterAggregateSnapshotKey<TAggregate>(idToSnapshotKeySelector);
+        return this;
     }
 
     public AggregateRegistrationBuilder<TAggregate, TEventBase> RegisterEvents(

@@ -50,9 +50,9 @@ public class ShoppingCartItem
     
 public static class ShoppingCartFunctions
 {
-    public static void RegisterEvents(EventRegistryBuilder<ShoppingCartState, IDomainEvent> builder)
+    public static void RegisterEvents(EventRegistryBuilder<ShoppingCartState, IDomainEvent> events)
     {
-        builder
+        events
             .Event<ShoppingCartCreated>().RoutesTo(Apply).HasName(ShoppingCartCreated.EventName)
             .Event<ItemAddedToShoppingCart>().RoutesTo(Apply).HasName(ItemAddedToShoppingCart.EventName)
             .Event<ItemRemovedFromShoppingCart>().RoutesTo(Apply).HasName(ItemRemovedFromShoppingCart.EventName);

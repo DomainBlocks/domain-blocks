@@ -1,46 +1,45 @@
 ﻿using System;
 using System.Runtime.Serialization;
 
-namespace DomainBlocks.Serialization
+namespace DomainBlocks.Serialization;
+
+[Serializable]
+public class InvalidEventTypeException : EventDeserializeException
 {
-    [Serializable]
-    public class InvalidEventTypeException : EventDeserializeException
+    public InvalidEventTypeException(string serializedEventType, string clrTypeName) :
+        this(serializedEventType, clrTypeName, $"Cannot cast event of type {serializedEventType} to {clrTypeName}")
     {
-        public string SerializedEventType { get; }
-        public string ClrTypeName { get; }
+        SerializedEventType = serializedEventType;
+        ClrTypeName = clrTypeName;
+    }
 
-        public InvalidEventTypeException(string serializedEventType, string clrTypeName)
-        {
-            SerializedEventType = serializedEventType;
-            ClrTypeName = clrTypeName;
-        }
+    public InvalidEventTypeException(string serializedEventType, string clrTypeName, string message) 
+        : base(message)
+    {
+        SerializedEventType = serializedEventType;
+        ClrTypeName = clrTypeName;
+    }
 
-        public InvalidEventTypeException(string message, string serializedEventType, string clrTypeName) 
-            : base(message)
-        {
-            SerializedEventType = serializedEventType;
-            ClrTypeName = clrTypeName;
-        }
+    public InvalidEventTypeException(
+        string serializedEventType, string clrTypeName, string message, Exception inner) : base(message, inner)
+    {
+        SerializedEventType = serializedEventType;
+        ClrTypeName = clrTypeName;
+    }
+    
+    public string SerializedEventType { get; }
+    public string ClrTypeName { get; }
 
-        public InvalidEventTypeException(string message, string serializedEventType, string clrTypeName, Exception inner) 
-            : base(message, inner)
-        {
-            SerializedEventType = serializedEventType;
-            ClrTypeName = clrTypeName;
-        }
-
-        protected InvalidEventTypeException(SerializationInfo info, StreamingContext context) 
-            : base(info, context)
-        {
-            if (info == null)
-            {
-                throw new ArgumentNullException(nameof(info));
-            }
-
-            info.AddValue(nameof(ClrTypeName), ClrTypeName);
-            info.AddValue(nameof(SerializedEventType), SerializedEventType);
-
-            base.GetObjectData(info, context);
-        }
+    protected InvalidEventTypeException(SerializationInfo info, StreamingContext context) : base(info, context)
+    {
+        SerializedEventType = (string)info.GetValue(nameof(SerializedEventType), typeof(string));
+        ClrTypeName = (string)info.GetValue(nameof(ClrTypeName), typeof(string));
+    }
+    
+    public override void GetObjectData(SerializationInfo info, StreamingContext context)
+    {
+        base.GetObjectData(info, context);
+        info.AddValue(nameof(SerializedEventType), SerializedEventType);
+        info.AddValue(nameof(ClrTypeName), ClrTypeName);
     }
 }

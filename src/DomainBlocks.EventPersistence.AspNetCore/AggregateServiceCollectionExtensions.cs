@@ -1,4 +1,5 @@
 ﻿using System;
+using DomainBlocks.Persistence.Builders;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -12,10 +13,10 @@ public static class AggregateServiceCollectionExtensions
     public static IServiceCollection AddAggregateRepository(
         this IServiceCollection services,
         IConfiguration configuration,
-        Action<AggregateRepositoryOptionsBuilder> optionsAction,
-        AggregateRegistry<object> aggregateRegistry)
+        Action<AggregateRepositoryOptionsBuilder> optionsBuilderAction,
+        Action<AggregateRegistryBuilder<object>> registryBuilderAction)
     {
-        return AddAggregateRepository<object>(services, configuration, optionsAction, aggregateRegistry);
+        return AddAggregateRepository<object>(services, configuration, optionsBuilderAction, registryBuilderAction);
     }
 
     /// <summary>
@@ -24,12 +25,15 @@ public static class AggregateServiceCollectionExtensions
     public static IServiceCollection AddAggregateRepository<TEventBase>(
         this IServiceCollection services,
         IConfiguration configuration,
-        Action<AggregateRepositoryOptionsBuilder> optionsAction,
-        AggregateRegistry<TEventBase> aggregateRegistry)
+        Action<AggregateRepositoryOptionsBuilder> optionsBuilderAction,
+        Action<AggregateRegistryBuilder<TEventBase>> registryBuilderAction)
     {
         var optionsBuilder = new AggregateRepositoryOptionsBuilder(services, configuration);
+        optionsBuilderAction(optionsBuilder);
 
-        optionsAction(optionsBuilder);
+        var registryBuilder = new AggregateRegistryBuilder<TEventBase>();
+        registryBuilderAction(registryBuilder);
+        var aggregateRegistry = registryBuilder.Build();
 
         var rawDataType = optionsBuilder.RawDataType;
         var typedBuildMethod =

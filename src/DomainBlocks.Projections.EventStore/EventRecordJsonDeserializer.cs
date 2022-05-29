@@ -44,7 +44,7 @@ namespace DomainBlocks.Projections.EventStore
             }
 
             var runtTimeType = typeof(TEventBase);
-            throw new InvalidEventTypeException($"Cannot cast event of type {eventName} to {runtTimeType.FullName}", eventName, runtTimeType.FullName);
+            throw new InvalidEventTypeException(eventName, runtTimeType.FullName);
         }
     }
 }

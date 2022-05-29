@@ -1,6 +1,4 @@
-﻿using DomainBlocks.Persistence;
-using DomainBlocks.Persistence.AspNetCore;
-using DomainBlocks.Persistence.Builders;
+﻿using DomainBlocks.Persistence.AspNetCore;
 using DomainBlocks.Persistence.SqlStreamStore.AspNetCore;
 using DomainBlocks.Serialization.Json.AspNetCore;
 using MediatR;
@@ -28,7 +26,7 @@ public class Startup
     {
         services.AddGrpc();
         services.AddMediatR(typeof(Startup));
-        services.AddAggregateRepository(
+        services.AddAggregateRepository<IDomainEvent>(
             _configuration,
             options =>
             {
@@ -36,7 +34,17 @@ public class Startup
                     .UseSqlStreamStoreForEventsAndSnapshots()
                     .UseJsonSerialization();
             },
-            ConfigureAggregateRegistry());
+            aggregates =>
+            {
+                aggregates.Register<ShoppingCartState>(aggregate =>
+                {
+                    aggregate.InitialState(_ => new ShoppingCartState())
+                        .Id(o => o.Id?.ToString())
+                        .PersistenceKey(id => $"shoppingCart-{id}")
+                        .SnapshotKey(id => $"shoppingCartSnapshot-{id}")
+                        .RegisterEvents(ShoppingCartFunctions.RegisterEvents);
+                });
+            });
     }
 
     // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -60,22 +68,5 @@ public class Startup
                         "Communication with gRPC endpoints must be made through a gRPC client. To learn how to create a client, visit: https://go.microsoft.com/fwlink/?linkid=2086909");
                 });
         });
-    }
-
-    private static AggregateRegistry<IDomainEvent> ConfigureAggregateRegistry()
-    {
-        var registryBuilder = AggregateRegistryBuilder.Create<IDomainEvent>();
-
-        registryBuilder.Register<ShoppingCartState>(aggregate =>
-        {
-            aggregate.InitialState(_ => new ShoppingCartState())
-                .Id(o => o.Id?.ToString())
-                .PersistenceKey(id => $"shoppingCart-{id}")
-                .SnapshotKey(id => $"shoppingCartSnapshot-{id}");
-
-            aggregate.RegisterEvents(ShoppingCartFunctions.RegisterEvents);
-        });
-
-        return registryBuilder.Build();
     }
 }

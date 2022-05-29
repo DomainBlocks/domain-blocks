@@ -15,7 +15,7 @@ public static class TestAggregateFunctions
                 .PersistenceKey(id => $"testAggregate-{id}")
                 .SnapshotKey(id => $"testAggregateSnapshot-{id}");
 
-            agg.RegisterEvents(x => { x.Event<TestEvent>().RoutesTo(Apply); });
+            agg.RegisterEvents(events => { events.Event<TestEvent>().RoutesTo(Apply); });
         });
     }
 

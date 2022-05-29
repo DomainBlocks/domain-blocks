@@ -7,15 +7,14 @@ namespace DomainBlocks.Persistence.Builders;
 public static class AggregateRegistryBuilder
 {
     public static AggregateRegistryBuilder<TEventBase> Create<TEventBase>() => new();
-
-    public static AggregateRegistryBuilder<object> Create() => Create<object>();
+    public static AggregateRegistryBuilder<object> Create() => new();
 }
 
 public sealed class AggregateRegistryBuilder<TEventBase>
 {
-    public EventRegistryBuilder<TEventBase> Events { get; } = new();
-    
     private readonly AggregateMetadataMap _aggregateMetadataMap = new();
+    
+    public EventRegistryBuilder<TEventBase> Events { get; } = new();
 
     public AggregateRegistry<TEventBase> Build()
     {
@@ -31,28 +30,29 @@ public sealed class AggregateRegistryBuilder<TEventBase>
         return this;
     }
 
-    internal void RegisterInitialStateFunc<TAggregate>(Func<IEventDispatcher<TEventBase>, TAggregate> getState)
+    internal void RegisterInitialStateFunc<TAggregate>(
+        Func<IEventDispatcher<TEventBase>, TAggregate> initialStateFactory)
     {
         var aggregateMetadata = GetOrAddAggregateMetadata<TAggregate>();
-        aggregateMetadata.GetInitialState = x => getState((IEventDispatcher<TEventBase>)x);
+        aggregateMetadata.InitialStateFactory = x => initialStateFactory((IEventDispatcher<TEventBase>)x);
     }
 
-    internal void RegisterAggregateIdFunc<TAggregate>(Func<TAggregate, string> getId)
+    internal void RegisterAggregateIdFunc<TAggregate>(Func<TAggregate, string> idSelector)
     {
         var aggregateMetadata = GetOrAddAggregateMetadata<TAggregate>();
-        aggregateMetadata.GetIdentifier = o => getId((TAggregate)o);
+        aggregateMetadata.IdSelector = x => idSelector((TAggregate)x);
     }
 
-    internal void RegisterAggregateKey<TAggregate>(Func<string, string> getPersistenceKey)
+    internal void RegisterAggregateKey<TAggregate>(Func<string, string> idToKeySelector)
     {
         var aggregateMetadata = GetOrAddAggregateMetadata<TAggregate>();
-        aggregateMetadata.GetKeyFromIdentifier = getPersistenceKey;
+        aggregateMetadata.IdToKeySelector = idToKeySelector;
     }
 
-    internal void RegisterAggregateSnapshotKey<TAggregate>(Func<string, string> getSnapshotKey)
+    internal void RegisterAggregateSnapshotKey<TAggregate>(Func<string, string> snapshotKeySelector)
     {
         var aggregateMetadata = GetOrAddAggregateMetadata<TAggregate>();
-        aggregateMetadata.GetSnapshotKeyFromIdentifier = getSnapshotKey;
+        aggregateMetadata.IdToSnapshotKeySelector = snapshotKeySelector;
     }
 
     private AggregateMetadata GetOrAddAggregateMetadata<TAggregate>()

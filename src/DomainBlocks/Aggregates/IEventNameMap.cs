@@ -4,7 +4,7 @@ namespace DomainBlocks.Aggregates
 {
     public interface IEventNameMap
     {
-        Type GetClrTypeForEventName(string eventName);
-        string GetEventNameForClrType(Type clrType);
+        Type GetEventType(string eventName);
+        string GetEventName(Type eventType);
     }
 }
