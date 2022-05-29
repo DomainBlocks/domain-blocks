@@ -4,7 +4,6 @@ namespace DomainBlocks.Aggregates;
 
 public interface IEventDispatcher
 {
-    // Can potentially dispatch by Type, or even event name here.
 }
 
 public interface IEventDispatcher<in TEventBase> : IEventDispatcher
