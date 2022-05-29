@@ -5,7 +5,7 @@ using System.Linq;
 namespace DomainBlocks.Aggregates;
 
 /// <summary>
-/// Dispatches domain events onto an aggregate and returns an updated aggregate state
+/// Routes domain events onto an aggregate and returns the updated aggregate state
 /// </summary>
 public sealed class AggregateEventRouter<TEventBase> : IAggregateEventRouter<TEventBase>
 {

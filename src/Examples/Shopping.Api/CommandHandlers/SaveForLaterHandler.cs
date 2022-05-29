@@ -21,7 +21,9 @@ public class SaveForLaterHandler : CommandHandlerBase<SaveItemForLater>
         var itemId = Guid.Parse(request.ItemId);
 
         var command = new Domain.Commands.SaveItemForLater(cartId, itemId);
-        //loadedAggregate.ExecuteCommand(x => ShoppingCartFunctions.Execute(x, command));
+        // TODO (DS): It seems that there is no method on the aggregate for this command, which was previously being
+        // hidden behind the command dispatcher. 
+        // loadedAggregate.ExecuteCommand(x => ShoppingCartFunctions.Execute(x, command));
 
         // Snapshot every 25 events
         await Repository.SaveAggregate(loadedAggregate, state => state.EventsLoadedCount >= 25);

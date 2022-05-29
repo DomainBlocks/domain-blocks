@@ -91,7 +91,7 @@ public static class ShoppingCartFunctions
             throw new InvalidOperationException("Attempted to add an item for a shopping cart with a different ID");
         }
 
-        var newItems = new List<ShoppingCartItem>(currentState.Items) {new ShoppingCartItem(@event.Id, @event.Item)};
+        var newItems = new List<ShoppingCartItem>(currentState.Items) { new(@event.Id, @event.Item) };
         return new ShoppingCartState(currentState.Id, newItems);
     }
 

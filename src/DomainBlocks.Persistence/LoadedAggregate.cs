@@ -55,22 +55,20 @@ public sealed class LoadedAggregate<TAggregateState, TEventBase>
     
     public void ExecuteCommand(Action<TAggregateState> commandExecutor)
     {
-        // Mutates the aggregate state.
-        commandExecutor(AggregateState);
-
-        // Save any events that were raised on the event router.
-        EventsToPersist = EventsToPersist.Concat(_eventRouter.TrackedEvents);
-        _eventRouter.ClearTrackedEvents();
+        ExecuteCommand(agg =>
+        {
+            commandExecutor(agg);
+            return agg;
+        });
     }
     
     public void ExecuteCommand(Action<TAggregateState, IAggregateEventRouter<TEventBase>> commandExecutor)
     {
-        // Mutates the aggregate state.
-        commandExecutor(AggregateState, _eventRouter);
-
-        // Save any events that were raised on the event router.
-        EventsToPersist = EventsToPersist.Concat(_eventRouter.TrackedEvents);
-        _eventRouter.ClearTrackedEvents();
+        ExecuteCommand(agg =>
+        {
+            commandExecutor(agg, _eventRouter);
+            return agg;
+        });
     }
     
     public void ExecuteCommand(Func<TAggregateState, TAggregateState> commandExecutor)
@@ -85,12 +83,7 @@ public sealed class LoadedAggregate<TAggregateState, TEventBase>
 
     public void ExecuteCommand(Func<TAggregateState, IAggregateEventRouter<TEventBase>, TAggregateState> commandExecutor)
     {
-        // Get the new state by executing the command.
-        AggregateState = commandExecutor(AggregateState, _eventRouter);
-
-        // Save any events that were raised on the event router.
-        EventsToPersist = EventsToPersist.Concat(_eventRouter.TrackedEvents);
-        _eventRouter.ClearTrackedEvents();
+        ExecuteCommand(agg => commandExecutor(agg, _eventRouter));
     }
     
     public void ExecuteCommand(Func<TAggregateState, IEnumerable<TEventBase>> commandExecutor)
