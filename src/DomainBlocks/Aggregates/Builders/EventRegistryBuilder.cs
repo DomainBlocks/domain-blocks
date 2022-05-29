@@ -1,8 +1,10 @@
+using System;
+
 namespace DomainBlocks.Aggregates.Builders;
 
 public static class EventRegistryBuilder
 {
-    public static EventRegistryBuilder<TEventBase> Create<TEventBase>()
+    public static EventRegistryBuilder<TEventBase> OfType<TEventBase>()
     {
         return new EventRegistryBuilder<TEventBase>();
     }
@@ -13,9 +15,12 @@ public class EventRegistryBuilder<TEventBase>
     internal EventRoutes<TEventBase> EventRoutes { get; } = new();
     internal EventNameMap EventNameMap { get; } = new();
 
-    public EventRegistryBuilder<TAggregate, TEventBase> For<TAggregate>()
+    public EventRegistryBuilder<TEventBase> For<TAggregate>(
+        Action<EventRegistryBuilder<TAggregate, TEventBase>> builderAction)
     {
-        return new EventRegistryBuilder<TAggregate, TEventBase>(this);
+        var builder = new EventRegistryBuilder<TAggregate, TEventBase>(this);
+        builderAction(builder);
+        return this;
     }
     
     public EventRegistry<TEventBase> Build() => new(EventRoutes, EventNameMap);
@@ -37,6 +42,4 @@ public class EventRegistryBuilder<TAggregate, TEventBase>
     {
         return new EventRegistrationBuilder<TAggregate, TEventBase, TEvent>(this);
     }
-
-    public EventRegistry<TEventBase> Build() => _builder.Build();
 }

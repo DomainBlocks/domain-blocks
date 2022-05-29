@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using DomainBlocks.Aggregates;
 using DomainBlocks.Aggregates.Builders;
 using NUnit.Framework;
@@ -12,27 +11,32 @@ public class EventDispatcherTests
     [Test]
     public void EventIsRoutedAndApplied()
     {
-        var registry = EventRegistryBuilder.Create<object>()
-            .For<MyAggregateRoot>().Event<SomethingHappened>()
-            .RoutesTo((a, e) => a.ApplyEvent(e))
-            .HasName(EventNames.SomethingHappened)
-            .Event<SomethingElseHappened>()
-            .RoutesTo((a, e) => a.ApplyEvent(e))
-            .HasName(EventNames.SomethingElseHappened)
+        var registry = EventRegistryBuilder
+            .OfType<object>()
+            .For<MyAggregateRoot>(events =>
+            {
+                events.Event<SomethingHappened>()
+                    .RoutesTo((a, e) => a.ApplyEvent(e))
+                    .HasName(EventNames.SomethingHappened);
+
+                events.Event<SomethingElseHappened>()
+                    .RoutesTo((a, e) => a.ApplyEvent(e))
+                    .HasName(EventNames.SomethingElseHappened);
+            })
             .Build();
 
         var eventDispatcher = new EventDispatcher<object>(registry.EventRoutes);
-            
+
         // Set up the initial state.
         var initialState = new MyAggregateRoot();
-            
+
         // Create some events to apply to the aggregate.
         var event1 = new SomethingHappened("Foo");
         var event2 = new SomethingElseHappened("Bar");
-            
+
         // Route the events.
         var newState = eventDispatcher.Dispatch(initialState, event1, event2);
-            
+
         Assert.That(newState.State, Is.EqualTo("Foo"));
         Assert.That(newState.OtherState, Is.EqualTo("Bar"));
     }
@@ -40,11 +44,14 @@ public class EventDispatcherTests
     [Test]
     public void MissingEventRouteThrowsException()
     {
-        var registry = EventRegistryBuilder.Create<object>()
-            .For<MyAggregateRoot>()
-            .Event<SomethingHappened>()
-            .RoutesTo((a, e) => a.ApplyEvent(e))
-            .HasName(EventNames.SomethingElseHappened)
+        var registry = EventRegistryBuilder
+            .OfType<object>()
+            .For<MyAggregateRoot>(events =>
+            {
+                events.Event<SomethingHappened>()
+                    .RoutesTo((a, e) => a.ApplyEvent(e))
+                    .HasName(EventNames.SomethingElseHappened);
+            })
             .Build();
 
         var eventDispatcher = new EventDispatcher<object>(registry.EventRoutes);
@@ -69,13 +76,16 @@ public class EventDispatcherTests
     [Test]
     public void DefaultEventRouteIsInvokedWhenSpecified()
     {
-        var registry = EventRegistryBuilder.Create<IEvent>()
-            .For<MyAggregateRoot>()
-            .Event<SomethingHappened>()
-            .RoutesTo((a, e) => a.ApplyEvent(e))
-            .HasName(EventNames.SomethingHappened)
-            .Event<IEvent>()
-            .RoutesTo((a, e) => a.DefaultApplyEvent(e))
+        var registry = EventRegistryBuilder.OfType<IEvent>()
+            .For<MyAggregateRoot>(events =>
+            {
+                events.Event<SomethingHappened>()
+                    .RoutesTo((a, e) => a.ApplyEvent(e))
+                    .HasName(EventNames.SomethingHappened);
+
+                events.Event<IEvent>()
+                    .RoutesTo((a, e) => a.DefaultApplyEvent(e));
+            })
             .Build();
 
         var eventDispatcher = new EventDispatcher<IEvent>(registry.EventRoutes);
@@ -89,13 +99,13 @@ public class EventDispatcherTests
 
         // Route the events.
         var newState = eventDispatcher.Dispatch(initialState, event1, event2);
-            
+
         Assert.That(newState.State, Is.EqualTo("Foo"));
-            
+
         // We expect SomethingElseHappened to do nothing, since the default route just returns "this".
         Assert.That(newState.OtherState, Is.Null);
     }
-        
+
     private interface IEvent
     {
     }
@@ -144,7 +154,7 @@ public class EventDispatcherTests
         {
             return new MyAggregateRoot(State, @event.OtherState);
         }
-            
+
         public MyAggregateRoot DefaultApplyEvent(IEvent @event)
         {
             return this;

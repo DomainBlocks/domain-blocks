@@ -15,9 +15,11 @@ public class ImmutableShoppingCartTests
     [Test]
     public void RoundTripTest()
     {
-        var eventRegistryBuilder = EventRegistryBuilder.Create<IDomainEvent>().For<ShoppingCartState>();
-        ShoppingCartFunctions.RegisterEvents(eventRegistryBuilder);
-        var events = eventRegistryBuilder.Build();
+        var events = EventRegistryBuilder
+            .OfType<IDomainEvent>()
+            .For<ShoppingCartState>(ShoppingCartFunctions.RegisterEvents)
+            .Build();
+        
         var eventDispatcher = new EventDispatcher<IDomainEvent>(events.EventRoutes);
 
         var initialState = new ShoppingCartState();
