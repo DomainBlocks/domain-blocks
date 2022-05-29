@@ -19,8 +19,8 @@ public class ImmutableShoppingCartTests
             .OfType<IDomainEvent>()
             .For<ShoppingCartState>(ShoppingCartFunctions.RegisterEvents)
             .Build();
-        
-        var eventDispatcher = new EventDispatcher<IDomainEvent>(events.EventRoutes);
+
+        var eventRouter = events.EventRouter;
 
         var initialState = new ShoppingCartState();
 
@@ -28,7 +28,7 @@ public class ImmutableShoppingCartTests
         var shoppingCartId = Guid.NewGuid(); // This could come from a sequence, or could be the customer's ID.
         var command1 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "First Item");
         var events1 = ShoppingCartFunctions.Execute(initialState, command1).ToList();
-        var newState1 = eventDispatcher.Dispatch(initialState, events1);
+        var newState1 = eventRouter.Send(initialState, events1);
 
         // Check the updated aggregate root state.
         Assert.That(newState1.Id, Is.EqualTo(shoppingCartId));
@@ -43,7 +43,7 @@ public class ImmutableShoppingCartTests
         // Execute the second command to the result of the first command.
         var command2 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "Second Item");
         var events2 = ShoppingCartFunctions.Execute(newState1, command2).ToList();
-        var newState2 = eventDispatcher.Dispatch(newState1, events2);
+        var newState2 = eventRouter.Send(newState1, events2);
 
         // Check the updated aggregate root state.
         Assert.That(newState2.Id, Is.EqualTo(shoppingCartId));
@@ -58,7 +58,7 @@ public class ImmutableShoppingCartTests
         // The aggregate event log is the sum total of all events from both commands.
         // Simulate loading from the event log.
         var eventLog = events1.Concat(events2);
-        var loadedAggregate = ShoppingCartState.FromEvents(eventDispatcher, eventLog);
+        var loadedAggregate = ShoppingCartState.FromEvents(eventRouter, eventLog);
 
         // Check the loaded aggregate root state.
         Assert.That(loadedAggregate.Id, Is.EqualTo(shoppingCartId));

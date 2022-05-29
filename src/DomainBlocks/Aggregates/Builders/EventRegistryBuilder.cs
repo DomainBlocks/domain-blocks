@@ -23,7 +23,7 @@ public class EventRegistryBuilder<TEventBase>
         return this;
     }
     
-    public EventRegistry<TEventBase> Build() => new(EventRoutes, EventNameMap);
+    public EventRegistry<TEventBase> Build() => EventRegistry.Create(EventRoutes, EventNameMap);
 }
 
 public class EventRegistryBuilder<TAggregate, TEventBase>

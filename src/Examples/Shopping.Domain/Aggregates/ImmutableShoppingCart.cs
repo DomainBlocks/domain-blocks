@@ -32,8 +32,8 @@ public class ShoppingCartState
     public IReadOnlyList<ShoppingCartItem> Items { get; }
 
     public static ShoppingCartState FromEvents(
-        EventDispatcher<IDomainEvent> eventDispatcher, IEnumerable<IDomainEvent> events) =>
-        eventDispatcher.Dispatch(new ShoppingCartState(), events);
+        IAggregateEventRouter<IDomainEvent> eventRouter, IEnumerable<IDomainEvent> events) =>
+        eventRouter.Send(new ShoppingCartState(), events);
 }
 
 public class ShoppingCartItem

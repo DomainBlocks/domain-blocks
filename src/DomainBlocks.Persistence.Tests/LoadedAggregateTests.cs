@@ -13,9 +13,9 @@ public class LoadedAggregateTests
     [Test]
     public void MutableAggregateScenario1()
     {
-        var eventDispatcher = CreateEventDispatcher<MutableAggregate1>(MutableAggregate1.RegisterEvents);
-        var aggregate = new MutableAggregate1(eventDispatcher);
-        var loadedAggregate = CreateLoadedAggregate(aggregate, eventDispatcher);
+        var eventRouter = CreateEventRouter<MutableAggregate1>(MutableAggregate1.RegisterEvents);
+        var aggregate = new MutableAggregate1(eventRouter);
+        var loadedAggregate = CreateLoadedAggregate(aggregate, eventRouter);
 
         const string commandData = "new state";
         loadedAggregate.ExecuteCommand(x => x.Execute(commandData));
@@ -30,12 +30,12 @@ public class LoadedAggregateTests
     [Test]
     public void MutableAggregateScenario2()
     {
-        var eventDispatcher = CreateEventDispatcher<MutableAggregate2>(MutableAggregate2.RegisterEvents);
+        var eventRouter = CreateEventRouter<MutableAggregate2>(MutableAggregate2.RegisterEvents);
         var aggregate = new MutableAggregate2();
-        var loadedAggregate = CreateLoadedAggregate(aggregate, eventDispatcher);
+        var loadedAggregate = CreateLoadedAggregate(aggregate, eventRouter);
 
         const string commandData = "new state";
-        loadedAggregate.ExecuteCommand((agg, dispatcher) => agg.Execute(commandData, dispatcher));
+        loadedAggregate.ExecuteCommand((agg, router) => agg.Execute(commandData, router));
         var eventsToPersist = loadedAggregate.EventsToPersist.ToList();
 
         Assert.That(loadedAggregate.AggregateState, Is.SameAs(aggregate));
@@ -47,9 +47,9 @@ public class LoadedAggregateTests
     [Test]
     public void ImmutableAggregateScenario1()
     {
-        var eventDispatcher = CreateEventDispatcher<ImmutableAggregate1>(ImmutableAggregate1.RegisterEvents);
-        var aggregate = new ImmutableAggregate1(eventDispatcher);
-        var loadedAggregate = CreateLoadedAggregate(aggregate, eventDispatcher);
+        var eventRouter = CreateEventRouter<ImmutableAggregate1>(ImmutableAggregate1.RegisterEvents);
+        var aggregate = new ImmutableAggregate1(eventRouter);
+        var loadedAggregate = CreateLoadedAggregate(aggregate, eventRouter);
 
         const string commandData = "new state";
         loadedAggregate.ExecuteCommand(agg => agg.Execute(commandData));
@@ -64,12 +64,12 @@ public class LoadedAggregateTests
     [Test]
     public void ImmutableAggregateScenario2()
     {
-        var eventDispatcher = CreateEventDispatcher<ImmutableAggregate2>(ImmutableAggregate2.RegisterEvents);
+        var eventRouter = CreateEventRouter<ImmutableAggregate2>(ImmutableAggregate2.RegisterEvents);
         var aggregate = new ImmutableAggregate2();
-        var loadedAggregate = CreateLoadedAggregate(aggregate, eventDispatcher);
+        var loadedAggregate = CreateLoadedAggregate(aggregate, eventRouter);
 
         const string commandData = "new state";
-        loadedAggregate.ExecuteCommand((agg, dispatcher) => agg.Execute(commandData, dispatcher));
+        loadedAggregate.ExecuteCommand((agg, router) => agg.Execute(commandData, router));
         var eventsToPersist = loadedAggregate.EventsToPersist.ToList();
 
         Assert.That(loadedAggregate.AggregateState, Is.Not.SameAs(aggregate));
@@ -81,9 +81,9 @@ public class LoadedAggregateTests
     [Test]
     public void ImmutableAggregateScenario3()
     {
-        var eventDispatcher = CreateEventDispatcher<ImmutableAggregate3>(ImmutableAggregate3.RegisterEvents);
+        var eventRouter = CreateEventRouter<ImmutableAggregate3>(ImmutableAggregate3.RegisterEvents);
         var aggregate = new ImmutableAggregate3();
-        var loadedAggregate = CreateLoadedAggregate(aggregate, eventDispatcher);
+        var loadedAggregate = CreateLoadedAggregate(aggregate, eventRouter);
 
         const string commandData = "new state";
         loadedAggregate.ExecuteCommand(x => x.Execute(commandData));
@@ -95,17 +95,17 @@ public class LoadedAggregateTests
         Assert.That(eventsToPersist[0], Is.TypeOf<StateChangedEvent>());
     }
     
-    private static TrackingEventDispatcher<object> CreateEventDispatcher<TAggregate>(
+    private static TrackingAggregateEventRouter<object> CreateEventRouter<TAggregate>(
         Action<EventRegistryBuilder<TAggregate, object>> builderAction)
     {
         var eventRegistry = EventRegistryBuilder.OfType<object>().For(builderAction).Build();
-        return new TrackingEventDispatcher<object>(new EventDispatcher<object>(eventRegistry.EventRoutes));
+        return new TrackingAggregateEventRouter<object>(eventRegistry.EventRouter);
     }
 
     private static LoadedAggregate<TAggregate, object> CreateLoadedAggregate<TAggregate>(
-        TAggregate initialState, TrackingEventDispatcher<object> eventDispatcher)
+        TAggregate initialState, TrackingAggregateEventRouter<object> eventRouter)
     {
-        return new LoadedAggregate<TAggregate, object>(initialState, "id", -1, null, 0, eventDispatcher);
+        return new LoadedAggregate<TAggregate, object>(initialState, "id", -1, null, 0, eventRouter);
     }
     
     private class StateChangedEvent
@@ -120,11 +120,11 @@ public class LoadedAggregateTests
 
     private class MutableAggregate1
     {
-        private readonly IEventDispatcher<object> _eventDispatcher;
+        private readonly IAggregateEventRouter<object> _eventRouter;
 
-        public MutableAggregate1(IEventDispatcher<object> eventDispatcher)
+        public MutableAggregate1(IAggregateEventRouter<object> eventRouter)
         {
-            _eventDispatcher = eventDispatcher;
+            _eventRouter = eventRouter;
         }
 
         public string State { get; private set; }
@@ -136,7 +136,7 @@ public class LoadedAggregateTests
 
         public void Execute(string newState)
         {
-            _eventDispatcher.Dispatch(this, new StateChangedEvent(newState));
+            _eventRouter.Send(this, new StateChangedEvent(newState));
         }
 
         private void Apply(StateChangedEvent e)
@@ -154,9 +154,9 @@ public class LoadedAggregateTests
             events.Event<StateChangedEvent>().RoutesTo((agg, e) => agg.Apply(e));
         }
 
-        public void Execute(string newState, IEventDispatcher<object> eventDispatcher)
+        public void Execute(string newState, IAggregateEventRouter<object> eventRouter)
         {
-            eventDispatcher.Dispatch(this, new StateChangedEvent(newState));
+            eventRouter.Send(this, new StateChangedEvent(newState));
         }
 
         private void Apply(StateChangedEvent e)
@@ -167,14 +167,14 @@ public class LoadedAggregateTests
 
     private class ImmutableAggregate1
     {
-        private readonly IEventDispatcher<object> _eventDispatcher;
+        private readonly IAggregateEventRouter<object> _eventRouter;
 
-        public ImmutableAggregate1(IEventDispatcher<object> eventDispatcher)
+        public ImmutableAggregate1(IAggregateEventRouter<object> eventRouter)
         {
-            _eventDispatcher = eventDispatcher;
+            _eventRouter = eventRouter;
         }
 
-        private ImmutableAggregate1(string state, IEventDispatcher<object> eventDispatcher) : this(eventDispatcher)
+        private ImmutableAggregate1(string state, IAggregateEventRouter<object> eventRouter) : this(eventRouter)
         {
             State = state;
         }
@@ -188,12 +188,12 @@ public class LoadedAggregateTests
         
         public ImmutableAggregate1 Execute(string newState)
         {
-            return _eventDispatcher.Dispatch(this, new StateChangedEvent(newState));
+            return _eventRouter.Send(this, new StateChangedEvent(newState));
         }
         
         private ImmutableAggregate1 Apply(StateChangedEvent e)
         {
-            return new ImmutableAggregate1(e.State, _eventDispatcher);
+            return new ImmutableAggregate1(e.State, _eventRouter);
         }
     }
     
@@ -215,9 +215,9 @@ public class LoadedAggregateTests
             events.Event<StateChangedEvent>().RoutesTo((agg, e) => agg.Apply(e));
         }
         
-        public ImmutableAggregate2 Execute(string newState, IEventDispatcher<object> eventDispatcher)
+        public ImmutableAggregate2 Execute(string newState, IAggregateEventRouter<object> eventRouter)
         {
-            return eventDispatcher.Dispatch(this, new StateChangedEvent(newState));
+            return eventRouter.Send(this, new StateChangedEvent(newState));
         }
         
         private ImmutableAggregate2 Apply(StateChangedEvent e)
