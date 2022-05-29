@@ -26,12 +26,9 @@ public sealed class EventNameMap : IEventNameMap
 
     public Type GetEventType(string eventName)
     {
-        if (_eventNameToTypeMap.TryGetValue(eventName, out var clrType))
-        {
-            return clrType;
-        }
-
-        throw new UnmappedEventNameException(eventName);
+        return _eventNameToTypeMap.TryGetValue(eventName, out var clrType)
+            ? clrType
+            : throw new UnmappedEventNameException(eventName);
     }
 
     public string GetEventName(Type eventType)

@@ -116,9 +116,7 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
         var eventsRepository = new EventStoreEventsRepository(EventStoreClient, serializer);
         var snapshotRepository = new EventStoreSnapshotRepository(EventStoreClient, serializer);
 
-        var aggregateRepository = AggregateRepository.Create(eventsRepository,
-            snapshotRepository,
-            aggregateRegistry);
+        var aggregateRepository = AggregateRepository.Create(eventsRepository, snapshotRepository, aggregateRegistry);
 
         // Execute the first command.
         var loadedAggregate = await aggregateRepository.LoadAggregate<ShoppingCartState>(shoppingCartId.ToString());
@@ -162,7 +160,7 @@ public class ShoppingCartSummarySqlProjection : ISqlProjection
 
     public IDbConnector DbConnector { get; } = new SqliteDbConnector("Data Source=test.db");
     public ISqlDialect SqlDialect { get; } = new SqliteSqlDialect();
-    public string TableName { get; } = "ShoppingCartSummary";
+    public string TableName => "ShoppingCartSummary";
 
     public SqlColumnDefinitions Columns { get; } = new()
     {
@@ -177,7 +175,7 @@ public class ShoppingCartSummarySqlProjection : ISqlProjection
         {
             nameof(ItemAddedToShoppingCart.Item),
             new SqlColumnDefinitionBuilder().Name("Item").Type(DbType.String).Build()
-        },
+        }
     };
 }
 

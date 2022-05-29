@@ -14,9 +14,12 @@ public sealed class EventRoutes<TEventBase>
 
     public EventApplier<TAggregate, TEventBase> Get<TAggregate>(Type eventType)
     {
+        if (eventType == null) throw new ArgumentNullException(nameof(eventType));
+
         if (!typeof(TEventBase).IsAssignableFrom(eventType))
         {
-            throw new ArgumentException();
+            throw new ArgumentException(
+                $"{eventType.FullName} is not assignable to {typeof(TEventBase).FullName}", nameof(eventType));
         }
 
         var key = (typeof(TAggregate), eventType);
@@ -34,8 +37,7 @@ public sealed class EventRoutes<TEventBase>
         }
 
         // No default route specified.
-        var message = "No route or default route found when attempting to apply event " +
-                      $"{eventType.Name} to {typeof(TAggregate).Name}";
+        var message = $"No route or default route found from {eventType.Name} to {typeof(TAggregate).Name}";
         throw new KeyNotFoundException(message);
     }
 }

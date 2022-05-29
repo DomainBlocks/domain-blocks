@@ -64,8 +64,7 @@ public class EventRouterTests
         // Route the events.
         var exception = Assert.Throws<KeyNotFoundException>(() => eventRouter.Send(initialState, event1, event2));
 
-        const string expectedMessage = "No route or default route found when attempting to apply event " +
-                                       "SomethingElseHappened to MyAggregateRoot";
+        const string expectedMessage = "No route or default route found from SomethingElseHappened to MyAggregateRoot";
 
         Assert.That(exception.Message, Is.EqualTo(expectedMessage));
     }
