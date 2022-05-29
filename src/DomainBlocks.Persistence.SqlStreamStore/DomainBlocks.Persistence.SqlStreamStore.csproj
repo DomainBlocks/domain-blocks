@@ -8,6 +8,7 @@
     <PackageReference Include="SqlStreamStore" Version="1.2.0-beta.8" />
   </ItemGroup>
 	<ItemGroup>
+		<ProjectReference Include="..\DomainBlocks.Common\DomainBlocks.Common.csproj" />
 		<ProjectReference Include="..\DomainBlocks.Persistence\DomainBlocks.Persistence.csproj" />
 	</ItemGroup>
 </Project>
