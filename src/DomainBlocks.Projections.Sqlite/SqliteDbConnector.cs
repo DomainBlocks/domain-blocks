@@ -3,7 +3,7 @@ using DomainBlocks.Projections.Sql;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Data;
-using System.Data.SQLite;
+using Microsoft.Data.Sqlite;
 
 namespace DomainBlocks.Projections.Sqlite
 {
@@ -18,7 +18,7 @@ namespace DomainBlocks.Projections.Sqlite
                 throw new ArgumentException("Value cannot be null or whitespace.", nameof(connectionString));
             }
 
-            Connection = new SQLiteConnection(connectionString);
+            Connection = new SqliteConnection(connectionString);
         }
 
         public IDbConnection Connection { get; }
@@ -32,18 +32,20 @@ namespace DomainBlocks.Projections.Sqlite
             {
                 foreach (var (name, value) in parameterBindingMap.GetParameterNamesAndValues(@event))
                 {
-                    SQLiteParameter parameter;
+                    // Note that we don't need to set DB types here. This is because of SQLite's dynamic type system.
+                    // See: https://docs.microsoft.com/en-us/dotnet/standard/data/sqlite/types#column-types
+                    // There is also an open issue where some types are not mapped correctly.
+                    // See: https://github.com/dotnet/efcore/issues/27213, https://github.com/dotnet/efcore/pull/27291
+                    SqliteParameter parameter;
                     if (columnDefinitions.TryGetValue(name, out var sqlColumnDefinition))
                     {
-                        parameter = new SQLiteParameter($"@{sqlColumnDefinition.Name}", sqlColumnDefinition.DataType)
-                            { Value = value };
+                        parameter = new SqliteParameter($"@{sqlColumnDefinition.Name}", value);
                     }
-                    else 
+                    else
                     {
                         // Parameter may not be in column definitions if it is custom sql.
                         // In this case, we don't bind the DbTyp for the parameter
-                        parameter = new SQLiteParameter($"@{name}")
-                            { Value = value };
+                        parameter = new SqliteParameter($"@{name}", value);
                     }
      
                     command.Parameters.Add(parameter);
@@ -58,5 +60,7 @@ namespace DomainBlocks.Projections.Sqlite
                 throw;
             }
         }
+        
+        
     }
 }

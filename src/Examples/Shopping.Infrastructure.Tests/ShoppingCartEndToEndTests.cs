@@ -150,7 +150,7 @@ namespace Shopping.Infrastructure.Tests
                    .ExecutesDelete();
         }
 
-        public IDbConnector DbConnector { get; } = new SqliteDbConnector("Data Source=test.db; Version=3;Pooling=True;Max Pool Size=100;");
+        public IDbConnector DbConnector { get; } = new SqliteDbConnector("Data Source=test.db");
         public ISqlDialect SqlDialect { get; } = new SqliteSqlDialect();
         public string TableName { get; } = "ShoppingCartSummary";
 
@@ -170,6 +170,4 @@ namespace Shopping.Infrastructure.Tests
                    .FromName(ItemRemovedFromShoppingCart.EventName);
         }
     }
-
-
 }

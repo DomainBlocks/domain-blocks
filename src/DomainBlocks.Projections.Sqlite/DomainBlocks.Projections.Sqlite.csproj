@@ -3,13 +3,14 @@
   <PropertyGroup>
     <IsPackable>true</IsPackable>
   </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="System.Data.SQLite.Core" Version="1.0.113.6" />
-  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\DomainBlocks.Projections.Sql\DomainBlocks.Projections.Sql.csproj" />
     <ProjectReference Include="..\DomainBlocks.Projections\DomainBlocks.Projections.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="6.0.5" />
   </ItemGroup>
 
 </Project>
