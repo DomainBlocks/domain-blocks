@@ -8,8 +8,8 @@ namespace DomainBlocks.Persistence.EventStore.AspNetCore
 {
     public static class AggregateRegistrationOptionsExtensions
     {
-        public static IAggregateRegistrationOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> UseEventStoreDbForEvents(
-            this IAggregateRegistrationOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> builder)
+        public static IAggregateRepositoryOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> UseEventStoreDbForEvents(
+            this IAggregateRepositoryOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> builder)
         {
             builder.ServiceCollection.AddEventStore(builder.Configuration);
 
@@ -22,8 +22,8 @@ namespace DomainBlocks.Persistence.EventStore.AspNetCore
             return builder;
         }
 
-        public static IAggregateRegistrationOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> UseEventStoreDbForSnapshots(
-            this IAggregateRegistrationOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> builder)
+        public static IAggregateRepositoryOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> UseEventStoreDbForSnapshots(
+            this IAggregateRepositoryOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> builder)
         {
             builder.ServiceCollection.AddEventStore(builder.Configuration);
 
@@ -36,8 +36,8 @@ namespace DomainBlocks.Persistence.EventStore.AspNetCore
             return builder;
         }
 
-        public static IAggregateRegistrationOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> UseEventStoreDbForEventsAndSnapshots(
-            this IAggregateRegistrationOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> builder)
+        public static IAggregateRepositoryOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> UseEventStoreDbForEventsAndSnapshots(
+            this IAggregateRepositoryOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> builder)
         {
             builder.ServiceCollection.AddEventStore(builder.Configuration);
 

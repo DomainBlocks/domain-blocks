@@ -1,15 +1,14 @@
-﻿using DomainBlocks.Persistence;
-using DomainBlocks.Persistence.EventStore;
-using DomainBlocks.Serialization.Json;
-using DomainBlocks.Testing;
-using NUnit.Framework;
-using System;
-using System.IO;
+﻿using System;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using DomainBlocks.Persistence;
+using DomainBlocks.Persistence.EventStore;
 using DomainBlocks.Serialization;
+using DomainBlocks.Serialization.Json;
+using DomainBlocks.Testing;
 using EventStore.Client;
+using NUnit.Framework;
 
 namespace DomainBlocks.EventStore.Testing
 {
