@@ -1,69 +1,64 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace DomainBlocks.Aggregates
+namespace DomainBlocks.Aggregates;
+
+public sealed class EventNameMap : IEventNameMap
 {
-    public sealed class EventNameMap : IEventNameMap
+    private readonly Dictionary<string, Type> _eventNameToTypeMap;
+    private readonly Dictionary<Type, string> _eventTypeToNameMap;
+
+    public EventNameMap()
     {
-        private readonly Dictionary<string, Type> _eventNameToTypeMap;
-        private readonly Dictionary<Type, string> _eventTypeToNameMap;
+        _eventNameToTypeMap = new Dictionary<string, Type>();
+        _eventTypeToNameMap = new Dictionary<Type, string>();
+    }
 
-        public EventNameMap()
-        {
-            _eventNameToTypeMap = new Dictionary<string, Type>();
-            _eventTypeToNameMap = new Dictionary<Type, string>();
-        }
+    public void Add<TEvent>(string eventName, bool throwOnConflict = true)
+    {
+        AddImpl(eventName, typeof(TEvent), throwOnConflict);
+    }
+
+    public void Add(string eventName, Type eventType, bool throwOnConflict = true)
+    {
+        AddImpl(eventName, eventType, throwOnConflict);
+    }
+
+    public Type GetEventType(string eventName)
+    {
+        return _eventNameToTypeMap.TryGetValue(eventName, out var clrType)
+            ? clrType
+            : throw new UnmappedEventNameException(eventName);
+    }
+
+    public string GetEventName(Type eventType)
+    {
+        return _eventTypeToNameMap.TryGetValue(eventType, out var eventName)
+            ? eventName
+            : throw new UnmappedEventTypeException(eventType.FullName);
+    }
+
+    private void AddImpl(string eventName, Type eventType, bool throwOnConflict = true)
+    {
+        if (string.IsNullOrEmpty(eventName))
+            throw new ArgumentException("Event name cannot be null or empty", nameof(eventName));
         
-        public void RegisterEvent<TEvent>(string eventName, bool throwOnConflict = true)
+        if (eventType == null) throw new ArgumentNullException(nameof(eventType));
+        
+        switch (throwOnConflict)
         {
-            RegisterEvent(typeof(TEvent), eventName, throwOnConflict);
-        }
-
-        public void RegisterEvent(Type clrType, string eventName, bool throwOnConflict = true)
-        {
-            RegisterEventName(eventName, clrType, throwOnConflict);
-        }
-
-        public Type GetClrTypeForEventName(string eventName)
-        {
-            if (_eventNameToTypeMap.TryGetValue(eventName, out var clrType))
-            {
-                return clrType;
-            }
-
-            throw new UnknownEventNameException($"{eventName} could not be mapped to a CLR type", eventName);
-        }
-
-        public string GetEventNameForClrType(Type clrType)
-        {
-            return _eventTypeToNameMap.TryGetValue(clrType, out var eventName)
-                ? eventName
-                : throw new UnknownEventNameException($"Could not find event name for type {clrType.FullName}");
-        }
-
-        // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Local
-        private void RegisterEventName(string eventName, Type clrType, bool throwOnConflict = true)
-        {
-            if (throwOnConflict && 
-                _eventNameToTypeMap.ContainsKey(eventName) &&
-                _eventNameToTypeMap[eventName] != clrType)
-            {
-                throw new InvalidOperationException($"Event {eventName} is already mapped " +
-                                                    $"to type {_eventNameToTypeMap[eventName].FullName}. " +
-                                                    $"Cannot map to {clrType.FullName}");
-            }
-
-            if (throwOnConflict && 
-                _eventTypeToNameMap.ContainsKey(clrType) &&
-                _eventTypeToNameMap[clrType] != eventName)
-            {
-                throw new InvalidOperationException($"Type {clrType.FullName} is already mapped " +
-                                                    $"to event {_eventTypeToNameMap[clrType]}. " +
-                                                    $"Cannot map to {_eventTypeToNameMap[clrType]}");
-            }
-
-            _eventNameToTypeMap[eventName] = clrType;
-            _eventTypeToNameMap[clrType] = eventName;
+            case true when _eventNameToTypeMap.ContainsKey(eventName) && _eventNameToTypeMap[eventName] != eventType:
+                throw new InvalidOperationException(
+                    $"Event name '{eventName}' is already mapped to CLR type " +
+                    $"'{_eventNameToTypeMap[eventName].FullName}'. Cannot map to '{eventType.FullName}'");
+            case true when _eventTypeToNameMap.ContainsKey(eventType) && _eventTypeToNameMap[eventType] != eventName:
+                throw new InvalidOperationException(
+                    $"CLR type '{eventType.FullName}' is already mapped to event name " +
+                    $"'{_eventTypeToNameMap[eventType]}'. Cannot map to '{eventName}'");
+            default:
+                _eventNameToTypeMap[eventName] = eventType;
+                _eventTypeToNameMap[eventType] = eventName; 
+                break;
         }
     }
 }

@@ -7,8 +7,8 @@ namespace DomainBlocks.Persistence.SqlStreamStore.AspNetCore
 {
     public static class AggregateRegistrationOptionsExtensions
     {
-        public static IAggregateRegistrationOptionsBuilderInfrastructure<string> UseSqlStreamStoreForEvents(
-            this IAggregateRegistrationOptionsBuilderInfrastructure<string> builder)
+        public static IAggregateRepositoryOptionsBuilderInfrastructure<string> UseSqlStreamStoreForEvents(
+            this IAggregateRepositoryOptionsBuilderInfrastructure<string> builder)
         {
             builder.ServiceCollection.AddPostgresSqlStreamStore(builder.Configuration);
 
@@ -21,8 +21,8 @@ namespace DomainBlocks.Persistence.SqlStreamStore.AspNetCore
             return builder;
         }
 
-        public static IAggregateRegistrationOptionsBuilderInfrastructure<string> UseSqlStreamStoreForSnapshots(
-            this IAggregateRegistrationOptionsBuilderInfrastructure<string> builder)
+        public static IAggregateRepositoryOptionsBuilderInfrastructure<string> UseSqlStreamStoreForSnapshots(
+            this IAggregateRepositoryOptionsBuilderInfrastructure<string> builder)
         {
             builder.ServiceCollection.AddPostgresSqlStreamStore(builder.Configuration);
 
@@ -35,8 +35,8 @@ namespace DomainBlocks.Persistence.SqlStreamStore.AspNetCore
             return builder;
         }
 
-        public static IAggregateRegistrationOptionsBuilderInfrastructure<string> UseSqlStreamStoreForEventsAndSnapshots(
-            this IAggregateRegistrationOptionsBuilderInfrastructure<string> builder)
+        public static IAggregateRepositoryOptionsBuilderInfrastructure<string> UseSqlStreamStoreForEventsAndSnapshots(
+            this IAggregateRepositoryOptionsBuilderInfrastructure<string> builder)
         {
             builder.ServiceCollection.AddPostgresSqlStreamStore(builder.Configuration);
 

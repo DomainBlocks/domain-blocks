@@ -11,10 +11,6 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\DomainBlocks.Persistence\DomainBlocks.Persistence.csproj" />
-      <ProjectReference Include="..\DomainBlocks.Serialization.Json\DomainBlocks.Serialization.Json.csproj" />
-      <ProjectReference Include="..\DomainBlocks.Serialization\DomainBlocks.Serialization.csproj" />
-      <ProjectReference Include="..\DomainBlocks.Testing\DomainBlocks.Testing.csproj" />
       <ProjectReference Include="..\DomainBlocks\DomainBlocks.csproj" />
     </ItemGroup>
 

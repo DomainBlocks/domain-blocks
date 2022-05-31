@@ -5,4 +5,8 @@
     <ProjectReference Include="..\DomainBlocks\DomainBlocks.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="$(AssemblyName).Tests" />
+  </ItemGroup>
+
 </Project>

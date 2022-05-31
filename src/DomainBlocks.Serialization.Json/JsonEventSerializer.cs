@@ -40,7 +40,7 @@ namespace DomainBlocks.Serialization.Json
         {
             if (@event == null) throw new ArgumentNullException(nameof(@event));
 
-            var eventName = eventNameOverride ?? _eventNameMap.GetEventNameForClrType(@event.GetType());
+            var eventName = eventNameOverride ?? _eventNameMap.GetEventName(@event.GetType());
             var eventData = _adapter.Serialize(@event, _options);
 
             if (additionalMetadata.Length > 0 && _metadataContext == null)
@@ -62,11 +62,11 @@ namespace DomainBlocks.Serialization.Json
         {
             if (eventData == null) throw new ArgumentNullException(nameof(eventData));
             if (eventName == null) throw new ArgumentNullException(nameof(eventName));
-            var clrType = typeOverride ?? _eventNameMap.GetClrTypeForEventName(eventName);
+            var eventType = typeOverride ?? _eventNameMap.GetEventType(eventName);
 
             try
             {
-                var evt = _adapter.Deserialize(eventData, clrType, _options);
+                var evt = _adapter.Deserialize(eventData, eventType, _options);
 
                 if (evt is TEvent typedEvent)
                 {
@@ -79,9 +79,7 @@ namespace DomainBlocks.Serialization.Json
             }
 
             var runTimeType = typeof(TEvent);
-            throw new InvalidEventTypeException($"Cannot cast event of type {eventName} to {runTimeType.FullName}",
-                                                eventName,
-                                                runTimeType.FullName);
+            throw new InvalidEventTypeException(eventName, runTimeType.FullName);
         }
 
         public EventMetadata DeserializeMetadata(TRawData rawMetadata)

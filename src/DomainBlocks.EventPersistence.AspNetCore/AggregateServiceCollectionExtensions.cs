@@ -1,61 +1,62 @@
 ﻿using System;
-using System.Reflection;
-using DomainBlocks.Aggregates.Registration;
+using DomainBlocks.Persistence.Builders;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace DomainBlocks.Persistence.AspNetCore
+namespace DomainBlocks.Persistence.AspNetCore;
+
+public static class AggregateServiceCollectionExtensions
 {
-    public static class AggregateServiceCollectionExtensions
+    /// <summary>
+    /// Adds an aggregate repository to persist events 
+    /// </summary>
+    public static IServiceCollection AddAggregateRepository(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        Action<AggregateRepositoryOptionsBuilder> optionsBuilderAction,
+        Action<AggregateRegistryBuilder<object>> registryBuilderAction)
     {
-        /// <summary>
-        /// Adds an aggregate repository to persist events 
-        /// </summary>
-        public static IServiceCollection AddAggregateRepository(this IServiceCollection services,
-                                                                          IConfiguration configuration,
-                                                                          Action<AggregateRegistrationOptionsBuilder> buildAggregateOptions,
-                                                                          AggregateRegistry<object, object>
-                                                                              aggregateRegistry)
-        {
-            return AddAggregateRepository<object, object>(services, configuration, buildAggregateOptions, aggregateRegistry);
-        }
+        return AddAggregateRepository<object>(services, configuration, optionsBuilderAction, registryBuilderAction);
+    }
 
-        /// <summary>
-        /// Adds an aggregate repository to persist events 
-        /// </summary>
-        public static IServiceCollection AddAggregateRepository<TCommandBase, TEventBase>(
-            this IServiceCollection services,
-            IConfiguration configuration,
-            Action<AggregateRegistrationOptionsBuilder> buildAggregateOptions,
-            AggregateRegistry<TCommandBase, TEventBase> aggregateRegistry)
-        {
-            var optionsBuilder = new AggregateRegistrationOptionsBuilder(services, configuration);
-            
-            buildAggregateOptions(optionsBuilder);
+    /// <summary>
+    /// Adds an aggregate repository to persist events 
+    /// </summary>
+    public static IServiceCollection AddAggregateRepository<TEventBase>(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        Action<AggregateRepositoryOptionsBuilder> optionsBuilderAction,
+        Action<AggregateRegistryBuilder<TEventBase>> registryBuilderAction)
+    {
+        var optionsBuilder = new AggregateRepositoryOptionsBuilder(services, configuration);
+        optionsBuilderAction(optionsBuilder);
 
-            var rawDataType = optionsBuilder.RawDataType;
-            var typedBuildMethod =
-                typeof(IAggregateRegistrationOptionsBuilderInfrastructure)
-                    .GetMethod(nameof(IAggregateRegistrationOptionsBuilderInfrastructure.Build))
-                    ?.MakeGenericMethod(rawDataType);
-            
-            services.AddSingleton<IAggregateRepository<TCommandBase, TEventBase>>(provider =>
+        var registryBuilder = new AggregateRegistryBuilder<TEventBase>();
+        registryBuilderAction(registryBuilder);
+        var aggregateRegistry = registryBuilder.Build();
+
+        var rawDataType = optionsBuilder.RawDataType;
+        var typedBuildMethod =
+            typeof(IAggregateRepositoryOptionsBuilderInfrastructure)
+                .GetMethod(nameof(IAggregateRepositoryOptionsBuilderInfrastructure.Build))
+                ?.MakeGenericMethod(rawDataType);
+
+        services.AddSingleton<IAggregateRepository<TEventBase>>(provider =>
+        {
+            dynamic aggregateRepositoryOptions = typedBuildMethod?.Invoke(
+                optionsBuilder, new[] { provider, aggregateRegistry.EventNameMap as object });
+
+            if (aggregateRepositoryOptions == null)
             {
-                dynamic aggregateOptions = typedBuildMethod?.Invoke(optionsBuilder, new []{ provider, aggregateRegistry.EventNameMap as object});
+                throw new InvalidOperationException("Unable to build aggregation registrations");
+            }
 
-                if (aggregateOptions == null)
-                {
-                    throw new InvalidOperationException("Unable to build aggregation registrations");
-                }
+            return AggregateRepository.Create(
+                aggregateRepositoryOptions.EventsRepository,
+                aggregateRepositoryOptions.SnapshotRepository,
+                aggregateRegistry);
+        });
 
-                return AggregateRepository.Create(aggregateOptions.EventsRepository,
-                                                  aggregateOptions.SnapshotRepository,
-                                                  aggregateRegistry);
-            });
-
-            services.AddSingleton(aggregateRegistry.CommandDispatcher);
-
-            return services;
-        }
+        return services;
     }
 }

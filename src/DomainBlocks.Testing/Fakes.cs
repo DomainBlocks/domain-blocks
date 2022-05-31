@@ -4,48 +4,47 @@ using System.Linq;
 using DomainBlocks.Aggregates;
 using NSubstitute;
 
-namespace DomainBlocks.Testing
+namespace DomainBlocks.Testing;
+
+public static class Fakes
 {
-    public static class Fakes
+    private static readonly IList<Type> AllLibraryTypes;
+
+    static Fakes()
     {
-        private static readonly IList<Type> AllLibraryTypes;
+        BuildFakes();
+        AllLibraryTypes = AppDomain.CurrentDomain
+            .GetAssemblies()
+            .Where(a => a.FullName!.Contains("DomainBlocks"))
+            .SelectMany(a => a.GetTypes())
+            .ToList();
+    }
 
-        static Fakes()
-        {
-            BuildFakes();
-            AllLibraryTypes = AppDomain.CurrentDomain
-                                       .GetAssemblies()
-                                       .Where(a => a.FullName.Contains("DomainBlocks"))
-                                       .SelectMany(a => a.GetTypes())
-                                       .ToList();
-        }
+    public static IEventNameMap EventNameMap { get; private set; }
 
-        public static IEventNameMap EventNameMap { get; private set; }
+    private static void BuildFakes()
+    {
+        EventNameMap = BuildFakeEventNameMap();
+    }
 
-        private static void BuildFakes()
-        {
-            EventNameMap = BuildFakeEventNameMap();
-        }
+    private static IEventNameMap BuildFakeEventNameMap()
+    {
+        var substitute = Substitute.For<IEventNameMap>();
+        substitute.GetEventName(Arg.Any<Type>()).Returns(args => ((Type)args[0]).Name);
+        substitute.GetEventType(Arg.Any<string>())
+            .Returns(args =>
+            {
+                var typeName = (string)args[0];
+                var type = AllLibraryTypes.FirstOrDefault(t => t.Name == typeName);
 
-        private static IEventNameMap BuildFakeEventNameMap()
-        {
-            var substitute = Substitute.For<IEventNameMap>();
-            substitute.GetEventNameForClrType(Arg.Any<Type>()).Returns(args => ((Type)args[0]).Name);
-            substitute.GetClrTypeForEventName(Arg.Any<string>())
-                      .Returns(args =>
-                      {
-                          var typeName = (string)args[0];
-                          var type = AllLibraryTypes.FirstOrDefault(t => t.Name == typeName);
+                if (type == null)
+                {
+                    throw new InvalidOperationException($"Unable to find type with name {typeName}");
+                }
 
-                          if (type == null)
-                          {
-                              throw new InvalidOperationException($"Unable to find type with name {typeName}");
-                          }
+                return type;
+            });
 
-                          return type;
-                      });
-
-            return substitute;
-        }
+        return substitute;
     }
 }

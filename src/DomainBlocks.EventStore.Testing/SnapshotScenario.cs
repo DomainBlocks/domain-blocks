@@ -1,8 +1,8 @@
 ﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
-using DomainBlocks.Aggregates.Registration;
 using DomainBlocks.Persistence;
+using DomainBlocks.Persistence.Builders;
 using DomainBlocks.Persistence.EventStore;
 using DomainBlocks.Serialization.Json;
 
@@ -11,16 +11,17 @@ namespace DomainBlocks.EventStore.Testing
     public class SnapshotScenario
     {
         private EventStoreIntegrationTest _test;
-        private AggregateRepository<TestCommand, TestEvent, ReadOnlyMemory<byte>> _aggregateRepository;
-        private LoadedAggregate<TestAggregateState, TestCommand, TestEvent> _loadedAggregate;
+        private AggregateRepository<TestEvent, ReadOnlyMemory<byte>> _aggregateRepository;
+        private LoadedAggregate<TestAggregateState, TestEvent> _loadedAggregate;
         private Guid _id;
         private long _aggregateVersion = StreamVersion.NewStream;
-        public TestAggregateState AggregateState { get; private set; }
-
+        
         public SnapshotScenario()
         {
             _id = Guid.NewGuid();
         }
+        
+        public TestAggregateState AggregateState { get; private set; }
 
         public async Task Initialise(EventStoreIntegrationTest test)
         {
@@ -43,22 +44,22 @@ namespace DomainBlocks.EventStore.Testing
             await _aggregateRepository.SaveSnapshot(VersionedAggregateState.Create(AggregateState, _aggregateVersion));
         }
 
-        public async Task<LoadedAggregate<TestAggregateState, TestCommand, TestEvent>> LoadLatestStateFromEvents()
+        public async Task<LoadedAggregate<TestAggregateState, TestEvent>> LoadLatestStateFromEvents()
         {
             return await LoadLatestState(AggregateLoadStrategy.UseEventStream);
         }
 
-        public async Task<LoadedAggregate<TestAggregateState, TestCommand, TestEvent>> LoadLatestStateFromSnapshot()
+        public async Task<LoadedAggregate<TestAggregateState, TestEvent>> LoadLatestStateFromSnapshot()
         {
             return await LoadLatestState(AggregateLoadStrategy.UseSnapshot);
         }
 
-        public async Task<LoadedAggregate<TestAggregateState, TestCommand, TestEvent>> LoadLatestStateFromSnapshotIfAvailable()
+        public async Task<LoadedAggregate<TestAggregateState, TestEvent>> LoadLatestStateFromSnapshotIfAvailable()
         {
             return await LoadLatestState(AggregateLoadStrategy.PreferSnapshot);
         }
 
-        private async Task<LoadedAggregate<TestAggregateState, TestCommand, TestEvent>> LoadLatestState(AggregateLoadStrategy loadStrategy)
+        private async Task<LoadedAggregate<TestAggregateState, TestEvent>> LoadLatestState(AggregateLoadStrategy loadStrategy)
         {
             var loadedAggregate = await _aggregateRepository.LoadAggregate<TestAggregateState>(_id.ToString(), loadStrategy);
             _aggregateVersion = loadedAggregate.Version;
@@ -73,13 +74,13 @@ namespace DomainBlocks.EventStore.Testing
 
             foreach (var command in commands)
             {
-                _loadedAggregate.ImmutableDispatchCommand(command);
+                _loadedAggregate.ExecuteCommand(_ => TestAggregateFunctions.Execute(command));
             }
         }
 
         private void SetupRepositories()
         {
-            var registryBuilder = AggregateRegistryBuilder.Create<TestCommand, TestEvent>();
+            var registryBuilder = AggregateRegistryBuilder.Create<TestEvent>();
             TestAggregateFunctions.Register(registryBuilder, _id);
 
             var registry = registryBuilder.Build();
