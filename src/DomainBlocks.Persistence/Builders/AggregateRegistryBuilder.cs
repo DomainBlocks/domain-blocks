@@ -19,7 +19,7 @@ public sealed class AggregateRegistryBuilder<TEventBase>
     public AggregateRegistry<TEventBase> Build()
     {
         var eventRegistry = Events.Build();
-        return new(eventRegistry.EventRouter, eventRegistry.EventNameMap, _aggregateMetadataMap);
+        return new AggregateRegistry<TEventBase>(eventRegistry, _aggregateMetadataMap);
     }
 
     public AggregateRegistryBuilder<TEventBase> Register<TAggregate>(

@@ -4,6 +4,12 @@ using System.Linq;
 
 namespace DomainBlocks.Aggregates;
 
+public static class AggregateEventRouter
+{
+    public static AggregateEventRouter<TEventBase> Create<TEventBase>(EventRoutes<TEventBase> eventRoutes) =>
+        new(eventRoutes);
+}
+
 /// <summary>
 /// Routes domain events onto an aggregate and returns the updated aggregate state
 /// </summary>

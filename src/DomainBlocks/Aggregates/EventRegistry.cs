@@ -5,19 +5,18 @@ public static class EventRegistry
     public static EventRegistry<TEventBase> Create<TEventBase>(
         EventRoutes<TEventBase> eventRoutes, EventNameMap eventNameMap)
     {
-        var eventRouter = new AggregateEventRouter<TEventBase>(eventRoutes);
-        return new EventRegistry<TEventBase>(eventRouter, eventNameMap);
+        return new EventRegistry<TEventBase>(eventRoutes, eventNameMap);
     }
 }
 
 public class EventRegistry<TEventBase>
 {
-    public EventRegistry(IAggregateEventRouter<TEventBase> eventRoutes, EventNameMap eventNameMap)
+    public EventRegistry(EventRoutes<TEventBase> eventRoutes, EventNameMap eventNameMap)
     {
-        EventRouter = eventRoutes;
+        EventRoutes = eventRoutes;
         EventNameMap = eventNameMap;
     }
 
-    public IAggregateEventRouter<TEventBase> EventRouter { get; }
+    public EventRoutes<TEventBase> EventRoutes { get; }
     public EventNameMap EventNameMap { get; }
 }

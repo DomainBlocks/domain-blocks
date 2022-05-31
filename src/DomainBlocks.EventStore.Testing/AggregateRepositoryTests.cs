@@ -28,9 +28,9 @@ namespace DomainBlocks.EventStore.Testing
 
             var result = await Scenario.LoadLatestStateFromSnapshot();
 
-            Assert.That(result.AggregateState.TotalNumber, Is.EqualTo(100));
+            Assert.That(result.State.TotalNumber, Is.EqualTo(100));
             Assert.That(result.SnapshotVersion, Is.EqualTo(99));
-            Assert.That(result.EventsLoadedCount, Is.EqualTo(0));
+            Assert.That(result.LoadedEventsCount, Is.EqualTo(0));
         }
 
         [Test]
@@ -42,9 +42,9 @@ namespace DomainBlocks.EventStore.Testing
 
             var result = await Scenario.LoadLatestStateFromSnapshot();
 
-            Assert.That(result.AggregateState.TotalNumber, Is.EqualTo(110));
+            Assert.That(result.State.TotalNumber, Is.EqualTo(110));
             Assert.That(result.SnapshotVersion, Is.EqualTo(99));
-            Assert.That(result.EventsLoadedCount, Is.EqualTo(10));
+            Assert.That(result.LoadedEventsCount, Is.EqualTo(10));
         }
 
         [Test]
@@ -57,11 +57,10 @@ namespace DomainBlocks.EventStore.Testing
 
             var result = await Scenario.LoadLatestStateFromSnapshot();
 
-            Assert.That(result.AggregateState.TotalNumber, Is.EqualTo(110));
+            Assert.That(result.State.TotalNumber, Is.EqualTo(110));
             Assert.That(result.SnapshotVersion, Is.EqualTo(109));
-            Assert.That(result.EventsLoadedCount, Is.EqualTo(0));
+            Assert.That(result.LoadedEventsCount, Is.EqualTo(0));
         }
-
 
         [SetUp]
         public async Task TestSetUp()
@@ -69,6 +68,5 @@ namespace DomainBlocks.EventStore.Testing
             Scenario = new SnapshotScenario();
             await Scenario.Initialise(this);
         }
-
     }
 }

@@ -34,9 +34,8 @@ namespace DomainBlocks.EventStore.Testing
         {
             DispatchCommandsToState(commandCount);
             _aggregateVersion = await _aggregateRepository.SaveAggregate(_loadedAggregate);
-            var loadedAggregate = await LoadLatestStateFromEvents();
-            _loadedAggregate = loadedAggregate;
-            AggregateState = _loadedAggregate.AggregateState;
+            _loadedAggregate = await LoadLatestStateFromEvents();
+            AggregateState = _loadedAggregate.State;
         }
 
         public async Task SaveSnapshot()
@@ -63,7 +62,7 @@ namespace DomainBlocks.EventStore.Testing
         {
             var loadedAggregate = await _aggregateRepository.LoadAggregate<TestAggregateState>(_id.ToString(), loadStrategy);
             _aggregateVersion = loadedAggregate.Version;
-            AggregateState = loadedAggregate.AggregateState;
+            AggregateState = loadedAggregate.State;
 
             return loadedAggregate;
         }

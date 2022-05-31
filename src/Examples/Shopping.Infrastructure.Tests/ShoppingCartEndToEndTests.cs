@@ -119,25 +119,25 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
         var aggregateRepository = AggregateRepository.Create(eventsRepository, snapshotRepository, aggregateRegistry);
 
         // Execute the first command.
-        var loadedAggregate = await aggregateRepository.LoadAggregate<ShoppingCartState>(shoppingCartId.ToString());
+        var aggregate = await aggregateRepository.LoadAggregate<ShoppingCartState>(shoppingCartId.ToString());
 
         var command1 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "First Item");
-        loadedAggregate.ExecuteCommand(x => ShoppingCartFunctions.Execute(x, command1));
+        aggregate.ExecuteCommand(x => ShoppingCartFunctions.Execute(x, command1));
 
         // Execute the second command to the result of the first command.
         var secondItemId = Guid.NewGuid();
         var command2 = new AddItemToShoppingCart(shoppingCartId, secondItemId, "Second Item");
-        loadedAggregate.ExecuteCommand(x => ShoppingCartFunctions.Execute(x, command2));
+        aggregate.ExecuteCommand(x => ShoppingCartFunctions.Execute(x, command2));
 
-        Assert.That(loadedAggregate.AggregateState.Id.HasValue, "Expected ShoppingCart ID to be set");
+        Assert.That(aggregate.State.Id.HasValue, "Expected ShoppingCart ID to be set");
 
         var command3 = new RemoveItemFromShoppingCart(secondItemId, shoppingCartId);
-        loadedAggregate.ExecuteCommand(x => ShoppingCartFunctions.Execute(x, command3));
+        aggregate.ExecuteCommand(x => ShoppingCartFunctions.Execute(x, command3));
 
-        var eventsToPersist = loadedAggregate.EventsToPersist.ToList();
+        var raisedEvents = aggregate.RaisedEvents.ToList();
 
-        var nextEventVersion = await aggregateRepository.SaveAggregate(loadedAggregate);
-        var expectedNextEventVersion = eventsToPersist.Count - 1;
+        var nextEventVersion = await aggregateRepository.SaveAggregate(aggregate);
+        var expectedNextEventVersion = raisedEvents.Count - 1;
 
         Assert.That(nextEventVersion, Is.EqualTo(expectedNextEventVersion));
     }

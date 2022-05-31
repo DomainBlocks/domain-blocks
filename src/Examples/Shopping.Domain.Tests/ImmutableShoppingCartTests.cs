@@ -15,12 +15,12 @@ public class ImmutableShoppingCartTests
     [Test]
     public void RoundTripTest()
     {
-        var events = EventRegistryBuilder
+        var eventsRegistry = EventRegistryBuilder
             .OfType<IDomainEvent>()
             .For<ShoppingCartState>(ShoppingCartFunctions.RegisterEvents)
             .Build();
 
-        var eventRouter = events.EventRouter;
+        var eventRouter = AggregateEventRouter.Create(eventsRegistry.EventRoutes);
 
         var initialState = new ShoppingCartState();
 
@@ -58,12 +58,12 @@ public class ImmutableShoppingCartTests
         // The aggregate event log is the sum total of all events from both commands.
         // Simulate loading from the event log.
         var eventLog = events1.Concat(events2);
-        var loadedAggregate = ShoppingCartState.FromEvents(eventRouter, eventLog);
+        var stateFromEvents = ShoppingCartState.FromEvents(eventRouter, eventLog);
 
         // Check the loaded aggregate root state.
-        Assert.That(loadedAggregate.Id, Is.EqualTo(shoppingCartId));
-        Assert.That(loadedAggregate.Items, Has.Count.EqualTo(2));
-        Assert.That(loadedAggregate.Items[0].Name, Is.EqualTo("First Item"));
-        Assert.That(loadedAggregate.Items[1].Name, Is.EqualTo("Second Item"));
+        Assert.That(stateFromEvents.Id, Is.EqualTo(shoppingCartId));
+        Assert.That(stateFromEvents.Items, Has.Count.EqualTo(2));
+        Assert.That(stateFromEvents.Items[0].Name, Is.EqualTo("First Item"));
+        Assert.That(stateFromEvents.Items[1].Name, Is.EqualTo("Second Item"));
     }
 }

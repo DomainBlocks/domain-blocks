@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Linq;
 
 namespace DomainBlocks.Aggregates;
 
@@ -13,7 +12,7 @@ public class TrackingAggregateEventRouter<TEventBase> : IAggregateEventRouter<TE
         _inner = inner;
     }
     
-    public IReadOnlyList<TEventBase> TrackedEvents => _trackedEvents.ToList().AsReadOnly();
+    public IReadOnlyList<TEventBase> TrackedEvents => _trackedEvents.AsReadOnly();
 
     public TAggregate Send<TAggregate>(TAggregate aggregateRoot, IEnumerable<TEventBase> events)
     {

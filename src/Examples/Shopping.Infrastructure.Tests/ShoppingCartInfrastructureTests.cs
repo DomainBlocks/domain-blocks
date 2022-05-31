@@ -38,28 +38,28 @@ public class ShoppingCartInfrastructureTests : EventStoreIntegrationTest
 
         var aggregateRepository = AggregateRepository.Create(eventsRepository, snapshotRepository, aggregateRegistry);
 
-        var loadedAggregate = await aggregateRepository.LoadAggregate<ShoppingCartState>(shoppingCartId.ToString());
+        var aggregate = await aggregateRepository.LoadAggregate<ShoppingCartState>(shoppingCartId.ToString());
 
         // Execute the first command.
         var command1 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "First Item");
-        loadedAggregate.ExecuteCommand(x => ShoppingCartFunctions.Execute(x, command1));
+        aggregate.ExecuteCommand(x => ShoppingCartFunctions.Execute(x, command1));
 
         // Execute the second command to the result of the first command.
         var command2 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "Second Item");
-        loadedAggregate.ExecuteCommand(x => ShoppingCartFunctions.Execute(x, command2));
+        aggregate.ExecuteCommand(x => ShoppingCartFunctions.Execute(x, command2));
 
-        Assert.That(loadedAggregate.AggregateState.Id.HasValue, "Expected ShoppingCart ID to be set");
+        Assert.That(aggregate.State.Id.HasValue, "Expected ShoppingCart ID to be set");
 
-        var eventsToPersist = loadedAggregate.EventsToPersist.ToList();
+        var raisedEvents = aggregate.RaisedEvents.ToList();
 
-        var nextEventVersion = await aggregateRepository.SaveAggregate(loadedAggregate);
-        var expectedNextEventVersion = eventsToPersist.Count - 1;
+        var nextEventVersion = await aggregateRepository.SaveAggregate(aggregate);
+        var expectedNextEventVersion = raisedEvents.Count - 1;
 
         Assert.That(nextEventVersion, Is.EqualTo(expectedNextEventVersion));
 
         var loadedData = await aggregateRepository.LoadAggregate<ShoppingCartState>(shoppingCartId.ToString());
 
-        var loadedState = loadedData.AggregateState;
+        var loadedState = loadedData.State;
         var loadedVersion = loadedData.Version;
 
         // Check the loaded aggregate root state.

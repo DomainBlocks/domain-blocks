@@ -5,107 +5,99 @@ using DomainBlocks.Aggregates;
 using DomainBlocks.Aggregates.Builders;
 using NUnit.Framework;
 
-namespace DomainBlocks.Persistence.Tests;
+namespace DomainBlocks.Tests.Aggregates;
 
 [TestFixture]
-public class LoadedAggregateTests
+public class AggregateTests
 {
     [Test]
     public void MutableAggregateScenario1()
     {
-        var eventRouter = CreateEventRouter<MutableAggregate1>(MutableAggregate1.RegisterEvents);
-        var aggregate = new MutableAggregate1(eventRouter);
-        var loadedAggregate = CreateLoadedAggregate(aggregate, eventRouter);
+        var eventRoutes = BuildEventRoutes<MutableAggregate1>(MutableAggregate1.RegisterEvents);
+        var aggregate = Aggregate.Create(eventRoutes, x => new MutableAggregate1(x));
+        var initialState = aggregate.State;
 
         const string commandData = "new state";
-        loadedAggregate.ExecuteCommand(x => x.Execute(commandData));
-        var eventsToPersist = loadedAggregate.EventsToPersist.ToList();
+        aggregate.ExecuteCommand(x => x.Execute(commandData));
 
-        Assert.That(loadedAggregate.AggregateState, Is.SameAs(aggregate));
-        Assert.That(loadedAggregate.AggregateState.State, Is.EqualTo(commandData));
-        Assert.That(eventsToPersist, Has.Count.EqualTo(1));
-        Assert.That(eventsToPersist[0], Is.TypeOf<StateChangedEvent>());
+        Assert.That(aggregate.State, Is.SameAs(initialState));
+        Assert.That(aggregate.State.State, Is.EqualTo(commandData));
+        Assert.That(aggregate.RaisedEvents, Has.Count.EqualTo(1));
+        Assert.That(aggregate.RaisedEvents[0], Is.TypeOf<StateChangedEvent>());
     }
     
     [Test]
     public void MutableAggregateScenario2()
     {
-        var eventRouter = CreateEventRouter<MutableAggregate2>(MutableAggregate2.RegisterEvents);
-        var aggregate = new MutableAggregate2();
-        var loadedAggregate = CreateLoadedAggregate(aggregate, eventRouter);
+        var eventRoutes = BuildEventRoutes<MutableAggregate2>(MutableAggregate2.RegisterEvents);
+        var aggregate = Aggregate.Create(eventRoutes, _ => new MutableAggregate2());
+        var initialState = aggregate.State;
 
         const string commandData = "new state";
-        loadedAggregate.ExecuteCommand((agg, router) => agg.Execute(commandData, router));
-        var eventsToPersist = loadedAggregate.EventsToPersist.ToList();
+        aggregate.ExecuteCommand((agg, router) => agg.Execute(commandData, router));
+        var raisedEvents = aggregate.RaisedEvents.ToList();
 
-        Assert.That(loadedAggregate.AggregateState, Is.SameAs(aggregate));
-        Assert.That(loadedAggregate.AggregateState.State, Is.EqualTo(commandData));
-        Assert.That(eventsToPersist, Has.Count.EqualTo(1));
-        Assert.That(eventsToPersist[0], Is.TypeOf<StateChangedEvent>());
+        Assert.That(aggregate.State, Is.SameAs(initialState));
+        Assert.That(aggregate.State.State, Is.EqualTo(commandData));
+        Assert.That(raisedEvents, Has.Count.EqualTo(1));
+        Assert.That(raisedEvents[0], Is.TypeOf<StateChangedEvent>());
     }
     
     [Test]
     public void ImmutableAggregateScenario1()
     {
-        var eventRouter = CreateEventRouter<ImmutableAggregate1>(ImmutableAggregate1.RegisterEvents);
-        var aggregate = new ImmutableAggregate1(eventRouter);
-        var loadedAggregate = CreateLoadedAggregate(aggregate, eventRouter);
+        var eventRoutes = BuildEventRoutes<ImmutableAggregate1>(ImmutableAggregate1.RegisterEvents);
+        var aggregate = Aggregate.Create(eventRoutes, x => new ImmutableAggregate1(x));
+        var initialState = aggregate.State;
 
         const string commandData = "new state";
-        loadedAggregate.ExecuteCommand(agg => agg.Execute(commandData));
-        var eventsToPersist = loadedAggregate.EventsToPersist.ToList();
+        aggregate.ExecuteCommand(agg => agg.Execute(commandData));
+        var raisedEvents = aggregate.RaisedEvents.ToList();
 
-        Assert.That(loadedAggregate.AggregateState, Is.Not.SameAs(aggregate));
-        Assert.That(loadedAggregate.AggregateState.State, Is.EqualTo(commandData));
-        Assert.That(eventsToPersist, Has.Count.EqualTo(1));
-        Assert.That(eventsToPersist[0], Is.TypeOf<StateChangedEvent>());
+        Assert.That(aggregate.State, Is.Not.SameAs(initialState));
+        Assert.That(aggregate.State.State, Is.EqualTo(commandData));
+        Assert.That(raisedEvents, Has.Count.EqualTo(1));
+        Assert.That(raisedEvents[0], Is.TypeOf<StateChangedEvent>());
     }
     
     [Test]
     public void ImmutableAggregateScenario2()
     {
-        var eventRouter = CreateEventRouter<ImmutableAggregate2>(ImmutableAggregate2.RegisterEvents);
-        var aggregate = new ImmutableAggregate2();
-        var loadedAggregate = CreateLoadedAggregate(aggregate, eventRouter);
+        var eventRoutes = BuildEventRoutes<ImmutableAggregate2>(ImmutableAggregate2.RegisterEvents);
+        var aggregate = Aggregate.Create(eventRoutes, _ => new ImmutableAggregate2());
+        var initialState = aggregate.State;
 
         const string commandData = "new state";
-        loadedAggregate.ExecuteCommand((agg, router) => agg.Execute(commandData, router));
-        var eventsToPersist = loadedAggregate.EventsToPersist.ToList();
+        aggregate.ExecuteCommand((agg, router) => agg.Execute(commandData, router));
+        var raisedEvents = aggregate.RaisedEvents.ToList();
 
-        Assert.That(loadedAggregate.AggregateState, Is.Not.SameAs(aggregate));
-        Assert.That(loadedAggregate.AggregateState.State, Is.EqualTo(commandData));
-        Assert.That(eventsToPersist, Has.Count.EqualTo(1));
-        Assert.That(eventsToPersist[0], Is.TypeOf<StateChangedEvent>());
+        Assert.That(aggregate.State, Is.Not.SameAs(initialState));
+        Assert.That(aggregate.State.State, Is.EqualTo(commandData));
+        Assert.That(raisedEvents, Has.Count.EqualTo(1));
+        Assert.That(raisedEvents[0], Is.TypeOf<StateChangedEvent>());
     }
     
     [Test]
     public void ImmutableAggregateScenario3()
     {
-        var eventRouter = CreateEventRouter<ImmutableAggregate3>(ImmutableAggregate3.RegisterEvents);
-        var aggregate = new ImmutableAggregate3();
-        var loadedAggregate = CreateLoadedAggregate(aggregate, eventRouter);
+        var eventRoutes = BuildEventRoutes<ImmutableAggregate3>(ImmutableAggregate3.RegisterEvents);
+        var aggregate = Aggregate.Create(eventRoutes, _ => new ImmutableAggregate3());
+        var initialState = aggregate.State;
 
         const string commandData = "new state";
-        loadedAggregate.ExecuteCommand(x => x.Execute(commandData));
-        var eventsToPersist = loadedAggregate.EventsToPersist.ToList();
+        aggregate.ExecuteCommand(x => x.Execute(commandData));
+        var raisedEvents = aggregate.RaisedEvents.ToList();
 
-        Assert.That(loadedAggregate.AggregateState, Is.Not.SameAs(aggregate));
-        Assert.That(loadedAggregate.AggregateState.State, Is.EqualTo(commandData));
-        Assert.That(eventsToPersist, Has.Count.EqualTo(1));
-        Assert.That(eventsToPersist[0], Is.TypeOf<StateChangedEvent>());
+        Assert.That(aggregate.State, Is.Not.SameAs(initialState));
+        Assert.That(aggregate.State.State, Is.EqualTo(commandData));
+        Assert.That(raisedEvents, Has.Count.EqualTo(1));
+        Assert.That(raisedEvents[0], Is.TypeOf<StateChangedEvent>());
     }
     
-    private static TrackingAggregateEventRouter<object> CreateEventRouter<TAggregate>(
+    private static EventRoutes<object> BuildEventRoutes<TAggregate>(
         Action<EventRegistryBuilder<TAggregate, object>> builderAction)
     {
-        var eventRegistry = EventRegistryBuilder.OfType<object>().For(builderAction).Build();
-        return new TrackingAggregateEventRouter<object>(eventRegistry.EventRouter);
-    }
-
-    private static LoadedAggregate<TAggregate, object> CreateLoadedAggregate<TAggregate>(
-        TAggregate initialState, TrackingAggregateEventRouter<object> eventRouter)
-    {
-        return new LoadedAggregate<TAggregate, object>(initialState, "id", -1, null, 0, eventRouter);
+        return EventRegistryBuilder.OfType<object>().For(builderAction).Build().EventRoutes;
     }
     
     private class StateChangedEvent

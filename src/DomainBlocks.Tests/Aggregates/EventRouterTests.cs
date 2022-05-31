@@ -11,7 +11,7 @@ public class EventRouterTests
     [Test]
     public void EventIsRoutedAndApplied()
     {
-        var eventRouter = EventRegistryBuilder
+        var eventRegistry = EventRegistryBuilder
             .OfType<object>()
             .For<MyAggregateRoot>(events =>
             {
@@ -23,8 +23,9 @@ public class EventRouterTests
                     .RoutesTo((a, e) => a.ApplyEvent(e))
                     .HasName(EventNames.SomethingElseHappened);
             })
-            .Build()
-            .EventRouter;
+            .Build();
+
+        var eventRouter = AggregateEventRouter.Create(eventRegistry.EventRoutes);
 
         // Set up the initial state.
         var initialState = new MyAggregateRoot();
@@ -43,7 +44,7 @@ public class EventRouterTests
     [Test]
     public void MissingEventRouteThrowsException()
     {
-        var eventRouter = EventRegistryBuilder
+        var eventRegistry = EventRegistryBuilder
             .OfType<object>()
             .For<MyAggregateRoot>(events =>
             {
@@ -51,8 +52,9 @@ public class EventRouterTests
                     .RoutesTo((a, e) => a.ApplyEvent(e))
                     .HasName(EventNames.SomethingElseHappened);
             })
-            .Build()
-            .EventRouter;
+            .Build();
+
+        var eventRouter = AggregateEventRouter.Create(eventRegistry.EventRoutes);
 
         // Set up the initial state.
         var initialState = new MyAggregateRoot();
@@ -72,7 +74,7 @@ public class EventRouterTests
     [Test]
     public void DefaultEventRouteIsInvokedWhenSpecified()
     {
-        var eventRouter = EventRegistryBuilder.OfType<IEvent>()
+        var eventRegistry = EventRegistryBuilder.OfType<IEvent>()
             .For<MyAggregateRoot>(events =>
             {
                 events.Event<SomethingHappened>()
@@ -82,8 +84,9 @@ public class EventRouterTests
                 events.Event<IEvent>()
                     .RoutesTo((a, e) => a.DefaultApplyEvent(e));
             })
-            .Build()
-            .EventRouter;
+            .Build();
+
+        var eventRouter = AggregateEventRouter.Create(eventRegistry.EventRoutes);
 
         // Set up the initial state.
         var initialState = new MyAggregateRoot();

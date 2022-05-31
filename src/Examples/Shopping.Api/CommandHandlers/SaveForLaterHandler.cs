@@ -15,7 +15,7 @@ public class SaveForLaterHandler : CommandHandlerBase<SaveItemForLater>
 
     protected override async Task HandleImpl(SaveItemForLater request, CancellationToken cancellationToken)
     {
-        var loadedAggregate = await Repository.LoadAggregate<ShoppingCartState>(request.CartId);
+        var aggregate = await Repository.LoadAggregate<ShoppingCartState>(request.CartId);
 
         var cartId = Guid.Parse(request.CartId);
         var itemId = Guid.Parse(request.ItemId);
@@ -23,9 +23,9 @@ public class SaveForLaterHandler : CommandHandlerBase<SaveItemForLater>
         var command = new Domain.Commands.SaveItemForLater(cartId, itemId);
         // TODO (DS): It seems that there is no method on the aggregate for this command, which was previously being
         // hidden behind the command dispatcher. 
-        // loadedAggregate.ExecuteCommand(x => ShoppingCartFunctions.Execute(x, command));
+        // aggregate.ExecuteCommand(x => ShoppingCartFunctions.Execute(x, command));
 
         // Snapshot every 25 events
-        await Repository.SaveAggregate(loadedAggregate, state => state.EventsLoadedCount >= 25);
+        await Repository.SaveAggregate(aggregate, x => x.LoadedEventsCount >= 25);
     }
 }

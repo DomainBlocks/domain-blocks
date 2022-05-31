@@ -4,17 +4,14 @@ namespace DomainBlocks.Persistence;
 
 public sealed class AggregateRegistry<TEventBase>
 {
-    internal AggregateRegistry(
-        IAggregateEventRouter<TEventBase> eventRouter,
-        IEventNameMap eventNameMap,
-        AggregateMetadataMap aggregateMetadataMap)
+    internal AggregateRegistry(EventRegistry<TEventBase> eventRegistry, AggregateMetadataMap aggregateMetadataMap)
     {
-        EventRouter = eventRouter;
-        EventNameMap = eventNameMap;
+        EventRoutes = eventRegistry.EventRoutes;
+        EventNameMap = eventRegistry.EventNameMap;
         AggregateMetadataMap = aggregateMetadataMap;
     }
     
-    public IAggregateEventRouter<TEventBase> EventRouter { get; }
+    public EventRoutes<TEventBase> EventRoutes { get; }
     public IEventNameMap EventNameMap { get; }
     public AggregateMetadataMap AggregateMetadataMap { get; }
 }

@@ -19,7 +19,7 @@ public sealed class AggregateRepository<TEventBase, TRawData> : IAggregateReposi
 {
     private readonly IEventsRepository<TRawData> _eventsRepository;
     private readonly ISnapshotRepository _snapshotRepository;
-    private readonly IAggregateEventRouter<TEventBase> _eventRouter;
+    private readonly AggregateEventRouter<TEventBase> _eventRouter;
     private readonly AggregateMetadataMap _metadataMap;
 
     public AggregateRepository(
@@ -30,7 +30,7 @@ public sealed class AggregateRepository<TEventBase, TRawData> : IAggregateReposi
         if (aggregateRegistry == null) throw new ArgumentNullException(nameof(aggregateRegistry));
         _eventsRepository = eventsRepository ?? throw new ArgumentNullException(nameof(eventsRepository));
         _snapshotRepository = snapshotRepository ?? throw new ArgumentNullException(nameof(snapshotRepository));
-        _eventRouter = aggregateRegistry.EventRouter;
+        _eventRouter = new AggregateEventRouter<TEventBase>(aggregateRegistry.EventRoutes);
         _metadataMap = aggregateRegistry.AggregateMetadataMap;
     }
 
@@ -42,17 +42,16 @@ public sealed class AggregateRepository<TEventBase, TRawData> : IAggregateReposi
         var aggregateMetadata = _metadataMap.GetForType<TAggregateState>();
 
         var trackingEventRouter = new TrackingAggregateEventRouter<TEventBase>(_eventRouter);
-
-        var initialAggregateState = (TAggregateState)aggregateMetadata.InitialStateFactory?.Invoke(trackingEventRouter);
+        var initialState = (TAggregateState)aggregateMetadata.InitialStateFactory?.Invoke(trackingEventRouter);
 
         // If we choose to load solely from an event stream, then we need some initial state
         // onto which to apply the events.
-        if (initialAggregateState == null && loadStrategy == AggregateLoadStrategy.UseEventStream)
+        if (initialState == null && loadStrategy == AggregateLoadStrategy.UseEventStream)
         {
-            throw new ArgumentNullException(nameof(initialAggregateState));
+            throw new InvalidOperationException("Cannot apply events to a null initial state.");
         }
 
-        var stateToAppendEventsTo = initialAggregateState;
+        var stateToApplyEventsTo = initialState;
 
         var streamName = aggregateMetadata.IdToKeySelector(id);
         long loadStartPosition = 0;
@@ -73,22 +72,22 @@ public sealed class AggregateRepository<TEventBase, TRawData> : IAggregateReposi
             else
             {
                 snapshotVersion = snapshot.Version;
-                stateToAppendEventsTo = snapshot.SnapshotState;
+                stateToApplyEventsTo = snapshot.SnapshotState;
                 loadStartPosition = snapshot.Version + 1;
             }
         }
 
-        if (stateToAppendEventsTo == null)
+        if (stateToApplyEventsTo == null)
         {
             throw new InvalidOperationException("Snapshot was not found, and no initial state " +
                                                 "was supplied onto which to append events");
         }
 
         var events = await _eventsRepository.LoadEventsAsync<TEventBase>(streamName, loadStartPosition);
-        var state = _eventRouter.Send(stateToAppendEventsTo, events);
+        var state = _eventRouter.Send(stateToApplyEventsTo, events);
         var newVersion = loadStartPosition + events.Count - 1;
 
-        return LoadedAggregate.Create(state, id, newVersion, snapshotVersion, events.Count, trackingEventRouter);
+        return LoadedAggregate.Create(state, trackingEventRouter, id, newVersion, snapshotVersion, events.Count);
     }
 
     public async Task<long> SaveAggregate<TAggregateState>(
@@ -96,7 +95,7 @@ public sealed class AggregateRepository<TEventBase, TRawData> : IAggregateReposi
         Func<LoadedAggregate<TAggregateState, TEventBase>, bool> snapshotPredicate = null)
     {
         if (loadedAggregate == null) throw new ArgumentNullException(nameof(loadedAggregate));
-        if (loadedAggregate.HasBeenSaved)
+        if (loadedAggregate.IsSaved)
         {
             throw new ArgumentException("Aggregate has already been saved and must be loaded from persistence " +
                                         "before being saved again");
@@ -106,15 +105,13 @@ public sealed class AggregateRepository<TEventBase, TRawData> : IAggregateReposi
         var aggregateMetadata = _metadataMap.GetForType<TAggregateState>();
         var streamName = aggregateMetadata.IdToKeySelector(loadedAggregate.Id);
         var newVersion = await _eventsRepository.SaveEventsAsync(
-            streamName, loadedAggregate.Version, loadedAggregate.EventsToPersist);
-        loadedAggregate.HasBeenSaved = true;
+            streamName, loadedAggregate.Version, loadedAggregate.RaisedEvents);
+        loadedAggregate.IsSaved = true;
 
         if (snapshotPredicate(loadedAggregate))
         {
-            var snapshotKey = aggregateMetadata.SnapshotKeySelector(loadedAggregate.AggregateState);
-
-            await _snapshotRepository.SaveSnapshotAsync(
-                snapshotKey, loadedAggregate.Version, loadedAggregate.AggregateState);
+            var snapshotKey = aggregateMetadata.SnapshotKeySelector(loadedAggregate.State);
+            await _snapshotRepository.SaveSnapshotAsync(snapshotKey, loadedAggregate.Version, loadedAggregate.State);
         }
 
         return newVersion;
