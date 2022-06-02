@@ -19,7 +19,7 @@ public sealed class AggregateRepository<TEventBase, TRawData> : IAggregateReposi
 {
     private readonly IEventsRepository<TRawData> _eventsRepository;
     private readonly ISnapshotRepository _snapshotRepository;
-    private readonly AggregateEventRouter<TEventBase> _eventRouter;
+    private readonly EventRoutes<TEventBase> _eventRoutes;
     private readonly AggregateMetadataMap _metadataMap;
 
     public AggregateRepository(
@@ -30,7 +30,7 @@ public sealed class AggregateRepository<TEventBase, TRawData> : IAggregateReposi
         if (aggregateRegistry == null) throw new ArgumentNullException(nameof(aggregateRegistry));
         _eventsRepository = eventsRepository ?? throw new ArgumentNullException(nameof(eventsRepository));
         _snapshotRepository = snapshotRepository ?? throw new ArgumentNullException(nameof(snapshotRepository));
-        _eventRouter = new AggregateEventRouter<TEventBase>(aggregateRegistry.EventRoutes);
+        _eventRoutes = aggregateRegistry.EventRoutes;
         _metadataMap = aggregateRegistry.AggregateMetadataMap;
     }
 
@@ -41,8 +41,8 @@ public sealed class AggregateRepository<TEventBase, TRawData> : IAggregateReposi
 
         var aggregateMetadata = _metadataMap.GetForType<TAggregateState>();
 
-        var trackingEventRouter = new TrackingAggregateEventRouter<TEventBase>(_eventRouter);
-        var initialState = (TAggregateState)aggregateMetadata.InitialStateFactory?.Invoke(trackingEventRouter);
+        var eventRouter = new AggregateEventRouter<TEventBase>(_eventRoutes);
+        var initialState = (TAggregateState)aggregateMetadata.InitialStateFactory?.Invoke(eventRouter);
 
         // If we choose to load solely from an event stream, then we need some initial state
         // onto which to apply the events.
@@ -84,10 +84,10 @@ public sealed class AggregateRepository<TEventBase, TRawData> : IAggregateReposi
         }
 
         var events = await _eventsRepository.LoadEventsAsync<TEventBase>(streamName, loadStartPosition);
-        var state = _eventRouter.Send(stateToApplyEventsTo, events);
+        var state = eventRouter.Send(stateToApplyEventsTo, events);
         var newVersion = loadStartPosition + events.Count - 1;
-
-        return LoadedAggregate.Create(state, trackingEventRouter, id, newVersion, snapshotVersion, events.Count);
+        
+        return LoadedAggregate.Create(state, eventRouter, id, newVersion, snapshotVersion, events.Count);
     }
 
     public async Task<long> SaveAggregate<TAggregateState>(

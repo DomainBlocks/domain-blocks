@@ -112,9 +112,9 @@ public class AggregateTests
 
     private class MutableAggregate1
     {
-        private readonly IAggregateEventRouter<object> _eventRouter;
+        private readonly AggregateEventRouter<object> _eventRouter;
 
-        public MutableAggregate1(IAggregateEventRouter<object> eventRouter)
+        public MutableAggregate1(AggregateEventRouter<object> eventRouter)
         {
             _eventRouter = eventRouter;
         }
@@ -146,7 +146,7 @@ public class AggregateTests
             events.Event<StateChangedEvent>().RoutesTo((agg, e) => agg.Apply(e));
         }
 
-        public void Execute(string newState, IAggregateEventRouter<object> eventRouter)
+        public void Execute(string newState, AggregateEventRouter<object> eventRouter)
         {
             eventRouter.Send(this, new StateChangedEvent(newState));
         }
@@ -159,14 +159,14 @@ public class AggregateTests
 
     private class ImmutableAggregate1
     {
-        private readonly IAggregateEventRouter<object> _eventRouter;
+        private readonly AggregateEventRouter<object> _eventRouter;
 
-        public ImmutableAggregate1(IAggregateEventRouter<object> eventRouter)
+        public ImmutableAggregate1(AggregateEventRouter<object> eventRouter)
         {
             _eventRouter = eventRouter;
         }
 
-        private ImmutableAggregate1(string state, IAggregateEventRouter<object> eventRouter) : this(eventRouter)
+        private ImmutableAggregate1(string state, AggregateEventRouter<object> eventRouter) : this(eventRouter)
         {
             State = state;
         }
@@ -207,7 +207,7 @@ public class AggregateTests
             events.Event<StateChangedEvent>().RoutesTo((agg, e) => agg.Apply(e));
         }
         
-        public ImmutableAggregate2 Execute(string newState, IAggregateEventRouter<object> eventRouter)
+        public ImmutableAggregate2 Execute(string newState, AggregateEventRouter<object> eventRouter)
         {
             return eventRouter.Send(this, new StateChangedEvent(newState));
         }

@@ -31,10 +31,10 @@ public sealed class AggregateRegistryBuilder<TEventBase>
     }
 
     internal void RegisterInitialStateFunc<TAggregate>(
-        Func<IAggregateEventRouter<TEventBase>, TAggregate> initialStateFactory)
+        Func<AggregateEventRouter<TEventBase>, TAggregate> initialStateFactory)
     {
         var aggregateMetadata = GetOrAddAggregateMetadata<TAggregate>();
-        aggregateMetadata.InitialStateFactory = x => initialStateFactory((IAggregateEventRouter<TEventBase>)x);
+        aggregateMetadata.InitialStateFactory = x => initialStateFactory((AggregateEventRouter<TEventBase>)x);
     }
 
     internal void RegisterAggregateIdFunc<TAggregate>(Func<TAggregate, string> idSelector)

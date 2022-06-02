@@ -8,7 +8,7 @@ internal static class LoadedAggregate
 {
     internal static LoadedAggregate<TState, TEventBase> Create<TState, TEventBase>(
         TState state,
-        TrackingAggregateEventRouter<TEventBase> eventRouter,
+        AggregateEventRouter<TEventBase> eventRouter,
         string id,
         long version,
         long? snapshotVersion,
@@ -51,12 +51,12 @@ public sealed class LoadedAggregate<TState, TEventBase>
 
     public void ExecuteCommand(Action<TState> commandExecutor) => _aggregate.ExecuteCommand(commandExecutor);
 
-    public void ExecuteCommand(Action<TState, IAggregateEventRouter<TEventBase>> commandExecutor) =>
+    public void ExecuteCommand(Action<TState, AggregateEventRouter<TEventBase>> commandExecutor) =>
         _aggregate.ExecuteCommand(commandExecutor);
 
     public void ExecuteCommand(Func<TState, TState> commandExecutor) => _aggregate.ExecuteCommand(commandExecutor);
 
-    public void ExecuteCommand(Func<TState, IAggregateEventRouter<TEventBase>, TState> commandExecutor) =>
+    public void ExecuteCommand(Func<TState, AggregateEventRouter<TEventBase>, TState> commandExecutor) =>
         _aggregate.ExecuteCommand(commandExecutor);
 
     public void ExecuteCommand(Func<TState, IEnumerable<TEventBase>> commandExecutor) =>

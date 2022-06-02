@@ -10,10 +10,10 @@ namespace Shopping.Domain.Aggregates;
 
 public class MutableShoppingCart
 {
-    private readonly IAggregateEventRouter<IDomainEvent> _eventRouter;
+    private readonly AggregateEventRouter<IDomainEvent> _eventRouter;
     private readonly List<ShoppingCartItem> _items = new();
 
-    public MutableShoppingCart(IAggregateEventRouter<IDomainEvent> eventRouter)
+    public MutableShoppingCart(AggregateEventRouter<IDomainEvent> eventRouter)
     {
         _eventRouter = eventRouter;
     }

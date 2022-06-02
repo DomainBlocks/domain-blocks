@@ -13,5 +13,5 @@ public sealed class AggregateRegistry<TEventBase>
     
     public EventRoutes<TEventBase> EventRoutes { get; }
     public IEventNameMap EventNameMap { get; }
-    public AggregateMetadataMap AggregateMetadataMap { get; }
+    internal AggregateMetadataMap AggregateMetadataMap { get; }
 }

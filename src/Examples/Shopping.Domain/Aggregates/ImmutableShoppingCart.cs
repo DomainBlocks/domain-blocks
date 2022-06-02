@@ -32,7 +32,7 @@ public class ShoppingCartState
     public IReadOnlyList<ShoppingCartItem> Items { get; }
 
     public static ShoppingCartState FromEvents(
-        IAggregateEventRouter<IDomainEvent> eventRouter, IEnumerable<IDomainEvent> events) =>
+        AggregateEventRouter<IDomainEvent> eventRouter, IEnumerable<IDomainEvent> events) =>
         eventRouter.Send(new ShoppingCartState(), events);
 }
 

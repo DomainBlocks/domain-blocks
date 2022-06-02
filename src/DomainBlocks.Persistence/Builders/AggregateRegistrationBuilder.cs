@@ -14,7 +14,7 @@ public sealed class AggregateRegistrationBuilder<TAggregate, TEventBase>
     }
 
     public AggregateRegistrationBuilder<TAggregate, TEventBase> InitialState(
-        Func<IAggregateEventRouter<TEventBase>, TAggregate> initialStateFactory)
+        Func<AggregateEventRouter<TEventBase>, TAggregate> initialStateFactory)
     {
         _aggregateRegistryBuilder.RegisterInitialStateFunc(initialStateFactory);
         return this;

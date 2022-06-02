@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace DomainBlocks.Persistence
 {
-    public sealed class AggregateMetadataMap : Dictionary<Type, AggregateMetadata>
+    internal sealed class AggregateMetadataMap : Dictionary<Type, AggregateMetadata>
     {
         public AggregateMetadata GetForInstance<TAggregate>(TAggregate instance)
         {
