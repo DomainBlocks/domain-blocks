@@ -3,10 +3,10 @@ using Shopping.Domain.Events;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using DomainBlocks.Aggregates;
-using DomainBlocks.Aggregates.Builders;
 
 namespace Shopping.Domain.Aggregates;
+
+using EventApplier = Func<ShoppingCartState, IDomainEvent, ShoppingCartState>;
 
 // Demonstrates immutable state, but it could equally be mutable.
 // Note: the immutable implementation could be better. It's just for demo purposes.
@@ -30,10 +30,6 @@ public class ShoppingCartState
 
     public Guid? Id { get; }
     public IReadOnlyList<ShoppingCartItem> Items { get; }
-
-    public static ShoppingCartState FromEvents(
-        AggregateEventRouter<IDomainEvent> eventRouter, IEnumerable<IDomainEvent> events) =>
-        eventRouter.Send(new ShoppingCartState(), events);
 }
 
 public class ShoppingCartItem
@@ -50,13 +46,13 @@ public class ShoppingCartItem
     
 public static class ShoppingCartFunctions
 {
-    public static void RegisterEvents(EventRegistryBuilder<ShoppingCartState, IDomainEvent> events)
+    public static EventApplier EventApplier => (state, @event) => @event switch
     {
-        events
-            .Event<ShoppingCartCreated>().RoutesTo(Apply).HasName(ShoppingCartCreated.EventName)
-            .Event<ItemAddedToShoppingCart>().RoutesTo(Apply).HasName(ItemAddedToShoppingCart.EventName)
-            .Event<ItemRemovedFromShoppingCart>().RoutesTo(Apply).HasName(ItemRemovedFromShoppingCart.EventName);
-    }
+        ShoppingCartCreated e => Apply(state, e),
+        ItemAddedToShoppingCart e => Apply(state, e),
+        ItemRemovedFromShoppingCart e => Apply(state, e),
+        _ => state
+    };
 
     public static IEnumerable<IDomainEvent> Execute(ShoppingCartState state, AddItemToShoppingCart command)
     {

@@ -12,7 +12,7 @@ public static class EventRegistryBuilder
 
 public class EventRegistryBuilder<TEventBase>
 {
-    internal EventRoutes<TEventBase> EventRoutes { get; } = new();
+    internal EventApplierMap<TEventBase> EventApplierMap { get; } = new();
     internal EventNameMap EventNameMap { get; } = new();
 
     public EventRegistryBuilder<TEventBase> For<TAggregate>(
@@ -23,7 +23,7 @@ public class EventRegistryBuilder<TEventBase>
         return this;
     }
     
-    public EventRegistry<TEventBase> Build() => EventRegistry.Create(EventRoutes, EventNameMap);
+    public EventRegistry<TEventBase> Build() => EventRegistry.Create(EventApplierMap, EventNameMap);
 }
 
 public class EventRegistryBuilder<TAggregate, TEventBase>
@@ -34,12 +34,28 @@ public class EventRegistryBuilder<TAggregate, TEventBase>
     {
         _builder = builder;
     }
-    
-    internal EventRoutes<TEventBase> EventRoutes => _builder.EventRoutes;
+
     internal EventNameMap EventNameMap => _builder.EventNameMap;
 
     public EventRegistrationBuilder<TAggregate, TEventBase, TEvent> Event<TEvent>() where TEvent : TEventBase
     {
         return new EventRegistrationBuilder<TAggregate, TEventBase, TEvent>(this);
+    }
+
+    public EventRegistryBuilder<TAggregate, TEventBase> ApplyWith(Action<TAggregate, TEventBase> eventApplier)
+    {
+        _builder.EventApplierMap.Add<TAggregate>((state, @event) =>
+        {
+            eventApplier(state, @event);
+            return state;
+        });
+
+        return this;
+    }
+
+    public EventRegistryBuilder<TAggregate, TEventBase> ApplyWith(Func<TAggregate, TEventBase, TAggregate> eventApplier)
+    {
+        _builder.EventApplierMap.Add(eventApplier);
+        return this;
     }
 }

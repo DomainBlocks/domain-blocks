@@ -10,12 +10,16 @@ public static class TestAggregateFunctions
     {
         builder.Register<TestAggregateState>(agg =>
         {
-            agg.InitialState(_ => new TestAggregateState(aggregateId, 0))
+            agg.InitialState(() => new TestAggregateState(aggregateId, 0))
                 .Id(x => x.Id.ToString())
                 .PersistenceKey(id => $"testAggregate-{id}")
                 .SnapshotKey(id => $"testAggregateSnapshot-{id}");
 
-            agg.RegisterEvents(events => { events.Event<TestEvent>().RoutesTo(Apply); });
+            agg.RegisterEvents(events =>
+            {
+                events.ApplyWith((s, e) => Apply(s, (dynamic)e));
+                events.Event<TestEvent>().HasName(nameof(TestEvent));
+            });
         });
     }
 

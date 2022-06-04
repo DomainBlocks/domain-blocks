@@ -7,86 +7,76 @@ namespace DomainBlocks.Aggregates;
 public static class Aggregate
 {
     public static Aggregate<TState, TEventBase> Create<TState, TEventBase>(
-        EventRoutes<TEventBase> eventRoutes,
-        Func<AggregateEventRouter<TEventBase>, TState> stateFactory,
+        TState state,
+        Action<TState, TEventBase> eventApplier,
         IEnumerable<TEventBase> events = null)
     {
-        if (eventRoutes == null) throw new ArgumentNullException(nameof(eventRoutes));
-        if (stateFactory == null) throw new ArgumentNullException(nameof(stateFactory));
-
-        var eventRouter = new AggregateEventRouter<TEventBase>(eventRoutes);
-        
-        // Create the initial state.
-        var state = stateFactory(eventRouter);
-        
-        // Apply any given events to the initial state. Note that we don't care about any raised events here, as we are
-        // creating a new aggregate instance from the event log.
-        state = eventRouter.Send(state, events ?? Enumerable.Empty<TEventBase>());
-        eventRouter.ClearRaisedEvents();
-        
-        return new Aggregate<TState, TEventBase>(state, eventRouter);
+        return Create(
+            state,
+            (s, e) =>
+            {
+                eventApplier(s, e);
+                return s;
+            },
+            events);
     }
-    
-    // TODO (DS): Find a way to get rid of this overload, as we want to enforce (as much as we can) that a given
-    // TState instance and it's wrapping Aggregate instance share the same AggregateEventRouter instance. This comes
-    // back to the topic of being able to instantiate state from a snapshot with an event router.
+
     public static Aggregate<TState, TEventBase> Create<TState, TEventBase>(
-        TState state, AggregateEventRouter<TEventBase> eventRouter)
+        TState state,
+        Func<TState, TEventBase, TState> eventApplier,
+        IEnumerable<TEventBase> events = null)
     {
-        return new Aggregate<TState, TEventBase>(state, eventRouter);
+        if (eventApplier == null) throw new ArgumentNullException(nameof(eventApplier));
+
+        // Apply any given events to the initial state.
+        if (events is not null)
+        {
+            state = events.Aggregate(state, eventApplier);
+        }
+
+        return new Aggregate<TState, TEventBase>(state, eventApplier);
     }
 }
 
 public class Aggregate<TState, TEventBase>
 {
-    private readonly AggregateEventRouter<TEventBase> _eventRouter;
+    private readonly Func<TState, TEventBase, TState> _eventApplier;
+    private readonly List<TEventBase> _appliedEvents = new();
 
-    internal Aggregate(TState state, AggregateEventRouter<TEventBase> eventRouter)
+    public Aggregate(TState state, Func<TState, TEventBase, TState> eventApplier)
     {
-        _eventRouter = eventRouter ?? throw new ArgumentNullException(nameof(eventRouter));
+        _eventApplier = eventApplier ?? throw new ArgumentNullException(nameof(eventApplier));
         State = state ?? throw new ArgumentNullException(nameof(state));
     }
 
     public TState State { get; private set; }
-    public IReadOnlyList<TEventBase> RaisedEvents => _eventRouter.RaisedEvents;
+    public IReadOnlyList<TEventBase> AppliedEvents => _appliedEvents.AsReadOnly();
 
-    public void ClearRaisedEvents() => _eventRouter.ClearRaisedEvents();
-    
-    public void ExecuteCommand(Action<TState> commandExecutor)
+    public void ClearAppliedEvents() => _appliedEvents.Clear();
+
+    public void ExecuteCommand(Action<TState, Action<TState, TEventBase>> commandExecutor)
     {
-        ExecuteCommand(agg =>
+        ExecuteCommand((state, eventApplier) =>
         {
-            commandExecutor(agg);
-            return agg;
+            commandExecutor(state, (s, e) => eventApplier(s, e));
+            return state;
         });
     }
-    
-    public void ExecuteCommand(Action<TState, AggregateEventRouter<TEventBase>> commandExecutor)
+
+    public void ExecuteCommand(Func<TState, Func<TState, TEventBase, TState>, TState> commandExecutor)
     {
-        ExecuteCommand(agg =>
-        {
-            commandExecutor(agg, _eventRouter);
-            return agg;
-        });
-    }
-    
-    public void ExecuteCommand(Func<TState, TState> commandExecutor)
-    {
-        // Get the new state by executing the command.
-        State = commandExecutor(State);
+        State = commandExecutor(State, EventApplier);
     }
 
-    public void ExecuteCommand(Func<TState, AggregateEventRouter<TEventBase>, TState> commandExecutor)
-    {
-        ExecuteCommand(agg => commandExecutor(agg, _eventRouter));
-    }
-    
     public void ExecuteCommand(Func<TState, IEnumerable<TEventBase>> commandExecutor)
     {
-        // Get the events to raise by executing the command. This func is assumed to be immutable.
-        var events = commandExecutor(State).ToList();
+        var events = commandExecutor(State);
+        State = events.Aggregate(State, EventApplier);
+    }
 
-        // Send the events, and get the new state.
-        State = _eventRouter.Send(State, events);
+    private TState EventApplier(TState state, TEventBase @event)
+    {
+        _appliedEvents.Add(@event);
+        return _eventApplier(state, @event);
     }
 }

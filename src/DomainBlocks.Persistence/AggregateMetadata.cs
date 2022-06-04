@@ -4,7 +4,7 @@ namespace DomainBlocks.Persistence;
 
 internal sealed class AggregateMetadata
 {
-    public Func<object, object> InitialStateFactory { get; set; }
+    public Func<object> InitialStateFactory { get; set; }
     public Func<object, string> IdSelector { get; set; }
     public Func<string, string> IdToKeySelector { get; set; }
     public Func<string, string> IdToSnapshotKeySelector { get; set; }

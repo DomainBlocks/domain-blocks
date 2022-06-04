@@ -22,14 +22,20 @@ public class ShoppingCartInfrastructureTests : EventStoreIntegrationTest
         var aggregateRegistry = AggregateRegistryBuilder.Create<IDomainEvent>()
             .Register<ShoppingCartState>(builder =>
             {
-                builder.InitialState(_ => new ShoppingCartState())
+                builder.InitialState(() => new ShoppingCartState())
                     .Id(o => o.Id?.ToString())
                     .PersistenceKey(id => $"shoppingCart-{id}")
                     .SnapshotKey(id => $"shoppingCartSnapshot-{id}")
-                    .RegisterEvents(ShoppingCartFunctions.RegisterEvents);
+                    .RegisterEvents(events =>
+                    {
+                        events.ApplyWith(ShoppingCartFunctions.EventApplier);
+                        events.Event<ShoppingCartCreated>().HasName(ShoppingCartCreated.EventName);
+                        events.Event<ItemAddedToShoppingCart>().HasName(ItemAddedToShoppingCart.EventName);
+                        events.Event<ItemRemovedFromShoppingCart>().HasName(ItemRemovedFromShoppingCart.EventName);
+                    });
             })
             .Build();
-            
+
         var shoppingCartId = Guid.NewGuid(); // This could come from a sequence, or could be the customer's ID.
 
         var serializer = new JsonBytesEventSerializer(aggregateRegistry.EventNameMap);
@@ -50,7 +56,7 @@ public class ShoppingCartInfrastructureTests : EventStoreIntegrationTest
 
         Assert.That(aggregate.State.Id.HasValue, "Expected ShoppingCart ID to be set");
 
-        var raisedEvents = aggregate.RaisedEvents.ToList();
+        var raisedEvents = aggregate.AppliedEvents.ToList();
 
         var nextEventVersion = await aggregateRepository.SaveAggregate(aggregate);
         var expectedNextEventVersion = raisedEvents.Count - 1;

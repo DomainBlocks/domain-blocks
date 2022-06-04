@@ -38,11 +38,11 @@ public class Startup
             {
                 aggregates.Register<ShoppingCartState>(aggregate =>
                 {
-                    aggregate.InitialState(_ => new ShoppingCartState())
+                    aggregate.InitialState(() => new ShoppingCartState())
                         .Id(o => o.Id?.ToString())
                         .PersistenceKey(id => $"shoppingCart-{id}")
                         .SnapshotKey(id => $"shoppingCartSnapshot-{id}")
-                        .RegisterEvents(ShoppingCartFunctions.RegisterEvents);
+                        .RegisterEvents(x => x.ApplyWith(ShoppingCartFunctions.EventApplier));
                 });
             });
     }

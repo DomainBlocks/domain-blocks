@@ -1,5 +1,4 @@
 ﻿using System;
-using DomainBlocks.Aggregates;
 using DomainBlocks.Aggregates.Builders;
 
 namespace DomainBlocks.Persistence.Builders;
@@ -30,11 +29,10 @@ public sealed class AggregateRegistryBuilder<TEventBase>
         return this;
     }
 
-    internal void RegisterInitialStateFunc<TAggregate>(
-        Func<AggregateEventRouter<TEventBase>, TAggregate> initialStateFactory)
+    internal void RegisterInitialStateFunc<TAggregate>(Func<TAggregate> initialStateFactory)
     {
         var aggregateMetadata = GetOrAddAggregateMetadata<TAggregate>();
-        aggregateMetadata.InitialStateFactory = x => initialStateFactory((AggregateEventRouter<TEventBase>)x);
+        aggregateMetadata.InitialStateFactory = () => initialStateFactory();
     }
 
     internal void RegisterAggregateIdFunc<TAggregate>(Func<TAggregate, string> idSelector)

@@ -8,13 +8,13 @@ internal static class LoadedAggregate
 {
     internal static LoadedAggregate<TState, TEventBase> Create<TState, TEventBase>(
         TState state,
-        AggregateEventRouter<TEventBase> eventRouter,
+        Func<TState, TEventBase, TState> eventApplier,
         string id,
         long version,
         long? snapshotVersion,
         long eventsLoaded)
     {
-        var aggregate = Aggregate.Create(state, eventRouter);
+        var aggregate = new Aggregate<TState, TEventBase>(state, eventApplier);
         return new LoadedAggregate<TState, TEventBase>(aggregate, id, version, snapshotVersion, eventsLoaded);
     }
 }
@@ -42,21 +42,17 @@ public sealed class LoadedAggregate<TState, TEventBase>
     }
 
     public TState State => _aggregate.State;
-    public IReadOnlyList<TEventBase> RaisedEvents => _aggregate.RaisedEvents;
+    public IReadOnlyList<TEventBase> AppliedEvents => _aggregate.AppliedEvents;
     public string Id { get; }
     public long Version { get; }
     public long? SnapshotVersion { get; }
     public long LoadedEventsCount { get; }
     internal bool IsSaved { get; set; }
 
-    public void ExecuteCommand(Action<TState> commandExecutor) => _aggregate.ExecuteCommand(commandExecutor);
-
-    public void ExecuteCommand(Action<TState, AggregateEventRouter<TEventBase>> commandExecutor) =>
+    public void ExecuteCommand(Action<TState, Action<TState, TEventBase>> commandExecutor) =>
         _aggregate.ExecuteCommand(commandExecutor);
 
-    public void ExecuteCommand(Func<TState, TState> commandExecutor) => _aggregate.ExecuteCommand(commandExecutor);
-
-    public void ExecuteCommand(Func<TState, AggregateEventRouter<TEventBase>, TState> commandExecutor) =>
+    public void ExecuteCommand(Func<TState, Func<TState, TEventBase, TState>, TState> commandExecutor) =>
         _aggregate.ExecuteCommand(commandExecutor);
 
     public void ExecuteCommand(Func<TState, IEnumerable<TEventBase>> commandExecutor) =>

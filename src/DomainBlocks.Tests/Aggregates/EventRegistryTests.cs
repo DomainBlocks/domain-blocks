@@ -17,15 +17,10 @@ public class EventRegistryTests
     {
         var registry = EventRegistryBuilder
             .OfType<object>()
-            .For<MyAggregateRoot>(events =>
+            .For<object>(events =>
             {
-                events.Event<SomethingHappened>()
-                    .RoutesTo((a, e) => a.ApplyEvent(e))
-                    .HasName(EventNames.SomethingHappened);
-
-                events.Event<SomethingElseHappened>()
-                    .RoutesTo((a, e) => a.ApplyEvent(e))
-                    .HasName(EventNames.SomethingElseHappened);
+                events.Event<SomethingHappened>().HasName(EventNames.SomethingHappened);
+                events.Event<SomethingElseHappened>().HasName(EventNames.SomethingElseHappened);
             })
             .Build();
 
@@ -48,18 +43,5 @@ public class EventRegistryTests
 
     private class SomethingElseHappened
     {
-    }
-
-    private class MyAggregateRoot
-    {
-        public MyAggregateRoot ApplyEvent(SomethingHappened @event)
-        {
-            return this;
-        }
-
-        public MyAggregateRoot ApplyEvent(SomethingElseHappened @event)
-        {
-            return this;
-        }
     }
 }

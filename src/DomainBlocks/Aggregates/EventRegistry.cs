@@ -3,20 +3,21 @@ namespace DomainBlocks.Aggregates;
 public static class EventRegistry
 {
     public static EventRegistry<TEventBase> Create<TEventBase>(
-        EventRoutes<TEventBase> eventRoutes, EventNameMap eventNameMap)
+        EventApplierMap<TEventBase> eventApplierMap,
+        EventNameMap eventNameMap)
     {
-        return new EventRegistry<TEventBase>(eventRoutes, eventNameMap);
+        return new EventRegistry<TEventBase>(eventApplierMap, eventNameMap);
     }
 }
 
 public class EventRegistry<TEventBase>
 {
-    public EventRegistry(EventRoutes<TEventBase> eventRoutes, EventNameMap eventNameMap)
+    public EventRegistry(EventApplierMap<TEventBase> eventApplierMap, EventNameMap eventNameMap)
     {
-        EventRoutes = eventRoutes;
+        EventApplierMap = eventApplierMap;
         EventNameMap = eventNameMap;
     }
 
-    public EventRoutes<TEventBase> EventRoutes { get; }
+    public EventApplierMap<TEventBase> EventApplierMap { get; }
     public EventNameMap EventNameMap { get; }
 }

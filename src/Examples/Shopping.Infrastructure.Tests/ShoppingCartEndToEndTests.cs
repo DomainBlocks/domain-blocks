@@ -101,12 +101,12 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
         var aggregateRegistry = AggregateRegistryBuilder.Create<IDomainEvent>()
             .Register<ShoppingCartState>(builder =>
             {
-                builder.InitialState(_ => new ShoppingCartState())
+                builder.InitialState(() => new ShoppingCartState())
                     .Id(o => o.Id?.ToString())
                     .PersistenceKey(id => $"shoppingCart-{id}")
                     .SnapshotKey(id => $"shoppingCartSnapshot-{id}");
 
-                builder.RegisterEvents(ShoppingCartFunctions.RegisterEvents);
+                builder.RegisterEvents(events => events.ApplyWith(ShoppingCartFunctions.EventApplier));
             })
             .Build();
 
@@ -134,7 +134,7 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
         var command3 = new RemoveItemFromShoppingCart(secondItemId, shoppingCartId);
         aggregate.ExecuteCommand(x => ShoppingCartFunctions.Execute(x, command3));
 
-        var raisedEvents = aggregate.RaisedEvents.ToList();
+        var raisedEvents = aggregate.AppliedEvents.ToList();
 
         var nextEventVersion = await aggregateRepository.SaveAggregate(aggregate);
         var expectedNextEventVersion = raisedEvents.Count - 1;
