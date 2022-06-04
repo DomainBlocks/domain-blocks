@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DomainBlocks.Persistence;
 using MediatR;
-using Shopping.Domain.Events;
+using Shopping.Events;
 
 namespace Shopping.Api.CommandHandlers;
 

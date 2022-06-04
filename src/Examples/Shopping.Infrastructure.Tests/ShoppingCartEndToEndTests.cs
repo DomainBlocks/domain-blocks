@@ -17,9 +17,9 @@ using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using Shopping.Domain.Aggregates;
 using Shopping.Domain.Commands;
-using Shopping.Domain.Events;
+using Shopping.Events;
 using ProjectionDispatcher =
-    DomainBlocks.Projections.EventDispatcher<EventStore.Client.EventRecord, Shopping.Domain.Events.IDomainEvent>;
+    DomainBlocks.Projections.EventDispatcher<EventStore.Client.EventRecord, Shopping.Events.IDomainEvent>;
 using UserCredentials = DomainBlocks.Common.UserCredentials;
 
 namespace Shopping.Infrastructure.Tests;

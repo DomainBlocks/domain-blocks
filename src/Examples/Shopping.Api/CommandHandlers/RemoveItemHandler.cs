@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DomainBlocks.Persistence;
 using Shopping.Domain.Aggregates;
-using Shopping.Domain.Events;
+using Shopping.Events;
 
 namespace Shopping.Api.CommandHandlers;
 

@@ -1,8 +1,8 @@
 using Shopping.Domain.Commands;
-using Shopping.Domain.Events;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Shopping.Events;
 
 namespace Shopping.Domain.Aggregates;
 

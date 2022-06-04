@@ -1,6 +1,6 @@
 using DomainBlocks.Projections;
 using DomainBlocks.Projections.EntityFramework;
-using Shopping.Domain.Events;
+using Shopping.Events;
 using Shopping.ReadModel.Db.Model;
 
 namespace Shopping.ReadModel.Db

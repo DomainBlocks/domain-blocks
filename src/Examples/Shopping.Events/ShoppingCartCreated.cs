@@ -1,16 +1,17 @@
 using System;
 
-namespace Shopping.Domain.Events
+namespace Shopping.Events;
+
+public class ShoppingCartCreated : IDomainEvent
 {
-    public class ShoppingCartCreated : IDomainEvent
+    public const string EventName = "ShoppingCartCreated";
+
+    public ShoppingCartCreated(Guid id)
     {
-        public const string EventName = "ShoppingCartCreated";
-
-        public ShoppingCartCreated(Guid id)
-        {
-            Id = id;
-        }
-
-        public Guid Id { get; }
+        Id = id;
     }
+
+    public Guid Id { get; }
+    
+    public void Accept(IDomainEventVisitor visitor) => visitor.Visit(this);
 }

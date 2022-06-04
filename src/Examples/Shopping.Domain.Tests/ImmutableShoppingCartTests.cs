@@ -1,9 +1,9 @@
 ﻿using NUnit.Framework;
 using Shopping.Domain.Aggregates;
 using Shopping.Domain.Commands;
-using Shopping.Domain.Events;
 using System;
 using System.Linq;
+using Shopping.Events;
 
 namespace Shopping.Domain.Tests;
 

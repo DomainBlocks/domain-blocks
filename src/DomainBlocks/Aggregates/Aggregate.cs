@@ -65,16 +65,16 @@ public class Aggregate<TState, TEventBase>
 
     public void ExecuteCommand(Func<TState, Func<TState, TEventBase, TState>, TState> commandExecutor)
     {
-        State = commandExecutor(State, EventApplier);
+        State = commandExecutor(State, ApplyEvent);
     }
 
     public void ExecuteCommand(Func<TState, IEnumerable<TEventBase>> commandExecutor)
     {
         var events = commandExecutor(State);
-        State = events.Aggregate(State, EventApplier);
+        State = events.Aggregate(State, ApplyEvent);
     }
 
-    private TState EventApplier(TState state, TEventBase @event)
+    private TState ApplyEvent(TState state, TEventBase @event)
     {
         _appliedEvents.Add(@event);
         return _eventApplier(state, @event);

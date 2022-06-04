@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Shopping.Domain.Commands;
-using Shopping.Domain.Events;
+using Shopping.Events;
 
 namespace Shopping.Domain.Aggregates;
 
@@ -11,11 +11,14 @@ using EventApplier = Action<MutableShoppingCart, IDomainEvent>;
 public class MutableShoppingCart
 {
     private readonly List<ShoppingCartItem> _items = new();
+    private readonly EventVisitor _eventVisitor;
+
+    public MutableShoppingCart() => _eventVisitor = new EventVisitor(this);
+
+    public static EventApplier EventApplier => (s, e) => e.Accept(s._eventVisitor);
     
     public Guid? Id { get; private set; }
     public IReadOnlyList<ShoppingCartItem> Items => _items.AsReadOnly();
-
-    public static EventApplier EventApplier => (state, @event) => state.Apply((dynamic)@event);
 
     public void Execute(AddItemToShoppingCart command, EventApplier eventApplier)
     {
@@ -62,5 +65,16 @@ public class MutableShoppingCart
 
         var index = _items.FindIndex(item => item.Id == @event.Id);
         _items.RemoveAt(index);
+    }
+
+    private class EventVisitor : IDomainEventVisitor
+    {
+        private readonly MutableShoppingCart _state;
+
+        public EventVisitor(MutableShoppingCart state) => _state = state;
+
+        public void Visit(ItemAddedToShoppingCart @event) => _state.Apply(@event);
+        public void Visit(ItemRemovedFromShoppingCart @event) => _state.Apply(@event);
+        public void Visit(ShoppingCartCreated @event) => _state.Apply(@event);
     }
 }

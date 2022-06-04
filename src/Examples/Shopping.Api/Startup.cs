@@ -9,7 +9,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Shopping.Domain.Aggregates;
-using Shopping.Domain.Events;
+using Shopping.Events;
 
 namespace Shopping.Api;
 
