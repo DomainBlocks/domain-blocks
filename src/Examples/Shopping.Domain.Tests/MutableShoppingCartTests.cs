@@ -1,6 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
-using DomainBlocks.Aggregates;
 using NUnit.Framework;
 using Shopping.Domain.Aggregates;
 using Shopping.Domain.Commands;
@@ -16,14 +16,21 @@ public class MutableShoppingCartTests
     {
         // Initial state
         var shoppingCart = new MutableShoppingCart();
-        var aggregate = Aggregate.Create(shoppingCart, MutableShoppingCart.EventApplier);
+
+        // Simple wrapper around EventApplier to capture applied events.
+        var appliedEvents = new List<IDomainEvent>();
+        void ApplyEvent(MutableShoppingCart state, IDomainEvent @event)
+        {
+            MutableShoppingCart.EventApplier(state, @event);
+            appliedEvents.Add(@event);
+        }
 
         // Execute the first command.
         var shoppingCartId = Guid.NewGuid(); // This could come from a sequence, or could be the customer's ID.
         var command1 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "First Item");
-        aggregate.ExecuteCommand((s, e) => s.Execute(command1, e));
-        var events1 = aggregate.AppliedEvents.ToList();
-        aggregate.ClearAppliedEvents();
+        shoppingCart.Execute(command1, ApplyEvent);
+        var events1 = appliedEvents.ToList();
+        appliedEvents.Clear();
 
         // Check the updated aggregate root state.
         Assert.That(shoppingCart.Id, Is.EqualTo(shoppingCartId));
@@ -37,9 +44,9 @@ public class MutableShoppingCartTests
 
         // Execute the second command to the result of the first command.
         var command2 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "Second Item");
-        aggregate.ExecuteCommand((s, e) => s.Execute(command2, e));
-        var events2 = aggregate.AppliedEvents.ToList();
-        aggregate.ClearAppliedEvents();
+        shoppingCart.Execute(command2, ApplyEvent);
+        var events2 = appliedEvents.ToList();
+        appliedEvents.Clear();
 
         // Check the updated aggregate root state.
         Assert.That(shoppingCart.Id, Is.EqualTo(shoppingCartId));
@@ -54,13 +61,16 @@ public class MutableShoppingCartTests
         // The aggregate event log is the sum total of all events from both commands.
         // Simulate loading from the event log.
         var eventLog = events1.Concat(events2);
-        var aggregateFromEvents =
-            Aggregate.Create(new MutableShoppingCart(), MutableShoppingCart.EventApplier, eventLog);
+        var aggregateFromEvents = eventLog.Aggregate(new MutableShoppingCart(), (s, e) =>
+        {
+            MutableShoppingCart.EventApplier(s, e);
+            return s;
+        });
 
         // Check the loaded aggregate root state.
-        Assert.That(aggregateFromEvents.State.Id, Is.EqualTo(shoppingCartId));
-        Assert.That(aggregateFromEvents.State.Items, Has.Count.EqualTo(2));
-        Assert.That(aggregateFromEvents.State.Items[0].Name, Is.EqualTo("First Item"));
-        Assert.That(aggregateFromEvents.State.Items[1].Name, Is.EqualTo("Second Item"));
+        Assert.That(aggregateFromEvents.Id, Is.EqualTo(shoppingCartId));
+        Assert.That(aggregateFromEvents.Items, Has.Count.EqualTo(2));
+        Assert.That(aggregateFromEvents.Items[0].Name, Is.EqualTo("First Item"));
+        Assert.That(aggregateFromEvents.Items[1].Name, Is.EqualTo("Second Item"));
     }
 }
