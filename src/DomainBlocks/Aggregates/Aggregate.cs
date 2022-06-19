@@ -54,29 +54,46 @@ public class Aggregate<TState, TEventBase>
 
     public void ClearAppliedEvents() => _appliedEvents.Clear();
 
-    public void ExecuteCommand(Action<TState, Action<TState, TEventBase>> commandExecutor)
+    public void ExecuteCommand(Action<TState> commandExecutor, Func<TState, IEnumerable<TEventBase>> eventsSelector)
     {
-        ExecuteCommand((state, eventApplier) =>
-        {
-            commandExecutor(state, (s, e) => eventApplier(s, e));
-            return state;
-        });
-    }
-
-    public void ExecuteCommand(Func<TState, Func<TState, TEventBase, TState>, TState> commandExecutor)
-    {
-        State = commandExecutor(State, ApplyEvent);
+        commandExecutor(State);
+        var events = eventsSelector(State);
+        _appliedEvents.AddRange(events);
     }
 
     public void ExecuteCommand(Func<TState, IEnumerable<TEventBase>> commandExecutor)
     {
-        var events = commandExecutor(State);
-        State = events.Aggregate(State, ApplyEvent);
+        var events = commandExecutor(State).ToList();
+        State = events.Aggregate(State, _eventApplier);
+        _appliedEvents.AddRange(events);
     }
 
-    private TState ApplyEvent(TState state, TEventBase @event)
+    public void ExecuteCommand(Func<TState, (TState, IEnumerable<TEventBase>)> commandExecutor)
     {
-        _appliedEvents.Add(@event);
-        return _eventApplier(state, @event);
+        (State, var events) = commandExecutor(State);
+        _appliedEvents.AddRange(events);
+    }
+    
+    public TResult ExecuteCommand<TResult>(
+        Func<TState, TResult> commandExecutor,
+        Func<TResult, IEnumerable<TEventBase>> eventsSelector)
+    {
+        var result = commandExecutor(State);
+        var events = eventsSelector(result).ToList();
+        State = events.Aggregate(State, _eventApplier);
+        _appliedEvents.AddRange(events);
+        return result;
+    }
+    
+    public TResult ExecuteCommand<TResult>(
+        Func<TState, TResult> commandExecutor,
+        Func<TResult, TState> stateSelector,
+        Func<TResult, IEnumerable<TEventBase>> eventsSelector)
+    {
+        var result = commandExecutor(State);
+        State = stateSelector(result);
+        var events = eventsSelector(result);
+        _appliedEvents.AddRange(events);
+        return result;
     }
 }

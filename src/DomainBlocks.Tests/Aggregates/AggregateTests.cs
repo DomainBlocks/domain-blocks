@@ -1,9 +1,36 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using DomainBlocks.Aggregates;
 using NUnit.Framework;
 
 namespace DomainBlocks.Tests.Aggregates;
+
+public static class FuncExtensions
+{
+    public static (TState, IEnumerable<TEvent>) Apply<TState, TEvent>(
+        this Func<TState, TEvent, TState> eventApplier,
+        TState state,
+        TEvent @event)
+    {
+        return eventApplier.Apply((state, Enumerable.Empty<TEvent>()), @event);
+    }
+    
+    public static (TState, IEnumerable<TEvent>) Apply<TState, TEvent>(
+        this Func<TState, TEvent, TState> eventApplier,
+        (TState, IEnumerable<TEvent>) stateWithEvents,
+        TEvent @event)
+    {
+        var (state, events) = stateWithEvents;
+        
+        IEnumerable<TEvent> Yield(TEvent e)
+        {
+            yield return e;
+        }
+
+        return (eventApplier(state, @event), events.Concat(Yield(@event)));
+    }
+}
 
 [TestFixture]
 public class AggregateTests
@@ -15,7 +42,7 @@ public class AggregateTests
         var aggregate = Aggregate.Create(initialState, MutableAggregate.EventApplier);
 
         const string commandData = "new state";
-        aggregate.ExecuteCommand((s, e) => s.Execute(commandData, e));
+        aggregate.ExecuteCommand(s => s.Execute(commandData), s => s.AppliedEvents);
 
         Assert.That(aggregate.State, Is.SameAs(initialState));
         Assert.That(aggregate.State.State, Is.EqualTo(commandData));
@@ -30,7 +57,8 @@ public class AggregateTests
         var aggregate = Aggregate.Create(initialState, ImmutableAggregate1.EventApplier);
 
         const string commandData = "new state";
-        aggregate.ExecuteCommand((s, e) => s.Execute(commandData, e));
+
+        aggregate.ExecuteCommand(s => s.Execute(commandData));
 
         Assert.That(aggregate.State, Is.Not.SameAs(initialState));
         Assert.That(aggregate.State.State, Is.EqualTo(commandData));
@@ -69,13 +97,21 @@ public class AggregateTests
 
     private class MutableAggregate
     {
-        public static Action<MutableAggregate, IEvent> EventApplier => (s, e) => s.Apply((dynamic)e);
+        private readonly List<IEvent> _appliedEvents = new();
+
+        public static Action<MutableAggregate, IEvent> EventApplier => (s, e) =>
+        {
+            s.Apply((dynamic)e);
+            s._appliedEvents.Add(e);
+        };
 
         public string State { get; private set; }
 
-        public void Execute(string data, Action<MutableAggregate, IEvent> eventApplier)
+        public IReadOnlyList<IEvent> AppliedEvents => _appliedEvents.AsReadOnly();
+
+        public void Execute(string data)
         {
-            eventApplier(this, new StateChangedEvent(data));
+            EventApplier(this, new StateChangedEvent(data));
         }
 
         private void Apply(StateChangedEvent e)
@@ -83,7 +119,7 @@ public class AggregateTests
             State = e.State;
         }
     }
-
+    
     public class ImmutableAggregate1
     {
         public ImmutableAggregate1()
@@ -100,10 +136,9 @@ public class AggregateTests
 
         public string State { get; }
 
-        public ImmutableAggregate1 Execute(
-            string newState, Func<ImmutableAggregate1, IEvent, ImmutableAggregate1> eventApplier)
+        public (ImmutableAggregate1, IEnumerable<IEvent>) Execute(string newState)
         {
-            return eventApplier(this, new StateChangedEvent(newState));
+            return EventApplier.Apply(this, new StateChangedEvent(newState));
         }
 
         private ImmutableAggregate1 Apply(StateChangedEvent e)

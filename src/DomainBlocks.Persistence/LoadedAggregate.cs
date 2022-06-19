@@ -49,12 +49,6 @@ public sealed class LoadedAggregate<TState, TEventBase>
     public long LoadedEventsCount { get; }
     internal bool IsSaved { get; set; }
 
-    public void ExecuteCommand(Action<TState, Action<TState, TEventBase>> commandExecutor) =>
-        _aggregate.ExecuteCommand(commandExecutor);
-
-    public void ExecuteCommand(Func<TState, Func<TState, TEventBase, TState>, TState> commandExecutor) =>
-        _aggregate.ExecuteCommand(commandExecutor);
-
     public void ExecuteCommand(Func<TState, IEnumerable<TEventBase>> commandExecutor) =>
         _aggregate.ExecuteCommand(commandExecutor);
 }
