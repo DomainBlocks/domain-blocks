@@ -36,6 +36,31 @@ public static class Aggregate
 
         return new Aggregate<TState, TEventBase>(state, eventApplier);
     }
+    
+    // ********** EXPERIMENTAL **********
+
+    public static (TState, IEnumerable<TEvent>) ApplyEvent<TState, TEvent>(
+        TState state,
+        TEvent @event,
+        Func<TState, TEvent, TState> eventApplier)
+    {
+        return ApplyEvent((state, Enumerable.Empty<TEvent>()), @event, eventApplier);
+    }
+    
+    public static (TState, IEnumerable<TEvent>) ApplyEvent<TState, TEvent>(
+        (TState, IEnumerable<TEvent>) stateWithEvents,
+        TEvent @event,
+        Func<TState, TEvent, TState> eventApplier)
+    {
+        var (state, events) = stateWithEvents;
+        
+        IEnumerable<TEvent> Yield(TEvent e)
+        {
+            yield return e;
+        }
+
+        return (eventApplier(state, @event), events.Concat(Yield(@event)));
+    }
 }
 
 public class Aggregate<TState, TEventBase>

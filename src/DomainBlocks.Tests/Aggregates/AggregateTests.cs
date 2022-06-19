@@ -6,31 +6,31 @@ using NUnit.Framework;
 
 namespace DomainBlocks.Tests.Aggregates;
 
-public static class FuncExtensions
-{
-    public static (TState, IEnumerable<TEvent>) Apply<TState, TEvent>(
-        this Func<TState, TEvent, TState> eventApplier,
-        TState state,
-        TEvent @event)
-    {
-        return eventApplier.Apply((state, Enumerable.Empty<TEvent>()), @event);
-    }
-    
-    public static (TState, IEnumerable<TEvent>) Apply<TState, TEvent>(
-        this Func<TState, TEvent, TState> eventApplier,
-        (TState, IEnumerable<TEvent>) stateWithEvents,
-        TEvent @event)
-    {
-        var (state, events) = stateWithEvents;
-        
-        IEnumerable<TEvent> Yield(TEvent e)
-        {
-            yield return e;
-        }
-
-        return (eventApplier(state, @event), events.Concat(Yield(@event)));
-    }
-}
+// public static class FuncExtensions
+// {
+//     public static (TState, IEnumerable<TEvent>) Apply<TState, TEvent>(
+//         this Func<TState, TEvent, TState> eventApplier,
+//         TState state,
+//         TEvent @event)
+//     {
+//         return eventApplier.Apply((state, Enumerable.Empty<TEvent>()), @event);
+//     }
+//     
+//     public static (TState, IEnumerable<TEvent>) Apply<TState, TEvent>(
+//         this Func<TState, TEvent, TState> eventApplier,
+//         (TState, IEnumerable<TEvent>) stateWithEvents,
+//         TEvent @event)
+//     {
+//         var (state, events) = stateWithEvents;
+//         
+//         IEnumerable<TEvent> Yield(TEvent e)
+//         {
+//             yield return e;
+//         }
+//
+//         return (eventApplier(state, @event), events.Concat(Yield(@event)));
+//     }
+// }
 
 [TestFixture]
 public class AggregateTests
@@ -138,7 +138,9 @@ public class AggregateTests
 
         public (ImmutableAggregate1, IEnumerable<IEvent>) Execute(string newState)
         {
-            return EventApplier.Apply(this, new StateChangedEvent(newState));
+            var result = Aggregate.ApplyEvent(this, new StateChangedEvent(newState), EventApplier);
+            result = Aggregate.ApplyEvent(result, new StateChangedEvent(newState), EventApplier);
+            return result;
         }
 
         private ImmutableAggregate1 Apply(StateChangedEvent e)
