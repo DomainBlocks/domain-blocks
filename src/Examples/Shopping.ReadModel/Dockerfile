@@ -6,7 +6,7 @@ EXPOSE 443
 FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
 WORKDIR /src
 COPY ["Examples/Shopping.ReadModel/Shopping.ReadModel.csproj", "Examples/Shopping.ReadModel/"]
-RUN dotnet restore "Examples/Shopping.ReadModel/Shopping.ReadModel.csproj"
+RUN dotnet restore "Examples/Shopping.ReadModel/Shopping.ReadModel.csproj" -p:TargetFramework=net6.0
 COPY . .
 WORKDIR "/src/Examples/Shopping.ReadModel"
 RUN dotnet build "Shopping.ReadModel.csproj" -c Release -o /app/build
