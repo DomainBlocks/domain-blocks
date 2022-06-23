@@ -84,16 +84,4 @@ public class Aggregate<TState, TEventBase>
         _appliedEvents.AddRange(events);
         return result;
     }
-    
-    public TResult ExecuteCommand<TResult>(
-        Func<TState, TResult> commandExecutor,
-        Func<TResult, TState> stateSelector,
-        Func<TResult, IEnumerable<TEventBase>> eventsSelector)
-    {
-        var result = commandExecutor(State);
-        State = stateSelector(result);
-        var events = eventsSelector(result);
-        _appliedEvents.AddRange(events);
-        return result;
-    }
 }

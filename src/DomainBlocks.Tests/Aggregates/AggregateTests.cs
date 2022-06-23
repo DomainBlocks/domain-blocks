@@ -80,6 +80,21 @@ public class AggregateTests
         Assert.That(aggregate.AppliedEvents, Has.Count.EqualTo(1));
         Assert.That(aggregate.AppliedEvents[0], Is.TypeOf<StateChangedEvent>());
     }
+    
+    [Test]
+    public void ImmutableAggregateScenario3()
+    {
+        var initialState = new ImmutableAggregate3();
+        var aggregate = Aggregate.Create(initialState, ImmutableAggregate3.EventApplier);
+
+        const string commandData = "new state";
+        var result = aggregate.ExecuteCommand(s => s.Execute(commandData), x => x.Events);
+
+        Assert.That(aggregate.State, Is.Not.SameAs(initialState));
+        Assert.That(aggregate.State.State, Is.EqualTo(commandData));
+        Assert.That(aggregate.AppliedEvents, Has.Count.EqualTo(1));
+        Assert.That(aggregate.AppliedEvents[0], Is.TypeOf<StateChangedEvent>());
+    }
 
     public interface IEvent
     {
@@ -138,13 +153,19 @@ public class AggregateTests
 
         public (ImmutableAggregate1, IEnumerable<IEvent>) Execute(string newState)
         {
-            var result = EventApplier.Apply(this, new StateChangedEvent(newState));
-            return result;
+            var (state, events) = EventApplier.Apply(this, new StateChangedEvent(newState));
+            
+            (state, events) = EventApplier.Apply((state, events), new StateChangedEvent(newState));
+
+            return (state, events);
 
             // var events = new List<IEvent>();
-            //
+
             // var stateChanged = new StateChangedEvent(newState);
             // var state = Apply(stateChanged);
+            //
+            // // Observe state change - make a decision
+            //
             // events.Add(stateChanged);
             //
             // return (state, events);
@@ -180,6 +201,40 @@ public class AggregateTests
         private ImmutableAggregate2 Apply(StateChangedEvent e)
         {
             return new ImmutableAggregate2(e.State);
+        }
+    }
+
+    public record Result(List<IEvent> Events);
+    
+    private class ImmutableAggregate3
+    {
+        public ImmutableAggregate3()
+        {
+        }
+
+        private ImmutableAggregate3(string state)
+        {
+            State = state;
+        }
+
+        public static Func<ImmutableAggregate3, IEvent, ImmutableAggregate3> EventApplier =>
+            (s, e) => s.Apply((dynamic)e);
+
+        public string State { get; }
+
+        public Result Execute(string newState)
+        {
+            var events = new List<IEvent>();
+            var stateChanged = new StateChangedEvent("foo");
+            var state = Apply(stateChanged);
+            events.Add(stateChanged);
+
+            return new Result(events);
+        }
+
+        private ImmutableAggregate3 Apply(StateChangedEvent e)
+        {
+            return new ImmutableAggregate3(e.State);
         }
     }
 }
