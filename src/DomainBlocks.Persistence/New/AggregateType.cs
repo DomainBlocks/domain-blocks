@@ -8,18 +8,23 @@ public class AggregateType<TAggregate, TEventBase> : IAggregateType
 {
     private readonly Func<TAggregate> _factory;
     private readonly Func<TAggregate, string> _idSelector;
-    // TODO: Add other key selectors here
+    private readonly Func<string, string> _idToStreamKeySelector;
+    private readonly Func<string, string> _idToSnapshotKeySelector;
     private readonly IReadOnlyDictionary<Type, ICommandResultType> _commandResultTypes;
     private readonly Func<TAggregate, TEventBase, TAggregate> _eventApplier;
 
     public AggregateType(
         Func<TAggregate> factory,
         Func<TAggregate, string> idSelector,
+        Func<string, string> idToStreamKeySelector,
+        Func<string, string> idToSnapshotKeySelector,
         IEnumerable<ICommandResultType> commandResultTypes,
         Func<TAggregate, TEventBase, TAggregate> eventApplier)
     {
         _factory = factory;
         _idSelector = idSelector;
+        _idToStreamKeySelector = idToStreamKeySelector;
+        _idToSnapshotKeySelector = idToSnapshotKeySelector;
         _commandResultTypes = commandResultTypes.ToDictionary(x => x.ClrType);
         _eventApplier = eventApplier;
     }
@@ -28,8 +33,9 @@ public class AggregateType<TAggregate, TEventBase> : IAggregateType
     public Type EventBaseType => typeof(TEventBase);
 
     public TAggregate CreateNew() => _factory();
-
     public string SelectId(TAggregate aggregate) => _idSelector(aggregate);
+    public string SelectStreamKey(TAggregate aggregate) => _idToStreamKeySelector(SelectId(aggregate));
+    public string SelectSnapshotKey(TAggregate aggregate) => _idToSnapshotKeySelector(SelectId(aggregate));
 
     public CommandResultType<TAggregate, TEventBase, TCommandResult> GetCommandResultType<TCommandResult>()
     {
