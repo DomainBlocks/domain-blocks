@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using DomainBlocks.Aggregates;
 
 namespace DomainBlocks.Persistence.New;
 
@@ -11,10 +12,13 @@ public class Model
     // the aggregate repository.
     private readonly IReadOnlyDictionary<(Type, Type), IAggregateType> _aggregateConfigs;
 
-    public Model(IEnumerable<IAggregateType> aggregateTypes)
+    public Model(IEnumerable<IAggregateType> aggregateTypes, EventNameMap eventNameMap)
     {
+        EventNameMap = eventNameMap;
         _aggregateConfigs = aggregateTypes.ToDictionary(x => x.Key);
     }
+    
+    public EventNameMap EventNameMap { get; }
 
     public AggregateType<TAggregate, TEventBase> GetAggregateType<TAggregate, TEventBase>()
     {

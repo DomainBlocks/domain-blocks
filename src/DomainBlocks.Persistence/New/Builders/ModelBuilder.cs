@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using DomainBlocks.Aggregates;
 
 namespace DomainBlocks.Persistence.New.Builders;
 
@@ -19,7 +20,15 @@ public class ModelBuilder
 
     public Model Build()
     {
-        var aggregateConfigs = _aggregateTypeBuilders.Select(x => x.Build());
-        return new Model(aggregateConfigs);
+        var aggregateTypes = _aggregateTypeBuilders.Select(x => x.Build()).ToList();
+        var allEventTypes = aggregateTypes.SelectMany(x => x.EventTypes);
+
+        var eventNameMap = new EventNameMap();
+        foreach (var eventType in allEventTypes)
+        {
+            eventNameMap.Add(eventType.EventName, eventType.ClrType);
+        }
+
+        return new Model(aggregateTypes, eventNameMap);
     }
 }

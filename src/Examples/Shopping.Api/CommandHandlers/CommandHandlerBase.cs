@@ -3,16 +3,15 @@ using System.Threading;
 using System.Threading.Tasks;
 using DomainBlocks.Persistence;
 using MediatR;
-using Shopping.Domain.Events;
 
 namespace Shopping.Api.CommandHandlers;
 
 public abstract class CommandHandlerBase<TRequest> : IRequestHandler<TRequest, CommandAcknowledgement>
     where TRequest : IRequest<CommandAcknowledgement>
 {
-    protected IAggregateRepository<IDomainEvent> Repository { get; }
+    protected IAggregateRepository Repository { get; }
 
-    protected CommandHandlerBase(IAggregateRepository<IDomainEvent> repository)
+    protected CommandHandlerBase(IAggregateRepository repository)
     {
         Repository = repository;
     }

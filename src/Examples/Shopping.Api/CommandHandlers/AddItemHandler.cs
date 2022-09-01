@@ -9,13 +9,13 @@ namespace Shopping.Api.CommandHandlers;
 
 public class AddItemHandler : CommandHandlerBase<AddItemToShoppingCart>
 {
-    public AddItemHandler(IAggregateRepository<IDomainEvent> repository) : base(repository)
+    public AddItemHandler(IAggregateRepository repository) : base(repository)
     {
     }
 
     protected override async Task HandleImpl(AddItemToShoppingCart request, CancellationToken cancellationToken)
     {
-        var loadedAggregate = await Repository.LoadAggregate<ShoppingCartState>(request.CartId);
+        var loadedAggregate = await Repository.LoadAggregate<ShoppingCartState, IDomainEvent>(request.CartId);
 
         var cartId = Guid.Parse(request.CartId);
         var itemId = Guid.Parse(request.ItemId);
