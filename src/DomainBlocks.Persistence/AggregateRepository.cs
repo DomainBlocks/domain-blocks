@@ -9,7 +9,7 @@ public static class AggregateRepository
     public static AggregateRepository<TEventBase, TRawData> Create<TEventBase, TRawData>(
         IEventsRepository<TRawData> eventsRepository,
         ISnapshotRepository snapshotRepository,
-        AggregateRegistry< TEventBase> aggregateRegistry)
+        AggregateRegistry<TEventBase> aggregateRegistry)
     {
         return new AggregateRepository<TEventBase, TRawData>(eventsRepository, snapshotRepository, aggregateRegistry);
     }
@@ -25,6 +25,7 @@ public sealed class AggregateRepository<TEventBase, TRawData> : IAggregateReposi
     public AggregateRepository(
         IEventsRepository<TRawData> eventsRepository,
         ISnapshotRepository snapshotRepository,
+        // Maybe start by replacing AggregateRegistry with Model.
         AggregateRegistry<TEventBase> aggregateRegistry)
     {
         if (aggregateRegistry == null) throw new ArgumentNullException(nameof(aggregateRegistry));
