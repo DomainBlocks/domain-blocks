@@ -77,7 +77,7 @@ public sealed class AggregateRepository<TRawData> : IAggregateRepository
         }
 
         var events = await _eventsRepository.LoadEventsAsync<TEventBase>(streamName, loadStartPosition);
-        var state = events.Aggregate(initialAggregateState, aggregateType.ApplyEvent);
+        var state = events.Aggregate(stateToAppendEventsTo, aggregateType.ApplyEvent);
         var newVersion = loadStartPosition + events.Count - 1;
 
         return LoadedAggregate.Create(state, id, newVersion, snapshotVersion, events.Count, aggregateType);

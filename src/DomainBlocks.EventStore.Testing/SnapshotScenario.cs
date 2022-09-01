@@ -41,7 +41,7 @@ namespace DomainBlocks.EventStore.Testing
 
         public async Task SaveSnapshot()
         {
-            await _aggregateRepository.SaveSnapshot<TestAggregateState, TestEvent>(
+            await _aggregateRepository.SaveSnapshot<TestAggregateState, object>(
                 VersionedAggregateState.Create(AggregateState, _aggregateVersion));
         }
 
