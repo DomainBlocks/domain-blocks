@@ -57,7 +57,9 @@ public sealed class LoadedAggregate<TAggregateState, TEventBase>
     {
         var commandResultType = _aggregateType.GetCommandResultType<TResult>();
         var result = commandExecutor(AggregateState);
-        (AggregateState, EventsToPersist) = commandResultType.GetUpdatedStateAndEvents(result, AggregateState);
+        var (updatedState, events) = commandResultType.GetUpdatedStateAndEvents(result, AggregateState);
+        AggregateState = updatedState;
+        EventsToPersist = EventsToPersist.Concat(events);
 
         return result;
     }
@@ -66,6 +68,8 @@ public sealed class LoadedAggregate<TAggregateState, TEventBase>
     {
         var commandResultType = _aggregateType.GetVoidCommandResultType();
         commandExecutor(AggregateState);
-        (AggregateState, EventsToPersist) = commandResultType.GetUpdatedStateAndEvents(AggregateState);
+        var (updatedState, events) = commandResultType.GetUpdatedStateAndEvents(AggregateState);
+        AggregateState = updatedState;
+        EventsToPersist = EventsToPersist.Concat(events);
     }
 }
