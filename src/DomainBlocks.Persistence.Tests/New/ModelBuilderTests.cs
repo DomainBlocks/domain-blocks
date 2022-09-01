@@ -19,6 +19,8 @@ public class ModelBuilderTests
             .EventBaseType<IEvent>()
             .InitialState(() => new PriceCaptureSession())
             .HasId(x => x.Id)
+            .WithStreamKey(id => $"priceCaptureSession-{id}")
+            .WithSnapshotKey(id => $"priceCaptureSessionSnapshot-{id}")
             .HasCommandResult<IEnumerable<IEvent>>(result =>
             {
                 result

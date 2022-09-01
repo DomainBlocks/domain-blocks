@@ -25,6 +25,8 @@ public class AggregateTypeBuilder<TAggregate, TEventBase> : IAggregateTypeBuilde
 {
     private Func<TAggregate> _factory;
     private Func<TAggregate, string> _idSelector;
+    private Func<string, string> _idToStreamKeySelector;
+    private Func<string, string> _idToSnapshotKeySelector;
     private readonly List<ICommandResultTypeBuilder> _commandResultConfigBuilders = new();
     private Func<TAggregate, TEventBase, TAggregate> _eventApplier;
 
@@ -37,6 +39,18 @@ public class AggregateTypeBuilder<TAggregate, TEventBase> : IAggregateTypeBuilde
     public AggregateTypeBuilder<TAggregate, TEventBase> HasId(Func<TAggregate, string> idSelector)
     {
         _idSelector = idSelector;
+        return this;
+    }
+
+    public AggregateTypeBuilder<TAggregate, TEventBase> WithStreamKey(Func<string, string> idToStreamKeySelector)
+    {
+        _idToStreamKeySelector = idToStreamKeySelector;
+        return this;
+    }
+
+    public AggregateTypeBuilder<TAggregate, TEventBase> WithSnapshotKey(Func<string, string> idToSnapshotKeySelector)
+    {
+        _idToSnapshotKeySelector = idToSnapshotKeySelector;
         return this;
     }
 
@@ -62,6 +76,11 @@ public class AggregateTypeBuilder<TAggregate, TEventBase> : IAggregateTypeBuilde
         var commandResultConfigs = _commandResultConfigBuilders.Select(x => x.Build());
 
         return new AggregateType<TAggregate, TEventBase>(
-            _factory, _idSelector, commandResultConfigs, _eventApplier);
+            _factory,
+            _idSelector,
+            _idToStreamKeySelector,
+            _idToSnapshotKeySelector,
+            commandResultConfigs,
+            _eventApplier);
     }
 }
