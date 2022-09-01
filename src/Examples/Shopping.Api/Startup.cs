@@ -50,7 +50,8 @@ public class Startup
 
                         aggregate
                             .CommandResult<IEnumerable<IDomainEvent>>()
-                            .WithEventsFrom((res, _) => res);
+                            .WithEventsFrom((res, _) => res)
+                            .ApplyEvents();
 
                         aggregate.Event<ShoppingCartCreated>().HasName(ShoppingCartCreated.EventName);
                         aggregate.Event<ItemAddedToShoppingCart>().HasName(ItemAddedToShoppingCart.EventName);

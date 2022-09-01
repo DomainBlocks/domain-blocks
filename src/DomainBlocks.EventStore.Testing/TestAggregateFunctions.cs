@@ -21,7 +21,7 @@ public static class TestAggregateFunctions
                 aggregate
                     .CommandResult<IEnumerable<object>>()
                     .WithEventsFrom((res, _) => res)
-                    .WithUpdatedStateFrom((res, agg) => res.Aggregate(agg, (acc, next) => Apply(acc, (dynamic)next)));
+                    .ApplyEvents();
 
                 aggregate.ApplyEventsWith((agg, e) => Apply(agg, (dynamic)e));
 

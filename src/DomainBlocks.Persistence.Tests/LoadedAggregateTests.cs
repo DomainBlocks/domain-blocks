@@ -24,45 +24,41 @@ public class LoadedAggregateTests
         var aggregate = new MutableAggregate1();
         var loadedAggregate = CreateLoadedAggregate(aggregate, aggregateType);
 
-        const string commandData = "new state";
-        loadedAggregate.ExecuteCommand(x => x.Execute(commandData));
+        const string value = "new value";
+        loadedAggregate.ExecuteCommand(x => x.Execute(value));
         var eventsToPersist = loadedAggregate.EventsToPersist.ToList();
 
         Assert.That(loadedAggregate.AggregateState, Is.SameAs(aggregate));
-        Assert.That(loadedAggregate.AggregateState.Value, Is.EqualTo(commandData));
+        Assert.That(loadedAggregate.AggregateState.Value, Is.EqualTo(value));
         Assert.That(eventsToPersist, Has.Count.EqualTo(1));
         Assert.That(eventsToPersist[0], Is.TypeOf<ValueChangedEvent>());
     }
-    
+
     [Test]
     public void MutableAggregateScenario2()
     {
         var aggregateTypeBuilder = new AggregateTypeBuilder<MutableAggregate2, object>();
+        aggregateTypeBuilder.ApplyEventsWith((agg, e) => agg.Apply(e));
 
         aggregateTypeBuilder
-            .ApplyEventsWith((agg, e) =>
-            {
-                agg.Apply(e);
-                return agg;
-            })
             .CommandResult<IEnumerable<object>>()
             .WithEventsFrom((res, _) => res)
-            .UpdateStateWithAppliedEvents();
+            .ApplyEventsWhileEnumerating();
 
         var aggregateType = aggregateTypeBuilder.Build();
 
         var aggregate = new MutableAggregate2();
         var loadedAggregate = CreateLoadedAggregate(aggregate, aggregateType);
 
-        const string commandData = "new state";
-        loadedAggregate.ExecuteCommand(x => x.Execute(commandData));
+        const string value = "new value";
+        loadedAggregate.ExecuteCommand(x => x.Execute(value));
         var eventsToPersist = loadedAggregate.EventsToPersist.ToList();
 
         Assert.That(loadedAggregate.AggregateState, Is.SameAs(aggregate));
         Assert.That(loadedAggregate.AggregateState.ObservedValues, Has.Count.EqualTo(3));
-        Assert.That(loadedAggregate.AggregateState.ObservedValues[0], Is.EqualTo($"{commandData} 1"));
-        Assert.That(loadedAggregate.AggregateState.ObservedValues[1], Is.EqualTo($"{commandData} 2"));
-        Assert.That(loadedAggregate.AggregateState.ObservedValues[2], Is.EqualTo($"{commandData} 3"));
+        Assert.That(loadedAggregate.AggregateState.ObservedValues[0], Is.EqualTo($"{value} 1"));
+        Assert.That(loadedAggregate.AggregateState.ObservedValues[1], Is.EqualTo($"{value} 1 2"));
+        Assert.That(loadedAggregate.AggregateState.ObservedValues[2], Is.EqualTo($"{value} 1 2 3"));
         Assert.That(eventsToPersist, Has.Count.EqualTo(3));
         Assert.That(eventsToPersist[0], Is.TypeOf<ValueChangedEvent>());
         Assert.That(eventsToPersist[1], Is.TypeOf<ValueChangedEvent>());
@@ -73,14 +69,14 @@ public class LoadedAggregateTests
     public void ImmutableAggregateScenario1()
     {
         var aggregateTypeBuilder = new AggregateTypeBuilder<ImmutableAggregate1, object>();
+        aggregateTypeBuilder.ApplyEventsWith((agg, e) => agg.Apply(e));
 
         aggregateTypeBuilder
-            .ApplyEventsWith((agg, e) => agg.Apply(e))
             .CommandResult<IEnumerable<object>>()
             .WithEventsFrom((res, _) => res)
-            .WithUpdatedStateFrom((res, agg) => res.Aggregate(agg, (acc, next) => acc.Apply(next)));
+            .ApplyEvents();
 
-            var aggregateType = aggregateTypeBuilder.Build();
+        var aggregateType = aggregateTypeBuilder.Build();
 
         var aggregate = new ImmutableAggregate1();
         var loadedAggregate = CreateLoadedAggregate(aggregate, aggregateType);
@@ -133,19 +129,21 @@ public class LoadedAggregateTests
 
     private class MutableAggregate2
     {
+        public string Value { get; private set; }
         public List<string> ObservedValues { get; } = new();
 
         public IEnumerable<object> Execute(string newValue)
         {
             yield return new ValueChangedEvent($"{newValue} 1");
-            yield return new ValueChangedEvent($"{newValue} 2");
-            yield return new ValueChangedEvent($"{newValue} 3");
+            yield return new ValueChangedEvent($"{Value} 2");
+            yield return new ValueChangedEvent($"{Value} 3");
         }
 
         public void Apply(object @event)
         {
             if (@event is ValueChangedEvent e)
             {
+                Value = e.Value;
                 ObservedValues.Add(e.Value);
             }
         }

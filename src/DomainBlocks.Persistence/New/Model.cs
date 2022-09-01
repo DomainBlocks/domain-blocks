@@ -15,9 +15,9 @@ public class Model
     public Model(IEnumerable<IAggregateType> aggregateTypes, EventNameMap eventNameMap)
     {
         EventNameMap = eventNameMap;
-        _aggregateConfigs = aggregateTypes.ToDictionary(x => x.Key);
+        _aggregateConfigs = aggregateTypes.ToDictionary(x => (x.ClrType, x.EventBaseType));
     }
-    
+
     public EventNameMap EventNameMap { get; }
 
     public AggregateType<TAggregate, TEventBase> GetAggregateType<TAggregate, TEventBase>()

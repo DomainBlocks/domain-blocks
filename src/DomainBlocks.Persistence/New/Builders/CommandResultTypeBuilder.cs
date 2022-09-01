@@ -3,63 +3,68 @@ using System.Collections.Generic;
 
 namespace DomainBlocks.Persistence.New.Builders;
 
-public interface IEventsCommandResultTypeBuilder<TAggregate, TEventBase, out TCommandResult>
+public interface ICommandResultUpdatedStateSelectorBuilder<TAggregate, out TCommandResult>
 {
-    public IUpdatedStateCommandResultTypeBuilder<TAggregate, TEventBase, TCommandResult> WithEventsFrom(
-        Func<TCommandResult, TAggregate, IEnumerable<TEventBase>> eventsSelector);
-}
-
-public interface IUpdatedStateCommandResultTypeBuilder<TAggregate, out TEventBase, out TCommandResult>
-{
-    public ICommandResultTypeBuilder WithUpdatedStateFrom(
-        Func<TCommandResult, TAggregate, TAggregate> updatedStateSelector);
-
-    public ICommandResultTypeBuilder UpdateStateWithAppliedEvents();
+    public void WithUpdatedStateFrom(Func<TCommandResult, TAggregate, TAggregate> updatedStateSelector);
+    public void ApplyEvents();
+    public void ApplyEventsWhileEnumerating();
 }
 
 public class CommandResultTypeBuilder<TAggregate, TEventBase, TCommandResult> :
     ICommandResultTypeBuilder,
-    IEventsCommandResultTypeBuilder<TAggregate, TEventBase, TCommandResult>,
-    IUpdatedStateCommandResultTypeBuilder<TAggregate, TEventBase, TCommandResult>
+    ICommandResultUpdatedStateSelectorBuilder<TAggregate, TCommandResult>
 {
-    private readonly AggregateTypeBuilder<TAggregate, TEventBase> _aggregateTypeBuilder;
+    private readonly IEventApplierSource<TAggregate, TEventBase> _eventApplierSource;
     private Func<TCommandResult, TAggregate, IEnumerable<TEventBase>> _eventsSelector;
     private Func<TCommandResult, TAggregate, TAggregate> _updatedStateSelector;
-    private bool _hasApplyEventsEnabled;
+    private ApplyEventsBehavior? _applyEventsBehavior;
 
-    public CommandResultTypeBuilder(AggregateTypeBuilder<TAggregate, TEventBase> aggregateTypeBuilder)
+    internal CommandResultTypeBuilder(IEventApplierSource<TAggregate, TEventBase> eventApplierSource)
     {
-        _aggregateTypeBuilder = aggregateTypeBuilder;
+        _eventApplierSource = eventApplierSource;
     }
 
-    public IUpdatedStateCommandResultTypeBuilder<TAggregate, TEventBase, TCommandResult> WithEventsFrom(
+    public ICommandResultUpdatedStateSelectorBuilder<TAggregate, TCommandResult> WithEventsFrom(
         Func<TCommandResult, TAggregate, IEnumerable<TEventBase>> eventsSelector)
     {
         _eventsSelector = eventsSelector;
         return this;
     }
 
-    public ICommandResultTypeBuilder WithUpdatedStateFrom(
+    void ICommandResultUpdatedStateSelectorBuilder<TAggregate, TCommandResult>.WithUpdatedStateFrom(
         Func<TCommandResult, TAggregate, TAggregate> updatedStateSelector)
     {
         _updatedStateSelector = updatedStateSelector;
-        return this;
     }
 
-    public ICommandResultTypeBuilder UpdateStateWithAppliedEvents()
+    void ICommandResultUpdatedStateSelectorBuilder<TAggregate, TCommandResult>.ApplyEvents()
     {
-        _hasApplyEventsEnabled = true;
-        return this;
+        _applyEventsBehavior = ApplyEventsBehavior.ApplyAfterEnumerating;
     }
 
-    public CommandResultType<TAggregate, TEventBase, TCommandResult> Build()
+    void ICommandResultUpdatedStateSelectorBuilder<TAggregate, TCommandResult>.ApplyEventsWhileEnumerating()
     {
-        ICommandResultStrategy<TAggregate, TEventBase, TCommandResult> strategy = _hasApplyEventsEnabled
-            ? ApplyEventsCommandResultStrategy.Create(_eventsSelector, _aggregateTypeBuilder.EventApplier)
-            : DefaultCommandResultStrategy.Create(_updatedStateSelector, _eventsSelector);
+        _applyEventsBehavior = ApplyEventsBehavior.ApplyWhileEnumerating;
+    }
+
+    ICommandResultType ICommandResultTypeBuilder.Build()
+    {
+        var strategy = _applyEventsBehavior switch
+        {
+            null => DefaultCommandResultStrategy.Create(_updatedStateSelector, _eventsSelector),
+            ApplyEventsBehavior.ApplyAfterEnumerating =>
+                ApplyAfterEnumeratingStrategy.Create(_eventsSelector, _eventApplierSource.EventApplier),
+            ApplyEventsBehavior.ApplyWhileEnumerating =>
+                ApplyWhileEnumeratingStrategy.Create(_eventsSelector, _eventApplierSource.EventApplier),
+            _ => null
+        };
 
         return new CommandResultType<TAggregate, TEventBase, TCommandResult>(strategy);
     }
-
-    ICommandResultType ICommandResultTypeBuilder.Build() => Build();
+    
+    private enum ApplyEventsBehavior
+    {
+        ApplyAfterEnumerating,
+        ApplyWhileEnumerating
+    }
 }
