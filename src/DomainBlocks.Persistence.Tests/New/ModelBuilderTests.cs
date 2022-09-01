@@ -31,11 +31,7 @@ public class ModelBuilderTests
                     .WithEventsFrom((res, _) => res.Events)
                     .WithUpdatedStateFrom((res, _) => res.UpdatedState);
 
-                aggregate.ApplyEventsWith((agg, e) =>
-                {
-                    agg.Apply(e);
-                    return agg;
-                });
+                aggregate.ApplyEventsWith((agg, e) => agg.Apply(e));
 
                 aggregate
                     .Event<PriceCaptureSessionStarted>()

@@ -5,7 +5,7 @@ namespace DomainBlocks.Persistence.New;
 
 public static class DefaultCommandResultStrategy
 {
-    public static DefaultCommandResultStrategy<TAggregate, TEventBase, TCommandResult> Create<
+    public static ICommandResultStrategy<TAggregate, TEventBase, TCommandResult> Create<
         TAggregate, TEventBase, TCommandResult>(
         Func<TCommandResult, TAggregate, TAggregate> updatedStateSelector,
         Func<TCommandResult, TAggregate, IEnumerable<TEventBase>> eventsSelector)

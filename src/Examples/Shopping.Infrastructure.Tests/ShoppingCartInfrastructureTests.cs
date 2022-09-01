@@ -34,7 +34,7 @@ public class ShoppingCartInfrastructureTests : EventStoreIntegrationTest
                 aggregate
                     .CommandResult<IEnumerable<IDomainEvent>>()
                     .WithEventsFrom((res, _) => res)
-                    .WithUpdatedStateFrom((res, agg) => res.Aggregate(agg, ShoppingCartFunctions.Apply));
+                    .ApplyEvents();
 
                 aggregate.Event<ShoppingCartCreated>().HasName(ShoppingCartCreated.EventName);
                 aggregate.Event<ItemAddedToShoppingCart>().HasName(ItemAddedToShoppingCart.EventName);

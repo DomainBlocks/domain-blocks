@@ -5,8 +5,7 @@ namespace DomainBlocks.Persistence.New;
 
 public interface IAggregateType
 {
-    public (Type, Type) Key => (ClrType, EventBaseType);
-    Type ClrType { get; }
-    Type EventBaseType { get; }
-    IEnumerable<IEventType> EventTypes { get; }
+    public Type ClrType { get; }
+    public Type EventBaseType { get; }
+    public IEnumerable<IEventType> EventTypes { get; }
 }

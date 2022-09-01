@@ -3,29 +3,37 @@ using System.Collections.Generic;
 
 namespace DomainBlocks.Persistence.New.Builders;
 
-public class VoidCommandResultTypeBuilder<TAggregate, TEventBase> : ICommandResultTypeBuilder
+public interface IVoidCommandResultUpdatedStateSelectorBuilder<TAggregate>
+{
+    public void WithUpdatedStateFrom(Func<TAggregate, TAggregate> updatedStateSelector);
+}
+
+public class VoidCommandResultTypeBuilder<TAggregate, TEventBase> :
+    ICommandResultTypeBuilder,
+    IVoidCommandResultUpdatedStateSelectorBuilder<TAggregate>
 {
     private Func<TAggregate, TAggregate> _updatedStateSelector;
     private Func<TAggregate, IEnumerable<TEventBase>> _eventsSelector;
 
-    public VoidCommandResultTypeBuilder<TAggregate, TEventBase> WithUpdatedStateFrom(
-        Func<TAggregate, TAggregate> updatedStateSelector)
+    internal VoidCommandResultTypeBuilder()
     {
-        _updatedStateSelector = updatedStateSelector;
-        return this;
     }
 
-    public VoidCommandResultTypeBuilder<TAggregate, TEventBase> WithEventsFrom(
+    public IVoidCommandResultUpdatedStateSelectorBuilder<TAggregate> WithEventsFrom(
         Func<TAggregate, IEnumerable<TEventBase>> eventsSelector)
     {
         _eventsSelector = eventsSelector;
         return this;
     }
 
-    public VoidCommandResultType<TAggregate, TEventBase> Build()
+    void IVoidCommandResultUpdatedStateSelectorBuilder<TAggregate>.WithUpdatedStateFrom(
+        Func<TAggregate, TAggregate> updatedStateSelector)
+    {
+        _updatedStateSelector = updatedStateSelector;
+    }
+
+    ICommandResultType ICommandResultTypeBuilder.Build()
     {
         return new VoidCommandResultType<TAggregate, TEventBase>(_updatedStateSelector, _eventsSelector);
     }
-
-    ICommandResultType ICommandResultTypeBuilder.Build() => Build();
 }
