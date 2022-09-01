@@ -1,25 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using DomainBlocks.Aggregates;
 
 namespace DomainBlocks.Persistence.New.Builders;
-
-public class AggregateTypeBuilder<TAggregate>
-{
-    private readonly ModelBuilder _modelBuilder;
-
-    public AggregateTypeBuilder(ModelBuilder modelBuilder)
-    {
-        _modelBuilder = modelBuilder;
-    }
-
-    public AggregateTypeBuilder<TAggregate, TEventBase> EventBaseType<TEventBase>()
-    {
-        var builder = new AggregateTypeBuilder<TAggregate, TEventBase>();
-        _modelBuilder.AddAggregateConfigurationBuilder(builder);
-        return builder;
-    }
-}
 
 public class AggregateTypeBuilder<TAggregate, TEventBase> : IAggregateTypeBuilder
 {
@@ -27,7 +11,8 @@ public class AggregateTypeBuilder<TAggregate, TEventBase> : IAggregateTypeBuilde
     private Func<TAggregate, string> _idSelector;
     private Func<string, string> _idToStreamKeySelector;
     private Func<string, string> _idToSnapshotKeySelector;
-    private readonly List<ICommandResultTypeBuilder> _commandResultConfigBuilders = new();
+    private readonly List<ICommandResultTypeBuilder> _commandResultTypeBuilders = new();
+    private readonly List<IEventTypeBuilder> _eventTypeBuilders = new();
     private Func<TAggregate, TEventBase, TAggregate> _eventApplier;
 
     public AggregateTypeBuilder<TAggregate, TEventBase> InitialState(Func<TAggregate> factory)
@@ -55,13 +40,20 @@ public class AggregateTypeBuilder<TAggregate, TEventBase> : IAggregateTypeBuilde
     }
 
     // TODO: Think about how to deal with command methods that return void.
-    public AggregateTypeBuilder<TAggregate, TEventBase> HasCommandResult<TCommandResult>(
+    public AggregateTypeBuilder<TAggregate, TEventBase> CommandResult<TCommandResult>(
         Action<CommandResultTypeBuilder<TAggregate, TEventBase, TCommandResult>> builderAction)
     {
         var builder = new CommandResultTypeBuilder<TAggregate, TEventBase, TCommandResult>();
-        _commandResultConfigBuilders.Add(builder);
+        _commandResultTypeBuilders.Add(builder);
         builderAction(builder);
         return this;
+    }
+
+    public EventTypeBuilder<TEvent, TEventBase> Event<TEvent>() where TEvent : TEventBase
+    {
+        var builder = new EventTypeBuilder<TEvent, TEventBase>();
+        _eventTypeBuilders.Add(builder);
+        return builder;
     }
 
     public AggregateTypeBuilder<TAggregate, TEventBase> ApplyEventsWith(
@@ -73,14 +65,16 @@ public class AggregateTypeBuilder<TAggregate, TEventBase> : IAggregateTypeBuilde
 
     public IAggregateType Build()
     {
-        var commandResultConfigs = _commandResultConfigBuilders.Select(x => x.Build());
-
+        var commandResultTypes = _commandResultTypeBuilders.Select(x => x.Build());
+        var eventTypes = _eventTypeBuilders.Select(x => x.Build());
+        
         return new AggregateType<TAggregate, TEventBase>(
             _factory,
             _idSelector,
             _idToStreamKeySelector,
             _idToSnapshotKeySelector,
-            commandResultConfigs,
+            commandResultTypes,
+            eventTypes,
             _eventApplier);
     }
 }
