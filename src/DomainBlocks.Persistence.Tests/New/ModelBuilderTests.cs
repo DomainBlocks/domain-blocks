@@ -12,36 +12,44 @@ public class ModelBuilderTests
     [Test]
     public void HappyPathTest()
     {
-        var modelBuilder = new ModelBuilder();
+        var model = new ModelBuilder()
+            .Aggregate<PriceCaptureSession, IEvent>(aggregate =>
+            {
+                aggregate
+                    .InitialState(() => new PriceCaptureSession())
+                    .HasId(x => x.Id)
+                    .WithStreamKey(id => $"priceCaptureSession-{id}")
+                    .WithSnapshotKey(id => $"priceCaptureSessionSnapshot-{id}")
+                    .CommandResult<IEnumerable<IEvent>>(result =>
+                    {
+                        result
+                            .WithEventsFrom((_, res) => res)
+                            .WithUpdatedStateFrom((agg, _) => agg);
+                    })
+                    .CommandResult<CommandResult>(result =>
+                    {
+                        result
+                            .WithEventsFrom((_, res) => res.Events)
+                            .WithUpdatedStateFrom((_, res) => res.UpdatedState);
+                    })
+                    .ApplyEventsWith((agg, e) =>
+                    {
+                        agg.Apply(e);
+                        return agg;
+                    });
 
-        modelBuilder
-            .Aggregate<PriceCaptureSession>()
-            .EventBaseType<IEvent>()
-            .InitialState(() => new PriceCaptureSession())
-            .HasId(x => x.Id)
-            .WithStreamKey(id => $"priceCaptureSession-{id}")
-            .WithSnapshotKey(id => $"priceCaptureSessionSnapshot-{id}")
-            .HasCommandResult<IEnumerable<IEvent>>(result =>
-            {
-                result
-                    .WithEventsFrom((_, res) => res)
-                    .WithUpdatedStateFrom((agg, _) => agg);
+                aggregate
+                    .Event<PriceCaptureSessionStarted>()
+                    .HasName(nameof(PriceCaptureSessionStarted));
             })
-            .HasCommandResult<CommandResult>(result =>
-            {
-                result
-                    .WithEventsFrom((_, res) => res.Events)
-                    .WithUpdatedStateFrom((_, res) => res.UpdatedState);
-            })
-            .ApplyEventsWith((agg, e) =>
-            {
-                agg.Apply(e);
-                return agg;
-            });
-
-        var model = modelBuilder.Build();
+            .Build();
 
         var aggregateType = model.GetAggregateType<PriceCaptureSession, IEvent>();
+        
+        Assert.That(
+            aggregateType.EventNameMap.GetEventName(typeof(PriceCaptureSessionStarted)),
+            Is.EqualTo(nameof(PriceCaptureSessionStarted)));
+        
         var commandResultType1 = aggregateType.GetCommandResultType<IEnumerable<IEvent>>();
 
         var priceCaptureSession = aggregateType.CreateNew();
