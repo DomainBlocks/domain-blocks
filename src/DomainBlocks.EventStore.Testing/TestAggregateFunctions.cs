@@ -1,22 +1,24 @@
 ﻿using System;
 using System.Collections.Generic;
-using DomainBlocks.Persistence.Builders;
+using DomainBlocks.Persistence.New.Builders;
 
 namespace DomainBlocks.EventStore.Testing;
 
 public static class TestAggregateFunctions
 {
-    public static void Register(AggregateRegistryBuilder<TestEvent> builder, Guid aggregateId)
+    public static void BuildModel(ModelBuilder builder, Guid aggregateId)
     {
-        builder.Register<TestAggregateState>(agg =>
-        {
-            agg.InitialState(_ => new TestAggregateState(aggregateId, 0))
-                .Id(x => x.Id.ToString())
-                .PersistenceKey(id => $"testAggregate-{id}")
-                .SnapshotKey(id => $"testAggregateSnapshot-{id}");
+        builder
+            .Aggregate<TestAggregateState, object>(aggregate =>
+            {
+                aggregate
+                    .InitialState(() => new TestAggregateState(aggregateId, 0))
+                    .HasId(x => x.Id.ToString())
+                    .WithStreamKey(id => $"testAggregate-{id}")
+                    .WithSnapshotKey(id => $"testAggregateSnapshot-{id}");
 
-            agg.RegisterEvents(events => { events.Event<TestEvent>().RoutesTo(Apply); });
-        });
+                aggregate.ApplyEventsWith((agg, e) => Apply(agg, (dynamic)e));
+            });
     }
 
     public static IEnumerable<TestEvent> Execute(TestCommand command)

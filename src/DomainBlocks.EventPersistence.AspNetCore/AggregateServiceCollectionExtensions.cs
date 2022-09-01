@@ -1,5 +1,5 @@
 ﻿using System;
-using DomainBlocks.Persistence.Builders;
+using DomainBlocks.Persistence.New.Builders;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -14,26 +14,13 @@ public static class AggregateServiceCollectionExtensions
         this IServiceCollection services,
         IConfiguration configuration,
         Action<AggregateRepositoryOptionsBuilder> optionsBuilderAction,
-        Action<AggregateRegistryBuilder<object>> registryBuilderAction)
-    {
-        return AddAggregateRepository<object>(services, configuration, optionsBuilderAction, registryBuilderAction);
-    }
-
-    /// <summary>
-    /// Adds an aggregate repository to persist events 
-    /// </summary>
-    public static IServiceCollection AddAggregateRepository<TEventBase>(
-        this IServiceCollection services,
-        IConfiguration configuration,
-        Action<AggregateRepositoryOptionsBuilder> optionsBuilderAction,
-        Action<AggregateRegistryBuilder<TEventBase>> registryBuilderAction)
+        Action<ModelBuilder> modelBuilderAction)
     {
         var optionsBuilder = new AggregateRepositoryOptionsBuilder(services, configuration);
         optionsBuilderAction(optionsBuilder);
 
-        var registryBuilder = new AggregateRegistryBuilder<TEventBase>();
-        registryBuilderAction(registryBuilder);
-        var aggregateRegistry = registryBuilder.Build();
+        var modelBuilder = new ModelBuilder();
+        modelBuilderAction(modelBuilder);
 
         var rawDataType = optionsBuilder.RawDataType;
         var typedBuildMethod =
@@ -41,10 +28,12 @@ public static class AggregateServiceCollectionExtensions
                 .GetMethod(nameof(IAggregateRepositoryOptionsBuilderInfrastructure.Build))
                 ?.MakeGenericMethod(rawDataType);
 
-        services.AddSingleton<IAggregateRepository<TEventBase>>(provider =>
+        services.AddSingleton<IAggregateRepository>(provider =>
         {
+            var model = modelBuilder.Build();
+
             dynamic aggregateRepositoryOptions = typedBuildMethod?.Invoke(
-                optionsBuilder, new[] { provider, aggregateRegistry.EventNameMap as object });
+                optionsBuilder, new[] { provider, model.EventNameMap as object });
 
             if (aggregateRepositoryOptions == null)
             {
@@ -54,7 +43,7 @@ public static class AggregateServiceCollectionExtensions
             return AggregateRepository.Create(
                 aggregateRepositoryOptions.EventsRepository,
                 aggregateRepositoryOptions.SnapshotRepository,
-                aggregateRegistry);
+                model);
         });
 
         return services;

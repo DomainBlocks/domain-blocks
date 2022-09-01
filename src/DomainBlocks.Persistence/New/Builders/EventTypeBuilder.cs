@@ -10,8 +10,10 @@ public class EventTypeBuilder<TEvent, TEventBase> : IEventTypeBuilder where TEve
         return this;
     }
 
-    public IEventType Build()
+    public EventType<TEvent, TEventBase> Build()
     {
         return new EventType<TEvent, TEventBase>(_eventName);
     }
+
+    IEventType IEventTypeBuilder.Build() => Build();
 }

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using DomainBlocks.Aggregates;
 
 namespace DomainBlocks.Persistence.New.Builders;
 
@@ -13,7 +12,8 @@ public class AggregateTypeBuilder<TAggregate, TEventBase> : IAggregateTypeBuilde
     private Func<string, string> _idToSnapshotKeySelector;
     private readonly List<ICommandResultTypeBuilder> _commandResultTypeBuilders = new();
     private readonly List<IEventTypeBuilder> _eventTypeBuilders = new();
-    private Func<TAggregate, TEventBase, TAggregate> _eventApplier;
+    
+    public Func<TAggregate, TEventBase, TAggregate> EventApplier { get; private set; }
 
     public AggregateTypeBuilder<TAggregate, TEventBase> InitialState(Func<TAggregate> factory)
     {
@@ -39,14 +39,18 @@ public class AggregateTypeBuilder<TAggregate, TEventBase> : IAggregateTypeBuilde
         return this;
     }
 
-    // TODO: Think about how to deal with command methods that return void.
-    public AggregateTypeBuilder<TAggregate, TEventBase> CommandResult<TCommandResult>(
-        Action<CommandResultTypeBuilder<TAggregate, TEventBase, TCommandResult>> builderAction)
+    public IEventsCommandResultTypeBuilder<TAggregate, TEventBase, TCommandResult> CommandResult<TCommandResult>()
     {
-        var builder = new CommandResultTypeBuilder<TAggregate, TEventBase, TCommandResult>();
+        var builder = new CommandResultTypeBuilder<TAggregate, TEventBase, TCommandResult>(this);
         _commandResultTypeBuilders.Add(builder);
-        builderAction(builder);
-        return this;
+        return builder;
+    }
+
+    public VoidCommandResultTypeBuilder<TAggregate, TEventBase> VoidCommandResult()
+    {
+        var builder = new VoidCommandResultTypeBuilder<TAggregate, TEventBase>();
+        _commandResultTypeBuilders.Add(builder);
+        return builder;
     }
 
     public EventTypeBuilder<TEvent, TEventBase> Event<TEvent>() where TEvent : TEventBase
@@ -59,15 +63,15 @@ public class AggregateTypeBuilder<TAggregate, TEventBase> : IAggregateTypeBuilde
     public AggregateTypeBuilder<TAggregate, TEventBase> ApplyEventsWith(
         Func<TAggregate, TEventBase, TAggregate> eventApplier)
     {
-        _eventApplier = eventApplier;
+        EventApplier = eventApplier;
         return this;
     }
 
-    public IAggregateType Build()
+    public AggregateType<TAggregate, TEventBase> Build()
     {
         var commandResultTypes = _commandResultTypeBuilders.Select(x => x.Build());
         var eventTypes = _eventTypeBuilders.Select(x => x.Build());
-        
+
         return new AggregateType<TAggregate, TEventBase>(
             _factory,
             _idSelector,
@@ -75,6 +79,8 @@ public class AggregateTypeBuilder<TAggregate, TEventBase> : IAggregateTypeBuilde
             _idToSnapshotKeySelector,
             commandResultTypes,
             eventTypes,
-            _eventApplier);
+            EventApplier);
     }
+
+    IAggregateType IAggregateTypeBuilder.Build() => Build();
 }

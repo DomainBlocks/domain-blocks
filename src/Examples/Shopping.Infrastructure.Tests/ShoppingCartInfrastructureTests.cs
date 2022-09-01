@@ -1,10 +1,11 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using DomainBlocks.EventStore.Testing;
 using DomainBlocks.Persistence;
-using DomainBlocks.Persistence.Builders;
 using DomainBlocks.Persistence.EventStore;
+using DomainBlocks.Persistence.New.Builders;
 using DomainBlocks.Serialization.Json;
 using NUnit.Framework;
 using Shopping.Domain.Aggregates;
@@ -19,26 +20,37 @@ public class ShoppingCartInfrastructureTests : EventStoreIntegrationTest
     [Test]
     public async Task PersistedRoundTripTest()
     {
-        var aggregateRegistry = AggregateRegistryBuilder.Create<IDomainEvent>()
-            .Register<ShoppingCartState>(builder =>
+        var model = new ModelBuilder()
+            .Aggregate<ShoppingCartState, IDomainEvent>(aggregate =>
             {
-                builder.InitialState(_ => new ShoppingCartState())
-                    .Id(o => o.Id?.ToString())
-                    .PersistenceKey(id => $"shoppingCart-{id}")
-                    .SnapshotKey(id => $"shoppingCartSnapshot-{id}")
-                    .RegisterEvents(ShoppingCartFunctions.RegisterEvents);
+                aggregate
+                    .InitialState(() => new ShoppingCartState())
+                    .HasId(o => o.Id?.ToString())
+                    .WithStreamKey(id => $"shoppingCart-{id}")
+                    .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");
+
+                aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
+
+                aggregate
+                    .CommandResult<IEnumerable<IDomainEvent>>()
+                    .WithEventsFrom((res, _) => res);
+
+                aggregate.Event<ShoppingCartCreated>().HasName(ShoppingCartCreated.EventName);
+                aggregate.Event<ItemAddedToShoppingCart>().HasName(ItemAddedToShoppingCart.EventName);
+                aggregate.Event<ItemRemovedFromShoppingCart>().HasName(ItemRemovedFromShoppingCart.EventName);
             })
             .Build();
-            
+
         var shoppingCartId = Guid.NewGuid(); // This could come from a sequence, or could be the customer's ID.
 
-        var serializer = new JsonBytesEventSerializer(aggregateRegistry.EventNameMap);
+        var serializer = new JsonBytesEventSerializer(model.EventNameMap);
         var eventsRepository = new EventStoreEventsRepository(EventStoreClient, serializer);
         var snapshotRepository = new EventStoreSnapshotRepository(EventStoreClient, serializer);
 
-        var aggregateRepository = AggregateRepository.Create(eventsRepository, snapshotRepository, aggregateRegistry);
+        var aggregateRepository = AggregateRepository.Create(eventsRepository, snapshotRepository, model);
 
-        var loadedAggregate = await aggregateRepository.LoadAggregate<ShoppingCartState>(shoppingCartId.ToString());
+        var loadedAggregate =
+            await aggregateRepository.LoadAggregate<ShoppingCartState, IDomainEvent>(shoppingCartId.ToString());
 
         // Execute the first command.
         var command1 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "First Item");
@@ -57,7 +69,8 @@ public class ShoppingCartInfrastructureTests : EventStoreIntegrationTest
 
         Assert.That(nextEventVersion, Is.EqualTo(expectedNextEventVersion));
 
-        var loadedData = await aggregateRepository.LoadAggregate<ShoppingCartState>(shoppingCartId.ToString());
+        var loadedData =
+            await aggregateRepository.LoadAggregate<ShoppingCartState, IDomainEvent>(shoppingCartId.ToString());
 
         var loadedState = loadedData.AggregateState;
         var loadedVersion = loadedData.Version;

@@ -2,8 +2,8 @@
 using System.Linq;
 using System.Threading.Tasks;
 using DomainBlocks.Persistence;
-using DomainBlocks.Persistence.Builders;
 using DomainBlocks.Persistence.EventStore;
+using DomainBlocks.Persistence.New.Builders;
 using DomainBlocks.Serialization.Json;
 
 namespace DomainBlocks.EventStore.Testing
@@ -11,16 +11,16 @@ namespace DomainBlocks.EventStore.Testing
     public class SnapshotScenario
     {
         private EventStoreIntegrationTest _test;
-        private AggregateRepository<TestEvent, ReadOnlyMemory<byte>> _aggregateRepository;
-        private LoadedAggregate<TestAggregateState, TestEvent> _loadedAggregate;
+        private AggregateRepository<ReadOnlyMemory<byte>> _aggregateRepository;
+        private LoadedAggregate<TestAggregateState, object> _loadedAggregate;
         private Guid _id;
         private long _aggregateVersion = StreamVersion.NewStream;
-        
+
         public SnapshotScenario()
         {
             _id = Guid.NewGuid();
         }
-        
+
         public TestAggregateState AggregateState { get; private set; }
 
         public async Task Initialise(EventStoreIntegrationTest test)
@@ -41,27 +41,31 @@ namespace DomainBlocks.EventStore.Testing
 
         public async Task SaveSnapshot()
         {
-            await _aggregateRepository.SaveSnapshot(VersionedAggregateState.Create(AggregateState, _aggregateVersion));
+            await _aggregateRepository.SaveSnapshot<TestAggregateState, TestEvent>(
+                VersionedAggregateState.Create(AggregateState, _aggregateVersion));
         }
 
-        public async Task<LoadedAggregate<TestAggregateState, TestEvent>> LoadLatestStateFromEvents()
+        public async Task<LoadedAggregate<TestAggregateState, object>> LoadLatestStateFromEvents()
         {
             return await LoadLatestState(AggregateLoadStrategy.UseEventStream);
         }
 
-        public async Task<LoadedAggregate<TestAggregateState, TestEvent>> LoadLatestStateFromSnapshot()
+        public async Task<LoadedAggregate<TestAggregateState, object>> LoadLatestStateFromSnapshot()
         {
             return await LoadLatestState(AggregateLoadStrategy.UseSnapshot);
         }
 
-        public async Task<LoadedAggregate<TestAggregateState, TestEvent>> LoadLatestStateFromSnapshotIfAvailable()
+        public async Task<LoadedAggregate<TestAggregateState, object>> LoadLatestStateFromSnapshotIfAvailable()
         {
             return await LoadLatestState(AggregateLoadStrategy.PreferSnapshot);
         }
 
-        private async Task<LoadedAggregate<TestAggregateState, TestEvent>> LoadLatestState(AggregateLoadStrategy loadStrategy)
+        private async Task<LoadedAggregate<TestAggregateState, object>> LoadLatestState(
+            AggregateLoadStrategy loadStrategy)
         {
-            var loadedAggregate = await _aggregateRepository.LoadAggregate<TestAggregateState>(_id.ToString(), loadStrategy);
+            var loadedAggregate =
+                await _aggregateRepository.LoadAggregate<TestAggregateState, object>(_id.ToString(), loadStrategy);
+
             _aggregateVersion = loadedAggregate.Version;
             AggregateState = loadedAggregate.AggregateState;
 
@@ -80,17 +84,17 @@ namespace DomainBlocks.EventStore.Testing
 
         private void SetupRepositories()
         {
-            var registryBuilder = AggregateRegistryBuilder.Create<TestEvent>();
-            TestAggregateFunctions.Register(registryBuilder, _id);
+            var modelBuilder = new ModelBuilder();
+            TestAggregateFunctions.BuildModel(modelBuilder, _id);
 
-            var registry = registryBuilder.Build();
+            var model = modelBuilder.Build();
 
-            var serializer = new JsonBytesEventSerializer(registry.EventNameMap);
+            var serializer = new JsonBytesEventSerializer(model.EventNameMap);
 
             var snapshotRepository = new EventStoreSnapshotRepository(_test.EventStoreClient, serializer);
             var eventsRepository = new EventStoreEventsRepository(_test.EventStoreClient, serializer);
 
-            _aggregateRepository = AggregateRepository.Create(eventsRepository, snapshotRepository, registry);
+            _aggregateRepository = AggregateRepository.Create(eventsRepository, snapshotRepository, model);
         }
     }
 }

@@ -19,24 +19,23 @@ public class ModelBuilderTests
                     .InitialState(() => new PriceCaptureSession())
                     .HasId(x => x.Id)
                     .WithStreamKey(id => $"priceCaptureSession-{id}")
-                    .WithSnapshotKey(id => $"priceCaptureSessionSnapshot-{id}")
-                    .CommandResult<IEnumerable<IEvent>>(result =>
-                    {
-                        result
-                            .WithEventsFrom((_, res) => res)
-                            .WithUpdatedStateFrom((agg, _) => agg);
-                    })
-                    .CommandResult<CommandResult>(result =>
-                    {
-                        result
-                            .WithEventsFrom((_, res) => res.Events)
-                            .WithUpdatedStateFrom((_, res) => res.UpdatedState);
-                    })
-                    .ApplyEventsWith((agg, e) =>
-                    {
-                        agg.Apply(e);
-                        return agg;
-                    });
+                    .WithSnapshotKey(id => $"priceCaptureSessionSnapshot-{id}");
+
+                aggregate
+                    .CommandResult<IEnumerable<IEvent>>()
+                    .WithEventsFrom((res, _) => res)
+                    .WithUpdatedStateFrom((_, agg) => agg);
+
+                aggregate
+                    .CommandResult<CommandResult>()
+                    .WithEventsFrom((res, _) => res.Events)
+                    .WithUpdatedStateFrom((res, _) => res.UpdatedState);
+
+                aggregate.ApplyEventsWith((agg, e) =>
+                {
+                    agg.Apply(e);
+                    return agg;
+                });
 
                 aggregate
                     .Event<PriceCaptureSessionStarted>()
@@ -45,31 +44,31 @@ public class ModelBuilderTests
             .Build();
 
         var aggregateType = model.GetAggregateType<PriceCaptureSession, IEvent>();
-        
+
         Assert.That(
-            aggregateType.EventNameMap.GetEventName(typeof(PriceCaptureSessionStarted)),
+            model.EventNameMap.GetEventName(typeof(PriceCaptureSessionStarted)),
             Is.EqualTo(nameof(PriceCaptureSessionStarted)));
-        
+
         var commandResultType1 = aggregateType.GetCommandResultType<IEnumerable<IEvent>>();
 
         var priceCaptureSession = aggregateType.CreateNew();
         var commandResult = priceCaptureSession.Start().ToList();
 
-        var events = commandResultType1.SelectEvents(priceCaptureSession, commandResult).ToList();
-        var updatedState = commandResultType1.SelectUpdatedState(priceCaptureSession, commandResult);
-        
-        Assert.That(events, Has.Count.EqualTo(1));
-        Assert.That(events[0], Is.TypeOf<PriceCaptureSessionStarted>());
+        var (updatedState, events) = commandResultType1.GetUpdatedStateAndEvents(commandResult, priceCaptureSession);
+        var eventList = events.ToList();
+
+        Assert.That(eventList, Has.Count.EqualTo(1));
+        Assert.That(eventList[0], Is.TypeOf<PriceCaptureSessionStarted>());
         Assert.That(updatedState, Is.SameAs(priceCaptureSession));
-        
+
         var commandResultType2 = aggregateType.GetCommandResultType<CommandResult>();
         var commandResult2 = priceCaptureSession.ImmutableStart();
 
-        events = commandResultType2.SelectEvents(priceCaptureSession, commandResult2).ToList();
-        updatedState = commandResultType2.SelectUpdatedState(priceCaptureSession, commandResult2);
-        
-        Assert.That(events, Has.Count.EqualTo(1));
-        Assert.That(events[0], Is.TypeOf<PriceCaptureSessionStarted>());
+        (updatedState, events) = commandResultType2.GetUpdatedStateAndEvents(commandResult2, priceCaptureSession);
+        eventList = events.ToList();
+
+        Assert.That(eventList, Has.Count.EqualTo(1));
+        Assert.That(eventList[0], Is.TypeOf<PriceCaptureSessionStarted>());
         Assert.That(updatedState, Is.SameAs(commandResult2.UpdatedState));
     }
 
@@ -101,14 +100,14 @@ public class ModelBuilderTests
         public CommandResult ImmutableStart()
         {
             var id = Guid.NewGuid().ToString();
-            
+
             return new CommandResult
             {
                 Events = new[] { new PriceCaptureSessionStarted { Id = id } },
                 UpdatedState = this
             };
         }
-        
+
         public void Apply(IEvent @event)
         {
             if (@event is PriceCaptureSessionStarted e)

@@ -3,8 +3,6 @@ using Shopping.Domain.Events;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using DomainBlocks.Aggregates;
-using DomainBlocks.Aggregates.Builders;
 
 namespace Shopping.Domain.Aggregates;
 
@@ -30,10 +28,6 @@ public class ShoppingCartState
 
     public Guid? Id { get; }
     public IReadOnlyList<ShoppingCartItem> Items { get; }
-
-    public static ShoppingCartState FromEvents(
-        IAggregateEventRouter<IDomainEvent> eventRouter, IEnumerable<IDomainEvent> events) =>
-        eventRouter.Send(new ShoppingCartState(), events);
 }
 
 public class ShoppingCartItem
@@ -50,14 +44,6 @@ public class ShoppingCartItem
     
 public static class ShoppingCartFunctions
 {
-    public static void RegisterEvents(EventRegistryBuilder<ShoppingCartState, IDomainEvent> events)
-    {
-        events
-            .Event<ShoppingCartCreated>().RoutesTo(Apply).HasName(ShoppingCartCreated.EventName)
-            .Event<ItemAddedToShoppingCart>().RoutesTo(Apply).HasName(ItemAddedToShoppingCart.EventName)
-            .Event<ItemRemovedFromShoppingCart>().RoutesTo(Apply).HasName(ItemRemovedFromShoppingCart.EventName);
-    }
-
     public static IEnumerable<IDomainEvent> Execute(ShoppingCartState state, AddItemToShoppingCart command)
     {
         var isNew = state.Id == null;
@@ -77,6 +63,18 @@ public static class ShoppingCartFunctions
         }
 
         yield return new ItemRemovedFromShoppingCart(command.Id, command.CartId);
+    }
+
+    public static ShoppingCartState Apply(ShoppingCartState currentState, IDomainEvent @event)
+    {
+        return @event switch
+        {
+            ShoppingCartCreated e => Apply(currentState, e),
+            ItemAddedToShoppingCart e => Apply(currentState, e),
+            ItemRemovedFromShoppingCart e => Apply(currentState, e),
+            // Simply ignore unknown events
+            _ => currentState
+        };
     }
 
     private static ShoppingCartState Apply(ShoppingCartState currentState, ShoppingCartCreated @event)
