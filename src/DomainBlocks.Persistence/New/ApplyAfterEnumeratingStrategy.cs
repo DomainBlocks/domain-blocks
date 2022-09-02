@@ -11,18 +11,18 @@ public static class ApplyAfterEnumeratingStrategy
         Func<TCommandResult, TAggregate, IEnumerable<TEventBase>> eventsSelector,
         Func<TAggregate, TEventBase, TAggregate> eventApplier)
     {
-        return new MaterializeBeforeApplyingStrategy<TAggregate, TEventBase, TCommandResult>(
+        return new ApplyAfterEnumeratingStrategy<TAggregate, TEventBase, TCommandResult>(
             eventsSelector, eventApplier);
     }
 }
 
-public class MaterializeBeforeApplyingStrategy<TAggregate, TEventBase, TCommandResult>
+public class ApplyAfterEnumeratingStrategy<TAggregate, TEventBase, TCommandResult>
     : ICommandResultStrategy<TAggregate, TEventBase, TCommandResult>
 {
     private readonly Func<TCommandResult, TAggregate, IEnumerable<TEventBase>> _eventsSelector;
     private readonly Func<TAggregate, TEventBase, TAggregate> _eventApplier;
 
-    public MaterializeBeforeApplyingStrategy(
+    public ApplyAfterEnumeratingStrategy(
         Func<TCommandResult, TAggregate, IEnumerable<TEventBase>> eventsSelector,
         Func<TAggregate, TEventBase, TAggregate> eventApplier)
     {
