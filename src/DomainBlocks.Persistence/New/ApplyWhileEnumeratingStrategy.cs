@@ -10,18 +10,18 @@ public static class ApplyWhileEnumeratingStrategy
         Func<TCommandResult, TAggregate, IEnumerable<TEventBase>> eventsSelector,
         Func<TAggregate, TEventBase, TAggregate> eventApplier)
     {
-        return new ApplyEventsCommandResultStrategy<TAggregate, TEventBase, TCommandResult>(
+        return new ApplyWhileEnumeratingStrategy<TAggregate, TEventBase, TCommandResult>(
             eventsSelector, eventApplier);
     }
 }
 
-public class ApplyEventsCommandResultStrategy<TAggregate, TEventBase, TCommandResult>
+public class ApplyWhileEnumeratingStrategy<TAggregate, TEventBase, TCommandResult>
     : ICommandResultStrategy<TAggregate, TEventBase, TCommandResult>
 {
     private readonly Func<TCommandResult, TAggregate, IEnumerable<TEventBase>> _eventsSelector;
     private readonly Func<TAggregate, TEventBase, TAggregate> _eventApplier;
 
-    public ApplyEventsCommandResultStrategy(
+    public ApplyWhileEnumeratingStrategy(
         Func<TCommandResult, TAggregate, IEnumerable<TEventBase>> eventsSelector,
         Func<TAggregate, TEventBase, TAggregate> eventApplier)
     {
