@@ -24,11 +24,6 @@ public class Model
     }
 
     public IEventNameMap EventNameMap => _eventNameMap;
-
-    public AggregateType<TAggregate, TEventBase> GetAggregateType<TAggregate, TEventBase>() where TEventBase : class
-    {
-        return (AggregateType<TAggregate, TEventBase>)_aggregateTypes[typeof(TAggregate)];
-    }
     
     public IAggregateType<TAggregate> GetAggregateType<TAggregate>()
     {

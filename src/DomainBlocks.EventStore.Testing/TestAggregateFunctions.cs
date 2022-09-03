@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using DomainBlocks.Persistence.New.Builders;
 
 namespace DomainBlocks.EventStore.Testing;
@@ -10,7 +9,7 @@ public static class TestAggregateFunctions
     public static void BuildModel(ModelBuilder builder, Guid aggregateId)
     {
         builder
-            .Aggregate<TestAggregateState, object>(aggregate =>
+            .ImmutableAggregate<TestAggregateState, object>(aggregate =>
             {
                 aggregate
                     .InitialState(() => new TestAggregateState(aggregateId, 0))
@@ -19,9 +18,14 @@ public static class TestAggregateFunctions
                     .WithSnapshotKey(id => $"testAggregateSnapshot-{id}");
 
                 aggregate
-                    .CommandResult<IEnumerable<object>>()
-                    .WithEventsFrom((res, _) => res)
-                    .ApplyEvents();
+                    .ApplyEventsWith((agg, e) => Apply(agg, (dynamic)e))
+                    .WithRaisedEventsFrom(commandReturnTypes =>
+                    {
+                        commandReturnTypes
+                            .CommandReturnType<IEnumerable<object>>()
+                            .WithEventsFrom(x => x)
+                            .ApplyEvents();
+                    });
 
                 aggregate.ApplyEventsWith((agg, e) => Apply(agg, (dynamic)e));
 

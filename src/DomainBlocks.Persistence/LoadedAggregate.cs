@@ -1,75 +1,63 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using DomainBlocks.Persistence.New;
 
 namespace DomainBlocks.Persistence;
 
 internal static class LoadedAggregate
 {
-    internal static LoadedAggregate<TAggregateState> Create<TAggregateState>(
-        TAggregateState aggregateState,
+    internal static LoadedAggregate<TAggregate> Create<TAggregate>(
+        TAggregate state,
+        IAggregateType<TAggregate> aggregateType,
         string id,
         long version,
         long? snapshotVersion,
-        long eventsLoaded,
-        IAggregateType<TAggregateState> aggregateType)
+        long eventsLoaded)
     {
-        return new LoadedAggregate<TAggregateState>(
-            aggregateState, id, version, snapshotVersion, eventsLoaded, aggregateType);
+        return new LoadedAggregate<TAggregate>(state, aggregateType, id, version, snapshotVersion, eventsLoaded);
     }
 }
 
-public sealed class LoadedAggregate<TAggregateState>
+public sealed class LoadedAggregate<TAggregate>
 {
-    private readonly IAggregateType<TAggregateState> _aggregateType;
+    private readonly ICommandExecutionContext<TAggregate> _commandExecutionContext;
 
     internal LoadedAggregate(
-        TAggregateState aggregateState,
+        TAggregate state,
+        IAggregateType<TAggregate> aggregateType,
         string id,
         long version,
         long? snapshotVersion,
-        long eventsLoadedCount,
-        IAggregateType<TAggregateState> aggregateType)
+        long eventsLoadedCount)
     {
+        if (aggregateType == null) throw new ArgumentNullException(nameof(aggregateType));
+
         if (string.IsNullOrWhiteSpace(id))
             throw new ArgumentException("Value cannot be null or whitespace.", nameof(id));
 
-        _aggregateType = aggregateType ?? throw new ArgumentNullException(nameof(aggregateType));
+        _commandExecutionContext = aggregateType.GetCommandExecutionContext(state);
 
-        AggregateState = aggregateState ?? throw new ArgumentNullException(nameof(aggregateState));
         Id = id;
         Version = version;
         SnapshotVersion = snapshotVersion;
         EventsLoadedCount = eventsLoadedCount;
-        EventsToPersist = Enumerable.Empty<object>();
     }
 
-    public TAggregateState AggregateState { get; private set; }
+    public TAggregate State => _commandExecutionContext.State;
     public string Id { get; }
     public long Version { get; }
     public long? SnapshotVersion { get; }
     public long EventsLoadedCount { get; }
-    public IEnumerable<object> EventsToPersist { get; private set; }
+    public IEnumerable<object> EventsToPersist => _commandExecutionContext.RaisedEvents;
     internal bool HasBeenSaved { get; set; }
 
-    public TResult ExecuteCommand<TResult>(Func<TAggregateState, TResult> commandExecutor)
+    public TResult ExecuteCommand<TResult>(Func<TAggregate, TResult> commandExecutor)
     {
-        var commandResultType = _aggregateType.GetCommandResultType<TResult>();
-        var result = commandExecutor(AggregateState);
-        var (updatedState, events) = commandResultType.GetUpdatedStateAndEvents(result, AggregateState);
-        AggregateState = updatedState;
-        EventsToPersist = EventsToPersist.Concat(events);
-
-        return result;
+        return _commandExecutionContext.ExecuteCommand(commandExecutor);
     }
 
-    public void ExecuteCommand(Action<TAggregateState> commandExecutor)
+    public void ExecuteCommand(Action<TAggregate> commandExecutor)
     {
-        var commandResultType = _aggregateType.GetVoidCommandResultType();
-        commandExecutor(AggregateState);
-        var (updatedState, events) = commandResultType.GetUpdatedStateAndEvents(AggregateState);
-        AggregateState = updatedState;
-        EventsToPersist = EventsToPersist.Concat(events);
+        _commandExecutionContext.ExecuteCommand(commandExecutor);
     }
 }
