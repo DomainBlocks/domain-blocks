@@ -9,9 +9,18 @@ public class ModelBuilder
     private readonly List<IAggregateTypeBuilder> _aggregateTypeBuilders = new();
 
     public ModelBuilder Aggregate<TAggregate, TEventBase>(
-        Action<AggregateTypeBuilder<TAggregate, TEventBase>> builderAction) where TEventBase : class
+        Action<MutableAggregateTypeBuilder<TAggregate, TEventBase>> builderAction) where TEventBase : class
     {
-        var builder = new AggregateTypeBuilder<TAggregate, TEventBase>();
+        var builder = new MutableAggregateTypeBuilder<TAggregate, TEventBase>();
+        _aggregateTypeBuilders.Add(builder);
+        builderAction(builder);
+        return this;
+    }
+    
+    public ModelBuilder ImmutableAggregate<TAggregate, TEventBase>(
+        Action<ImmutableAggregateTypeBuilder<TAggregate, TEventBase>> builderAction) where TEventBase : class
+    {
+        var builder = new ImmutableAggregateTypeBuilder<TAggregate, TEventBase>();
         _aggregateTypeBuilders.Add(builder);
         builderAction(builder);
         return this;

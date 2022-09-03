@@ -38,7 +38,7 @@ public class Startup
             modelBuilder =>
             {
                 modelBuilder
-                    .Aggregate<ShoppingCartState, IDomainEvent>(aggregate =>
+                    .ImmutableAggregate<ShoppingCartState, IDomainEvent>(aggregate =>
                     {
                         aggregate
                             .InitialState(() => new ShoppingCartState())
@@ -46,12 +46,15 @@ public class Startup
                             .WithStreamKey(id => $"shoppingCart-{id}")
                             .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");
 
-                        aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
-
                         aggregate
-                            .CommandResult<IEnumerable<IDomainEvent>>()
-                            .WithEventsFrom((res, _) => res)
-                            .ApplyEvents();
+                            .ApplyEventsWith(ShoppingCartFunctions.Apply)
+                            .WithRaisedEventsFrom(commandReturnTypes =>
+                            {
+                                commandReturnTypes
+                                    .CommandReturnType<IEnumerable<IDomainEvent>>()
+                                    .WithEventsFrom(x => x)
+                                    .ApplyEvents();
+                            });
 
                         aggregate.Event<ShoppingCartCreated>().HasName(ShoppingCartCreated.EventName);
                         aggregate.Event<ItemAddedToShoppingCart>().HasName(ItemAddedToShoppingCart.EventName);

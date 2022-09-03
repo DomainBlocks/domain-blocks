@@ -21,7 +21,7 @@ public class ShoppingCartInfrastructureTests : EventStoreIntegrationTest
     public async Task PersistedRoundTripTest()
     {
         var model = new ModelBuilder()
-            .Aggregate<ShoppingCartState, IDomainEvent>(aggregate =>
+            .ImmutableAggregate<ShoppingCartState, IDomainEvent>(aggregate =>
             {
                 aggregate
                     .InitialState(() => new ShoppingCartState())
@@ -29,12 +29,15 @@ public class ShoppingCartInfrastructureTests : EventStoreIntegrationTest
                     .WithStreamKey(id => $"shoppingCart-{id}")
                     .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");
 
-                aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
-
                 aggregate
-                    .CommandResult<IEnumerable<IDomainEvent>>()
-                    .WithEventsFrom((res, _) => res)
-                    .ApplyEvents();
+                    .ApplyEventsWith(ShoppingCartFunctions.Apply)
+                    .WithRaisedEventsFrom(commandReturnTypes =>
+                    {
+                        commandReturnTypes
+                            .CommandReturnType<IEnumerable<IDomainEvent>>()
+                            .WithEventsFrom(x => x)
+                            .ApplyEvents();
+                    });
 
                 aggregate.Event<ShoppingCartCreated>().HasName(ShoppingCartCreated.EventName);
                 aggregate.Event<ItemAddedToShoppingCart>().HasName(ItemAddedToShoppingCart.EventName);
@@ -61,7 +64,7 @@ public class ShoppingCartInfrastructureTests : EventStoreIntegrationTest
         var command2 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "Second Item");
         loadedAggregate.ExecuteCommand(x => ShoppingCartFunctions.Execute(x, command2));
 
-        Assert.That(loadedAggregate.AggregateState.Id.HasValue, "Expected ShoppingCart ID to be set");
+        Assert.That(loadedAggregate.State.Id.HasValue, "Expected ShoppingCart ID to be set");
 
         var eventsToPersist = loadedAggregate.EventsToPersist.ToList();
 
@@ -71,7 +74,7 @@ public class ShoppingCartInfrastructureTests : EventStoreIntegrationTest
         Assert.That(nextEventVersion, Is.EqualTo(expectedNextEventVersion));
 
         var loadedData = await aggregateRepository.LoadAggregate<ShoppingCartState>(shoppingCartId.ToString());
-        var loadedState = loadedData.AggregateState;
+        var loadedState = loadedData.State;
         var loadedVersion = loadedData.Version;
 
         // Check the loaded aggregate root state.

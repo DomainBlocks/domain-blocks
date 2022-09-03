@@ -28,7 +28,7 @@ namespace DomainBlocks.EventStore.Testing
 
             var result = await Scenario.LoadLatestStateFromSnapshot();
 
-            Assert.That(result.AggregateState.TotalNumber, Is.EqualTo(100));
+            Assert.That(result.State.TotalNumber, Is.EqualTo(100));
             Assert.That(result.SnapshotVersion, Is.EqualTo(99));
             Assert.That(result.EventsLoadedCount, Is.EqualTo(0));
         }
@@ -42,7 +42,7 @@ namespace DomainBlocks.EventStore.Testing
 
             var result = await Scenario.LoadLatestStateFromSnapshot();
 
-            Assert.That(result.AggregateState.TotalNumber, Is.EqualTo(110));
+            Assert.That(result.State.TotalNumber, Is.EqualTo(110));
             Assert.That(result.SnapshotVersion, Is.EqualTo(99));
             Assert.That(result.EventsLoadedCount, Is.EqualTo(10));
         }
@@ -57,7 +57,7 @@ namespace DomainBlocks.EventStore.Testing
 
             var result = await Scenario.LoadLatestStateFromSnapshot();
 
-            Assert.That(result.AggregateState.TotalNumber, Is.EqualTo(110));
+            Assert.That(result.State.TotalNumber, Is.EqualTo(110));
             Assert.That(result.SnapshotVersion, Is.EqualTo(109));
             Assert.That(result.EventsLoadedCount, Is.EqualTo(0));
         }

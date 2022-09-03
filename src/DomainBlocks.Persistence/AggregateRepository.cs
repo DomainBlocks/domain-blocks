@@ -34,17 +34,17 @@ public sealed class AggregateRepository<TRawData> : IAggregateRepository
         if (id == null) throw new ArgumentNullException(nameof(id));
 
         var aggregateType = _model.GetAggregateType<TAggregateState>();
-        var initialAggregateState = aggregateType.CreateNew();
+        var initialState = aggregateType.CreateNew();
 
         // If we choose to load solely from an event stream, then we need some initial state
         // onto which to apply the events.
         // TODO (DS): This logic seems wrong, as initial state is never null.
-        if (initialAggregateState == null && loadStrategy == AggregateLoadStrategy.UseEventStream)
+        if (initialState == null && loadStrategy == AggregateLoadStrategy.UseEventStream)
         {
-            throw new ArgumentNullException(nameof(initialAggregateState));
+            throw new ArgumentNullException(nameof(initialState));
         }
 
-        var stateToAppendEventsTo = initialAggregateState;
+        var stateToAppendEventsTo = initialState;
 
         var streamName = aggregateType.SelectStreamKeyFromId(id);
         long loadStartPosition = 0;
@@ -92,7 +92,7 @@ public sealed class AggregateRepository<TRawData> : IAggregateRepository
 
         var newVersion = loadStartPosition + result.EventCount - 1;
 
-        return LoadedAggregate.Create(result.State, id, newVersion, snapshotVersion, result.EventCount, aggregateType);
+        return LoadedAggregate.Create(result.State, aggregateType, id, newVersion, snapshotVersion, result.EventCount);
     }
 
     public async Task<long> SaveAggregate<TAggregateState>(
@@ -117,10 +117,10 @@ public sealed class AggregateRepository<TRawData> : IAggregateRepository
 
         if (snapshotPredicate(loadedAggregate))
         {
-            var snapshotKey = aggregateType.SelectSnapshotKey(loadedAggregate.AggregateState);
+            var snapshotKey = aggregateType.SelectSnapshotKey(loadedAggregate.State);
 
             await _snapshotRepository.SaveSnapshotAsync(
-                snapshotKey, loadedAggregate.Version, loadedAggregate.AggregateState);
+                snapshotKey, loadedAggregate.Version, loadedAggregate.State);
         }
 
         return newVersion;

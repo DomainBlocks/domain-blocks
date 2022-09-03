@@ -99,7 +99,7 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
         // TODO: Copied from ShoppingCartInfrastructureTests for the moment.
         // We should refactor this to allow better sharing
         var model = new ModelBuilder()
-            .Aggregate<ShoppingCartState, IDomainEvent>(aggregate =>
+            .ImmutableAggregate<ShoppingCartState, IDomainEvent>(aggregate =>
             {
                 aggregate
                     .InitialState(() => new ShoppingCartState())
@@ -107,11 +107,15 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
                     .WithStreamKey(id => $"shoppingCart-{id}")
                     .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");
 
-                aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
-
                 aggregate
-                    .CommandResult<IEnumerable<IDomainEvent>>()
-                    .WithEventsFrom((res, _) => res);
+                    .ApplyEventsWith(ShoppingCartFunctions.Apply)
+                    .WithRaisedEventsFrom(commandReturnTypes =>
+                    {
+                        commandReturnTypes
+                            .CommandReturnType<IEnumerable<IDomainEvent>>()
+                            .WithEventsFrom(x => x)
+                            .ApplyEvents();
+                    });
 
                 aggregate.Event<ShoppingCartCreated>().HasName(ShoppingCartCreated.EventName);
                 aggregate.Event<ItemAddedToShoppingCart>().HasName(ItemAddedToShoppingCart.EventName);
@@ -137,7 +141,7 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
         var command2 = new AddItemToShoppingCart(shoppingCartId, secondItemId, "Second Item");
         loadedAggregate.ExecuteCommand(x => ShoppingCartFunctions.Execute(x, command2));
 
-        Assert.That(loadedAggregate.AggregateState.Id.HasValue, "Expected ShoppingCart ID to be set");
+        Assert.That(loadedAggregate.State.Id.HasValue, "Expected ShoppingCart ID to be set");
 
         var command3 = new RemoveItemFromShoppingCart(secondItemId, shoppingCartId);
         loadedAggregate.ExecuteCommand(x => ShoppingCartFunctions.Execute(x, command3));
