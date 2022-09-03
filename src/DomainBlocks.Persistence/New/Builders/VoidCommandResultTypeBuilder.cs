@@ -11,6 +11,7 @@ public interface IVoidCommandResultUpdatedStateSelectorBuilder<TAggregate>
 public class VoidCommandResultTypeBuilder<TAggregate, TEventBase> :
     ICommandResultTypeBuilder,
     IVoidCommandResultUpdatedStateSelectorBuilder<TAggregate>
+    where TEventBase : class
 {
     private Func<TAggregate, TAggregate> _updatedStateSelector;
     private Func<TAggregate, IEnumerable<TEventBase>> _eventsSelector;

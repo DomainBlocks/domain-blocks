@@ -5,14 +5,12 @@ namespace DomainBlocks.Persistence;
 
 public interface IAggregateRepository
 {
-    // TODO (DS): Type erase TEventBase.
-    Task<LoadedAggregate<TAggregateState, TEventBase>> LoadAggregate<TAggregateState, TEventBase>(
-        string id,
-        AggregateLoadStrategy loadStrategy = AggregateLoadStrategy.PreferSnapshot);
+    Task<LoadedAggregate<TAggregateState>> LoadAggregate<TAggregateState>(
+        string id, AggregateLoadStrategy loadStrategy = AggregateLoadStrategy.PreferSnapshot);
 
-    Task<long> SaveAggregate<TAggregateState, TEventBase>(
-        LoadedAggregate<TAggregateState, TEventBase> loadedAggregate,
-        Func<LoadedAggregate<TAggregateState, TEventBase>, bool> snapshotPredicate = null);
+    Task<long> SaveAggregate<TAggregateState>(
+        LoadedAggregate<TAggregateState> loadedAggregate,
+        Func<LoadedAggregate<TAggregateState>, bool> snapshotPredicate = null);
 
-    Task SaveSnapshot<TAggregateState, TEventBase>(VersionedAggregateState<TAggregateState> versionedState);
+    Task SaveSnapshot<TAggregateState>(VersionedAggregateState<TAggregateState> versionedState);
 }

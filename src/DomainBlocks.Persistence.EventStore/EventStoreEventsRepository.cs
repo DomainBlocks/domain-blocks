@@ -22,7 +22,8 @@ namespace DomainBlocks.Persistence.EventStore
             Log.LogDebug("EventStoreEventsRepository created using {SerializerType} serializer", serializer.GetType().Name);
         }
 
-        public async Task<long> SaveEventsAsync<TEvent>(string streamName, long expectedStreamVersion, IEnumerable<TEvent> events)
+        public async Task<long> SaveEventsAsync(
+            string streamName, long expectedStreamVersion, IEnumerable<object> events)
         {
             if (streamName == null) throw new ArgumentNullException(nameof(streamName));
             if (events == null) throw new ArgumentNullException(nameof(events));
@@ -76,10 +77,10 @@ namespace DomainBlocks.Persistence.EventStore
             return writeResult.NextExpectedStreamRevision.ToInt64();
         }
 
-        public async Task<IList<TEvent>> LoadEventsAsync<TEvent>(string streamName, long startPosition = 0, Action<IEventPersistenceData<ReadOnlyMemory<byte>>> onEventError = null)
+        public async Task<IList<object>> LoadEventsAsync(string streamName, long startPosition = 0, Action<IEventPersistenceData<ReadOnlyMemory<byte>>> onEventError = null)
         {
             if (streamName == null) throw new ArgumentNullException(nameof(streamName));
-            var events = new List<TEvent>();
+            var events = new List<object>();
 
             try
             {
@@ -99,8 +100,8 @@ namespace DomainBlocks.Persistence.EventStore
                 {
                     try
                     {
-                        events.Add(_serializer.DeserializeEvent<TEvent>(resolvedEvent.OriginalEvent.Data,
-                                                                        resolvedEvent.OriginalEvent.EventType));
+                        events.Add(_serializer.DeserializeEvent(
+                            resolvedEvent.OriginalEvent.Data, resolvedEvent.OriginalEvent.EventType));
                     }
                     catch (EventDeserializeException e)
                     {

@@ -3,7 +3,12 @@ using System.Collections.Generic;
 
 namespace DomainBlocks.Persistence.New;
 
-public class VoidCommandResultType<TAggregate, TEventBase> : ICommandResultType
+public interface IVoidCommandResultType<TAggregate> : ICommandResultType
+{
+    public (TAggregate, IEnumerable<object>) GetUpdatedStateAndEvents(TAggregate aggregate);
+}
+
+public class VoidCommandResultType<TAggregate, TEventBase> : IVoidCommandResultType<TAggregate> where TEventBase : class
 {
     private readonly Func<TAggregate, TAggregate> _updatedStateSelector;
     private readonly Func<TAggregate, IEnumerable<TEventBase>> _eventsSelector;
@@ -22,5 +27,10 @@ public class VoidCommandResultType<TAggregate, TEventBase> : ICommandResultType
         var updatedState = _updatedStateSelector(aggregate);
         var events = _eventsSelector(aggregate);
         return (updatedState, events);
+    }
+
+    (TAggregate, IEnumerable<object>) IVoidCommandResultType<TAggregate>.GetUpdatedStateAndEvents(TAggregate aggregate)
+    {
+        return GetUpdatedStateAndEvents(aggregate);
     }
 }

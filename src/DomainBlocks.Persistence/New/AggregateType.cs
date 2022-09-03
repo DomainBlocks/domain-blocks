@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace DomainBlocks.Persistence.New;
 
-public class AggregateType<TAggregate, TEventBase> : IAggregateType
+public class AggregateType<TAggregate, TEventBase> : IAggregateType<TAggregate> where TEventBase : class
 {
     private readonly Func<TAggregate> _factory;
     private readonly Func<TAggregate, string> _idSelector;
@@ -43,6 +43,8 @@ public class AggregateType<TAggregate, TEventBase> : IAggregateType
     public string SelectStreamKey(TAggregate aggregate) => _idToStreamKeySelector(SelectId(aggregate));
     public string SelectSnapshotKey(TAggregate aggregate) => _idToSnapshotKeySelector(SelectId(aggregate));
 
+    public TAggregate ApplyEvent(TAggregate aggregate, TEventBase @event) => _eventApplier(aggregate, @event);
+    
     public CommandResultType<TAggregate, TEventBase, TCommandResult> GetCommandResultType<TCommandResult>()
     {
         return (CommandResultType<TAggregate, TEventBase, TCommandResult>)_commandResultTypes[typeof(TCommandResult)];
@@ -53,5 +55,18 @@ public class AggregateType<TAggregate, TEventBase> : IAggregateType
         return (VoidCommandResultType<TAggregate, TEventBase>)_commandResultTypes[typeof(void)];
     }
 
-    public TAggregate ApplyEvent(TAggregate aggregate, TEventBase @event) => _eventApplier(aggregate, @event);
+    TAggregate IAggregateType<TAggregate>.ApplyEvent(TAggregate aggregate, object @event)
+    {
+        return ApplyEvent(aggregate, (TEventBase)@event);
+    }
+
+    ICommandResultType<TAggregate, TCommandResult> IAggregateType<TAggregate>.GetCommandResultType<TCommandResult>()
+    {
+        return GetCommandResultType<TCommandResult>();
+    }
+
+    IVoidCommandResultType<TAggregate> IAggregateType<TAggregate>.GetVoidCommandResultType()
+    {
+        return GetVoidCommandResultType();
+    }
 }
