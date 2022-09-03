@@ -9,7 +9,7 @@ namespace DomainBlocks.Persistence
     {
         Task<long> SaveEventsAsync(string streamName, long expectedStreamVersion, IEnumerable<object> events);
         
-        Task<IList<object>> LoadEventsAsync(
+        IAsyncEnumerable<object> LoadEventsAsync(
             string streamName, long startPosition = 0, Action<IEventPersistenceData<TRawData>> onEventError = null);
     }
 }

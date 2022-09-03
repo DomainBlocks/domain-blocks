@@ -77,46 +77,19 @@ namespace DomainBlocks.Persistence.EventStore
             return writeResult.NextExpectedStreamRevision.ToInt64();
         }
 
-        public async Task<IList<object>> LoadEventsAsync(string streamName, long startPosition = 0, Action<IEventPersistenceData<ReadOnlyMemory<byte>>> onEventError = null)
+        public async IAsyncEnumerable<object> LoadEventsAsync(
+            string streamName,
+            long startPosition = 0,
+            Action<IEventPersistenceData<ReadOnlyMemory<byte>>> onEventError = null)
         {
             if (streamName == null) throw new ArgumentNullException(nameof(streamName));
-            var events = new List<object>();
+
+            EventStoreClient.ReadStreamResult readStreamResult;
 
             try
             {
-                var readStreamResult =
-                    _client.ReadStreamAsync(Direction.Forwards,
-                                            streamName,
-                                            StreamPosition.FromInt64(startPosition));
-
-                var readState = await readStreamResult.ReadState;
-
-                if (readState == ReadState.StreamNotFound)
-                {
-                    return events;
-                }
-
-                await foreach (var resolvedEvent in readStreamResult)
-                {
-                    try
-                    {
-                        events.Add(_serializer.DeserializeEvent(
-                            resolvedEvent.OriginalEvent.Data, resolvedEvent.OriginalEvent.EventType));
-                    }
-                    catch (EventDeserializeException e)
-                    {
-                        if (onEventError == null)
-                        {
-                            Log.LogWarning(e,
-                                           "Error deserializing event and no error handler set up. This may cause data inconsistencies");
-                        }
-                        else
-                        {
-                            onEventError(EventStoreEventPersistenceData.FromRecordedEvent(resolvedEvent.Event));
-                            Log.LogInformation(e, "Error deserializing event. Calling onEventError handler");
-                        }
-                    }
-                }
+                readStreamResult = _client.ReadStreamAsync(
+                    Direction.Forwards, streamName, StreamPosition.FromInt64(startPosition));
             }
             catch (Exception ex)
             {
@@ -124,15 +97,51 @@ namespace DomainBlocks.Persistence.EventStore
                 throw;
             }
 
-            return events;
+            var readState = await readStreamResult.ReadState;
+            if (readState == ReadState.StreamNotFound)
+            {
+                yield break;
+            }
+
+            await foreach (var resolvedEvent in readStreamResult)
+            {
+                object deserializedEvent;
+
+                try
+                {
+                    deserializedEvent = _serializer.DeserializeEvent(
+                        resolvedEvent.OriginalEvent.Data, resolvedEvent.OriginalEvent.EventType);
+                }
+                catch (EventDeserializeException e)
+                {
+                    if (onEventError == null)
+                    {
+                        Log.LogWarning(e,
+                            "Error deserializing event and no error handler set up. This may cause data inconsistencies");
+                    }
+                    else
+                    {
+                        onEventError(EventStoreEventPersistenceData.FromRecordedEvent(resolvedEvent.Event));
+                        Log.LogInformation(e, "Error deserializing event. Calling onEventError handler");
+                    }
+
+                    continue;
+                }
+                catch (Exception ex)
+                {
+                    Log.LogError(ex, "Unable to load events from {StreamName}", streamName);
+                    throw;
+                }
+                
+                yield return deserializedEvent;
+            }
         }
 
         private static StreamRevision MapStreamVersionToEventStoreStreamRevision(long streamVersion)
         {
             return streamVersion switch
             {
-                StreamVersion.NewStream => StreamRevision.None,
-                _ => StreamRevision.FromInt64(streamVersion)
+                StreamVersion.NewStream => StreamRevision.None, _ => StreamRevision.FromInt64(streamVersion)
             };
         }
     }
