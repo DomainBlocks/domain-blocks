@@ -76,11 +76,23 @@ public sealed class AggregateRepository<TRawData> : IAggregateRepository
                                                 "was supplied onto which to append events");
         }
 
-        var events = await _eventsRepository.LoadEventsAsync(streamName, loadStartPosition);
-        var state = events.Aggregate(stateToAppendEventsTo, aggregateType.ApplyEvent);
-        var newVersion = loadStartPosition + events.Count - 1;
+        var events = _eventsRepository.LoadEventsAsync(streamName, loadStartPosition);
 
-        return LoadedAggregate.Create(state, id, newVersion, snapshotVersion, events.Count, aggregateType);
+        var result = await events.AggregateAsync(
+            new
+            {
+                State = stateToAppendEventsTo,
+                EventCount = 0
+            },
+            (acc, next) => new
+            {
+                State = aggregateType.ApplyEvent(acc.State, next),
+                EventCount = acc.EventCount + 1
+            });
+
+        var newVersion = loadStartPosition + result.EventCount - 1;
+
+        return LoadedAggregate.Create(result.State, id, newVersion, snapshotVersion, result.EventCount, aggregateType);
     }
 
     public async Task<long> SaveAggregate<TAggregateState>(
