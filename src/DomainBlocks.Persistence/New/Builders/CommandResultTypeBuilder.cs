@@ -13,6 +13,7 @@ public interface ICommandResultUpdatedStateSelectorBuilder<TAggregate, out TComm
 public class CommandResultTypeBuilder<TAggregate, TEventBase, TCommandResult> :
     ICommandResultTypeBuilder,
     ICommandResultUpdatedStateSelectorBuilder<TAggregate, TCommandResult>
+    where TEventBase : class
 {
     private readonly IEventApplierSource<TAggregate, TEventBase> _eventApplierSource;
     private Func<TCommandResult, TAggregate, IEnumerable<TEventBase>> _eventsSelector;
@@ -61,7 +62,7 @@ public class CommandResultTypeBuilder<TAggregate, TEventBase, TCommandResult> :
 
         return new CommandResultType<TAggregate, TEventBase, TCommandResult>(strategy);
     }
-    
+
     private enum ApplyEventsBehavior
     {
         ApplyAfterEnumerating,

@@ -30,6 +30,7 @@ public class AggregateTypeBuilder<TAggregate, TEventBase> :
     IIdToStreamKeySelectorBuilder,
     IIdToSnapshotKeySelectorBuilder,
     IEventApplierSource<TAggregate, TEventBase>
+    where TEventBase : class
 {
     private Func<TAggregate> _factory;
     private Func<TAggregate, string> _idSelector;

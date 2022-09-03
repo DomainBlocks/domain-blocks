@@ -7,7 +7,9 @@ namespace DomainBlocks.Persistence
 {
     public interface IEventsRepository<out TRawData>
     {
-        Task<long> SaveEventsAsync<TEvent>(string streamName, long expectedStreamVersion, IEnumerable<TEvent> events);
-        Task<IList<TEvent>> LoadEventsAsync<TEvent>(string streamName, long startPosition = 0, Action<IEventPersistenceData<TRawData>> onEventError = null);
+        Task<long> SaveEventsAsync(string streamName, long expectedStreamVersion, IEnumerable<object> events);
+        
+        Task<IList<object>> LoadEventsAsync(
+            string streamName, long startPosition = 0, Action<IEventPersistenceData<TRawData>> onEventError = null);
     }
 }

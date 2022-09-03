@@ -91,10 +91,10 @@ public class LoadedAggregateTests
         Assert.That(eventsToPersist[0], Is.TypeOf<ValueChangedEvent>());
     }
 
-    private static LoadedAggregate<TAggregate, object> CreateLoadedAggregate<TAggregate>(
-        TAggregate initialState, AggregateType<TAggregate, object> aggregateType)
+    private static LoadedAggregate<TAggregate> CreateLoadedAggregate<TAggregate>(
+        TAggregate initialState, IAggregateType<TAggregate> aggregateType)
     {
-        return new LoadedAggregate<TAggregate, object>(initialState, "id", -1, null, 0, aggregateType);
+        return new LoadedAggregate<TAggregate>(initialState, "id", -1, null, 0, aggregateType);
     }
 
     private class ValueChangedEvent

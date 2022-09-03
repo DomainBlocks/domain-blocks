@@ -7,22 +7,22 @@ namespace DomainBlocks.Persistence;
 
 internal static class LoadedAggregate
 {
-    internal static LoadedAggregate<TAggregateState, TEventBase> Create<TAggregateState, TEventBase>(
+    internal static LoadedAggregate<TAggregateState> Create<TAggregateState>(
         TAggregateState aggregateState,
         string id,
         long version,
         long? snapshotVersion,
         long eventsLoaded,
-        AggregateType<TAggregateState, TEventBase> aggregateType)
+        IAggregateType<TAggregateState> aggregateType)
     {
-        return new LoadedAggregate<TAggregateState, TEventBase>(
+        return new LoadedAggregate<TAggregateState>(
             aggregateState, id, version, snapshotVersion, eventsLoaded, aggregateType);
     }
 }
 
-public sealed class LoadedAggregate<TAggregateState, TEventBase>
+public sealed class LoadedAggregate<TAggregateState>
 {
-    private readonly AggregateType<TAggregateState, TEventBase> _aggregateType;
+    private readonly IAggregateType<TAggregateState> _aggregateType;
 
     internal LoadedAggregate(
         TAggregateState aggregateState,
@@ -30,7 +30,7 @@ public sealed class LoadedAggregate<TAggregateState, TEventBase>
         long version,
         long? snapshotVersion,
         long eventsLoadedCount,
-        AggregateType<TAggregateState, TEventBase> aggregateType)
+        IAggregateType<TAggregateState> aggregateType)
     {
         if (string.IsNullOrWhiteSpace(id))
             throw new ArgumentException("Value cannot be null or whitespace.", nameof(id));
@@ -42,7 +42,7 @@ public sealed class LoadedAggregate<TAggregateState, TEventBase>
         Version = version;
         SnapshotVersion = snapshotVersion;
         EventsLoadedCount = eventsLoadedCount;
-        EventsToPersist = Enumerable.Empty<TEventBase>();
+        EventsToPersist = Enumerable.Empty<object>();
     }
 
     public TAggregateState AggregateState { get; private set; }
@@ -50,7 +50,7 @@ public sealed class LoadedAggregate<TAggregateState, TEventBase>
     public long Version { get; }
     public long? SnapshotVersion { get; }
     public long EventsLoadedCount { get; }
-    public IEnumerable<TEventBase> EventsToPersist { get; private set; }
+    public IEnumerable<object> EventsToPersist { get; private set; }
     internal bool HasBeenSaved { get; set; }
 
     public TResult ExecuteCommand<TResult>(Func<TAggregateState, TResult> commandExecutor)

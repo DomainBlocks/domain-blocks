@@ -22,7 +22,8 @@ namespace DomainBlocks.Persistence.SqlStreamStore
             _serializer = serializer;
         }
 
-        public async Task<long> SaveEventsAsync<TEvent>(string streamName, long expectedStreamVersion, IEnumerable<TEvent> events)
+        public async Task<long> SaveEventsAsync(
+            string streamName, long expectedStreamVersion, IEnumerable<object> events)
         {
             if (streamName == null) throw new ArgumentNullException(nameof(streamName));
             if (events == null) throw new ArgumentNullException(nameof(events));
@@ -78,11 +79,12 @@ namespace DomainBlocks.Persistence.SqlStreamStore
             return appendResult.CurrentVersion;
         }
 
-        public async Task<IList<TEvent>> LoadEventsAsync<TEvent>(string streamName, long startPosition = 0, Action<IEventPersistenceData<string>> onEventError = null)
+        public async Task<IList<object>> LoadEventsAsync(
+            string streamName, long startPosition = 0, Action<IEventPersistenceData<string>> onEventError = null)
         {
             if (streamName == null) throw new ArgumentNullException(nameof(streamName));
             const int readPageSize = 4096;
-            var events = new List<TEvent>();
+            var events = new List<object>();
             var currentPagePosition = (int)startPosition;
 
             try
@@ -90,9 +92,8 @@ namespace DomainBlocks.Persistence.SqlStreamStore
                 ReadStreamPage readStreamPage;
                 do
                 {
-                    readStreamPage = await _streamStore.ReadStreamForwards(streamName,
-                                                                           currentPagePosition,
-                                                                           readPageSize);
+                    readStreamPage = await _streamStore.ReadStreamForwards(
+                        streamName, currentPagePosition, readPageSize);
 
                     if (readStreamPage.Status == PageReadStatus.StreamNotFound)
                     {
@@ -104,15 +105,15 @@ namespace DomainBlocks.Persistence.SqlStreamStore
                         try
                         {
                             var jsonData = await message.GetJsonData();
-                            events.Add(_serializer.DeserializeEvent<TEvent>(jsonData,
-                                                                            message.Type));
+                            events.Add(_serializer.DeserializeEvent(jsonData, message.Type));
                         }
                         catch (EventDeserializeException e)
                         {
                             if (onEventError == null)
                             {
-                                Log.LogWarning(e,
-                                               "Error deserializing event and no error handler set up. This may cause data inconsistencies");
+                                Log.LogWarning(
+                                    e, "Error deserializing event and no error handler set up. " +
+                                       "This may cause data inconsistencies");
                             }
                             else
                             {

@@ -58,28 +58,22 @@ namespace DomainBlocks.Serialization.Json
                                                           eventMetadata);
         }
 
-        public TEvent DeserializeEvent<TEvent>(TRawData eventData, string eventName, Type typeOverride = null)
+        public object DeserializeEvent(TRawData eventData, string eventName, Type typeOverride = null)
         {
             if (eventData == null) throw new ArgumentNullException(nameof(eventData));
             if (eventName == null) throw new ArgumentNullException(nameof(eventName));
+            
             var eventType = typeOverride ?? _eventNameMap.GetEventType(eventName);
 
             try
             {
                 var evt = _adapter.Deserialize(eventData, eventType, _options);
-
-                if (evt is TEvent typedEvent)
-                {
-                    return typedEvent;
-                }
+                return evt;
             }
             catch (Exception e)
             {
                 throw new EventDeserializeException("Unable to deserialize event", e);
             }
-
-            var runTimeType = typeof(TEvent);
-            throw new InvalidEventTypeException(eventName, runTimeType.FullName);
         }
 
         public EventMetadata DeserializeMetadata(TRawData rawMetadata)

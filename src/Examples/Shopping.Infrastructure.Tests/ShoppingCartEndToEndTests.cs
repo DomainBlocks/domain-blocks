@@ -128,9 +128,7 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
         var aggregateRepository = AggregateRepository.Create(eventsRepository, snapshotRepository, model);
 
         // Execute the first command.
-        var loadedAggregate =
-            await aggregateRepository.LoadAggregate<ShoppingCartState, IDomainEvent>(shoppingCartId.ToString());
-
+        var loadedAggregate = await aggregateRepository.LoadAggregate<ShoppingCartState>(shoppingCartId.ToString());
         var command1 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "First Item");
         loadedAggregate.ExecuteCommand(x => ShoppingCartFunctions.Execute(x, command1));
 

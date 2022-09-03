@@ -7,22 +7,31 @@ namespace DomainBlocks.Persistence.New;
 
 public class Model
 {
-    // Second type is the type of the event - but we don't need this as part of the key, as we'll never use a different
-    // type of event for a given aggregate type. This is an interesting idea, as it means we can hide the event type in
-    // the aggregate repository.
-    private readonly IReadOnlyDictionary<(Type, Type), IAggregateType> _aggregateConfigs;
+    private readonly IReadOnlyDictionary<Type, IAggregateType> _aggregateTypes;
+    private readonly EventNameMap _eventNameMap;
 
-    public Model(IEnumerable<IAggregateType> aggregateTypes, EventNameMap eventNameMap)
+    public Model(IEnumerable<IAggregateType> aggregateTypes)
     {
-        EventNameMap = eventNameMap;
-        _aggregateConfigs = aggregateTypes.ToDictionary(x => (x.ClrType, x.EventBaseType));
+        _aggregateTypes = aggregateTypes.ToDictionary(x => x.ClrType);
+
+        // Build event name map from all aggregate types.
+        var allEventTypes = _aggregateTypes.Values.SelectMany(x => x.EventTypes);
+        _eventNameMap = new EventNameMap();
+        foreach (var eventType in allEventTypes)
+        {
+            _eventNameMap.Add(eventType.EventName, eventType.ClrType);
+        }
     }
 
-    public EventNameMap EventNameMap { get; }
+    public IEventNameMap EventNameMap => _eventNameMap;
 
-    public AggregateType<TAggregate, TEventBase> GetAggregateType<TAggregate, TEventBase>()
+    public AggregateType<TAggregate, TEventBase> GetAggregateType<TAggregate, TEventBase>() where TEventBase : class
     {
-        var key = (typeof(TAggregate), typeof(TEventBase));
-        return (AggregateType<TAggregate, TEventBase>)_aggregateConfigs[key];
+        return (AggregateType<TAggregate, TEventBase>)_aggregateTypes[typeof(TAggregate)];
+    }
+    
+    public IAggregateType<TAggregate> GetAggregateType<TAggregate>()
+    {
+        return (IAggregateType<TAggregate>)_aggregateTypes[typeof(TAggregate)];
     }
 }

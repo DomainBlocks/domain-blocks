@@ -12,8 +12,8 @@ namespace DomainBlocks.EventStore.Testing
     {
         private EventStoreIntegrationTest _test;
         private AggregateRepository<ReadOnlyMemory<byte>> _aggregateRepository;
-        private LoadedAggregate<TestAggregateState, object> _loadedAggregate;
-        private Guid _id;
+        private LoadedAggregate<TestAggregateState> _loadedAggregate;
+        private readonly Guid _id;
         private long _aggregateVersion = StreamVersion.NewStream;
 
         public SnapshotScenario()
@@ -41,30 +41,28 @@ namespace DomainBlocks.EventStore.Testing
 
         public async Task SaveSnapshot()
         {
-            await _aggregateRepository.SaveSnapshot<TestAggregateState, object>(
-                VersionedAggregateState.Create(AggregateState, _aggregateVersion));
+            await _aggregateRepository.SaveSnapshot(VersionedAggregateState.Create(AggregateState, _aggregateVersion));
         }
 
-        public async Task<LoadedAggregate<TestAggregateState, object>> LoadLatestStateFromEvents()
+        public async Task<LoadedAggregate<TestAggregateState>> LoadLatestStateFromEvents()
         {
             return await LoadLatestState(AggregateLoadStrategy.UseEventStream);
         }
 
-        public async Task<LoadedAggregate<TestAggregateState, object>> LoadLatestStateFromSnapshot()
+        public async Task<LoadedAggregate<TestAggregateState>> LoadLatestStateFromSnapshot()
         {
             return await LoadLatestState(AggregateLoadStrategy.UseSnapshot);
         }
 
-        public async Task<LoadedAggregate<TestAggregateState, object>> LoadLatestStateFromSnapshotIfAvailable()
+        public async Task<LoadedAggregate<TestAggregateState>> LoadLatestStateFromSnapshotIfAvailable()
         {
             return await LoadLatestState(AggregateLoadStrategy.PreferSnapshot);
         }
 
-        private async Task<LoadedAggregate<TestAggregateState, object>> LoadLatestState(
-            AggregateLoadStrategy loadStrategy)
+        private async Task<LoadedAggregate<TestAggregateState>> LoadLatestState(AggregateLoadStrategy loadStrategy)
         {
             var loadedAggregate =
-                await _aggregateRepository.LoadAggregate<TestAggregateState, object>(_id.ToString(), loadStrategy);
+                await _aggregateRepository.LoadAggregate<TestAggregateState>(_id.ToString(), loadStrategy);
 
             _aggregateVersion = loadedAggregate.Version;
             AggregateState = loadedAggregate.AggregateState;
