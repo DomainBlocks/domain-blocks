@@ -61,7 +61,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainBlocks.Projections.En
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shopping.ReadModel", "Examples\Shopping.ReadModel\Shopping.ReadModel.csproj", "{E99B1405-331E-49F2-ACB5-7CA04775DEDE}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shopping.Events", "Examples\Shopping.Events\Shopping.Events.csproj", "{BC5E2846-A445-4C7D-AF92-EA5DF375640A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shopping.Domain.Events", "Examples\Shopping.Domain.Events\Shopping.Domain.Events.csproj", "{BC5E2846-A445-4C7D-AF92-EA5DF375640A}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Asp.Net", "Asp.Net", "{58CD75DE-F1E9-4BBD-8945-0BB392EDC8EE}"
 EndProject
