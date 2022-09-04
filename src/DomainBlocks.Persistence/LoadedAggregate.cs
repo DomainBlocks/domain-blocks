@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using DomainBlocks.Persistence.New;
+using DomainBlocks.Core;
 
 namespace DomainBlocks.Persistence;
 

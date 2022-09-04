@@ -1,5 +1,5 @@
 ﻿using System;
-using DomainBlocks.Persistence.New.Builders;
+using DomainBlocks.Core.Builders;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 

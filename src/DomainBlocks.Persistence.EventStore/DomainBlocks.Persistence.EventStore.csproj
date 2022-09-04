@@ -9,7 +9,7 @@
     <ProjectReference Include="..\DomainBlocks.Common\DomainBlocks.Common.csproj" />
     <ProjectReference Include="..\DomainBlocks.Persistence\DomainBlocks.Persistence.csproj" />
     <ProjectReference Include="..\DomainBlocks.Serialization\DomainBlocks.Serialization.csproj" />
-    <ProjectReference Include="..\DomainBlocks\DomainBlocks.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Core\DomainBlocks.Core.csproj" />
   </ItemGroup>
 
 </Project>

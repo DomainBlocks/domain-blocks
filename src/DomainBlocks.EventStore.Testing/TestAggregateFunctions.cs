@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using DomainBlocks.Persistence.New.Builders;
+using DomainBlocks.Core.Builders;
 
 namespace DomainBlocks.EventStore.Testing;
 
