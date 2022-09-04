@@ -2,6 +2,7 @@
 
     <PropertyGroup>
         <OutputType>Library</OutputType>
+        <RootNamespace>DomainBlocks.Core.Tests</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>
