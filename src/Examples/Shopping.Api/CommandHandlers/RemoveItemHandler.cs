@@ -14,7 +14,7 @@ public class RemoveItemHandler : CommandHandlerBase<RemoveItemFromShoppingCart>
 
     protected override async Task HandleImpl(RemoveItemFromShoppingCart request, CancellationToken cancellationToken)
     {
-        var loadedAggregate = await Repository.LoadAggregate<ShoppingCartState>(request.CartId);
+        var loadedAggregate = await Repository.LoadAsync<ShoppingCartState>(request.CartId);
 
         var cartId = Guid.Parse(request.CartId);
         var itemId = Guid.Parse(request.ItemId);
@@ -22,6 +22,6 @@ public class RemoveItemHandler : CommandHandlerBase<RemoveItemFromShoppingCart>
         var command = new Domain.Commands.RemoveItemFromShoppingCart(itemId, cartId);
         loadedAggregate.ExecuteCommand(x => ShoppingCartFunctions.Execute(x, command));
 
-        await Repository.SaveAggregate(loadedAggregate);
+        await Repository.SaveAsync(loadedAggregate);
     }
 }

@@ -12,16 +12,16 @@ public interface IMutableCommandReturnType<in TAggregate, in TCommandResult> : I
 public class MutableCommandReturnType<TAggregate, TEventBase, TCommandResult>
     : IMutableCommandReturnType<TAggregate, TCommandResult> where TEventBase : class
 {
-    private readonly MutableApplyEventsBehavior _applyEventsBehavior;
+    private readonly ApplyRaisedEventsBehavior _applyRaisedEventsBehavior;
     private readonly Func<TCommandResult, IEnumerable<TEventBase>> _eventsSelector;
     private readonly Action<TAggregate, TEventBase> _eventApplier;
 
     public MutableCommandReturnType(
-        MutableApplyEventsBehavior applyEventsBehavior,
+        ApplyRaisedEventsBehavior applyRaisedEventsBehavior,
         Func<TCommandResult, IEnumerable<TEventBase>> eventsSelector,
         Action<TAggregate, TEventBase> eventApplier)
     {
-        _applyEventsBehavior = applyEventsBehavior;
+        _applyRaisedEventsBehavior = applyRaisedEventsBehavior;
         _eventsSelector = eventsSelector;
         _eventApplier = eventApplier;
     }
@@ -30,13 +30,13 @@ public class MutableCommandReturnType<TAggregate, TEventBase, TCommandResult>
 
     public IEnumerable<object> SelectEventsAndUpdateState(TCommandResult commandResult, TAggregate state)
     {
-        return _applyEventsBehavior switch
+        return _applyRaisedEventsBehavior switch
         {
-            MutableApplyEventsBehavior.None => _eventsSelector(commandResult),
-            MutableApplyEventsBehavior.ApplyAfterEnumerating => ApplyAfterEnumerating(commandResult, state),
-            MutableApplyEventsBehavior.ApplyWhileEnumerating => ApplyWhileEnumerating(commandResult, state),
+            ApplyRaisedEventsBehavior.None => _eventsSelector(commandResult),
+            ApplyRaisedEventsBehavior.ApplyAfterEnumerating => ApplyAfterEnumerating(commandResult, state),
+            ApplyRaisedEventsBehavior.ApplyWhileEnumerating => ApplyWhileEnumerating(commandResult, state),
             _ => throw new InvalidOperationException(
-                $"Unknown enum value {nameof(MutableApplyEventsBehavior)}.{_applyEventsBehavior}.")
+                $"Unknown enum value {nameof(ApplyRaisedEventsBehavior)}.{_applyRaisedEventsBehavior}.")
         };
     }
 

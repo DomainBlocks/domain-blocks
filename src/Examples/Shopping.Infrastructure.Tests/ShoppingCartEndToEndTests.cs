@@ -131,7 +131,7 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
         var aggregateRepository = AggregateRepository.Create(eventsRepository, snapshotRepository, model);
 
         // Execute the first command.
-        var loadedAggregate = await aggregateRepository.LoadAggregate<ShoppingCartState>(shoppingCartId.ToString());
+        var loadedAggregate = await aggregateRepository.LoadAsync<ShoppingCartState>(shoppingCartId.ToString());
         var command1 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "First Item");
         loadedAggregate.ExecuteCommand(x => ShoppingCartFunctions.Execute(x, command1));
 
@@ -147,7 +147,7 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
 
         var eventsToPersist = loadedAggregate.EventsToPersist.ToList();
 
-        var nextEventVersion = await aggregateRepository.SaveAggregate(loadedAggregate);
+        var nextEventVersion = await aggregateRepository.SaveAsync(loadedAggregate);
         var expectedNextEventVersion = eventsToPersist.Count - 1;
 
         Assert.That(nextEventVersion, Is.EqualTo(expectedNextEventVersion));

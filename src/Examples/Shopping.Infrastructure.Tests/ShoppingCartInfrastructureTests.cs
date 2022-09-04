@@ -52,9 +52,7 @@ public class ShoppingCartInfrastructureTests : EventStoreIntegrationTest
         var snapshotRepository = new EventStoreSnapshotRepository(EventStoreClient, serializer);
 
         var aggregateRepository = AggregateRepository.Create(eventsRepository, snapshotRepository, model);
-
-        var loadedAggregate =
-            await aggregateRepository.LoadAggregate<ShoppingCartState>(shoppingCartId.ToString());
+        var loadedAggregate = await aggregateRepository.LoadAsync<ShoppingCartState>(shoppingCartId.ToString());
 
         // Execute the first command.
         var command1 = new AddItemToShoppingCart(shoppingCartId, Guid.NewGuid(), "First Item");
@@ -68,14 +66,14 @@ public class ShoppingCartInfrastructureTests : EventStoreIntegrationTest
 
         var eventsToPersist = loadedAggregate.EventsToPersist.ToList();
 
-        var nextEventVersion = await aggregateRepository.SaveAggregate(loadedAggregate);
+        var nextEventVersion = await aggregateRepository.SaveAsync(loadedAggregate);
         var expectedNextEventVersion = eventsToPersist.Count - 1;
 
         Assert.That(nextEventVersion, Is.EqualTo(expectedNextEventVersion));
 
-        var loadedData = await aggregateRepository.LoadAggregate<ShoppingCartState>(shoppingCartId.ToString());
-        var loadedState = loadedData.State;
-        var loadedVersion = loadedData.Version;
+        loadedAggregate = await aggregateRepository.LoadAsync<ShoppingCartState>(shoppingCartId.ToString());
+        var loadedState = loadedAggregate.State;
+        var loadedVersion = loadedAggregate.Version;
 
         // Check the loaded aggregate root state.
         Assert.That(loadedVersion, Is.EqualTo(2));

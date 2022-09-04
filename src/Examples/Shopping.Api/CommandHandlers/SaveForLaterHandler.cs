@@ -14,7 +14,7 @@ public class SaveForLaterHandler : CommandHandlerBase<SaveItemForLater>
 
     protected override async Task HandleImpl(SaveItemForLater request, CancellationToken cancellationToken)
     {
-        var loadedAggregate = await Repository.LoadAggregate<ShoppingCartState>(request.CartId);
+        var loadedAggregate = await Repository.LoadAsync<ShoppingCartState>(request.CartId);
 
         var cartId = Guid.Parse(request.CartId);
         var itemId = Guid.Parse(request.ItemId);
@@ -26,6 +26,6 @@ public class SaveForLaterHandler : CommandHandlerBase<SaveItemForLater>
 
         // Snapshot every 25 events
         // TODO (DS): Snapshot strategy can be added to AggregateType.
-        await Repository.SaveAggregate(loadedAggregate, state => state.EventsLoadedCount >= 25);
+        await Repository.SaveAsync(loadedAggregate, state => state.EventsLoadedCount >= 25);
     }
 }

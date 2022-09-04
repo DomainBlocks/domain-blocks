@@ -5,12 +5,12 @@ namespace DomainBlocks.Persistence;
 
 public interface IAggregateRepository
 {
-    Task<LoadedAggregate<TAggregateState>> LoadAggregate<TAggregateState>(
+    Task<LoadedAggregate<TAggregateState>> LoadAsync<TAggregateState>(
         string id, AggregateLoadStrategy loadStrategy = AggregateLoadStrategy.PreferSnapshot);
 
-    Task<long> SaveAggregate<TAggregateState>(
+    Task<long> SaveAsync<TAggregateState>(
         LoadedAggregate<TAggregateState> loadedAggregate,
         Func<LoadedAggregate<TAggregateState>, bool> snapshotPredicate = null);
 
-    Task SaveSnapshot<TAggregateState>(VersionedAggregateState<TAggregateState> versionedState);
+    Task SaveSnapshotAsync<TAggregateState>(VersionedAggregateState<TAggregateState> versionedState);
 }

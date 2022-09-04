@@ -28,7 +28,7 @@ public sealed class AggregateRepository<TRawData> : IAggregateRepository
         _model = model ?? throw new ArgumentNullException(nameof(model));
     }
 
-    public async Task<LoadedAggregate<TAggregateState>> LoadAggregate<TAggregateState>(
+    public async Task<LoadedAggregate<TAggregateState>> LoadAsync<TAggregateState>(
         string id, AggregateLoadStrategy loadStrategy = AggregateLoadStrategy.PreferSnapshot)
     {
         if (id == null) throw new ArgumentNullException(nameof(id));
@@ -95,7 +95,7 @@ public sealed class AggregateRepository<TRawData> : IAggregateRepository
         return LoadedAggregate.Create(result.State, aggregateType, id, newVersion, snapshotVersion, result.EventCount);
     }
 
-    public async Task<long> SaveAggregate<TAggregateState>(
+    public async Task<long> SaveAsync<TAggregateState>(
         LoadedAggregate<TAggregateState> loadedAggregate,
         Func<LoadedAggregate<TAggregateState>, bool> snapshotPredicate = null)
     {
@@ -126,7 +126,7 @@ public sealed class AggregateRepository<TRawData> : IAggregateRepository
         return newVersion;
     }
 
-    public async Task SaveSnapshot<TAggregateState>(VersionedAggregateState<TAggregateState> versionedState)
+    public async Task SaveSnapshotAsync<TAggregateState>(VersionedAggregateState<TAggregateState> versionedState)
     {
         if (versionedState == null) throw new ArgumentNullException(nameof(versionedState));
 
