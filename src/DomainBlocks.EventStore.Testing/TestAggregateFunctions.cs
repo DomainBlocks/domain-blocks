@@ -29,7 +29,7 @@ public static class TestAggregateFunctions
 
                 aggregate.ApplyEventsWith((agg, e) => Apply(agg, (dynamic)e));
 
-                aggregate.Event<TestEvent>().HasName(nameof(TestEvent));
+                aggregate.Event<TestEvent>();
             });
     }
 

@@ -61,14 +61,12 @@ namespace DomainBlocks.EventStore.Testing
             Assert.That(result.SnapshotVersion, Is.EqualTo(109));
             Assert.That(result.EventsLoadedCount, Is.EqualTo(0));
         }
-
-
+        
         [SetUp]
         public async Task TestSetUp()
         {
             Scenario = new SnapshotScenario();
             await Scenario.Initialise(this);
         }
-
     }
 }
