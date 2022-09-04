@@ -13,5 +13,9 @@ public class EventTypeBuilder<TEvent, TEventBase> : IEventTypeBuilder where TEve
         _eventName = eventName;
     }
 
-    IEventType IEventTypeBuilder.Build() => new EventType<TEvent, TEventBase>(_eventName);
+    IEventType IEventTypeBuilder.Build()
+    {
+        var eventName = _eventName ?? typeof(TEvent).Name;
+        return new EventType<TEvent, TEventBase>(eventName);
+    }
 }
