@@ -1,6 +1,6 @@
 namespace DomainBlocks.Core;
 
-public enum MutableApplyEventsBehavior
+public enum ApplyRaisedEventsBehavior
 {
     None,
     ApplyAfterEnumerating,
