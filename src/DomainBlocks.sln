@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.32112.339
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainBlocks", "DomainBlocks\DomainBlocks.csproj", "{3A908D35-70E7-4DA2-8FC2-1F664CE350FF}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainBlocks.Core", "DomainBlocks.Core\DomainBlocks.Core.csproj", "{3A908D35-70E7-4DA2-8FC2-1F664CE350FF}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shopping.Domain.Tests", "Examples\Shopping.Domain.Tests\Shopping.Domain.Tests.csproj", "{8E12A7F8-2C98-444C-9242-07164DE58E9C}"
 EndProject

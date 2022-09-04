@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
-using DomainBlocks.Persistence.New;
+using DomainBlocks.Core;
 
 namespace DomainBlocks.Persistence;
 

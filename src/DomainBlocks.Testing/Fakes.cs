@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using DomainBlocks.Aggregates;
+using DomainBlocks.Core;
 using NSubstitute;
 
 namespace DomainBlocks.Testing;

@@ -4,10 +4,10 @@ using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
 using DomainBlocks.Common;
+using DomainBlocks.Core.Builders;
 using DomainBlocks.EventStore.Testing;
 using DomainBlocks.Persistence;
 using DomainBlocks.Persistence.EventStore;
-using DomainBlocks.Persistence.New.Builders;
 using DomainBlocks.Projections;
 using DomainBlocks.Projections.EventStore;
 using DomainBlocks.Projections.Sql;
@@ -59,7 +59,6 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
             new EventRecordJsonDeserializer(),
             registry.EventNameMap,
             EventDispatcherConfiguration.ReadModelDefaults);
-
 
         await readModelDispatcher.StartAsync();
     }

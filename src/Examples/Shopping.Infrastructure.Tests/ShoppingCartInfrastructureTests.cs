@@ -2,10 +2,10 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using DomainBlocks.Core.Builders;
 using DomainBlocks.EventStore.Testing;
 using DomainBlocks.Persistence;
 using DomainBlocks.Persistence.EventStore;
-using DomainBlocks.Persistence.New.Builders;
 using DomainBlocks.Serialization.Json;
 using NUnit.Framework;
 using Shopping.Domain.Aggregates;

@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
-using DomainBlocks.Persistence.New;
-using DomainBlocks.Persistence.New.Builders;
+using DomainBlocks.Core;
+using DomainBlocks.Core.Builders;
 using NUnit.Framework;
 
 namespace DomainBlocks.Persistence.Tests;

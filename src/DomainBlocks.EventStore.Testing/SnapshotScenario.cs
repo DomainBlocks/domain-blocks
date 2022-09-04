@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
+using DomainBlocks.Core.Builders;
 using DomainBlocks.Persistence;
 using DomainBlocks.Persistence.EventStore;
-using DomainBlocks.Persistence.New.Builders;
 using DomainBlocks.Serialization.Json;
 
 namespace DomainBlocks.EventStore.Testing

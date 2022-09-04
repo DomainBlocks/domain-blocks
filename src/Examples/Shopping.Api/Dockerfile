@@ -7,7 +7,7 @@ FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
 WORKDIR /src
 COPY ["Examples/Shopping.Api/Shopping.Api.csproj", "Examples/Shopping.Api/"]
 COPY ["DomainBlocks.Persistence.SqlStreamStore.AspNetCore/DomainBlocks.Persistence.SqlStreamStore.AspNetCore.csproj", "DomainBlocks.Persistence.SqlStreamStore.AspNetCore/"]
-COPY ["DomainBlocks/DomainBlocks.csproj", "DomainBlocks/"]
+COPY ["DomainBlocks.Core/DomainBlocks.Core.csproj", "DomainBlocks.Core/"]
 COPY ["DomainBlocks.Common/DomainBlocks.Common.csproj", "DomainBlocks.Common/"]
 COPY ["DomainBlocks.Persistence.SqlStreamStore/DomainBlocks.Persistence.SqlStreamStore.csproj", "DomainBlocks.Persistence.SqlStreamStore/"]
 COPY ["DomainBlocks.Persistence/DomainBlocks.Persistence.csproj", "DomainBlocks.Persistence/"]
