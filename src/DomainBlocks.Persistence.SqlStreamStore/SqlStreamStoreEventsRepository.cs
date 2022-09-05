@@ -85,25 +85,27 @@ namespace DomainBlocks.Persistence.SqlStreamStore
             if (streamName == null) throw new ArgumentNullException(nameof(streamName));
 
             const int readPageSize = 4096;
+            var currentPagePosition = (int)startPosition;
+
             ReadStreamPage readStreamPage;
+            do
+            {
+                try
+                {
+                    readStreamPage =
+                        await _streamStore.ReadStreamForwards(streamName, currentPagePosition, readPageSize);
+                }
+                catch (Exception ex)
+                {
+                    Log.LogError(ex, "Unable to load events from {StreamName}", streamName);
+                    throw;
+                }
 
-            try
-            {
-                readStreamPage = await _streamStore.ReadStreamForwards(streamName, (int)startPosition, readPageSize);
-            }
-            catch (Exception ex)
-            {
-                Log.LogError(ex, "Unable to load events from {StreamName}", streamName);
-                throw;
-            }
+                if (readStreamPage.Status == PageReadStatus.StreamNotFound)
+                {
+                    yield break;
+                }
 
-            if (readStreamPage.Status == PageReadStatus.StreamNotFound)
-            {
-                yield break;
-            }
-
-            while (!readStreamPage.IsEnd)
-            {
                 foreach (var message in readStreamPage.Messages)
                 {
                     object deserializedEvent;
@@ -137,6 +139,8 @@ namespace DomainBlocks.Persistence.SqlStreamStore
                     yield return deserializedEvent;
                 }
 
+                currentPagePosition = readStreamPage.LastStreamVersion;
+
                 try
                 {
                     readStreamPage = await readStreamPage.ReadNext();
@@ -146,7 +150,8 @@ namespace DomainBlocks.Persistence.SqlStreamStore
                     Log.LogError(ex, "Unable to load events from {StreamName}", streamName);
                     throw;
                 }
-            }
+
+            } while (!readStreamPage.IsEnd);
         }
 
         private static int MapStreamVersion(long expectedStreamVersion)
