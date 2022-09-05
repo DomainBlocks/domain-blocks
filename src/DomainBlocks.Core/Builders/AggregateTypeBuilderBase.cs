@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 
 namespace DomainBlocks.Core.Builders;
 
@@ -66,6 +68,25 @@ public abstract class AggregateTypeBuilderBase<TAggregate, TEventBase> :
         var builder = new EventTypeBuilder<TEvent, TEventBase>();
         EventTypeBuilders.Add(builder);
         return builder;
+    }
+
+    public void WithEventsFrom(Assembly assembly, Type baseType = null)
+    {
+        var builders = assembly
+            .GetTypes()
+            .Where(x => x.IsClass &&
+                        typeof(TEventBase).IsAssignableFrom(x) &&
+                        (baseType == null || baseType.IsAssignableFrom(x)))
+            .Select(x =>
+            {
+                var untypedBuilderType = typeof(EventTypeBuilder<,>);
+                var typeArgs = new[] { x, typeof(TEventBase) };
+                var builderType = untypedBuilderType.MakeGenericType(typeArgs);
+                var builder = (IEventTypeBuilder)Activator.CreateInstance(builderType);
+                return builder;
+            });
+
+        EventTypeBuilders.AddRange(builders);
     }
 
     public abstract IAggregateType Build();

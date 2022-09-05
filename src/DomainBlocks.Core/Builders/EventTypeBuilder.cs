@@ -4,10 +4,6 @@ public class EventTypeBuilder<TEvent, TEventBase> : IEventTypeBuilder where TEve
 {
     private string _eventName;
 
-    internal EventTypeBuilder()
-    {
-    }
-
     public void HasName(string eventName)
     {
         _eventName = eventName;
