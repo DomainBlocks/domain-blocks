@@ -52,7 +52,9 @@ public class ModelBuilderTests
                             .WithEventsFrom(x => x)
                             .ApplyEventsWhileEnumerating();
                     })
-                    .ApplyEventsWith((agg, e) => agg.Apply(e));
+                    .ApplyEventsByConvention()
+                    .FromMethodName("Apply")
+                    .IncludeNonPublicMethods();
             })
             .Build();
 
@@ -149,13 +151,10 @@ public class ModelBuilderTests
             yield return new ValueChangedEvent($"{Value} 3");
         }
 
-        public void Apply(object @event)
+        private void Apply(ValueChangedEvent @event)
         {
-            if (@event is ValueChangedEvent e)
-            {
-                Value = e.Value;
-                ObservedValues.Add(e.Value);
-            }
+            Value = @event.Value;
+            ObservedValues.Add(@event.Value);
         }
     }
 
