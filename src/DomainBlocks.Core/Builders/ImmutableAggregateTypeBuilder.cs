@@ -3,9 +3,10 @@ using System.Linq;
 
 namespace DomainBlocks.Core.Builders;
 
-public interface IImmutableRaisedEventsBuilder<TAggregate, out TEventBase> where TEventBase : class
+public interface IImmutableRaisedEventsBuilder<TAggregate, TEventBase> where TEventBase : class
 {
     public void ApplyEventsWith(Func<TAggregate, TEventBase, TAggregate> eventApplier);
+    public ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase> ApplyEventsByConvention();
 }
 
 public class ImmutableAggregateTypeBuilder<TAggregate, TEventBase> :
@@ -14,7 +15,14 @@ public class ImmutableAggregateTypeBuilder<TAggregate, TEventBase> :
     IImmutableEventApplierSource<TAggregate, TEventBase>
     where TEventBase : class
 {
-    public Func<TAggregate, TEventBase, TAggregate> EventApplier { get; private set; }
+    private Func<TAggregate, TEventBase, TAggregate> _eventApplier;
+    private ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase> _eventApplierBuilder;
+
+    public Func<TAggregate, TEventBase, TAggregate> EventApplier
+    {
+        get => _eventApplier ?? _eventApplierBuilder.Build();
+        private set => _eventApplier = value;
+    }
 
     public IImmutableRaisedEventsBuilder<TAggregate, TEventBase> WithRaisedEventsFrom(
         Action<ImmutableCommandReturnTypeBuilder<TAggregate, TEventBase>> commandReturnTypeBuilderAction)
@@ -28,6 +36,14 @@ public class ImmutableAggregateTypeBuilder<TAggregate, TEventBase> :
         Func<TAggregate, TEventBase, TAggregate> eventApplier)
     {
         EventApplier = eventApplier;
+        _eventApplierBuilder = null;
+    }
+
+    ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase>
+        IImmutableRaisedEventsBuilder<TAggregate, TEventBase>.ApplyEventsByConvention()
+    {
+        _eventApplierBuilder = new ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase>();
+        return _eventApplierBuilder;
     }
 
     public override IImmutableAggregateType<TAggregate> Build()

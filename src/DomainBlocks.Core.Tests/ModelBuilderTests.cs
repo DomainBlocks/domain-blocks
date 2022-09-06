@@ -91,15 +91,17 @@ public class ModelBuilderTests
                             .WithEventsFrom(x => x)
                             .ApplyEvents();
                     })
-                    .ApplyEventsWith((agg, e) => agg.Apply(e));
+                    .ApplyEventsByConvention()
+                    .FromMethodName("Apply")
+                    .IncludeNonPublicMethods();
             })
             .Build();
-        
+
         var aggregateType = model.GetAggregateType<ImmutableAggregate1>();
 
         var aggregate = new ImmutableAggregate1();
         var context = aggregateType.GetCommandExecutionContext(aggregate);
-        
+
         context.ExecuteCommand(x => x.Execute("value"));
         var events = context.RaisedEvents.ToList();
 
@@ -176,13 +178,9 @@ public class ModelBuilderTests
             yield return new ValueChangedEvent(newValue);
         }
 
-        public ImmutableAggregate1 Apply(object @event)
+        private ImmutableAggregate1 Apply(ValueChangedEvent @event)
         {
-            return @event switch
-            {
-                ValueChangedEvent e => new ImmutableAggregate1(e.Value),
-                _ => this
-            };
+            return new ImmutableAggregate1(@event.Value);
         }
     }
 }
