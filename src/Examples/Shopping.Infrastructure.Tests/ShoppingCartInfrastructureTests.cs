@@ -30,14 +30,14 @@ public class ShoppingCartInfrastructureTests : EventStoreIntegrationTest
                     .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");
 
                 aggregate
-                    .ApplyEventsWith(ShoppingCartFunctions.Apply)
                     .WithRaisedEventsFrom(commandReturnTypes =>
                     {
                         commandReturnTypes
                             .CommandReturnType<IEnumerable<IDomainEvent>>()
                             .WithEventsFrom(x => x)
                             .ApplyEvents();
-                    });
+                    })
+                    .ApplyEventsWith(ShoppingCartFunctions.Apply);
 
                 aggregate.Event<ShoppingCartCreated>().HasName(ShoppingCartCreated.EventName);
                 aggregate.Event<ItemAddedToShoppingCart>().HasName(ItemAddedToShoppingCart.EventName);

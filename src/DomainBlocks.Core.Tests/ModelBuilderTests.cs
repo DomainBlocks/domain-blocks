@@ -15,8 +15,8 @@ public class ModelBuilderTests
             .Aggregate<MutableAggregate1, object>(aggregate =>
             {
                 aggregate
-                    .ApplyEventsWith((_, _) => { }) // Not used in this test
-                    .WithRaisedEventsFrom(x => x.RaisedEvents);
+                    .WithRaisedEventsFrom(x => x.RaisedEvents)
+                    .ApplyEventsWith((_, _) => { }); // Not used in this test
             })
             .Build();
 
@@ -45,14 +45,14 @@ public class ModelBuilderTests
             .Aggregate<MutableAggregate2, object>(aggregate =>
             {
                 aggregate
-                    .ApplyEventsWith((agg, e) => agg.Apply(e))
                     .WithRaisedEventsFrom(commandReturnTypes =>
                     {
                         commandReturnTypes
                             .CommandReturnType<IEnumerable<object>>()
                             .WithEventsFrom(x => x)
                             .ApplyEventsWhileEnumerating();
-                    });
+                    })
+                    .ApplyEventsWith((agg, e) => agg.Apply(e));
             })
             .Build();
 
@@ -82,14 +82,14 @@ public class ModelBuilderTests
             .ImmutableAggregate<ImmutableAggregate1, object>(aggregate =>
             {
                 aggregate
-                    .ApplyEventsWith((agg, e) => agg.Apply(e))
                     .WithRaisedEventsFrom(commandReturnTypes =>
                     {
                         commandReturnTypes
                             .CommandReturnType<IEnumerable<object>>()
                             .WithEventsFrom(x => x)
                             .ApplyEvents();
-                    });
+                    })
+                    .ApplyEventsWith((agg, e) => agg.Apply(e));
             })
             .Build();
         

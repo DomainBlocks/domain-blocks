@@ -18,16 +18,14 @@ public static class TestAggregateFunctions
                     .WithSnapshotKey(id => $"testAggregateSnapshot-{id}");
 
                 aggregate
-                    .ApplyEventsWith((agg, e) => Apply(agg, (dynamic)e))
                     .WithRaisedEventsFrom(commandReturnTypes =>
                     {
                         commandReturnTypes
                             .CommandReturnType<IEnumerable<object>>()
                             .WithEventsFrom(x => x)
                             .ApplyEvents();
-                    });
-
-                aggregate.ApplyEventsWith((agg, e) => Apply(agg, (dynamic)e));
+                    })
+                    .ApplyEventsWith((agg, e) => Apply(agg, (dynamic)e));
 
                 aggregate.Event<TestEvent>();
             });

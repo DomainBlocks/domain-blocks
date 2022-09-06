@@ -3,10 +3,9 @@ using System.Linq;
 
 namespace DomainBlocks.Core.Builders;
 
-public interface IImmutableRaisedEventsBuilder<TAggregate, TEventBase> where TEventBase : class
+public interface IImmutableRaisedEventsBuilder<TAggregate, out TEventBase> where TEventBase : class
 {
-    public void WithRaisedEventsFrom(
-        Action<ImmutableCommandReturnTypeBuilder<TAggregate, TEventBase>> commandReturnTypeBuilderAction);
+    public void ApplyEventsWith(Func<TAggregate, TEventBase, TAggregate> eventApplier);
 }
 
 public class ImmutableAggregateTypeBuilder<TAggregate, TEventBase> :
@@ -16,19 +15,19 @@ public class ImmutableAggregateTypeBuilder<TAggregate, TEventBase> :
     where TEventBase : class
 {
     public Func<TAggregate, TEventBase, TAggregate> EventApplier { get; private set; }
-    
-    public IImmutableRaisedEventsBuilder<TAggregate, TEventBase> ApplyEventsWith(
-        Func<TAggregate, TEventBase, TAggregate> eventApplier)
-    {
-        EventApplier = eventApplier;
-        return this;
-    }
 
-    void IImmutableRaisedEventsBuilder<TAggregate, TEventBase>.WithRaisedEventsFrom(
+    public IImmutableRaisedEventsBuilder<TAggregate, TEventBase> WithRaisedEventsFrom(
         Action<ImmutableCommandReturnTypeBuilder<TAggregate, TEventBase>> commandReturnTypeBuilderAction)
     {
         var builder = new ImmutableCommandReturnTypeBuilder<TAggregate, TEventBase>(CommandReturnTypeBuilders, this);
         commandReturnTypeBuilderAction(builder);
+        return this;
+    }
+
+    void IImmutableRaisedEventsBuilder<TAggregate, TEventBase>.ApplyEventsWith(
+        Func<TAggregate, TEventBase, TAggregate> eventApplier)
+    {
+        EventApplier = eventApplier;
     }
 
     public override IImmutableAggregateType<TAggregate> Build()
