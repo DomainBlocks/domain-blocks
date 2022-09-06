@@ -51,9 +51,9 @@ public class MutableAggregateType<TAggregate, TEventBase>
         return new MutableCommandExecutionContext<TAggregate>(aggregate, this);
     }
 
-    public IMutableCommandReturnType<TAggregate, TCommandResult> GetCommandReturnType<TCommandResult>()
+    public new IMutableCommandReturnType<TAggregate, TCommandResult> GetCommandReturnType<TCommandResult>()
     {
-        return (IMutableCommandReturnType<TAggregate, TCommandResult>)CommandReturnTypes[typeof(TCommandResult)];
+        return (IMutableCommandReturnType<TAggregate, TCommandResult>)base.GetCommandReturnType<TCommandResult>();
     }
 
     public IEnumerable<object> SelectRaisedEvents(TAggregate aggregate)

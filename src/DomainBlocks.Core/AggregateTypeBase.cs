@@ -10,6 +10,7 @@ public abstract class AggregateTypeBase<TAggregate, TEventBase> : IAggregateType
     private readonly Func<TAggregate, string> _idSelector;
     private readonly Func<string, string> _idToStreamKeySelector;
     private readonly Func<string, string> _idToSnapshotKeySelector;
+    private readonly IReadOnlyDictionary<Type, ICommandReturnType> _commandReturnTypes;
     private readonly IReadOnlyDictionary<Type, IEventType> _eventTypes;
 
     protected AggregateTypeBase(
@@ -24,14 +25,13 @@ public abstract class AggregateTypeBase<TAggregate, TEventBase> : IAggregateType
         _idSelector = idSelector;
         _idToStreamKeySelector = idToStreamKeySelector;
         _idToSnapshotKeySelector = idToSnapshotKeySelector;
-        CommandReturnTypes = commandReturnTypes.ToDictionary(x => x.ClrType);
+        _commandReturnTypes = commandReturnTypes.ToDictionary(x => x.ClrType);
         _eventTypes = eventTypes.ToDictionary(x => x.ClrType);
     }
-    
+
     public Type ClrType => typeof(TAggregate);
     public Type EventBaseType => typeof(TEventBase);
     public IEnumerable<IEventType> EventTypes => _eventTypes.Values;
-    protected IReadOnlyDictionary<Type, ICommandReturnType> CommandReturnTypes { get; }
 
     public TAggregate CreateNew() => _factory();
     public string SelectId(TAggregate aggregate) => _idSelector(aggregate);
@@ -42,4 +42,16 @@ public abstract class AggregateTypeBase<TAggregate, TEventBase> : IAggregateType
 
     public abstract TAggregate ApplyEvent(TAggregate aggregate, object @event);
     public abstract ICommandExecutionContext<TAggregate> GetCommandExecutionContext(TAggregate aggregate);
+
+    protected ICommandReturnType GetCommandReturnType<TCommandResult>()
+    {
+        var commandResultClrType = typeof(TCommandResult);
+
+        if (_commandReturnTypes.TryGetValue(commandResultClrType, out var commandReturnType))
+        {
+            return commandReturnType;
+        }
+
+        throw new KeyNotFoundException($"No command result type found for CLR type {commandResultClrType.Name}.");
+    }
 }

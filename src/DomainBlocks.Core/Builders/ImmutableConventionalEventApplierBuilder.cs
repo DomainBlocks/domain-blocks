@@ -12,6 +12,9 @@ public class ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase> : 
 
     public IIncludeNonPublicMethodsBuilder FromMethodName(string methodName)
     {
+        if (string.IsNullOrWhiteSpace(methodName))
+            throw new ArgumentException("Method name cannot be null or whitespace.", nameof(methodName));
+        
         _methodName = methodName;
         return this;
     }
@@ -23,6 +26,9 @@ public class ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase> : 
 
     public Func<TAggregate, TEventBase, TAggregate> Build()
     {
+        if (_methodName == null)
+            throw new InvalidOperationException("Unable to find event applier methods as method name was specified.");
+
         var bindingFlags = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static;
 
         if (_includeNonPublicMethods)
@@ -60,6 +66,9 @@ public class ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase> : 
                 return (eventType, handler);
             })
             .ToDictionary(x => x.eventType, x => x.handler);
+
+        if (handlers.Count == 0)
+            throw new InvalidOperationException($"No event applier methods named '{_methodName}' were found.");
 
         return (agg, e) => handlers.TryGetValue(e.GetType(), out var handler) ? handler(agg, e) : agg;
     }

@@ -41,26 +41,27 @@ public abstract class AggregateTypeBuilderBase<TAggregate, TEventBase> :
 
     public IIdSelectorBuilder<TAggregate> InitialState(Func<TAggregate> factory)
     {
-        Factory = factory;
+        Factory = factory ?? throw new ArgumentNullException(nameof(factory));
         return this;
     }
 
     IIdToStreamKeySelectorBuilder IIdSelectorBuilder<TAggregate>.HasId(Func<TAggregate, string> idSelector)
     {
-        IdSelector = idSelector;
+        IdSelector = idSelector ?? throw new ArgumentNullException(nameof(idSelector));
         return this;
     }
 
     IIdToSnapshotKeySelectorBuilder IIdToStreamKeySelectorBuilder.WithStreamKey(
         Func<string, string> idToStreamKeySelector)
     {
-        IdToStreamKeySelector = idToStreamKeySelector;
+        IdToStreamKeySelector = idToStreamKeySelector ?? throw new ArgumentNullException(nameof(idToStreamKeySelector));
         return this;
     }
 
     void IIdToSnapshotKeySelectorBuilder.WithSnapshotKey(Func<string, string> idToSnapshotKeySelector)
     {
-        IdToSnapshotKeySelector = idToSnapshotKeySelector;
+        IdToSnapshotKeySelector = idToSnapshotKeySelector ??
+                                  throw new ArgumentNullException(nameof(idToSnapshotKeySelector));
     }
 
     public EventTypeBuilder<TEvent, TEventBase> Event<TEvent>() where TEvent : TEventBase
@@ -72,6 +73,8 @@ public abstract class AggregateTypeBuilderBase<TAggregate, TEventBase> :
 
     public void WithEventsFrom(Assembly assembly, Type baseType = null)
     {
+        if (assembly == null) throw new ArgumentNullException(nameof(assembly));
+
         var builders = assembly
             .GetTypes()
             .Where(x => x.IsClass &&

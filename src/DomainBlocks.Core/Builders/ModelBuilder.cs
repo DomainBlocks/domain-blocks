@@ -11,15 +11,19 @@ public class ModelBuilder
     public ModelBuilder Aggregate<TAggregate, TEventBase>(
         Action<MutableAggregateTypeBuilder<TAggregate, TEventBase>> builderAction) where TEventBase : class
     {
+        if (builderAction == null) throw new ArgumentNullException(nameof(builderAction));
+
         var builder = new MutableAggregateTypeBuilder<TAggregate, TEventBase>();
         _aggregateTypeBuilders.Add(builder);
         builderAction(builder);
         return this;
     }
-    
+
     public ModelBuilder ImmutableAggregate<TAggregate, TEventBase>(
         Action<ImmutableAggregateTypeBuilder<TAggregate, TEventBase>> builderAction) where TEventBase : class
     {
+        if (builderAction == null) throw new ArgumentNullException(nameof(builderAction));
+
         var builder = new ImmutableAggregateTypeBuilder<TAggregate, TEventBase>();
         _aggregateTypeBuilders.Add(builder);
         builderAction(builder);

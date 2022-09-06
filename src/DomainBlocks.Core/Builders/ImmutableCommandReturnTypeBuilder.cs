@@ -43,20 +43,20 @@ public class ImmutableCommandReturnTypeBuilder<TAggregate, TEventBase, TCommandR
 
     internal ImmutableCommandReturnTypeBuilder(IImmutableEventApplierSource<TAggregate, TEventBase> eventApplierSource)
     {
-        _eventApplierSource = eventApplierSource;
+        _eventApplierSource = eventApplierSource ?? throw new ArgumentNullException(nameof(eventApplierSource));
     }
 
     public IImmutableCommandReturnUpdatedStateSelectorBuilder<TAggregate, TCommandResult> WithEventsFrom(
         Func<TCommandResult, IEnumerable<TEventBase>> eventsSelector)
     {
-        _eventsSelector = eventsSelector;
+        _eventsSelector = eventsSelector ?? throw new ArgumentNullException(nameof(eventsSelector));
         return this;
     }
 
     void IImmutableCommandReturnUpdatedStateSelectorBuilder<TAggregate, TCommandResult>.WithUpdatedStateFrom(
         Func<TCommandResult, TAggregate> updatedStateSelector)
     {
-        _updatedStateSelector = updatedStateSelector;
+        _updatedStateSelector = updatedStateSelector ?? throw new ArgumentNullException(nameof(updatedStateSelector));
     }
 
     void IImmutableCommandReturnUpdatedStateSelectorBuilder<TAggregate, TCommandResult>.ApplyEvents()

@@ -22,20 +22,23 @@ public class MutableAggregateTypeBuilder<TAggregate, TEventBase> :
 
     public Action<TAggregate, TEventBase> EventApplier
     {
-        get => _eventApplier ?? _eventApplierBuilder.Build();
+        get => _eventApplier ?? _eventApplierBuilder?.Build();
         private set => _eventApplier = value;
     }
 
     public IMutableRaisedEventsBuilder<TAggregate, TEventBase> WithRaisedEventsFrom(
         Func<TAggregate, IEnumerable<TEventBase>> eventsSelector)
     {
-        _raisedEventsSelector = eventsSelector;
+        _raisedEventsSelector = eventsSelector ?? throw new ArgumentNullException(nameof(eventsSelector));
         return this;
     }
 
     public IMutableRaisedEventsBuilder<TAggregate, TEventBase> WithRaisedEventsFrom(
         Action<MutableCommandReturnTypeBuilder<TAggregate, TEventBase>> commandReturnTypeBuilderAction)
     {
+        if (commandReturnTypeBuilderAction == null)
+            throw new ArgumentNullException(nameof(commandReturnTypeBuilderAction));
+
         var builder = new MutableCommandReturnTypeBuilder<TAggregate, TEventBase>(CommandReturnTypeBuilders, this);
         commandReturnTypeBuilderAction(builder);
         return this;
@@ -44,7 +47,7 @@ public class MutableAggregateTypeBuilder<TAggregate, TEventBase> :
     void IMutableRaisedEventsBuilder<TAggregate, TEventBase>.ApplyEventsWith(
         Action<TAggregate, TEventBase> eventApplier)
     {
-        EventApplier = eventApplier;
+        EventApplier = eventApplier ?? throw new ArgumentNullException(nameof(eventApplier));
         _eventApplierBuilder = null;
     }
 

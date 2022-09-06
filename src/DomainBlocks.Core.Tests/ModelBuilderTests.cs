@@ -53,7 +53,7 @@ public class ModelBuilderTests
                             .ApplyEventsWhileEnumerating();
                     })
                     .ApplyEventsByConvention()
-                    .FromMethodName("Apply")
+                    .FromMethodName(nameof(MutableAggregate2.Apply))
                     .IncludeNonPublicMethods();
             })
             .Build();
@@ -92,7 +92,7 @@ public class ModelBuilderTests
                             .ApplyEvents();
                     })
                     .ApplyEventsByConvention()
-                    .FromMethodName("Apply")
+                    .FromMethodName(nameof(ImmutableAggregate1.Apply))
                     .IncludeNonPublicMethods();
             })
             .Build();
@@ -153,7 +153,7 @@ public class ModelBuilderTests
             yield return new ValueChangedEvent($"{Value} 3");
         }
 
-        private void Apply(ValueChangedEvent @event)
+        public void Apply(ValueChangedEvent @event)
         {
             Value = @event.Value;
             ObservedValues.Add(@event.Value);
@@ -178,7 +178,7 @@ public class ModelBuilderTests
             yield return new ValueChangedEvent(newValue);
         }
 
-        private static ImmutableAggregate1 Apply(ValueChangedEvent @event)
+        public static ImmutableAggregate1 Apply(ValueChangedEvent @event)
         {
             return new ImmutableAggregate1(@event.Value);
         }

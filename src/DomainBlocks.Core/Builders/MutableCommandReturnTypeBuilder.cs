@@ -17,8 +17,8 @@ public class MutableCommandReturnTypeBuilder<TAggregate, TEventBase> where TEven
     internal MutableCommandReturnTypeBuilder(
         List<ICommandReturnTypeBuilder> builders, IMutableEventApplierSource<TAggregate, TEventBase> eventApplierSource)
     {
-        _builders = builders;
-        _eventApplierSource = eventApplierSource;
+        _builders = builders ?? throw new ArgumentNullException(nameof(builders));
+        _eventApplierSource = eventApplierSource ?? throw new ArgumentNullException(nameof(eventApplierSource));
     }
 
     public MutableCommandReturnTypeBuilder<TAggregate, TEventBase, TCommandResult> CommandReturnType<TCommandResult>()
@@ -40,13 +40,13 @@ public class MutableCommandReturnTypeBuilder<TAggregate, TEventBase, TCommandRes
 
     internal MutableCommandReturnTypeBuilder(IMutableEventApplierSource<TAggregate, TEventBase> eventApplierSource)
     {
-        _eventApplierSource = eventApplierSource;
+        _eventApplierSource = eventApplierSource ?? throw new ArgumentNullException(nameof(eventApplierSource));
     }
 
     public IApplyRaisedEventsBehaviorBuilder WithEventsFrom(
         Func<TCommandResult, IEnumerable<TEventBase>> eventsSelector)
     {
-        _eventsSelector = eventsSelector;
+        _eventsSelector = eventsSelector ?? throw new ArgumentNullException(nameof(eventsSelector));
         return this;
     }
     
