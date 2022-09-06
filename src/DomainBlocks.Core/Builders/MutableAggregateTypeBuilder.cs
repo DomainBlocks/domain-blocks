@@ -48,7 +48,8 @@ public class MutableAggregateTypeBuilder<TAggregate, TEventBase> :
         _eventApplierBuilder = null;
     }
 
-    public MutableConventionalEventApplierBuilder<TAggregate, TEventBase> ApplyEventsByConvention()
+    MutableConventionalEventApplierBuilder<TAggregate, TEventBase>
+        IMutableRaisedEventsBuilder<TAggregate, TEventBase>.ApplyEventsByConvention()
     {
         _eventApplierBuilder = new MutableConventionalEventApplierBuilder<TAggregate, TEventBase>();
         return _eventApplierBuilder;
