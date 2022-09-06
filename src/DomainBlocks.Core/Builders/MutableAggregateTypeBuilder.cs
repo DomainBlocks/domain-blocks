@@ -4,12 +4,9 @@ using System.Linq;
 
 namespace DomainBlocks.Core.Builders;
 
-public interface IMutableRaisedEventsBuilder<TAggregate, TEventBase> where TEventBase : class
+public interface IMutableRaisedEventsBuilder<out TAggregate, out TEventBase> where TEventBase : class
 {
-    public void WithRaisedEventsFrom(Func<TAggregate, IEnumerable<TEventBase>> eventsSelector);
-
-    public void WithRaisedEventsFrom(
-        Action<MutableCommandReturnTypeBuilder<TAggregate, TEventBase>> commandReturnTypeBuilderAction);
+    public void ApplyEventsWith(Action<TAggregate, TEventBase> eventApplier);
 }
 
 public class MutableAggregateTypeBuilder<TAggregate, TEventBase> :
@@ -22,24 +19,25 @@ public class MutableAggregateTypeBuilder<TAggregate, TEventBase> :
 
     public Action<TAggregate, TEventBase> EventApplier { get; private set; }
 
-    public IMutableRaisedEventsBuilder<TAggregate, TEventBase> ApplyEventsWith(
-        Action<TAggregate, TEventBase> eventApplier)
-    {
-        EventApplier = eventApplier;
-        return this;
-    }
-
-    void IMutableRaisedEventsBuilder<TAggregate, TEventBase>.WithRaisedEventsFrom(
+    public IMutableRaisedEventsBuilder<TAggregate, TEventBase> WithRaisedEventsFrom(
         Func<TAggregate, IEnumerable<TEventBase>> eventsSelector)
     {
         _raisedEventsSelector = eventsSelector;
+        return this;
     }
 
-    void IMutableRaisedEventsBuilder<TAggregate, TEventBase>.WithRaisedEventsFrom(
+    public IMutableRaisedEventsBuilder<TAggregate, TEventBase> WithRaisedEventsFrom(
         Action<MutableCommandReturnTypeBuilder<TAggregate, TEventBase>> commandReturnTypeBuilderAction)
     {
         var builder = new MutableCommandReturnTypeBuilder<TAggregate, TEventBase>(CommandReturnTypeBuilders, this);
         commandReturnTypeBuilderAction(builder);
+        return this;
+    }
+
+    void IMutableRaisedEventsBuilder<TAggregate, TEventBase>.ApplyEventsWith(
+        Action<TAggregate, TEventBase> eventApplier)
+    {
+        EventApplier = eventApplier;
     }
 
     public override IMutableAggregateType<TAggregate> Build()
