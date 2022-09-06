@@ -14,31 +14,7 @@ public sealed class EventNameMap : IEventNameMap
         _eventTypeToNameMap = new Dictionary<Type, string>();
     }
 
-    public void Add<TEvent>(string eventName, bool throwOnConflict = true)
-    {
-        AddImpl(eventName, typeof(TEvent), throwOnConflict);
-    }
-
     public void Add(string eventName, Type eventType, bool throwOnConflict = true)
-    {
-        AddImpl(eventName, eventType, throwOnConflict);
-    }
-
-    public Type GetEventType(string eventName)
-    {
-        return _eventNameToTypeMap.TryGetValue(eventName, out var clrType)
-            ? clrType
-            : throw new UnmappedEventNameException(eventName);
-    }
-
-    public string GetEventName(Type eventType)
-    {
-        return _eventTypeToNameMap.TryGetValue(eventType, out var eventName)
-            ? eventName
-            : throw new UnmappedEventTypeException(eventType.FullName);
-    }
-
-    private void AddImpl(string eventName, Type eventType, bool throwOnConflict = true)
     {
         if (string.IsNullOrEmpty(eventName))
             throw new ArgumentException("Event name cannot be null or empty", nameof(eventName));
@@ -60,5 +36,19 @@ public sealed class EventNameMap : IEventNameMap
                 _eventTypeToNameMap[eventType] = eventName; 
                 break;
         }
+    }
+
+    public Type GetEventType(string eventName)
+    {
+        return _eventNameToTypeMap.TryGetValue(eventName, out var clrType)
+            ? clrType
+            : throw new UnmappedEventNameException(eventName);
+    }
+
+    public string GetEventName(Type eventType)
+    {
+        return _eventTypeToNameMap.TryGetValue(eventType, out var eventName)
+            ? eventName
+            : throw new UnmappedEventTypeException(eventType.FullName);
     }
 }

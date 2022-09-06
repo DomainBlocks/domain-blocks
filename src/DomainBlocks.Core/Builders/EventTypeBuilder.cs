@@ -1,3 +1,5 @@
+using System;
+
 namespace DomainBlocks.Core.Builders;
 
 public class EventTypeBuilder<TEvent, TEventBase> : IEventTypeBuilder where TEvent : TEventBase
@@ -6,6 +8,9 @@ public class EventTypeBuilder<TEvent, TEventBase> : IEventTypeBuilder where TEve
 
     public void HasName(string eventName)
     {
+        if (string.IsNullOrWhiteSpace(eventName))
+            throw new ArgumentException("Event name cannot be null or whitespace.", nameof(eventName));
+
         _eventName = eventName;
     }
 

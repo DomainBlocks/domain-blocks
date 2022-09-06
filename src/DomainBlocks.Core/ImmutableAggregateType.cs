@@ -36,8 +36,8 @@ public class ImmutableAggregateType<TAggregate, TEventBase>
         return new ImmutableCommandExecutionContext<TAggregate>(aggregate, this);
     }
 
-    public IImmutableCommandReturnType<TAggregate, TCommandResult> GetCommandReturnType<TCommandResult>()
+    public new IImmutableCommandReturnType<TAggregate, TCommandResult> GetCommandReturnType<TCommandResult>()
     {
-        return (IImmutableCommandReturnType<TAggregate, TCommandResult>)CommandReturnTypes[typeof(TCommandResult)];
+        return (IImmutableCommandReturnType<TAggregate, TCommandResult>)base.GetCommandReturnType<TCommandResult>();
     }
 }

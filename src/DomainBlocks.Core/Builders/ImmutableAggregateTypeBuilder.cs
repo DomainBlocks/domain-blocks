@@ -20,13 +20,16 @@ public class ImmutableAggregateTypeBuilder<TAggregate, TEventBase> :
 
     public Func<TAggregate, TEventBase, TAggregate> EventApplier
     {
-        get => _eventApplier ?? _eventApplierBuilder.Build();
+        get => _eventApplier ?? _eventApplierBuilder?.Build();
         private set => _eventApplier = value;
     }
 
     public IImmutableRaisedEventsBuilder<TAggregate, TEventBase> WithRaisedEventsFrom(
         Action<ImmutableCommandReturnTypeBuilder<TAggregate, TEventBase>> commandReturnTypeBuilderAction)
     {
+        if (commandReturnTypeBuilderAction == null)
+            throw new ArgumentNullException(nameof(commandReturnTypeBuilderAction));
+        
         var builder = new ImmutableCommandReturnTypeBuilder<TAggregate, TEventBase>(CommandReturnTypeBuilders, this);
         commandReturnTypeBuilderAction(builder);
         return this;
@@ -35,7 +38,7 @@ public class ImmutableAggregateTypeBuilder<TAggregate, TEventBase> :
     void IImmutableRaisedEventsBuilder<TAggregate, TEventBase>.ApplyEventsWith(
         Func<TAggregate, TEventBase, TAggregate> eventApplier)
     {
-        EventApplier = eventApplier;
+        EventApplier = eventApplier ?? throw new ArgumentNullException(nameof(eventApplier));
         _eventApplierBuilder = null;
     }
 
