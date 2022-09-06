@@ -23,7 +23,7 @@ public class ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase> : 
 
     public Func<TAggregate, TEventBase, TAggregate> Build()
     {
-        var bindingFlags = BindingFlags.Public | BindingFlags.Instance;
+        var bindingFlags = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static;
 
         if (_includeNonPublicMethods)
         {
@@ -49,7 +49,8 @@ public class ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase> : 
             {
                 var (method, eventType) = x;
                 var eventParam = Expression.Parameter(typeof(TEventBase), "event");
-                var body = Expression.Call(aggregateParam, method, Expression.Convert(eventParam, eventType));
+                var instance = method.IsStatic ? null : aggregateParam;
+                var body = Expression.Call(instance, method, Expression.Convert(eventParam, eventType));
                 var block = Expression.Block(aggregateParam, body);
 
                 var lambda = Expression.Lambda<Func<TAggregate, TEventBase, TAggregate>>(

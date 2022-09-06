@@ -178,7 +178,7 @@ public class ModelBuilderTests
             yield return new ValueChangedEvent(newValue);
         }
 
-        private ImmutableAggregate1 Apply(ValueChangedEvent @event)
+        private static ImmutableAggregate1 Apply(ValueChangedEvent @event)
         {
             return new ImmutableAggregate1(@event.Value);
         }
