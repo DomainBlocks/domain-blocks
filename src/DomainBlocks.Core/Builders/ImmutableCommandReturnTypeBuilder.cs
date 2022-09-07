@@ -11,11 +11,11 @@ public interface IImmutableCommandReturnUpdatedStateSelectorBuilder<in TAggregat
 
 public class ImmutableCommandReturnTypeBuilder<TAggregate, TEventBase> where TEventBase : class
 {
-    private readonly List<ICommandReturnTypeBuilder> _builders;
+    private readonly ICollection<ICommandReturnTypeBuilder> _builders;
     private readonly IImmutableEventApplierSource<TAggregate, TEventBase> _eventApplierSource;
 
     internal ImmutableCommandReturnTypeBuilder(
-        List<ICommandReturnTypeBuilder> builders,
+        ICollection<ICommandReturnTypeBuilder> builders,
         IImmutableEventApplierSource<TAggregate, TEventBase> eventApplierSource)
     {
         _builders = builders;

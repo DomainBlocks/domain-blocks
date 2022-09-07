@@ -27,7 +27,7 @@ public class ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase> : 
     public Func<TAggregate, TEventBase, TAggregate> Build()
     {
         if (_methodName == null)
-            throw new InvalidOperationException("Unable to find event applier methods as method name was specified.");
+            throw new InvalidOperationException("No method name specified. Unable to find event applier methods.");
 
         var bindingFlags = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static;
 
