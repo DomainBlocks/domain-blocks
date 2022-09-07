@@ -11,11 +11,12 @@ public interface IApplyRaisedEventsBehaviorBuilder
 
 public class MutableCommandReturnTypeBuilder<TAggregate, TEventBase> where TEventBase : class
 {
-    private readonly List<ICommandReturnTypeBuilder> _builders;
+    private readonly ICollection<ICommandReturnTypeBuilder> _builders;
     private readonly IMutableEventApplierSource<TAggregate, TEventBase> _eventApplierSource;
 
     internal MutableCommandReturnTypeBuilder(
-        List<ICommandReturnTypeBuilder> builders, IMutableEventApplierSource<TAggregate, TEventBase> eventApplierSource)
+        ICollection<ICommandReturnTypeBuilder> builders,
+        IMutableEventApplierSource<TAggregate, TEventBase> eventApplierSource)
     {
         _builders = builders ?? throw new ArgumentNullException(nameof(builders));
         _eventApplierSource = eventApplierSource ?? throw new ArgumentNullException(nameof(eventApplierSource));
