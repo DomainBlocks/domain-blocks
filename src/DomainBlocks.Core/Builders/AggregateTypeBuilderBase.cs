@@ -32,12 +32,15 @@ public abstract class AggregateTypeBuilderBase<TAggregate, TEventBase> :
     IIdToSnapshotKeySelectorBuilder
     where TEventBase : class
 {
+    private readonly List<IEventTypeBuilder> _eventTypeBuilders = new();
+
     protected Func<TAggregate> Factory { get; private set; }
     protected Func<TAggregate, string> IdSelector { get; private set; }
     protected Func<string, string> IdToStreamKeySelector { get; private set; }
     protected Func<string, string> IdToSnapshotKeySelector { get; private set; }
     protected List<ICommandReturnTypeBuilder> CommandReturnTypeBuilders { get; } = new();
-    protected List<IEventTypeBuilder> EventTypeBuilders { get; } = new();
+    protected IEnumerable<ICommandReturnType> CommandReturnTypes => CommandReturnTypeBuilders.Select(x => x.Build());
+    protected IEnumerable<IEventType> EventTypes => _eventTypeBuilders.SelectMany(x => x.Build());
 
     public IIdSelectorBuilder<TAggregate> InitialState(Func<TAggregate> factory)
     {
@@ -67,29 +70,15 @@ public abstract class AggregateTypeBuilderBase<TAggregate, TEventBase> :
     public EventTypeBuilder<TEvent, TEventBase> Event<TEvent>() where TEvent : TEventBase
     {
         var builder = new EventTypeBuilder<TEvent, TEventBase>();
-        EventTypeBuilders.Add(builder);
+        _eventTypeBuilders.Add(builder);
         return builder;
     }
 
-    public void WithEventsFrom(Assembly assembly, Type baseType = null)
+    public AssemblyEventTypeBuilder<TEventBase> Events(Assembly assembly)
     {
-        if (assembly == null) throw new ArgumentNullException(nameof(assembly));
-
-        var builders = assembly
-            .GetTypes()
-            .Where(x => x.IsClass &&
-                        typeof(TEventBase).IsAssignableFrom(x) &&
-                        (baseType == null || baseType.IsAssignableFrom(x)))
-            .Select(x =>
-            {
-                var untypedBuilderType = typeof(EventTypeBuilder<,>);
-                var typeArgs = new[] { x, typeof(TEventBase) };
-                var builderType = untypedBuilderType.MakeGenericType(typeArgs);
-                var builder = (IEventTypeBuilder)Activator.CreateInstance(builderType);
-                return builder;
-            });
-
-        EventTypeBuilders.AddRange(builders);
+        var builder = new AssemblyEventTypeBuilder<TEventBase>(assembly);
+        _eventTypeBuilders.Add(builder);
+        return builder;
     }
 
     public abstract IAggregateType Build();

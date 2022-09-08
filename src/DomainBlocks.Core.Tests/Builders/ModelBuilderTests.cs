@@ -3,7 +3,7 @@ using System.Linq;
 using DomainBlocks.Core.Builders;
 using NUnit.Framework;
 
-namespace DomainBlocks.Core.Tests;
+namespace DomainBlocks.Core.Tests.Builders;
 
 [TestFixture]
 public class ModelBuilderTests

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace DomainBlocks.Core.Builders;
 
@@ -60,16 +59,13 @@ public class MutableAggregateTypeBuilder<TAggregate, TEventBase> :
 
     public override IMutableAggregateType<TAggregate> Build()
     {
-        var commandResultTypes = CommandReturnTypeBuilders.Select(x => x.Build());
-        var eventTypes = EventTypeBuilders.Select(x => x.Build());
-
         return new MutableAggregateType<TAggregate, TEventBase>(
             Factory,
             IdSelector,
             IdToStreamKeySelector,
             IdToSnapshotKeySelector,
-            commandResultTypes,
-            eventTypes,
+            CommandReturnTypes,
+            EventTypes,
             EventApplier,
             _raisedEventsSelector);
     }
