@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace DomainBlocks.Core.Builders;
 
@@ -14,9 +15,9 @@ public class EventTypeBuilder<TEvent, TEventBase> : IEventTypeBuilder where TEve
         _eventName = eventName;
     }
 
-    IEventType IEventTypeBuilder.Build()
+    IEnumerable<IEventType> IEventTypeBuilder.Build()
     {
         var eventName = _eventName ?? typeof(TEvent).Name;
-        return new EventType<TEvent, TEventBase>(eventName);
+        yield return new EventType<TEvent, TEventBase>(eventName);
     }
 }

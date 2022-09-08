@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 
 namespace DomainBlocks.Core.Builders;
 
@@ -51,16 +50,13 @@ public class ImmutableAggregateTypeBuilder<TAggregate, TEventBase> :
 
     public override IImmutableAggregateType<TAggregate> Build()
     {
-        var commandResultTypes = CommandReturnTypeBuilders.Select(x => x.Build());
-        var eventTypes = EventTypeBuilders.Select(x => x.Build());
-
         return new ImmutableAggregateType<TAggregate, TEventBase>(
             Factory,
             IdSelector,
             IdToStreamKeySelector,
             IdToSnapshotKeySelector,
-            commandResultTypes,
-            eventTypes,
+            CommandReturnTypes,
+            EventTypes,
             EventApplier);
     }
 }
