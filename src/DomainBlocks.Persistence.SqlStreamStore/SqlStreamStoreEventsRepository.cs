@@ -12,14 +12,17 @@ namespace DomainBlocks.Persistence.SqlStreamStore
 {
     public class SqlStreamStoreEventsRepository : IEventsRepository<string>
     {
+        private static readonly ILogger<SqlStreamStoreEventsRepository> Log = Logger.CreateFor<SqlStreamStoreEventsRepository>();
         private readonly IStreamStore _streamStore;
         private readonly IEventSerializer<string> _serializer;
-        private static readonly ILogger<SqlStreamStoreEventsRepository> Log = Logger.CreateFor<SqlStreamStoreEventsRepository>();
+        private readonly int _readPageSize;
 
-        public SqlStreamStoreEventsRepository(IStreamStore streamStore, IEventSerializer<string> serializer)
+        public SqlStreamStoreEventsRepository(
+            IStreamStore streamStore, IEventSerializer<string> serializer, int readPageSize = 600)
         {
             _streamStore = streamStore ?? throw new ArgumentNullException(nameof(streamStore));
             _serializer = serializer;
+            _readPageSize = readPageSize;
         }
 
         public async Task<long> SaveEventsAsync(
@@ -84,29 +87,21 @@ namespace DomainBlocks.Persistence.SqlStreamStore
         {
             if (streamName == null) throw new ArgumentNullException(nameof(streamName));
 
-            const int readPageSize = 4096;
-            var currentPagePosition = (int)startPosition;
-
-            ReadStreamPage readStreamPage;
-            do
+            // Get the first page.
+            ReadStreamPage page;
+            try
             {
-                try
-                {
-                    readStreamPage =
-                        await _streamStore.ReadStreamForwards(streamName, currentPagePosition, readPageSize);
-                }
-                catch (Exception ex)
-                {
-                    Log.LogError(ex, "Unable to load events from {StreamName}", streamName);
-                    throw;
-                }
+                page = await _streamStore.ReadStreamForwards(streamName, (int)startPosition, _readPageSize);
+            }
+            catch (Exception ex)
+            {
+                Log.LogError(ex, "Unable to load events from {StreamName}", streamName);
+                throw;
+            }
 
-                if (readStreamPage.Status == PageReadStatus.StreamNotFound)
-                {
-                    yield break;
-                }
-
-                foreach (var message in readStreamPage.Messages)
+            while (true)
+            {
+                foreach (var message in page.Messages)
                 {
                     object deserializedEvent;
 
@@ -115,17 +110,17 @@ namespace DomainBlocks.Persistence.SqlStreamStore
                         var jsonData = await message.GetJsonData();
                         deserializedEvent = _serializer.DeserializeEvent(jsonData, message.Type);
                     }
-                    catch (EventDeserializeException e)
+                    catch (EventDeserializeException ex)
                     {
                         if (onEventError == null)
                         {
-                            Log.LogWarning(e, "Error deserializing event and no error handler set up." +
-                                              " This may cause data inconsistencies");
+                            Log.LogWarning(ex, "Error deserializing event and no error handler set up." +
+                                               " This may cause data inconsistencies");
                         }
                         else
                         {
                             onEventError(await SqlStreamStoreEventPersistenceData.FromStreamMessage(message));
-                            Log.LogInformation(e, "Error deserializing event. Calling onEventError handler");
+                            Log.LogInformation(ex, "Error deserializing event. Calling onEventError handler");
                         }
 
                         continue;
@@ -139,19 +134,22 @@ namespace DomainBlocks.Persistence.SqlStreamStore
                     yield return deserializedEvent;
                 }
 
-                currentPagePosition = readStreamPage.LastStreamVersion;
+                if (page.IsEnd)
+                {
+                    break;
+                }
 
+                // Get the next page.
                 try
                 {
-                    readStreamPage = await readStreamPage.ReadNext();
+                    page = await page.ReadNext();
                 }
                 catch (Exception ex)
                 {
                     Log.LogError(ex, "Unable to load events from {StreamName}", streamName);
                     throw;
                 }
-
-            } while (!readStreamPage.IsEnd);
+            }
         }
 
         private static int MapStreamVersion(long expectedStreamVersion)
