@@ -14,9 +14,7 @@ public class ModelBuilderTests
         var model = new ModelBuilder()
             .Aggregate<MutableAggregate1, object>(aggregate =>
             {
-                aggregate
-                    .WithRaisedEventsFrom(x => x.RaisedEvents)
-                    .ApplyEventsWith((_, _) => { }); // Not used in this test
+                aggregate.WithRaisedEventsFrom(x => x.RaisedEvents);
             })
             .Build();
 
