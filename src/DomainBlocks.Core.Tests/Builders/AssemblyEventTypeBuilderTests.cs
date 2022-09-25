@@ -23,14 +23,14 @@ public class AssemblyEventTypeBuilderTests
     }
     
     [Test]
-    public void BuiltThrowsExceptionWhenNoEventsFound()
+    public void BuildThrowsExceptionWhenNoEventsFound()
     {
         var builder = new AssemblyEventTypeBuilder<IEvent2>(typeof(IEvent2).Assembly);
         Assert.Throws<InvalidOperationException>(() => ((IEventTypeBuilder)builder).Build());
     }
 
     [Test]
-    public void BuiltThrowsExceptionWhenNoEventsWithFilterBaseTypeFound()
+    public void BuildThrowsExceptionWhenNoEventsWithFilterBaseTypeFound()
     {
         var builder = new AssemblyEventTypeBuilder<IEvent1>(typeof(IEvent1).Assembly);
         builder.FilterByBaseType<IFilterType2>();
