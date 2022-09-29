@@ -3,15 +3,14 @@ using System.Threading.Tasks;
 
 namespace DomainBlocks.Persistence;
 
-public interface IAggregateRepository<TEventBase>
+public interface IAggregateRepository
 {
-    Task<LoadedAggregate<TAggregateState, TEventBase>> LoadAggregate<TAggregateState>(
-        string id,
-        AggregateLoadStrategy loadStrategy = AggregateLoadStrategy.PreferSnapshot);
+    Task<LoadedAggregate<TAggregateState>> LoadAsync<TAggregateState>(
+        string id, AggregateLoadStrategy loadStrategy = AggregateLoadStrategy.PreferSnapshot);
 
-    Task<long> SaveAggregate<TAggregateState>(
-        LoadedAggregate<TAggregateState, TEventBase> loadedAggregate,
-        Func<LoadedAggregate<TAggregateState, TEventBase>, bool> snapshotPredicate = null);
+    Task<long> SaveAsync<TAggregateState>(
+        LoadedAggregate<TAggregateState> loadedAggregate,
+        Func<LoadedAggregate<TAggregateState>, bool> snapshotPredicate = null);
 
-    Task SaveSnapshot<TAggregateState>(VersionedAggregateState<TAggregateState> versionedState);
+    Task SaveSnapshotAsync<TAggregateState>(VersionedAggregateState<TAggregateState> versionedState);
 }

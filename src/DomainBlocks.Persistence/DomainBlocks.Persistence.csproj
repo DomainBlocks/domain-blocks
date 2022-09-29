@@ -2,11 +2,15 @@
   
   <ItemGroup>
     <ProjectReference Include="..\DomainBlocks.Serialization\DomainBlocks.Serialization.csproj" />
-    <ProjectReference Include="..\DomainBlocks\DomainBlocks.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Core\DomainBlocks.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="$(AssemblyName).Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Linq.Async" Version="5.0.0" />
   </ItemGroup>
 
 </Project>

@@ -14,7 +14,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DomainBlocks.Persistence\DomainBlocks.Persistence.csproj" />
-    <ProjectReference Include="..\DomainBlocks\DomainBlocks.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Core\DomainBlocks.Core.csproj" />
   </ItemGroup>
 
 </Project>

@@ -2,7 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DomainBlocks.Serialization\DomainBlocks.Serialization.csproj" />
-    <ProjectReference Include="..\DomainBlocks\DomainBlocks.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Core\DomainBlocks.Core.csproj" />
   </ItemGroup>
 
 </Project>

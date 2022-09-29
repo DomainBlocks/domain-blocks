@@ -3,13 +3,13 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.32112.339
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainBlocks", "DomainBlocks\DomainBlocks.csproj", "{3A908D35-70E7-4DA2-8FC2-1F664CE350FF}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainBlocks.Core", "DomainBlocks.Core\DomainBlocks.Core.csproj", "{3A908D35-70E7-4DA2-8FC2-1F664CE350FF}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shopping.Domain.Tests", "Examples\Shopping.Domain.Tests\Shopping.Domain.Tests.csproj", "{8E12A7F8-2C98-444C-9242-07164DE58E9C}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shopping.Domain", "Examples\Shopping.Domain\Shopping.Domain.csproj", "{643C07DB-082E-4117-8D75-3CF917E33815}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainBlocks.Tests", "DomainBlocks.Tests\DomainBlocks.Tests.csproj", "{B62C04E6-2DF3-49BC-8F5E-0A4388DCD9F6}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainBlocks.Core.Tests", "DomainBlocks.Core.Tests\DomainBlocks.Core.Tests.csproj", "{B62C04E6-2DF3-49BC-8F5E-0A4388DCD9F6}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Examples", "Examples", "{083A78FB-1B77-4383-868C-D9D3EB0E682E}"
 EndProject
@@ -61,7 +61,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainBlocks.Projections.En
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shopping.ReadModel", "Examples\Shopping.ReadModel\Shopping.ReadModel.csproj", "{E99B1405-331E-49F2-ACB5-7CA04775DEDE}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shopping.Events", "Examples\Shopping.Events\Shopping.Events.csproj", "{BC5E2846-A445-4C7D-AF92-EA5DF375640A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shopping.Domain.Events", "Examples\Shopping.Domain.Events\Shopping.Domain.Events.csproj", "{BC5E2846-A445-4C7D-AF92-EA5DF375640A}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Asp.Net", "Asp.Net", "{58CD75DE-F1E9-4BBD-8945-0BB392EDC8EE}"
 EndProject
@@ -92,8 +92,6 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainBlocks.SqlStreamStore.Common.AspNetCore", "DomainBlocks.SqlStreamStore.Common.AspNetCore\DomainBlocks.SqlStreamStore.Common.AspNetCore.csproj", "{94948354-15D2-4834-AA4A-232E1E5AC3C7}"
 EndProject
 Project("{E53339B2-1760-4266-BCC7-CA923CBCF16C}") = "Shopping.DockerCompose", "Examples\Shopping.DockerCompose.dcproj", "{B494CB62-63D3-4514-8272-51F8AD6C61E4}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Persistence.Tests", "DomainBlocks.Persistence.Tests\DomainBlocks.Persistence.Tests.csproj", "{E91F9B9C-0E01-4F35-A33F-B206E570645E}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -245,10 +243,6 @@ Global
 		{B494CB62-63D3-4514-8272-51F8AD6C61E4}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B494CB62-63D3-4514-8272-51F8AD6C61E4}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B494CB62-63D3-4514-8272-51F8AD6C61E4}.Release|Any CPU.Build.0 = Release|Any CPU
-		{E91F9B9C-0E01-4F35-A33F-B206E570645E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{E91F9B9C-0E01-4F35-A33F-B206E570645E}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{E91F9B9C-0E01-4F35-A33F-B206E570645E}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{E91F9B9C-0E01-4F35-A33F-B206E570645E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

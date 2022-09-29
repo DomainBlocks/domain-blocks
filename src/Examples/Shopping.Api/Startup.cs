@@ -1,4 +1,5 @@
-﻿using DomainBlocks.Persistence.AspNetCore;
+﻿using System.Collections.Generic;
+using DomainBlocks.Persistence.AspNetCore;
 using DomainBlocks.Persistence.SqlStreamStore.AspNetCore;
 using DomainBlocks.Serialization.Json.AspNetCore;
 using MediatR;
@@ -26,7 +27,7 @@ public class Startup
     {
         services.AddGrpc();
         services.AddMediatR(typeof(Startup));
-        services.AddAggregateRepository<IDomainEvent>(
+        services.AddAggregateRepository(
             _configuration,
             options =>
             {
@@ -34,16 +35,31 @@ public class Startup
                     .UseSqlStreamStoreForEventsAndSnapshots()
                     .UseJsonSerialization();
             },
-            aggregates =>
+            modelBuilder =>
             {
-                aggregates.Register<ShoppingCartState>(aggregate =>
-                {
-                    aggregate.InitialState(_ => new ShoppingCartState())
-                        .Id(o => o.Id?.ToString())
-                        .PersistenceKey(id => $"shoppingCart-{id}")
-                        .SnapshotKey(id => $"shoppingCartSnapshot-{id}")
-                        .RegisterEvents(ShoppingCartFunctions.RegisterEvents);
-                });
+                modelBuilder
+                    .ImmutableAggregate<ShoppingCartState, IDomainEvent>(aggregate =>
+                    {
+                        aggregate
+                            .InitialState(() => new ShoppingCartState())
+                            .HasId(x => x.Id?.ToString())
+                            .WithStreamKey(id => $"shoppingCart-{id}")
+                            .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");
+
+                        aggregate
+                            .WithRaisedEventsFrom(commandReturnTypes =>
+                            {
+                                commandReturnTypes
+                                    .CommandReturnType<IEnumerable<IDomainEvent>>()
+                                    .WithEventsFrom(x => x)
+                                    .ApplyEvents();
+                            })
+                            .ApplyEventsWith(ShoppingCartFunctions.Apply);
+
+                        aggregate.Event<ShoppingCartCreated>().HasName(ShoppingCartCreated.EventName);
+                        aggregate.Event<ItemAddedToShoppingCart>().HasName(ItemAddedToShoppingCart.EventName);
+                        aggregate.Event<ItemRemovedFromShoppingCart>().HasName(ItemRemovedFromShoppingCart.EventName);
+                    });
             });
     }
 
