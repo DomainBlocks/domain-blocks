@@ -1,5 +1,5 @@
 ﻿using System;
-using DomainBlocks.Aggregates;
+using DomainBlocks.Core;
 using DomainBlocks.Serialization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

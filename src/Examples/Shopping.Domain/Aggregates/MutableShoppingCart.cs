@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using DomainBlocks.Aggregates;
-using DomainBlocks.Aggregates.Builders;
 using Shopping.Domain.Commands;
 using Shopping.Domain.Events;
 
@@ -10,34 +8,22 @@ namespace Shopping.Domain.Aggregates;
 
 public class MutableShoppingCart
 {
-    private readonly IAggregateEventRouter<IDomainEvent> _eventRouter;
     private readonly List<ShoppingCartItem> _items = new();
-
-    public MutableShoppingCart(IAggregateEventRouter<IDomainEvent> eventRouter)
-    {
-        _eventRouter = eventRouter;
-    }
+    private readonly List<IDomainEvent> _raisedEvents = new();
     
     public Guid? Id { get; private set; }
     public IReadOnlyList<ShoppingCartItem> Items => _items.AsReadOnly();
-
-    public static void RegisterEvents(EventRegistryBuilder<MutableShoppingCart, IDomainEvent> events)
-    {
-        events
-            .Event<ShoppingCartCreated>().RoutesTo((agg, e) => agg.Apply(e))
-            .Event<ItemAddedToShoppingCart>().RoutesTo((agg, e) => agg.Apply(e))
-            .Event<ItemRemovedFromShoppingCart>().RoutesTo((agg, e) => agg.Apply(e));
-    }
+    public IReadOnlyList<IDomainEvent> RaisedEvents => _raisedEvents;
 
     public void Execute(AddItemToShoppingCart command)
     {
         var isNew = Id == null;
         if (isNew)
         {
-            _eventRouter.Send(this, new ShoppingCartCreated(command.CartId));
+            RaiseEvent(new ShoppingCartCreated(command.CartId));
         }
-
-        _eventRouter.Send(this, new ItemAddedToShoppingCart(command.Id, command.CartId, command.Item));
+        
+        RaiseEvent(new ItemAddedToShoppingCart(command.Id, command.CartId, command.Item));
     }
 
     public void Execute(RemoveItemFromShoppingCart command)
@@ -47,7 +33,29 @@ public class MutableShoppingCart
             throw new InvalidOperationException("Item not in shopping cart");
         }
 
-        _eventRouter.Send(this, new ItemRemovedFromShoppingCart(command.Id, command.CartId));
+        RaiseEvent(new ItemRemovedFromShoppingCart(command.Id, command.CartId));
+    }
+
+    public void ApplyEvent(IDomainEvent @event)
+    {
+        switch (@event)
+        {
+            case ShoppingCartCreated e:
+                Apply(e);
+                break;
+            case ItemAddedToShoppingCart e:
+                Apply(e);
+                break;
+            case ItemRemovedFromShoppingCart e:
+                Apply(e);
+                break;
+        }
+    }
+
+    private void RaiseEvent(IDomainEvent @event)
+    {
+        ApplyEvent(@event);
+        _raisedEvents.Add(@event);
     }
 
     private void Apply(ShoppingCartCreated @event)

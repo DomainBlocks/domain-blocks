@@ -65,13 +65,12 @@ namespace DomainBlocks.Persistence.SqlStreamStore
                 }
 
                 var snapshotMessage = messages[0];
-                var snapshotState = _serializer.DeserializeEvent<TState>(await snapshotMessage.GetJsonData(),
-                                                                         snapshotMessage.Type,
-                                                                         typeof(TState));
+                
+                var snapshotState = (TState)_serializer.DeserializeEvent(
+                    await snapshotMessage.GetJsonData(), snapshotMessage.Type, typeof(TState));
 
                 var snapshotVersion = long.Parse(_serializer.DeserializeMetadata(snapshotMessage.JsonMetadata)[SnapshotVersionMetadataKey]);
                 return (true, new Snapshot<TState>(snapshotState, snapshotVersion));
-
             }
             catch (Exception ex)
             {

@@ -22,7 +22,8 @@ namespace DomainBlocks.Persistence.SqlStreamStore
             _serializer = serializer;
         }
 
-        public async Task<long> SaveEventsAsync<TEvent>(string streamName, long expectedStreamVersion, IEnumerable<TEvent> events)
+        public async Task<long> SaveEventsAsync(
+            string streamName, long expectedStreamVersion, IEnumerable<object> events)
         {
             if (streamName == null) throw new ArgumentNullException(nameof(streamName));
             if (events == null) throw new ArgumentNullException(nameof(events));
@@ -78,62 +79,79 @@ namespace DomainBlocks.Persistence.SqlStreamStore
             return appendResult.CurrentVersion;
         }
 
-        public async Task<IList<TEvent>> LoadEventsAsync<TEvent>(string streamName, long startPosition = 0, Action<IEventPersistenceData<string>> onEventError = null)
+        public async IAsyncEnumerable<object> LoadEventsAsync(
+            string streamName, long startPosition = 0, Action<IEventPersistenceData<string>> onEventError = null)
         {
             if (streamName == null) throw new ArgumentNullException(nameof(streamName));
+
             const int readPageSize = 4096;
-            var events = new List<TEvent>();
             var currentPagePosition = (int)startPosition;
 
-            try
+            ReadStreamPage readStreamPage;
+            do
             {
-                ReadStreamPage readStreamPage;
-                do
+                try
                 {
-                    readStreamPage = await _streamStore.ReadStreamForwards(streamName,
-                                                                           currentPagePosition,
-                                                                           readPageSize);
+                    readStreamPage =
+                        await _streamStore.ReadStreamForwards(streamName, currentPagePosition, readPageSize);
+                }
+                catch (Exception ex)
+                {
+                    Log.LogError(ex, "Unable to load events from {StreamName}", streamName);
+                    throw;
+                }
 
-                    if (readStreamPage.Status == PageReadStatus.StreamNotFound)
+                if (readStreamPage.Status == PageReadStatus.StreamNotFound)
+                {
+                    yield break;
+                }
+
+                foreach (var message in readStreamPage.Messages)
+                {
+                    object deserializedEvent;
+
+                    try
                     {
-                        return events;
+                        var jsonData = await message.GetJsonData();
+                        deserializedEvent = _serializer.DeserializeEvent(jsonData, message.Type);
+                    }
+                    catch (EventDeserializeException e)
+                    {
+                        if (onEventError == null)
+                        {
+                            Log.LogWarning(e, "Error deserializing event and no error handler set up." +
+                                              " This may cause data inconsistencies");
+                        }
+                        else
+                        {
+                            onEventError(await SqlStreamStoreEventPersistenceData.FromStreamMessage(message));
+                            Log.LogInformation(e, "Error deserializing event. Calling onEventError handler");
+                        }
+
+                        continue;
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.LogError(ex, "Unable to load events from {StreamName}", streamName);
+                        throw;
                     }
 
-                    foreach (var message in readStreamPage.Messages)
-                    {
-                        try
-                        {
-                            var jsonData = await message.GetJsonData();
-                            events.Add(_serializer.DeserializeEvent<TEvent>(jsonData,
-                                                                            message.Type));
-                        }
-                        catch (EventDeserializeException e)
-                        {
-                            if (onEventError == null)
-                            {
-                                Log.LogWarning(e,
-                                               "Error deserializing event and no error handler set up. This may cause data inconsistencies");
-                            }
-                            else
-                            {
-                                onEventError(await SqlStreamStoreEventPersistenceData.FromStreamMessage(message));
-                                Log.LogInformation(e, "Error deserializing event. Calling onEventError handler");
-                            }
-                        }
-                    }
+                    yield return deserializedEvent;
+                }
 
-                    currentPagePosition = readStreamPage.LastStreamVersion;
+                currentPagePosition = readStreamPage.LastStreamVersion;
+
+                try
+                {
                     readStreamPage = await readStreamPage.ReadNext();
+                }
+                catch (Exception ex)
+                {
+                    Log.LogError(ex, "Unable to load events from {StreamName}", streamName);
+                    throw;
+                }
 
-                } while (!readStreamPage.IsEnd);
-            }
-            catch (Exception ex)
-            {
-                Log.LogError(ex, "Unable to load events from {StreamName}", streamName);
-                throw;
-            }
-
-            return events;
+            } while (!readStreamPage.IsEnd);
         }
 
         private static int MapStreamVersion(long expectedStreamVersion)

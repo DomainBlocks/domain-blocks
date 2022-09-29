@@ -5,8 +5,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\DomainBlocks\DomainBlocks.csproj" />
-      <ProjectReference Include="..\Shopping.Events\Shopping.Events.csproj" />
+      <ProjectReference Include="..\..\DomainBlocks.Core\DomainBlocks.Core.csproj" />
+      <ProjectReference Include="..\Shopping.Domain.Events\Shopping.Domain.Events.csproj" />
     </ItemGroup>
 
 </Project>

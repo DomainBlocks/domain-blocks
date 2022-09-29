@@ -63,9 +63,9 @@ namespace DomainBlocks.Persistence.EventStore
                 
                 var resolvedEvent = readStreamResult.Current;
 
-                var snapshotData = _serializer.DeserializeEvent<TState>(resolvedEvent.OriginalEvent.Data,
-                                                                        resolvedEvent.OriginalEvent.EventType,
-                                                                        typeof(TState));
+                var snapshotData = (TState)_serializer.DeserializeEvent(
+                    resolvedEvent.OriginalEvent.Data, resolvedEvent.OriginalEvent.EventType, typeof(TState));
+                
                 var snapshotVersion = long.Parse(_serializer.DeserializeMetadata(resolvedEvent.OriginalEvent.Metadata)[SnapshotVersionMetadataKey]);
 
                 return (true, new Snapshot<TState>(snapshotData, snapshotVersion));

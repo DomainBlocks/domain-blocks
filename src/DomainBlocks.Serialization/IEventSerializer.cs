@@ -5,8 +5,10 @@ namespace DomainBlocks.Serialization
 {
     public interface IEventSerializer<TRawData>
     {
-        IEventPersistenceData<TRawData> GetPersistenceData(object @event, string eventNameOverride = null, params KeyValuePair<string, string>[] additionalMetadata);
-        TEvent DeserializeEvent<TEvent>(TRawData eventData, string eventName, Type typeOverride = null);
+        IEventPersistenceData<TRawData> GetPersistenceData(
+            object @event, string eventNameOverride = null, params KeyValuePair<string, string>[] additionalMetadata);
+        
+        object DeserializeEvent(TRawData eventData, string eventName, Type typeOverride = null);
         void UseMetaDataContext(EventMetadataContext metadataContext);
         EventMetadata DeserializeMetadata(TRawData rawMetadata);
     }

@@ -1,101 +1,63 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using DomainBlocks.Aggregates;
+using DomainBlocks.Core;
 
 namespace DomainBlocks.Persistence;
 
 internal static class LoadedAggregate
 {
-    internal static LoadedAggregate<TAggregateState, TEventBase> Create<TAggregateState, TEventBase>(
-        TAggregateState aggregateState,
+    internal static LoadedAggregate<TAggregate> Create<TAggregate>(
+        TAggregate state,
+        IAggregateType<TAggregate> aggregateType,
         string id,
         long version,
         long? snapshotVersion,
-        long eventsLoaded,
-        TrackingAggregateEventRouter<TEventBase> trackingEventRouter)
+        long eventsLoaded)
     {
-        return new LoadedAggregate<TAggregateState, TEventBase>(
-            aggregateState, id, version, snapshotVersion, eventsLoaded, trackingEventRouter);
+        return new LoadedAggregate<TAggregate>(state, aggregateType, id, version, snapshotVersion, eventsLoaded);
     }
 }
 
-public sealed class LoadedAggregate<TAggregateState, TEventBase>
+public sealed class LoadedAggregate<TAggregate>
 {
-    private readonly TrackingAggregateEventRouter<TEventBase> _eventRouter;
+    private readonly ICommandExecutionContext<TAggregate> _commandExecutionContext;
 
     internal LoadedAggregate(
-        TAggregateState aggregateState,
+        TAggregate state,
+        IAggregateType<TAggregate> aggregateType,
         string id,
         long version,
         long? snapshotVersion,
-        long eventsLoadedCount,
-        TrackingAggregateEventRouter<TEventBase> eventRouter)
+        long eventsLoadedCount)
     {
+        if (aggregateType == null) throw new ArgumentNullException(nameof(aggregateType));
+
         if (string.IsNullOrWhiteSpace(id))
             throw new ArgumentException("Value cannot be null or whitespace.", nameof(id));
-        
-        _eventRouter = eventRouter ?? throw new ArgumentNullException(nameof(eventRouter));
-        
-        AggregateState = aggregateState ?? throw new ArgumentNullException(nameof(aggregateState));
+
+        _commandExecutionContext = aggregateType.GetCommandExecutionContext(state);
+
         Id = id;
         Version = version;
         SnapshotVersion = snapshotVersion;
         EventsLoadedCount = eventsLoadedCount;
-        EventsToPersist = Enumerable.Empty<TEventBase>();
     }
 
-    public TAggregateState AggregateState { get; private set; }
+    public TAggregate State => _commandExecutionContext.State;
     public string Id { get; }
     public long Version { get; }
     public long? SnapshotVersion { get; }
     public long EventsLoadedCount { get; }
-    public IEnumerable<TEventBase> EventsToPersist { get; private set; }
+    public IEnumerable<object> EventsToPersist => _commandExecutionContext.RaisedEvents;
     internal bool HasBeenSaved { get; set; }
-    
-    public void ExecuteCommand(Action<TAggregateState> commandExecutor)
-    {
-        ExecuteCommand(agg =>
-        {
-            commandExecutor(agg);
-            return agg;
-        });
-    }
-    
-    public void ExecuteCommand(Action<TAggregateState, IAggregateEventRouter<TEventBase>> commandExecutor)
-    {
-        ExecuteCommand(agg =>
-        {
-            commandExecutor(agg, _eventRouter);
-            return agg;
-        });
-    }
-    
-    public void ExecuteCommand(Func<TAggregateState, TAggregateState> commandExecutor)
-    {
-        // Get the new state by executing the command.
-        AggregateState = commandExecutor(AggregateState);
 
-        // Save any events that were raised on the event router.
-        EventsToPersist = EventsToPersist.Concat(_eventRouter.TrackedEvents);
-        _eventRouter.ClearTrackedEvents();
+    public TResult ExecuteCommand<TResult>(Func<TAggregate, TResult> commandExecutor)
+    {
+        return _commandExecutionContext.ExecuteCommand(commandExecutor);
     }
 
-    public void ExecuteCommand(Func<TAggregateState, IAggregateEventRouter<TEventBase>, TAggregateState> commandExecutor)
+    public void ExecuteCommand(Action<TAggregate> commandExecutor)
     {
-        ExecuteCommand(agg => commandExecutor(agg, _eventRouter));
-    }
-    
-    public void ExecuteCommand(Func<TAggregateState, IEnumerable<TEventBase>> commandExecutor)
-    {
-        // Get the events to raise by executing the command. This func is assumed to be immutable.
-        var events = commandExecutor(AggregateState).ToList();
-
-        // Send the events, and get the new state.
-        AggregateState = _eventRouter.Send(AggregateState, events);
-
-        // Save the events. Note that any events raised on the event router by the command executor are ignored.
-        EventsToPersist = EventsToPersist.Concat(events);
-        _eventRouter.ClearTrackedEvents();
+        _commandExecutionContext.ExecuteCommand(commandExecutor);
     }
 }

@@ -1,5 +1,5 @@
 ﻿using System.Text.Json;
-using DomainBlocks.Aggregates;
+using DomainBlocks.Core;
 
 namespace DomainBlocks.Serialization.Json
 {

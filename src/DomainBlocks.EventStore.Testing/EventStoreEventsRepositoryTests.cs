@@ -33,9 +33,7 @@ namespace DomainBlocks.EventStore.Testing
             Assert.ThrowsAsync<ArgumentNullException>(async () =>
             {
                 var repo = CreateRepository();
-                await repo.SaveEventsAsync<TestEvent>(EventStoreTestHelpers.RandomStreamName(), 
-                                                      StreamVersion.NewStream, 
-                                                      null);
+                await repo.SaveEventsAsync(EventStoreTestHelpers.RandomStreamName(), StreamVersion.NewStream, null);
             });
         }
 
@@ -72,7 +70,7 @@ namespace DomainBlocks.EventStore.Testing
                                        StreamVersion.NewStream, 
                                        EventStoreTestHelpers.GenerateTestEvents(eventCount));
 
-            var events = await repo.LoadEventsAsync<TestEvent>(streamName);
+            var events = await repo.LoadEventsAsync(streamName).Cast<TestEvent>().ToListAsync();
 
             Assert.That(events.Count, Is.EqualTo(eventCount));
 
@@ -112,7 +110,7 @@ namespace DomainBlocks.EventStore.Testing
                 erroredEventId = Uuid.FromGuid(e.EventId);
             }
 
-            var loadedEvents = await repo.LoadEventsAsync<TestEvent>(streamName, onEventError: OnEventError);
+            var loadedEvents = await repo.LoadEventsAsync(streamName, onEventError: OnEventError).ToListAsync();
 
             Assert.That(loadedEvents.Count, Is.EqualTo(2)); // 2 events should load successfully
             Assert.That(erroredEventCount, Is.EqualTo(1));
@@ -126,7 +124,7 @@ namespace DomainBlocks.EventStore.Testing
             Assert.ThrowsAsync<ArgumentNullException>(async () =>
             {
                 var repo = CreateRepository();
-                await repo.LoadEventsAsync<TestEvent>(null);
+                await repo.LoadEventsAsync(null).ToListAsync();
             });
         }
 

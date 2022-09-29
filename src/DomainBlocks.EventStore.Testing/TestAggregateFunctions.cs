@@ -1,25 +1,37 @@
 ﻿using System;
 using System.Collections.Generic;
-using DomainBlocks.Persistence.Builders;
+using DomainBlocks.Core.Builders;
 
 namespace DomainBlocks.EventStore.Testing;
 
 public static class TestAggregateFunctions
 {
-    public static void Register(AggregateRegistryBuilder<TestEvent> builder, Guid aggregateId)
+    public static void BuildModel(ModelBuilder builder, Guid aggregateId)
     {
-        builder.Register<TestAggregateState>(agg =>
-        {
-            agg.InitialState(_ => new TestAggregateState(aggregateId, 0))
-                .Id(x => x.Id.ToString())
-                .PersistenceKey(id => $"testAggregate-{id}")
-                .SnapshotKey(id => $"testAggregateSnapshot-{id}");
+        builder
+            .ImmutableAggregate<TestAggregateState, object>(aggregate =>
+            {
+                aggregate
+                    .InitialState(() => new TestAggregateState(aggregateId, 0))
+                    .HasId(x => x.Id.ToString())
+                    .WithStreamKey(id => $"testAggregate-{id}")
+                    .WithSnapshotKey(id => $"testAggregateSnapshot-{id}");
 
-            agg.RegisterEvents(events => { events.Event<TestEvent>().RoutesTo(Apply); });
-        });
+                aggregate
+                    .WithRaisedEventsFrom(commandReturnTypes =>
+                    {
+                        commandReturnTypes
+                            .CommandReturnType<IEnumerable<object>>()
+                            .WithEventsFrom(x => x)
+                            .ApplyEvents();
+                    })
+                    .ApplyEventsWith((agg, e) => Apply(agg, (dynamic)e));
+
+                aggregate.Event<TestEvent>();
+            });
     }
 
-    public static IEnumerable<TestEvent> Execute(TestCommand command)
+    public static IEnumerable<object> Execute(TestCommand command)
     {
         yield return new TestEvent(command.Number);
     }
