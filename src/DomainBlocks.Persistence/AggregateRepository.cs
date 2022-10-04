@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using DomainBlocks.Core;
 
@@ -29,7 +30,8 @@ public sealed class AggregateRepository<TRawData> : IAggregateRepository
     }
 
     public async Task<LoadedAggregate<TAggregateState>> LoadAsync<TAggregateState>(
-        string id, AggregateLoadStrategy loadStrategy = AggregateLoadStrategy.PreferSnapshot)
+        string id, AggregateLoadStrategy loadStrategy = AggregateLoadStrategy.PreferSnapshot,
+        CancellationToken cancellationToken = default)
     {
         if (id == null) throw new ArgumentNullException(nameof(id));
 
@@ -97,7 +99,8 @@ public sealed class AggregateRepository<TRawData> : IAggregateRepository
 
     public async Task<long> SaveAsync<TAggregateState>(
         LoadedAggregate<TAggregateState> loadedAggregate,
-        Func<LoadedAggregate<TAggregateState>, bool> snapshotPredicate = null)
+        Func<LoadedAggregate<TAggregateState>, bool> snapshotPredicate = null,
+        CancellationToken cancellationToken = default)
     {
         if (loadedAggregate == null) throw new ArgumentNullException(nameof(loadedAggregate));
         if (loadedAggregate.HasBeenSaved)
@@ -126,7 +129,9 @@ public sealed class AggregateRepository<TRawData> : IAggregateRepository
         return newVersion;
     }
 
-    public async Task SaveSnapshotAsync<TAggregateState>(VersionedAggregateState<TAggregateState> versionedState)
+    public async Task SaveSnapshotAsync<TAggregateState>(
+        VersionedAggregateState<TAggregateState> versionedState,
+        CancellationToken cancellationToken = default)
     {
         if (versionedState == null) throw new ArgumentNullException(nameof(versionedState));
 

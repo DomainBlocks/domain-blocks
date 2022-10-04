@@ -14,7 +14,7 @@ public class AddItemHandler : CommandHandlerBase<AddItemToShoppingCart>
 
     protected override async Task HandleImpl(AddItemToShoppingCart request, CancellationToken cancellationToken)
     {
-        var loadedAggregate = await Repository.LoadAsync<ShoppingCartState>(request.CartId);
+        var loadedAggregate = await Repository.LoadAsync<ShoppingCartState>(request.CartId, cancellationToken: cancellationToken);
 
         var cartId = Guid.Parse(request.CartId);
         var itemId = Guid.Parse(request.ItemId);
@@ -22,6 +22,6 @@ public class AddItemHandler : CommandHandlerBase<AddItemToShoppingCart>
         var command = new Domain.Commands.AddItemToShoppingCart(cartId, itemId, request.ItemName);
         loadedAggregate.ExecuteCommand(x => ShoppingCartFunctions.Execute(x, command));
 
-        await Repository.SaveAsync(loadedAggregate);
+        await Repository.SaveAsync(loadedAggregate, cancellationToken: cancellationToken);
     }
 }
