@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace DomainBlocks.Projections.Sql;
@@ -30,7 +31,7 @@ public sealed class SqlProjectionContext : IProjectionContext
 
     public IDbConnection Connection { get; }
 
-    public async Task OnSubscribing()
+    public async Task OnSubscribing(CancellationToken cancellationToken = default)
     {
         try
         {
@@ -38,7 +39,7 @@ public sealed class SqlProjectionContext : IProjectionContext
             {
                 if (Connection is DbConnection concreteConnection)
                 {
-                    await concreteConnection.OpenAsync().ConfigureAwait(false);
+                    await concreteConnection.OpenAsync(cancellationToken).ConfigureAwait(false);
                 }
                 else
                 {
@@ -62,7 +63,7 @@ public sealed class SqlProjectionContext : IProjectionContext
         }
     }
 
-    public Task OnCaughtUp()
+    public Task OnCaughtUp(CancellationToken cancellationToken = default)
     {
         try
         {
@@ -75,7 +76,7 @@ public sealed class SqlProjectionContext : IProjectionContext
                 }
                 else
                 {
-                    Log.LogWarning("Caught up to live event stream, but no transaction was found.");
+                    Log.LogWarning("Caught up to live event stream, but no transaction was found");
                 }
             }
         }
@@ -89,18 +90,18 @@ public sealed class SqlProjectionContext : IProjectionContext
         return Task.CompletedTask;
     }
 
-    public async Task OnBeforeHandleEvent()
+    public async Task OnBeforeHandleEvent(CancellationToken cancellationToken = default)
     {
         if (_isProcessingLiveEvents)
         {
             if (_settings.HandleLiveEventsInTransaction)
             {
-                await BeginTransaction();
+                await BeginTransaction(cancellationToken);
             }
         }
     }
 
-    public Task OnAfterHandleEvent()
+    public Task OnAfterHandleEvent(CancellationToken cancellationToken = default)
     {
         if (_isProcessingLiveEvents)
         {
@@ -113,7 +114,7 @@ public sealed class SqlProjectionContext : IProjectionContext
                 }
                 else
                 {
-                    Log.LogWarning("Expected to be in a transaction when handling event, but none was found.");
+                    Log.LogWarning("Expected to be in a transaction when handling event, but none was found");
                 }
             }
         }
@@ -135,11 +136,11 @@ public sealed class SqlProjectionContext : IProjectionContext
         }
     }
 
-    private async Task BeginTransaction()
+    private async Task BeginTransaction(CancellationToken cancellationToken = default)
     {
         if (Connection is DbConnection concreteConnection)
         {
-            _activeTransaction = await concreteConnection.BeginTransactionAsync().ConfigureAwait(false);
+            _activeTransaction = await concreteConnection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         }
         else
         {

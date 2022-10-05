@@ -40,7 +40,7 @@ public class EventDispatcherHostedService<TRawData, TEventBase> : IEventDispatch
             projectionRegistry.EventNameMap,
             EventDispatcherConfiguration.ReadModelDefaults);
 
-        await dispatcher.StartAsync();
+        await dispatcher.StartAsync(cancellationToken);
     }
 
     public Task StopAsync(CancellationToken cancellationToken)

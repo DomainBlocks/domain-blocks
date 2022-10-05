@@ -8,7 +8,7 @@ namespace DomainBlocks.Projections.EventStore;
 public class EventStoreEventPublisher : IEventPublisher<EventRecord>, IDisposable
 {
     private readonly EventStoreClient _client;
-    private Func<EventNotification<EventRecord>, Task> _onEvent;
+    private Func<EventNotification<EventRecord>, CancellationToken, Task> _onEvent;
     private StreamSubscription _subscription;
     private readonly EventStoreDroppedSubscriptionHandler _subscriptionDroppedHandler;
     private Position _lastProcessedPosition;
@@ -22,7 +22,7 @@ public class EventStoreEventPublisher : IEventPublisher<EventRecord>, IDisposabl
     }
 
     public async Task StartAsync(
-        Func<EventNotification<EventRecord>, Task> onEvent,
+        Func<EventNotification<EventRecord>, CancellationToken, Task> onEvent,
         CancellationToken cancellationToken = default)
     {
         _onEvent = onEvent ?? throw new ArgumentNullException(nameof(onEvent));
@@ -43,7 +43,7 @@ public class EventStoreEventPublisher : IEventPublisher<EventRecord>, IDisposabl
     {
         async Task SendEventNotification(ResolvedEvent resolvedEvent)
         {
-            await _onEvent(resolvedEvent.ToEventNotification());
+            await _onEvent(resolvedEvent.ToEventNotification(), cancellationToken);
 
             if (resolvedEvent.OriginalPosition.HasValue)
             {
@@ -58,7 +58,7 @@ public class EventStoreEventPublisher : IEventPublisher<EventRecord>, IDisposabl
             await SendEventNotification(historicEvent);
         }
 
-        await _onEvent(EventNotification.CaughtUp<EventRecord>());
+        await _onEvent(EventNotification.CaughtUp<EventRecord>(), cancellationToken);
 
         _subscription = await _client.SubscribeToAllAsync(_lastProcessedPosition,
             (_, evt, _) => SendEventNotification(evt),

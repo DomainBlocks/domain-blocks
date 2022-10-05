@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using DomainBlocks.Core.Builders;
@@ -13,7 +12,10 @@ public class ModelBuilderTests
     public void MutableAggregateScenario1()
     {
         var model = new ModelBuilder()
-            .Aggregate<MutableAggregate1, object>(aggregate => { aggregate.WithRaisedEventsFrom(x => x.RaisedEvents); })
+            .Aggregate<MutableAggregate1, object>(aggregate =>
+            {
+                aggregate.WithRaisedEventsFrom(x => x.RaisedEvents);
+            })
             .Build();
 
         var aggregateType = model.GetAggregateType<MutableAggregate1>();
@@ -38,22 +40,20 @@ public class ModelBuilderTests
     public void MutableAggregateScenario2()
     {
         var model = new ModelBuilder()
-            .Aggregate<MutableAggregate2, object>(
-                aggregate =>
-                {
-                    aggregate
-                        .WithRaisedEventsFrom(
-                            commandReturnTypes =>
-                            {
-                                commandReturnTypes
-                                    .CommandReturnType<IEnumerable<object>>()
-                                    .WithEventsFrom(x => x)
-                                    .ApplyEventsWhileEnumerating();
-                            })
-                        .ApplyEventsByConvention()
-                        .FromMethodName(nameof(MutableAggregate2.Apply))
-                        .IncludeNonPublicMethods();
-                })
+            .Aggregate<MutableAggregate2, object>(aggregate =>
+            {
+                aggregate
+                    .WithRaisedEventsFrom(commandReturnTypes =>
+                    {
+                        commandReturnTypes
+                            .CommandReturnType<IEnumerable<object>>()
+                            .WithEventsFrom(x => x)
+                            .ApplyEventsWhileEnumerating();
+                    })
+                    .ApplyEventsByConvention()
+                    .FromMethodName(nameof(MutableAggregate2.Apply))
+                    .IncludeNonPublicMethods();
+            })
             .Build();
 
         var aggregateType = model.GetAggregateType<MutableAggregate2>();
@@ -79,24 +79,20 @@ public class ModelBuilderTests
     public void ImmutableAggregateScenario1()
     {
         var model = new ModelBuilder()
-            .ImmutableAggregate<ImmutableAggregate1, object>(
-                aggregate =>
-                {
-                    aggregate
-                        .WithRaisedEventsFrom(
-                            commandReturnTypes =>
-                            {
-                                commandReturnTypes
-                                    .CommandReturnType<TestCommandResult>()
-                                    .WithEventsFrom(x => x.Events)
-                                    .WithUpdatedStateFrom(x => x.State);
-                            })
-                        
-                        .ApplyEventsWith(ImmutableAggregate1.Apply);
-                        //..ApplyEventsByConvention()
-                        //.FromMethodName(nameof(ImmutableAggregate1.Apply))
-                        //.IncludeNonPublicMethods();
-                })
+            .ImmutableAggregate<ImmutableAggregate1, object>(aggregate =>
+            {
+                aggregate
+                    .WithRaisedEventsFrom(commandReturnTypes =>
+                    {
+                        commandReturnTypes
+                            .CommandReturnType<IEnumerable<object>>()
+                            .WithEventsFrom(x => x)
+                            .ApplyEvents();
+                    })
+                    .ApplyEventsByConvention()
+                    .FromMethodName(nameof(ImmutableAggregate1.Apply))
+                    .IncludeNonPublicMethods();
+            })
             .Build();
 
         var aggregateType = model.GetAggregateType<ImmutableAggregate1>();
@@ -111,12 +107,6 @@ public class ModelBuilderTests
         Assert.That(context.State.Value, Is.EqualTo("value"));
         Assert.That(events, Has.Count.EqualTo(1));
         Assert.That(events[0], Is.TypeOf<ValueChangedEvent>());
-    }
-
-    private class TestCommandResult
-    {
-        public ImmutableAggregate1 State { get; set; }
-        public IEnumerable<object> Events { get; set; }
     }
 
     private class ValueChangedEvent
@@ -181,27 +171,14 @@ public class ModelBuilderTests
 
         public string Value { get; }
 
-        public TestCommandResult Execute(string newValue)
+        public IEnumerable<object> Execute(string newValue)
         {
-            return new TestCommandResult
-            {
-                State = new ImmutableAggregate1(newValue),
-                Events = new[] { new ValueChangedEvent(newValue) }
-            };
+            yield return new ValueChangedEvent(newValue);
         }
 
         public static ImmutableAggregate1 Apply(ValueChangedEvent @event)
         {
             return new ImmutableAggregate1(@event.Value);
-        }
-        
-        public static ImmutableAggregate1 Apply(ImmutableAggregate1 aggregate, object @event)
-        {
-            return @event switch
-            {
-                ValueChangedEvent e => Apply(e),
-                _ => aggregate
-            };
         }
     }
 }

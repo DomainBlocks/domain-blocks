@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading;
 using System.Threading.Tasks;
 using DomainBlocks.Common;
 using Microsoft.EntityFrameworkCore;
@@ -18,13 +19,13 @@ public class EntityFrameworkProjectionContext : IProjectionContext
         _dbContext = dbContext;
     }
 
-    public async Task OnSubscribing()
+    public async Task OnSubscribing(CancellationToken cancellationToken = default)
     {
         try
         {
             var database = _dbContext.Database;
             // await database.EnsureDeletedAsync().ConfigureAwait(false);
-            await database.EnsureCreatedAsync().ConfigureAwait(false);
+            await database.EnsureCreatedAsync(cancellationToken).ConfigureAwait(false);
 
             _isProcessingLiveEvents = false;
         }
@@ -35,22 +36,22 @@ public class EntityFrameworkProjectionContext : IProjectionContext
         }
     }
 
-    public async Task OnCaughtUp()
+    public async Task OnCaughtUp(CancellationToken cancellationToken = default)
     {
         _isProcessingLiveEvents = true;
-        await _dbContext.SaveChangesAsync().ConfigureAwait(false);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public Task OnBeforeHandleEvent()
+    public Task OnBeforeHandleEvent(CancellationToken cancellationToken = default)
     {
         return Task.CompletedTask;
     }
 
-    public async Task OnAfterHandleEvent()
+    public async Task OnAfterHandleEvent(CancellationToken cancellationToken = default)
     {
         if (_isProcessingLiveEvents)
         {
-            await _dbContext.SaveChangesAsync().ConfigureAwait(false);
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 }

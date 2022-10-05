@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using DomainBlocks.Common;
 using DomainBlocks.Serialization;
@@ -35,13 +36,13 @@ public sealed class EventDispatcher<TRawData, TEventBase>
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
     }
 
-    public async Task StartAsync()
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
         Log.LogDebug("Starting EventStream");
         await ForAllContexts(c => c.OnSubscribing()).ConfigureAwait(false);
         Log.LogDebug("Context OnSubscribing hooks called");
 
-        await _publisher.StartAsync(HandleEventNotificationAsync).ConfigureAwait(false);
+        await _publisher.StartAsync(HandleEventNotificationAsync, cancellationToken).ConfigureAwait(false);
         Log.LogDebug("Event publisher started");
     }
 
@@ -53,12 +54,14 @@ public sealed class EventDispatcher<TRawData, TEventBase>
         }
     }
 
-    private async Task HandleEventNotificationAsync(EventNotification<TRawData> notification)
+    private async Task HandleEventNotificationAsync(
+        EventNotification<TRawData> notification,
+        CancellationToken cancellationToken = default)
     {
         switch (notification.NotificationKind)
         {
             case EventNotificationKind.Event:
-                await HandleEventAsync(notification.Event, notification.EventType, notification.EventId)
+                await HandleEventAsync(notification.Event, notification.EventType, notification.EventId, cancellationToken)
                     .ConfigureAwait(false);
                 break;
             case EventNotificationKind.CaughtUpNotification:
@@ -71,7 +74,11 @@ public sealed class EventDispatcher<TRawData, TEventBase>
         }
     }
 
-    private async Task HandleEventAsync(TRawData eventData, string eventType, Guid eventId)
+    private async Task HandleEventAsync(
+        TRawData eventData,
+        string eventType,
+        Guid eventId,
+        CancellationToken cancellationToken = default)
     {
         var tasks = new List<Task>();
 
@@ -144,7 +151,7 @@ public sealed class EventDispatcher<TRawData, TEventBase>
         }
         catch (Exception ex)
         {
-            Log.LogError(ex, "Exception occurred handling event id {EventId}.", eventId);
+            Log.LogError(ex, "Exception occurred handling event id {EventId}", eventId);
             if (!_configuration.ContinueAfterProjectionException)
             {
                 _publisher.Stop();
