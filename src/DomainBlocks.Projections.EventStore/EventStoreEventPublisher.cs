@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading;
 using System.Threading.Tasks;
 using EventStore.Client;
 
@@ -15,13 +16,17 @@ public class EventStoreEventPublisher : IEventPublisher<EventRecord>, IDisposabl
     public EventStoreEventPublisher(EventStoreClient client)
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
-        _subscriptionDroppedHandler = new EventStoreDroppedSubscriptionHandler(Stop, ReSubscribeAfterDrop);
+        _subscriptionDroppedHandler = new EventStoreDroppedSubscriptionHandler(
+            Stop,
+            () => ReSubscribeAfterDrop(CancellationToken.None));
     }
 
-    public async Task StartAsync(Func<EventNotification<EventRecord>, Task> onEvent)
+    public async Task StartAsync(
+        Func<EventNotification<EventRecord>, Task> onEvent,
+        CancellationToken cancellationToken = default)
     {
         _onEvent = onEvent ?? throw new ArgumentNullException(nameof(onEvent));
-        await SubscribeToEventStore(Position.Start);
+        await SubscribeToEventStore(Position.Start, cancellationToken);
     }
 
     public void Stop()
@@ -34,7 +39,7 @@ public class EventStoreEventPublisher : IEventPublisher<EventRecord>, IDisposabl
         _subscription?.Dispose();
     }
 
-    private async Task SubscribeToEventStore(Position position)
+    private async Task SubscribeToEventStore(Position position, CancellationToken cancellationToken = default)
     {
         async Task SendEventNotification(ResolvedEvent resolvedEvent)
         {
@@ -46,9 +51,9 @@ public class EventStoreEventPublisher : IEventPublisher<EventRecord>, IDisposabl
             }
         }
 
-        var historicEvents = _client.ReadAllAsync(Direction.Forwards, position);
+        var historicEvents = _client.ReadAllAsync(Direction.Forwards, position, cancellationToken: cancellationToken);
 
-        await foreach (var historicEvent in historicEvents)
+        await foreach (var historicEvent in historicEvents.WithCancellation(cancellationToken))
         {
             await SendEventNotification(historicEvent);
         }
@@ -60,7 +65,8 @@ public class EventStoreEventPublisher : IEventPublisher<EventRecord>, IDisposabl
             false,
             OnSubscriptionDropped,
             userCredentials: new UserCredentials("admin",
-                "changeit"));
+                "changeit"),
+            cancellationToken: cancellationToken);
     }
         
     private void OnSubscriptionDropped(StreamSubscription subscription, SubscriptionDroppedReason reason, Exception exception)
@@ -68,8 +74,8 @@ public class EventStoreEventPublisher : IEventPublisher<EventRecord>, IDisposabl
         _subscriptionDroppedHandler.HandleDroppedSubscription(reason, exception);
     }
 
-    private async Task ReSubscribeAfterDrop()
+    private async Task ReSubscribeAfterDrop(CancellationToken cancellationToken = default)
     {
-        await SubscribeToEventStore(_lastProcessedPosition);
+        await SubscribeToEventStore(_lastProcessedPosition, cancellationToken);
     }
 }

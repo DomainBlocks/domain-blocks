@@ -32,12 +32,14 @@ public class EventStoreDroppedSubscriptionHandler
                 break;
             case SubscriptionDroppedReason.SubscriberError:
                 Log.LogCritical(exception,
-                    $"Exception occurred in subscriber. Stopping event publisher. Reason {reason}");
+                    "Exception occurred in subscriber. Stopping event publisher. Reason {Reason}",
+                    reason);
                 _stop();
                 break;
             case SubscriptionDroppedReason.ServerError:
                 Log.LogCritical(exception,
-                    $"Server error in EventStore subscription. Stopping event publisher. Reason {reason}");
+                    "Server error in EventStore subscription. Stopping event publisher. Reason {Reason}",
+                    reason);
                 _stop();
                 break;
             default:
@@ -51,12 +53,17 @@ public class EventStoreDroppedSubscriptionHandler
     {
         if (_subscribeAttempts > _maxSubscribeAttempts)
         {
-            Log.LogCritical($"Unable to reconnect to EventStore after {_maxSubscribeAttempts} attempts. Stopping event publisher");
+            Log.LogCritical(
+                "Unable to reconnect to EventStore after {MaxSubscribeAttempts} attempts. Stopping event publisher",
+                _maxSubscribeAttempts);
             _stop();
             return;
         }
 
-        Log.LogInformation($"Waiting for {_backOffTimeSpan.TotalSeconds} seconds before resubscribing. Resubscribe attempt {_subscribeAttempts}");
+        Log.LogInformation(
+            "Waiting for {TotalSeconds} seconds before resubscribing. Resubscribe attempt {SubscribeAttempts}",
+            _backOffTimeSpan.TotalSeconds,
+            _subscribeAttempts);
         await Task.Delay(_backOffTimeSpan);
 
         _backOffTimeSpan *= 2;

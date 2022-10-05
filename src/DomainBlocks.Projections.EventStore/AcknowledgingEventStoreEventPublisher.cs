@@ -26,10 +26,12 @@ public class AcknowledgingEventStoreEventPublisher : IEventPublisher<EventRecord
 
     }
 
-    public async Task StartAsync(Func<EventNotification<EventRecord>, Task> onEvent)
+    public async Task StartAsync(
+        Func<EventNotification<EventRecord>, Task> onEvent,
+        CancellationToken cancellationToken = default)
     {
         _onEvent = onEvent ?? throw new ArgumentNullException(nameof(onEvent));
-        await SubscribeToPersistentSubscription();
+        await SubscribeToPersistentSubscription(cancellationToken);
     }
 
     public void Stop()
@@ -50,7 +52,7 @@ public class AcknowledgingEventStoreEventPublisher : IEventPublisher<EventRecord
         await TryHandlingEvent(subscription, resolvedEvent, 0);
     }
 
-    private async Task SubscribeToPersistentSubscription()
+    private async Task SubscribeToPersistentSubscription(CancellationToken cancellationToken = default)
     {
         _subscription = await _client.SubscribeAsync(_persistentConnectionDescriptor.Stream,
             _persistentConnectionDescriptor.GroupName,
@@ -59,7 +61,8 @@ public class AcknowledgingEventStoreEventPublisher : IEventPublisher<EventRecord
             _persistentConnectionDescriptor
                 .UserCredentials,
             _persistentConnectionDescriptor.BufferSize,
-            false);
+            false,
+            cancellationToken);
     }
 
     private async Task TryHandlingEvent(PersistentSubscription subscription, ResolvedEvent resolvedEvent, int retryNumber)
@@ -96,7 +99,8 @@ public class AcknowledgingEventStoreEventPublisher : IEventPublisher<EventRecord
 
     private async Task RetryHandlingEventOrFail(PersistentSubscription subscription,
         ResolvedEvent resolvedEvent, 
-        int retryNumber)
+        int retryNumber,
+        CancellationToken cancellationToken = default)
     {
         var retrySettings = _persistentConnectionDescriptor.RetrySettings;
         if (retryNumber <= retrySettings.MaxRetryCount)
@@ -108,7 +112,7 @@ public class AcknowledgingEventStoreEventPublisher : IEventPublisher<EventRecord
                 resolvedEvent.Event.EventId,
                 nextRetryNumber,
                 delay);
-            await Task.Delay(delay);
+            await Task.Delay(delay, cancellationToken);
 
             // Recurse back into TryHandlingEvent with the retry number incremented
             await TryHandlingEvent(subscription, resolvedEvent, nextRetryNumber);
@@ -125,8 +129,9 @@ public class AcknowledgingEventStoreEventPublisher : IEventPublisher<EventRecord
             var reason = $"{actionDescription} event {resolvedEvent.Event.EventId} after maximum retries reached " +
                          "and event could not be processed successfully";
 
-            Log.LogError($"Could not handle event {{EventId}} after maximum retries. {actionDescription} event",
-                resolvedEvent.Event.EventId);
+            Log.LogError("Could not handle event {EventId} after maximum retries. {ActionDescription} event",
+                resolvedEvent.Event.EventId, 
+                actionDescription);
 
             await subscription.Nack(failureAction, reason, resolvedEvent);
         }
@@ -139,6 +144,7 @@ public class AcknowledgingEventStoreEventPublisher : IEventPublisher<EventRecord
         _subscriptionDroppedHandler.HandleDroppedSubscription(reason, exception);
     }
 
+    // TODO: Check if we need to pass CT.
     private async Task ReSubscribeAfterDrop()
     {
         await SubscribeToPersistentSubscription();
