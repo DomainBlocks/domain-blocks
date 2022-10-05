@@ -1,15 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace DomainBlocks.Serialization
+namespace DomainBlocks.Serialization;
+
+public interface IEventSerializer<TRawData>
 {
-    public interface IEventSerializer<TRawData>
-    {
-        IEventPersistenceData<TRawData> GetPersistenceData(
-            object @event, string eventNameOverride = null, params KeyValuePair<string, string>[] additionalMetadata);
+    IEventPersistenceData<TRawData> GetPersistenceData(
+        object @event, string eventNameOverride = null, params KeyValuePair<string, string>[] additionalMetadata);
         
-        object DeserializeEvent(TRawData eventData, string eventName, Type typeOverride = null);
-        void UseMetaDataContext(EventMetadataContext metadataContext);
-        EventMetadata DeserializeMetadata(TRawData rawMetadata);
-    }
+    object DeserializeEvent(TRawData eventData, string eventName, Type typeOverride = null);
+    void UseMetaDataContext(EventMetadataContext metadataContext);
+    EventMetadata DeserializeMetadata(TRawData rawMetadata);
 }

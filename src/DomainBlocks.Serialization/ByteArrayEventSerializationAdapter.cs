@@ -1,17 +1,16 @@
 ﻿using System;
 
-namespace DomainBlocks.Serialization
-{
-    public class ByteArrayEventSerializationAdapter : IEventSerializationAdapter<ReadOnlyMemory<byte>>
-    {
-        public ReadOnlyMemory<byte> FromRawData(ReadOnlyMemory<byte> rawEventData)
-        {
-            return rawEventData;
-        }
+namespace DomainBlocks.Serialization;
 
-        public ReadOnlyMemory<byte> ToRawData(ReadOnlyMemory<byte> bytes)
-        {
-            return bytes;
-        }
+public class ByteArrayEventSerializationAdapter : IEventSerializationAdapter<ReadOnlyMemory<byte>>
+{
+    public ReadOnlyMemory<byte> FromRawData(ReadOnlyMemory<byte> rawEventData)
+    {
+        return rawEventData;
+    }
+
+    public ReadOnlyMemory<byte> ToRawData(ReadOnlyMemory<byte> bytes)
+    {
+        return bytes;
     }
 }

@@ -4,39 +4,38 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 // ReSharper disable InvertIf
 
-namespace DomainBlocks.EventStore.Common.AspNetCore
+namespace DomainBlocks.EventStore.Common.AspNetCore;
+
+public static class EventStoreServiceConfigurationExtensions
 {
-    public static class EventStoreServiceConfigurationExtensions
+    private static readonly object SyncLock = new();
+    private static EventStoreClient _eventStoreClient;
+
+    public static IServiceCollection AddEventStore(this IServiceCollection services, IConfiguration configuration)
     {
-        private static readonly object SyncLock = new();
-        private static EventStoreClient _eventStoreClient;
+        services.AddOptions<EventStoreConnectionOptions>()
+            .Bind(configuration.GetSection(EventStoreConnectionOptions.ConfigSection))
+            .ValidateDataAnnotations();
 
-        public static IServiceCollection AddEventStore(this IServiceCollection services, IConfiguration configuration)
+        services.AddSingleton(provider =>
         {
-            services.AddOptions<EventStoreConnectionOptions>()
-                    .Bind(configuration.GetSection(EventStoreConnectionOptions.ConfigSection))
-                    .ValidateDataAnnotations();
-
-            services.AddSingleton(provider =>
+            if (_eventStoreClient == null)
             {
-                if (_eventStoreClient == null)
+                lock (SyncLock)
                 {
-                    lock (SyncLock)
+                    if (_eventStoreClient == null)
                     {
-                        if (_eventStoreClient == null)
-                        {
-                            var options = provider.GetRequiredService<IOptions<EventStoreConnectionOptions>>();
+                        var options = provider.GetRequiredService<IOptions<EventStoreConnectionOptions>>();
 
-                            var settings = EventStoreClientSettings.Create(options.Value.ConnectionString);
-                            _eventStoreClient = new EventStoreClient(settings);
-                        }
+                        var settings = EventStoreClientSettings.Create(options.Value.ConnectionString);
+                        _eventStoreClient = new EventStoreClient(settings);
                     }
                 }
+            }
 
-                return _eventStoreClient;
-            });
+            return _eventStoreClient;
+        });
 
-            return services;
-        }
+        return services;
     }
 }

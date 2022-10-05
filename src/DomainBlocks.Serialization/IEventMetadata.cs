@@ -1,21 +1,20 @@
 ﻿using System.Collections.Generic;
 
-namespace DomainBlocks.Serialization
+namespace DomainBlocks.Serialization;
+
+public class EventMetadata : Dictionary<string, string>
 {
-    public class EventMetadata : Dictionary<string, string>
+
+    public static readonly EventMetadata Empty = new EventMetadata();
+
+    public static EventMetadata FromKeyValuePairs(IEnumerable<KeyValuePair<string, string>> pairs)
     {
-
-        public static readonly EventMetadata Empty = new EventMetadata();
-
-        public static EventMetadata FromKeyValuePairs(IEnumerable<KeyValuePair<string, string>> pairs)
+        var metadata = new EventMetadata();
+        foreach (var (key, value) in pairs)
         {
-            var metadata = new EventMetadata();
-            foreach (var (key, value) in pairs)
-            {
-                metadata.Add(key, value);
-            }
-
-            return metadata;
+            metadata.Add(key, value);
         }
+
+        return metadata;
     }
 }

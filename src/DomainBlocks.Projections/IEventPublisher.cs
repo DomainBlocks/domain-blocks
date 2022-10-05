@@ -1,11 +1,10 @@
 ﻿using System;
 using System.Threading.Tasks;
 
-namespace DomainBlocks.Projections
+namespace DomainBlocks.Projections;
+
+public interface IEventPublisher<TEventData>
 {
-    public interface IEventPublisher<TEventData>
-    {
-        Task StartAsync(Func<EventNotification<TEventData>, Task> onEvent);
-        void Stop();
-    }
+    Task StartAsync(Func<EventNotification<TEventData>, Task> onEvent);
+    void Stop();
 }

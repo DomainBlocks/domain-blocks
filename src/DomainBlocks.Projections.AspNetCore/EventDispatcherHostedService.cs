@@ -4,48 +4,47 @@ using System.Threading.Tasks;
 using DomainBlocks.Serialization;
 using Microsoft.Extensions.Hosting;
 
-namespace DomainBlocks.Projections.AspNetCore
+namespace DomainBlocks.Projections.AspNetCore;
+
+public interface IEventDispatcherHostedService : IHostedService
 {
-    public interface IEventDispatcherHostedService : IHostedService
+}
+
+public class EventDispatcherHostedService<TRawData, TEventBase> : IEventDispatcherHostedService
+{
+    private readonly ProjectionRegistryBuilder _registryBuilder;
+    private readonly IEventPublisher<TRawData> _publisher;
+    private readonly IEventDeserializer<TRawData> _eventDeserializer;
+    private readonly Action<ProjectionRegistryBuilder> _onRegisteringProjections;
+
+    public EventDispatcherHostedService(ProjectionRegistryBuilder registryBuilder,
+        IEventPublisher<TRawData> publisher,
+        IEventDeserializer<TRawData> eventDeserializer,
+        Action<ProjectionRegistryBuilder> onRegisteringProjections)
     {
+        _registryBuilder = registryBuilder;
+        _publisher = publisher;
+        _eventDeserializer = eventDeserializer;
+        _onRegisteringProjections = onRegisteringProjections;
     }
 
-    public class EventDispatcherHostedService<TRawData, TEventBase> : IEventDispatcherHostedService
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
-        private readonly ProjectionRegistryBuilder _registryBuilder;
-        private readonly IEventPublisher<TRawData> _publisher;
-        private readonly IEventDeserializer<TRawData> _eventDeserializer;
-        private readonly Action<ProjectionRegistryBuilder> _onRegisteringProjections;
+        _onRegisteringProjections(_registryBuilder);
+        var projectionRegistry = _registryBuilder.Build();
 
-        public EventDispatcherHostedService(ProjectionRegistryBuilder registryBuilder,
-                                            IEventPublisher<TRawData> publisher,
-                                            IEventDeserializer<TRawData> eventDeserializer,
-                                            Action<ProjectionRegistryBuilder> onRegisteringProjections)
-        {
-            _registryBuilder = registryBuilder;
-            _publisher = publisher;
-            _eventDeserializer = eventDeserializer;
-            _onRegisteringProjections = onRegisteringProjections;
-        }
+        var dispatcher = new EventDispatcher<TRawData, TEventBase>(_publisher,
+            projectionRegistry.EventProjectionMap,
+            projectionRegistry.ProjectionContextMap,
+            _eventDeserializer,
+            projectionRegistry.EventNameMap,
+            EventDispatcherConfiguration.ReadModelDefaults);
 
-        public async Task StartAsync(CancellationToken cancellationToken)
-        {
-            _onRegisteringProjections(_registryBuilder);
-            var projectionRegistry = _registryBuilder.Build();
+        await dispatcher.StartAsync();
+    }
 
-            var dispatcher = new EventDispatcher<TRawData, TEventBase>(_publisher,
-                                                                       projectionRegistry.EventProjectionMap,
-                                                                       projectionRegistry.ProjectionContextMap,
-                                                                       _eventDeserializer,
-                                                                       projectionRegistry.EventNameMap,
-                                                                       EventDispatcherConfiguration.ReadModelDefaults);
-
-            await dispatcher.StartAsync();
-        }
-
-        public Task StopAsync(CancellationToken cancellationToken)
-        {
-            return Task.CompletedTask;
-        }
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        return Task.CompletedTask;
     }
 }
