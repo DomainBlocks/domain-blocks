@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using DomainBlocks.Common;
 using DomainBlocks.Serialization;
@@ -26,7 +28,10 @@ public class SqlStreamStoreEventsRepository : IEventsRepository<string>
     }
 
     public async Task<long> SaveEventsAsync(
-        string streamName, long expectedStreamVersion, IEnumerable<object> events)
+        string streamName,
+        long expectedStreamVersion,
+        IEnumerable<object> events,
+        CancellationToken cancellationToken = default)
     {
         if (streamName == null) throw new ArgumentNullException(nameof(streamName));
         if (events == null) throw new ArgumentNullException(nameof(events));
@@ -61,7 +66,7 @@ public class SqlStreamStoreEventsRepository : IEventsRepository<string>
             foreach (var eventData in messages)
             {
                 Log.LogTrace("Event to append {EventId}. EventType {EventType}. WriteId {WriteId}. " +
-                             "EventJsonString {EventJsonString}. MetadataJsonString {MetadataJsonString}.",
+                             "EventJsonString {EventJsonString}. MetadataJsonString {MetadataJsonString}",
                     eventData.MessageId, eventData.Type, writeId, eventData.JsonData, eventData.JsonMetadata);
             }
         }
@@ -70,7 +75,7 @@ public class SqlStreamStoreEventsRepository : IEventsRepository<string>
 
         try
         {
-            appendResult = await _streamStore.AppendToStream(streamName, expectedVersion, messages);
+            appendResult = await _streamStore.AppendToStream(streamName, expectedVersion, messages, cancellationToken);
             Log.LogDebug("Written events to stream. WriteId {WriteId}", writeId);
         }
         catch (Exception ex)
@@ -83,7 +88,8 @@ public class SqlStreamStoreEventsRepository : IEventsRepository<string>
     }
 
     public async IAsyncEnumerable<object> LoadEventsAsync(
-        string streamName, long startPosition = 0, Action<IEventPersistenceData<string>> onEventError = null)
+        string streamName, long startPosition = 0, Action<IEventPersistenceData<string>> onEventError = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         if (streamName == null) throw new ArgumentNullException(nameof(streamName));
 
@@ -91,7 +97,8 @@ public class SqlStreamStoreEventsRepository : IEventsRepository<string>
         ReadStreamPage page;
         try
         {
-            page = await _streamStore.ReadStreamForwards(streamName, (int)startPosition, _readPageSize);
+            page = await _streamStore.ReadStreamForwards(
+                streamName, (int)startPosition, _readPageSize, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -107,7 +114,7 @@ public class SqlStreamStoreEventsRepository : IEventsRepository<string>
 
                 try
                 {
-                    var jsonData = await message.GetJsonData();
+                    var jsonData = await message.GetJsonData(cancellationToken);
                     deserializedEvent = _serializer.DeserializeEvent(jsonData, message.Type);
                 }
                 catch (EventDeserializeException ex)
@@ -142,7 +149,7 @@ public class SqlStreamStoreEventsRepository : IEventsRepository<string>
             // Get the next page.
             try
             {
-                page = await page.ReadNext();
+                page = await page.ReadNext(cancellationToken);
             }
             catch (Exception ex)
             {
