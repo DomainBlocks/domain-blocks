@@ -1,10 +1,9 @@
 ﻿using System;
 
-namespace DomainBlocks.Serialization
+namespace DomainBlocks.Serialization;
+
+public interface IEventSerializationAdapter<TRawData>
 {
-    public interface IEventSerializationAdapter<TRawData>
-    {
-        ReadOnlyMemory<byte> FromRawData(TRawData rawEventData);
-        TRawData ToRawData(ReadOnlyMemory<byte> bytes);
-    }
+    ReadOnlyMemory<byte> FromRawData(TRawData rawEventData);
+    TRawData ToRawData(ReadOnlyMemory<byte> bytes);
 }

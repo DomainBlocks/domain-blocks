@@ -1,16 +1,15 @@
 ﻿using System;
 
-namespace Shopping.Domain.Commands
-{
-    public class RemoveItemFromShoppingCart
-    {
-        public RemoveItemFromShoppingCart(Guid id, Guid cartId)
-        {
-            Id = id;
-            CartId = cartId;
-        }
+namespace Shopping.Domain.Commands;
 
-        public Guid Id { get; }
-        public Guid CartId { get; }
+public class RemoveItemFromShoppingCart
+{
+    public RemoveItemFromShoppingCart(Guid id, Guid cartId)
+    {
+        Id = id;
+        CartId = cartId;
     }
+
+    public Guid Id { get; }
+    public Guid CartId { get; }
 }

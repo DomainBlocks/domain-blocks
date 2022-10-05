@@ -2,16 +2,15 @@
 using System.Data;
 using System.Linq;
 
-namespace DomainBlocks.Projections.Sql
+namespace DomainBlocks.Projections.Sql;
+
+public static class DataParameterCollectionExtension
 {
-    public static class DataParameterCollectionExtension
+    public static string ToFormattedString(this IDataParameterCollection collection)
     {
-        public static string ToFormattedString(this IDataParameterCollection collection)
-        {
-            return string.Join($", {Environment.NewLine}",
-                               collection.Cast<IDataParameter>()
-                                         .Select(p => $"Name: {p.ParameterName}, " +
-                                                      $"Type: {p.DbType}, Value: {p.Value}"));
-        }
+        return string.Join($", {Environment.NewLine}",
+            collection.Cast<IDataParameter>()
+                .Select(p => $"Name: {p.ParameterName}, " +
+                             $"Type: {p.DbType}, Value: {p.Value}"));
     }
 }

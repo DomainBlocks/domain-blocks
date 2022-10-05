@@ -1,8 +1,7 @@
-﻿namespace DomainBlocks.Projections
+﻿namespace DomainBlocks.Projections;
+
+public enum EventNotificationKind
 {
-    public enum EventNotificationKind
-    {
-        Event,
-        CaughtUpNotification
-    }
+    Event,
+    CaughtUpNotification
 }

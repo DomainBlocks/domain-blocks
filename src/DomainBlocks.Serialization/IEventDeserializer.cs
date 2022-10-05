@@ -1,12 +1,11 @@
 ﻿using System;
 using System.Text.Json;
 
-namespace DomainBlocks.Serialization
+namespace DomainBlocks.Serialization;
+
+public interface IEventDeserializer<in TRawData>
 {
-    public interface IEventDeserializer<in TRawData>
-    {
-        (TEventBase, EventMetadata) DeserializeEventAndMetadata<TEventBase>(TRawData rawEvent,
-                                                                            string eventName,
-                                                                            Type eventType);
-    }
+    (TEventBase, EventMetadata) DeserializeEventAndMetadata<TEventBase>(TRawData rawEvent,
+        string eventName,
+        Type eventType);
 }

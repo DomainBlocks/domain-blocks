@@ -1,22 +1,21 @@
 ﻿using System;
 
-namespace DomainBlocks.Common
+namespace DomainBlocks.Common;
+
+public class UserCredentials
 {
-    public class UserCredentials
+    public UserCredentials(string userName, string password)
     {
-        public UserCredentials(string userName, string password)
-        {
-            UserName = userName ?? throw new ArgumentNullException(nameof(userName));
-            Password = password ?? throw new ArgumentNullException(nameof(password));
-        }
-
-        public UserCredentials(string authToken)
-        {
-            AuthToken = authToken ?? throw new ArgumentNullException(nameof(authToken));
-        }
-
-        public string AuthToken { get; }
-        public string UserName { get; }
-        public string Password { get; }
+        UserName = userName ?? throw new ArgumentNullException(nameof(userName));
+        Password = password ?? throw new ArgumentNullException(nameof(password));
     }
+
+    public UserCredentials(string authToken)
+    {
+        AuthToken = authToken ?? throw new ArgumentNullException(nameof(authToken));
+    }
+
+    public string AuthToken { get; }
+    public string UserName { get; }
+    public string Password { get; }
 }

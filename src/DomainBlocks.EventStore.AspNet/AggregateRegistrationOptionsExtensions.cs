@@ -4,56 +4,55 @@ using DomainBlocks.Persistence.AspNetCore;
 using EventStore.Client;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace DomainBlocks.Persistence.EventStore.AspNetCore
+namespace DomainBlocks.Persistence.EventStore.AspNetCore;
+
+public static class AggregateRegistrationOptionsExtensions
 {
-    public static class AggregateRegistrationOptionsExtensions
+    public static IAggregateRepositoryOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> UseEventStoreDbForEvents(
+        this IAggregateRepositoryOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> builder)
     {
-        public static IAggregateRepositoryOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> UseEventStoreDbForEvents(
-            this IAggregateRepositoryOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> builder)
+        builder.ServiceCollection.AddEventStore(builder.Configuration);
+
+        builder.AddEventsRepository((provider, serializer) =>
         {
-            builder.ServiceCollection.AddEventStore(builder.Configuration);
+            var eventStoreClient = provider.GetRequiredService<EventStoreClient>();
+            return new EventStoreEventsRepository(eventStoreClient, serializer);
+        });
 
-            builder.AddEventsRepository((provider, serializer) =>
-            {
-                var eventStoreClient = provider.GetRequiredService<EventStoreClient>();
-                return new EventStoreEventsRepository(eventStoreClient, serializer);
-            });
+        return builder;
+    }
 
-            return builder;
-        }
+    public static IAggregateRepositoryOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> UseEventStoreDbForSnapshots(
+        this IAggregateRepositoryOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> builder)
+    {
+        builder.ServiceCollection.AddEventStore(builder.Configuration);
 
-        public static IAggregateRepositoryOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> UseEventStoreDbForSnapshots(
-            this IAggregateRepositoryOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> builder)
+        builder.AddSnapshotRepository((provider, serializer) =>
         {
-            builder.ServiceCollection.AddEventStore(builder.Configuration);
+            var eventStoreClient = provider.GetRequiredService<EventStoreClient>();
+            return new EventStoreSnapshotRepository(eventStoreClient, serializer);
+        });
 
-            builder.AddSnapshotRepository((provider, serializer) =>
-            {
-                var eventStoreClient = provider.GetRequiredService<EventStoreClient>();
-                return new EventStoreSnapshotRepository(eventStoreClient, serializer);
-            });
+        return builder;
+    }
 
-            return builder;
-        }
+    public static IAggregateRepositoryOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> UseEventStoreDbForEventsAndSnapshots(
+        this IAggregateRepositoryOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> builder)
+    {
+        builder.ServiceCollection.AddEventStore(builder.Configuration);
 
-        public static IAggregateRepositoryOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> UseEventStoreDbForEventsAndSnapshots(
-            this IAggregateRepositoryOptionsBuilderInfrastructure<ReadOnlyMemory<byte>> builder)
+        builder.AddEventsRepository((provider, serializer) =>
         {
-            builder.ServiceCollection.AddEventStore(builder.Configuration);
+            var eventStoreClient = provider.GetRequiredService<EventStoreClient>();
+            return new EventStoreEventsRepository(eventStoreClient, serializer);
+        });
 
-            builder.AddEventsRepository((provider, serializer) =>
-            {
-                var eventStoreClient = provider.GetRequiredService<EventStoreClient>();
-                return new EventStoreEventsRepository(eventStoreClient, serializer);
-            });
+        builder.AddSnapshotRepository((provider, serializer) =>
+        {
+            var eventStoreClient = provider.GetRequiredService<EventStoreClient>();
+            return new EventStoreSnapshotRepository(eventStoreClient, serializer);
+        });
 
-            builder.AddSnapshotRepository((provider, serializer) =>
-            {
-                var eventStoreClient = provider.GetRequiredService<EventStoreClient>();
-                return new EventStoreSnapshotRepository(eventStoreClient, serializer);
-            });
-
-            return builder;
-        }
+        return builder;
     }
 }

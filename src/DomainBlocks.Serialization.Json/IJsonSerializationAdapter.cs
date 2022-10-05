@@ -1,14 +1,13 @@
 ﻿using System;
 using System.Text.Json;
 
-namespace DomainBlocks.Serialization.Json
+namespace DomainBlocks.Serialization.Json;
+
+public interface IJsonSerializationAdapter<TRawData>
 {
-    public interface IJsonSerializationAdapter<TRawData>
-    {
-        TRawData Serialize(object obj, JsonSerializerOptions options);
+    TRawData Serialize(object obj, JsonSerializerOptions options);
 
-        object Deserialize(TRawData rawData, Type eventType, JsonSerializerOptions options);
+    object Deserialize(TRawData rawData, Type eventType, JsonSerializerOptions options);
 
-        T Deserialize<T>(TRawData rawData, JsonSerializerOptions options);
-    }
+    T Deserialize<T>(TRawData rawData, JsonSerializerOptions options);
 }
