@@ -3,13 +3,12 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using DomainBlocks.Serialization;
 
-namespace DomainBlocks.Persistence
+namespace DomainBlocks.Persistence;
+
+public interface IEventsRepository<out TRawData>
 {
-    public interface IEventsRepository<out TRawData>
-    {
-        Task<long> SaveEventsAsync(string streamName, long expectedStreamVersion, IEnumerable<object> events);
+    Task<long> SaveEventsAsync(string streamName, long expectedStreamVersion, IEnumerable<object> events);
         
-        IAsyncEnumerable<object> LoadEventsAsync(
-            string streamName, long startPosition = 0, Action<IEventPersistenceData<TRawData>> onEventError = null);
-    }
+    IAsyncEnumerable<object> LoadEventsAsync(
+        string streamName, long startPosition = 0, Action<IEventPersistenceData<TRawData>> onEventError = null);
 }
