@@ -12,7 +12,7 @@ public class AcknowledgingEventStoreEventPublisher : IEventPublisher<EventRecord
     private static readonly ILogger<AcknowledgingEventStoreEventPublisher> Log = 
         Logger.CreateFor<AcknowledgingEventStoreEventPublisher>();
     private readonly EventStorePersistentSubscriptionsClient _client;
-    private Func<EventNotification<EventRecord>, Task> _onEvent;
+    private Func<EventNotification<EventRecord>, CancellationToken, Task> _onEvent;
     private readonly EventStorePersistentConnectionDescriptor _persistentConnectionDescriptor;
     private PersistentSubscription _subscription;
     private readonly EventStoreDroppedSubscriptionHandler _subscriptionDroppedHandler;
@@ -22,12 +22,11 @@ public class AcknowledgingEventStoreEventPublisher : IEventPublisher<EventRecord
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
         _persistentConnectionDescriptor = persistentConnectionDescriptor;
-        _subscriptionDroppedHandler = new EventStoreDroppedSubscriptionHandler(Stop, ReSubscribeAfterDrop);
-
+        _subscriptionDroppedHandler = new EventStoreDroppedSubscriptionHandler(Stop, () => ReSubscribeAfterDrop());
     }
 
     public async Task StartAsync(
-        Func<EventNotification<EventRecord>, Task> onEvent,
+        Func<EventNotification<EventRecord>, CancellationToken, Task> onEvent,
         CancellationToken cancellationToken = default)
     {
         _onEvent = onEvent ?? throw new ArgumentNullException(nameof(onEvent));
@@ -44,12 +43,16 @@ public class AcknowledgingEventStoreEventPublisher : IEventPublisher<EventRecord
         _subscription.Dispose();
     }
 
-    private async Task HandleEvent(PersistentSubscription subscription, ResolvedEvent resolvedEvent, int? arg3, CancellationToken token)
+    private async Task HandleEvent(
+        PersistentSubscription subscription,
+        ResolvedEvent resolvedEvent,
+        int? arg3,
+        CancellationToken cancellationToken = default)
     {
         // TODO: I'm not sure awaiting here is the best move if we want to utilize the ES buffer properly
         // It might be better to return straight away and then ack/nack as and when we finish processing
         // This needs some more investigation
-        await TryHandlingEvent(subscription, resolvedEvent, 0);
+        await TryHandlingEvent(subscription, resolvedEvent, 0, cancellationToken: cancellationToken);
     }
 
     private async Task SubscribeToPersistentSubscription(CancellationToken cancellationToken = default)
@@ -65,11 +68,15 @@ public class AcknowledgingEventStoreEventPublisher : IEventPublisher<EventRecord
             cancellationToken);
     }
 
-    private async Task TryHandlingEvent(PersistentSubscription subscription, ResolvedEvent resolvedEvent, int retryNumber)
+    private async Task TryHandlingEvent(
+        PersistentSubscription subscription,
+        ResolvedEvent resolvedEvent,
+        int retryNumber,
+        CancellationToken cancellationToken = default) 
     {
         try
         {
-            await _onEvent(resolvedEvent.ToEventNotification());
+            await _onEvent(resolvedEvent.ToEventNotification(), cancellationToken);
             await subscription.Ack(resolvedEvent);
             Log.LogTrace("Handled and acknowledged event {EventId}", resolvedEvent.Event.EventId);
         }
@@ -78,7 +85,7 @@ public class AcknowledgingEventStoreEventPublisher : IEventPublisher<EventRecord
             Log.LogWarning(ex, "Failed to handle event {EventId}", resolvedEvent.Event.EventId);
             try
             {
-                await RetryHandlingEventOrFail(subscription, resolvedEvent, retryNumber);
+                await RetryHandlingEventOrFail(subscription, resolvedEvent, retryNumber, cancellationToken);
             }
             catch (Exception ex2)
             {
@@ -115,7 +122,7 @@ public class AcknowledgingEventStoreEventPublisher : IEventPublisher<EventRecord
             await Task.Delay(delay, cancellationToken);
 
             // Recurse back into TryHandlingEvent with the retry number incremented
-            await TryHandlingEvent(subscription, resolvedEvent, nextRetryNumber);
+            await TryHandlingEvent(subscription, resolvedEvent, nextRetryNumber, cancellationToken);
         }
         else
         {
@@ -144,9 +151,8 @@ public class AcknowledgingEventStoreEventPublisher : IEventPublisher<EventRecord
         _subscriptionDroppedHandler.HandleDroppedSubscription(reason, exception);
     }
 
-    // TODO: Check if we need to pass CT.
-    private async Task ReSubscribeAfterDrop()
+    private async Task ReSubscribeAfterDrop(CancellationToken cancellationToken = default)
     {
-        await SubscribeToPersistentSubscription();
+        await SubscribeToPersistentSubscription(cancellationToken);
     }
 }

@@ -14,7 +14,7 @@ namespace DomainBlocks.Projections.Sql.Tests
 
             Assert.That(scenario.DbConnector.Connection.State, Is.EqualTo(ConnectionState.Closed));
 
-            await scenario.Dispatcher.StartAsync();
+            await scenario.Dispatcher.StartAsync(default);
 
             Assert.That(scenario.DbConnector.Connection.State, Is.EqualTo(ConnectionState.Open));
         }
@@ -24,7 +24,7 @@ namespace DomainBlocks.Projections.Sql.Tests
         {
             var scenario = new SqlProjectionScenario();
 
-            await scenario.Dispatcher.StartAsync();
+            await scenario.Dispatcher.StartAsync(default);
 
             await scenario.Publisher.SendEvent(new TestEvent(1, 1), TestEvent.Name);
             await scenario.Publisher.SendEvent(new TestEvent(2, 1), TestEvent.Name);
@@ -33,7 +33,7 @@ namespace DomainBlocks.Projections.Sql.Tests
             Assert.That(transaction, Is.Not.Null);
             Assert.That(transaction.HasBeenCommitted, Is.False);
 
-            await scenario.Publisher.SendCaughtUp();
+            await scenario.Publisher.SendCaughtUp(default);
 
             Assert.That(transaction.HasBeenCommitted, Is.True);
         }
@@ -43,8 +43,8 @@ namespace DomainBlocks.Projections.Sql.Tests
         {
             var scenario = new SqlProjectionScenario();
 
-            await scenario.Dispatcher.StartAsync();
-            await scenario.Publisher.SendCaughtUp();
+            await scenario.Dispatcher.StartAsync(default);
+            await scenario.Publisher.SendCaughtUp(default);
             scenario.DbConnector.Connection.ActiveTransaction = null;
 
             await scenario.Publisher.SendEvent(new TestEvent(1, 1), TestEvent.Name);
@@ -58,8 +58,8 @@ namespace DomainBlocks.Projections.Sql.Tests
         public async Task EachEventIsHandledIsItsOwnTransaction()
         {
             var scenario = new SqlProjectionScenario();
-            await scenario.Dispatcher.StartAsync();
-            await scenario.Publisher.SendCaughtUp();
+            await scenario.Dispatcher.StartAsync(default);
+            await scenario.Publisher.SendCaughtUp(default);
 
             scenario.DbConnector.Connection.TransactionsBegun.Clear();
 
@@ -75,14 +75,14 @@ namespace DomainBlocks.Projections.Sql.Tests
             var contextSettings = SqlContextSettings.Default with { UseTransactionBeforeCaughtUp = false};
 
             var scenario = new SqlProjectionScenario(sqlContextSettings: contextSettings);
-            await scenario.Dispatcher.StartAsync();
+            await scenario.Dispatcher.StartAsync(default);
 
             await scenario.Publisher.SendEvent(new TestEvent(1, 1), TestEvent.Name);
             await scenario.Publisher.SendEvent(new TestEvent(2, 1), TestEvent.Name);
 
             Assert.That(scenario.DbConnector.Connection.ActiveTransaction, Is.Null);
 
-            await scenario.Publisher.SendCaughtUp();
+            await scenario.Publisher.SendCaughtUp(default);
 
             Assert.That(scenario.DbConnector.Connection.ActiveTransaction, Is.Null);
         }
@@ -93,8 +93,8 @@ namespace DomainBlocks.Projections.Sql.Tests
             var contextSettings = SqlContextSettings.Default with { HandleLiveEventsInTransaction = false };
 
             var scenario = new SqlProjectionScenario(sqlContextSettings: contextSettings);
-            await scenario.Dispatcher.StartAsync();
-            await scenario.Publisher.SendCaughtUp();
+            await scenario.Dispatcher.StartAsync(default);
+            await scenario.Publisher.SendCaughtUp(default);
 
             // Transaction should still have been used for before the caught up part
             Assert.That(scenario.DbConnector.Connection.ActiveTransaction, Is.Not.Null);

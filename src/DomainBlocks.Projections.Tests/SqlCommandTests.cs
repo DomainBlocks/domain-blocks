@@ -16,7 +16,7 @@ namespace DomainBlocks.Projections.Sql.Tests
 
             Assert.That(commands.Count, Is.EqualTo(0));
 
-            await scenario.Dispatcher.StartAsync();
+            await scenario.Dispatcher.StartAsync(default);
 
             Assert.That(commands.Count, Is.EqualTo(1));
             Assert.That(commands[0].CommandText.Contains("CREATE TABLE", StringComparison.InvariantCultureIgnoreCase));
@@ -26,7 +26,7 @@ namespace DomainBlocks.Projections.Sql.Tests
         public async Task CommandsAreCombinedWhenEventProjectsToUpsertAndCustomSql()
         {
             var scenario = new SqlProjectionScenario();
-            await scenario.Dispatcher.StartAsync();
+            await scenario.Dispatcher.StartAsync(default);
             // Executed commands contains create table sql after starting dispatcher
             scenario.DbConnector.Connection.ExecutedCommands.Clear();
 
@@ -41,7 +41,7 @@ namespace DomainBlocks.Projections.Sql.Tests
         public async Task CommandsAreCombinedWhenEventProjectsToDeleteAndCustomSql()
         {
             var scenario = new SqlProjectionScenario();
-            await scenario.Dispatcher.StartAsync();
+            await scenario.Dispatcher.StartAsync(default);
             // Executed commands contains create table sql after starting dispatcher
             scenario.DbConnector.Connection.ExecutedCommands.Clear();
 

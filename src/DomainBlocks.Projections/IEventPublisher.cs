@@ -7,7 +7,7 @@ namespace DomainBlocks.Projections;
 public interface IEventPublisher<TEventData>
 {
     Task StartAsync(
-        Func<EventNotification<TEventData>, Task> onEvent,
+        Func<EventNotification<TEventData>, CancellationToken, Task> onEvent,
         CancellationToken cancellationToken = default);
     void Stop();
 }

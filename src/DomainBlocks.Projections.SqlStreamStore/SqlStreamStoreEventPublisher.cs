@@ -10,7 +10,7 @@ namespace DomainBlocks.Projections.SqlStreamStore;
 public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper>, IDisposable
 {
     private readonly IStreamStore _streamStore;
-    private Func<EventNotification<StreamMessageWrapper>, Task> _onEvent;
+    private Func<EventNotification<StreamMessageWrapper>, CancellationToken, Task> _onEvent;
     private IAllStreamSubscription _subscription;
     private readonly SqlStreamStoreDroppedSubscriptionHandler _subscriptionDroppedHandler;
     private long? _lastProcessedPosition;
@@ -22,7 +22,7 @@ public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper
     }
 
     public async Task StartAsync(
-        Func<EventNotification<StreamMessageWrapper>, Task> onEvent,
+        Func<EventNotification<StreamMessageWrapper>, CancellationToken, Task> onEvent,
         CancellationToken cancellationToken = default)
     {
         _onEvent = onEvent ?? throw new ArgumentNullException(nameof(onEvent));
@@ -50,7 +50,8 @@ public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper
                     // To avoid ordering issues, we want to ensure no other
                     // event processing is done until our caught up
                     // notification is published , so wait on the task
-                    _onEvent(EventNotification.CaughtUp<StreamMessageWrapper>()).Wait(cancellationToken);
+                    _onEvent(EventNotification.CaughtUp<StreamMessageWrapper>(), cancellationToken)
+                        .Wait(cancellationToken);
                 }
             });
         // TODO: allow this to be configured
@@ -79,7 +80,7 @@ public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper
             wrapper.Type,
             wrapper.MessageId);
 
-        await _onEvent(notification).ConfigureAwait(false);
+        await _onEvent(notification, cancellationToken).ConfigureAwait(false);
         _lastProcessedPosition = message.Position;
     }
 
