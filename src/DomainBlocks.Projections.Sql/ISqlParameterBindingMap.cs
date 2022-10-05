@@ -1,10 +1,9 @@
 ﻿using System.Collections.Generic;
 
-namespace DomainBlocks.Projections.Sql
+namespace DomainBlocks.Projections.Sql;
+
+public interface ISqlParameterBindingMap<in TEvent>
 {
-    public interface ISqlParameterBindingMap<in TEvent>
-    {
-        IEnumerable<(string name, object value)> GetParameterNamesAndValues(TEvent @event);
-        IEnumerable<string> GetParameterNames();
-    }
+    IEnumerable<(string name, object value)> GetParameterNamesAndValues(TEvent @event);
+    IEnumerable<string> GetParameterNames();
 }

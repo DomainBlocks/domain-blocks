@@ -1,22 +1,21 @@
-﻿namespace DomainBlocks.Persistence
+﻿namespace DomainBlocks.Persistence;
+
+public static class VersionedAggregateState
 {
-    public static class VersionedAggregateState
+    public static VersionedAggregateState<T> Create<T>(T aggregateState, long version)
     {
-        public static VersionedAggregateState<T> Create<T>(T aggregateState, long version)
-        {
-            return new VersionedAggregateState<T>(aggregateState, version);
-        }
+        return new VersionedAggregateState<T>(aggregateState, version);
+    }
+}
+
+public sealed class VersionedAggregateState<T>
+{
+    public VersionedAggregateState(T aggregateState, long version)
+    {
+        AggregateState = aggregateState;
+        Version = version;
     }
 
-    public sealed class VersionedAggregateState<T>
-    {
-        public VersionedAggregateState(T aggregateState, long version)
-        {
-            AggregateState = aggregateState;
-            Version = version;
-        }
-
-        public T AggregateState { get; }
-        public long Version { get; }
-    }
+    public T AggregateState { get; }
+    public long Version { get; }
 }

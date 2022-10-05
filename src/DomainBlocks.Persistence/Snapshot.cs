@@ -1,14 +1,13 @@
-﻿namespace DomainBlocks.Persistence
-{
-    public sealed class Snapshot<T>
-    {
-        public Snapshot(T snapshotState, long version)
-        {
-            SnapshotState = snapshotState;
-            Version = version;
-        }
+﻿namespace DomainBlocks.Persistence;
 
-        public T SnapshotState { get; }
-        public long Version { get; }
+public sealed class Snapshot<T>
+{
+    public Snapshot(T snapshotState, long version)
+    {
+        SnapshotState = snapshotState;
+        Version = version;
     }
+
+    public T SnapshotState { get; }
+    public long Version { get; }
 }

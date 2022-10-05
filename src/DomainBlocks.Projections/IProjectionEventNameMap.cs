@@ -1,10 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace DomainBlocks.Projections
+namespace DomainBlocks.Projections;
+
+public interface IProjectionEventNameMap
 {
-    public interface IProjectionEventNameMap
-    {
-        IEnumerable<Type> GetClrTypesForEventName(string eventName);
-    }
+    IEnumerable<Type> GetClrTypesForEventName(string eventName);
 }

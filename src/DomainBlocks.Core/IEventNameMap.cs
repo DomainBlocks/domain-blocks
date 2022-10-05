@@ -1,10 +1,9 @@
 ﻿using System;
 
-namespace DomainBlocks.Core
+namespace DomainBlocks.Core;
+
+public interface IEventNameMap
 {
-    public interface IEventNameMap
-    {
-        Type GetEventType(string eventName);
-        string GetEventName(Type eventType);
-    }
+    Type GetEventType(string eventName);
+    string GetEventName(Type eventType);
 }

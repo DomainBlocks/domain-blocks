@@ -1,12 +1,11 @@
-﻿namespace DomainBlocks.EventStore.Testing
-{
-    public class TestEvent
-    {
-        public TestEvent(int number)
-        {
-            Number = number;
-        }
+﻿namespace DomainBlocks.EventStore.Testing;
 
-        public int Number { get; }
+public class TestEvent
+{
+    public TestEvent(int number)
+    {
+        Number = number;
     }
+
+    public int Number { get; }
 }

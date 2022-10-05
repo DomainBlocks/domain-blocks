@@ -1,10 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace DomainBlocks.Projections
+namespace DomainBlocks.Projections;
+
+public interface IEventProjectionBuilder
 {
-    public interface IEventProjectionBuilder
-    {
-        IEnumerable<(Type eventType, RunProjection func)> BuildProjectionFuncs();
-    }
+    IEnumerable<(Type eventType, RunProjection func)> BuildProjectionFuncs();
 }

@@ -11,63 +11,62 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.OpenApi.Models;
 using Shopping.ReadModel.Db;
 
-namespace Shopping.ReadModel
+namespace Shopping.ReadModel;
+
+public class Startup
 {
-    public class Startup
+    public Startup(IConfiguration configuration)
     {
-        public Startup(IConfiguration configuration)
-        {
-            Configuration = configuration;
-        }
+        Configuration = configuration;
+    }
 
-        public IConfiguration Configuration { get; }
+    public IConfiguration Configuration { get; }
 
-        // This method gets called by the runtime. Use this method to add services to the container.
-        public void ConfigureServices(IServiceCollection services)
-        {
-            services.AddDbContext<ShoppingCartDbContext>(options =>
-                                                             options.UseNpgsql(Configuration
-                                                                                   .GetConnectionString("Default")));
+    // This method gets called by the runtime. Use this method to add services to the container.
+    public void ConfigureServices(IServiceCollection services)
+    {
+        services.AddDbContext<ShoppingCartDbContext>(options =>
+            options.UseNpgsql(Configuration
+                .GetConnectionString("Default")));
 
-            services.AddReadModel(Configuration,
-                                  options =>
-                                  {
-                                      options.UseSqlStreamStorePublishedEvents()
-                                             .UseEntityFramework<ShoppingCartDbContext, StreamMessageWrapper>()
-                                             .WithProjections((builder, dbContext) =>
-                                             {
-                                                 ShoppingClassSummaryEfProjection.Register(builder, dbContext);
-                                                 ShoppingCartHistoryEfProjection.Register(builder, dbContext);
-                                             });
-                                  });
-
-            services.AddControllers();
-            services.AddSwaggerGen(c =>
+        services.AddReadModel(Configuration,
+            options =>
             {
-                c.SwaggerDoc("v1", new OpenApiInfo { Title = "Shopping.ReadModel", Version = "v1" });
+                options.UseSqlStreamStorePublishedEvents()
+                    .UseEntityFramework<ShoppingCartDbContext, StreamMessageWrapper>()
+                    .WithProjections((builder, dbContext) =>
+                    {
+                        ShoppingClassSummaryEfProjection.Register(builder, dbContext);
+                        ShoppingCartHistoryEfProjection.Register(builder, dbContext);
+                    });
             });
-        }
 
-        // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+        services.AddControllers();
+        services.AddSwaggerGen(c =>
         {
-            if (env.IsDevelopment())
-            {
-                app.UseDeveloperExceptionPage();
-                app.UseSwagger();
-                app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Shopping.ReadModel v1"));
-            }
+            c.SwaggerDoc("v1", new OpenApiInfo { Title = "Shopping.ReadModel", Version = "v1" });
+        });
+    }
 
-            app.UseHttpsRedirection();
-
-            app.UseRouting();
-
-            app.UseAuthorization();
-
-            app.UseEndpoints(endpoints =>
-            {
-                endpoints.MapControllers();
-            });
+    // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
+    public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+    {
+        if (env.IsDevelopment())
+        {
+            app.UseDeveloperExceptionPage();
+            app.UseSwagger();
+            app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Shopping.ReadModel v1"));
         }
+
+        app.UseHttpsRedirection();
+
+        app.UseRouting();
+
+        app.UseAuthorization();
+
+        app.UseEndpoints(endpoints =>
+        {
+            endpoints.MapControllers();
+        });
     }
 }

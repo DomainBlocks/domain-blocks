@@ -1,12 +1,11 @@
 ﻿using System.Threading.Tasks;
 
-namespace DomainBlocks.Projections
+namespace DomainBlocks.Projections;
+
+public interface IProjectionContext
 {
-    public interface IProjectionContext
-    {
-        Task OnSubscribing();
-        Task OnCaughtUp();
-        Task OnBeforeHandleEvent();
-        Task OnAfterHandleEvent();
-    }
+    Task OnSubscribing();
+    Task OnCaughtUp();
+    Task OnBeforeHandleEvent();
+    Task OnAfterHandleEvent();
 }
