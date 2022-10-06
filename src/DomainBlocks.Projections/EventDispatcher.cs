@@ -39,18 +39,20 @@ public sealed class EventDispatcher<TRawData, TEventBase>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         Log.LogDebug("Starting EventStream");
-        await ForAllContexts(c => c.OnSubscribing()).ConfigureAwait(false);
+        await ForAllContexts((c, ct) => c.OnSubscribing(ct), cancellationToken).ConfigureAwait(false);
         Log.LogDebug("Context OnSubscribing hooks called");
 
         await _publisher.StartAsync(HandleEventNotificationAsync, cancellationToken).ConfigureAwait(false);
         Log.LogDebug("Event publisher started");
     }
 
-    private async Task ForAllContexts(Func<IProjectionContext, Task> contextAction)
+    private async Task ForAllContexts(
+        Func<IProjectionContext, CancellationToken, Task> contextAction,
+        CancellationToken cancellationToken = default)
     {
         foreach (var context in _projectionContextMap.GetAllContexts())
         {
-            await contextAction(context).ConfigureAwait(false); 
+            await contextAction(context, cancellationToken).ConfigureAwait(false); 
         }
     }
 
@@ -66,7 +68,7 @@ public sealed class EventDispatcher<TRawData, TEventBase>
                 break;
             case EventNotificationKind.CaughtUpNotification:
                 Log.LogDebug("Received caught up notification");
-                await ForAllContexts(c => c.OnCaughtUp()).ConfigureAwait(false);
+                await ForAllContexts((c, ct) => c.OnCaughtUp(ct), cancellationToken).ConfigureAwait(false);
                 Log.LogDebug("Context OnCaughtUp hooks called");
                 break;
             default:
@@ -96,13 +98,17 @@ public sealed class EventDispatcher<TRawData, TEventBase>
                 throw;
             }
 
-            tasks.Add(DispatchEventToProjections(@event, metadata, eventId));
+            tasks.Add(DispatchEventToProjections(@event, metadata, eventId, cancellationToken));
         }
 
         await Task.WhenAll(tasks).ConfigureAwait(false);
     }
 
-    private async Task DispatchEventToProjections(TEventBase @event, EventMetadata metadata, Guid eventId)
+    private async Task DispatchEventToProjections(
+        TEventBase @event,
+        EventMetadata metadata,
+        Guid eventId,
+        CancellationToken cancellationToken = default)
     {
         try
         {
@@ -110,7 +116,7 @@ public sealed class EventDispatcher<TRawData, TEventBase>
             var eventType = @event.GetType();
             var contextsForEvent = _projectionContextMap.GetContextsForEventType(eventType);
 
-            var beforeEventActions = contextsForEvent.Select(c => c.OnBeforeHandleEvent());
+            var beforeEventActions = contextsForEvent.Select(c => c.OnBeforeHandleEvent(cancellationToken));
             Log.LogTrace("Context OnBeforeHandleEvent hooks called for event ID {EventId}", eventId);
             await Task.WhenAll(beforeEventActions).ConfigureAwait(false);
 
@@ -137,6 +143,7 @@ public sealed class EventDispatcher<TRawData, TEventBase>
                         }
                     }
                 }
+
                 stopwatch.Stop();
             }
 
@@ -144,9 +151,9 @@ public sealed class EventDispatcher<TRawData, TEventBase>
 
             foreach (var projectionContext in contextsForEvent)
             {
-                await projectionContext.OnAfterHandleEvent().ConfigureAwait(false);
+                await projectionContext.OnAfterHandleEvent(cancellationToken).ConfigureAwait(false);
             }
-                
+
             Log.LogTrace("Context OnAfterHandleEvent hooks called for event ID {EventId}", eventId);
         }
         catch (Exception ex)
@@ -155,8 +162,9 @@ public sealed class EventDispatcher<TRawData, TEventBase>
             if (!_configuration.ContinueAfterProjectionException)
             {
                 _publisher.Stop();
-                throw new EventStreamException("Unhandled exception in event stream handling event ID" +
-                                               $" {eventId}. Stopping event publisher",
+                throw new EventStreamException(
+                    "Unhandled exception in event stream handling event ID" +
+                    $" {eventId}. Stopping event publisher",
                     ex);
             }
         }
