@@ -22,7 +22,7 @@ public class AcknowledgingEventStoreEventPublisher : IEventPublisher<EventRecord
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
         _persistentConnectionDescriptor = persistentConnectionDescriptor;
-        _subscriptionDroppedHandler = new EventStoreDroppedSubscriptionHandler(Stop, () => ReSubscribeAfterDrop());
+        _subscriptionDroppedHandler = new EventStoreDroppedSubscriptionHandler(Stop, ReSubscribeAfterDrop);
     }
 
     public async Task StartAsync(

@@ -18,7 +18,7 @@ public class EventStoreEventPublisher : IEventPublisher<EventRecord>, IDisposabl
         _client = client ?? throw new ArgumentNullException(nameof(client));
         _subscriptionDroppedHandler = new EventStoreDroppedSubscriptionHandler(
             Stop,
-            () => ReSubscribeAfterDrop(CancellationToken.None));
+            ReSubscribeAfterDrop);
     }
 
     public async Task StartAsync(
