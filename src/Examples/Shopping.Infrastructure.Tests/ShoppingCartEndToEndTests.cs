@@ -60,7 +60,7 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
             registry.EventNameMap,
             EventDispatcherConfiguration.ReadModelDefaults);
 
-        await readModelDispatcher.StartAsync(default);
+        await readModelDispatcher.StartAsync();
     }
 
     private async Task SetUpProcessManagerProjections()

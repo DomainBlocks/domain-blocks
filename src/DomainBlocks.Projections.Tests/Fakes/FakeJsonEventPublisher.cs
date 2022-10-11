@@ -57,7 +57,7 @@ namespace DomainBlocks.Projections.Sql.Tests.Fakes
                 cancellationToken);
         }
 
-        public async Task SendCaughtUp(CancellationToken cancellationToken)
+        public async Task SendCaughtUp(CancellationToken cancellationToken = default)
         {
             AssertPublisherStarted();
             await _onEvent(EventNotification.CaughtUp<EventRecord>(), cancellationToken);

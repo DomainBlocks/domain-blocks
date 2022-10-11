@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading;
 using System.Threading.Tasks;
 using DomainBlocks.Common;
 using EventStore.Client;
@@ -9,14 +10,14 @@ namespace DomainBlocks.Projections.EventStore;
 public class EventStoreDroppedSubscriptionHandler
 {
     private readonly Action _stop;
-    private readonly Func<Task> _resubscribe;
+    private readonly Func<CancellationToken, Task> _resubscribe;
     private static readonly ILogger<EventStoreDroppedSubscriptionHandler> Log = Logger.CreateFor<EventStoreDroppedSubscriptionHandler>();
 
     private int _maxSubscribeAttempts = 3;
     private int _subscribeAttempts;
     private TimeSpan _backOffTimeSpan = TimeSpan.FromSeconds(1);
 
-    public EventStoreDroppedSubscriptionHandler(Action stop, Func<Task> resubscribe)
+    public EventStoreDroppedSubscriptionHandler(Action stop, Func<CancellationToken, Task> resubscribe)
     {
         _stop = stop;
         _resubscribe = resubscribe;
@@ -49,7 +50,7 @@ public class EventStoreDroppedSubscriptionHandler
         
     // TODO: Need to better understand the new reasons for subscriptions being dropped
     // to see if it still makes sense to try resubscribing
-    private async Task TryToResubscribe()
+    private async Task TryToResubscribe(CancellationToken cancellationToken = default)
     {
         if (_subscribeAttempts > _maxSubscribeAttempts)
         {
@@ -64,10 +65,10 @@ public class EventStoreDroppedSubscriptionHandler
             "Waiting for {TotalSeconds} seconds before resubscribing. Resubscribe attempt {SubscribeAttempts}",
             _backOffTimeSpan.TotalSeconds,
             _subscribeAttempts);
-        await Task.Delay(_backOffTimeSpan);
+        await Task.Delay(_backOffTimeSpan, cancellationToken);
 
         _backOffTimeSpan *= 2;
         _subscribeAttempts++;
-        await _resubscribe();
+        await _resubscribe(cancellationToken);
     }
 }

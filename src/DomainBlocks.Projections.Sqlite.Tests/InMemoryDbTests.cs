@@ -45,10 +45,10 @@ namespace DomainBlocks.Projections.Sqlite.Tests
         [Test]
         public async Task SqlSchemaIsBuiltAndPopulatedCorrectly()
         {
-            await _eventDispatcher.StartAsync(default);
+            await _eventDispatcher.StartAsync();
             _connection = _dbConnector.Connection;
 
-            await _publisher.SendCaughtUp(default);
+            await _publisher.SendCaughtUp();
             var cartId = Guid.NewGuid();
             await _publisher.SendEvent(new ShoppingCartCreated(cartId), ShoppingCartCreated.EventName);
 

@@ -37,11 +37,6 @@ public class EventStoreSnapshotRepository : ISnapshotRepository
             if (snapshotKey == null) throw new ArgumentNullException(nameof(snapshotKey));
             if (snapshotState == null) throw new ArgumentNullException(nameof(snapshotState));
 
-            _serializer.ToEventData(
-                snapshotState,
-                SnapshotEventName,
-                KeyValuePair.Create(SnapshotVersionMetadataKey, snapshotVersion.ToString()));
-            
             var snapshotData = new[]
             {
                 _serializer.ToEventData(
@@ -62,9 +57,7 @@ public class EventStoreSnapshotRepository : ISnapshotRepository
                 ex,
                 "Error when attempting to save snapshot. Stream Name {StreamName}. " +
                 "Snapshot Version {SnapshotVersion}, Snapshot Type {SnapshotType}",
-                snapshotKey,
-                snapshotVersion,
-                typeof(TState).FullName);
+                snapshotKey, snapshotVersion, typeof(TState).FullName); 
             throw;
         }
     }
@@ -105,12 +98,8 @@ public class EventStoreSnapshotRepository : ISnapshotRepository
         }
         catch (Exception ex)
         {
-            Log.LogError(
-                ex,
-                "Error when attempting to load snapshot. Stream Name: {StreamName}. " +
-                "Snapshot Type {SnapshotType}",
-                snapshotKey,
-                typeof(TState).FullName);
+            Log.LogError(ex, "Error when attempting to load snapshot. Stream Name: {StreamName}. " +
+                             "Snapshot Type {SnapshotType}", snapshotKey, typeof(TState).FullName);
             throw;
         }
     }

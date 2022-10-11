@@ -26,6 +26,6 @@ public class SaveForLaterHandler : CommandHandlerBase<SaveItemForLater>
 
         // Snapshot every 25 events
         // TODO (DS): Snapshot strategy can be added to AggregateType.
-        await Repository.SaveAsync(loadedAggregate, state => state.EventsLoadedCount >= 25);
+        await Repository.SaveAsync(loadedAggregate, state => state.EventsLoadedCount >= 25, cancellationToken);
     }
 }

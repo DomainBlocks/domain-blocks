@@ -36,7 +36,7 @@ public sealed class EventDispatcher<TRawData, TEventBase>
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
     }
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartAsync(CancellationToken cancellationToken = default)
     {
         Log.LogDebug("Starting EventStream");
         await ForAllContexts((c, ct) => c.OnSubscribing(ct), cancellationToken).ConfigureAwait(false);
