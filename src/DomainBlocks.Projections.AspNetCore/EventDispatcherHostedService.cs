@@ -28,7 +28,7 @@ public class EventDispatcherHostedService<TRawData, TEventBase> : IEventDispatch
         _onRegisteringProjections = onRegisteringProjections;
     }
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartAsync(CancellationToken cancellationToken = default)
     {
         _onRegisteringProjections(_registryBuilder);
         var projectionRegistry = _registryBuilder.Build();
@@ -40,10 +40,10 @@ public class EventDispatcherHostedService<TRawData, TEventBase> : IEventDispatch
             projectionRegistry.EventNameMap,
             EventDispatcherConfiguration.ReadModelDefaults);
 
-        await dispatcher.StartAsync();
+        await dispatcher.StartAsync(cancellationToken);
     }
 
-    public Task StopAsync(CancellationToken cancellationToken)
+    public Task StopAsync(CancellationToken cancellationToken = default)
     {
         return Task.CompletedTask;
     }

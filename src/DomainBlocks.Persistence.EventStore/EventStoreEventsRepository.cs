@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using DomainBlocks.Common;
 using DomainBlocks.Serialization;
@@ -23,7 +25,10 @@ public class EventStoreEventsRepository : IEventsRepository<ReadOnlyMemory<byte>
     }
 
     public async Task<long> SaveEventsAsync(
-        string streamName, long expectedStreamVersion, IEnumerable<object> events)
+        string streamName,
+        long expectedStreamVersion,
+        IEnumerable<object> events,
+        CancellationToken cancellationToken = default)
     {
         if (streamName == null) throw new ArgumentNullException(nameof(streamName));
         if (events == null) throw new ArgumentNullException(nameof(events));
@@ -65,7 +70,11 @@ public class EventStoreEventsRepository : IEventsRepository<ReadOnlyMemory<byte>
         IWriteResult writeResult;
         try
         {
-            writeResult = await _client.AppendToStreamAsync(streamName, streamVersion, eventDatas);
+            writeResult = await _client.AppendToStreamAsync(
+                streamName,
+                streamVersion,
+                eventDatas,
+                cancellationToken: cancellationToken);
             Log.LogDebug("Written events to stream. WriteId {WriteId}", writeId);
         }
         catch (Exception ex)
@@ -80,7 +89,8 @@ public class EventStoreEventsRepository : IEventsRepository<ReadOnlyMemory<byte>
     public async IAsyncEnumerable<object> LoadEventsAsync(
         string streamName,
         long startPosition = 0,
-        Action<IEventPersistenceData<ReadOnlyMemory<byte>>> onEventError = null)
+        Action<IEventPersistenceData<ReadOnlyMemory<byte>>> onEventError = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         if (streamName == null) throw new ArgumentNullException(nameof(streamName));
 
@@ -89,7 +99,10 @@ public class EventStoreEventsRepository : IEventsRepository<ReadOnlyMemory<byte>
         try
         {
             readStreamResult = _client.ReadStreamAsync(
-                Direction.Forwards, streamName, StreamPosition.FromInt64(startPosition));
+                Direction.Forwards,
+                streamName,
+                StreamPosition.FromInt64(startPosition),
+                cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {

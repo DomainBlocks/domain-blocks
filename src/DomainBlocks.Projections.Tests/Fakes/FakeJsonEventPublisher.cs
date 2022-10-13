@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Net.Mime;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using EventStore.Client;
 using NUnit.Framework;
@@ -11,10 +12,12 @@ namespace DomainBlocks.Projections.Sql.Tests.Fakes
 {
     public class FakeJsonEventPublisher : IEventPublisher<EventRecord>
     {
-        private Func<EventNotification<EventRecord>, Task> _onEvent;
+        private Func<EventNotification<EventRecord>, CancellationToken, Task> _onEvent;
         public bool IsStarted { get; private set; }
 
-        public Task StartAsync(Func<EventNotification<EventRecord>, Task> onEvent)
+        public Task StartAsync(
+            Func<EventNotification<EventRecord>, CancellationToken, Task> onEvent,
+            CancellationToken cancellationToken = default)
         {
             _onEvent = onEvent;
             IsStarted = true;
@@ -26,7 +29,11 @@ namespace DomainBlocks.Projections.Sql.Tests.Fakes
             IsStarted = false;
         }
 
-        public async Task SendEvent(object @event, string eventType, Guid? eventId = null)
+        public async Task SendEvent(
+            object @event,
+            string eventType,
+            Guid? eventId = null,
+            CancellationToken cancellationToken = default)
         {
             AssertPublisherStarted();
             var data = new ReadOnlyMemory<byte>(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(@event)));
@@ -45,13 +52,15 @@ namespace DomainBlocks.Projections.Sql.Tests.Fakes
                                               data,
                                               null);
 
-            await _onEvent(EventNotification.FromEvent(eventRecord, eventRecord.EventType, eventRecord.EventId.ToGuid()));
+            await _onEvent(
+                EventNotification.FromEvent(eventRecord, eventRecord.EventType, eventRecord.EventId.ToGuid()),
+                cancellationToken);
         }
 
-        public async Task SendCaughtUp()
+        public async Task SendCaughtUp(CancellationToken cancellationToken = default)
         {
             AssertPublisherStarted();
-            await _onEvent(EventNotification.CaughtUp<EventRecord>());
+            await _onEvent(EventNotification.CaughtUp<EventRecord>(), cancellationToken);
         }
 
         private void AssertPublisherStarted()
