@@ -20,7 +20,8 @@ public sealed class EventDispatcher<TRawData, TEventBase>
     private readonly IEventDeserializer<TRawData> _deserializer;
     private readonly IProjectionEventNameMap _projectionEventNameMap;
 
-    public EventDispatcher(IEventPublisher<TRawData> publisher,
+    public EventDispatcher(
+        IEventPublisher<TRawData> publisher,
         EventProjectionMap projectionMap,
         ProjectionContextMap projectionContextMap,
         IEventDeserializer<TRawData> serializer,

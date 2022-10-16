@@ -6,10 +6,10 @@ namespace DomainBlocks.Projections.AspNetCore;
 
 public static class ReadModelServiceCollectionExtensions
 {
-    public static IServiceCollection AddReadModel(this IServiceCollection services,
+    public static IServiceCollection AddReadModel(
+        this IServiceCollection services,
         IConfiguration configuration,
-        Action<ProjectionRegistrationOptionsBuilder>
-            buildProjectionOptions)
+        Action<ProjectionRegistrationOptionsBuilder> buildProjectionOptions)
     {
         return services.AddReadModel<object>(configuration, buildProjectionOptions);
     }
@@ -45,8 +45,7 @@ public static class ReadModelServiceCollectionExtensions
                 typeof(ProjectionRegistryBuilder),
                 projectionOptions.EventPublisher.GetType(),
                 projectionOptions.EventSerializer.GetType(),
-                projectionOptions.OnRegisteringProjections
-                    .GetType()
+                projectionOptions.OnRegisteringProjections.GetType()
             });
 
             var eventDispatcher = (IEventDispatcherHostedService)constructorMethod?.Invoke(new object[]
@@ -56,7 +55,6 @@ public static class ReadModelServiceCollectionExtensions
                 projectionOptions.EventSerializer,
                 projectionOptions.OnRegisteringProjections
             });
-
 
             return eventDispatcher;
         });

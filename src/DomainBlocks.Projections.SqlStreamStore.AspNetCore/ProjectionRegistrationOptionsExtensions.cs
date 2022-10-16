@@ -1,6 +1,8 @@
 ﻿using System.Text.Json;
 using DomainBlocks.Projections.AspNetCore;
+using DomainBlocks.Serialization;
 using DomainBlocks.SqlStreamStore.Common.AspNetCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SqlStreamStore;
 
@@ -40,4 +42,32 @@ public static class ProjectionRegistrationOptionsExtensions
         return builder;
     }
 #nullable restore
+    
+    // TODO (DS): This needs a bit more thought. Temporary until we refactor the projection builders/wire-up.
+    public static IServiceCollection UseSqlStreamStorePublishedEvents(
+        this IServiceCollection serviceCollection, IConfiguration configuration)
+    {
+        serviceCollection.AddPostgresSqlStreamStore(configuration);
+
+        serviceCollection.AddSingleton<IEventPublisher<StreamMessageWrapper>>(sp =>
+        {
+            var streamStore = sp.GetRequiredService<IStreamStore>();
+            return new SqlStreamStoreEventPublisher(streamStore);
+        });
+
+        serviceCollection
+            .AddTransient<IEventDeserializer<StreamMessageWrapper>>(_ => new StreamMessageJsonDeserializer());
+
+        serviceCollection.AddHostedService(sp =>
+        {
+            var eventPublisher = sp.GetRequiredService<IEventPublisher<StreamMessageWrapper>>();
+            var eventDeserializer = sp.GetRequiredService<IEventDeserializer<StreamMessageWrapper>>();
+            var projectionRegistry = sp.GetRequiredService<ProjectionRegistry>();
+            
+            return new EventDispatcherHostedServiceNew<StreamMessageWrapper, object>(
+                eventPublisher, eventDeserializer, projectionRegistry);
+        });
+        
+        return serviceCollection;
+    }
 }
