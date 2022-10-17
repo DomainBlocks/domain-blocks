@@ -8,7 +8,6 @@
   <ItemGroup>
     <ProjectReference Include="..\DomainBlocks.Persistence.SqlStreamStore\DomainBlocks.Persistence.SqlStreamStore.csproj" />
     <ProjectReference Include="..\DomainBlocks.Projections.AspNetCore\DomainBlocks.Projections.AspNetCore.csproj" />
-    <ProjectReference Include="..\DomainBlocks.Projections.DependencyInjection\DomainBlocks.Projections.DependencyInjection.csproj" />
     <ProjectReference Include="..\DomainBlocks.Projections.SqlStreamStore\DomainBlocks.Projections.SqlStreamStore.csproj" />
     <ProjectReference Include="..\DomainBlocks.SqlStreamStore.Common.AspNetCore\DomainBlocks.SqlStreamStore.Common.AspNetCore.csproj" />
   </ItemGroup>

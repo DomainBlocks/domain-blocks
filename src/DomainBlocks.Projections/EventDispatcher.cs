@@ -29,14 +29,14 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
         IEventPublisher<TRawData> publisher,
         EventProjectionMap projectionMap,
         ProjectionContextMap projectionContextMap,
-        IEventDeserializer<TRawData> serializer,
+        IEventDeserializer<TRawData> deserializer,
         IProjectionEventNameMap projectionEventNameMap,
         EventDispatcherConfiguration configuration)
     {
         _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
         _projectionMap = projectionMap ?? throw new ArgumentNullException(nameof(projectionMap));
         _projectionContextMap = projectionContextMap ?? throw new ArgumentNullException(nameof(projectionContextMap));
-        _deserializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+        _deserializer = deserializer ?? throw new ArgumentNullException(nameof(deserializer));
         _projectionEventNameMap =
             projectionEventNameMap ?? throw new ArgumentNullException(nameof(projectionEventNameMap));
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));

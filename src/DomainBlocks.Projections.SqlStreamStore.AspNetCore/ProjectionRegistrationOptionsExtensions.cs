@@ -1,7 +1,5 @@
-﻿using System;
-using System.Text.Json;
+﻿using System.Text.Json;
 using DomainBlocks.Projections.AspNetCore;
-using DomainBlocks.Projections.New.Builders;
 using DomainBlocks.SqlStreamStore.Common.AspNetCore;
 using Microsoft.Extensions.DependencyInjection;
 using SqlStreamStore;
@@ -43,31 +41,4 @@ public static class ProjectionRegistrationOptionsExtensions
         return builder;
     }
 #nullable restore
-
-    public static EventSubscriptionOptionsBuilder UseSqlStreamStore(
-        this EventSubscriptionOptionsBuilder optionsBuilder, string connectionString)
-    {
-        optionsBuilder.WithEventDispatcher(projections =>
-        {
-            var settings = new PostgresStreamStoreSettings(connectionString);
-            var streamStore = new PostgresStreamStore(settings);
-            var eventPublisher = new SqlStreamStoreEventPublisher(streamStore);
-            var eventDeserializer = new StreamMessageJsonDeserializer();
-
-            var eventDispatcher = new EventDispatcher<StreamMessageWrapper, object>(
-                eventPublisher,
-                projections.EventProjectionMap,
-                projections.ProjectionContextMap,
-                eventDeserializer,
-                projections.EventNameMap,
-                EventDispatcherConfiguration.ReadModelDefaults with
-                {
-                    ProjectionHandlerTimeout = TimeSpan.FromMinutes(1)
-                });
-
-            return eventDispatcher;
-        });
-
-        return optionsBuilder;
-    }
 }

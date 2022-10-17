@@ -1,10 +1,9 @@
 using System.Threading.Tasks;
-using DomainBlocks.Projections;
 using DomainBlocks.Projections.AspNetCore;
-using DomainBlocks.Projections.DependencyInjection;
 using DomainBlocks.Projections.EntityFramework.AspNetCore;
 using DomainBlocks.Projections.SqlStreamStore;
 using DomainBlocks.Projections.SqlStreamStore.AspNetCore;
+using DomainBlocks.Projections.SqlStreamStore.New.Extensions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
@@ -46,7 +45,7 @@ public class Startup
         //     });
 
         // **** New approach ****
-        services.AddEventSubscription((sp, options) =>
+        services.AddHostedEventSubscription((sp, options) =>
         {
             var connectionString = Configuration.GetValue<string>("SqlStreamStore:ConnectionString");
             options.UseSqlStreamStore(connectionString);
@@ -92,9 +91,6 @@ public class Startup
                 });
             });
         });
-        
-        // TODO (DS): Figure out how to deal with this
-        services.AddHostedService<EventDispatcherHostedServiceNew>();
 
         services.AddControllers();
         services.AddSwaggerGen(c =>

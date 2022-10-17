@@ -2,7 +2,7 @@
 using DomainBlocks.Projections.New.Builders;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace DomainBlocks.Projections.DependencyInjection;
+namespace DomainBlocks.Projections.New.Extensions;
 
 public static class ProjectionsServiceCollectionExtensions
 {

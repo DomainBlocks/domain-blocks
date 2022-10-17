@@ -1,4 +1,6 @@
 ﻿using System;
+using DomainBlocks.Projections.New.Builders;
+using DomainBlocks.Projections.New.Extensions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -60,5 +62,14 @@ public static class ReadModelServiceCollectionExtensions
         });
 
         return services;
+    }
+    
+    public static IServiceCollection AddHostedEventSubscription(
+        this IServiceCollection serviceCollection,
+        Action<IServiceProvider, EventSubscriptionOptionsBuilder> optionsAction)
+    {
+        return serviceCollection
+            .AddEventSubscription(optionsAction)
+            .AddHostedService<EventDispatcherHostedServiceNew>();
     }
 }

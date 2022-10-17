@@ -19,7 +19,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\DomainBlocks.Projections.DependencyInjection\DomainBlocks.Projections.DependencyInjection.csproj" />
     <ProjectReference Include="..\..\DomainBlocks.Projections.EntityFramework.AspNetCore\DomainBlocks.Projections.EntityFramework.AspNetCore.csproj" />
     <ProjectReference Include="..\..\DomainBlocks.Projections.EntityFramework\DomainBlocks.Projections.EntityFramework.csproj" />
     <ProjectReference Include="..\..\DomainBlocks.Projections.EventStore.AspNetCore\DomainBlocks.Projections.EventStore.AspNetCore.csproj" />

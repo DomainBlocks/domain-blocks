@@ -23,6 +23,6 @@ public class EventSubscriptionOptionsBuilder
     {
         var projections = _projectionOptionsBuilder.Build();
         var eventDispatcher = _eventDispatcherFactory(projections);
-        return new EventSubscriptionOptions(projections, eventDispatcher);
+        return new EventSubscriptionOptions(eventDispatcher);
     }
 }
