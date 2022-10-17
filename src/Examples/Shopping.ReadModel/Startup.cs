@@ -33,23 +33,19 @@ public class Startup
         services.AddDbContext<ShoppingCartDbContext>(options =>
             options.UseNpgsql(Configuration.GetConnectionString("Default")));
 
-        services.AddReadModel(Configuration,
-            options =>
-            {
-                options.UseSqlStreamStorePublishedEvents()
-                    .UseEntityFramework<ShoppingCartDbContext, StreamMessageWrapper>()
-                    .WithProjections((builder, dbContext) =>
-                    {
-                        ShoppingClassSummaryEfProjection.Register(builder, dbContext);
-                        ShoppingCartHistoryEfProjection.Register(builder, dbContext);
-                    });
-            });
+        // services.AddReadModel(Configuration,
+        //     options =>
+        //     {
+        //         options.UseSqlStreamStorePublishedEvents()
+        //             .UseEntityFramework<ShoppingCartDbContext, StreamMessageWrapper>()
+        //             .WithProjections((builder, dbContext) =>
+        //             {
+        //                 ShoppingClassSummaryEfProjection.Register(builder, dbContext);
+        //                 ShoppingCartHistoryEfProjection.Register(builder, dbContext);
+        //             });
+        //     });
 
-        // New approach
-        
-        services.AddHostedService(
-            sp => new EventDispatcherHostedServiceNew(sp.GetRequiredService<IEventDispatcher>()));
-
+        // **** New approach ****
         services.AddEventSubscription((sp, options) =>
         {
             var connectionString = Configuration.GetValue<string>("SqlStreamStore:ConnectionString");
@@ -57,31 +53,22 @@ public class Startup
 
             options.AddProjection<(IServiceScope scope, ShoppingCartDbContext dbContext)>(b =>
             {
-                b.OnSubscribing(async ct =>
+                b.OnSubscribing(async (state, ct) =>
                 {
-                    var scope = sp.CreateScope();
-                    var dbContext = scope.ServiceProvider.GetRequiredService<ShoppingCartDbContext>();
-                    await dbContext.Database.EnsureDeletedAsync(ct);
-                    await dbContext.Database.EnsureCreatedAsync(ct).ConfigureAwait(false);
-                    return (scope, dbContext);
+                    await state.dbContext.Database.EnsureDeletedAsync(ct);
+                    await state.dbContext.Database.EnsureCreatedAsync(ct);
                 });
 
-                b.OnCaughtUp(async (state, ct) =>
-                {
-                    await state.dbContext.SaveChangesAsync(ct);
-                    state.scope.Dispose();
-                });
-
-                b.OnEventHandling(_ =>
+                b.OnUpdating(_ =>
                 {
                     var scope = sp.CreateScope();
                     var dbContext = scope.ServiceProvider.GetRequiredService<ShoppingCartDbContext>();
                     return Task.FromResult((scope, dbContext));
                 });
 
-                b.OnEventHandled(async (state, ct) =>
+                b.OnUpdated(async (state, ct) =>
                 {
-                    await state.dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+                    await state.dbContext.SaveChangesAsync(ct);
                     state.scope.Dispose();
                 });
 
@@ -105,6 +92,9 @@ public class Startup
                 });
             });
         });
+        
+        // TODO (DS): Figure out how to deal with this
+        services.AddHostedService<EventDispatcherHostedServiceNew>();
 
         services.AddControllers();
         services.AddSwaggerGen(c =>

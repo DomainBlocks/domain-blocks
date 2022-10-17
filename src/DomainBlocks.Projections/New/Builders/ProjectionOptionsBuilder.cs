@@ -13,31 +13,25 @@ public interface IProjectionOptionsBuilder
 
 public class ProjectionOptionsBuilder<TState> : IProjectionOptionsBuilder
 {
-    private Func<CancellationToken, Task<TState>> _onSubscribing;
-    private Func<TState, CancellationToken, Task> _onCaughtUp;
-    private Func<CancellationToken, Task<TState>> _onEventHandling;
-    private Func<TState, CancellationToken, Task> _onEventHandled;
+    private Func<TState, CancellationToken, Task> _onSubscribing;
+    private Func<CancellationToken,Task<TState>> _onUpdating;
+    private Func<TState,CancellationToken,Task> _onUpdated;
     private readonly ProjectionEventNameMap _eventNameMap = new();
     private readonly List<(Type, Func<object, EventMetadata, TState, Task>)> _eventHandlers = new();
 
-    public void OnSubscribing(Func<CancellationToken, Task<TState>> onSubscribing)
+    public void OnSubscribing(Func<TState, CancellationToken, Task> onSubscribing)
     {
         _onSubscribing = onSubscribing;
     }
-
-    public void OnCaughtUp(Func<TState, CancellationToken, Task> onCaughtUp)
+    
+    public void OnUpdating(Func<CancellationToken, Task<TState>> onUpdating)
     {
-        _onCaughtUp = onCaughtUp;
+        _onUpdating = onUpdating;
     }
-
-    public void OnEventHandling(Func<CancellationToken, Task<TState>> onEventHandling)
+    
+    public void OnUpdated(Func<TState, CancellationToken, Task> onUpdated)
     {
-        _onEventHandling = onEventHandling;
-    }
-
-    public void OnEventHandled(Func<TState, CancellationToken, Task> onEventHandled)
-    {
-        _onEventHandled = onEventHandled;
+        _onUpdated = onUpdated;
     }
 
     public void When<TEvent>(Action<TEvent, TState> eventHandler)
@@ -62,9 +56,7 @@ public class ProjectionOptionsBuilder<TState> : IProjectionOptionsBuilder
     {
         var eventProjectionMap = new EventProjectionMap();
         var projectionContextMap = new ProjectionContextMap();
-
-        var projectionContext = new ProjectionContext<TState>(
-            _onSubscribing, _onCaughtUp, _onEventHandling, _onEventHandled);
+        var projectionContext = new ProjectionContext<TState>(_onSubscribing, _onUpdating, _onUpdated);
 
         foreach (var (eventType, handler) in _eventHandlers)
         {

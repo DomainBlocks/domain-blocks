@@ -7,34 +7,32 @@ namespace DomainBlocks.Projections.New;
 
 internal class ProjectionContext<TState> : IProjectionContext
 {
-    private readonly Func<CancellationToken, Task<TState>> _onSubscribing;
-    private readonly Func<TState, CancellationToken, Task> _onCaughtUp;
-    private readonly Func<CancellationToken, Task<TState>> _onEventHandling;
-    private readonly Func<TState, CancellationToken, Task> _onEventHandled;
+    private readonly Func<TState, CancellationToken, Task> _onSubscribing;
+    private readonly Func<CancellationToken, Task<TState>> _onUpdating;
+    private readonly Func<TState, CancellationToken, Task> _onUpdated;
     private bool _isCaughtUp;
     private TState _state;
 
     public ProjectionContext(
-        Func<CancellationToken, Task<TState>> onSubscribing,
-        Func<TState, CancellationToken, Task> onCaughtUp,
-        Func<CancellationToken, Task<TState>> onEventHandling,
-        Func<TState, CancellationToken, Task> onEventHandled)
+        Func<TState, CancellationToken, Task> onSubscribing,
+        Func<CancellationToken, Task<TState>> onUpdating,
+        Func<TState, CancellationToken, Task> onUpdated)
     {
         _onSubscribing = onSubscribing;
-        _onCaughtUp = onCaughtUp;
-        _onEventHandling = onEventHandling;
-        _onEventHandled = onEventHandled;
+        _onUpdating = onUpdating;
+        _onUpdated = onUpdated;
     }
 
     public async Task OnSubscribing(CancellationToken cancellationToken = default)
     {
-        _state = await _onSubscribing.Invoke(cancellationToken);
+        _state = await _onUpdating(cancellationToken);
+        await _onSubscribing(_state, cancellationToken);
     }
 
     public async Task OnCaughtUp(CancellationToken cancellationToken = default)
     {
         if (_isCaughtUp) return;
-        await _onCaughtUp(_state, cancellationToken);
+        await _onUpdated(_state, cancellationToken);
         _state = default;
         _isCaughtUp = true;
     }
@@ -42,13 +40,13 @@ internal class ProjectionContext<TState> : IProjectionContext
     public async Task OnBeforeHandleEvent(CancellationToken cancellationToken = default)
     {
         if (!_isCaughtUp) return;
-        _state = await _onEventHandling(cancellationToken);
+        _state = await _onUpdating(cancellationToken);
     }
 
     public async Task OnAfterHandleEvent(CancellationToken cancellationToken = default)
     {
         if (!_isCaughtUp) return;
-        await _onEventHandled(_state, cancellationToken);
+        await _onUpdated(_state, cancellationToken);
         _state = default;
     }
 
