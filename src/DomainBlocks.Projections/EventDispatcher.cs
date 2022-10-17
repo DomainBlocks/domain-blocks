@@ -10,7 +10,12 @@ using Microsoft.Extensions.Logging;
 
 namespace DomainBlocks.Projections;
 
-public sealed class EventDispatcher<TRawData, TEventBase>
+public interface IEventDispatcher
+{
+    public Task StartAsync(CancellationToken cancellationToken = default);
+}
+
+public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
 {
     private static readonly ILogger<EventDispatcher<TRawData, TEventBase>> Log = Logger.CreateFor<EventDispatcher<TRawData, TEventBase>>();
     private readonly IEventPublisher<TRawData> _publisher;

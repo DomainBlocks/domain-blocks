@@ -6,15 +6,16 @@ namespace DomainBlocks.Projections.DependencyInjection;
 
 public static class ProjectionsServiceCollectionExtensions
 {
-    public static IServiceCollection AddProjection<TState>(
+    public static IServiceCollection AddEventSubscription(
         this IServiceCollection serviceCollection,
-        Action<IServiceProvider, ProjectionOptionsBuilder<TState>> optionsAction)
+        Action<IServiceProvider, EventSubscriptionOptionsBuilder> optionsAction)
     {
         serviceCollection.AddSingleton(sp =>
         {
-            var optionsBuilder = new ProjectionOptionsBuilder<TState>();
+            var optionsBuilder = new EventSubscriptionOptionsBuilder();
             optionsAction(sp, optionsBuilder);
-            return optionsBuilder.Build();
+            var options = optionsBuilder.Build();
+            return options.EventDispatcher;
         });
 
         return serviceCollection;

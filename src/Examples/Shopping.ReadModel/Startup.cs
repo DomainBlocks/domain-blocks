@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using DomainBlocks.Projections;
 using DomainBlocks.Projections.AspNetCore;
 using DomainBlocks.Projections.DependencyInjection;
 using DomainBlocks.Projections.EntityFramework.AspNetCore;
@@ -30,87 +31,78 @@ public class Startup
     public void ConfigureServices(IServiceCollection services)
     {
         services.AddDbContext<ShoppingCartDbContext>(options =>
-            options.UseNpgsql(Configuration
-                .GetConnectionString("Default")));
+            options.UseNpgsql(Configuration.GetConnectionString("Default")));
 
-        // services.AddReadModel(Configuration,
-        //     options =>
-        //     {
-        //         options.UseSqlStreamStorePublishedEvents()
-        //             .UseEntityFramework<ShoppingCartDbContext, StreamMessageWrapper>()
-        //             .WithProjections((builder, dbContext) =>
-        //             {
-        //                 ShoppingClassSummaryEfProjection.Register(builder, dbContext);
-        //                 ShoppingCartHistoryEfProjection.Register(builder, dbContext);
-        //             });
-        //     });
-        
+        services.AddReadModel(Configuration,
+            options =>
+            {
+                options.UseSqlStreamStorePublishedEvents()
+                    .UseEntityFramework<ShoppingCartDbContext, StreamMessageWrapper>()
+                    .WithProjections((builder, dbContext) =>
+                    {
+                        ShoppingClassSummaryEfProjection.Register(builder, dbContext);
+                        ShoppingCartHistoryEfProjection.Register(builder, dbContext);
+                    });
+            });
+
         // New approach
-        services.UseSqlStreamStorePublishedEvents(Configuration);
+        
+        services.AddHostedService(
+            sp => new EventDispatcherHostedServiceNew(sp.GetRequiredService<IEventDispatcher>()));
 
-        // services.AddEventDispatcher(o => o.UseSqlStreamStore());
-        // services.AddEventDispatcher(o => o.UseEventStore());
-
-        // services.AddCatchUpSubscription((sp, options) =>
-        // {
-        //     options.UseSqlStreamStore();
-        //
-        //     options.AddProjection();
-        //     options.AddProjection();
-        //     options.AddProjection();
-        //     options.AddProjection();
-        //     options.AddProjection();
-        // });
-
-        services.AddProjection<(IServiceScope scope, ShoppingCartDbContext dbContext)>((sp, options) =>
+        services.AddEventSubscription((sp, options) =>
         {
-            //options.UseEventStore();
-            
-            options.OnSubscribing(async ct =>
-            {
-                var scope = sp.CreateScope();
-                var dbContext = scope.ServiceProvider.GetRequiredService<ShoppingCartDbContext>();
-                await dbContext.Database.EnsureDeletedAsync(ct);
-                await dbContext.Database.EnsureCreatedAsync(ct).ConfigureAwait(false);
-                return (scope, dbContext);
-            });
+            var connectionString = Configuration.GetValue<string>("SqlStreamStore:ConnectionString");
+            options.UseSqlStreamStore(connectionString);
 
-            options.OnCaughtUp(async (state, ct) =>
+            options.AddProjection<(IServiceScope scope, ShoppingCartDbContext dbContext)>(b =>
             {
-                await state.dbContext.SaveChangesAsync(ct);
-                state.scope.Dispose();
-            });
-
-            options.OnEventHandling(_ =>
-            {
-                var scope = sp.CreateScope();
-                var dbContext = scope.ServiceProvider.GetRequiredService<ShoppingCartDbContext>();
-                return Task.FromResult((scope, dbContext));
-            });
-
-            options.OnEventHandled(async (state, ct) =>
-            {
-                await state.dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
-                state.scope.Dispose();
-            });
-
-            options.When<ItemAddedToShoppingCart>((e, state) =>
-            {
-                state.dbContext.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem
+                b.OnSubscribing(async ct =>
                 {
-                    CartId = e.CartId,
-                    Id = e.Id,
-                    ItemDescription = e.Item
+                    var scope = sp.CreateScope();
+                    var dbContext = scope.ServiceProvider.GetRequiredService<ShoppingCartDbContext>();
+                    await dbContext.Database.EnsureDeletedAsync(ct);
+                    await dbContext.Database.EnsureCreatedAsync(ct).ConfigureAwait(false);
+                    return (scope, dbContext);
                 });
-            });
 
-            options.WhenAsync<ItemRemovedFromShoppingCart>(async (e, state) =>
-            {
-                var item = await state.dbContext.ShoppingCartSummaryItems.FindAsync(e.Id);
-                if (item != null)
+                b.OnCaughtUp(async (state, ct) =>
                 {
-                    state.dbContext.ShoppingCartSummaryItems.Remove(item);
-                }
+                    await state.dbContext.SaveChangesAsync(ct);
+                    state.scope.Dispose();
+                });
+
+                b.OnEventHandling(_ =>
+                {
+                    var scope = sp.CreateScope();
+                    var dbContext = scope.ServiceProvider.GetRequiredService<ShoppingCartDbContext>();
+                    return Task.FromResult((scope, dbContext));
+                });
+
+                b.OnEventHandled(async (state, ct) =>
+                {
+                    await state.dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+                    state.scope.Dispose();
+                });
+
+                b.When<ItemAddedToShoppingCart>((e, state) =>
+                {
+                    state.dbContext.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem
+                    {
+                        CartId = e.CartId,
+                        Id = e.Id,
+                        ItemDescription = e.Item
+                    });
+                });
+
+                b.WhenAsync<ItemRemovedFromShoppingCart>(async (e, state) =>
+                {
+                    var item = await state.dbContext.ShoppingCartSummaryItems.FindAsync(e.Id);
+                    if (item != null)
+                    {
+                        state.dbContext.ShoppingCartSummaryItems.Remove(item);
+                    }
+                });
             });
         });
 

@@ -52,7 +52,7 @@ internal class ProjectionContext<TState> : IProjectionContext
         _state = default;
     }
 
-    public RunProjection AsProjectionFunc(Func<object, EventMetadata, TState, Task> eventHandler)
+    public RunProjection CreateProjectionFunc(Func<object, EventMetadata, TState, Task> eventHandler)
     {
         return (e, metadata) => eventHandler(e, metadata, _state);
     }

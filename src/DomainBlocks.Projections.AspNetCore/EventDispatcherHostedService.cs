@@ -52,33 +52,18 @@ public class EventDispatcherHostedService<TRawData, TEventBase> : IEventDispatch
 }
 
 // Simplified event dispatcher which we'll use while we refactor the builder logic.
-public class EventDispatcherHostedServiceNew<TRawData, TEventBase> : IEventDispatcherHostedService
+public class EventDispatcherHostedServiceNew : IEventDispatcherHostedService
 {
-    private readonly IEventPublisher<TRawData> _publisher;
-    private readonly IEventDeserializer<TRawData> _eventDeserializer;
-    private readonly ProjectionRegistry _projectionRegistry;
+    private readonly IEventDispatcher _eventDispatcher;
 
-    public EventDispatcherHostedServiceNew(
-        IEventPublisher<TRawData> publisher,
-        IEventDeserializer<TRawData> eventDeserializer,
-        ProjectionRegistry projectionRegistry)
+    public EventDispatcherHostedServiceNew(IEventDispatcher eventDispatcher)
     {
-        _publisher = publisher;
-        _eventDeserializer = eventDeserializer;
-        _projectionRegistry = projectionRegistry;
+        _eventDispatcher = eventDispatcher;
     }
 
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
-        var dispatcher = new EventDispatcher<TRawData, TEventBase>(
-            _publisher,
-            _projectionRegistry.EventProjectionMap,
-            _projectionRegistry.ProjectionContextMap,
-            _eventDeserializer,
-            _projectionRegistry.EventNameMap,
-            EventDispatcherConfiguration.ReadModelDefaults);
-
-        await dispatcher.StartAsync(cancellationToken);
+        await _eventDispatcher.StartAsync(cancellationToken);
     }
 
     public Task StopAsync(CancellationToken cancellationToken = default)

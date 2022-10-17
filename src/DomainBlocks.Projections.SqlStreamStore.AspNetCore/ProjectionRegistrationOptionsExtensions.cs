@@ -1,8 +1,8 @@
-﻿using System.Text.Json;
+﻿using System;
+using System.Text.Json;
 using DomainBlocks.Projections.AspNetCore;
-using DomainBlocks.Serialization;
+using DomainBlocks.Projections.New.Builders;
 using DomainBlocks.SqlStreamStore.Common.AspNetCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SqlStreamStore;
 
@@ -17,7 +17,8 @@ public static class ProjectionRegistrationOptionsExtensions
         var builderInfrastructure = (IProjectionRegistrationOptionsBuilderInfrastructure)builder;
 
         var typedBuilder = builderInfrastructure.TypedAs<StreamMessageWrapper>();
-        var typedBuilderInfrastructure = (IProjectionRegistrationOptionsBuilderInfrastructure<StreamMessageWrapper>)typedBuilder;
+        var typedBuilderInfrastructure =
+            (IProjectionRegistrationOptionsBuilderInfrastructure<StreamMessageWrapper>)typedBuilder;
 
         typedBuilderInfrastructure.UseEventPublisher(provider =>
         {
@@ -42,32 +43,31 @@ public static class ProjectionRegistrationOptionsExtensions
         return builder;
     }
 #nullable restore
-    
-    // TODO (DS): This needs a bit more thought. Temporary until we refactor the projection builders/wire-up.
-    public static IServiceCollection UseSqlStreamStorePublishedEvents(
-        this IServiceCollection serviceCollection, IConfiguration configuration)
+
+    public static EventSubscriptionOptionsBuilder UseSqlStreamStore(
+        this EventSubscriptionOptionsBuilder optionsBuilder, string connectionString)
     {
-        serviceCollection.AddPostgresSqlStreamStore(configuration);
-
-        serviceCollection.AddSingleton<IEventPublisher<StreamMessageWrapper>>(sp =>
+        optionsBuilder.WithEventDispatcher(projections =>
         {
-            var streamStore = sp.GetRequiredService<IStreamStore>();
-            return new SqlStreamStoreEventPublisher(streamStore);
+            var settings = new PostgresStreamStoreSettings(connectionString);
+            var streamStore = new PostgresStreamStore(settings);
+            var eventPublisher = new SqlStreamStoreEventPublisher(streamStore);
+            var eventDeserializer = new StreamMessageJsonDeserializer();
+
+            var eventDispatcher = new EventDispatcher<StreamMessageWrapper, object>(
+                eventPublisher,
+                projections.EventProjectionMap,
+                projections.ProjectionContextMap,
+                eventDeserializer,
+                projections.EventNameMap,
+                EventDispatcherConfiguration.ReadModelDefaults with
+                {
+                    ProjectionHandlerTimeout = TimeSpan.FromMinutes(1)
+                });
+
+            return eventDispatcher;
         });
 
-        serviceCollection
-            .AddTransient<IEventDeserializer<StreamMessageWrapper>>(_ => new StreamMessageJsonDeserializer());
-
-        serviceCollection.AddHostedService(sp =>
-        {
-            var eventPublisher = sp.GetRequiredService<IEventPublisher<StreamMessageWrapper>>();
-            var eventDeserializer = sp.GetRequiredService<IEventDeserializer<StreamMessageWrapper>>();
-            var projectionRegistry = sp.GetRequiredService<ProjectionRegistry>();
-            
-            return new EventDispatcherHostedServiceNew<StreamMessageWrapper, object>(
-                eventPublisher, eventDeserializer, projectionRegistry);
-        });
-        
-        return serviceCollection;
+        return optionsBuilder;
     }
 }

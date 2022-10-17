@@ -6,7 +6,12 @@ using DomainBlocks.Serialization;
 
 namespace DomainBlocks.Projections.New.Builders;
 
-public class ProjectionOptionsBuilder<TState>
+public interface IProjectionOptionsBuilder
+{
+    public ProjectionRegistry Build();
+}
+
+public class ProjectionOptionsBuilder<TState> : IProjectionOptionsBuilder
 {
     private Func<CancellationToken, Task<TState>> _onSubscribing;
     private Func<TState, CancellationToken, Task> _onCaughtUp;
@@ -63,7 +68,7 @@ public class ProjectionOptionsBuilder<TState>
 
         foreach (var (eventType, handler) in _eventHandlers)
         {
-            eventProjectionMap.AddProjectionFunc(eventType, projectionContext.AsProjectionFunc(handler));
+            eventProjectionMap.AddProjectionFunc(eventType, projectionContext.CreateProjectionFunc(handler));
             projectionContextMap.RegisterProjectionContext(eventType, projectionContext);
         }
 
