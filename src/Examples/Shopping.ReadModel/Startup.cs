@@ -58,14 +58,14 @@ public class Startup
                     await state.dbContext.Database.EnsureCreatedAsync(ct);
                 });
 
-                b.OnUpdating(_ =>
+                b.OnProjecting(() =>
                 {
                     var scope = sp.CreateScope();
                     var dbContext = scope.ServiceProvider.GetRequiredService<ShoppingCartDbContext>();
-                    return Task.FromResult((scope, dbContext));
+                    return (scope, dbContext);
                 });
 
-                b.OnUpdated(async (state, ct) =>
+                b.OnProjected(async (state, ct) =>
                 {
                     await state.dbContext.SaveChangesAsync(ct);
                     state.scope.Dispose();

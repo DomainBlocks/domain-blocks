@@ -14,8 +14,8 @@ public interface IProjectionOptionsBuilder
 public class ProjectionOptionsBuilder<TState> : IProjectionOptionsBuilder
 {
     private Func<TState, CancellationToken, Task> _onSubscribing;
-    private Func<CancellationToken,Task<TState>> _onUpdating;
-    private Func<TState,CancellationToken,Task> _onUpdated;
+    private Func<CancellationToken,Task<TState>> _onProjecting;
+    private Func<TState, CancellationToken, Task> _onProjected;
     private readonly ProjectionEventNameMap _eventNameMap = new();
     private readonly List<(Type, Func<object, EventMetadata, TState, Task>)> _eventHandlers = new();
 
@@ -24,14 +24,19 @@ public class ProjectionOptionsBuilder<TState> : IProjectionOptionsBuilder
         _onSubscribing = onSubscribing;
     }
     
-    public void OnUpdating(Func<CancellationToken, Task<TState>> onUpdating)
+    public void OnProjecting(Func<CancellationToken, Task<TState>> onUpdating)
     {
-        _onUpdating = onUpdating;
+        _onProjecting = onUpdating;
     }
     
-    public void OnUpdated(Func<TState, CancellationToken, Task> onUpdated)
+    public void OnProjecting(Func<TState> onUpdating)
     {
-        _onUpdated = onUpdated;
+        _onProjecting = _ => Task.FromResult(onUpdating());
+    }
+    
+    public void OnProjected(Func<TState, CancellationToken, Task> onUpdated)
+    {
+        _onProjected = onUpdated;
     }
 
     public void When<TEvent>(Action<TEvent, TState> eventHandler)
@@ -56,7 +61,7 @@ public class ProjectionOptionsBuilder<TState> : IProjectionOptionsBuilder
     {
         var eventProjectionMap = new EventProjectionMap();
         var projectionContextMap = new ProjectionContextMap();
-        var projectionContext = new ProjectionContext<TState>(_onSubscribing, _onUpdating, _onUpdated);
+        var projectionContext = new ProjectionContext<TState>(_onSubscribing, _onProjecting, _onProjected);
 
         foreach (var (eventType, handler) in _eventHandlers)
         {
