@@ -60,15 +60,15 @@ public class EventStoreEventPublisher : IEventPublisher<EventRecord>, IDisposabl
 
         await _onEvent(EventNotification.CaughtUp<EventRecord>(), cancellationToken);
 
-        _subscription = await _client.SubscribeToAllAsync(_lastProcessedPosition,
+        _subscription = await _client.SubscribeToAllAsync(
+            _lastProcessedPosition,
             (_, evt, _) => SendEventNotification(evt),
             false,
             OnSubscriptionDropped,
-            userCredentials: new UserCredentials("admin",
-                "changeit"),
+            userCredentials: new UserCredentials("admin", "changeit"),
             cancellationToken: cancellationToken);
     }
-        
+
     private void OnSubscriptionDropped(StreamSubscription subscription, SubscriptionDroppedReason reason, Exception exception)
     {
         _subscriptionDroppedHandler.HandleDroppedSubscription(reason, exception);

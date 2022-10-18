@@ -10,15 +10,26 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi.Models;
 using Shopping.Domain.Events;
 using Shopping.ReadModel.Db;
 using Shopping.ReadModel.Db.Model;
+using SqlStreamStore.Logging;
+using SqlStreamStore.Logging.LogProviders;
+using LogLevel = Microsoft.Extensions.Logging.LogLevel;
 
 namespace Shopping.ReadModel;
 
 public class Startup
 {
+    static Startup()
+    {
+        var loggerFactory = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Debug).AddConsole());
+        DomainBlocks.Common.Logger.SetLoggerFactory(loggerFactory);
+        LogProvider.SetCurrentLogProvider(new SqlStreamStoreLogProvider(loggerFactory));
+    }
+
     public Startup(IConfiguration configuration)
     {
         Configuration = configuration;
@@ -50,30 +61,49 @@ public class Startup
             var connectionString = Configuration.GetValue<string>("SqlStreamStore:ConnectionString");
             options.UseSqlStreamStore(connectionString);
 
-            options.AddProjection<(IServiceScope scope, ShoppingCartDbContext dbContext)>(b =>
+            options.AddProjection<DbSet<ShoppingCartSummaryItem>>(projection =>
             {
-                b.OnSubscribing(async (state, ct) =>
+                projection.OnInitializing(async ct =>
                 {
-                    await state.dbContext.Database.EnsureDeletedAsync(ct);
-                    await state.dbContext.Database.EnsureCreatedAsync(ct);
+                    using var scope = sp.CreateScope();
+                    await using var dbContext = scope.ServiceProvider.GetRequiredService<ShoppingCartDbContext>();
+                    await dbContext.Database.EnsureDeletedAsync(ct);
+                    await dbContext.Database.EnsureCreatedAsync(ct);
                 });
 
-                b.OnProjecting(() =>
-                {
-                    var scope = sp.CreateScope();
-                    var dbContext = scope.ServiceProvider.GetRequiredService<ShoppingCartDbContext>();
-                    return (scope, dbContext);
-                });
+                projection
+                    .OnCatchingUp(_ =>
+                    {
+                        var scope = sp.CreateScope();
+                        var dbContext = scope.ServiceProvider.GetRequiredService<ShoppingCartDbContext>();
+                        var transaction = dbContext.Database.BeginTransaction();
+                        return Task.FromResult((scope, dbContext, transaction));
+                    })
+                    .OnCaughtUp(async (context, ct) =>
+                    {
+                        await context.dbContext.SaveChangesAsync(ct);
+                        await context.transaction.CommitAsync(ct);
+                        context.scope.Dispose();
+                    })
+                    .WithState(x => x.dbContext.ShoppingCartSummaryItems);
 
-                b.OnProjected(async (state, ct) =>
-                {
-                    await state.dbContext.SaveChangesAsync(ct);
-                    state.scope.Dispose();
-                });
+                projection
+                    .OnEventDispatching(_ =>
+                    {
+                        var scope = sp.CreateScope();
+                        var dbContext = scope.ServiceProvider.GetRequiredService<ShoppingCartDbContext>();
+                        return Task.FromResult((scope, dbContext));
+                    })
+                    .OnEventHandled(async (context, ct) =>
+                    {
+                        await context.dbContext.SaveChangesAsync(ct);
+                        context.scope.Dispose();
+                    })
+                    .WithState(x => x.dbContext.ShoppingCartSummaryItems);
 
-                b.When<ItemAddedToShoppingCart>((e, state) =>
+                projection.When<ItemAddedToShoppingCart>((e, state) =>
                 {
-                    state.dbContext.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem
+                    state.Add(new ShoppingCartSummaryItem
                     {
                         CartId = e.CartId,
                         Id = e.Id,
@@ -81,12 +111,12 @@ public class Startup
                     });
                 });
 
-                b.WhenAsync<ItemRemovedFromShoppingCart>(async (e, state) =>
+                projection.WhenAsync<ItemRemovedFromShoppingCart>(async (e, state) =>
                 {
-                    var item = await state.dbContext.ShoppingCartSummaryItems.FindAsync(e.Id);
+                    var item = await state.FindAsync(e.Id);
                     if (item != null)
                     {
-                        state.dbContext.ShoppingCartSummaryItems.Remove(item);
+                        state.Remove(item);
                     }
                 });
             });
@@ -119,5 +149,40 @@ public class Startup
         {
             endpoints.MapControllers();
         });
+    }
+}
+
+public class SqlStreamStoreLogProvider : LogProviderBase
+{
+    private readonly ILoggerFactory _loggerFactory;
+
+    public SqlStreamStoreLogProvider(ILoggerFactory loggerFactory)
+    {
+        _loggerFactory = loggerFactory;
+    }
+
+    public override Logger GetLogger(string name)
+    {
+        var logger = _loggerFactory.CreateLogger(name);
+
+        return (level, func, exception, parameters) =>
+        {
+            var message = func?.Invoke();
+
+            var logLevel = level switch
+            {
+                SqlStreamStore.Logging.LogLevel.Trace => LogLevel.Trace,
+                SqlStreamStore.Logging.LogLevel.Debug => LogLevel.Debug,
+                SqlStreamStore.Logging.LogLevel.Info => LogLevel.Information,
+                SqlStreamStore.Logging.LogLevel.Warn => LogLevel.Warning,
+                SqlStreamStore.Logging.LogLevel.Error => LogLevel.Error,
+                SqlStreamStore.Logging.LogLevel.Fatal => LogLevel.Critical,
+                _ => LogLevel.Information
+            };
+
+            logger.Log(logLevel, exception, message, parameters);
+
+            return true;
+        };
     }
 }

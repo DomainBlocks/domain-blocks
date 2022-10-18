@@ -25,6 +25,7 @@ public static class EventSubscriptionOptionsBuilderExtensions
                 projections.EventNameMap,
                 EventDispatcherConfiguration.ReadModelDefaults with
                 {
+                    // TODO: Remove
                     ProjectionHandlerTimeout = TimeSpan.FromMinutes(1)
                 });
 

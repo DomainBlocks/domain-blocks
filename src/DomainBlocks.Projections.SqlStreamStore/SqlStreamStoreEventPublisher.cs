@@ -72,7 +72,7 @@ public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper
         _subscriptionDroppedHandler.HandleDroppedSubscription(reason, exception);
     }
 
-    async Task SendEventNotification(StreamMessage message, CancellationToken cancellationToken = default)
+    private async Task SendEventNotification(StreamMessage message, CancellationToken cancellationToken = default)
     {
         var jsonData = await message.GetJsonData(cancellationToken).ConfigureAwait(false);
         var wrapper = new StreamMessageWrapper(message, jsonData);

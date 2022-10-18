@@ -19,7 +19,7 @@ public class EntityFrameworkProjectionContext : IProjectionContext
         _dbContext = dbContext;
     }
 
-    public async Task OnSubscribing(CancellationToken cancellationToken = default)
+    public async Task OnInitializing(CancellationToken cancellationToken = default)
     {
         try
         {
@@ -42,12 +42,12 @@ public class EntityFrameworkProjectionContext : IProjectionContext
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public Task OnBeforeHandleEvent(CancellationToken cancellationToken = default)
+    public Task OnEventDispatching(CancellationToken cancellationToken = default)
     {
         return Task.CompletedTask;
     }
 
-    public async Task OnAfterHandleEvent(CancellationToken cancellationToken = default)
+    public async Task OnEventHandled(CancellationToken cancellationToken = default)
     {
         if (_isProcessingLiveEvents)
         {

@@ -7,46 +7,63 @@ namespace DomainBlocks.Projections.New;
 
 internal class ProjectionContext<TState> : IProjectionContext
 {
-    private readonly Func<TState, CancellationToken, Task> _onSubscribing;
-    private readonly Func<CancellationToken, Task<TState>> _onProjecting;
-    private readonly Func<TState, CancellationToken, Task> _onProjected;
-    private bool _isCaughtUp;
+    private readonly Func<CancellationToken, Task> _onInitializing;
+    private readonly Func<CancellationToken, Task<object>> _onCatchingUp;
+    private readonly Func<object, CancellationToken, Task> _onCaughtUp;
+    private readonly Func<CancellationToken, Task<object>> _onEventDispatching;
+    private readonly Func<object, CancellationToken, Task> _onEventHandled;
+    private readonly Func<object, TState> _catchUpContextToStateSelector;
+    private readonly Func<object, TState> _eventContextToStateSelector;
+    private object _catchUpContext;
+    private object _eventContext;
     private TState _state;
 
     public ProjectionContext(
-        Func<TState, CancellationToken, Task> onSubscribing,
-        Func<CancellationToken, Task<TState>> onProjecting,
-        Func<TState, CancellationToken, Task> onProjected)
+        Func<CancellationToken, Task> onInitializing,
+        Func<CancellationToken, Task<object>> onCatchingUp,
+        Func<object, CancellationToken, Task> onCaughtUp,
+        Func<CancellationToken, Task<object>> onEventDispatching,
+        Func<object, CancellationToken, Task> onEventHandled,
+        Func<object, TState> catchUpContextToStateSelector,
+        Func<object, TState> eventContextToStateSelector)
     {
-        _onSubscribing = onSubscribing;
-        _onProjecting = onProjecting;
-        _onProjected = onProjected;
+        _onInitializing = onInitializing ?? (_ => Task.CompletedTask);
+        _onCatchingUp = onCatchingUp ?? (_ => null);
+        _onCaughtUp = onCaughtUp ?? ((_, _) => Task.CompletedTask);
+        _onEventDispatching = onEventDispatching ?? (_ => null);
+        _onEventHandled = onEventHandled ?? ((_, _) => Task.CompletedTask);
+        _catchUpContextToStateSelector = catchUpContextToStateSelector ?? (_ => default);
+        _eventContextToStateSelector = eventContextToStateSelector ?? (_ => default);
     }
 
-    public async Task OnSubscribing(CancellationToken cancellationToken = default)
+    public async Task OnInitializing(CancellationToken cancellationToken = default)
     {
-        _state = await _onProjecting(cancellationToken);
-        await _onSubscribing(_state, cancellationToken);
+        await _onInitializing(cancellationToken);
+
+        // TODO (DS): We need a proper hook for OnCatchingUp
+        _catchUpContext = await _onCatchingUp(cancellationToken);
+        _state = _catchUpContextToStateSelector(_catchUpContext);
     }
 
     public async Task OnCaughtUp(CancellationToken cancellationToken = default)
     {
-        if (_isCaughtUp) return;
-        await _onProjected(_state, cancellationToken);
+        await _onCaughtUp(_catchUpContext, cancellationToken);
+        _catchUpContext = null;
         _state = default;
-        _isCaughtUp = true;
     }
 
-    public async Task OnBeforeHandleEvent(CancellationToken cancellationToken = default)
+    public async Task OnEventDispatching(CancellationToken cancellationToken = default)
     {
-        if (!_isCaughtUp) return;
-        _state = await _onProjecting(cancellationToken);
+        if (_catchUpContext != null) return;
+        _eventContext = await _onEventDispatching(cancellationToken);
+        _state = _eventContextToStateSelector(_catchUpContext);
     }
 
-    public async Task OnAfterHandleEvent(CancellationToken cancellationToken = default)
+    public async Task OnEventHandled(CancellationToken cancellationToken = default)
     {
-        if (!_isCaughtUp) return;
-        await _onProjected(_state, cancellationToken);
+        if (_catchUpContext != null) return;
+        await _onEventHandled(_eventContext, cancellationToken);
+        _eventContext = null;
         _state = default;
     }
 

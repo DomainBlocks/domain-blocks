@@ -45,7 +45,7 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
         Log.LogDebug("Starting EventStream");
-        await ForAllContexts((c, ct) => c.OnSubscribing(ct), cancellationToken).ConfigureAwait(false);
+        await ForAllContexts((c, ct) => c.OnInitializing(ct), cancellationToken).ConfigureAwait(false);
         Log.LogDebug("Context OnSubscribing hooks called");
 
         await _publisher.StartAsync(HandleEventNotificationAsync, cancellationToken).ConfigureAwait(false);
@@ -122,7 +122,7 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
             var eventType = @event.GetType();
             var contextsForEvent = _projectionContextMap.GetContextsForEventType(eventType);
 
-            var beforeEventActions = contextsForEvent.Select(c => c.OnBeforeHandleEvent(cancellationToken));
+            var beforeEventActions = contextsForEvent.Select(c => c.OnEventDispatching(cancellationToken));
             Log.LogTrace("Context OnBeforeHandleEvent hooks called for event ID {EventId}", eventId);
             await Task.WhenAll(beforeEventActions).ConfigureAwait(false);
 
@@ -157,7 +157,7 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
 
             foreach (var projectionContext in contextsForEvent)
             {
-                await projectionContext.OnAfterHandleEvent(cancellationToken).ConfigureAwait(false);
+                await projectionContext.OnEventHandled(cancellationToken).ConfigureAwait(false);
             }
 
             Log.LogTrace("Context OnAfterHandleEvent hooks called for event ID {EventId}", eventId);
