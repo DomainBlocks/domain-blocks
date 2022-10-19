@@ -6,13 +6,13 @@ namespace DomainBlocks.Projections.New.Extensions;
 
 public static class ProjectionsServiceCollectionExtensions
 {
-    public static IServiceCollection AddEventSubscription(
+    public static IServiceCollection AddEventCatchUpSubscription(
         this IServiceCollection serviceCollection,
-        Action<IServiceProvider, EventSubscriptionOptionsBuilder> optionsAction)
+        Action<IServiceProvider, EventCatchUpSubscriptionOptionsBuilder> optionsAction)
     {
         serviceCollection.AddSingleton(sp =>
         {
-            var optionsBuilder = new EventSubscriptionOptionsBuilder();
+            var optionsBuilder = new EventCatchUpSubscriptionOptionsBuilder();
             optionsAction(sp, optionsBuilder);
             var options = optionsBuilder.Build();
             return options.EventDispatcher;

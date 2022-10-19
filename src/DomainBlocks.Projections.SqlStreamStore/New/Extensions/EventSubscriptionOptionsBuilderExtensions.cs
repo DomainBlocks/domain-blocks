@@ -6,8 +6,8 @@ namespace DomainBlocks.Projections.SqlStreamStore.New.Extensions;
 
 public static class EventSubscriptionOptionsBuilderExtensions
 {
-    public static EventSubscriptionOptionsBuilder UseSqlStreamStore(
-        this EventSubscriptionOptionsBuilder optionsBuilder, string connectionString)
+    public static EventCatchUpSubscriptionOptionsBuilder UseSqlStreamStore(
+        this EventCatchUpSubscriptionOptionsBuilder optionsBuilder, string connectionString)
     {
         optionsBuilder.WithEventDispatcher(projections =>
         {

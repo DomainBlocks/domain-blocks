@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace DomainBlocks.Projections;
 
-internal sealed class ProjectionEventNameMap : IProjectionEventNameMap
+public sealed class ProjectionEventNameMap : IProjectionEventNameMap
 {
     private readonly Dictionary<string, Type> _defaultEventNameMap = new();
     private readonly Dictionary<string, HashSet<Type>> _eventNameMap = new();

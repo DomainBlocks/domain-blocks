@@ -63,13 +63,13 @@ public static class ReadModelServiceCollectionExtensions
 
         return services;
     }
-    
-    public static IServiceCollection AddHostedEventSubscription(
+
+    public static IServiceCollection AddHostedEventCatchUpSubscription(
         this IServiceCollection serviceCollection,
-        Action<IServiceProvider, EventSubscriptionOptionsBuilder> optionsAction)
+        Action<IServiceProvider, EventCatchUpSubscriptionOptionsBuilder> optionsAction)
     {
         return serviceCollection
-            .AddEventSubscription(optionsAction)
+            .AddEventCatchUpSubscription(optionsAction)
             .AddHostedService<EventDispatcherHostedServiceNew>();
     }
 }

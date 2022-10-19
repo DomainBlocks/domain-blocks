@@ -5,12 +5,7 @@ using System.Threading.Tasks;
 
 namespace DomainBlocks.Projections.New.Builders;
 
-public interface IProjectionOptionsBuilder
-{
-    public ProjectionRegistry Build();
-}
-
-public class ProjectionOptionsBuilder : IProjectionOptionsBuilder
+public class ProjectionOptionsBuilder
 {
     private readonly ProjectionEventNameMap _eventNameMap = new();
     private readonly List<(Type, RunProjection)> _eventHandlers = new();

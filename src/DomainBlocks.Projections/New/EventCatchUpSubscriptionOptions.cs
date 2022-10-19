@@ -1,8 +1,8 @@
 namespace DomainBlocks.Projections.New;
 
-public class EventSubscriptionOptions
+public class EventCatchUpSubscriptionOptions
 {
-    public EventSubscriptionOptions(IEventDispatcher eventDispatcher)
+    public EventCatchUpSubscriptionOptions(IEventDispatcher eventDispatcher)
     {
         EventDispatcher = eventDispatcher;
     }
