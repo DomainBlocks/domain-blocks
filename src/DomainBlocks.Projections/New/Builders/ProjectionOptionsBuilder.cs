@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using DomainBlocks.Serialization;
 
 namespace DomainBlocks.Projections.New.Builders;
 
@@ -11,127 +10,61 @@ public interface IProjectionOptionsBuilder
     public ProjectionRegistry Build();
 }
 
-public class ProjectionOptionsBuilder<TState> : IProjectionOptionsBuilder
+public class ProjectionOptionsBuilder : IProjectionOptionsBuilder
 {
-    private Func<CancellationToken, Task> _onInitializing;
-    private Func<CancellationToken, Task<object>> _onCatchingUp;
-    private Func<object, CancellationToken, Task> _onCaughtUp;
-    private Func<object, TState> _catchUpContextToStateSelector;
-    private Func<CancellationToken, Task<object>> _onEventDispatching;
-    private Func<object, CancellationToken, Task> _onEventHandled;
-    private Func<object, TState> _eventContextToStateSelector;
     private readonly ProjectionEventNameMap _eventNameMap = new();
-    private readonly List<(Type, Func<object, EventMetadata, TState, Task>)> _eventHandlers = new();
+    private readonly List<(Type, RunProjection)> _eventHandlers = new();
+    private Func<CancellationToken, Task> _onInitializing;
+    private Func<CancellationToken, Task> _onCatchingUp;
+    private Func<CancellationToken, Task> _onCaughtUp;
+    private Func<CancellationToken, Task> _onEventDispatching;
+    private Func<CancellationToken, Task> _onEventHandled;
 
-    public void OnInitializing(Func<CancellationToken, Task> onStarting)
+    public void OnInitializing(Func<CancellationToken, Task> onInitializing)
     {
-        _onInitializing = onStarting;
+        _onInitializing = onInitializing;
     }
 
-    public CatchUpContext<TContext> OnCatchingUp<TContext>(Func<CancellationToken, Task<TContext>> onCatchingUp)
+    public void OnCatchingUp(Func<CancellationToken, Task> onCatchingUp)
     {
-        _onCatchingUp = async ct =>
-        {
-            var state = await onCatchingUp(ct).ConfigureAwait(false);
-            return state;
-        };
-
-        return new CatchUpContext<TContext>(this);
+        _onCatchingUp = onCatchingUp;
     }
 
-    public EventContext<TContext> OnEventDispatching<TContext>(
-        Func<CancellationToken, Task<TContext>> onEventDispatching)
+    public void OnCaughtUp(Func<CancellationToken, Task> onCaughtUp)
     {
-        _onEventDispatching = async ct =>
-        {
-            var state = await onEventDispatching(ct).ConfigureAwait(false);
-            return state;
-        };
-
-        return new EventContext<TContext>(this);
+        _onCaughtUp = onCaughtUp;
     }
 
-    public void When<TEvent>(Action<TEvent, TState> eventHandler)
+    public void OnEventDispatching(Func<CancellationToken, Task> onEventDispatching)
     {
-        _eventNameMap.RegisterDefaultEventName<TEvent>();
-
-        _eventHandlers.Add((typeof(TEvent), (e, _, state) =>
-        {
-            eventHandler((TEvent)e, state);
-            return Task.CompletedTask;
-        }));
+        _onEventDispatching = onEventDispatching;
     }
 
-    public void WhenAsync<TEvent>(Func<TEvent, TState, Task> eventHandler)
+    public void OnEventHandled(Func<CancellationToken, Task> onEventHandled)
+    {
+        _onEventHandled = onEventHandled;
+    }
+
+    public void When<TEvent>(Func<TEvent, Task> eventHandler)
     {
         _eventNameMap.RegisterDefaultEventName<TEvent>();
-        _eventHandlers.Add((typeof(TEvent), (e, _, state) => eventHandler((TEvent)e, state)));
+        _eventHandlers.Add((typeof(TEvent), (e, _) => eventHandler((TEvent)e)));
     }
 
-    // For now we return a ProjectionRegistry as an interim solution.
     public ProjectionRegistry Build()
     {
         var eventProjectionMap = new EventProjectionMap();
         var projectionContextMap = new ProjectionContextMap();
 
-        var projectionContext = new ProjectionContext<TState>(
-            _onInitializing,
-            _onCatchingUp,
-            _onCaughtUp,
-            _onEventDispatching,
-            _onEventHandled,
-            _catchUpContextToStateSelector,
-            _eventContextToStateSelector);
+        var projectionContext = new ProjectionContext(
+            _onInitializing, _onCatchingUp, _onCaughtUp, _onEventDispatching, _onEventHandled);
 
         foreach (var (eventType, handler) in _eventHandlers)
         {
-            var projectionFunc = projectionContext.CreateProjectionFunc(handler);
-            eventProjectionMap.AddProjectionFunc(eventType, projectionFunc);
+            eventProjectionMap.AddProjectionFunc(eventType, handler);
             projectionContextMap.RegisterProjectionContext(eventType, projectionContext);
         }
 
         return new ProjectionRegistry(eventProjectionMap, projectionContextMap, _eventNameMap);
-    }
-
-    public class CatchUpContext<TContext>
-    {
-        private readonly ProjectionOptionsBuilder<TState> _parent;
-
-        public CatchUpContext(ProjectionOptionsBuilder<TState> parent)
-        {
-            _parent = parent;
-        }
-
-        public CatchUpContext<TContext> OnCaughtUp(Func<TContext, CancellationToken, Task> onCaughtUp)
-        {
-            _parent._onCaughtUp = (context, ct) => onCaughtUp((TContext)context, ct);
-            return this;
-        }
-
-        public void WithState(Func<TContext, TState> stateSelector)
-        {
-            _parent._catchUpContextToStateSelector = x => stateSelector((TContext)x);
-        }
-    }
-
-    public class EventContext<TContext>
-    {
-        private readonly ProjectionOptionsBuilder<TState> _parent;
-
-        public EventContext(ProjectionOptionsBuilder<TState> parent)
-        {
-            _parent = parent;
-        }
-
-        public EventContext<TContext> OnEventHandled(Func<TContext, CancellationToken, Task> onCaughtUp)
-        {
-            _parent._onEventHandled = (context, ct) => onCaughtUp((TContext)context, ct);
-            return this;
-        }
-
-        public void WithState(Func<TContext, TState> stateSelector)
-        {
-            _parent._eventContextToStateSelector = x => stateSelector((TContext)x);
-        }
     }
 }

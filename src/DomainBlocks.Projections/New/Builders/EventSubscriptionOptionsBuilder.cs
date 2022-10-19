@@ -7,9 +7,9 @@ public class EventSubscriptionOptionsBuilder
     private IProjectionOptionsBuilder _projectionOptionsBuilder;
     private Func<ProjectionRegistry, IEventDispatcher> _eventDispatcherFactory;
 
-    public void AddProjection<TState>(Action<ProjectionOptionsBuilder<TState>> optionsAction)
+    public void AddProjection(Action<ProjectionOptionsBuilder> optionsAction)
     {
-        var projectionOptionsBuilder = new ProjectionOptionsBuilder<TState>();
+        var projectionOptionsBuilder = new ProjectionOptionsBuilder();
         _projectionOptionsBuilder = projectionOptionsBuilder;
         optionsAction(projectionOptionsBuilder);
     }

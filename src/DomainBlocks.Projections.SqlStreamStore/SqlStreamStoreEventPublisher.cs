@@ -41,19 +41,34 @@ public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper
 
     private async Task SubscribeToStore(long? subscribePosition, CancellationToken cancellationToken = default)
     {
-        _subscription = _streamStore.SubscribeToAll(subscribePosition, StreamMessageReceived, SubscriptionDropped,
-            caughtUp =>
+        // Observing duplicate calls to HasCaughtUp with the same hasCaughtUp value. By keeping the last value here we
+        // can deduplicate notifications.
+        var previousHasCaughtUpValue = false;
+
+        _subscription = _streamStore.SubscribeToAll(
+            subscribePosition,
+            StreamMessageReceived,
+            SubscriptionDropped,
+            hasCaughtUp =>
             {
-                if (caughtUp)
+                if (previousHasCaughtUpValue == hasCaughtUp)
+                {
+                    return;
+                }
+
+                previousHasCaughtUpValue = hasCaughtUp;
+
+                if (hasCaughtUp)
                 {
                     // SqlStreamStore doesn't provide us with an async delegate.
                     // To avoid ordering issues, we want to ensure no other
                     // event processing is done until our caught up
-                    // notification is published , so wait on the task
-                    _onEvent(EventNotification.CaughtUp<StreamMessageWrapper>(), cancellationToken)
-                        .Wait(cancellationToken);
+                    // notification is published, so wait on the task
+                    var caughtUpNotification = EventNotification.CaughtUp<StreamMessageWrapper>();
+                    _onEvent(caughtUpNotification, cancellationToken).Wait(cancellationToken);
                 }
             });
+
         // TODO: allow this to be configured
         _subscription.MaxCountPerRead = 1000;
         await _subscription.Started.ConfigureAwait(false);
@@ -67,7 +82,8 @@ public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper
         await SendEventNotification(streamMessage, cancellationToken: cancellationToken);
     }
 
-    private void SubscriptionDropped(IAllStreamSubscription subscription, SubscriptionDroppedReason reason, Exception exception)
+    private void SubscriptionDropped(
+        IAllStreamSubscription subscription, SubscriptionDroppedReason reason, Exception exception)
     {
         _subscriptionDroppedHandler.HandleDroppedSubscription(reason, exception);
     }
@@ -76,11 +92,10 @@ public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper
     {
         var jsonData = await message.GetJsonData(cancellationToken).ConfigureAwait(false);
         var wrapper = new StreamMessageWrapper(message, jsonData);
-        var notification = EventNotification.FromEvent(wrapper,
-            wrapper.Type,
-            wrapper.MessageId);
+        var notification = EventNotification.FromEvent(wrapper, wrapper.Type, wrapper.MessageId);
 
         await _onEvent(notification, cancellationToken).ConfigureAwait(false);
+
         _lastProcessedPosition = message.Position;
     }
 

@@ -7,6 +7,7 @@ using DomainBlocks.Projections.SqlStreamStore.New.Extensions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -61,7 +62,7 @@ public class Startup
             var connectionString = Configuration.GetValue<string>("SqlStreamStore:ConnectionString");
             options.UseSqlStreamStore(connectionString);
 
-            options.AddProjection<DbSet<ShoppingCartSummaryItem>>(projection =>
+            options.AddProjection(projection =>
             {
                 projection.OnInitializing(async ct =>
                 {
@@ -71,52 +72,62 @@ public class Startup
                     await dbContext.Database.EnsureCreatedAsync(ct);
                 });
 
-                projection
-                    .OnCatchingUp(_ =>
-                    {
-                        var scope = sp.CreateScope();
-                        var dbContext = scope.ServiceProvider.GetRequiredService<ShoppingCartDbContext>();
-                        var transaction = dbContext.Database.BeginTransaction();
-                        return Task.FromResult((scope, dbContext, transaction));
-                    })
-                    .OnCaughtUp(async (context, ct) =>
-                    {
-                        await context.dbContext.SaveChangesAsync(ct);
-                        await context.transaction.CommitAsync(ct);
-                        context.scope.Dispose();
-                    })
-                    .WithState(x => x.dbContext.ShoppingCartSummaryItems);
+                // State
+                var hasCaughtUp = false;
+                IServiceScope scope = null;
+                ShoppingCartDbContext dbContext = null;
+                IDbContextTransaction transaction = null;
 
-                projection
-                    .OnEventDispatching(_ =>
-                    {
-                        var scope = sp.CreateScope();
-                        var dbContext = scope.ServiceProvider.GetRequiredService<ShoppingCartDbContext>();
-                        return Task.FromResult((scope, dbContext));
-                    })
-                    .OnEventHandled(async (context, ct) =>
-                    {
-                        await context.dbContext.SaveChangesAsync(ct);
-                        context.scope.Dispose();
-                    })
-                    .WithState(x => x.dbContext.ShoppingCartSummaryItems);
-
-                projection.When<ItemAddedToShoppingCart>((e, state) =>
+                projection.OnCatchingUp(_ =>
                 {
-                    state.Add(new ShoppingCartSummaryItem
+                    scope = sp.CreateScope();
+                    dbContext = scope.ServiceProvider.GetRequiredService<ShoppingCartDbContext>();
+                    transaction = dbContext.Database.BeginTransaction();
+                    hasCaughtUp = false;
+                    return Task.CompletedTask;
+                });
+
+                projection.OnCaughtUp(async ct =>
+                {
+                    await dbContext.SaveChangesAsync(ct);
+                    await transaction.CommitAsync(ct);
+                    scope.Dispose();
+                    hasCaughtUp = true;
+                });
+
+                projection.OnEventDispatching(_ =>
+                {
+                    if (!hasCaughtUp) return Task.CompletedTask;
+                    scope = sp.CreateScope();
+                    dbContext = scope.ServiceProvider.GetRequiredService<ShoppingCartDbContext>();
+                    return Task.CompletedTask;
+                });
+
+                projection.OnEventHandled(async ct =>
+                {
+                    if (!hasCaughtUp) return;
+                    await dbContext.SaveChangesAsync(ct);
+                    scope.Dispose();
+                });
+
+                projection.When<ItemAddedToShoppingCart>(e =>
+                {
+                    dbContext.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem
                     {
                         CartId = e.CartId,
                         Id = e.Id,
                         ItemDescription = e.Item
                     });
+
+                    return Task.CompletedTask;
                 });
 
-                projection.WhenAsync<ItemRemovedFromShoppingCart>(async (e, state) =>
+                projection.When<ItemRemovedFromShoppingCart>(async e =>
                 {
-                    var item = await state.FindAsync(e.Id);
+                    var item = await dbContext.ShoppingCartSummaryItems.FindAsync(e.Id);
                     if (item != null)
                     {
-                        state.Remove(item);
+                        dbContext.ShoppingCartSummaryItems.Remove(item);
                     }
                 });
             });
@@ -140,15 +151,9 @@ public class Startup
         }
 
         app.UseHttpsRedirection();
-
         app.UseRouting();
-
         app.UseAuthorization();
-
-        app.UseEndpoints(endpoints =>
-        {
-            endpoints.MapControllers();
-        });
+        app.UseEndpoints(endpoints => { endpoints.MapControllers(); });
     }
 }
 
