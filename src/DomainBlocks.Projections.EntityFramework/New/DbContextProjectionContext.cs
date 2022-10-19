@@ -65,7 +65,7 @@ internal class DbContextProjectionContext<TDbContext> : IProjectionContext where
         _isCatchingUp = true;
     }
 
-    internal RunProjection CreateProjectionFunc(Func<object, TDbContext, Task> eventHandler)
+    internal RunProjection BindProjectionFunc(Func<object, TDbContext, Task> eventHandler)
     {
         return (e, _) => eventHandler(e, _dbContext);
     }

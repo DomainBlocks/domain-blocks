@@ -1,8 +1,8 @@
 using System;
-using DomainBlocks.Projections.New.Builders;
+using DomainBlocks.Projections.New;
 using SqlStreamStore;
 
-namespace DomainBlocks.Projections.SqlStreamStore.New.Extensions;
+namespace DomainBlocks.Projections.SqlStreamStore.New;
 
 public static class EventSubscriptionOptionsBuilderExtensions
 {

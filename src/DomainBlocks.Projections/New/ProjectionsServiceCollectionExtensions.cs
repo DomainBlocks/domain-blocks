@@ -1,8 +1,7 @@
 ﻿using System;
-using DomainBlocks.Projections.New.Builders;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace DomainBlocks.Projections.New.Extensions;
+namespace DomainBlocks.Projections.New;
 
 public static class ProjectionsServiceCollectionExtensions
 {

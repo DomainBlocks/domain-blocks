@@ -1,10 +1,11 @@
+using System;
 using System.Threading.Tasks;
 using DomainBlocks.Projections.AspNetCore;
 using DomainBlocks.Projections.EntityFramework.AspNetCore;
 using DomainBlocks.Projections.EntityFramework.New;
 using DomainBlocks.Projections.SqlStreamStore;
 using DomainBlocks.Projections.SqlStreamStore.AspNetCore;
-using DomainBlocks.Projections.SqlStreamStore.New.Extensions;
+using DomainBlocks.Projections.SqlStreamStore.New;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
@@ -58,46 +59,45 @@ public class Startup
         //     });
 
         // **** New approach ****
-        services.AddHostedEventCatchUpSubscription((sp, options) =>
+        services.AddHostedEventCatchUpSubscription((sp, subscriptionOptions) =>
         {
             var connectionString = Configuration.GetValue<string>("SqlStreamStore:ConnectionString");
-            options.UseSqlStreamStore(connectionString);
+            subscriptionOptions.UseSqlStreamStore(connectionString);
 
-            options.AddDbContextProjection<ShoppingCartDbContext>(projection =>
-            {
-                projection
-                    .Using(sp.CreateScope)
-                    .WithDbContext(x => x.ServiceProvider.GetRequiredService<ShoppingCartDbContext>());
-
-                projection.OnInitializing(async (dbContext, ct) =>
+            subscriptionOptions
+                .Using(sp.CreateScope)
+                .WithDbContext(x => x.ServiceProvider.GetRequiredService<ShoppingCartDbContext>())
+                .AddProjection(projection =>
                 {
-                    await dbContext.Database.EnsureDeletedAsync(ct);
-                    await dbContext.Database.EnsureCreatedAsync(ct);
-                });
-                
-                projection.When<ItemAddedToShoppingCart>((e, dbContext) =>
-                {
-                    dbContext.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem
+                    projection.OnInitializing(async (dbContext, ct) =>
                     {
-                        CartId = e.CartId,
-                        Id = e.Id,
-                        ItemDescription = e.Item
+                        await dbContext.Database.EnsureDeletedAsync(ct);
+                        await dbContext.Database.EnsureCreatedAsync(ct);
                     });
 
-                    return Task.CompletedTask;
-                });
-
-                projection.When<ItemRemovedFromShoppingCart>(async (e, dbContext) =>
-                {
-                    var item = await dbContext.ShoppingCartSummaryItems.FindAsync(e.Id);
-                    if (item != null)
+                    projection.When<ItemAddedToShoppingCart>((e, dbContext) =>
                     {
-                        dbContext.ShoppingCartSummaryItems.Remove(item);
-                    }
-                });
-            });
+                        dbContext.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem
+                        {
+                            CartId = e.CartId,
+                            Id = e.Id,
+                            ItemDescription = e.Item
+                        });
 
-            // options.AddProjection(projection =>
+                        return Task.CompletedTask;
+                    });
+
+                    projection.When<ItemRemovedFromShoppingCart>(async (e, dbContext) =>
+                    {
+                        var item = await dbContext.ShoppingCartSummaryItems.FindAsync(e.Id);
+                        if (item != null)
+                        {
+                            dbContext.ShoppingCartSummaryItems.Remove(item);
+                        }
+                    });
+                });
+
+            // subscriptionOptions.AddProjection(projection =>
             // {
             //     projection.OnInitializing(async ct =>
             //     {

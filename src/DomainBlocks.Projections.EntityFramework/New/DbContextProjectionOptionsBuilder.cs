@@ -2,27 +2,48 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using DomainBlocks.Projections.New;
 using Microsoft.EntityFrameworkCore;
 
 namespace DomainBlocks.Projections.EntityFramework.New;
 
-public class DbContextProjectionOptionsBuilder<TDbContext> where TDbContext : DbContext
+public class DbContextProjectionOptionsBuilder<TResource, TDbContext>
+    where TDbContext : DbContext where TResource : IDisposable
 {
-    private readonly ProjectionEventNameMap _eventNameMap = new();
+    private readonly ProjectionOptions<TResource> _options;
     private readonly List<(Type, Func<object, TDbContext, Task>)> _eventHandlers = new();
     private Func<TDbContext, CancellationToken, Task> _onInitializing;
-    private Func<IDisposable> _resourceFactory;
-    private Func<IDisposable, TDbContext> _dbContextFactory;
 
-    public UsingBuilder<TResource> Using<TResource>(Func<TResource> resourceFactory) where TResource : IDisposable
+    public DbContextProjectionOptionsBuilder(
+        ProjectionOptions<TResource> options, Func<TResource, TDbContext> dbContextFactory)
     {
-        _resourceFactory = () => resourceFactory();
-        return new UsingBuilder<TResource>(this);
+        _options = options;
+
+        // This feels like we're missing some decent abstractions here.
+        options.WithProjectionRegistryFactory(() =>
+        {
+            var projectionContext = new DbContextProjectionContext<TDbContext>(
+                _onInitializing,
+                () => options.ResourceFactory(),
+                x => dbContextFactory((TResource)x));
+
+            var eventProjectionMap = new EventProjectionMap();
+            var projectionContextMap = new ProjectionContextMap();
+
+            foreach (var (eventType, handler) in _eventHandlers)
+            {
+                var projectionFunc = projectionContext.BindProjectionFunc(handler);
+                eventProjectionMap.AddProjectionFunc(eventType, projectionFunc);
+                projectionContextMap.RegisterProjectionContext(eventType, projectionContext);
+            }
+
+            return new ProjectionRegistry(eventProjectionMap, projectionContextMap, options.EventNameMap);
+        });
     }
 
-    public void WithDbContext(Func<TDbContext> dbContextFactory)
+    public void AddProjection(Action<DbContextProjectionOptionsBuilder<TResource, TDbContext>> optionBuilder)
     {
-        _dbContextFactory = _ => dbContextFactory();
+        optionBuilder(this);
     }
 
     public void OnInitializing(Func<TDbContext, CancellationToken, Task> onInitializing)
@@ -32,40 +53,7 @@ public class DbContextProjectionOptionsBuilder<TDbContext> where TDbContext : Db
 
     public void When<TEvent>(Func<TEvent, TDbContext, Task> eventHandler)
     {
-        _eventNameMap.RegisterDefaultEventName<TEvent>();
+        _options.WithDefaultEventName<TEvent>();
         _eventHandlers.Add((typeof(TEvent), (e, dbContext) => eventHandler((TEvent)e, dbContext)));
-    }
-
-    public ProjectionRegistry Build()
-    {
-        var eventProjectionMap = new EventProjectionMap();
-        var projectionContextMap = new ProjectionContextMap();
-
-        var projectionContext = new DbContextProjectionContext<TDbContext>(
-            _onInitializing, _resourceFactory, _dbContextFactory);
-
-        foreach (var (eventType, handler) in _eventHandlers)
-        {
-            var projectionFunc = projectionContext.CreateProjectionFunc(handler);
-            eventProjectionMap.AddProjectionFunc(eventType, projectionFunc);
-            projectionContextMap.RegisterProjectionContext(eventType, projectionContext);
-        }
-
-        return new ProjectionRegistry(eventProjectionMap, projectionContextMap, _eventNameMap);
-    }
-
-    public class UsingBuilder<TResource> where TResource : IDisposable
-    {
-        private readonly DbContextProjectionOptionsBuilder<TDbContext> _parent;
-
-        public UsingBuilder(DbContextProjectionOptionsBuilder<TDbContext> parent)
-        {
-            _parent = parent;
-        }
-
-        public void WithDbContext(Func<TResource, TDbContext> dbContextFactory)
-        {
-            _parent._dbContextFactory = resource => dbContextFactory((TResource)resource);
-        }
     }
 }
