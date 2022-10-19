@@ -1,4 +1,3 @@
-using System;
 using System.Threading.Tasks;
 using DomainBlocks.Projections.AspNetCore;
 using DomainBlocks.Projections.EntityFramework.AspNetCore;
