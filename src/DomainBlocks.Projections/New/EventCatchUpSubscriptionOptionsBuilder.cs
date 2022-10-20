@@ -10,19 +10,22 @@ public class EventCatchUpSubscriptionOptionsBuilder
     {
         var projectionOptionsBuilder = new StatelessProjectionOptionsBuilder();
         optionsAction(projectionOptionsBuilder);
-        Options = Options.WithProjectionOptions(projectionOptionsBuilder.Options);
+        AddProjectionOptions(projectionOptionsBuilder.Options);
     }
 
-    public ProjectionResourceBuilder<TResource> Using<TResource>(Func<TResource> resourceFactory)
+    public UsingResourceOptionsBuilder<TResource> Using<TResource>(Func<TResource> resourceFactory)
         where TResource : IDisposable
     {
-        var builder = new ProjectionResourceBuilder<TResource>(resourceFactory);
-        Options = Options.WithProjectionOptionsProvider(builder);
-        return builder;
+        return new UsingResourceOptionsBuilder<TResource>(this, resourceFactory);
     }
 
     public void WithEventDispatcherFactory(Func<ProjectionRegistry, IEventDispatcher> eventDispatcherFactory)
     {
         Options = Options.WithEventDispatcherFactory(eventDispatcherFactory);
+    }
+
+    public void AddProjectionOptions(IProjectionOptions projectionOptions)
+    {
+        Options = Options.WithProjectionOptions(projectionOptions);
     }
 }
