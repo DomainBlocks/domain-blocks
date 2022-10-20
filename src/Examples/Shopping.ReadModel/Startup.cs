@@ -62,7 +62,7 @@ public class Startup
         {
             var connectionString = Configuration.GetValue<string>("SqlStreamStore:ConnectionString");
             subscriptionOptions.UseSqlStreamStore(connectionString);
-
+            
             subscriptionOptions
                 .Using(sp.CreateScope)
                 .WithDbContext(x => x.ServiceProvider.GetRequiredService<ShoppingCartDbContext>())
@@ -73,7 +73,7 @@ public class Startup
                         await dbContext.Database.EnsureDeletedAsync(ct);
                         await dbContext.Database.EnsureCreatedAsync(ct);
                     });
-
+            
                     projection.When<ItemAddedToShoppingCart>((e, dbContext) =>
                     {
                         dbContext.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem
@@ -82,10 +82,10 @@ public class Startup
                             Id = e.Id,
                             ItemDescription = e.Item
                         });
-
+            
                         return Task.CompletedTask;
                     });
-
+            
                     projection.When<ItemRemovedFromShoppingCart>(async (e, dbContext) =>
                     {
                         var item = await dbContext.ShoppingCartSummaryItems.FindAsync(e.Id);

@@ -13,8 +13,7 @@ public static class ProjectionsServiceCollectionExtensions
         {
             var optionsBuilder = new EventCatchUpSubscriptionOptionsBuilder();
             optionsAction(sp, optionsBuilder);
-            var options = optionsBuilder.Build();
-            return options.EventDispatcher;
+            return optionsBuilder.Options.CreateEventDispatcher();
         });
 
         return serviceCollection;

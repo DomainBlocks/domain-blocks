@@ -9,7 +9,7 @@ public static class EventSubscriptionOptionsBuilderExtensions
     public static EventCatchUpSubscriptionOptionsBuilder UseSqlStreamStore(
         this EventCatchUpSubscriptionOptionsBuilder optionsBuilder, string connectionString)
     {
-        optionsBuilder.WithEventDispatcher(projections =>
+        optionsBuilder.WithEventDispatcherFactory(projections =>
         {
             // TODO (DS): Should we be directly referencing postgres StreamStore from here?
             var settings = new PostgresStreamStoreSettings(connectionString);

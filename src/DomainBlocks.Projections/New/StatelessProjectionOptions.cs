@@ -5,65 +5,82 @@ using System.Threading.Tasks;
 
 namespace DomainBlocks.Projections.New;
 
-public class StatelessProjectionOptions : ProjectionOptionsBase
+public class StatelessProjectionOptions : IProjectionOptions
 {
+    private readonly ProjectionEventNameMap _eventNameMap = new();
     private readonly List<(Type, RunProjection)> _eventHandlers = new();
+    private Func<CancellationToken, Task> _onInitializing;
+    private Func<CancellationToken, Task> _onCatchingUp;
+    private Func<CancellationToken, Task> _onCaughtUp;
+    private Func<CancellationToken, Task> _onEventDispatching;
+    private Func<CancellationToken, Task> _onEventHandled;
 
-    public Func<CancellationToken, Task> OnInitializing { get; private set; }
-    public Func<CancellationToken, Task> OnCatchingUp { get; private set; }
-    public Func<CancellationToken, Task> OnCaughtUp { get; private set; }
-    public Func<CancellationToken, Task> OnEventDispatching { get; private set; }
-    public Func<CancellationToken, Task> OnEventHandled { get; private set; }
-    public IEnumerable<(Type, RunProjection)> EventHandlers => _eventHandlers;
-    
-    public void WithOnInitializing(Func<CancellationToken, Task> onInitializing)
+    public StatelessProjectionOptions()
     {
-        OnInitializing = onInitializing;
     }
 
-    public void WithOnCatchingUp(Func<CancellationToken, Task> onInitializing)
+    private StatelessProjectionOptions(StatelessProjectionOptions copyFrom)
     {
-        OnCatchingUp = onInitializing;
+        _eventNameMap = new ProjectionEventNameMap(copyFrom._eventNameMap);
+        _eventHandlers = new List<(Type, RunProjection)>(copyFrom._eventHandlers);
+        _onInitializing = copyFrom._onInitializing;
+        _onCatchingUp = copyFrom._onCatchingUp;
+        _onCaughtUp = copyFrom._onCaughtUp;
+        _onEventDispatching = copyFrom._onEventDispatching;
+        _onEventHandled = copyFrom._onEventHandled;
     }
 
-    public void WithOnCaughtUp(Func<CancellationToken, Task> onCaughtUp)
+    public StatelessProjectionOptions WithOnInitializing(Func<CancellationToken, Task> onInitializing)
     {
-        OnCaughtUp = onCaughtUp;
+        return new StatelessProjectionOptions(this) { _onInitializing = onInitializing };
     }
 
-    public void WithOnEventDispatching(Func<CancellationToken, Task> onEventDispatching)
+    public StatelessProjectionOptions WithOnCatchingUp(Func<CancellationToken, Task> onCatchingUp)
     {
-        OnEventDispatching = onEventDispatching;
+        return new StatelessProjectionOptions(this) { _onCatchingUp = onCatchingUp };
     }
 
-    public void WithOnEventHandled(Func<CancellationToken, Task> onEventHandled)
+    public StatelessProjectionOptions WithOnCaughtUp(Func<CancellationToken, Task> onCaughtUp)
     {
-        OnEventHandled = onEventHandled;
-    }
-    
-    public void WithEventHandler<TEvent>(Func<TEvent, Task> eventHandler)
-    {
-        _eventHandlers.Add((typeof(TEvent), (e, _) => eventHandler((TEvent)e)));
+        return new StatelessProjectionOptions(this) { _onCaughtUp = onCaughtUp };
     }
 
-    public override ProjectionRegistry ToProjectionRegistry()
+    public StatelessProjectionOptions WithOnEventDispatching(Func<CancellationToken, Task> onEventDispatching)
+    {
+        return new StatelessProjectionOptions(this) { _onEventDispatching = onEventDispatching };
+    }
+
+    public StatelessProjectionOptions WithOnEventHandled(Func<CancellationToken, Task> onEventHandled)
+    {
+        return new StatelessProjectionOptions(this) { _onEventHandled = onEventHandled };
+    }
+
+    public StatelessProjectionOptions WithEventHandler<TEvent>(Func<TEvent, Task> eventHandler)
+    {
+        var copy = new StatelessProjectionOptions(this);
+        copy._eventNameMap.RegisterDefaultEventName<TEvent>();
+        copy._eventHandlers.Add((typeof(TEvent), (e, _) => eventHandler((TEvent)e)));
+        return copy;
+    }
+
+    public ProjectionRegistry ToProjectionRegistry()
     {
         var eventProjectionMap = new EventProjectionMap();
         var projectionContextMap = new ProjectionContextMap();
 
         var projectionContext = new StatelessProjectionContext(
-            OnInitializing,
-            OnCatchingUp,
-            OnCaughtUp,
-            OnEventDispatching,
-            OnEventHandled);
+            _onInitializing,
+            _onCatchingUp,
+            _onCaughtUp,
+            _onEventDispatching,
+            _onEventHandled);
 
-        foreach (var (eventType, handler) in EventHandlers)
+        foreach (var (eventType, handler) in _eventHandlers)
         {
             eventProjectionMap.AddProjectionFunc(eventType, handler);
             projectionContextMap.RegisterProjectionContext(eventType, projectionContext);
         }
 
-        return new ProjectionRegistry(eventProjectionMap, projectionContextMap, EventNameMap);
+        return new ProjectionRegistry(eventProjectionMap, projectionContextMap, _eventNameMap);
     }
 }

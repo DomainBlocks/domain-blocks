@@ -9,6 +9,16 @@ public sealed class ProjectionEventNameMap : IProjectionEventNameMap
     private readonly Dictionary<string, Type> _defaultEventNameMap = new();
     private readonly Dictionary<string, HashSet<Type>> _eventNameMap = new();
 
+    public ProjectionEventNameMap()
+    {
+    }
+
+    public ProjectionEventNameMap(ProjectionEventNameMap copyFrom)
+    {
+        _defaultEventNameMap = new Dictionary<string, Type>(copyFrom._defaultEventNameMap);
+        _eventNameMap = _eventNameMap.ToDictionary(x => x.Key, x => new HashSet<Type>(x.Value));
+    }
+
     public IEnumerable<Type> GetClrTypesForEventName(string eventName)
     {
         if (eventName == null) throw new ArgumentNullException(nameof(eventName));

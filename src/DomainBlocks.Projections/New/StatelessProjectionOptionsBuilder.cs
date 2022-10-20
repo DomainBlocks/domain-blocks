@@ -6,41 +6,35 @@ namespace DomainBlocks.Projections.New;
 
 public class StatelessProjectionOptionsBuilder
 {
-    private readonly StatelessProjectionOptions _options;
-
-    public StatelessProjectionOptionsBuilder(StatelessProjectionOptions options)
-    {
-        _options = options;
-    }
-
+    public StatelessProjectionOptions Options { get; private set; } = new();
+    
     public void OnInitializing(Func<CancellationToken, Task> onInitializing)
     {
-        _options.WithOnInitializing(onInitializing);
+        Options = Options.WithOnInitializing(onInitializing);
     }
 
     public void OnCatchingUp(Func<CancellationToken, Task> onCatchingUp)
     {
-        _options.WithOnCatchingUp(onCatchingUp);
+        Options = Options.WithOnCatchingUp(onCatchingUp);
     }
 
     public void OnCaughtUp(Func<CancellationToken, Task> onCaughtUp)
     {
-        _options.WithOnCaughtUp(onCaughtUp);
+        Options = Options.WithOnCaughtUp(onCaughtUp);
     }
 
     public void OnEventDispatching(Func<CancellationToken, Task> onEventDispatching)
     {
-        _options.WithOnEventDispatching(onEventDispatching);
+        Options = Options.WithOnEventDispatching(onEventDispatching);
     }
 
     public void OnEventHandled(Func<CancellationToken, Task> onEventHandled)
     {
-        _options.WithOnEventHandled(onEventHandled);
+        Options = Options.WithOnEventHandled(onEventHandled);
     }
 
     public void When<TEvent>(Func<TEvent, Task> eventHandler)
     {
-        _options.WithDefaultEventName<TEvent>();
-        _options.WithEventHandler(eventHandler);
+        Options = Options.WithEventHandler(eventHandler);
     }
 }

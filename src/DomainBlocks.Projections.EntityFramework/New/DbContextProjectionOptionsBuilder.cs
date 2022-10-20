@@ -1,14 +1,16 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using DomainBlocks.Projections.New;
 using Microsoft.EntityFrameworkCore;
 
 namespace DomainBlocks.Projections.EntityFramework.New;
 
-public class DbContextProjectionOptionsBuilder<TResource, TDbContext>
+public class DbContextProjectionOptionsBuilder<TResource, TDbContext> : IProjectionOptionsProvider
     where TDbContext : DbContext where TResource : IDisposable
 {
-    private readonly DbContextProjectionOptions<TResource, TDbContext> _options;
+    private DbContextProjectionOptions<TResource, TDbContext> _options;
 
     public DbContextProjectionOptionsBuilder(DbContextProjectionOptions<TResource, TDbContext> options)
     {
@@ -22,12 +24,16 @@ public class DbContextProjectionOptionsBuilder<TResource, TDbContext>
 
     public void OnInitializing(Func<TDbContext, CancellationToken, Task> onInitializing)
     {
-        _options.WithOnInitializing(onInitializing);
+        _options = _options.WithOnInitializing(onInitializing);
     }
 
     public void When<TEvent>(Func<TEvent, TDbContext, Task> eventHandler)
     {
-        _options.WithDefaultEventName<TEvent>();
-        _options.WithEventHandler(eventHandler);
+        _options = _options.WithEventHandler(eventHandler);
+    }
+
+    IEnumerable<IProjectionOptions> IProjectionOptionsProvider.GetProjectionOptions()
+    {
+        yield return _options;
     }
 }
