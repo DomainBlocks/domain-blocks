@@ -6,9 +6,9 @@ public class EventCatchUpSubscriptionOptionsBuilder
 {
     public EventCatchUpSubscriptionOptions Options { get; private set; } = new();
 
-    public void AddProjection(Action<StatelessProjectionOptionsBuilder> optionsAction)
+    public void AddProjection(Action<ProjectionOptionsBuilder> optionsAction)
     {
-        var projectionOptionsBuilder = new StatelessProjectionOptionsBuilder();
+        var projectionOptionsBuilder = new ProjectionOptionsBuilder();
         optionsAction(projectionOptionsBuilder);
         AddProjectionOptions(projectionOptionsBuilder.Options);
     }
@@ -26,6 +26,6 @@ public class EventCatchUpSubscriptionOptionsBuilder
 
     public void AddProjectionOptions(IProjectionOptions projectionOptions)
     {
-        Options = Options.WithProjectionOptions(projectionOptions);
+        Options = Options.AddProjectionOptions(projectionOptions);
     }
 }

@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 namespace DomainBlocks.Projections.New;
 
-public class StatelessProjectionOptions : IProjectionOptions
+public class ProjectionOptions : IProjectionOptions
 {
     private readonly ProjectionEventNameMap _eventNameMap = new();
     private readonly List<(Type, RunProjection)> _eventHandlers = new();
@@ -15,11 +15,11 @@ public class StatelessProjectionOptions : IProjectionOptions
     private Func<CancellationToken, Task> _onEventDispatching;
     private Func<CancellationToken, Task> _onEventHandled;
 
-    public StatelessProjectionOptions()
+    public ProjectionOptions()
     {
     }
 
-    private StatelessProjectionOptions(StatelessProjectionOptions copyFrom)
+    private ProjectionOptions(ProjectionOptions copyFrom)
     {
         _eventNameMap = new ProjectionEventNameMap(copyFrom._eventNameMap);
         _eventHandlers = new List<(Type, RunProjection)>(copyFrom._eventHandlers);
@@ -30,34 +30,34 @@ public class StatelessProjectionOptions : IProjectionOptions
         _onEventHandled = copyFrom._onEventHandled;
     }
 
-    public StatelessProjectionOptions WithOnInitializing(Func<CancellationToken, Task> onInitializing)
+    public ProjectionOptions WithOnInitializing(Func<CancellationToken, Task> onInitializing)
     {
-        return new StatelessProjectionOptions(this) { _onInitializing = onInitializing };
+        return new ProjectionOptions(this) { _onInitializing = onInitializing };
     }
 
-    public StatelessProjectionOptions WithOnCatchingUp(Func<CancellationToken, Task> onCatchingUp)
+    public ProjectionOptions WithOnCatchingUp(Func<CancellationToken, Task> onCatchingUp)
     {
-        return new StatelessProjectionOptions(this) { _onCatchingUp = onCatchingUp };
+        return new ProjectionOptions(this) { _onCatchingUp = onCatchingUp };
     }
 
-    public StatelessProjectionOptions WithOnCaughtUp(Func<CancellationToken, Task> onCaughtUp)
+    public ProjectionOptions WithOnCaughtUp(Func<CancellationToken, Task> onCaughtUp)
     {
-        return new StatelessProjectionOptions(this) { _onCaughtUp = onCaughtUp };
+        return new ProjectionOptions(this) { _onCaughtUp = onCaughtUp };
     }
 
-    public StatelessProjectionOptions WithOnEventDispatching(Func<CancellationToken, Task> onEventDispatching)
+    public ProjectionOptions WithOnEventDispatching(Func<CancellationToken, Task> onEventDispatching)
     {
-        return new StatelessProjectionOptions(this) { _onEventDispatching = onEventDispatching };
+        return new ProjectionOptions(this) { _onEventDispatching = onEventDispatching };
     }
 
-    public StatelessProjectionOptions WithOnEventHandled(Func<CancellationToken, Task> onEventHandled)
+    public ProjectionOptions WithOnEventHandled(Func<CancellationToken, Task> onEventHandled)
     {
-        return new StatelessProjectionOptions(this) { _onEventHandled = onEventHandled };
+        return new ProjectionOptions(this) { _onEventHandled = onEventHandled };
     }
 
-    public StatelessProjectionOptions WithEventHandler<TEvent>(Func<TEvent, Task> eventHandler)
+    public ProjectionOptions WithEventHandler<TEvent>(Func<TEvent, Task> eventHandler)
     {
-        var copy = new StatelessProjectionOptions(this);
+        var copy = new ProjectionOptions(this);
         copy._eventNameMap.RegisterDefaultEventName<TEvent>();
         copy._eventHandlers.Add((typeof(TEvent), (e, _) => eventHandler((TEvent)e)));
         return copy;
@@ -68,7 +68,7 @@ public class StatelessProjectionOptions : IProjectionOptions
         var eventProjectionMap = new EventProjectionMap();
         var projectionContextMap = new ProjectionContextMap();
 
-        var projectionContext = new StatelessProjectionContext(
+        var projectionContext = new ProjectionContext(
             _onInitializing,
             _onCatchingUp,
             _onCaughtUp,

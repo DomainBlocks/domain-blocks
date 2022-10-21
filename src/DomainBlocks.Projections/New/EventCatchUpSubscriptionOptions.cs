@@ -19,7 +19,7 @@ public class EventCatchUpSubscriptionOptions
         _eventDispatcherFactory = copyFrom._eventDispatcherFactory;
     }
 
-    public EventCatchUpSubscriptionOptions WithProjectionOptions(IProjectionOptions projectionOptions)
+    public EventCatchUpSubscriptionOptions AddProjectionOptions(IProjectionOptions projectionOptions)
     {
         var copy = new EventCatchUpSubscriptionOptions(this);
         copy._projectionOptions.Add(projectionOptions);

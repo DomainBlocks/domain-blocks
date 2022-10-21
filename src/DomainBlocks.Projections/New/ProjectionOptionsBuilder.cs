@@ -4,9 +4,9 @@ using System.Threading.Tasks;
 
 namespace DomainBlocks.Projections.New;
 
-public class StatelessProjectionOptionsBuilder
+public class ProjectionOptionsBuilder
 {
-    public StatelessProjectionOptions Options { get; private set; } = new();
+    public ProjectionOptions Options { get; private set; } = new();
     
     public void OnInitializing(Func<CancellationToken, Task> onInitializing)
     {

@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 
 namespace DomainBlocks.Projections.New;
 
-internal class StatelessProjectionContext : IProjectionContext
+internal class ProjectionContext : IProjectionContext
 {
     private readonly Func<CancellationToken, Task> _onInitializing;
     private readonly Func<CancellationToken, Task> _onCatchingUp;
@@ -12,7 +12,7 @@ internal class StatelessProjectionContext : IProjectionContext
     private readonly Func<CancellationToken, Task> _onEventDispatching;
     private readonly Func<CancellationToken, Task> _onEventHandled;
 
-    public StatelessProjectionContext(
+    public ProjectionContext(
         Func<CancellationToken, Task> onInitializing,
         Func<CancellationToken, Task> onCatchingUp,
         Func<CancellationToken, Task> onCaughtUp,
