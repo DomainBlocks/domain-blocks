@@ -29,10 +29,9 @@ internal class ProjectionContext : IProjectionContext
     public async Task OnInitializing(CancellationToken cancellationToken = default)
     {
         await _onInitializing(cancellationToken);
-
-        // TODO (DS): We need a proper OnCatchingUp hook.
-        await _onCatchingUp(cancellationToken);
     }
+    
+    public Task OnCatchingUp(CancellationToken cancellationToken = default) => _onCatchingUp(cancellationToken);
 
     public Task OnCaughtUp(CancellationToken cancellationToken = default) => _onCaughtUp(cancellationToken);
 

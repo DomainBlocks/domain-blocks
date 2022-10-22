@@ -28,13 +28,13 @@ internal class DbContextProjectionContext<TDbContext> : IProjectionContext where
 
     public async Task OnInitializing(CancellationToken cancellationToken = default)
     {
-        {
-            using var resource = _resourceFactory();
-            await using var dbContext = _dbContextFactory(resource);
-            await _onInitializing(dbContext, cancellationToken);
-        }
+        using var resource = _resourceFactory();
+        await using var dbContext = _dbContextFactory(resource);
+        await _onInitializing(dbContext, cancellationToken);
+    }
 
-        // TODO (DS): We need a proper OnCatchingUp hook.
+    public async Task OnCatchingUp(CancellationToken cancellationToken = default)
+    {
         _resource = _resourceFactory();
         _dbContext = _dbContextFactory(_resource);
         _transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);

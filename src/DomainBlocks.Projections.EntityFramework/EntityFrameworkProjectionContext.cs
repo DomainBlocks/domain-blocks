@@ -5,7 +5,6 @@ using DomainBlocks.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-
 namespace DomainBlocks.Projections.EntityFramework;
 
 public class EntityFrameworkProjectionContext : IProjectionContext
@@ -34,6 +33,12 @@ public class EntityFrameworkProjectionContext : IProjectionContext
             Log.LogCritical(ex, "Exception occurred attempting to handle subscribing to event stream");
             throw;
         }
+    }
+
+    public Task OnCatchingUp(CancellationToken cancellationToken = default)
+    {
+        _isProcessingLiveEvents = false;
+        return Task.CompletedTask;
     }
 
     public async Task OnCaughtUp(CancellationToken cancellationToken = default)

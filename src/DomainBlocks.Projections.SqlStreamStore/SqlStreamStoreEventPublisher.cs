@@ -60,12 +60,16 @@ public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper
 
                 if (hasCaughtUp)
                 {
-                    // SqlStreamStore doesn't provide us with an async delegate.
-                    // To avoid ordering issues, we want to ensure no other
-                    // event processing is done until our caught up
-                    // notification is published, so wait on the task
-                    var caughtUpNotification = EventNotification.CaughtUp<StreamMessageWrapper>();
-                    _onEvent(caughtUpNotification, cancellationToken).Wait(cancellationToken);
+                    // SqlStreamStore doesn't provide us with an async delegate. To avoid ordering issues, we want to
+                    // ensure no other event processing is done until our caught up notification is published - so wait
+                    // on the task
+                    var notification = EventNotification.CaughtUp<StreamMessageWrapper>();
+                    _onEvent(notification, cancellationToken).Wait(cancellationToken);
+                }
+                else
+                {
+                    var notification = EventNotification.CatchingUp<StreamMessageWrapper>();
+                    _onEvent(notification, cancellationToken).Wait(cancellationToken);
                 }
             });
 

@@ -2,6 +2,7 @@
 
 public enum EventNotificationKind
 {
-    Event,
-    CaughtUpNotification
+    CatchingUp,
+    CaughtUp,
+    Event
 }

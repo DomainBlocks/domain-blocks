@@ -51,7 +51,7 @@ public sealed class SqlProjectionContext : IProjectionContext
 
             if (_settings.UseTransactionBeforeCaughtUp)
             {
-                await BeginTransaction();
+                await BeginTransaction(cancellationToken);
             }
 
             _isProcessingLiveEvents = false;
@@ -61,6 +61,12 @@ public sealed class SqlProjectionContext : IProjectionContext
             Log.LogCritical(ex, "Exception occurred attempting to handle subscribing to event stream");
             throw;
         }
+    }
+
+    public Task OnCatchingUp(CancellationToken cancellationToken = default)
+    {
+        // TODO (DS): Complete implementation
+        return Task.CompletedTask;
     }
 
     public Task OnCaughtUp(CancellationToken cancellationToken = default)
