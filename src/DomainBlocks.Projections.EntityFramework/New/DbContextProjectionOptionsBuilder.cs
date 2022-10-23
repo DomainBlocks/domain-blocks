@@ -5,8 +5,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DomainBlocks.Projections.EntityFramework.New;
 
-public class DbContextProjectionOptionsBuilder<TResource, TDbContext>
-    where TDbContext : DbContext where TResource : IDisposable
+public class DbContextProjectionOptionsBuilder<TResource, TDbContext> :
+    IDbContextProjectionOptionsBuilder<TDbContext>
+    where TDbContext : DbContext
+    where TResource : IDisposable
 {
     public DbContextProjectionOptions<TResource, TDbContext> Options { get; private set; }
 
@@ -19,9 +21,24 @@ public class DbContextProjectionOptionsBuilder<TResource, TDbContext>
     {
         Options = Options.WithOnInitializing(onInitializing);
     }
+    
+    public void OnCatchingUp(Func<TDbContext, CancellationToken, Task> onCatchingUp)
+    {
+        Options = Options.WithOnCatchingUp(onCatchingUp);
+    }
+    
+    public void OnCaughtUp(Func<TDbContext, CancellationToken, Task> onCaughtUp)
+    {
+        Options = Options.WithOnCaughtUp(onCaughtUp);
+    }
 
     public void When<TEvent>(Func<TEvent, TDbContext, Task> eventHandler)
     {
         Options = Options.WithEventHandler(eventHandler);
+    }
+
+    public void WithCatchUpMode(DbContextProjectionCatchUpMode catchUpMode)
+    {
+        Options = Options.WithCatchUpMode(catchUpMode);
     }
 }

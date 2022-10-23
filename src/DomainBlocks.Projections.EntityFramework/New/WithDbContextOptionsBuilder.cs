@@ -18,7 +18,7 @@ public class WithDbContextOptionsBuilder<TResource, TDbContext>
         _initialOptions = initialOptions;
     }
 
-    public void AddProjection(Action<DbContextProjectionOptionsBuilder<TResource, TDbContext>> optionsAction)
+    public void AddProjection(Action<IDbContextProjectionOptionsBuilder<TDbContext>> optionsAction)
     {
         var builder = new DbContextProjectionOptionsBuilder<TResource, TDbContext>(_initialOptions);
         optionsAction(builder);

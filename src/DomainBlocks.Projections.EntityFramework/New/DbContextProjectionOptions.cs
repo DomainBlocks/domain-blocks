@@ -2,19 +2,18 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using DomainBlocks.Projections.New;
 using Microsoft.EntityFrameworkCore;
 
 namespace DomainBlocks.Projections.EntityFramework.New;
 
-public class DbContextProjectionOptions<TResource, TDbContext> : IProjectionOptions
+public class DbContextProjectionOptions<TResource, TDbContext> :
+    IDbContextProjectionOptions<TDbContext>
     where TResource : IDisposable where TDbContext : DbContext
 {
     private readonly ProjectionEventNameMap _eventNameMap = new();
     private readonly List<(Type, Func<object, TDbContext, Task>)> _eventHandlers = new();
     private Func<TResource> _resourceFactory;
     private Func<TResource, TDbContext> _dbContextFactory;
-    private Func<TDbContext, CancellationToken, Task> _onInitializing;
 
     public DbContextProjectionOptions()
     {
@@ -26,8 +25,18 @@ public class DbContextProjectionOptions<TResource, TDbContext> : IProjectionOpti
         _eventHandlers = new List<(Type, Func<object, TDbContext, Task>)>(copyFrom._eventHandlers);
         _resourceFactory = copyFrom._resourceFactory;
         _dbContextFactory = copyFrom._dbContextFactory;
-        _onInitializing = copyFrom._onInitializing;
+        OnInitializing = copyFrom.OnInitializing;
+        OnCatchingUp = copyFrom.OnCatchingUp;
+        OnCaughtUp = copyFrom.OnCaughtUp;
+        CatchUpMode = copyFrom.CatchUpMode;
     }
+
+    public Func<IDisposable> ResourceFactory => () => _resourceFactory();
+    public Func<IDisposable, TDbContext> DbContextFactory => d => _dbContextFactory((TResource)d);
+    public Func<TDbContext, CancellationToken, Task> OnInitializing { get; private init; }
+    public Func<TDbContext, CancellationToken, Task> OnCatchingUp { get; private init; }
+    public Func<TDbContext, CancellationToken, Task> OnCaughtUp { get; private init; }
+    public DbContextProjectionCatchUpMode CatchUpMode { get; private init; }
 
     public DbContextProjectionOptions<TResource, TDbContext> WithResourceFactory(Func<TResource> resourceFactory)
     {
@@ -43,7 +52,18 @@ public class DbContextProjectionOptions<TResource, TDbContext> : IProjectionOpti
     public DbContextProjectionOptions<TResource, TDbContext> WithOnInitializing(
         Func<TDbContext, CancellationToken, Task> onInitializing)
     {
-        return new DbContextProjectionOptions<TResource, TDbContext>(this) { _onInitializing = onInitializing };
+        return new DbContextProjectionOptions<TResource, TDbContext>(this) { OnInitializing = onInitializing };
+    }
+
+    public DbContextProjectionOptions<TResource, TDbContext> WithOnCatchingUp(
+        Func<TDbContext, CancellationToken, Task> onCatchingUp)
+    {
+        return new DbContextProjectionOptions<TResource, TDbContext>(this) { OnCatchingUp = onCatchingUp };
+    }
+    public DbContextProjectionOptions<TResource, TDbContext> WithOnCaughtUp(
+        Func<TDbContext, CancellationToken, Task> onCatchingUp)
+    {
+        return new DbContextProjectionOptions<TResource, TDbContext>(this) { OnCaughtUp = onCatchingUp };
     }
 
     public DbContextProjectionOptions<TResource, TDbContext> WithEventHandler<TEvent>(
@@ -55,13 +75,15 @@ public class DbContextProjectionOptions<TResource, TDbContext> : IProjectionOpti
         return copy;
     }
 
+    public DbContextProjectionOptions<TResource, TDbContext> WithCatchUpMode(DbContextProjectionCatchUpMode catchUpMode)
+    {
+        var copy = new DbContextProjectionOptions<TResource, TDbContext>(this) { CatchUpMode = catchUpMode };
+        return copy;
+    }
+
     public ProjectionRegistry ToProjectionRegistry()
     {
-        var projectionContext = new DbContextProjectionContext<TDbContext>(
-            _onInitializing,
-            () => _resourceFactory(),
-            x => _dbContextFactory((TResource)x));
-
+        var projectionContext = new DbContextProjectionContext<TDbContext>(this);
         var eventProjectionMap = new EventProjectionMap();
         var projectionContextMap = new ProjectionContextMap();
 
