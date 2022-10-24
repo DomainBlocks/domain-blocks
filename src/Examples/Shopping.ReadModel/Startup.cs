@@ -60,9 +60,13 @@ public class Startup
         // **** New approach ****
         services.AddHostedEventCatchUpSubscription((sp, subscriptionOptions) =>
         {
-            var connectionString = Configuration.GetValue<string>("SqlStreamStore:ConnectionString");
-            var settings = new PostgresStreamStoreSettings(connectionString);
-            subscriptionOptions.UseSqlStreamStore(settings);
+            subscriptionOptions.UseSqlStreamStore(o =>
+            {
+                var connectionString = Configuration.GetValue<string>("SqlStreamStore:ConnectionString");
+                var settings = new PostgresStreamStoreSettings(connectionString);
+                o.UsePostgres(settings);
+                o.UseJsonSerialization();
+            });
 
             subscriptionOptions
                 .Using(sp.CreateScope)

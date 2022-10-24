@@ -1,26 +1,22 @@
-using System.Text.Json;
+using System;
 using DomainBlocks.Projections.New;
-using SqlStreamStore;
 
 namespace DomainBlocks.Projections.SqlStreamStore.New;
 
 public static class EventSubscriptionOptionsBuilderExtensions
 {
-    public static EventCatchUpSubscriptionOptionsBuilder UseSqlStreamStore(
-        this EventCatchUpSubscriptionOptionsBuilder optionsBuilder,
-        PostgresStreamStoreSettings settings,
-        // TODO (DS): Allow serialization options to be specified as part of builder options for SQLStreamStore.
-        JsonSerializerOptions jsonSerializerOptions = null)
+    public static void UseSqlStreamStore(
+        this EventCatchUpSubscriptionOptionsBuilder optionsBuilder, Action<SqlStreamStoreOptionsBuilder> optionsAction)
     {
+        var sqlStreamStoreOptionsBuilder = new SqlStreamStoreOptionsBuilder();
+        optionsAction(sqlStreamStoreOptionsBuilder);
+        var sqlStreamStoreOptions = sqlStreamStoreOptionsBuilder.Options;
+
         optionsBuilder.WithEventDispatcherFactory(projections =>
         {
-            // TODO (DS): Don't directly reference SqlStreamStore.Postgres in this assembly. We need proper options
-            // which allow us to select which underlying infrastructure to use. Address in a future PR.
-            var streamStore = new PostgresStreamStore(settings);
-            streamStore.CreateSchemaIfNotExists().Wait();
-
+            var streamStore = sqlStreamStoreOptions.StreamStoreFactory();
             var eventPublisher = new SqlStreamStoreEventPublisher(streamStore);
-            var eventDeserializer = new StreamMessageJsonDeserializer(jsonSerializerOptions);
+            var eventDeserializer = sqlStreamStoreOptions.EventDeserializerFactory();
 
             var eventDispatcher = new EventDispatcher<StreamMessageWrapper, object>(
                 eventPublisher,
@@ -32,7 +28,5 @@ public static class EventSubscriptionOptionsBuilderExtensions
 
             return eventDispatcher;
         });
-
-        return optionsBuilder;
     }
 }
