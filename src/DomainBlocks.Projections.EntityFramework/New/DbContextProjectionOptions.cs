@@ -28,6 +28,8 @@ public class DbContextProjectionOptions<TResource, TDbContext> :
         OnInitializing = copyFrom.OnInitializing ?? ((_, _) => Task.CompletedTask);
         OnCatchingUp = copyFrom.OnCatchingUp ?? ((_, _) => Task.CompletedTask);
         OnCaughtUp = copyFrom.OnCaughtUp ?? ((_, _) => Task.CompletedTask);
+        OnEventDispatching = copyFrom.OnEventDispatching ?? ((_, _) => Task.CompletedTask);
+        OnEventHandled = copyFrom.OnEventHandled ?? ((_, _) => Task.CompletedTask);
         OnSaved = copyFrom.OnSaved ?? ((_, _) => Task.CompletedTask);
         CatchUpMode = copyFrom.CatchUpMode;
     }
@@ -38,6 +40,8 @@ public class DbContextProjectionOptions<TResource, TDbContext> :
     public Func<TDbContext, CancellationToken, Task> OnCatchingUp { get; private init; }
     public Func<TDbContext, CancellationToken, Task> OnCaughtUp { get; private init; }
     public Func<TDbContext, CancellationToken, Task> OnSaved { get; private init; }
+    public Func<TDbContext, CancellationToken, Task> OnEventDispatching { get; private init; }
+    public Func<TDbContext, CancellationToken, Task> OnEventHandled { get; private init; }
     public DbContextProjectionCatchUpMode CatchUpMode { get; private init; }
 
     public DbContextProjectionOptions<TResource, TDbContext> WithResourceFactory(Func<TResource> resourceFactory)
@@ -62,12 +66,25 @@ public class DbContextProjectionOptions<TResource, TDbContext> :
     {
         return new DbContextProjectionOptions<TResource, TDbContext>(this) { OnCatchingUp = onCatchingUp };
     }
+
     public DbContextProjectionOptions<TResource, TDbContext> WithOnCaughtUp(
         Func<TDbContext, CancellationToken, Task> onCatchingUp)
     {
         return new DbContextProjectionOptions<TResource, TDbContext>(this) { OnCaughtUp = onCatchingUp };
     }
-    
+
+    public DbContextProjectionOptions<TResource, TDbContext> WithOnEventDispatching(
+        Func<TDbContext, CancellationToken, Task> onEventDispatching)
+    {
+        return new DbContextProjectionOptions<TResource, TDbContext>(this) { OnEventDispatching = onEventDispatching };
+    }
+
+    public DbContextProjectionOptions<TResource, TDbContext> WithOnEventHandled(
+        Func<TDbContext, CancellationToken, Task> onEventHandled)
+    {
+        return new DbContextProjectionOptions<TResource, TDbContext>(this) { OnEventHandled = onEventHandled };
+    }
+
     public DbContextProjectionOptions<TResource, TDbContext> WithOnSaved(
         Func<TDbContext, CancellationToken, Task> onSaved)
     {

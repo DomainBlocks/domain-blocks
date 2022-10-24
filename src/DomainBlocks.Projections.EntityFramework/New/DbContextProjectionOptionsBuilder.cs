@@ -14,7 +14,7 @@ public class DbContextProjectionOptionsBuilder<TResource, TDbContext> :
     {
         Options = options;
     }
-    
+
     public DbContextProjectionOptions<TResource, TDbContext> Options { get; private set; }
 
     public void OnInitializing(Func<TDbContext, CancellationToken, Task> onInitializing)
@@ -30,6 +30,16 @@ public class DbContextProjectionOptionsBuilder<TResource, TDbContext> :
     public void OnCaughtUp(Func<TDbContext, CancellationToken, Task> onCaughtUp)
     {
         Options = Options.WithOnCaughtUp(onCaughtUp);
+    }
+
+    public void OnEventDispatching(Func<TDbContext, CancellationToken, Task> onEventDispatching)
+    {
+        Options = Options.WithOnEventDispatching(onEventDispatching);
+    }
+
+    public void OnEventHandled(Func<TDbContext, CancellationToken, Task> onEventHandled)
+    {
+        Options = Options.WithOnEventHandled(onEventHandled);
     }
 
     public void When<TEvent>(Func<TEvent, TDbContext, Task> eventHandler)

@@ -10,6 +10,8 @@ public interface IDbContextProjectionOptionsBuilder<out TDbContext> where TDbCon
     public void OnInitializing(Func<TDbContext, CancellationToken, Task> onInitializing);
     public void OnCatchingUp(Func<TDbContext, CancellationToken, Task> onCatchingUp);
     public void OnCaughtUp(Func<TDbContext, CancellationToken, Task> onCaughtUp);
+    public void OnEventDispatching(Func<TDbContext, CancellationToken, Task> onEventDispatching);
+    public void OnEventHandled(Func<TDbContext, CancellationToken, Task> onEventHandled);
     public void When<TEvent>(Func<TEvent, TDbContext, Task> eventHandler);
     public void When<TEvent>(Action<TEvent, TDbContext> eventHandler);
     public void OnSaved(Func<TDbContext, CancellationToken, Task> onSaved);

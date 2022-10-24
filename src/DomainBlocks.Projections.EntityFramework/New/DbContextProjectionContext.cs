@@ -53,25 +53,24 @@ internal class DbContextProjectionContext<TDbContext> : IProjectionContext where
         }
 
         _isCatchingUp = false;
-        await _options.OnCaughtUp(_dbContext, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
         await (_transaction?.CommitAsync(cancellationToken) ?? Task.CompletedTask);
         await _options.OnSaved(_dbContext, cancellationToken);
+        await _options.OnCaughtUp(_dbContext, cancellationToken);
 
         await Cleanup();
     }
 
-    public Task OnEventDispatching(CancellationToken cancellationToken = default)
+    public async Task OnEventDispatching(CancellationToken cancellationToken = default)
     {
         if (_isCatchingUp)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         _resource = _options.ResourceFactory();
         _dbContext = _options.DbContextFactory(_resource);
-
-        return Task.CompletedTask;
+        await _options.OnEventDispatching(_dbContext, cancellationToken);
     }
 
     public async Task OnEventHandled(CancellationToken cancellationToken = default)
@@ -83,6 +82,7 @@ internal class DbContextProjectionContext<TDbContext> : IProjectionContext where
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         await _options.OnSaved(_dbContext, cancellationToken);
+        await _options.OnEventHandled(_dbContext, cancellationToken);
 
         await Cleanup();
     }
