@@ -37,6 +37,15 @@ public class DbContextProjectionOptionsBuilder<TResource, TDbContext> :
         Options = Options.WithEventHandler(eventHandler);
     }
 
+    public void When<TEvent>(Action<TEvent, TDbContext> eventHandler)
+    {
+        Options = Options.WithEventHandler<TEvent>((e, dbContext) =>
+        {
+            eventHandler(e, dbContext);
+            return Task.CompletedTask;
+        });
+    }
+
     public void OnSaved(Func<TDbContext, CancellationToken, Task> onSaved)
     {
         Options = Options.WithOnSaved(onSaved);

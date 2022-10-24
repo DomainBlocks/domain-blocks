@@ -84,8 +84,6 @@ public class Startup
                             Id = e.Id,
                             ItemDescription = e.Item
                         });
-
-                        return Task.CompletedTask;
                     });
 
                     projection.When<ItemRemovedFromShoppingCart>(async (e, dbContext) =>
