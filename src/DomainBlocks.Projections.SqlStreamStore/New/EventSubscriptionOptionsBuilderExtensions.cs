@@ -13,6 +13,8 @@ public static class EventSubscriptionOptionsBuilderExtensions
             // TODO (DS): Don't directly reference SqlStreamStore.Postgres in this assembly. We need proper options
             // which allow us to select which underlying infrastructure to use. Address in a future PR.
             var streamStore = new PostgresStreamStore(settings);
+            streamStore.CreateSchemaIfNotExists().Wait();
+            
             var eventPublisher = new SqlStreamStoreEventPublisher(streamStore);
             var eventDeserializer = new StreamMessageJsonDeserializer();
 
@@ -23,7 +25,7 @@ public static class EventSubscriptionOptionsBuilderExtensions
                 eventDeserializer,
                 projections.EventNameMap,
                 EventDispatcherConfiguration.ReadModelDefaults);
-
+            
             return eventDispatcher;
         });
 
