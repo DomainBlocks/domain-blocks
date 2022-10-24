@@ -1,4 +1,3 @@
-using System.Threading.Tasks;
 using DomainBlocks.Projections.AspNetCore;
 using DomainBlocks.Projections.EntityFramework.AspNetCore;
 using DomainBlocks.Projections.EntityFramework.New;
@@ -119,39 +118,40 @@ public class Startup
         app.UseAuthorization();
         app.UseEndpoints(endpoints => { endpoints.MapControllers(); });
     }
-}
-
-public class SqlStreamStoreLogProvider : LogProviderBase
-{
-    private readonly ILoggerFactory _loggerFactory;
-
-    public SqlStreamStoreLogProvider(ILoggerFactory loggerFactory)
+    
+    // TODO (DS): Move this somewhere common in a future PR.
+    private class SqlStreamStoreLogProvider : LogProviderBase
     {
-        _loggerFactory = loggerFactory;
-    }
+        private readonly ILoggerFactory _loggerFactory;
 
-    public override Logger GetLogger(string name)
-    {
-        var logger = _loggerFactory.CreateLogger(name);
-
-        return (level, func, exception, parameters) =>
+        public SqlStreamStoreLogProvider(ILoggerFactory loggerFactory)
         {
-            var message = func?.Invoke();
+            _loggerFactory = loggerFactory;
+        }
 
-            var logLevel = level switch
+        public override Logger GetLogger(string name)
+        {
+            var logger = _loggerFactory.CreateLogger(name);
+
+            return (level, func, exception, parameters) =>
             {
-                SqlStreamStore.Logging.LogLevel.Trace => LogLevel.Trace,
-                SqlStreamStore.Logging.LogLevel.Debug => LogLevel.Debug,
-                SqlStreamStore.Logging.LogLevel.Info => LogLevel.Information,
-                SqlStreamStore.Logging.LogLevel.Warn => LogLevel.Warning,
-                SqlStreamStore.Logging.LogLevel.Error => LogLevel.Error,
-                SqlStreamStore.Logging.LogLevel.Fatal => LogLevel.Critical,
-                _ => LogLevel.Information
+                var message = func?.Invoke();
+
+                var logLevel = level switch
+                {
+                    SqlStreamStore.Logging.LogLevel.Trace => LogLevel.Trace,
+                    SqlStreamStore.Logging.LogLevel.Debug => LogLevel.Debug,
+                    SqlStreamStore.Logging.LogLevel.Info => LogLevel.Information,
+                    SqlStreamStore.Logging.LogLevel.Warn => LogLevel.Warning,
+                    SqlStreamStore.Logging.LogLevel.Error => LogLevel.Error,
+                    SqlStreamStore.Logging.LogLevel.Fatal => LogLevel.Critical,
+                    _ => LogLevel.Information
+                };
+
+                logger.Log(logLevel, exception, message, parameters);
+
+                return true;
             };
-
-            logger.Log(logLevel, exception, message, parameters);
-
-            return true;
-        };
+        }
     }
 }

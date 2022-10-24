@@ -7,11 +7,11 @@ namespace DomainBlocks.Projections.EntityFramework.New;
 
 public interface IDbContextProjectionOptionsBuilder<out TDbContext> where TDbContext : DbContext
 {
-    void OnInitializing(Func<TDbContext, CancellationToken, Task> onInitializing);
-    void OnCatchingUp(Func<TDbContext, CancellationToken, Task> onCatchingUp);
-    void OnCaughtUp(Func<TDbContext, CancellationToken, Task> onCaughtUp);
-    void When<TEvent>(Func<TEvent, TDbContext, Task> eventHandler);
-    void When<TEvent>(Action<TEvent, TDbContext> eventHandler);
-    void OnSaved(Func<TDbContext, CancellationToken, Task> onSaved);
-    void WithCatchUpMode(DbContextProjectionCatchUpMode catchUpMode);
+    public void OnInitializing(Func<TDbContext, CancellationToken, Task> onInitializing);
+    public void OnCatchingUp(Func<TDbContext, CancellationToken, Task> onCatchingUp);
+    public void OnCaughtUp(Func<TDbContext, CancellationToken, Task> onCaughtUp);
+    public void When<TEvent>(Func<TEvent, TDbContext, Task> eventHandler);
+    public void When<TEvent>(Action<TEvent, TDbContext> eventHandler);
+    public void OnSaved(Func<TDbContext, CancellationToken, Task> onSaved);
+    public void WithCatchUpMode(DbContextProjectionCatchUpMode catchUpMode);
 }
