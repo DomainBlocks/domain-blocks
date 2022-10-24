@@ -5,12 +5,12 @@ namespace DomainBlocks.Projections.New;
 public class UsingResourceOptionsBuilder<TResource>
 {
     public UsingResourceOptionsBuilder(
-        EventCatchUpSubscriptionOptionsBuilder rootBuilder, Func<TResource> resourceFactory)
+        EventCatchUpSubscriptionOptionsBuilder coreBuilder, Func<TResource> resourceFactory)
     {
-        RootBuilder = rootBuilder;
+        CoreBuilder = coreBuilder;
         ResourceFactory = resourceFactory;
     }
 
-    public EventCatchUpSubscriptionOptionsBuilder RootBuilder { get; }
+    public EventCatchUpSubscriptionOptionsBuilder CoreBuilder { get; }
     public Func<TResource> ResourceFactory { get; }
 }

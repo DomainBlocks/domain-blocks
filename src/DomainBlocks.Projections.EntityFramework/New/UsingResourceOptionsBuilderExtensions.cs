@@ -15,6 +15,6 @@ public static class UsingResourceOptionsBuilderExtensions
             .WithDbContextFactory(dbContextFactory);
 
         return new WithDbContextOptionsBuilder<TResource, TDbContext>(
-            optionsBuilder.RootBuilder, initialOptions);
+            optionsBuilder.CoreBuilder, initialOptions);
     }
 }

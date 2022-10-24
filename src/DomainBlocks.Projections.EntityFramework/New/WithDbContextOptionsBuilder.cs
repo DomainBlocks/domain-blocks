@@ -7,14 +7,14 @@ namespace DomainBlocks.Projections.EntityFramework.New;
 public class WithDbContextOptionsBuilder<TResource, TDbContext>
     where TResource : IDisposable where TDbContext : DbContext
 {
-    private readonly EventCatchUpSubscriptionOptionsBuilder _rootBuilder;
+    private readonly EventCatchUpSubscriptionOptionsBuilder _coreBuilder;
     private readonly DbContextProjectionOptions<TResource, TDbContext> _initialOptions;
 
     public WithDbContextOptionsBuilder(
-        EventCatchUpSubscriptionOptionsBuilder rootBuilder,
+        EventCatchUpSubscriptionOptionsBuilder coreBuilder,
         DbContextProjectionOptions<TResource, TDbContext> initialOptions)
     {
-        _rootBuilder = rootBuilder;
+        _coreBuilder = coreBuilder;
         _initialOptions = initialOptions;
     }
 
@@ -22,6 +22,6 @@ public class WithDbContextOptionsBuilder<TResource, TDbContext>
     {
         var builder = new DbContextProjectionOptionsBuilder<TResource, TDbContext>(_initialOptions);
         optionsAction(builder);
-        _rootBuilder.AddProjectionOptions(builder.Options);
+        _coreBuilder.AddProjectionOptions(builder.Options);
     }
 }
