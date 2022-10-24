@@ -25,10 +25,10 @@ public class DbContextProjectionOptions<TResource, TDbContext> :
         _eventHandlers = new List<(Type, Func<object, TDbContext, Task>)>(copyFrom._eventHandlers);
         _resourceFactory = copyFrom._resourceFactory;
         _dbContextFactory = copyFrom._dbContextFactory;
-        OnInitializing = copyFrom.OnInitializing;
-        OnCatchingUp = copyFrom.OnCatchingUp;
-        OnCaughtUp = copyFrom.OnCaughtUp;
-        OnSaved = copyFrom.OnSaved;
+        OnInitializing = copyFrom.OnInitializing ?? ((_, _) => Task.CompletedTask);
+        OnCatchingUp = copyFrom.OnCatchingUp ?? ((_, _) => Task.CompletedTask);
+        OnCaughtUp = copyFrom.OnCaughtUp ?? ((_, _) => Task.CompletedTask);
+        OnSaved = copyFrom.OnSaved ?? ((_, _) => Task.CompletedTask);
         CatchUpMode = copyFrom.CatchUpMode;
     }
 

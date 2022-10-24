@@ -65,7 +65,7 @@ public sealed class SqlProjectionContext : IProjectionContext
 
     public Task OnCatchingUp(CancellationToken cancellationToken = default)
     {
-        // TODO (DS): Complete implementation
+        // TODO (DS): Complete implementation in a future PR.
         return Task.CompletedTask;
     }
 

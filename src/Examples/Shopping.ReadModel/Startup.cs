@@ -75,7 +75,7 @@ public class Startup
                         await dbContext.Database.EnsureDeletedAsync(ct);
                         await dbContext.Database.EnsureCreatedAsync(ct);
                     });
-
+                    
                     projection.When<ItemAddedToShoppingCart>((e, dbContext) =>
                     {
                         dbContext.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem

@@ -9,6 +9,7 @@ namespace DomainBlocks.Projections.SqlStreamStore;
 
 public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper>, IDisposable
 {
+    private const int DefaultPageSize = 600;
     private readonly IStreamStore _streamStore;
     private Func<EventNotification<StreamMessageWrapper>, CancellationToken, Task> _onEvent;
     private IAllStreamSubscription _subscription;
@@ -41,6 +42,9 @@ public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper
 
     private async Task SubscribeToStore(long? subscribePosition, CancellationToken cancellationToken = default)
     {
+        // Initially signal that we're catching up.
+        await _onEvent(EventNotification.CatchingUp<StreamMessageWrapper>(), cancellationToken);
+        
         // Observing duplicate calls to HasCaughtUp with the same hasCaughtUp value. By keeping the last value here we
         // can deduplicate notifications.
         var previousHasCaughtUpValue = false;
@@ -74,7 +78,8 @@ public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper
             });
 
         // TODO: allow this to be configured
-        _subscription.MaxCountPerRead = 1000;
+        _subscription.MaxCountPerRead = DefaultPageSize;
+
         await _subscription.Started.ConfigureAwait(false);
     }
 

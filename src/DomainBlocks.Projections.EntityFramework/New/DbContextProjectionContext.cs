@@ -28,6 +28,11 @@ internal class DbContextProjectionContext<TDbContext> : IProjectionContext where
 
     public async Task OnCatchingUp(CancellationToken cancellationToken = default)
     {
+        if (_isCatchingUp)
+        {
+            return;
+        }
+
         _isCatchingUp = true;
         _resource = _options.ResourceFactory();
         _dbContext = _options.DbContextFactory(_resource);
@@ -42,22 +47,18 @@ internal class DbContextProjectionContext<TDbContext> : IProjectionContext where
 
     public async Task OnCaughtUp(CancellationToken cancellationToken = default)
     {
+        if (!_isCatchingUp)
+        {
+            return;
+        }
+
+        _isCatchingUp = false;
         await _options.OnCaughtUp(_dbContext, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
         await (_transaction?.CommitAsync(cancellationToken) ?? Task.CompletedTask);
-        await (_options.OnSaved?.Invoke(_dbContext, cancellationToken) ?? Task.CompletedTask);
+        await _options.OnSaved(_dbContext, cancellationToken);
 
-        // Cleanup
-        _transaction?.Dispose();
-        _transaction = null;
-
-        await _dbContext.DisposeAsync();
-        _dbContext = null;
-
-        _resource?.Dispose();
-        _resource = null;
-
-        _isCatchingUp = false;
+        await Cleanup();
     }
 
     public Task OnEventDispatching(CancellationToken cancellationToken = default)
@@ -69,7 +70,7 @@ internal class DbContextProjectionContext<TDbContext> : IProjectionContext where
 
         _resource = _options.ResourceFactory();
         _dbContext = _options.DbContextFactory(_resource);
-        
+
         return Task.CompletedTask;
     }
 
@@ -81,18 +82,25 @@ internal class DbContextProjectionContext<TDbContext> : IProjectionContext where
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
-        await (_options.OnSaved?.Invoke(_dbContext, cancellationToken) ?? Task.CompletedTask);
-        
-        // Cleanup
-        await _dbContext.DisposeAsync();
-        _dbContext = null;
-        
-        _resource?.Dispose();
-        _resource = null;
+        await _options.OnSaved(_dbContext, cancellationToken);
+
+        await Cleanup();
     }
 
     internal RunProjection BindProjectionFunc(Func<object, TDbContext, Task> eventHandler)
     {
         return (e, _) => eventHandler(e, _dbContext);
+    }
+
+    private async Task Cleanup()
+    {
+        await (_transaction?.DisposeAsync() ?? ValueTask.CompletedTask);
+        _transaction = null;
+
+        await (_dbContext?.DisposeAsync() ?? ValueTask.CompletedTask);
+        _dbContext = null;
+
+        _resource?.Dispose();
+        _resource = null;
     }
 }

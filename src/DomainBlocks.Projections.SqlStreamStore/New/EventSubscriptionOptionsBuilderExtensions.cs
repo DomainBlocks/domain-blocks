@@ -1,4 +1,3 @@
-using System;
 using DomainBlocks.Projections.New;
 using SqlStreamStore;
 
@@ -11,7 +10,8 @@ public static class EventSubscriptionOptionsBuilderExtensions
     {
         optionsBuilder.WithEventDispatcherFactory(projections =>
         {
-            // TODO (DS): Should we be directly referencing postgres StreamStore from here?
+            // TODO (DS): Don't directly reference SqlStreamStore.Postgres in this assembly. We need options which allow
+            // us to select which underlying infrastructure to use. Address in a future PR.
             var settings = new PostgresStreamStoreSettings(connectionString);
             var streamStore = new PostgresStreamStore(settings);
             var eventPublisher = new SqlStreamStoreEventPublisher(streamStore);
@@ -23,11 +23,7 @@ public static class EventSubscriptionOptionsBuilderExtensions
                 projections.ProjectionContextMap,
                 eventDeserializer,
                 projections.EventNameMap,
-                EventDispatcherConfiguration.ReadModelDefaults with
-                {
-                    // TODO: Remove
-                    ProjectionHandlerTimeout = TimeSpan.FromMinutes(1)
-                });
+                EventDispatcherConfiguration.ReadModelDefaults);
 
             return eventDispatcher;
         });
