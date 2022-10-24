@@ -10,8 +10,8 @@ public static class EventSubscriptionOptionsBuilderExtensions
     {
         optionsBuilder.WithEventDispatcherFactory(projections =>
         {
-            // TODO (DS): Don't directly reference SqlStreamStore.Postgres in this assembly. We need options which allow
-            // us to select which underlying infrastructure to use. Address in a future PR.
+            // TODO (DS): Don't directly reference SqlStreamStore.Postgres in this assembly. We need proper options
+            // which allow us to select which underlying infrastructure to use. Address in a future PR.
             var settings = new PostgresStreamStoreSettings(connectionString);
             var streamStore = new PostgresStreamStore(settings);
             var eventPublisher = new SqlStreamStoreEventPublisher(streamStore);

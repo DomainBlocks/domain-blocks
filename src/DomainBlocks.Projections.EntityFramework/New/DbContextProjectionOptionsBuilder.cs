@@ -10,12 +10,12 @@ public class DbContextProjectionOptionsBuilder<TResource, TDbContext> :
     where TDbContext : DbContext
     where TResource : IDisposable
 {
-    public DbContextProjectionOptions<TResource, TDbContext> Options { get; private set; }
-
     public DbContextProjectionOptionsBuilder(DbContextProjectionOptions<TResource, TDbContext> options)
     {
         Options = options;
     }
+    
+    public DbContextProjectionOptions<TResource, TDbContext> Options { get; private set; }
 
     public void OnInitializing(Func<TDbContext, CancellationToken, Task> onInitializing)
     {

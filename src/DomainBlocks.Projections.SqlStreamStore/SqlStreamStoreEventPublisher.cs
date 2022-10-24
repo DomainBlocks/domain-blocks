@@ -44,10 +44,10 @@ public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper
     {
         // Initially signal that we're catching up.
         await _onEvent(EventNotification.CatchingUp<StreamMessageWrapper>(), cancellationToken);
-        
-        // Observing duplicate calls to HasCaughtUp with the same hasCaughtUp value. By keeping the last value here we
-        // can deduplicate notifications.
-        var previousHasCaughtUpValue = false;
+
+        // SQLStreamStore invokes the HasCaughtUp delegate multiple times with the same hasCaughtUp value. We keep the
+        // last value here in order to deduplicate the CatchingUp and CaughtUp signals.
+        var lastHasCaughtUp = false;
 
         _subscription = _streamStore.SubscribeToAll(
             subscribePosition,
@@ -55,12 +55,8 @@ public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper
             SubscriptionDropped,
             hasCaughtUp =>
             {
-                if (previousHasCaughtUpValue == hasCaughtUp)
-                {
-                    return;
-                }
-
-                previousHasCaughtUpValue = hasCaughtUp;
+                if (lastHasCaughtUp == hasCaughtUp) return;
+                lastHasCaughtUp = hasCaughtUp;
 
                 if (hasCaughtUp)
                 {

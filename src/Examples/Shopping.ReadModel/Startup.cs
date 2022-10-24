@@ -8,7 +8,6 @@ using DomainBlocks.Projections.SqlStreamStore.New;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -45,6 +44,7 @@ public class Startup
         services.AddDbContext<ShoppingCartDbContext>(options =>
             options.UseNpgsql(Configuration.GetConnectionString("Default")));
 
+        // TODO (DS): Remove this example once we can support multiple projections with the new approach.
         // services.AddReadModel(Configuration,
         //     options =>
         //     {
@@ -75,7 +75,7 @@ public class Startup
                         await dbContext.Database.EnsureDeletedAsync(ct);
                         await dbContext.Database.EnsureCreatedAsync(ct);
                     });
-                    
+
                     projection.When<ItemAddedToShoppingCart>((e, dbContext) =>
                     {
                         dbContext.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem
@@ -97,76 +97,6 @@ public class Startup
                         }
                     });
                 });
-
-            // subscriptionOptions.AddProjection(projection =>
-            // {
-            //     projection.OnInitializing(async ct =>
-            //     {
-            //         using var scope = sp.CreateScope();
-            //         await using var dbContext = scope.ServiceProvider.GetRequiredService<ShoppingCartDbContext>();
-            //         await dbContext.Database.EnsureDeletedAsync(ct);
-            //         await dbContext.Database.EnsureCreatedAsync(ct);
-            //     });
-            //
-            //     // State
-            //     var hasCaughtUp = false;
-            //     IServiceScope scope = null;
-            //     ShoppingCartDbContext dbContext = null;
-            //     IDbContextTransaction transaction = null;
-            //
-            //     projection.OnCatchingUp(_ =>
-            //     {
-            //         scope = sp.CreateScope();
-            //         dbContext = scope.ServiceProvider.GetRequiredService<ShoppingCartDbContext>();
-            //         transaction = dbContext.Database.BeginTransaction();
-            //         hasCaughtUp = false;
-            //         return Task.CompletedTask;
-            //     });
-            //
-            //     projection.OnCaughtUp(async ct =>
-            //     {
-            //         await dbContext.SaveChangesAsync(ct);
-            //         await transaction.CommitAsync(ct);
-            //         scope.Dispose();
-            //         hasCaughtUp = true;
-            //     });
-            //
-            //     projection.OnEventDispatching(_ =>
-            //     {
-            //         if (!hasCaughtUp) return Task.CompletedTask;
-            //         scope = sp.CreateScope();
-            //         dbContext = scope.ServiceProvider.GetRequiredService<ShoppingCartDbContext>();
-            //         return Task.CompletedTask;
-            //     });
-            //
-            //     projection.OnEventHandled(async ct =>
-            //     {
-            //         if (!hasCaughtUp) return;
-            //         await dbContext.SaveChangesAsync(ct);
-            //         scope.Dispose();
-            //     });
-            //
-            //     projection.When<ItemAddedToShoppingCart>(e =>
-            //     {
-            //         dbContext.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem
-            //         {
-            //             CartId = e.CartId,
-            //             Id = e.Id,
-            //             ItemDescription = e.Item
-            //         });
-            //
-            //         return Task.CompletedTask;
-            //     });
-            //
-            //     projection.When<ItemRemovedFromShoppingCart>(async e =>
-            //     {
-            //         var item = await dbContext.ShoppingCartSummaryItems.FindAsync(e.Id);
-            //         if (item != null)
-            //         {
-            //             dbContext.ShoppingCartSummaryItems.Remove(item);
-            //         }
-            //     });
-            // });
         });
 
         services.AddControllers();
