@@ -13,5 +13,6 @@ public interface IDbContextProjectionOptions<TDbContext> : IProjectionOptions wh
     public Func<TDbContext, CancellationToken, Task> OnInitializing { get; }
     public Func<TDbContext, CancellationToken, Task> OnCatchingUp { get; }
     public Func<TDbContext, CancellationToken, Task> OnCaughtUp { get; }
+    public Func<TDbContext, CancellationToken, Task> OnSaved { get; }
     public DbContextProjectionCatchUpMode CatchUpMode { get; }
 }

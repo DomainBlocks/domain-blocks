@@ -28,6 +28,7 @@ public class DbContextProjectionOptions<TResource, TDbContext> :
         OnInitializing = copyFrom.OnInitializing;
         OnCatchingUp = copyFrom.OnCatchingUp;
         OnCaughtUp = copyFrom.OnCaughtUp;
+        OnSaved = copyFrom.OnSaved;
         CatchUpMode = copyFrom.CatchUpMode;
     }
 
@@ -36,6 +37,7 @@ public class DbContextProjectionOptions<TResource, TDbContext> :
     public Func<TDbContext, CancellationToken, Task> OnInitializing { get; private init; }
     public Func<TDbContext, CancellationToken, Task> OnCatchingUp { get; private init; }
     public Func<TDbContext, CancellationToken, Task> OnCaughtUp { get; private init; }
+    public Func<TDbContext, CancellationToken, Task> OnSaved { get; private init; }
     public DbContextProjectionCatchUpMode CatchUpMode { get; private init; }
 
     public DbContextProjectionOptions<TResource, TDbContext> WithResourceFactory(Func<TResource> resourceFactory)
@@ -64,6 +66,12 @@ public class DbContextProjectionOptions<TResource, TDbContext> :
         Func<TDbContext, CancellationToken, Task> onCatchingUp)
     {
         return new DbContextProjectionOptions<TResource, TDbContext>(this) { OnCaughtUp = onCatchingUp };
+    }
+    
+    public DbContextProjectionOptions<TResource, TDbContext> WithOnSaved(
+        Func<TDbContext, CancellationToken, Task> onSaved)
+    {
+        return new DbContextProjectionOptions<TResource, TDbContext>(this) { OnSaved = onSaved };
     }
 
     public DbContextProjectionOptions<TResource, TDbContext> WithEventHandler<TEvent>(

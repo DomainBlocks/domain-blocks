@@ -11,5 +11,6 @@ public interface IDbContextProjectionOptionsBuilder<out TDbContext> where TDbCon
     void OnCatchingUp(Func<TDbContext, CancellationToken, Task> onCatchingUp);
     void OnCaughtUp(Func<TDbContext, CancellationToken, Task> onCaughtUp);
     void When<TEvent>(Func<TEvent, TDbContext, Task> eventHandler);
+    void OnSaved(Func<TDbContext, CancellationToken, Task> onSaved);
     void WithCatchUpMode(DbContextProjectionCatchUpMode catchUpMode);
 }

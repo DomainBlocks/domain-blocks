@@ -45,6 +45,7 @@ internal class DbContextProjectionContext<TDbContext> : IProjectionContext where
         await _options.OnCaughtUp(_dbContext, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
         await (_transaction?.CommitAsync(cancellationToken) ?? Task.CompletedTask);
+        await (_options.OnSaved?.Invoke(_dbContext, cancellationToken) ?? Task.CompletedTask);
 
         // Cleanup
         _transaction?.Dispose();
@@ -80,6 +81,7 @@ internal class DbContextProjectionContext<TDbContext> : IProjectionContext where
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await (_options.OnSaved?.Invoke(_dbContext, cancellationToken) ?? Task.CompletedTask);
         
         // Cleanup
         await _dbContext.DisposeAsync();
