@@ -15,6 +15,7 @@ using Microsoft.OpenApi.Models;
 using Shopping.Domain.Events;
 using Shopping.ReadModel.Db;
 using Shopping.ReadModel.Db.Model;
+using SqlStreamStore;
 using SqlStreamStore.Logging;
 using SqlStreamStore.Logging.LogProviders;
 using LogLevel = Microsoft.Extensions.Logging.LogLevel;
@@ -60,7 +61,8 @@ public class Startup
         services.AddHostedEventCatchUpSubscription((sp, subscriptionOptions) =>
         {
             var connectionString = Configuration.GetValue<string>("SqlStreamStore:ConnectionString");
-            subscriptionOptions.UseSqlStreamStore(connectionString);
+            var settings = new PostgresStreamStoreSettings(connectionString);
+            subscriptionOptions.UseSqlStreamStore(settings);
 
             subscriptionOptions
                 .Using(sp.CreateScope)
