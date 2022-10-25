@@ -1,6 +1,5 @@
 using DomainBlocks.Projections.AspNetCore;
 using DomainBlocks.Projections.EntityFramework.AspNetCore;
-using DomainBlocks.Projections.EntityFramework.New;
 using DomainBlocks.Projections.SqlStreamStore;
 using DomainBlocks.Projections.SqlStreamStore.AspNetCore;
 using DomainBlocks.Projections.SqlStreamStore.New;
@@ -70,15 +69,23 @@ public class Startup
 
             subscriptionOptions
                 .Using(sp.CreateScope)
-                .WithDbContext(x => x.ServiceProvider.GetRequiredService<ShoppingCartDbContext>())
+                .WithService(x => x.ServiceProvider.GetRequiredService<ShoppingCartDbContext>())
                 .AddProjection(projection =>
                 {
-                    projection.WithCatchUpMode(DbContextProjectionCatchUpMode.UseTransaction);
-
                     projection.OnInitializing(async (dbContext, ct) =>
                     {
                         await dbContext.Database.EnsureDeletedAsync(ct);
                         await dbContext.Database.EnsureCreatedAsync(ct);
+                    });
+                    
+                    projection.OnCaughtUp(async (dbContext, ct) =>
+                    {
+                        await dbContext.SaveChangesAsync(ct);
+                    });
+                    
+                    projection.OnEventHandled(async (dbContext, ct) =>
+                    {
+                        await dbContext.SaveChangesAsync(ct);
                     });
 
                     projection.When<ItemAddedToShoppingCart>((e, dbContext) =>
