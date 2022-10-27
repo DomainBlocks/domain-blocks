@@ -15,7 +15,8 @@ public static class ProjectionRegistrationOptionsExtensions
         var builderInfrastructure = (IProjectionRegistrationOptionsBuilderInfrastructure)builder;
 
         var typedBuilder = builderInfrastructure.TypedAs<StreamMessageWrapper>();
-        var typedBuilderInfrastructure = (IProjectionRegistrationOptionsBuilderInfrastructure<StreamMessageWrapper>)typedBuilder;
+        var typedBuilderInfrastructure =
+            (IProjectionRegistrationOptionsBuilderInfrastructure<StreamMessageWrapper>)typedBuilder;
 
         typedBuilderInfrastructure.UseEventPublisher(provider =>
         {

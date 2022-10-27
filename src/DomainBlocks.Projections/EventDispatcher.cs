@@ -10,9 +10,11 @@ using Microsoft.Extensions.Logging;
 
 namespace DomainBlocks.Projections;
 
-public sealed class EventDispatcher<TRawData, TEventBase>
+public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
 {
-    private static readonly ILogger<EventDispatcher<TRawData, TEventBase>> Log = Logger.CreateFor<EventDispatcher<TRawData, TEventBase>>();
+    private static readonly ILogger<EventDispatcher<TRawData, TEventBase>> Log =
+        Logger.CreateFor<EventDispatcher<TRawData, TEventBase>>();
+
     private readonly IEventPublisher<TRawData> _publisher;
     private readonly EventProjectionMap _projectionMap;
     private readonly ProjectionContextMap _projectionContextMap;
@@ -20,17 +22,18 @@ public sealed class EventDispatcher<TRawData, TEventBase>
     private readonly IEventDeserializer<TRawData> _deserializer;
     private readonly IProjectionEventNameMap _projectionEventNameMap;
 
-    public EventDispatcher(IEventPublisher<TRawData> publisher,
+    public EventDispatcher(
+        IEventPublisher<TRawData> publisher,
         EventProjectionMap projectionMap,
         ProjectionContextMap projectionContextMap,
-        IEventDeserializer<TRawData> serializer,
+        IEventDeserializer<TRawData> deserializer,
         IProjectionEventNameMap projectionEventNameMap,
         EventDispatcherConfiguration configuration)
     {
         _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
         _projectionMap = projectionMap ?? throw new ArgumentNullException(nameof(projectionMap));
         _projectionContextMap = projectionContextMap ?? throw new ArgumentNullException(nameof(projectionContextMap));
-        _deserializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+        _deserializer = deserializer ?? throw new ArgumentNullException(nameof(deserializer));
         _projectionEventNameMap =
             projectionEventNameMap ?? throw new ArgumentNullException(nameof(projectionEventNameMap));
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
@@ -39,7 +42,7 @@ public sealed class EventDispatcher<TRawData, TEventBase>
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
         Log.LogDebug("Starting EventStream");
-        await ForAllContexts((c, ct) => c.OnSubscribing(ct), cancellationToken).ConfigureAwait(false);
+        await ForAllContexts((c, ct) => c.OnInitializing(ct), cancellationToken).ConfigureAwait(false);
         Log.LogDebug("Context OnSubscribing hooks called");
 
         await _publisher.StartAsync(HandleEventNotificationAsync, cancellationToken).ConfigureAwait(false);
@@ -52,7 +55,7 @@ public sealed class EventDispatcher<TRawData, TEventBase>
     {
         foreach (var context in _projectionContextMap.GetAllContexts())
         {
-            await contextAction(context, cancellationToken).ConfigureAwait(false); 
+            await contextAction(context, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -62,14 +65,22 @@ public sealed class EventDispatcher<TRawData, TEventBase>
     {
         switch (notification.NotificationKind)
         {
-            case EventNotificationKind.Event:
-                await HandleEventAsync(notification.Event, notification.EventType, notification.EventId, cancellationToken)
-                    .ConfigureAwait(false);
+            case EventNotificationKind.CatchingUp:
+                Log.LogDebug("Received catching up notification");
+                await ForAllContexts((c, ct) => c.OnCatchingUp(ct), cancellationToken).ConfigureAwait(false);
+                Log.LogDebug("Context OnCatchingUp hooks called");
                 break;
-            case EventNotificationKind.CaughtUpNotification:
+            case EventNotificationKind.CaughtUp:
                 Log.LogDebug("Received caught up notification");
                 await ForAllContexts((c, ct) => c.OnCaughtUp(ct), cancellationToken).ConfigureAwait(false);
                 Log.LogDebug("Context OnCaughtUp hooks called");
+                break;
+            case EventNotificationKind.Event:
+                await HandleEventAsync(
+                    notification.Event,
+                    notification.EventType,
+                    notification.EventId,
+                    cancellationToken).ConfigureAwait(false);
                 break;
             default:
                 throw new ArgumentOutOfRangeException();
@@ -116,7 +127,7 @@ public sealed class EventDispatcher<TRawData, TEventBase>
             var eventType = @event.GetType();
             var contextsForEvent = _projectionContextMap.GetContextsForEventType(eventType);
 
-            var beforeEventActions = contextsForEvent.Select(c => c.OnBeforeHandleEvent(cancellationToken));
+            var beforeEventActions = contextsForEvent.Select(c => c.OnEventDispatching(cancellationToken));
             Log.LogTrace("Context OnBeforeHandleEvent hooks called for event ID {EventId}", eventId);
             await Task.WhenAll(beforeEventActions).ConfigureAwait(false);
 
@@ -129,17 +140,17 @@ public sealed class EventDispatcher<TRawData, TEventBase>
                 {
                     await executeAsync(@event, metadata).ConfigureAwait(false);
 
-                    // Timeout is best effort as it's only able to check
-                    // after each projection finishes.
+                    // Timeout is best effort as it's only able to check after each projection finishes.
                     if (stopwatch.Elapsed >= _configuration.ProjectionHandlerTimeout)
                     {
                         Log.LogError("Timed out waiting for projections for event if {EventId}", eventId);
+                        
                         if (!_configuration.ContinueAfterTimeout)
                         {
                             _publisher.Stop();
-                            throw new
-                                TimeoutException(
-                                    $"Stopping event stream after timeout handling event ID {eventId}");
+
+                            throw new TimeoutException(
+                                $"Stopping event stream after timeout handling event ID {eventId}");
                         }
                     }
                 }
@@ -151,7 +162,7 @@ public sealed class EventDispatcher<TRawData, TEventBase>
 
             foreach (var projectionContext in contextsForEvent)
             {
-                await projectionContext.OnAfterHandleEvent(cancellationToken).ConfigureAwait(false);
+                await projectionContext.OnEventHandled(cancellationToken).ConfigureAwait(false);
             }
 
             Log.LogTrace("Context OnAfterHandleEvent hooks called for event ID {EventId}", eventId);
@@ -162,10 +173,9 @@ public sealed class EventDispatcher<TRawData, TEventBase>
             if (!_configuration.ContinueAfterProjectionException)
             {
                 _publisher.Stop();
+
                 throw new EventStreamException(
-                    "Unhandled exception in event stream handling event ID" +
-                    $" {eventId}. Stopping event publisher",
-                    ex);
+                    $"Unhandled exception in event stream handling event ID {eventId}. Stopping event publisher", ex);
             }
         }
     }

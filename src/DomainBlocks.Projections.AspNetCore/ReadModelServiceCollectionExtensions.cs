@@ -1,4 +1,5 @@
 ﻿using System;
+using DomainBlocks.Projections.New;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -6,10 +7,10 @@ namespace DomainBlocks.Projections.AspNetCore;
 
 public static class ReadModelServiceCollectionExtensions
 {
-    public static IServiceCollection AddReadModel(this IServiceCollection services,
+    public static IServiceCollection AddReadModel(
+        this IServiceCollection services,
         IConfiguration configuration,
-        Action<ProjectionRegistrationOptionsBuilder>
-            buildProjectionOptions)
+        Action<ProjectionRegistrationOptionsBuilder> buildProjectionOptions)
     {
         return services.AddReadModel<object>(configuration, buildProjectionOptions);
     }
@@ -45,8 +46,7 @@ public static class ReadModelServiceCollectionExtensions
                 typeof(ProjectionRegistryBuilder),
                 projectionOptions.EventPublisher.GetType(),
                 projectionOptions.EventSerializer.GetType(),
-                projectionOptions.OnRegisteringProjections
-                    .GetType()
+                projectionOptions.OnRegisteringProjections.GetType()
             });
 
             var eventDispatcher = (IEventDispatcherHostedService)constructorMethod?.Invoke(new object[]
@@ -57,10 +57,18 @@ public static class ReadModelServiceCollectionExtensions
                 projectionOptions.OnRegisteringProjections
             });
 
-
             return eventDispatcher;
         });
 
         return services;
+    }
+
+    public static IServiceCollection AddHostedEventCatchUpSubscription(
+        this IServiceCollection serviceCollection,
+        Action<IServiceProvider, EventCatchUpSubscriptionOptionsBuilder> optionsAction)
+    {
+        return serviceCollection
+            .AddEventCatchUpSubscription(optionsAction)
+            .AddHostedService<EventDispatcherHostedServiceNew>();
     }
 }

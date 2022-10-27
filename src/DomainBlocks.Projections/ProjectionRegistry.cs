@@ -4,7 +4,8 @@ namespace DomainBlocks.Projections;
 
 public class ProjectionRegistry
 {
-    public ProjectionRegistry(EventProjectionMap eventProjectionMap,
+    public ProjectionRegistry(
+        EventProjectionMap eventProjectionMap,
         ProjectionContextMap projectionContextMap,
         IProjectionEventNameMap eventNameMap)
     {

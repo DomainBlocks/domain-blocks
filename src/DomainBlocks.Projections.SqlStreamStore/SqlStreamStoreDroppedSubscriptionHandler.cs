@@ -31,13 +31,13 @@ public class SqlStreamStoreDroppedSubscriptionHandler
                 _stop();
                 break;
             case SubscriptionDroppedReason.SubscriberError:
-                Log.LogCritical(exception,
-                    $"Exception occurred in subscriber. Stopping event publisher. Reason {reason}");
+                Log.LogCritical(
+                    exception, "Exception occurred in subscriber. Stopping event publisher. Reason {Reason}", reason);
                 _stop();
                 break;
             case SubscriptionDroppedReason.StreamStoreError:
                 Log.LogCritical(exception,
-                    $"Server error in SqlStreamStore. Stopping event publisher. Reason {reason}");
+                    "Server error in SqlStreamStore. Stopping event publisher. Reason {Reason}", reason);
                 _stop();
                 break;
             default:

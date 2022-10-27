@@ -13,7 +13,8 @@ public class StreamMessageJsonDeserializer : IEventDeserializer<StreamMessageWra
         _serializerOptions = serializerOptions;
     }
 
-    public (TEventBase, EventMetadata) DeserializeEventAndMetadata<TEventBase>(StreamMessageWrapper streamMessage,
+    public (TEventBase, EventMetadata) DeserializeEventAndMetadata<TEventBase>(
+        StreamMessageWrapper streamMessage,
         string eventName,
         Type eventType)
     {

@@ -31,7 +31,7 @@ public sealed class SqlProjectionContext : IProjectionContext
 
     public IDbConnection Connection { get; }
 
-    public async Task OnSubscribing(CancellationToken cancellationToken = default)
+    public async Task OnInitializing(CancellationToken cancellationToken = default)
     {
         try
         {
@@ -51,7 +51,7 @@ public sealed class SqlProjectionContext : IProjectionContext
 
             if (_settings.UseTransactionBeforeCaughtUp)
             {
-                await BeginTransaction();
+                await BeginTransaction(cancellationToken);
             }
 
             _isProcessingLiveEvents = false;
@@ -61,6 +61,12 @@ public sealed class SqlProjectionContext : IProjectionContext
             Log.LogCritical(ex, "Exception occurred attempting to handle subscribing to event stream");
             throw;
         }
+    }
+
+    public Task OnCatchingUp(CancellationToken cancellationToken = default)
+    {
+        // TODO (DS): Complete implementation in a future PR.
+        return Task.CompletedTask;
     }
 
     public Task OnCaughtUp(CancellationToken cancellationToken = default)
@@ -90,7 +96,7 @@ public sealed class SqlProjectionContext : IProjectionContext
         return Task.CompletedTask;
     }
 
-    public async Task OnBeforeHandleEvent(CancellationToken cancellationToken = default)
+    public async Task OnEventDispatching(CancellationToken cancellationToken = default)
     {
         if (_isProcessingLiveEvents)
         {
@@ -101,7 +107,7 @@ public sealed class SqlProjectionContext : IProjectionContext
         }
     }
 
-    public Task OnAfterHandleEvent(CancellationToken cancellationToken = default)
+    public Task OnEventHandled(CancellationToken cancellationToken = default)
     {
         if (_isProcessingLiveEvents)
         {

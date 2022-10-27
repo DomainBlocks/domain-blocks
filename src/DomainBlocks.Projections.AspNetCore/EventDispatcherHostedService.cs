@@ -17,7 +17,8 @@ public class EventDispatcherHostedService<TRawData, TEventBase> : IEventDispatch
     private readonly IEventDeserializer<TRawData> _eventDeserializer;
     private readonly Action<ProjectionRegistryBuilder> _onRegisteringProjections;
 
-    public EventDispatcherHostedService(ProjectionRegistryBuilder registryBuilder,
+    public EventDispatcherHostedService(
+        ProjectionRegistryBuilder registryBuilder,
         IEventPublisher<TRawData> publisher,
         IEventDeserializer<TRawData> eventDeserializer,
         Action<ProjectionRegistryBuilder> onRegisteringProjections)
@@ -33,7 +34,8 @@ public class EventDispatcherHostedService<TRawData, TEventBase> : IEventDispatch
         _onRegisteringProjections(_registryBuilder);
         var projectionRegistry = _registryBuilder.Build();
 
-        var dispatcher = new EventDispatcher<TRawData, TEventBase>(_publisher,
+        var dispatcher = new EventDispatcher<TRawData, TEventBase>(
+            _publisher,
             projectionRegistry.EventProjectionMap,
             projectionRegistry.ProjectionContextMap,
             _eventDeserializer,
@@ -41,6 +43,27 @@ public class EventDispatcherHostedService<TRawData, TEventBase> : IEventDispatch
             EventDispatcherConfiguration.ReadModelDefaults);
 
         await dispatcher.StartAsync(cancellationToken);
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+}
+
+// Simplified event dispatcher which we'll use while we refactor the builder logic.
+public class EventDispatcherHostedServiceNew : IEventDispatcherHostedService
+{
+    private readonly IEventDispatcher _eventDispatcher;
+
+    public EventDispatcherHostedServiceNew(IEventDispatcher eventDispatcher)
+    {
+        _eventDispatcher = eventDispatcher;
+    }
+
+    public async Task StartAsync(CancellationToken cancellationToken = default)
+    {
+        await _eventDispatcher.StartAsync(cancellationToken);
     }
 
     public Task StopAsync(CancellationToken cancellationToken = default)

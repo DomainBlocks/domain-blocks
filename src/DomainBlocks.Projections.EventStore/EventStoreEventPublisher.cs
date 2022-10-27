@@ -41,6 +41,9 @@ public class EventStoreEventPublisher : IEventPublisher<EventRecord>, IDisposabl
 
     private async Task SubscribeToEventStore(Position position, CancellationToken cancellationToken = default)
     {
+        // Initially signal that we're catching up.
+        await _onEvent(EventNotification.CatchingUp<EventRecord>(), cancellationToken);
+
         async Task SendEventNotification(ResolvedEvent resolvedEvent)
         {
             await _onEvent(resolvedEvent.ToEventNotification(), cancellationToken);
@@ -60,16 +63,18 @@ public class EventStoreEventPublisher : IEventPublisher<EventRecord>, IDisposabl
 
         await _onEvent(EventNotification.CaughtUp<EventRecord>(), cancellationToken);
 
-        _subscription = await _client.SubscribeToAllAsync(_lastProcessedPosition,
+        _subscription = await _client.SubscribeToAllAsync(
+            _lastProcessedPosition,
             (_, evt, _) => SendEventNotification(evt),
             false,
             OnSubscriptionDropped,
-            userCredentials: new UserCredentials("admin",
-                "changeit"),
+            // TODO (DS): Don't hardcode credentials here. Address in a future PR.
+            userCredentials: new UserCredentials("admin", "changeit"),
             cancellationToken: cancellationToken);
     }
-        
-    private void OnSubscriptionDropped(StreamSubscription subscription, SubscriptionDroppedReason reason, Exception exception)
+
+    private void OnSubscriptionDropped(
+        StreamSubscription subscription, SubscriptionDroppedReason reason, Exception exception)
     {
         _subscriptionDroppedHandler.HandleDroppedSubscription(reason, exception);
     }

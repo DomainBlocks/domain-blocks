@@ -5,7 +5,6 @@ using DomainBlocks.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-
 namespace DomainBlocks.Projections.EntityFramework;
 
 public class EntityFrameworkProjectionContext : IProjectionContext
@@ -19,7 +18,7 @@ public class EntityFrameworkProjectionContext : IProjectionContext
         _dbContext = dbContext;
     }
 
-    public async Task OnSubscribing(CancellationToken cancellationToken = default)
+    public async Task OnInitializing(CancellationToken cancellationToken = default)
     {
         try
         {
@@ -36,18 +35,24 @@ public class EntityFrameworkProjectionContext : IProjectionContext
         }
     }
 
+    public Task OnCatchingUp(CancellationToken cancellationToken = default)
+    {
+        _isProcessingLiveEvents = false;
+        return Task.CompletedTask;
+    }
+
     public async Task OnCaughtUp(CancellationToken cancellationToken = default)
     {
         _isProcessingLiveEvents = true;
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public Task OnBeforeHandleEvent(CancellationToken cancellationToken = default)
+    public Task OnEventDispatching(CancellationToken cancellationToken = default)
     {
         return Task.CompletedTask;
     }
 
-    public async Task OnAfterHandleEvent(CancellationToken cancellationToken = default)
+    public async Task OnEventHandled(CancellationToken cancellationToken = default)
     {
         if (_isProcessingLiveEvents)
         {

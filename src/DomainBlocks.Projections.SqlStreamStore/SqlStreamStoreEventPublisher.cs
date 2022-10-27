@@ -9,6 +9,7 @@ namespace DomainBlocks.Projections.SqlStreamStore;
 
 public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper>, IDisposable
 {
+    private const int DefaultPageSize = 600;
     private readonly IStreamStore _streamStore;
     private Func<EventNotification<StreamMessageWrapper>, CancellationToken, Task> _onEvent;
     private IAllStreamSubscription _subscription;
@@ -41,21 +42,40 @@ public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper
 
     private async Task SubscribeToStore(long? subscribePosition, CancellationToken cancellationToken = default)
     {
-        _subscription = _streamStore.SubscribeToAll(subscribePosition, StreamMessageReceived, SubscriptionDropped,
-            caughtUp =>
+        // Initially signal that we're catching up.
+        await _onEvent(EventNotification.CatchingUp<StreamMessageWrapper>(), cancellationToken);
+
+        // SQLStreamStore invokes the HasCaughtUp delegate multiple times with the same hasCaughtUp value. We keep the
+        // last value here in order to deduplicate the CatchingUp and CaughtUp signals.
+        var lastHasCaughtUp = false;
+
+        _subscription = _streamStore.SubscribeToAll(
+            subscribePosition,
+            StreamMessageReceived,
+            SubscriptionDropped,
+            hasCaughtUp =>
             {
-                if (caughtUp)
+                if (lastHasCaughtUp == hasCaughtUp) return;
+                lastHasCaughtUp = hasCaughtUp;
+
+                if (hasCaughtUp)
                 {
-                    // SqlStreamStore doesn't provide us with an async delegate.
-                    // To avoid ordering issues, we want to ensure no other
-                    // event processing is done until our caught up
-                    // notification is published , so wait on the task
-                    _onEvent(EventNotification.CaughtUp<StreamMessageWrapper>(), cancellationToken)
-                        .Wait(cancellationToken);
+                    // SqlStreamStore doesn't provide us with an async delegate. To avoid ordering issues, we want to
+                    // ensure no other event processing is done until our caught up notification is published - so wait
+                    // on the task
+                    var notification = EventNotification.CaughtUp<StreamMessageWrapper>();
+                    _onEvent(notification, cancellationToken).Wait(cancellationToken);
+                }
+                else
+                {
+                    var notification = EventNotification.CatchingUp<StreamMessageWrapper>();
+                    _onEvent(notification, cancellationToken).Wait(cancellationToken);
                 }
             });
+
         // TODO: allow this to be configured
-        _subscription.MaxCountPerRead = 1000;
+        _subscription.MaxCountPerRead = DefaultPageSize;
+
         await _subscription.Started.ConfigureAwait(false);
     }
 
@@ -67,20 +87,20 @@ public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper
         await SendEventNotification(streamMessage, cancellationToken: cancellationToken);
     }
 
-    private void SubscriptionDropped(IAllStreamSubscription subscription, SubscriptionDroppedReason reason, Exception exception)
+    private void SubscriptionDropped(
+        IAllStreamSubscription subscription, SubscriptionDroppedReason reason, Exception exception)
     {
         _subscriptionDroppedHandler.HandleDroppedSubscription(reason, exception);
     }
 
-    async Task SendEventNotification(StreamMessage message, CancellationToken cancellationToken = default)
+    private async Task SendEventNotification(StreamMessage message, CancellationToken cancellationToken = default)
     {
         var jsonData = await message.GetJsonData(cancellationToken).ConfigureAwait(false);
         var wrapper = new StreamMessageWrapper(message, jsonData);
-        var notification = EventNotification.FromEvent(wrapper,
-            wrapper.Type,
-            wrapper.MessageId);
+        var notification = EventNotification.FromEvent(wrapper, wrapper.Type, wrapper.MessageId);
 
         await _onEvent(notification, cancellationToken).ConfigureAwait(false);
+
         _lastProcessedPosition = message.Position;
     }
 
