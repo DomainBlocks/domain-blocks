@@ -4,7 +4,8 @@ using System.Threading.Tasks;
 
 namespace DomainBlocks.Projections.New;
 
-public class ServiceProjectionOptionsBuilder<TResource, TService> : IServiceProjectionOptionsBuilder<TService> where TResource : IDisposable
+public class ServiceProjectionOptionsBuilder<TResource, TService> : IServiceProjectionOptionsBuilder<TService>
+    where TResource : IDisposable
 {
     public ServiceProjectionOptionsBuilder(ServiceProjectionOptions<TResource, TService> options)
     {

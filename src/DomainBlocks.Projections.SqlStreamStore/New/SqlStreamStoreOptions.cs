@@ -6,6 +6,9 @@ namespace DomainBlocks.Projections.SqlStreamStore.New;
 
 public class SqlStreamStoreOptions
 {
+    private static readonly Func<IEventDeserializer<StreamMessageWrapper>> DefaultEventDeserializerFactory =
+        () => new StreamMessageJsonDeserializer();
+
     public SqlStreamStoreOptions()
     {
     }
@@ -13,9 +16,9 @@ public class SqlStreamStoreOptions
     private SqlStreamStoreOptions(SqlStreamStoreOptions copyFrom)
     {
         StreamStoreFactory = copyFrom.StreamStoreFactory;
-        EventDeserializerFactory = copyFrom.EventDeserializerFactory;
+        EventDeserializerFactory = copyFrom.EventDeserializerFactory ?? DefaultEventDeserializerFactory;
     }
-    
+
     public Func<IStreamStore> StreamStoreFactory { get; private init; }
     public Func<IEventDeserializer<StreamMessageWrapper>> EventDeserializerFactory { get; private init; }
 
