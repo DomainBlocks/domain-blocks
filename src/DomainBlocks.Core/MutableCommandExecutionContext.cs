@@ -30,7 +30,8 @@ public class MutableCommandExecutionContext<TAggregate> : ICommandExecutionConte
         else
         {
             var commandReturnType = _aggregateType.GetCommandReturnType<TCommandResult>();
-            var raisedEvents = commandReturnType.SelectEventsAndUpdateState(commandResult, State);
+            var raisedEvents =
+                commandReturnType.SelectEventsAndUpdateState(commandResult, State, _aggregateType.EventApplier);
             _raisedEvents.AddRange(raisedEvents);
         }
 

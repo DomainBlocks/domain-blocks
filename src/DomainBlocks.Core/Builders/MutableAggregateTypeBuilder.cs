@@ -11,14 +11,11 @@ public interface IMutableRaisedEventsBuilder<TAggregate, TEventBase> where TEven
 
 public class MutableAggregateTypeBuilder<TAggregate, TEventBase> :
     AggregateTypeBuilderBase<TAggregate, TEventBase>,
-    IMutableRaisedEventsBuilder<TAggregate, TEventBase>,
-    IMutableEventApplierSource<TAggregate, TEventBase>
+    IMutableRaisedEventsBuilder<TAggregate, TEventBase>
     where TEventBase : class
 {
     private MutableAggregateType<TAggregate, TEventBase> _options = new();
     private MutableConventionalEventApplierBuilder<TAggregate, TEventBase> _eventApplierBuilder;
-
-    public Action<TAggregate, TEventBase> EventApplier => (agg, e) => Options.ApplyEvent(agg, e);
 
     protected override AggregateTypeBase<TAggregate, TEventBase> Options
     {
@@ -39,7 +36,7 @@ public class MutableAggregateTypeBuilder<TAggregate, TEventBase> :
         if (commandReturnTypeBuilderAction == null)
             throw new ArgumentNullException(nameof(commandReturnTypeBuilderAction));
 
-        var builder = new MutableCommandReturnTypeBuilder<TAggregate, TEventBase>(this);
+        var builder = new MutableCommandReturnTypeBuilder<TAggregate, TEventBase>();
         commandReturnTypeBuilderAction(builder);
         Options = _options.WithCommandReturnTypes(builder.Options);
         return this;

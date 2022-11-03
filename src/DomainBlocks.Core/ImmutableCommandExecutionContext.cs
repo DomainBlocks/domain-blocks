@@ -22,7 +22,7 @@ public class ImmutableCommandExecutionContext<TAggregate> : ICommandExecutionCon
     {
         var commandResult = commandExecutor(State);
         var options = _aggregateType.GetCommandReturnType<TCommandResult>();
-        (var events, State) = options.SelectEventsAndUpdateState(commandResult, State);
+        (var events, State) = options.SelectEventsAndUpdateState(commandResult, State, _aggregateType.EventApplier);
         _raisedEvents.AddRange(events);
 
         return commandResult;

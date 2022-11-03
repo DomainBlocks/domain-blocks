@@ -12,22 +12,14 @@ public interface IImmutableCommandReturnUpdatedStateSelectorBuilder<in TAggregat
 
 public class ImmutableCommandReturnTypeBuilder<TAggregate, TEventBase> where TEventBase : class
 {
-    private readonly IImmutableEventApplierSource<TAggregate, TEventBase> _eventApplierSource;
     private readonly List<ICommandReturnTypeBuilder> _builders = new();
-
-    internal ImmutableCommandReturnTypeBuilder(
-        IImmutableEventApplierSource<TAggregate, TEventBase> eventApplierSource)
-    {
-        _eventApplierSource = eventApplierSource;
-    }
 
     internal IEnumerable<ICommandReturnType> Options => _builders.Select(x => x.Options);
 
     public ImmutableCommandReturnTypeBuilder<TAggregate, TEventBase, TCommandResult>
         CommandReturnType<TCommandResult>()
     {
-        var builder =
-            new ImmutableCommandReturnTypeBuilder<TAggregate, TEventBase, TCommandResult>(_eventApplierSource);
+        var builder = new ImmutableCommandReturnTypeBuilder<TAggregate, TEventBase, TCommandResult>();
         _builders.Add(builder);
         return builder;
     }
@@ -38,14 +30,7 @@ public class ImmutableCommandReturnTypeBuilder<TAggregate, TEventBase, TCommandR
     IImmutableCommandReturnUpdatedStateSelectorBuilder<TAggregate, TCommandResult>
     where TEventBase : class
 {
-    private readonly IImmutableEventApplierSource<TAggregate, TEventBase> _eventApplierSource;
     private ImmutableCommandReturnType<TAggregate, TEventBase, TCommandResult> _options = new();
-
-    internal ImmutableCommandReturnTypeBuilder(
-        IImmutableEventApplierSource<TAggregate, TEventBase> eventApplierSource)
-    {
-        _eventApplierSource = eventApplierSource ?? throw new ArgumentNullException(nameof(eventApplierSource));
-    }
 
     public ICommandReturnType Options => _options;
 
@@ -64,6 +49,6 @@ public class ImmutableCommandReturnTypeBuilder<TAggregate, TEventBase, TCommandR
 
     void IImmutableCommandReturnUpdatedStateSelectorBuilder<TAggregate, TCommandResult>.ApplyEvents()
     {
-        _options = _options.WithEventsApplied(_eventApplierSource.EventApplier);
+        _options = _options.WithUpdatedStateFromEvents();
     }
 }

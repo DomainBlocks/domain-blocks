@@ -37,7 +37,7 @@ public sealed class AggregateRepository<TRawData> : IAggregateRepository
         if (id == null) throw new ArgumentNullException(nameof(id));
 
         var aggregateType = _model.GetAggregateType<TAggregateState>();
-        var initialState = aggregateType.CreateNew();
+        var initialState = aggregateType.Factory();
 
         // If we choose to load solely from an event stream, then we need some initial state
         // onto which to apply the events.
@@ -49,13 +49,13 @@ public sealed class AggregateRepository<TRawData> : IAggregateRepository
 
         var stateToAppendEventsTo = initialState;
 
-        var streamName = aggregateType.SelectStreamKeyFromId(id);
+        var streamName = aggregateType.IdToStreamKeySelector(id);
         long loadStartPosition = 0;
         long? snapshotVersion = null;
 
         if (loadStrategy is AggregateLoadStrategy.UseSnapshot or AggregateLoadStrategy.PreferSnapshot)
         {
-            var snapshotKey = aggregateType.SelectSnapshotKeyFromId(id);
+            var snapshotKey = aggregateType.IdToSnapshotKeySelector(id);
             var (isSuccess, snapshot) =
                 await _snapshotRepository.TryLoadSnapshotAsync<TAggregateState>(snapshotKey, cancellationToken);
 
@@ -91,7 +91,7 @@ public sealed class AggregateRepository<TRawData> : IAggregateRepository
             },
             (acc, next) => new
             {
-                State = aggregateType.ApplyEvent(acc.State, next),
+                State = aggregateType.EventApplier(acc.State, next),
                 EventCount = acc.EventCount + 1
             }, 
             cancellationToken);
@@ -115,7 +115,7 @@ public sealed class AggregateRepository<TRawData> : IAggregateRepository
 
         snapshotPredicate ??= _ => false;
         var aggregateType = _model.GetAggregateType<TAggregateState>();
-        var streamName = aggregateType.SelectStreamKeyFromId(loadedAggregate.Id);
+        var streamName = aggregateType.IdToStreamKeySelector(loadedAggregate.Id);
         
         var newVersion = await _eventsRepository.SaveEventsAsync(
             streamName, loadedAggregate.Version, loadedAggregate.EventsToPersist, cancellationToken);
