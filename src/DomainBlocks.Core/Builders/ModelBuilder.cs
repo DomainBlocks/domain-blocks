@@ -32,7 +32,7 @@ public class ModelBuilder
 
     public Model Build()
     {
-        var aggregateTypes = _aggregateTypeBuilders.Select(x => x.Build());
+        var aggregateTypes = _aggregateTypeBuilders.Select(x => x.Options);
         return new Model(aggregateTypes);
     }
 }

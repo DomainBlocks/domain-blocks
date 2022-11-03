@@ -12,28 +12,40 @@ public interface IMutableAggregateType<TAggregate> : IAggregateType<TAggregate>
     public IEnumerable<object> SelectRaisedEvents(TAggregate aggregate);
 }
 
-public class MutableAggregateType<TAggregate, TEventBase>
-    : AggregateTypeBase<TAggregate, TEventBase>, IMutableAggregateType<TAggregate> where TEventBase : class
+public class MutableAggregateType<TAggregate, TEventBase> :
+    AggregateTypeBase<TAggregate, TEventBase>,
+    IMutableAggregateType<TAggregate> where TEventBase : class
 {
-    private readonly Action<TAggregate, TEventBase> _eventApplier;
-    private readonly Func<TAggregate, IEnumerable<TEventBase>> _raisedEventsSelector;
+    private Action<TAggregate, TEventBase> _eventApplier;
+    private Func<TAggregate, IEnumerable<TEventBase>> _raisedEventsSelector;
 
-    public MutableAggregateType(
-        Func<TAggregate> factory,
-        Func<TAggregate, string> idSelector,
-        Func<string, string> idToStreamKeySelector,
-        Func<string, string> idToSnapshotKeySelector,
-        IEnumerable<ICommandReturnType> commandReturnTypes,
-        IEnumerable<IEventType> eventTypes,
-        Action<TAggregate, TEventBase> eventApplier,
-        Func<TAggregate, IEnumerable<TEventBase>> raisedEventsSelector)
-        : base(factory, idSelector, idToStreamKeySelector, idToSnapshotKeySelector, commandReturnTypes, eventTypes)
+    public MutableAggregateType()
     {
-        _eventApplier = eventApplier;
-        _raisedEventsSelector = raisedEventsSelector;
+    }
+
+    private MutableAggregateType(MutableAggregateType<TAggregate, TEventBase> copyFrom) : base(copyFrom)
+    {
+        _eventApplier = copyFrom._eventApplier;
+        _raisedEventsSelector = copyFrom._raisedEventsSelector;
     }
 
     public bool CanSelectRaisedEventsFromAggregate => _raisedEventsSelector != null;
+
+    public MutableAggregateType<TAggregate, TEventBase> WithEventApplier(
+        Action<TAggregate, TEventBase> eventApplier)
+    {
+        var clone = Clone();
+        clone._eventApplier = eventApplier;
+        return clone;
+    }
+
+    public MutableAggregateType<TAggregate, TEventBase> WithRaisedEventsSelector(
+        Func<TAggregate, IEnumerable<TEventBase>> raisedEventsSelector)
+    {
+        var clone = Clone();
+        clone._raisedEventsSelector = raisedEventsSelector;
+        return clone;
+    }
 
     public override TAggregate ApplyEvent(TAggregate aggregate, object @event)
     {
@@ -64,5 +76,10 @@ public class MutableAggregateType<TAggregate, TEventBase>
         }
 
         return _raisedEventsSelector(aggregate);
+    }
+
+    protected override MutableAggregateType<TAggregate, TEventBase> Clone()
+    {
+        return new MutableAggregateType<TAggregate, TEventBase>(this);
     }
 }

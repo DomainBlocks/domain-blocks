@@ -6,27 +6,25 @@ namespace DomainBlocks.Core;
 
 public abstract class AggregateTypeBase<TAggregate, TEventBase> : IAggregateType<TAggregate>
 {
-    private readonly Func<TAggregate> _factory;
-    private readonly Func<TAggregate, string> _idSelector;
-    private readonly Func<string, string> _idToStreamKeySelector;
-    private readonly Func<string, string> _idToSnapshotKeySelector;
-    private readonly IReadOnlyDictionary<Type, ICommandReturnType> _commandReturnTypes;
-    private readonly IReadOnlyDictionary<Type, IEventType> _eventTypes;
+    private Func<TAggregate> _factory;
+    private Func<TAggregate, string> _idSelector;
+    private Func<string, string> _idToStreamKeySelector;
+    private Func<string, string> _idToSnapshotKeySelector;
+    private Dictionary<Type, ICommandReturnType> _commandReturnTypes = new();
+    private Dictionary<Type, IEventType> _eventTypes = new();
 
-    protected AggregateTypeBase(
-        Func<TAggregate> factory,
-        Func<TAggregate, string> idSelector,
-        Func<string, string> idToStreamKeySelector,
-        Func<string, string> idToSnapshotKeySelector,
-        IEnumerable<ICommandReturnType> commandReturnTypes,
-        IEnumerable<IEventType> eventTypes)
+    protected AggregateTypeBase()
     {
-        _factory = factory;
-        _idSelector = idSelector;
-        _idToStreamKeySelector = idToStreamKeySelector;
-        _idToSnapshotKeySelector = idToSnapshotKeySelector;
-        _commandReturnTypes = commandReturnTypes.ToDictionary(x => x.ClrType);
-        _eventTypes = eventTypes.ToDictionary(x => x.ClrType);
+    }
+
+    protected AggregateTypeBase(AggregateTypeBase<TAggregate, TEventBase> copyFrom)
+    {
+        _factory = copyFrom._factory;
+        _idSelector = copyFrom._idSelector;
+        _idToStreamKeySelector = copyFrom._idToStreamKeySelector;
+        _idToSnapshotKeySelector = copyFrom._idToSnapshotKeySelector;
+        _commandReturnTypes = new Dictionary<Type, ICommandReturnType>(copyFrom._commandReturnTypes);
+        _eventTypes = new Dictionary<Type, IEventType>(copyFrom._eventTypes);
     }
 
     public Type ClrType => typeof(TAggregate);
@@ -43,15 +41,63 @@ public abstract class AggregateTypeBase<TAggregate, TEventBase> : IAggregateType
     public abstract TAggregate ApplyEvent(TAggregate aggregate, object @event);
     public abstract ICommandExecutionContext<TAggregate> GetCommandExecutionContext(TAggregate aggregate);
 
+    public AggregateTypeBase<TAggregate, TEventBase> WithFactory(Func<TAggregate> factory)
+    {
+        var clone = Clone();
+        clone._factory = factory;
+        return clone;
+    }
+
+    public AggregateTypeBase<TAggregate, TEventBase> WithIdSelector(Func<TAggregate, string> idSelector)
+    {
+        var clone = Clone();
+        clone._idSelector = idSelector;
+        return clone;
+    }
+
+    public AggregateTypeBase<TAggregate, TEventBase> WithIdToStreamKeySelector(
+        Func<string, string> idToStreamKeySelector)
+    {
+        var clone = Clone();
+        clone._idToStreamKeySelector = idToStreamKeySelector;
+        return clone;
+    }
+
+    public AggregateTypeBase<TAggregate, TEventBase> WithIdToSnapshotKeySelector(
+        Func<string, string> idToSnapshotKeySelector)
+    {
+        var clone = Clone();
+        clone._idToSnapshotKeySelector = idToSnapshotKeySelector;
+        return clone;
+    }
+
+    public AggregateTypeBase<TAggregate, TEventBase> WithCommandReturnTypes(
+        IEnumerable<ICommandReturnType> commandReturnTypes)
+    {
+        var clone = Clone();
+        clone._commandReturnTypes = commandReturnTypes.ToDictionary(x => x.ClrType);
+        return clone;
+    }
+
+    public AggregateTypeBase<TAggregate, TEventBase> WithEventTypes(IEnumerable<IEventType> eventTypeOptions)
+    {
+        var clone = Clone();
+        clone._eventTypes = eventTypeOptions.ToDictionary(x => x.ClrType);
+        return clone;
+    }
+
+    protected abstract AggregateTypeBase<TAggregate, TEventBase> Clone();
+
     protected ICommandReturnType GetCommandReturnType<TCommandResult>()
     {
-        var commandResultClrType = typeof(TCommandResult);
+        var commandReturnClrType = typeof(TCommandResult);
 
-        if (_commandReturnTypes.TryGetValue(commandResultClrType, out var commandReturnType))
+        if (_commandReturnTypes.TryGetValue(commandReturnClrType, out var commandReturnType))
         {
             return commandReturnType;
         }
 
-        throw new KeyNotFoundException($"No command result type found for CLR type {commandResultClrType.Name}.");
+        throw new KeyNotFoundException(
+            $"No command return type options found for CLR type {commandReturnClrType.Name}.");
     }
 }

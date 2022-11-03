@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace DomainBlocks.Core.Builders;
 
@@ -11,18 +12,19 @@ public interface IImmutableCommandReturnUpdatedStateSelectorBuilder<in TAggregat
 
 public class ImmutableCommandReturnTypeBuilder<TAggregate, TEventBase> where TEventBase : class
 {
-    private readonly ICollection<ICommandReturnTypeBuilder> _builders;
     private readonly IImmutableEventApplierSource<TAggregate, TEventBase> _eventApplierSource;
+    private readonly List<ICommandReturnTypeBuilder> _builders = new();
 
     internal ImmutableCommandReturnTypeBuilder(
-        ICollection<ICommandReturnTypeBuilder> builders,
         IImmutableEventApplierSource<TAggregate, TEventBase> eventApplierSource)
     {
-        _builders = builders;
         _eventApplierSource = eventApplierSource;
     }
 
-    public ImmutableCommandReturnTypeBuilder<TAggregate, TEventBase, TCommandResult> CommandReturnType<TCommandResult>()
+    internal IEnumerable<ICommandReturnType> Options => _builders.Select(x => x.Options);
+
+    public ImmutableCommandReturnTypeBuilder<TAggregate, TEventBase, TCommandResult>
+        CommandReturnType<TCommandResult>()
     {
         var builder =
             new ImmutableCommandReturnTypeBuilder<TAggregate, TEventBase, TCommandResult>(_eventApplierSource);
@@ -37,41 +39,31 @@ public class ImmutableCommandReturnTypeBuilder<TAggregate, TEventBase, TCommandR
     where TEventBase : class
 {
     private readonly IImmutableEventApplierSource<TAggregate, TEventBase> _eventApplierSource;
-    private Func<TCommandResult, IEnumerable<TEventBase>> _eventsSelector;
-    private Func<TCommandResult, TAggregate> _updatedStateSelector;
-    private bool _hasApplyEventsEnabled;
+    private ImmutableCommandReturnType<TAggregate, TEventBase, TCommandResult> _options = new();
 
-    internal ImmutableCommandReturnTypeBuilder(IImmutableEventApplierSource<TAggregate, TEventBase> eventApplierSource)
+    internal ImmutableCommandReturnTypeBuilder(
+        IImmutableEventApplierSource<TAggregate, TEventBase> eventApplierSource)
     {
         _eventApplierSource = eventApplierSource ?? throw new ArgumentNullException(nameof(eventApplierSource));
     }
 
+    public ICommandReturnType Options => _options;
+
     public IImmutableCommandReturnUpdatedStateSelectorBuilder<TAggregate, TCommandResult> WithEventsFrom(
         Func<TCommandResult, IEnumerable<TEventBase>> eventsSelector)
     {
-        _eventsSelector = eventsSelector ?? throw new ArgumentNullException(nameof(eventsSelector));
+        _options = _options.WithEventSelector(eventsSelector);
         return this;
     }
 
     void IImmutableCommandReturnUpdatedStateSelectorBuilder<TAggregate, TCommandResult>.WithUpdatedStateFrom(
         Func<TCommandResult, TAggregate> updatedStateSelector)
     {
-        _updatedStateSelector = updatedStateSelector ?? throw new ArgumentNullException(nameof(updatedStateSelector));
+        _options = _options.WithUpdatedStateSelector(updatedStateSelector);
     }
 
     void IImmutableCommandReturnUpdatedStateSelectorBuilder<TAggregate, TCommandResult>.ApplyEvents()
     {
-        _hasApplyEventsEnabled = true;
+        _options = _options.WithEventsApplied(_eventApplierSource.EventApplier);
     }
-
-    public ImmutableCommandReturnType<TAggregate, TEventBase, TCommandResult> Build()
-    {
-        return _hasApplyEventsEnabled
-            ? new ImmutableCommandReturnType<TAggregate, TEventBase, TCommandResult>(
-                _eventsSelector, _eventApplierSource.EventApplier)
-            : new ImmutableCommandReturnType<TAggregate, TEventBase, TCommandResult>(
-                _eventsSelector, _updatedStateSelector);
-    }
-
-    ICommandReturnType ICommandReturnTypeBuilder.Build() => Build();
 }

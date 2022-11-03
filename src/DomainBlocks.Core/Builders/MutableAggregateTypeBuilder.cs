@@ -15,20 +15,21 @@ public class MutableAggregateTypeBuilder<TAggregate, TEventBase> :
     IMutableEventApplierSource<TAggregate, TEventBase>
     where TEventBase : class
 {
-    private Func<TAggregate, IEnumerable<TEventBase>> _raisedEventsSelector;
-    private Action<TAggregate, TEventBase> _eventApplier;
+    private MutableAggregateType<TAggregate, TEventBase> _options = new();
     private MutableConventionalEventApplierBuilder<TAggregate, TEventBase> _eventApplierBuilder;
 
-    public Action<TAggregate, TEventBase> EventApplier
+    public Action<TAggregate, TEventBase> EventApplier => (agg, e) => Options.ApplyEvent(agg, e);
+
+    protected override AggregateTypeBase<TAggregate, TEventBase> Options
     {
-        get => _eventApplier ?? _eventApplierBuilder?.Build();
-        private set => _eventApplier = value;
+        get => _eventApplierBuilder == null ? _options : _options.WithEventApplier(_eventApplierBuilder.Build());
+        set => _options = (MutableAggregateType<TAggregate, TEventBase>)value;
     }
 
     public IMutableRaisedEventsBuilder<TAggregate, TEventBase> WithRaisedEventsFrom(
         Func<TAggregate, IEnumerable<TEventBase>> eventsSelector)
     {
-        _raisedEventsSelector = eventsSelector ?? throw new ArgumentNullException(nameof(eventsSelector));
+        _options = _options.WithRaisedEventsSelector(eventsSelector);
         return this;
     }
 
@@ -38,16 +39,17 @@ public class MutableAggregateTypeBuilder<TAggregate, TEventBase> :
         if (commandReturnTypeBuilderAction == null)
             throw new ArgumentNullException(nameof(commandReturnTypeBuilderAction));
 
-        var builder = new MutableCommandReturnTypeBuilder<TAggregate, TEventBase>(CommandReturnTypeBuilders, this);
+        var builder = new MutableCommandReturnTypeBuilder<TAggregate, TEventBase>(this);
         commandReturnTypeBuilderAction(builder);
+        Options = _options.WithCommandReturnTypes(builder.Options);
         return this;
     }
 
     void IMutableRaisedEventsBuilder<TAggregate, TEventBase>.ApplyEventsWith(
         Action<TAggregate, TEventBase> eventApplier)
     {
-        EventApplier = eventApplier ?? throw new ArgumentNullException(nameof(eventApplier));
         _eventApplierBuilder = null;
+        _options = _options.WithEventApplier(eventApplier);
     }
 
     MutableConventionalEventApplierBuilder<TAggregate, TEventBase>
@@ -55,18 +57,5 @@ public class MutableAggregateTypeBuilder<TAggregate, TEventBase> :
     {
         _eventApplierBuilder = new MutableConventionalEventApplierBuilder<TAggregate, TEventBase>();
         return _eventApplierBuilder;
-    }
-
-    public override IMutableAggregateType<TAggregate> Build()
-    {
-        return new MutableAggregateType<TAggregate, TEventBase>(
-            Factory,
-            IdSelector,
-            IdToStreamKeySelector,
-            IdToSnapshotKeySelector,
-            CommandReturnTypes,
-            EventTypes,
-            EventApplier,
-            _raisedEventsSelector);
     }
 }

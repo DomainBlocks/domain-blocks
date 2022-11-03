@@ -12,21 +12,50 @@ public interface IMutableCommandReturnType<in TAggregate, in TCommandResult> : I
 public class MutableCommandReturnType<TAggregate, TEventBase, TCommandResult>
     : IMutableCommandReturnType<TAggregate, TCommandResult> where TEventBase : class
 {
-    private readonly ApplyRaisedEventsBehavior _applyRaisedEventsBehavior;
-    private readonly Func<TCommandResult, IEnumerable<TEventBase>> _eventsSelector;
-    private readonly Action<TAggregate, TEventBase> _eventApplier;
+    private ApplyRaisedEventsBehavior _applyRaisedEventsBehavior;
+    private Func<TCommandResult, IEnumerable<TEventBase>> _eventsSelector;
+    private Action<TAggregate, TEventBase> _eventApplier;
 
-    public MutableCommandReturnType(
-        ApplyRaisedEventsBehavior applyRaisedEventsBehavior,
-        Func<TCommandResult, IEnumerable<TEventBase>> eventsSelector,
-        Action<TAggregate, TEventBase> eventApplier)
+    public MutableCommandReturnType()
     {
-        _applyRaisedEventsBehavior = applyRaisedEventsBehavior;
-        _eventsSelector = eventsSelector;
-        _eventApplier = eventApplier;
+    }
+    
+    private MutableCommandReturnType(
+        MutableCommandReturnType<TAggregate, TEventBase, TCommandResult> copyFrom)
+    {
+        _applyRaisedEventsBehavior = copyFrom._applyRaisedEventsBehavior;
+        _eventsSelector = copyFrom._eventsSelector;
+        _eventApplier = copyFrom._eventApplier;
     }
 
     public Type ClrType => typeof(TCommandResult);
+
+    public MutableCommandReturnType<TAggregate, TEventBase, TCommandResult> WithApplyRaisedEventsBehavior(
+        ApplyRaisedEventsBehavior behavior)
+    {
+        return new MutableCommandReturnType<TAggregate, TEventBase, TCommandResult>(this)
+        {
+            _applyRaisedEventsBehavior = behavior
+        };
+    }
+    
+    public MutableCommandReturnType<TAggregate, TEventBase, TCommandResult> WithEventsSelector(
+        Func<TCommandResult, IEnumerable<TEventBase>> eventsSelector)
+    {
+        return new MutableCommandReturnType<TAggregate, TEventBase, TCommandResult>(this)
+        {
+            _eventsSelector = eventsSelector
+        };
+    }
+
+    public MutableCommandReturnType<TAggregate, TEventBase, TCommandResult> WithEventApplier(
+        Action<TAggregate, TEventBase> eventApplier)
+    {
+        return new MutableCommandReturnType<TAggregate, TEventBase, TCommandResult>(this)
+        {
+            _eventApplier = eventApplier
+        };
+    }
 
     public IEnumerable<object> SelectEventsAndUpdateState(TCommandResult commandResult, TAggregate state)
     {

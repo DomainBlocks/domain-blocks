@@ -8,7 +8,8 @@ public class ImmutableCommandExecutionContext<TAggregate> : ICommandExecutionCon
     private readonly IImmutableAggregateType<TAggregate> _aggregateType;
     private readonly List<object> _raisedEvents = new();
 
-    public ImmutableCommandExecutionContext(TAggregate state, IImmutableAggregateType<TAggregate> aggregateType)
+    public ImmutableCommandExecutionContext(
+        TAggregate state, IImmutableAggregateType<TAggregate> aggregateType)
     {
         State = state ?? throw new ArgumentNullException(nameof(state));
         _aggregateType = aggregateType ?? throw new ArgumentNullException(nameof(aggregateType));
@@ -20,8 +21,8 @@ public class ImmutableCommandExecutionContext<TAggregate> : ICommandExecutionCon
     public TCommandResult ExecuteCommand<TCommandResult>(Func<TAggregate, TCommandResult> commandExecutor)
     {
         var commandResult = commandExecutor(State);
-        var commandReturnType = _aggregateType.GetCommandReturnType<TCommandResult>();
-        (var events, State) = commandReturnType.SelectEventsAndUpdateState(commandResult, State);
+        var options = _aggregateType.GetCommandReturnType<TCommandResult>();
+        (var events, State) = options.SelectEventsAndUpdateState(commandResult, State);
         _raisedEvents.AddRange(events);
 
         return commandResult;

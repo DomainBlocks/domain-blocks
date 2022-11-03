@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 
 namespace DomainBlocks.Core;
 
@@ -8,22 +7,28 @@ public interface IImmutableAggregateType<TAggregate> : IAggregateType<TAggregate
     public IImmutableCommandReturnType<TAggregate, TCommandResult> GetCommandReturnType<TCommandResult>();
 }
 
-public class ImmutableAggregateType<TAggregate, TEventBase>
-    : AggregateTypeBase<TAggregate, TEventBase>, IImmutableAggregateType<TAggregate> where TEventBase : class
+public class ImmutableAggregateType<TAggregate, TEventBase> :
+    AggregateTypeBase<TAggregate, TEventBase>,
+    IImmutableAggregateType<TAggregate>
 {
-    private readonly Func<TAggregate, TEventBase, TAggregate> _eventApplier;
+    private Func<TAggregate, TEventBase, TAggregate> _eventApplier;
 
-    public ImmutableAggregateType(
-        Func<TAggregate> factory,
-        Func<TAggregate, string> idSelector,
-        Func<string, string> idToStreamKeySelector,
-        Func<string, string> idToSnapshotKeySelector,
-        IEnumerable<ICommandReturnType> commandReturnTypes,
-        IEnumerable<IEventType> eventTypes,
-        Func<TAggregate, TEventBase, TAggregate> eventApplier)
-        : base(factory, idSelector, idToStreamKeySelector, idToSnapshotKeySelector, commandReturnTypes, eventTypes)
+    public ImmutableAggregateType()
     {
-        _eventApplier = eventApplier;
+    }
+
+    private ImmutableAggregateType(ImmutableAggregateType<TAggregate, TEventBase> copyFrom) :
+        base(copyFrom)
+    {
+        _eventApplier = copyFrom._eventApplier;
+    }
+
+    public ImmutableAggregateType<TAggregate, TEventBase> WithEventApplier(
+        Func<TAggregate, TEventBase, TAggregate> eventApplier)
+    {
+        var clone = Clone();
+        clone._eventApplier = eventApplier;
+        return clone;
     }
 
     public override TAggregate ApplyEvent(TAggregate aggregate, object @event)
@@ -39,5 +44,10 @@ public class ImmutableAggregateType<TAggregate, TEventBase>
     public new IImmutableCommandReturnType<TAggregate, TCommandResult> GetCommandReturnType<TCommandResult>()
     {
         return (IImmutableCommandReturnType<TAggregate, TCommandResult>)base.GetCommandReturnType<TCommandResult>();
+    }
+
+    protected override ImmutableAggregateType<TAggregate, TEventBase> Clone()
+    {
+        return new ImmutableAggregateType<TAggregate, TEventBase>(this);
     }
 }

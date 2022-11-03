@@ -13,7 +13,7 @@ public class AssemblyEventTypeBuilderTests
     {
         var builder = new AssemblyEventTypeBuilder<IEvent1>(typeof(IEvent1).Assembly);
         builder.FilterByBaseType<IFilterType1>();
-        var eventTypes = ((IEventTypeBuilder)builder).Build().ToList();
+        var eventTypes = builder.Build().ToList();
 
         Assert.That(eventTypes, Has.Count.EqualTo(2));
         Assert.That(eventTypes[0].ClrType, Is.EqualTo(typeof(Event1)));
@@ -26,7 +26,7 @@ public class AssemblyEventTypeBuilderTests
     public void BuildThrowsExceptionWhenNoEventsFound()
     {
         var builder = new AssemblyEventTypeBuilder<IEvent2>(typeof(IEvent2).Assembly);
-        Assert.Throws<InvalidOperationException>(() => ((IEventTypeBuilder)builder).Build());
+        Assert.Throws<InvalidOperationException>(() => builder.Build());
     }
 
     [Test]
@@ -34,7 +34,7 @@ public class AssemblyEventTypeBuilderTests
     {
         var builder = new AssemblyEventTypeBuilder<IEvent1>(typeof(IEvent1).Assembly);
         builder.FilterByBaseType<IFilterType2>();
-        Assert.Throws<InvalidOperationException>(() => ((IEventTypeBuilder)builder).Build());
+        Assert.Throws<InvalidOperationException>(() => builder.Build());
     }
 
     private interface IEvent1

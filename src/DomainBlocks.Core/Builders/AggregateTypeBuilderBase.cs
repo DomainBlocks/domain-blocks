@@ -7,7 +7,7 @@ namespace DomainBlocks.Core.Builders;
 
 public interface IAggregateTypeBuilder
 {
-    IAggregateType Build();
+    public IAggregateType Options { get; }
 }
 
 public interface IIdSelectorBuilder<out TAggregate>
@@ -32,54 +32,59 @@ public abstract class AggregateTypeBuilderBase<TAggregate, TEventBase> :
     IIdToSnapshotKeySelectorBuilder
     where TEventBase : class
 {
-    private readonly List<IEventTypeBuilder> _eventTypeBuilders = new();
+    private readonly List<Func<IEnumerable<IEventType>>> _eventTypeBuilders = new();
+    
+    protected abstract AggregateTypeBase<TAggregate, TEventBase> Options { get; set; }
 
-    protected Func<TAggregate> Factory { get; private set; }
-    protected Func<TAggregate, string> IdSelector { get; private set; }
-    protected Func<string, string> IdToStreamKeySelector { get; private set; }
-    protected Func<string, string> IdToSnapshotKeySelector { get; private set; }
-    protected List<ICommandReturnTypeBuilder> CommandReturnTypeBuilders { get; } = new();
-    protected IEnumerable<ICommandReturnType> CommandReturnTypes => CommandReturnTypeBuilders.Select(x => x.Build());
-    protected IEnumerable<IEventType> EventTypes => _eventTypeBuilders.SelectMany(x => x.Build());
+    IAggregateType IAggregateTypeBuilder.Options
+    {
+        get
+        {
+            var eventTypeOptions = _eventTypeBuilders.SelectMany(x => x());
+            var options = Options.WithEventTypes(eventTypeOptions);
+            return options;
+        }
+    }
 
     public IIdSelectorBuilder<TAggregate> InitialState(Func<TAggregate> factory)
     {
-        Factory = factory ?? throw new ArgumentNullException(nameof(factory));
+        if (factory == null) throw new ArgumentNullException(nameof(factory));
+        Options = Options.WithFactory(factory);
         return this;
     }
 
     IIdToStreamKeySelectorBuilder IIdSelectorBuilder<TAggregate>.HasId(Func<TAggregate, string> idSelector)
     {
-        IdSelector = idSelector ?? throw new ArgumentNullException(nameof(idSelector));
+        if (idSelector == null) throw new ArgumentNullException(nameof(idSelector));
+        Options = Options.WithIdSelector(idSelector);
         return this;
     }
 
     IIdToSnapshotKeySelectorBuilder IIdToStreamKeySelectorBuilder.WithStreamKey(
         Func<string, string> idToStreamKeySelector)
     {
-        IdToStreamKeySelector = idToStreamKeySelector ?? throw new ArgumentNullException(nameof(idToStreamKeySelector));
+        if (idToStreamKeySelector == null) throw new ArgumentNullException(nameof(idToStreamKeySelector));
+        Options = Options.WithIdToStreamKeySelector(idToStreamKeySelector);
         return this;
     }
 
     void IIdToSnapshotKeySelectorBuilder.WithSnapshotKey(Func<string, string> idToSnapshotKeySelector)
     {
-        IdToSnapshotKeySelector = idToSnapshotKeySelector ??
-                                  throw new ArgumentNullException(nameof(idToSnapshotKeySelector));
+        if (idToSnapshotKeySelector == null) throw new ArgumentNullException(nameof(idToSnapshotKeySelector));
+        Options = Options.WithIdToSnapshotKeySelector(idToSnapshotKeySelector);
     }
 
     public EventTypeBuilder<TEvent, TEventBase> Event<TEvent>() where TEvent : TEventBase
     {
         var builder = new EventTypeBuilder<TEvent, TEventBase>();
-        _eventTypeBuilders.Add(builder);
+        _eventTypeBuilders.Add(() => new[] { builder.Options });
         return builder;
     }
 
     public AssemblyEventTypeBuilder<TEventBase> Events(Assembly assembly)
     {
         var builder = new AssemblyEventTypeBuilder<TEventBase>(assembly);
-        _eventTypeBuilders.Add(builder);
+        _eventTypeBuilders.Add(() => builder.Build());
         return builder;
     }
-
-    public abstract IAggregateType Build();
 }

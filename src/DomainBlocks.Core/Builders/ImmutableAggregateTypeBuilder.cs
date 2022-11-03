@@ -14,13 +14,15 @@ public class ImmutableAggregateTypeBuilder<TAggregate, TEventBase> :
     IImmutableEventApplierSource<TAggregate, TEventBase>
     where TEventBase : class
 {
-    private Func<TAggregate, TEventBase, TAggregate> _eventApplier;
+    private ImmutableAggregateType<TAggregate, TEventBase> _options = new();
     private ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase> _eventApplierBuilder;
 
-    public Func<TAggregate, TEventBase, TAggregate> EventApplier
+    public Func<TAggregate, TEventBase, TAggregate> EventApplier => (agg, e) => Options.ApplyEvent(agg, e);
+
+    protected override AggregateTypeBase<TAggregate, TEventBase> Options
     {
-        get => _eventApplier ?? _eventApplierBuilder?.Build();
-        private set => _eventApplier = value;
+        get => _eventApplierBuilder == null ? _options : _options.WithEventApplier(_eventApplierBuilder.Build());
+        set => _options = (ImmutableAggregateType<TAggregate, TEventBase>)value;
     }
 
     public IImmutableRaisedEventsBuilder<TAggregate, TEventBase> WithRaisedEventsFrom(
@@ -28,17 +30,18 @@ public class ImmutableAggregateTypeBuilder<TAggregate, TEventBase> :
     {
         if (commandReturnTypeBuilderAction == null)
             throw new ArgumentNullException(nameof(commandReturnTypeBuilderAction));
-        
-        var builder = new ImmutableCommandReturnTypeBuilder<TAggregate, TEventBase>(CommandReturnTypeBuilders, this);
+
+        var builder = new ImmutableCommandReturnTypeBuilder<TAggregate, TEventBase>(this);
         commandReturnTypeBuilderAction(builder);
+        Options = _options.WithCommandReturnTypes(builder.Options);
         return this;
     }
 
     void IImmutableRaisedEventsBuilder<TAggregate, TEventBase>.ApplyEventsWith(
         Func<TAggregate, TEventBase, TAggregate> eventApplier)
     {
-        EventApplier = eventApplier ?? throw new ArgumentNullException(nameof(eventApplier));
         _eventApplierBuilder = null;
+        Options = _options.WithEventApplier(eventApplier);
     }
 
     ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase>
@@ -46,17 +49,5 @@ public class ImmutableAggregateTypeBuilder<TAggregate, TEventBase> :
     {
         _eventApplierBuilder = new ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase>();
         return _eventApplierBuilder;
-    }
-
-    public override IImmutableAggregateType<TAggregate> Build()
-    {
-        return new ImmutableAggregateType<TAggregate, TEventBase>(
-            Factory,
-            IdSelector,
-            IdToStreamKeySelector,
-            IdToSnapshotKeySelector,
-            CommandReturnTypes,
-            EventTypes,
-            EventApplier);
     }
 }
