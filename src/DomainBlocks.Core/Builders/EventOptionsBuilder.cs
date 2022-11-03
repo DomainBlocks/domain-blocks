@@ -2,9 +2,9 @@ using System;
 
 namespace DomainBlocks.Core.Builders;
 
-public class EventTypeBuilder<TEvent, TEventBase> where TEvent : TEventBase
+public class EventOptionsBuilder<TEvent, TEventBase> where TEvent : TEventBase
 {
-    public EventType<TEvent, TEventBase> Options { get; private set; } = new();
+    public EventOptions<TEvent, TEventBase> Options { get; private set; } = new();
 
     public void HasName(string eventName)
     {

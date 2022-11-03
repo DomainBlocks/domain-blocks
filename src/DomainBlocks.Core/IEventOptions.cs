@@ -2,7 +2,7 @@ using System;
 
 namespace DomainBlocks.Core;
 
-public interface IEventType
+public interface IEventOptions
 {
     public Type ClrType { get; }
     public string EventName { get; }

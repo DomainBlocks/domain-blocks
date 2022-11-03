@@ -5,14 +5,14 @@ namespace DomainBlocks.Core;
 
 public class ImmutableCommandExecutionContext<TAggregate> : ICommandExecutionContext<TAggregate>
 {
-    private readonly IImmutableAggregateType<TAggregate> _aggregateType;
+    private readonly IImmutableAggregateOptions<TAggregate> _aggregateOptions;
     private readonly List<object> _raisedEvents = new();
 
     public ImmutableCommandExecutionContext(
-        TAggregate state, IImmutableAggregateType<TAggregate> aggregateType)
+        TAggregate state, IImmutableAggregateOptions<TAggregate> aggregateOptions)
     {
         State = state ?? throw new ArgumentNullException(nameof(state));
-        _aggregateType = aggregateType ?? throw new ArgumentNullException(nameof(aggregateType));
+        _aggregateOptions = aggregateOptions ?? throw new ArgumentNullException(nameof(aggregateOptions));
     }
 
     public TAggregate State { get; private set; }
@@ -21,8 +21,8 @@ public class ImmutableCommandExecutionContext<TAggregate> : ICommandExecutionCon
     public TCommandResult ExecuteCommand<TCommandResult>(Func<TAggregate, TCommandResult> commandExecutor)
     {
         var commandResult = commandExecutor(State);
-        var options = _aggregateType.GetCommandReturnType<TCommandResult>();
-        (var events, State) = options.SelectEventsAndUpdateState(commandResult, State, _aggregateType.EventApplier);
+        var options = _aggregateOptions.GetCommandResultOptions<TCommandResult>();
+        (var events, State) = options.SelectEventsAndUpdateState(commandResult, State, _aggregateOptions.EventApplier);
         _raisedEvents.AddRange(events);
 
         return commandResult;

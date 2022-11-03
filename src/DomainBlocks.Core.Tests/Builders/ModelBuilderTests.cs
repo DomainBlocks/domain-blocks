@@ -18,10 +18,10 @@ public class ModelBuilderTests
             })
             .Build();
 
-        var aggregateType = model.GetAggregateType<MutableAggregate1>();
+        var aggregateOptions = model.GetAggregateOptions<MutableAggregate1>();
 
         var aggregate = new MutableAggregate1();
-        var context = aggregateType.GetCommandExecutionContext(aggregate);
+        var context = aggregateOptions.GetCommandExecutionContext(aggregate);
 
         context.ExecuteCommand(x => x.Execute("value 1"));
         context.ExecuteCommand(x => x.Execute("value 2"));
@@ -43,10 +43,10 @@ public class ModelBuilderTests
             .Aggregate<MutableAggregate2, object>(aggregate =>
             {
                 aggregate
-                    .WithRaisedEventsFrom(commandReturnTypes =>
+                    .WithRaisedEventsFrom(commandResultOptions =>
                     {
-                        commandReturnTypes
-                            .CommandReturnType<IEnumerable<object>>()
+                        commandResultOptions
+                            .CommandResult<IEnumerable<object>>()
                             .WithEventsFrom(x => x)
                             .ApplyEventsWhileEnumerating();
                     })
@@ -56,10 +56,10 @@ public class ModelBuilderTests
             })
             .Build();
 
-        var aggregateType = model.GetAggregateType<MutableAggregate2>();
+        var aggregateOptions = model.GetAggregateOptions<MutableAggregate2>();
 
         var aggregate = new MutableAggregate2();
-        var context = aggregateType.GetCommandExecutionContext(aggregate);
+        var context = aggregateOptions.GetCommandExecutionContext(aggregate);
 
         context.ExecuteCommand(x => x.Execute("value"));
         var events = context.RaisedEvents.ToList();
@@ -82,10 +82,10 @@ public class ModelBuilderTests
             .ImmutableAggregate<ImmutableAggregate1, object>(aggregate =>
             {
                 aggregate
-                    .WithRaisedEventsFrom(commandReturnTypes =>
+                    .WithRaisedEventsFrom(commandResultOptions =>
                     {
-                        commandReturnTypes
-                            .CommandReturnType<IEnumerable<object>>()
+                        commandResultOptions
+                            .CommandResult<IEnumerable<object>>()
                             .WithEventsFrom(x => x)
                             .ApplyEvents();
                     })
@@ -95,10 +95,10 @@ public class ModelBuilderTests
             })
             .Build();
 
-        var aggregateType = model.GetAggregateType<ImmutableAggregate1>();
+        var aggregateOptions = model.GetAggregateOptions<ImmutableAggregate1>();
 
         var aggregate = new ImmutableAggregate1();
-        var context = aggregateType.GetCommandExecutionContext(aggregate);
+        var context = aggregateOptions.GetCommandExecutionContext(aggregate);
 
         context.ExecuteCommand(x => x.Execute("value"));
         var events = context.RaisedEvents.ToList();

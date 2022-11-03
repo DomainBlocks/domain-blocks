@@ -3,14 +3,14 @@ using System.Collections.Generic;
 
 namespace DomainBlocks.Core;
 
-public interface IAggregateType
+public interface IAggregateOptions
 {
     public Type ClrType { get; }
     public Type EventBaseType { get; }
-    public IEnumerable<IEventType> EventTypes { get; }
+    public IEnumerable<IEventOptions> EventOptions { get; }
 }
 
-public interface IAggregateType<TAggregate> : IAggregateType
+public interface IAggregateOptions<TAggregate> : IAggregateOptions
 {
     public Func<TAggregate> Factory { get; }
     public Func<TAggregate, string> IdSelector { get; }

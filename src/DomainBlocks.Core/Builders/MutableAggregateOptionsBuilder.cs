@@ -9,18 +9,18 @@ public interface IMutableRaisedEventsBuilder<TAggregate, TEventBase> where TEven
     public MutableConventionalEventApplierBuilder<TAggregate, TEventBase> ApplyEventsByConvention();
 }
 
-public class MutableAggregateTypeBuilder<TAggregate, TEventBase> :
-    AggregateTypeBuilderBase<TAggregate, TEventBase>,
+public class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
+    AggregateOptionsBuilderBase<TAggregate, TEventBase>,
     IMutableRaisedEventsBuilder<TAggregate, TEventBase>
     where TEventBase : class
 {
-    private MutableAggregateType<TAggregate, TEventBase> _options = new();
+    private MutableAggregateOptions<TAggregate, TEventBase> _options = new();
     private MutableConventionalEventApplierBuilder<TAggregate, TEventBase> _eventApplierBuilder;
 
-    protected override AggregateTypeBase<TAggregate, TEventBase> Options
+    protected override AggregateOptionsBase<TAggregate, TEventBase> Options
     {
         get => _eventApplierBuilder == null ? _options : _options.WithEventApplier(_eventApplierBuilder.Build());
-        set => _options = (MutableAggregateType<TAggregate, TEventBase>)value;
+        set => _options = (MutableAggregateOptions<TAggregate, TEventBase>)value;
     }
 
     public IMutableRaisedEventsBuilder<TAggregate, TEventBase> WithRaisedEventsFrom(
@@ -31,14 +31,14 @@ public class MutableAggregateTypeBuilder<TAggregate, TEventBase> :
     }
 
     public IMutableRaisedEventsBuilder<TAggregate, TEventBase> WithRaisedEventsFrom(
-        Action<MutableCommandReturnTypeBuilder<TAggregate, TEventBase>> commandReturnTypeBuilderAction)
+        Action<MutableCommandResultOptionsBuilder<TAggregate, TEventBase>> commandResultBuilderAction)
     {
-        if (commandReturnTypeBuilderAction == null)
-            throw new ArgumentNullException(nameof(commandReturnTypeBuilderAction));
+        if (commandResultBuilderAction == null)
+            throw new ArgumentNullException(nameof(commandResultBuilderAction));
 
-        var builder = new MutableCommandReturnTypeBuilder<TAggregate, TEventBase>();
-        commandReturnTypeBuilderAction(builder);
-        Options = _options.WithCommandReturnTypes(builder.Options);
+        var builder = new MutableCommandResultOptionsBuilder<TAggregate, TEventBase>();
+        commandResultBuilderAction(builder);
+        Options = _options.WithCommandResultOptions(builder.Options);
         return this;
     }
 

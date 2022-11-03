@@ -6,33 +6,33 @@ namespace DomainBlocks.Core.Builders;
 
 public class ModelBuilder
 {
-    private readonly List<IAggregateTypeBuilder> _aggregateTypeBuilders = new();
+    private readonly List<IAggregateOptionsBuilder> _aggregateOptionsBuilders = new();
 
     public ModelBuilder Aggregate<TAggregate, TEventBase>(
-        Action<MutableAggregateTypeBuilder<TAggregate, TEventBase>> builderAction) where TEventBase : class
+        Action<MutableAggregateOptionsBuilder<TAggregate, TEventBase>> builderAction) where TEventBase : class
     {
         if (builderAction == null) throw new ArgumentNullException(nameof(builderAction));
 
-        var builder = new MutableAggregateTypeBuilder<TAggregate, TEventBase>();
-        _aggregateTypeBuilders.Add(builder);
+        var builder = new MutableAggregateOptionsBuilder<TAggregate, TEventBase>();
+        _aggregateOptionsBuilders.Add(builder);
         builderAction(builder);
         return this;
     }
 
     public ModelBuilder ImmutableAggregate<TAggregate, TEventBase>(
-        Action<ImmutableAggregateTypeBuilder<TAggregate, TEventBase>> builderAction) where TEventBase : class
+        Action<ImmutableAggregateOptionsBuilder<TAggregate, TEventBase>> builderAction) where TEventBase : class
     {
         if (builderAction == null) throw new ArgumentNullException(nameof(builderAction));
 
-        var builder = new ImmutableAggregateTypeBuilder<TAggregate, TEventBase>();
-        _aggregateTypeBuilders.Add(builder);
+        var builder = new ImmutableAggregateOptionsBuilder<TAggregate, TEventBase>();
+        _aggregateOptionsBuilders.Add(builder);
         builderAction(builder);
         return this;
     }
 
     public Model Build()
     {
-        var aggregateTypes = _aggregateTypeBuilders.Select(x => x.Options);
-        return new Model(aggregateTypes);
+        var aggregateOptions = _aggregateOptionsBuilders.Select(x => x.Options);
+        return new Model(aggregateOptions);
     }
 }

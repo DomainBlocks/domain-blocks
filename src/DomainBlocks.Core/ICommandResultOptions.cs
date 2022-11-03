@@ -2,7 +2,7 @@ using System;
 
 namespace DomainBlocks.Core;
 
-public interface ICommandReturnType
+public interface ICommandResultOptions
 {
     public Type ClrType { get; }
 }

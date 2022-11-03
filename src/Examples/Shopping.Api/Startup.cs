@@ -50,7 +50,7 @@ public class Startup
                             .WithRaisedEventsFrom(commandReturnTypes =>
                             {
                                 commandReturnTypes
-                                    .CommandReturnType<IEnumerable<IDomainEvent>>()
+                                    .CommandResult<IEnumerable<IDomainEvent>>()
                                     .WithEventsFrom(x => x)
                                     .ApplyEvents();
                             })

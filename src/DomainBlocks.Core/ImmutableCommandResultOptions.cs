@@ -3,24 +3,24 @@ using System.Collections.Generic;
 
 namespace DomainBlocks.Core;
 
-public interface IImmutableCommandReturnType<TAggregate, in TCommandResult> : ICommandReturnType
+public interface IImmutableCommandResultOptions<TAggregate, in TCommandResult> : ICommandResultOptions
 {
     public (IEnumerable<object>, TAggregate) SelectEventsAndUpdateState(
         TCommandResult commandResult, TAggregate state, Func<TAggregate, object, TAggregate> eventApplier);
 }
 
-public class ImmutableCommandReturnType<TAggregate, TEventBase, TCommandResult>
-    : IImmutableCommandReturnType<TAggregate, TCommandResult> where TEventBase : class
+public class ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult>
+    : IImmutableCommandResultOptions<TAggregate, TCommandResult> where TEventBase : class
 {
     private Func<TCommandResult, IEnumerable<TEventBase>> _eventsSelector;
     private Func<TCommandResult, TAggregate> _updatedStateSelector;
 
-    public ImmutableCommandReturnType()
+    public ImmutableCommandResultOptions()
     {
     }
     
-    private ImmutableCommandReturnType(
-        ImmutableCommandReturnType<TAggregate, TEventBase, TCommandResult> copyFrom)
+    private ImmutableCommandResultOptions(
+        ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> copyFrom)
     {
         _eventsSelector = copyFrom._eventsSelector;
         _updatedStateSelector = copyFrom._updatedStateSelector;
@@ -28,27 +28,27 @@ public class ImmutableCommandReturnType<TAggregate, TEventBase, TCommandResult>
 
     public Type ClrType => typeof(TCommandResult);
 
-    public ImmutableCommandReturnType<TAggregate, TEventBase, TCommandResult> WithEventSelector(
+    public ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> WithEventSelector(
         Func<TCommandResult, IEnumerable<TEventBase>> eventsSelector)
     {
-        return new ImmutableCommandReturnType<TAggregate, TEventBase, TCommandResult>(this)
+        return new ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult>(this)
         {
             _eventsSelector = eventsSelector
         };
     }
     
-    public ImmutableCommandReturnType<TAggregate, TEventBase, TCommandResult> WithUpdatedStateSelector(
+    public ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> WithUpdatedStateSelector(
         Func<TCommandResult, TAggregate> updatedStateSelector)
     {
-        return new ImmutableCommandReturnType<TAggregate, TEventBase, TCommandResult>(this)
+        return new ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult>(this)
         {
             _updatedStateSelector = updatedStateSelector
         };
     }
     
-    public ImmutableCommandReturnType<TAggregate, TEventBase, TCommandResult> WithUpdatedStateFromEvents()
+    public ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> WithUpdatedStateFromEvents()
     {
-        return new ImmutableCommandReturnType<TAggregate, TEventBase, TCommandResult>(this)
+        return new ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult>(this)
         {
             _updatedStateSelector = null
         };

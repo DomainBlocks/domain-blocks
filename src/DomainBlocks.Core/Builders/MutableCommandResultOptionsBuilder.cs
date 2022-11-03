@@ -10,27 +10,26 @@ public interface IApplyRaisedEventsBehaviorBuilder
     public void ApplyEventsWhileEnumerating();
 }
 
-public class MutableCommandReturnTypeBuilder<TAggregate, TEventBase> where TEventBase : class
+public class MutableCommandResultOptionsBuilder<TAggregate, TEventBase> where TEventBase : class
 {
-    private readonly List<ICommandReturnTypeBuilder> _builders = new();
+    private readonly List<ICommandResultOptionsBuilder> _builders = new();
 
-    internal IEnumerable<ICommandReturnType> Options => _builders.Select(x => x.Options);
+    internal IEnumerable<ICommandResultOptions> Options => _builders.Select(x => x.Options);
 
-    public MutableCommandReturnTypeBuilder<TAggregate, TEventBase, TCommandResult>
-        CommandReturnType<TCommandResult>()
+    public MutableCommandResultOptionsBuilder<TAggregate, TEventBase, TCommandResult> CommandResult<TCommandResult>()
     {
-        var builder = new MutableCommandReturnTypeBuilder<TAggregate, TEventBase, TCommandResult>();
+        var builder = new MutableCommandResultOptionsBuilder<TAggregate, TEventBase, TCommandResult>();
         _builders.Add(builder);
         return builder;
     }
 }
 
-public class MutableCommandReturnTypeBuilder<TAggregate, TEventBase, TCommandResult> :
-    ICommandReturnTypeBuilder, IApplyRaisedEventsBehaviorBuilder where TEventBase : class
+public class MutableCommandResultOptionsBuilder<TAggregate, TEventBase, TCommandResult> :
+    ICommandResultOptionsBuilder, IApplyRaisedEventsBehaviorBuilder where TEventBase : class
 {
-    private MutableCommandReturnType<TAggregate, TEventBase, TCommandResult> _options = new();
+    private MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> _options = new();
 
-    public ICommandReturnType Options => _options;
+    public ICommandResultOptions Options => _options;
 
     public IApplyRaisedEventsBehaviorBuilder WithEventsFrom(
         Func<TCommandResult, IEnumerable<TEventBase>> eventsSelector)

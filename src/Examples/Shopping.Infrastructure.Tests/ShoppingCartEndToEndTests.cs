@@ -110,7 +110,7 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
                     .WithRaisedEventsFrom(commandReturnTypes =>
                     {
                         commandReturnTypes
-                            .CommandReturnType<IEnumerable<IDomainEvent>>()
+                            .CommandResult<IEnumerable<IDomainEvent>>()
                             .WithEventsFrom(x => x)
                             .ApplyEvents();
                     })

@@ -5,9 +5,9 @@ using System.Reflection;
 
 namespace DomainBlocks.Core.Builders;
 
-public interface IAggregateTypeBuilder
+public interface IAggregateOptionsBuilder
 {
-    public IAggregateType Options { get; }
+    public IAggregateOptions Options { get; }
 }
 
 public interface IIdSelectorBuilder<out TAggregate>
@@ -25,23 +25,23 @@ public interface IIdToSnapshotKeySelectorBuilder
     public void WithSnapshotKey(Func<string, string> idToSnapshotKeySelector);
 }
 
-public abstract class AggregateTypeBuilderBase<TAggregate, TEventBase> :
-    IAggregateTypeBuilder,
+public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
+    IAggregateOptionsBuilder,
     IIdSelectorBuilder<TAggregate>,
     IIdToStreamKeySelectorBuilder,
     IIdToSnapshotKeySelectorBuilder
     where TEventBase : class
 {
-    private readonly List<Func<IEnumerable<IEventType>>> _eventTypeBuilders = new();
+    private readonly List<Func<IEnumerable<IEventOptions>>> _eventOptionsFactories = new();
     
-    protected abstract AggregateTypeBase<TAggregate, TEventBase> Options { get; set; }
+    protected abstract AggregateOptionsBase<TAggregate, TEventBase> Options { get; set; }
 
-    IAggregateType IAggregateTypeBuilder.Options
+    IAggregateOptions IAggregateOptionsBuilder.Options
     {
         get
         {
-            var eventTypeOptions = _eventTypeBuilders.SelectMany(x => x());
-            var options = Options.WithEventTypes(eventTypeOptions);
+            var eventOptions = _eventOptionsFactories.SelectMany(x => x());
+            var options = Options.WithEventOptions(eventOptions);
             return options;
         }
     }
@@ -74,17 +74,22 @@ public abstract class AggregateTypeBuilderBase<TAggregate, TEventBase> :
         Options = Options.WithIdToSnapshotKeySelector(idToSnapshotKeySelector);
     }
 
-    public EventTypeBuilder<TEvent, TEventBase> Event<TEvent>() where TEvent : TEventBase
+    public EventOptionsBuilder<TEvent, TEventBase> Event<TEvent>() where TEvent : TEventBase
     {
-        var builder = new EventTypeBuilder<TEvent, TEventBase>();
-        _eventTypeBuilders.Add(() => new[] { builder.Options });
+        var builder = new EventOptionsBuilder<TEvent, TEventBase>();
+        _eventOptionsFactories.Add(GetOptions);
         return builder;
+
+        IEnumerable<IEventOptions> GetOptions()
+        {
+            yield return builder.Options;
+        }
     }
 
-    public AssemblyEventTypeBuilder<TEventBase> Events(Assembly assembly)
+    public AssemblyEventOptionsBuilder<TEventBase> Events(Assembly assembly)
     {
-        var builder = new AssemblyEventTypeBuilder<TEventBase>(assembly);
-        _eventTypeBuilders.Add(() => builder.Build());
+        var builder = new AssemblyEventOptionsBuilder<TEventBase>(assembly);
+        _eventOptionsFactories.Add(() => builder.Build());
         return builder;
     }
 }

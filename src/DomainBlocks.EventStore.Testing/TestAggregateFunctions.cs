@@ -21,7 +21,7 @@ public static class TestAggregateFunctions
                     .WithRaisedEventsFrom(commandReturnTypes =>
                     {
                         commandReturnTypes
-                            .CommandReturnType<IEnumerable<object>>()
+                            .CommandResult<IEnumerable<object>>()
                             .WithEventsFrom(x => x)
                             .ApplyEvents();
                     })

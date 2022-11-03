@@ -4,23 +4,23 @@ using System.Linq;
 
 namespace DomainBlocks.Core;
 
-public interface IMutableCommandReturnType<TAggregate, in TCommandResult> : ICommandReturnType
+public interface IMutableCommandResultOptions<TAggregate, in TCommandResult> : ICommandResultOptions
 {
     public IEnumerable<object> SelectEventsAndUpdateState(
         TCommandResult commandResult, TAggregate state, Action<TAggregate, object> eventApplier);
 }
 
-public class MutableCommandReturnType<TAggregate, TEventBase, TCommandResult>
-    : IMutableCommandReturnType<TAggregate, TCommandResult> where TEventBase : class
+public class MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult>
+    : IMutableCommandResultOptions<TAggregate, TCommandResult> where TEventBase : class
 {
     private ApplyRaisedEventsBehavior _applyRaisedEventsBehavior;
     private Func<TCommandResult, IEnumerable<TEventBase>> _eventsSelector;
 
-    public MutableCommandReturnType()
+    public MutableCommandResultOptions()
     {
     }
-    
-    private MutableCommandReturnType(MutableCommandReturnType<TAggregate, TEventBase, TCommandResult> copyFrom)
+
+    private MutableCommandResultOptions(MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> copyFrom)
     {
         _applyRaisedEventsBehavior = copyFrom._applyRaisedEventsBehavior;
         _eventsSelector = copyFrom._eventsSelector;
@@ -28,19 +28,19 @@ public class MutableCommandReturnType<TAggregate, TEventBase, TCommandResult>
 
     public Type ClrType => typeof(TCommandResult);
 
-    public MutableCommandReturnType<TAggregate, TEventBase, TCommandResult> WithApplyRaisedEventsBehavior(
+    public MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> WithApplyRaisedEventsBehavior(
         ApplyRaisedEventsBehavior behavior)
     {
-        return new MutableCommandReturnType<TAggregate, TEventBase, TCommandResult>(this)
+        return new MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult>(this)
         {
             _applyRaisedEventsBehavior = behavior
         };
     }
-    
-    public MutableCommandReturnType<TAggregate, TEventBase, TCommandResult> WithEventsSelector(
+
+    public MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> WithEventsSelector(
         Func<TCommandResult, IEnumerable<TEventBase>> eventsSelector)
     {
-        return new MutableCommandReturnType<TAggregate, TEventBase, TCommandResult>(this)
+        return new MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult>(this)
         {
             _eventsSelector = eventsSelector
         };

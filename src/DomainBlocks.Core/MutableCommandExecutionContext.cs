@@ -5,13 +5,13 @@ namespace DomainBlocks.Core;
 
 public class MutableCommandExecutionContext<TAggregate> : ICommandExecutionContext<TAggregate>
 {
-    private readonly IMutableAggregateType<TAggregate> _aggregateType;
+    private readonly IMutableAggregateOptions<TAggregate> _aggregateOptions;
     private readonly List<object> _raisedEvents = new();
 
-    public MutableCommandExecutionContext(TAggregate state, IMutableAggregateType<TAggregate> aggregateType)
+    public MutableCommandExecutionContext(TAggregate state, IMutableAggregateOptions<TAggregate> aggregateOptions)
     {
         State = state ?? throw new ArgumentNullException(nameof(state));
-        _aggregateType = aggregateType ?? throw new ArgumentNullException(nameof(aggregateType));
+        _aggregateOptions = aggregateOptions ?? throw new ArgumentNullException(nameof(aggregateOptions));
     }
 
     public TAggregate State { get; }
@@ -21,17 +21,17 @@ public class MutableCommandExecutionContext<TAggregate> : ICommandExecutionConte
     {
         var commandResult = commandExecutor(State);
 
-        if (_aggregateType.CanSelectRaisedEventsFromAggregate)
+        if (_aggregateOptions.CanSelectRaisedEventsFromAggregate)
         {
-            var raisedEvents = _aggregateType.SelectRaisedEvents(State);
+            var raisedEvents = _aggregateOptions.SelectRaisedEvents(State);
             _raisedEvents.Clear();
             _raisedEvents.AddRange(raisedEvents);
         }
         else
         {
-            var commandReturnType = _aggregateType.GetCommandReturnType<TCommandResult>();
+            var commandReturnType = _aggregateOptions.GetCommandResultOptions<TCommandResult>();
             var raisedEvents =
-                commandReturnType.SelectEventsAndUpdateState(commandResult, State, _aggregateType.EventApplier);
+                commandReturnType.SelectEventsAndUpdateState(commandResult, State, _aggregateOptions.EventApplier);
             _raisedEvents.AddRange(raisedEvents);
         }
 
@@ -42,13 +42,13 @@ public class MutableCommandExecutionContext<TAggregate> : ICommandExecutionConte
     {
         commandExecutor(State);
         
-        if (!_aggregateType.CanSelectRaisedEventsFromAggregate)
+        if (!_aggregateOptions.CanSelectRaisedEventsFromAggregate)
         {
             throw new InvalidOperationException(
                 "Cannot execute void command. Aggregate has no raised events selector specified.");
         }
 
-        var raisedEvents = _aggregateType.SelectRaisedEvents(State);
+        var raisedEvents = _aggregateOptions.SelectRaisedEvents(State);
         _raisedEvents.Clear();
         _raisedEvents.AddRange(raisedEvents);
     }

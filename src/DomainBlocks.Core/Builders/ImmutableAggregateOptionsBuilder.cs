@@ -8,29 +8,29 @@ public interface IImmutableRaisedEventsBuilder<TAggregate, TEventBase> where TEv
     public ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase> ApplyEventsByConvention();
 }
 
-public class ImmutableAggregateTypeBuilder<TAggregate, TEventBase> :
-    AggregateTypeBuilderBase<TAggregate, TEventBase>,
+public class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
+    AggregateOptionsBuilderBase<TAggregate, TEventBase>,
     IImmutableRaisedEventsBuilder<TAggregate, TEventBase>
     where TEventBase : class
 {
-    private ImmutableAggregateType<TAggregate, TEventBase> _options = new();
+    private ImmutableAggregateOptions<TAggregate, TEventBase> _options = new();
     private ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase> _eventApplierBuilder;
 
-    protected override AggregateTypeBase<TAggregate, TEventBase> Options
+    protected override AggregateOptionsBase<TAggregate, TEventBase> Options
     {
         get => _eventApplierBuilder == null ? _options : _options.WithEventApplier(_eventApplierBuilder.Build());
-        set => _options = (ImmutableAggregateType<TAggregate, TEventBase>)value;
+        set => _options = (ImmutableAggregateOptions<TAggregate, TEventBase>)value;
     }
 
     public IImmutableRaisedEventsBuilder<TAggregate, TEventBase> WithRaisedEventsFrom(
-        Action<ImmutableCommandReturnTypeBuilder<TAggregate, TEventBase>> commandReturnTypeBuilderAction)
+        Action<ImmutableCommandResultOptionsBuilder<TAggregate, TEventBase>> commandResultBuilderAction)
     {
-        if (commandReturnTypeBuilderAction == null)
-            throw new ArgumentNullException(nameof(commandReturnTypeBuilderAction));
+        if (commandResultBuilderAction == null)
+            throw new ArgumentNullException(nameof(commandResultBuilderAction));
 
-        var builder = new ImmutableCommandReturnTypeBuilder<TAggregate, TEventBase>();
-        commandReturnTypeBuilderAction(builder);
-        Options = _options.WithCommandReturnTypes(builder.Options);
+        var builder = new ImmutableCommandResultOptionsBuilder<TAggregate, TEventBase>();
+        commandResultBuilderAction(builder);
+        Options = _options.WithCommandResultOptions(builder.Options);
         return this;
     }
 

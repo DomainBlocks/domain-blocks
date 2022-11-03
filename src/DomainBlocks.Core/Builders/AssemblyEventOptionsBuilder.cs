@@ -5,12 +5,12 @@ using System.Reflection;
 
 namespace DomainBlocks.Core.Builders;
 
-public class AssemblyEventTypeBuilder<TEventBase>
+public class AssemblyEventOptionsBuilder<TEventBase>
 {
     private readonly Assembly _assembly;
     private Type _filterBaseType;
 
-    public AssemblyEventTypeBuilder(Assembly assembly)
+    public AssemblyEventOptionsBuilder(Assembly assembly)
     {
         _assembly = assembly;
     }
@@ -20,7 +20,7 @@ public class AssemblyEventTypeBuilder<TEventBase>
         _filterBaseType = typeof(TFilterBaseType);
     }
 
-    public IEnumerable<IEventType> Build()
+    public IEnumerable<IEventOptions> Build()
     {
         if (_assembly == null) throw new ArgumentNullException(nameof(_assembly));
 
@@ -50,15 +50,14 @@ public class AssemblyEventTypeBuilder<TEventBase>
             }
         }
 
-        var eventTypes = eventClrTypes
+        var eventOptions = eventClrTypes
             .Select(eventClrType =>
             {
                 var typeArgs = new[] { eventClrType, typeof(TEventBase) };
-                var eventTypeClrType = typeof(EventType<,>).MakeGenericType(typeArgs);
-                var eventType = (IEventType)Activator.CreateInstance(eventTypeClrType);
-                return eventType;
+                var eventTypeClrType = typeof(EventOptions<,>).MakeGenericType(typeArgs);
+                return (IEventOptions)Activator.CreateInstance(eventTypeClrType);
             });
 
-        return eventTypes;
+        return eventOptions;
     }
 }
