@@ -37,29 +37,25 @@ public class Startup
             },
             modelBuilder =>
             {
-                modelBuilder
-                    .ImmutableAggregate<ShoppingCartState, IDomainEvent>(aggregate =>
-                    {
-                        aggregate
-                            .InitialState(() => new ShoppingCartState())
-                            .HasId(x => x.Id?.ToString())
-                            .WithStreamKey(id => $"shoppingCart-{id}")
-                            .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");
+                modelBuilder.ImmutableAggregate<ShoppingCartState, IDomainEvent>(aggregate =>
+                {
+                    aggregate
+                        .InitialState(() => new ShoppingCartState())
+                        .HasId(x => x.Id?.ToString())
+                        .WithStreamKey(id => $"shoppingCart-{id}")
+                        .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");
 
-                        aggregate
-                            .WithRaisedEventsFrom(commandReturnTypes =>
-                            {
-                                commandReturnTypes
-                                    .CommandResult<IEnumerable<IDomainEvent>>()
-                                    .WithEventsFrom(x => x)
-                                    .ApplyEvents();
-                            })
-                            .ApplyEventsWith(ShoppingCartFunctions.Apply);
+                    aggregate
+                        .CommandResult<IEnumerable<IDomainEvent>>()
+                        .WithEventsFrom(x => x)
+                        .ApplyEvents();
 
-                        aggregate.Event<ShoppingCartCreated>().HasName(ShoppingCartCreated.EventName);
-                        aggregate.Event<ItemAddedToShoppingCart>().HasName(ItemAddedToShoppingCart.EventName);
-                        aggregate.Event<ItemRemovedFromShoppingCart>().HasName(ItemRemovedFromShoppingCart.EventName);
-                    });
+                    aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
+
+                    aggregate.Event<ShoppingCartCreated>().HasName(ShoppingCartCreated.EventName);
+                    aggregate.Event<ItemAddedToShoppingCart>().HasName(ItemAddedToShoppingCart.EventName);
+                    aggregate.Event<ItemRemovedFromShoppingCart>().HasName(ItemRemovedFromShoppingCart.EventName);
+                });
             });
     }
 

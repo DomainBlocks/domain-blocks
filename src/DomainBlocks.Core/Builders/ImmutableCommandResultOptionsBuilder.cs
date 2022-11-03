@@ -1,28 +1,14 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace DomainBlocks.Core.Builders;
 
 public interface IImmutableCommandResultUpdatedStateSelectorBuilder<in TAggregate, out TCommandResult>
 {
     public void WithUpdatedStateFrom(Func<TCommandResult, TAggregate> updatedStateSelector);
+    
+    // TODO: should this be the default behaviour?
     public void ApplyEvents();
-}
-
-public class ImmutableCommandResultOptionsBuilder<TAggregate, TEventBase> where TEventBase : class
-{
-    private readonly List<ICommandResultOptionsBuilder> _builders = new();
-
-    internal IEnumerable<ICommandResultOptions> Options => _builders.Select(x => x.Options);
-
-    public ImmutableCommandResultOptionsBuilder<TAggregate, TEventBase, TCommandResult>
-        CommandResult<TCommandResult>()
-    {
-        var builder = new ImmutableCommandResultOptionsBuilder<TAggregate, TEventBase, TCommandResult>();
-        _builders.Add(builder);
-        return builder;
-    }
 }
 
 public class ImmutableCommandResultOptionsBuilder<TAggregate, TEventBase, TCommandResult> :

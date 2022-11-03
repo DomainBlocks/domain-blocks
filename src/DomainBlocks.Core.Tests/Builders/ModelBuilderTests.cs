@@ -43,13 +43,11 @@ public class ModelBuilderTests
             .Aggregate<MutableAggregate2, object>(aggregate =>
             {
                 aggregate
-                    .WithRaisedEventsFrom(commandResultOptions =>
-                    {
-                        commandResultOptions
-                            .CommandResult<IEnumerable<object>>()
-                            .WithEventsFrom(x => x)
-                            .ApplyEventsWhileEnumerating();
-                    })
+                    .CommandResult<IEnumerable<object>>()
+                    .WithEventsFrom(x => x)
+                    .ApplyEventsWhileEnumerating();
+                
+                aggregate
                     .ApplyEventsByConvention()
                     .FromMethodName(nameof(MutableAggregate2.Apply))
                     .IncludeNonPublicMethods();
@@ -82,13 +80,11 @@ public class ModelBuilderTests
             .ImmutableAggregate<ImmutableAggregate1, object>(aggregate =>
             {
                 aggregate
-                    .WithRaisedEventsFrom(commandResultOptions =>
-                    {
-                        commandResultOptions
-                            .CommandResult<IEnumerable<object>>()
-                            .WithEventsFrom(x => x)
-                            .ApplyEvents();
-                    })
+                    .CommandResult<IEnumerable<object>>()
+                    .WithEventsFrom(x => x)
+                    .ApplyEvents();
+
+                aggregate
                     .ApplyEventsByConvention()
                     .FromMethodName(nameof(ImmutableAggregate1.Apply))
                     .IncludeNonPublicMethods();

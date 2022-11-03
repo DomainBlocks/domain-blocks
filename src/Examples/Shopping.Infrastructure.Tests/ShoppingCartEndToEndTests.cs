@@ -107,14 +107,11 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
                     .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");
 
                 aggregate
-                    .WithRaisedEventsFrom(commandReturnTypes =>
-                    {
-                        commandReturnTypes
-                            .CommandResult<IEnumerable<IDomainEvent>>()
-                            .WithEventsFrom(x => x)
-                            .ApplyEvents();
-                    })
-                    .ApplyEventsWith(ShoppingCartFunctions.Apply);
+                    .CommandResult<IEnumerable<IDomainEvent>>()
+                    .WithEventsFrom(x => x)
+                    .ApplyEvents();
+
+                aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
 
                 aggregate.Event<ShoppingCartCreated>().HasName(ShoppingCartCreated.EventName);
                 aggregate.Event<ItemAddedToShoppingCart>().HasName(ItemAddedToShoppingCart.EventName);

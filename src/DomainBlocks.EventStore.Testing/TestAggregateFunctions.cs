@@ -8,27 +8,23 @@ public static class TestAggregateFunctions
 {
     public static void BuildModel(ModelBuilder builder, Guid aggregateId)
     {
-        builder
-            .ImmutableAggregate<TestAggregateState, object>(aggregate =>
-            {
-                aggregate
-                    .InitialState(() => new TestAggregateState(aggregateId, 0))
-                    .HasId(x => x.Id.ToString())
-                    .WithStreamKey(id => $"testAggregate-{id}")
-                    .WithSnapshotKey(id => $"testAggregateSnapshot-{id}");
+        builder.ImmutableAggregate<TestAggregateState, object>(aggregate =>
+        {
+            aggregate
+                .InitialState(() => new TestAggregateState(aggregateId, 0))
+                .HasId(x => x.Id.ToString())
+                .WithStreamKey(id => $"testAggregate-{id}")
+                .WithSnapshotKey(id => $"testAggregateSnapshot-{id}");
 
-                aggregate
-                    .WithRaisedEventsFrom(commandReturnTypes =>
-                    {
-                        commandReturnTypes
-                            .CommandResult<IEnumerable<object>>()
-                            .WithEventsFrom(x => x)
-                            .ApplyEvents();
-                    })
-                    .ApplyEventsWith((agg, e) => Apply(agg, (dynamic)e));
+            aggregate
+                .CommandResult<IEnumerable<object>>()
+                .WithEventsFrom(x => x)
+                .ApplyEvents();
 
-                aggregate.Event<TestEvent>();
-            });
+            aggregate.ApplyEventsWith((agg, e) => Apply(agg, (dynamic)e));
+
+            aggregate.Event<TestEvent>();
+        });
     }
 
     public static IEnumerable<object> Execute(TestCommand command)
