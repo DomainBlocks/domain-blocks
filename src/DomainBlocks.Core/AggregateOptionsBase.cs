@@ -113,15 +113,6 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         return clone;
     }
 
-    public AggregateOptionsBase<TAggregate, TEventBase> WithEventOptions(IEventOptions eventOptions)
-    {
-        if (eventOptions == null) throw new ArgumentNullException(nameof(eventOptions));
-
-        var clone = Clone();
-        clone._eventsOptions[eventOptions.ClrType] = eventOptions;
-        return clone;
-    }
-
     public AggregateOptionsBase<TAggregate, TEventBase> WithEventsOptions(IEnumerable<IEventOptions> eventsOptions)
     {
         if (eventsOptions == null) throw new ArgumentNullException(nameof(eventsOptions));
