@@ -1,5 +1,4 @@
-﻿using System.Collections.Generic;
-using DomainBlocks.Persistence.AspNetCore;
+﻿using DomainBlocks.Persistence.AspNetCore;
 using DomainBlocks.Persistence.SqlStreamStore.AspNetCore;
 using DomainBlocks.Serialization.Json.AspNetCore;
 using MediatR;
@@ -45,15 +44,9 @@ public class Startup
                         .WithStreamKey(id => $"shoppingCart-{id}")
                         .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");
 
-                    aggregate
-                        .CommandResult<IEnumerable<IDomainEvent>>()
-                        .WithEventsFrom(x => x);
-
                     aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
 
-                    aggregate.Event<ShoppingCartCreated>().HasName(ShoppingCartCreated.EventName);
-                    aggregate.Event<ItemAddedToShoppingCart>().HasName(ItemAddedToShoppingCart.EventName);
-                    aggregate.Event<ItemRemovedFromShoppingCart>().HasName(ItemRemovedFromShoppingCart.EventName);
+                    aggregate.UseEventTypesFrom(typeof(IDomainEvent).Assembly);
                 });
             });
     }

@@ -12,7 +12,7 @@ public class AssemblyEventTypeBuilderTests
     public void BuildFindsRelevantEventTypes()
     {
         var builder = new AssemblyEventOptionsBuilder<IEvent1>(typeof(IEvent1).Assembly);
-        builder.FilterByBaseType<IFilterType1>();
+        builder.Where(x => x.IsAssignableTo(typeof(IFilterType1)));
         var eventTypes = builder.Build().ToList();
 
         Assert.That(eventTypes, Has.Count.EqualTo(2));
@@ -21,7 +21,7 @@ public class AssemblyEventTypeBuilderTests
         Assert.That(eventTypes[1].ClrType, Is.EqualTo(typeof(Event2)));
         Assert.That(eventTypes[1].EventName, Is.EqualTo(nameof(Event2)));
     }
-    
+
     [Test]
     public void BuildThrowsExceptionWhenNoEventsFound()
     {
@@ -33,7 +33,7 @@ public class AssemblyEventTypeBuilderTests
     public void BuildThrowsExceptionWhenNoEventsWithFilterBaseTypeFound()
     {
         var builder = new AssemblyEventOptionsBuilder<IEvent1>(typeof(IEvent1).Assembly);
-        builder.FilterByBaseType<IFilterType2>();
+        builder.Where(x => x.IsAssignableTo(typeof(IFilterType2)));
         Assert.Throws<InvalidOperationException>(() => builder.Build());
     }
 
@@ -53,20 +53,21 @@ public class AssemblyEventTypeBuilderTests
     {
     }
 
-    // Abstract class should be ignored
+    // ReSharper disable once UnusedType.Global
     public abstract class Event3 : IEvent1, IFilterType1
     {
     }
 
     // Event type without filtering base type should be ignored
+    // ReSharper disable once UnusedType.Local
     private class Event4 : IEvent1
     {
     }
-    
+
     private interface IEvent2
     {
     }
-    
+
     private interface IFilterType2
     {
     }

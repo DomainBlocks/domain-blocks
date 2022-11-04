@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using DomainBlocks.Core.Builders;
@@ -29,15 +28,9 @@ public class ShoppingCartInfrastructureTests : EventStoreIntegrationTest
                     .WithStreamKey(id => $"shoppingCart-{id}")
                     .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");
 
-                aggregate
-                    .CommandResult<IEnumerable<IDomainEvent>>()
-                    .WithEventsFrom(x => x);
-
                 aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
 
-                aggregate.Event<ShoppingCartCreated>().HasName(ShoppingCartCreated.EventName);
-                aggregate.Event<ItemAddedToShoppingCart>().HasName(ItemAddedToShoppingCart.EventName);
-                aggregate.Event<ItemRemovedFromShoppingCart>().HasName(ItemRemovedFromShoppingCart.EventName);
+                aggregate.UseEventTypesFrom(typeof(IDomainEvent).Assembly);
             })
             .Build();
 

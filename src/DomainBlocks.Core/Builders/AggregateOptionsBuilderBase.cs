@@ -82,7 +82,7 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
         }
     }
 
-    public AssemblyEventOptionsBuilder<TEventBase> Events(Assembly assembly)
+    public AssemblyEventOptionsBuilder<TEventBase> UseEventTypesFrom(Assembly assembly)
     {
         var builder = new AssemblyEventOptionsBuilder<TEventBase>(assembly);
         _eventsOptionsFactories.Add(() => builder.Build());
