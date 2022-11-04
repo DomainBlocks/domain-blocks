@@ -4,16 +4,8 @@ using System.Linq;
 
 namespace DomainBlocks.Core.Builders;
 
-public interface IImmutableRaisedEventsBuilder<TAggregate, TEventBase> where TEventBase : class
-{
-    public void ApplyEventsWith(Func<TAggregate, TEventBase, TAggregate> eventApplier);
-    public ImmutableReflectionEventApplierBuilder<TAggregate, TEventBase> DiscoverEventApplierMethods();
-}
-
 public class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
-    AggregateOptionsBuilderBase<TAggregate, TEventBase>,
-    IImmutableRaisedEventsBuilder<TAggregate, TEventBase>
-    where TEventBase : class
+    AggregateOptionsBuilderBase<TAggregate, TEventBase> where TEventBase : class
 {
     private ImmutableAggregateOptions<TAggregate, TEventBase> _options = new();
     private readonly List<ICommandResultOptionsBuilder> _commandResultOptionsBuilders = new();
