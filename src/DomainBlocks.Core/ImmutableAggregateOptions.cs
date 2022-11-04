@@ -6,8 +6,7 @@ public interface IImmutableAggregateOptions<TAggregate> : IAggregateOptions<TAgg
 }
 
 public class ImmutableAggregateOptions<TAggregate, TEventBase> :
-    AggregateOptionsBase<TAggregate, TEventBase>,
-    IImmutableAggregateOptions<TAggregate>
+    AggregateOptionsBase<TAggregate, TEventBase>, IImmutableAggregateOptions<TAggregate>
 {
     public ImmutableAggregateOptions()
     {
@@ -17,16 +16,15 @@ public class ImmutableAggregateOptions<TAggregate, TEventBase> :
     {
     }
 
-    public override ICommandExecutionContext<TAggregate> GetCommandExecutionContext(TAggregate aggregate)
+    public override ICommandExecutionContext<TAggregate> CreateCommandExecutionContext(TAggregate aggregate)
     {
         return new ImmutableCommandExecutionContext<TAggregate>(aggregate, this);
     }
 
-    public new IImmutableCommandResultOptions<TAggregate, TCommandResult>
-        GetCommandResultOptions<TCommandResult>()
+    public new IImmutableCommandResultOptions<TAggregate, TCommandResult> GetCommandResultOptions<TCommandResult>()
     {
-        return (IImmutableCommandResultOptions<TAggregate, TCommandResult>)base
-            .GetCommandResultOptions<TCommandResult>();
+        var commandResultOptions = base.GetCommandResultOptions<TCommandResult>();
+        return (IImmutableCommandResultOptions<TAggregate, TCommandResult>)commandResultOptions;
     }
 
     protected override ImmutableAggregateOptions<TAggregate, TEventBase> Clone()

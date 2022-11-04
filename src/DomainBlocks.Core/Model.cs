@@ -6,19 +6,19 @@ namespace DomainBlocks.Core;
 
 public class Model
 {
-    private readonly IReadOnlyDictionary<Type, IAggregateOptions> _aggregateOptions;
+    private readonly IReadOnlyDictionary<Type, IAggregateOptions> _aggregatesOptions;
     private readonly EventNameMap _eventNameMap;
 
     public Model(IEnumerable<IAggregateOptions> aggregateOptions)
     {
-        _aggregateOptions = aggregateOptions.ToDictionary(x => x.ClrType);
+        _aggregatesOptions = aggregateOptions.ToDictionary(x => x.ClrType);
 
         // Build event name map from all aggregate options.
-        var allEventOptions = _aggregateOptions.Values.SelectMany(x => x.EventOptions);
+        var allEventsOptions = _aggregatesOptions.Values.SelectMany(x => x.EventsOptions);
         _eventNameMap = new EventNameMap();
-        foreach (var eventType in allEventOptions)
+        foreach (var eventOptions in allEventsOptions)
         {
-            _eventNameMap.Add(eventType.EventName, eventType.ClrType);
+            _eventNameMap.Add(eventOptions.EventName, eventOptions.ClrType);
         }
     }
 
@@ -26,6 +26,6 @@ public class Model
     
     public IAggregateOptions<TAggregate> GetAggregateOptions<TAggregate>()
     {
-        return (IAggregateOptions<TAggregate>)_aggregateOptions[typeof(TAggregate)];
+        return (IAggregateOptions<TAggregate>)_aggregatesOptions[typeof(TAggregate)];
     }
 }

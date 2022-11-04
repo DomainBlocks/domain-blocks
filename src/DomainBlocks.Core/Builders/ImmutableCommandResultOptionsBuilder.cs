@@ -6,9 +6,6 @@ namespace DomainBlocks.Core.Builders;
 public interface IImmutableCommandResultUpdatedStateSelectorBuilder<in TAggregate, out TCommandResult>
 {
     public void WithUpdatedStateFrom(Func<TCommandResult, TAggregate> updatedStateSelector);
-    
-    // TODO: should this be the default behaviour?
-    public void ApplyEvents();
 }
 
 public class ImmutableCommandResultOptionsBuilder<TAggregate, TEventBase, TCommandResult> :
@@ -23,7 +20,7 @@ public class ImmutableCommandResultOptionsBuilder<TAggregate, TEventBase, TComma
     public IImmutableCommandResultUpdatedStateSelectorBuilder<TAggregate, TCommandResult> WithEventsFrom(
         Func<TCommandResult, IEnumerable<TEventBase>> eventsSelector)
     {
-        _options = _options.WithEventSelector(eventsSelector);
+        _options = _options.WithEventsSelector(eventsSelector);
         return this;
     }
 
@@ -31,10 +28,5 @@ public class ImmutableCommandResultOptionsBuilder<TAggregate, TEventBase, TComma
         Func<TCommandResult, TAggregate> updatedStateSelector)
     {
         _options = _options.WithUpdatedStateSelector(updatedStateSelector);
-    }
-
-    void IImmutableCommandResultUpdatedStateSelectorBuilder<TAggregate, TCommandResult>.ApplyEvents()
-    {
-        _options = _options.WithUpdatedStateFromEvents();
     }
 }

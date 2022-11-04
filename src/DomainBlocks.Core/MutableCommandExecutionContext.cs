@@ -15,7 +15,7 @@ public class MutableCommandExecutionContext<TAggregate> : ICommandExecutionConte
     }
 
     public TAggregate State { get; }
-    public IEnumerable<object> RaisedEvents => _raisedEvents;
+    public IReadOnlyCollection<object> RaisedEvents => _raisedEvents.AsReadOnly();
 
     public TCommandResult ExecuteCommand<TCommandResult>(Func<TAggregate, TCommandResult> commandExecutor)
     {
@@ -26,16 +26,18 @@ public class MutableCommandExecutionContext<TAggregate> : ICommandExecutionConte
             var raisedEvents = _aggregateOptions.SelectRaisedEvents(State);
             _raisedEvents.Clear();
             _raisedEvents.AddRange(raisedEvents);
-        }
-        else
-        {
-            var commandReturnType = _aggregateOptions.GetCommandResultOptions<TCommandResult>();
-            var raisedEvents =
-                commandReturnType.SelectEventsAndUpdateState(commandResult, State, _aggregateOptions.EventApplier);
-            _raisedEvents.AddRange(raisedEvents);
+
+            return commandResult;
         }
 
-        return commandResult;
+        {
+            var commandResultOptions = _aggregateOptions.GetCommandResultOptions<TCommandResult>();
+            var raisedEvents =
+                commandResultOptions.SelectEventsAndUpdateState(commandResult, State, _aggregateOptions.EventApplier);
+            _raisedEvents.AddRange(raisedEvents);
+
+            return commandResultOptions.Coerce(commandResult, raisedEvents);
+        }
     }
 
     public void ExecuteCommand(Action<TAggregate> commandExecutor)

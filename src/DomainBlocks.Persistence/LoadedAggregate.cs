@@ -35,7 +35,7 @@ public sealed class LoadedAggregate<TAggregate>
         if (string.IsNullOrWhiteSpace(id))
             throw new ArgumentException("Value cannot be null or whitespace.", nameof(id));
 
-        _commandExecutionContext = aggregateOptions.GetCommandExecutionContext(state);
+        _commandExecutionContext = aggregateOptions.CreateCommandExecutionContext(state);
 
         Id = id;
         Version = version;
@@ -48,7 +48,7 @@ public sealed class LoadedAggregate<TAggregate>
     public long Version { get; }
     public long? SnapshotVersion { get; }
     public long EventsLoadedCount { get; }
-    public IEnumerable<object> EventsToPersist => _commandExecutionContext.RaisedEvents;
+    public IReadOnlyCollection<object> EventsToPersist => _commandExecutionContext.RaisedEvents;
     internal bool HasBeenSaved { get; set; }
 
     public TResult ExecuteCommand<TResult>(Func<TAggregate, TResult> commandExecutor)

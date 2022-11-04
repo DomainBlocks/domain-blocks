@@ -17,14 +17,27 @@ public class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
 {
     private ImmutableAggregateOptions<TAggregate, TEventBase> _options = new();
     private readonly List<ICommandResultOptionsBuilder> _commandResultOptionsBuilders = new();
-    private ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase> _eventApplierBuilder;
+    private ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase> _conventionalEventApplierBuilder;
 
     protected override AggregateOptionsBase<TAggregate, TEventBase> Options
     {
         get
         {
-            var options = _options.WithCommandResultOptions(_commandResultOptionsBuilders.Select(x => x.Options));
-            return _eventApplierBuilder == null ? options : options.WithEventApplier(_eventApplierBuilder.Build());
+            var commandResultsOptions = _commandResultOptionsBuilders.Select(x => x.Options);
+            var options = _options.WithCommandResultsOptions(commandResultsOptions);
+
+            if (!options.HasCommandResultOptions<IEnumerable<TEventBase>>())
+            {
+                // We support IEnumerable<TEventBase> as a command result by default.
+                var commandResultOptions =
+                    new ImmutableCommandResultOptions<TAggregate, TEventBase, IEnumerable<TEventBase>>()
+                        .WithEventsSelector(x => x);
+
+                options = options.WithCommandResultOptions(commandResultOptions);
+            }
+
+            var eventApplier = _conventionalEventApplierBuilder?.Build();
+            return eventApplier == null ? options : options.WithEventApplier(eventApplier);
         }
         set => _options = (ImmutableAggregateOptions<TAggregate, TEventBase>)value;
     }
@@ -38,13 +51,13 @@ public class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
 
     public void ApplyEventsWith(Func<TAggregate, TEventBase, TAggregate> eventApplier)
     {
-        _eventApplierBuilder = null;
+        _conventionalEventApplierBuilder = null;
         Options = _options.WithEventApplier(eventApplier);
     }
 
     public ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase> ApplyEventsByConvention()
     {
-        _eventApplierBuilder = new ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase>();
-        return _eventApplierBuilder;
+        _conventionalEventApplierBuilder = new ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase>();
+        return _conventionalEventApplierBuilder;
     }
 }

@@ -50,7 +50,7 @@ public class AssemblyEventOptionsBuilder<TEventBase>
             }
         }
 
-        var eventOptions = eventClrTypes
+        var eventsOptions = eventClrTypes
             .Select(eventClrType =>
             {
                 var typeArgs = new[] { eventClrType, typeof(TEventBase) };
@@ -58,6 +58,6 @@ public class AssemblyEventOptionsBuilder<TEventBase>
                 return (IEventOptions)Activator.CreateInstance(eventTypeClrType);
             });
 
-        return eventOptions;
+        return eventsOptions;
     }
 }

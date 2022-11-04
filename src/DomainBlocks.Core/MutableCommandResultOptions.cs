@@ -4,16 +4,10 @@ using System.Linq;
 
 namespace DomainBlocks.Core;
 
-public interface IMutableCommandResultOptions<TAggregate, in TCommandResult> : ICommandResultOptions
+public class MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> :
+    IMutableCommandResultOptions<TAggregate, TCommandResult> where TEventBase : class
 {
-    public IEnumerable<object> SelectEventsAndUpdateState(
-        TCommandResult commandResult, TAggregate state, Action<TAggregate, object> eventApplier);
-}
-
-public class MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult>
-    : IMutableCommandResultOptions<TAggregate, TCommandResult> where TEventBase : class
-{
-    private ApplyRaisedEventsBehavior _applyRaisedEventsBehavior;
+    private bool _isApplyEventsEnabled;
     private Func<TCommandResult, IEnumerable<TEventBase>> _eventsSelector;
 
     public MutableCommandResultOptions()
@@ -22,18 +16,22 @@ public class MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult>
 
     private MutableCommandResultOptions(MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> copyFrom)
     {
-        _applyRaisedEventsBehavior = copyFrom._applyRaisedEventsBehavior;
+        _isApplyEventsEnabled = copyFrom._isApplyEventsEnabled;
         _eventsSelector = copyFrom._eventsSelector;
     }
 
     public Type ClrType => typeof(TCommandResult);
 
-    public MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> WithApplyRaisedEventsBehavior(
-        ApplyRaisedEventsBehavior behavior)
+    public TCommandResult Coerce(TCommandResult commandResult, IEnumerable<object> raisedEvents)
+    {
+        return commandResult;
+    }
+
+    public MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> WithApplyEventsEnabled(bool isEnabled)
     {
         return new MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult>(this)
         {
-            _applyRaisedEventsBehavior = behavior
+            _isApplyEventsEnabled = isEnabled
         };
     }
 
@@ -46,41 +44,23 @@ public class MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult>
         };
     }
 
-    public IEnumerable<object> SelectEventsAndUpdateState(
+    public IReadOnlyCollection<object> SelectEventsAndUpdateState(
         TCommandResult commandResult, TAggregate state, Action<TAggregate, object> eventApplier)
     {
-        return _applyRaisedEventsBehavior switch
-        {
-            ApplyRaisedEventsBehavior.None => _eventsSelector(commandResult),
-            ApplyRaisedEventsBehavior.ApplyAfterEnumerating =>
-                ApplyAfterEnumerating(commandResult, state, eventApplier),
-            ApplyRaisedEventsBehavior.ApplyWhileEnumerating =>
-                ApplyWhileEnumerating(commandResult, state, eventApplier),
-            _ => throw new InvalidOperationException(
-                $"Unknown enum value {nameof(ApplyRaisedEventsBehavior)}.{_applyRaisedEventsBehavior}.")
-        };
+        return _isApplyEventsEnabled
+            ? ApplyEvents(commandResult, state, eventApplier)
+            : _eventsSelector(commandResult).ToList().AsReadOnly();
     }
 
-    private IEnumerable<object> ApplyAfterEnumerating(
+    private IReadOnlyCollection<object> ApplyEvents(
         TCommandResult commandResult, TAggregate state, Action<TAggregate, object> eventApplier)
     {
-        var events = _eventsSelector(commandResult).ToList();
+        var events = _eventsSelector(commandResult).ToList().AsReadOnly();
         foreach (var @event in events)
         {
             eventApplier(state, @event);
         }
 
         return events;
-    }
-
-    private IEnumerable<object> ApplyWhileEnumerating(
-        TCommandResult commandResult, TAggregate state, Action<TAggregate, object> eventApplier)
-    {
-        var events = _eventsSelector(commandResult);
-        foreach (var @event in events)
-        {
-            eventApplier(state, @event);
-            yield return @event;
-        }
     }
 }

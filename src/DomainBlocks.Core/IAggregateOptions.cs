@@ -7,7 +7,7 @@ public interface IAggregateOptions
 {
     public Type ClrType { get; }
     public Type EventBaseType { get; }
-    public IEnumerable<IEventOptions> EventOptions { get; }
+    public IEnumerable<IEventOptions> EventsOptions { get; }
 }
 
 public interface IAggregateOptions<TAggregate> : IAggregateOptions
@@ -21,5 +21,5 @@ public interface IAggregateOptions<TAggregate> : IAggregateOptions
     public string SelectStreamKey(TAggregate aggregate);
     public string SelectSnapshotKey(TAggregate aggregate);
 
-    public ICommandExecutionContext<TAggregate> GetCommandExecutionContext(TAggregate aggregate);
+    public ICommandExecutionContext<TAggregate> CreateCommandExecutionContext(TAggregate aggregate);
 }

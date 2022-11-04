@@ -108,8 +108,7 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
 
                 aggregate
                     .CommandResult<IEnumerable<IDomainEvent>>()
-                    .WithEventsFrom(x => x)
-                    .ApplyEvents();
+                    .WithEventsFrom(x => x);
 
                 aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
 

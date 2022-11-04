@@ -21,7 +21,7 @@ public class ModelBuilderTests
         var aggregateOptions = model.GetAggregateOptions<MutableAggregate1>();
 
         var aggregate = new MutableAggregate1();
-        var context = aggregateOptions.GetCommandExecutionContext(aggregate);
+        var context = aggregateOptions.CreateCommandExecutionContext(aggregate);
 
         context.ExecuteCommand(x => x.Execute("value 1"));
         context.ExecuteCommand(x => x.Execute("value 2"));
@@ -42,10 +42,7 @@ public class ModelBuilderTests
         var model = new ModelBuilder()
             .Aggregate<MutableAggregate2, object>(aggregate =>
             {
-                aggregate
-                    .CommandResult<IEnumerable<object>>()
-                    .WithEventsFrom(x => x)
-                    .ApplyEventsWhileEnumerating();
+                aggregate.WithEventEnumerableCommandResult(EventEnumerationMode.ApplyWhileEnumerating);
                 
                 aggregate
                     .ApplyEventsByConvention()
@@ -57,7 +54,7 @@ public class ModelBuilderTests
         var aggregateOptions = model.GetAggregateOptions<MutableAggregate2>();
 
         var aggregate = new MutableAggregate2();
-        var context = aggregateOptions.GetCommandExecutionContext(aggregate);
+        var context = aggregateOptions.CreateCommandExecutionContext(aggregate);
 
         context.ExecuteCommand(x => x.Execute("value"));
         var events = context.RaisedEvents.ToList();
@@ -81,8 +78,7 @@ public class ModelBuilderTests
             {
                 aggregate
                     .CommandResult<IEnumerable<object>>()
-                    .WithEventsFrom(x => x)
-                    .ApplyEvents();
+                    .WithEventsFrom(x => x);
 
                 aggregate
                     .ApplyEventsByConvention()
@@ -94,7 +90,7 @@ public class ModelBuilderTests
         var aggregateOptions = model.GetAggregateOptions<ImmutableAggregate1>();
 
         var aggregate = new ImmutableAggregate1();
-        var context = aggregateOptions.GetCommandExecutionContext(aggregate);
+        var context = aggregateOptions.CreateCommandExecutionContext(aggregate);
 
         context.ExecuteCommand(x => x.Execute("value"));
         var events = context.RaisedEvents.ToList();

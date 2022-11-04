@@ -48,14 +48,15 @@ public class MutableAggregateOptions<TAggregate, TEventBase> :
         return clone;
     }
 
-    public override ICommandExecutionContext<TAggregate> GetCommandExecutionContext(TAggregate aggregate)
+    public override ICommandExecutionContext<TAggregate> CreateCommandExecutionContext(TAggregate aggregate)
     {
         return new MutableCommandExecutionContext<TAggregate>(aggregate, this);
     }
 
     public new IMutableCommandResultOptions<TAggregate, TCommandResult> GetCommandResultOptions<TCommandResult>()
     {
-        return (IMutableCommandResultOptions<TAggregate, TCommandResult>)base.GetCommandResultOptions<TCommandResult>();
+        var commandResultOptions = base.GetCommandResultOptions<TCommandResult>();
+        return (IMutableCommandResultOptions<TAggregate, TCommandResult>)commandResultOptions;
     }
 
     public IEnumerable<object> SelectRaisedEvents(TAggregate aggregate)

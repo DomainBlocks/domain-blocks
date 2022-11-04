@@ -32,7 +32,7 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
     IIdToSnapshotKeySelectorBuilder
     where TEventBase : class
 {
-    private readonly List<Func<IEnumerable<IEventOptions>>> _eventOptionsFactories = new();
+    private readonly List<Func<IEnumerable<IEventOptions>>> _eventsOptionsFactories = new();
     
     protected abstract AggregateOptionsBase<TAggregate, TEventBase> Options { get; set; }
 
@@ -40,8 +40,8 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
     {
         get
         {
-            var eventOptions = _eventOptionsFactories.SelectMany(x => x());
-            var options = Options.WithEventOptions(eventOptions);
+            var eventsOptions = _eventsOptionsFactories.SelectMany(x => x());
+            var options = Options.WithEventsOptions(eventsOptions);
             return options;
         }
     }
@@ -77,7 +77,7 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
     public EventOptionsBuilder<TEvent, TEventBase> Event<TEvent>() where TEvent : TEventBase
     {
         var builder = new EventOptionsBuilder<TEvent, TEventBase>();
-        _eventOptionsFactories.Add(GetOptions);
+        _eventsOptionsFactories.Add(GetOptions);
         return builder;
 
         IEnumerable<IEventOptions> GetOptions()
@@ -89,7 +89,7 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
     public AssemblyEventOptionsBuilder<TEventBase> Events(Assembly assembly)
     {
         var builder = new AssemblyEventOptionsBuilder<TEventBase>(assembly);
-        _eventOptionsFactories.Add(() => builder.Build());
+        _eventsOptionsFactories.Add(() => builder.Build());
         return builder;
     }
 }

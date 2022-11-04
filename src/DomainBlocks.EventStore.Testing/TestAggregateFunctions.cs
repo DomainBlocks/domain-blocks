@@ -18,8 +18,7 @@ public static class TestAggregateFunctions
 
             aggregate
                 .CommandResult<IEnumerable<object>>()
-                .WithEventsFrom(x => x)
-                .ApplyEvents();
+                .WithEventsFrom(x => x);
 
             aggregate.ApplyEventsWith((agg, e) => Apply(agg, (dynamic)e));
 

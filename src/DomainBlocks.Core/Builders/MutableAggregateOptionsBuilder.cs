@@ -9,16 +9,27 @@ public class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
 {
     private MutableAggregateOptions<TAggregate, TEventBase> _options = new();
     private readonly List<ICommandResultOptionsBuilder> _commandResultOptionsBuilders = new();
-    private MutableConventionalEventApplierBuilder<TAggregate, TEventBase> _eventApplierBuilder;
+    private MutableConventionalEventApplierBuilder<TAggregate, TEventBase> _conventionalEventApplierBuilder;
 
     protected override AggregateOptionsBase<TAggregate, TEventBase> Options
     {
         get
         {
-            var options = (MutableAggregateOptions<TAggregate, TEventBase>)_options
-                .WithCommandResultOptions(_commandResultOptionsBuilders.Select(x => x.Options));
+            var commandResultsOptions = _commandResultOptionsBuilders.Select(x => x.Options);
+            var options = _options.WithCommandResultsOptions(commandResultsOptions);
 
-            return _eventApplierBuilder == null ? options : options.WithEventApplier(_eventApplierBuilder.Build());
+            if (!options.HasCommandResultOptions<IEnumerable<TEventBase>>())
+            {
+                // We support IEnumerable<TEventBase> as a command result by default.
+                var commandResultOptions = new MutableEventEnumerableCommandResultOptions<TAggregate, TEventBase>();
+                options = options.WithCommandResultOptions(commandResultOptions);
+            }
+
+            var eventApplier = _conventionalEventApplierBuilder?.Build();
+            
+            return eventApplier == null
+                ? options
+                : ((MutableAggregateOptions<TAggregate, TEventBase>)options).WithEventApplier(eventApplier);
         }
         set => _options = (MutableAggregateOptions<TAggregate, TEventBase>)value;
     }
@@ -35,15 +46,23 @@ public class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
         return builder;
     }
 
+    public void WithEventEnumerableCommandResult(EventEnumerationMode mode)
+    {
+        var commandResultOptions = new MutableEventEnumerableCommandResultOptions<TAggregate, TEventBase>()
+            .WithEventEnumerationMode(mode);
+
+        Options = _options.WithCommandResultOptions(commandResultOptions);
+    }
+
     public void ApplyEventsWith(Action<TAggregate, TEventBase> eventApplier)
     {
-        _eventApplierBuilder = null;
+        _conventionalEventApplierBuilder = null;
         _options = _options.WithEventApplier(eventApplier);
     }
 
     public MutableConventionalEventApplierBuilder<TAggregate, TEventBase> ApplyEventsByConvention()
     {
-        _eventApplierBuilder = new MutableConventionalEventApplierBuilder<TAggregate, TEventBase>();
-        return _eventApplierBuilder;
+        _conventionalEventApplierBuilder = new MutableConventionalEventApplierBuilder<TAggregate, TEventBase>();
+        return _conventionalEventApplierBuilder;
     }
 }

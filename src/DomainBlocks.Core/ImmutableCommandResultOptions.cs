@@ -1,16 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace DomainBlocks.Core;
 
-public interface IImmutableCommandResultOptions<TAggregate, in TCommandResult> : ICommandResultOptions
-{
-    public (IEnumerable<object>, TAggregate) SelectEventsAndUpdateState(
-        TCommandResult commandResult, TAggregate state, Func<TAggregate, object, TAggregate> eventApplier);
-}
-
-public class ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult>
-    : IImmutableCommandResultOptions<TAggregate, TCommandResult> where TEventBase : class
+public class ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> :
+    IImmutableCommandResultOptions<TAggregate, TCommandResult> where TEventBase : class
 {
     private Func<TCommandResult, IEnumerable<TEventBase>> _eventsSelector;
     private Func<TCommandResult, TAggregate> _updatedStateSelector;
@@ -18,17 +13,27 @@ public class ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResul
     public ImmutableCommandResultOptions()
     {
     }
-    
+
     private ImmutableCommandResultOptions(
         ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> copyFrom)
     {
         _eventsSelector = copyFrom._eventsSelector;
         _updatedStateSelector = copyFrom._updatedStateSelector;
     }
-
+    
     public Type ClrType => typeof(TCommandResult);
 
-    public ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> WithEventSelector(
+    public TCommandResult Coerce(TCommandResult commandResult, IEnumerable<object> raisedEvents)
+    {
+        if (typeof(TCommandResult) == typeof(IEnumerable<TEventBase>))
+        {
+            return (TCommandResult)raisedEvents.Cast<TEventBase>();
+        }
+
+        return commandResult;
+    }
+
+    public ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> WithEventsSelector(
         Func<TCommandResult, IEnumerable<TEventBase>> eventsSelector)
     {
         return new ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult>(this)
@@ -36,7 +41,7 @@ public class ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResul
             _eventsSelector = eventsSelector
         };
     }
-    
+
     public ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> WithUpdatedStateSelector(
         Func<TCommandResult, TAggregate> updatedStateSelector)
     {
@@ -45,16 +50,8 @@ public class ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResul
             _updatedStateSelector = updatedStateSelector
         };
     }
-    
-    public ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> WithUpdatedStateFromEvents()
-    {
-        return new ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult>(this)
-        {
-            _updatedStateSelector = null
-        };
-    }
 
-    public (IEnumerable<object>, TAggregate) SelectEventsAndUpdateState(
+    public (IReadOnlyCollection<object>, TAggregate) SelectEventsAndUpdateState(
         TCommandResult commandResult, TAggregate state, Func<TAggregate, object, TAggregate> eventApplier)
     {
         var events = _eventsSelector(commandResult);
@@ -62,7 +59,7 @@ public class ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResul
         if (_updatedStateSelector != null)
         {
             var updatedState = _updatedStateSelector(commandResult);
-            return (events, updatedState);
+            return (events.ToList().AsReadOnly(), updatedState);
         }
 
         {
@@ -75,7 +72,7 @@ public class ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResul
                 appliedEvents.Add(@event);
             }
 
-            return (appliedEvents, updatedState);
+            return (appliedEvents.AsReadOnly(), updatedState);
         }
     }
 }
