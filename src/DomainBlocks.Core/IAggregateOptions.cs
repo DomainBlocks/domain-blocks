@@ -5,21 +5,21 @@ namespace DomainBlocks.Core;
 
 public interface IAggregateOptions
 {
-    public Type ClrType { get; }
-    public Type EventBaseType { get; }
-    public IEnumerable<IEventOptions> EventsOptions { get; }
+    Type ClrType { get; }
+    Type EventBaseType { get; }
+    IEnumerable<IEventOptions> EventsOptions { get; }
 }
 
 public interface IAggregateOptions<TAggregate> : IAggregateOptions
 {
-    public Func<TAggregate> Factory { get; }
-    public Func<TAggregate, string> IdSelector { get; }
-    public Func<string, string> IdToStreamKeySelector { get; }
-    public Func<string, string> IdToSnapshotKeySelector { get; }
-    public Func<TAggregate, object, TAggregate> EventApplier { get; }
+    Func<TAggregate> Factory { get; }
+    Func<TAggregate, string> IdSelector { get; }
+    Func<string, string> IdToStreamKeySelector { get; }
+    Func<string, string> IdToSnapshotKeySelector { get; }
+    Func<TAggregate, object, TAggregate> EventApplier { get; }
 
-    public string SelectStreamKey(TAggregate aggregate);
-    public string SelectSnapshotKey(TAggregate aggregate);
+    string SelectStreamKey(TAggregate aggregate);
+    string SelectSnapshotKey(TAggregate aggregate);
 
-    public ICommandExecutionContext<TAggregate> CreateCommandExecutionContext(TAggregate aggregate);
+    ICommandExecutionContext<TAggregate> CreateCommandExecutionContext(TAggregate aggregate);
 }

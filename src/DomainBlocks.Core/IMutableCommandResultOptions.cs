@@ -5,6 +5,6 @@ namespace DomainBlocks.Core;
 
 public interface IMutableCommandResultOptions<TAggregate, TCommandResult> : ICommandResultOptions<TCommandResult>
 {
-    public IReadOnlyCollection<object> SelectEventsAndUpdateState(
+    IReadOnlyCollection<object> SelectEventsAndUpdateState(
         TCommandResult commandResult, TAggregate state, Action<TAggregate, object> eventApplier);
 }

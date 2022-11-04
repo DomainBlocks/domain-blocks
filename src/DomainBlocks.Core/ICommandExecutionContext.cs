@@ -5,9 +5,9 @@ namespace DomainBlocks.Core;
 
 public interface ICommandExecutionContext<out TAggregate>
 {
-    public TAggregate State { get; }
-    public IReadOnlyCollection<object> RaisedEvents { get; }
+    TAggregate State { get; }
+    IReadOnlyCollection<object> RaisedEvents { get; }
 
-    public TCommandResult ExecuteCommand<TCommandResult>(Func<TAggregate, TCommandResult> commandExecutor);
-    public void ExecuteCommand(Action<TAggregate> commandExecutor);
+    TCommandResult ExecuteCommand<TCommandResult>(Func<TAggregate, TCommandResult> commandExecutor);
+    void ExecuteCommand(Action<TAggregate> commandExecutor);
 }

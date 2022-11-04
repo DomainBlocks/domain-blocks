@@ -2,7 +2,7 @@ namespace DomainBlocks.Core;
 
 public interface IImmutableAggregateOptions<TAggregate> : IAggregateOptions<TAggregate>
 {
-    public IImmutableCommandResultOptions<TAggregate, TCommandResult> GetCommandResultOptions<TCommandResult>();
+    IImmutableCommandResultOptions<TAggregate, TCommandResult> GetCommandResultOptions<TCommandResult>();
 }
 
 public class ImmutableAggregateOptions<TAggregate, TEventBase> :
