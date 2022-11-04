@@ -7,7 +7,7 @@ namespace DomainBlocks.Core.Builders;
 public interface IImmutableRaisedEventsBuilder<TAggregate, TEventBase> where TEventBase : class
 {
     public void ApplyEventsWith(Func<TAggregate, TEventBase, TAggregate> eventApplier);
-    public ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase> ApplyEventsByConvention();
+    public ImmutableReflectionEventApplierBuilder<TAggregate, TEventBase> DiscoverEventApplierMethods();
 }
 
 public class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
@@ -17,7 +17,7 @@ public class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
 {
     private ImmutableAggregateOptions<TAggregate, TEventBase> _options = new();
     private readonly List<ICommandResultOptionsBuilder> _commandResultOptionsBuilders = new();
-    private ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase> _conventionalEventApplierBuilder;
+    private ImmutableReflectionEventApplierBuilder<TAggregate, TEventBase> _reflectionEventApplierBuilder;
 
     protected override AggregateOptionsBase<TAggregate, TEventBase> Options
     {
@@ -36,7 +36,7 @@ public class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
                 options = options.WithCommandResultOptions(commandResultOptions);
             }
 
-            var eventApplier = _conventionalEventApplierBuilder?.Build();
+            var eventApplier = _reflectionEventApplierBuilder?.Build();
             return eventApplier == null ? options : options.WithEventApplier(eventApplier);
         }
         set => _options = (ImmutableAggregateOptions<TAggregate, TEventBase>)value;
@@ -51,13 +51,13 @@ public class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
 
     public void ApplyEventsWith(Func<TAggregate, TEventBase, TAggregate> eventApplier)
     {
-        _conventionalEventApplierBuilder = null;
+        _reflectionEventApplierBuilder = null;
         Options = _options.WithEventApplier(eventApplier);
     }
 
-    public ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase> ApplyEventsByConvention()
+    public ImmutableReflectionEventApplierBuilder<TAggregate, TEventBase> DiscoverEventApplierMethods()
     {
-        _conventionalEventApplierBuilder = new ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase>();
-        return _conventionalEventApplierBuilder;
+        _reflectionEventApplierBuilder = new ImmutableReflectionEventApplierBuilder<TAggregate, TEventBase>();
+        return _reflectionEventApplierBuilder;
     }
 }

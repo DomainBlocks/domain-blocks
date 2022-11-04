@@ -16,7 +16,7 @@ public class MutableAggregateOptions<TAggregate, TEventBase> :
     AggregateOptionsBase<TAggregate, TEventBase>,
     IMutableAggregateOptions<TAggregate> where TEventBase : class
 {
-    private Func<TAggregate, IEnumerable<TEventBase>> _raisedEventsSelector;
+    private Func<TAggregate, IReadOnlyCollection<TEventBase>> _raisedEventsSelector;
 
     public MutableAggregateOptions()
     {
@@ -41,7 +41,7 @@ public class MutableAggregateOptions<TAggregate, TEventBase> :
     }
 
     public MutableAggregateOptions<TAggregate, TEventBase> WithRaisedEventsSelector(
-        Func<TAggregate, IEnumerable<TEventBase>> raisedEventsSelector)
+        Func<TAggregate, IReadOnlyCollection<TEventBase>> raisedEventsSelector)
     {
         var clone = Clone();
         clone._raisedEventsSelector = raisedEventsSelector;

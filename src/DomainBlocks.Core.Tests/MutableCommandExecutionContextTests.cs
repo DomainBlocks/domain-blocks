@@ -12,14 +12,14 @@ public class MutableCommandExecutionContextTests
     public void EventEnumerableReturnTypeIsNotEnumeratedAgainWhenMaterializing()
     {
         var model = new ModelBuilder()
-            .Aggregate<MutableAggregate, object>(aggregate =>
+            .Aggregate<MutableAggregate>(aggregate =>
             {
                 aggregate.WithEventEnumerableCommandResult(EventEnumerationMode.ApplyWhileEnumerating);
 
                 aggregate
-                    .ApplyEventsByConvention()
-                    .FromMethodName(nameof(MutableAggregate.Apply))
-                    .IncludeNonPublicMethods();
+                    .DiscoverEventApplierMethods()
+                    .WithName(nameof(MutableAggregate.Apply))
+                    .IncludeNonPublic();
             })
             .Build();
 

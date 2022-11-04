@@ -1,35 +1,35 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 
 namespace DomainBlocks.Core.Builders;
 
-public class ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase> : IIncludeNonPublicMethodsBuilder
+public class MutableReflectionEventApplierBuilder<TAggregate, TEventBase> : IIncludeNonPublicMethodsBuilder
 {
     private string _methodName;
     private bool _includeNonPublicMethods;
 
-    public IIncludeNonPublicMethodsBuilder FromMethodName(string methodName)
+    public IIncludeNonPublicMethodsBuilder WithName(string methodName)
     {
         if (string.IsNullOrWhiteSpace(methodName))
             throw new ArgumentException("Method name cannot be null or whitespace.", nameof(methodName));
-        
+
         _methodName = methodName;
         return this;
     }
 
-    void IIncludeNonPublicMethodsBuilder.IncludeNonPublicMethods()
+    void IIncludeNonPublicMethodsBuilder.IncludeNonPublic()
     {
         _includeNonPublicMethods = true;
     }
 
-    public Func<TAggregate, TEventBase, TAggregate> Build()
+    public Action<TAggregate, TEventBase> Build()
     {
         if (_methodName == null)
             throw new InvalidOperationException("No method name specified. Unable to find event applier methods.");
 
-        var bindingFlags = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static;
+        var bindingFlags = BindingFlags.Public | BindingFlags.Instance;
 
         if (_includeNonPublicMethods)
         {
@@ -41,8 +41,6 @@ public class ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase> : 
             let @params = method.GetParameters()
             where @params.Length == 1
             let paramType = @params[0].ParameterType
-            let returnParam = method.ReturnParameter
-            where typeof(TAggregate).IsAssignableFrom(returnParam.ParameterType)
             where paramType.IsClass
             where !paramType.IsAbstract
             where typeof(TEventBase).IsAssignableFrom(paramType)
@@ -55,13 +53,9 @@ public class ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase> : 
             {
                 var (method, eventType) = x;
                 var eventParam = Expression.Parameter(typeof(TEventBase), "event");
-                var instance = method.IsStatic ? null : aggregateParam;
-                var body = Expression.Call(instance, method, Expression.Convert(eventParam, eventType));
+                var body = Expression.Call(aggregateParam, method, Expression.Convert(eventParam, eventType));
                 var block = Expression.Block(aggregateParam, body);
-
-                var lambda = Expression.Lambda<Func<TAggregate, TEventBase, TAggregate>>(
-                    block, aggregateParam, eventParam);
-
+                var lambda = Expression.Lambda<Action<TAggregate, TEventBase>>(block, aggregateParam, eventParam);
                 var handler = lambda.Compile();
                 return (eventType, handler);
             })
@@ -70,6 +64,12 @@ public class ImmutableConventionalEventApplierBuilder<TAggregate, TEventBase> : 
         if (handlers.Count == 0)
             throw new InvalidOperationException($"No event applier methods named '{_methodName}' were found.");
 
-        return (agg, e) => handlers.TryGetValue(e.GetType(), out var handler) ? handler(agg, e) : agg;
+        return (agg, e) =>
+        {
+            if (handlers.TryGetValue(e.GetType(), out var handler))
+            {
+                handler(agg, e);
+            }
+        };
     }
 }

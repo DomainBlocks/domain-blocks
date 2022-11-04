@@ -9,7 +9,7 @@ public class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
 {
     private MutableAggregateOptions<TAggregate, TEventBase> _options = new();
     private readonly List<ICommandResultOptionsBuilder> _commandResultOptionsBuilders = new();
-    private MutableConventionalEventApplierBuilder<TAggregate, TEventBase> _conventionalEventApplierBuilder;
+    private MutableReflectionEventApplierBuilder<TAggregate, TEventBase> _reflectionEventApplierBuilder;
 
     protected override AggregateOptionsBase<TAggregate, TEventBase> Options
     {
@@ -25,7 +25,7 @@ public class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
                 options = options.WithCommandResultOptions(commandResultOptions);
             }
 
-            var eventApplier = _conventionalEventApplierBuilder?.Build();
+            var eventApplier = _reflectionEventApplierBuilder?.Build();
             
             return eventApplier == null
                 ? options
@@ -34,7 +34,7 @@ public class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
         set => _options = (MutableAggregateOptions<TAggregate, TEventBase>)value;
     }
 
-    public void WithRaisedEventsFrom(Func<TAggregate, IEnumerable<TEventBase>> eventsSelector)
+    public void WithRaisedEventsFrom(Func<TAggregate, IReadOnlyCollection<TEventBase>> eventsSelector)
     {
         _options = _options.WithRaisedEventsSelector(eventsSelector);
     }
@@ -56,13 +56,13 @@ public class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
 
     public void ApplyEventsWith(Action<TAggregate, TEventBase> eventApplier)
     {
-        _conventionalEventApplierBuilder = null;
+        _reflectionEventApplierBuilder = null;
         _options = _options.WithEventApplier(eventApplier);
     }
 
-    public MutableConventionalEventApplierBuilder<TAggregate, TEventBase> ApplyEventsByConvention()
+    public MutableReflectionEventApplierBuilder<TAggregate, TEventBase> DiscoverEventApplierMethods()
     {
-        _conventionalEventApplierBuilder = new MutableConventionalEventApplierBuilder<TAggregate, TEventBase>();
-        return _conventionalEventApplierBuilder;
+        _reflectionEventApplierBuilder = new MutableReflectionEventApplierBuilder<TAggregate, TEventBase>();
+        return _reflectionEventApplierBuilder;
     }
 }

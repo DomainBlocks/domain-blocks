@@ -19,6 +19,11 @@ public class ModelBuilder
         return this;
     }
 
+    public ModelBuilder Aggregate<TAggregate>(Action<MutableAggregateOptionsBuilder<TAggregate, object>> builderAction)
+    {
+        return Aggregate<TAggregate, object>(builderAction);
+    }
+
     public ModelBuilder ImmutableAggregate<TAggregate, TEventBase>(
         Action<ImmutableAggregateOptionsBuilder<TAggregate, TEventBase>> builderAction) where TEventBase : class
     {
@@ -28,6 +33,12 @@ public class ModelBuilder
         _aggregateOptionsBuilders.Add(builder);
         builderAction(builder);
         return this;
+    }
+    
+    public ModelBuilder ImmutableAggregate<TAggregate>(
+        Action<ImmutableAggregateOptionsBuilder<TAggregate, object>> builderAction)
+    {
+        return ImmutableAggregate<TAggregate, object>(builderAction);
     }
 
     public Model Build()
