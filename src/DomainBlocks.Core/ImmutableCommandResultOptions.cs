@@ -20,7 +20,7 @@ public class ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResul
         _eventsSelector = copyFrom._eventsSelector;
         _updatedStateSelector = copyFrom._updatedStateSelector;
     }
-    
+
     public Type ClrType => typeof(TCommandResult);
 
     public TCommandResult Coerce(TCommandResult commandResult, IEnumerable<object> raisedEvents)
@@ -36,6 +36,8 @@ public class ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResul
     public ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> WithEventsSelector(
         Func<TCommandResult, IEnumerable<TEventBase>> eventsSelector)
     {
+        if (eventsSelector == null) throw new ArgumentNullException(nameof(eventsSelector));
+
         return new ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult>(this)
         {
             _eventsSelector = eventsSelector
@@ -45,6 +47,8 @@ public class ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResul
     public ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> WithUpdatedStateSelector(
         Func<TCommandResult, TAggregate> updatedStateSelector)
     {
+        if (updatedStateSelector == null) throw new ArgumentNullException(nameof(updatedStateSelector));
+
         return new ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult>(this)
         {
             _updatedStateSelector = updatedStateSelector

@@ -12,7 +12,7 @@ public class AssemblyEventOptionsBuilder<TEventBase>
 
     public AssemblyEventOptionsBuilder(Assembly assembly)
     {
-        _assembly = assembly;
+        _assembly = assembly ?? throw new ArgumentNullException(nameof(assembly));
     }
 
     public void FilterByBaseType<TFilterBaseType>()

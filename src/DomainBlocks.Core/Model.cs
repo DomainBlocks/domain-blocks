@@ -9,9 +9,11 @@ public class Model
     private readonly IReadOnlyDictionary<Type, IAggregateOptions> _aggregatesOptions;
     private readonly EventNameMap _eventNameMap;
 
-    public Model(IEnumerable<IAggregateOptions> aggregateOptions)
+    public Model(IEnumerable<IAggregateOptions> aggregatesOptions)
     {
-        _aggregatesOptions = aggregateOptions.ToDictionary(x => x.ClrType);
+        if (aggregatesOptions == null) throw new ArgumentNullException(nameof(aggregatesOptions));
+
+        _aggregatesOptions = aggregatesOptions.ToDictionary(x => x.ClrType);
 
         // Build event name map from all aggregate options.
         var allEventsOptions = _aggregatesOptions.Values.SelectMany(x => x.EventsOptions);
@@ -23,7 +25,7 @@ public class Model
     }
 
     public IEventNameMap EventNameMap => _eventNameMap;
-    
+
     public IAggregateOptions<TAggregate> GetAggregateOptions<TAggregate>()
     {
         return (IAggregateOptions<TAggregate>)_aggregatesOptions[typeof(TAggregate)];

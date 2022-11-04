@@ -33,6 +33,8 @@ public class MutableAggregateOptions<TAggregate, TEventBase> :
 
     public MutableAggregateOptions<TAggregate, TEventBase> WithEventApplier(Action<TAggregate, TEventBase> eventApplier)
     {
+        if (eventApplier == null) throw new ArgumentNullException(nameof(eventApplier));
+        
         return (MutableAggregateOptions<TAggregate, TEventBase>)WithEventApplier((agg, e) =>
         {
             eventApplier(agg, e);
@@ -43,6 +45,8 @@ public class MutableAggregateOptions<TAggregate, TEventBase> :
     public MutableAggregateOptions<TAggregate, TEventBase> WithRaisedEventsSelector(
         Func<TAggregate, IReadOnlyCollection<TEventBase>> raisedEventsSelector)
     {
+        if (raisedEventsSelector == null) throw new ArgumentNullException(nameof(raisedEventsSelector));
+        
         var clone = Clone();
         clone._raisedEventsSelector = raisedEventsSelector;
         return clone;

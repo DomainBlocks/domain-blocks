@@ -20,6 +20,8 @@ public class ImmutableCommandExecutionContext<TAggregate> : ICommandExecutionCon
 
     public TCommandResult ExecuteCommand<TCommandResult>(Func<TAggregate, TCommandResult> commandExecutor)
     {
+        if (commandExecutor == null) throw new ArgumentNullException(nameof(commandExecutor));
+
         var commandResult = commandExecutor(State);
         var commandResultOptions = _aggregateOptions.GetCommandResultOptions<TCommandResult>();
         (var raisedEvents, State) =

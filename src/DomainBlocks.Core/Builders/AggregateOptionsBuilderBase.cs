@@ -33,7 +33,7 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
     where TEventBase : class
 {
     private readonly List<Func<IEnumerable<IEventOptions>>> _eventsOptionsFactories = new();
-    
+
     protected abstract AggregateOptionsBase<TAggregate, TEventBase> Options { get; set; }
 
     IAggregateOptions IAggregateOptionsBuilder.Options
@@ -48,14 +48,12 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
 
     public IIdSelectorBuilder<TAggregate> InitialState(Func<TAggregate> factory)
     {
-        if (factory == null) throw new ArgumentNullException(nameof(factory));
         Options = Options.WithFactory(factory);
         return this;
     }
 
     IIdToStreamKeySelectorBuilder IIdSelectorBuilder<TAggregate>.HasId(Func<TAggregate, string> idSelector)
     {
-        if (idSelector == null) throw new ArgumentNullException(nameof(idSelector));
         Options = Options.WithIdSelector(idSelector);
         return this;
     }
@@ -63,14 +61,12 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
     IIdToSnapshotKeySelectorBuilder IIdToStreamKeySelectorBuilder.WithStreamKey(
         Func<string, string> idToStreamKeySelector)
     {
-        if (idToStreamKeySelector == null) throw new ArgumentNullException(nameof(idToStreamKeySelector));
         Options = Options.WithIdToStreamKeySelector(idToStreamKeySelector);
         return this;
     }
 
     void IIdToSnapshotKeySelectorBuilder.WithSnapshotKey(Func<string, string> idToSnapshotKeySelector)
     {
-        if (idToSnapshotKeySelector == null) throw new ArgumentNullException(nameof(idToSnapshotKeySelector));
         Options = Options.WithIdToSnapshotKeySelector(idToSnapshotKeySelector);
     }
 

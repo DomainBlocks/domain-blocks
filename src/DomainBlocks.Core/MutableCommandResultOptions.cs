@@ -38,6 +38,8 @@ public class MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult>
     public MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> WithEventsSelector(
         Func<TCommandResult, IEnumerable<TEventBase>> eventsSelector)
     {
+        if (eventsSelector == null) throw new ArgumentNullException(nameof(eventsSelector));
+
         return new MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult>(this)
         {
             _eventsSelector = eventsSelector

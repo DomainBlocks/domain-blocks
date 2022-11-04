@@ -14,6 +14,8 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
 
     protected AggregateOptionsBase(AggregateOptionsBase<TAggregate, TEventBase> copyFrom)
     {
+        if (copyFrom == null) throw new ArgumentNullException(nameof(copyFrom));
+
         Factory = copyFrom.Factory;
         IdSelector = copyFrom.IdSelector;
         IdToStreamKeySelector = copyFrom.IdToStreamKeySelector;
@@ -32,7 +34,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
     public Func<string, string> IdToStreamKeySelector { get; private set; }
     public Func<string, string> IdToSnapshotKeySelector { get; private set; }
     public Func<TAggregate, object, TAggregate> EventApplier { get; private set; }
-    
+
     public string SelectStreamKey(TAggregate aggregate) => IdToStreamKeySelector(IdSelector(aggregate));
     public string SelectSnapshotKey(TAggregate aggregate) => IdToSnapshotKeySelector(IdSelector(aggregate));
 
@@ -40,6 +42,8 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
 
     public AggregateOptionsBase<TAggregate, TEventBase> WithFactory(Func<TAggregate> factory)
     {
+        if (factory == null) throw new ArgumentNullException(nameof(factory));
+
         var clone = Clone();
         clone.Factory = factory;
         return clone;
@@ -47,6 +51,8 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
 
     public AggregateOptionsBase<TAggregate, TEventBase> WithIdSelector(Func<TAggregate, string> idSelector)
     {
+        if (idSelector == null) throw new ArgumentNullException(nameof(idSelector));
+
         var clone = Clone();
         clone.IdSelector = idSelector;
         return clone;
@@ -55,6 +61,8 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
     public AggregateOptionsBase<TAggregate, TEventBase> WithIdToStreamKeySelector(
         Func<string, string> idToStreamKeySelector)
     {
+        if (idToStreamKeySelector == null) throw new ArgumentNullException(nameof(idToStreamKeySelector));
+
         var clone = Clone();
         clone.IdToStreamKeySelector = idToStreamKeySelector;
         return clone;
@@ -63,6 +71,8 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
     public AggregateOptionsBase<TAggregate, TEventBase> WithIdToSnapshotKeySelector(
         Func<string, string> idToSnapshotKeySelector)
     {
+        if (idToSnapshotKeySelector == null) throw new ArgumentNullException(nameof(idToSnapshotKeySelector));
+
         var clone = Clone();
         clone.IdToSnapshotKeySelector = idToSnapshotKeySelector;
         return clone;
@@ -71,6 +81,8 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
     public AggregateOptionsBase<TAggregate, TEventBase> WithEventApplier(
         Func<TAggregate, TEventBase, TAggregate> eventApplier)
     {
+        if (eventApplier == null) throw new ArgumentNullException(nameof(eventApplier));
+
         var clone = Clone();
         clone.EventApplier = (agg, e) => eventApplier(agg, (TEventBase)e);
         return clone;
@@ -79,6 +91,8 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
     public AggregateOptionsBase<TAggregate, TEventBase> WithCommandResultOptions(
         ICommandResultOptions commandResultOptions)
     {
+        if (commandResultOptions == null) throw new ArgumentNullException(nameof(commandResultOptions));
+
         var clone = Clone();
         clone._commandResultsOptions[commandResultOptions.ClrType] = commandResultOptions;
         return clone;
@@ -87,6 +101,8 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
     public AggregateOptionsBase<TAggregate, TEventBase> WithCommandResultsOptions(
         IEnumerable<ICommandResultOptions> commandResultsOptions)
     {
+        if (commandResultsOptions == null) throw new ArgumentNullException(nameof(commandResultsOptions));
+
         var clone = Clone();
 
         foreach (var commandResultOptions in commandResultsOptions)
@@ -99,6 +115,8 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
 
     public AggregateOptionsBase<TAggregate, TEventBase> WithEventOptions(IEventOptions eventOptions)
     {
+        if (eventOptions == null) throw new ArgumentNullException(nameof(eventOptions));
+
         var clone = Clone();
         clone._eventsOptions[eventOptions.ClrType] = eventOptions;
         return clone;
@@ -106,6 +124,8 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
 
     public AggregateOptionsBase<TAggregate, TEventBase> WithEventsOptions(IEnumerable<IEventOptions> eventsOptions)
     {
+        if (eventsOptions == null) throw new ArgumentNullException(nameof(eventsOptions));
+
         var clone = Clone();
 
         foreach (var eventOptions in eventsOptions)
@@ -115,7 +135,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
 
         return clone;
     }
-    
+
     public bool HasCommandResultOptions<TCommandResult>()
     {
         return _commandResultsOptions.ContainsKey(typeof(TCommandResult));

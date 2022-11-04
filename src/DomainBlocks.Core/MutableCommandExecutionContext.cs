@@ -19,6 +19,8 @@ public class MutableCommandExecutionContext<TAggregate> : ICommandExecutionConte
 
     public TCommandResult ExecuteCommand<TCommandResult>(Func<TAggregate, TCommandResult> commandExecutor)
     {
+        if (commandExecutor == null) throw new ArgumentNullException(nameof(commandExecutor));
+
         var commandResult = commandExecutor(State);
 
         if (_aggregateOptions.CanSelectRaisedEventsFromAggregate)
@@ -42,8 +44,10 @@ public class MutableCommandExecutionContext<TAggregate> : ICommandExecutionConte
 
     public void ExecuteCommand(Action<TAggregate> commandExecutor)
     {
+        if (commandExecutor == null) throw new ArgumentNullException(nameof(commandExecutor));
+
         commandExecutor(State);
-        
+
         if (!_aggregateOptions.CanSelectRaisedEventsFromAggregate)
         {
             throw new InvalidOperationException(
