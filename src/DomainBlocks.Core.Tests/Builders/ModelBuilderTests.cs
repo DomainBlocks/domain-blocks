@@ -168,12 +168,12 @@ public class ModelBuilderTests
         var aggregate = new ImmutableAggregate();
         var context = aggregateOptions.CreateCommandExecutionContext(aggregate);
 
-        context.ExecuteCommand(x => x.ChangeValueWithYieldReturnedEvents("value"));
+        var result = context.ExecuteCommand(x => x.ChangeValueWithYieldReturnedEvents("value"));
         var events = context.RaisedEvents.ToList();
 
         Assert.That(context.State, Is.Not.SameAs(aggregate));
         Assert.That(context.State.Value, Is.EqualTo("value 3"));
-        Assert.That(context.RaisedEvents, Is.EqualTo(events));
+        Assert.That(context.RaisedEvents, Is.EqualTo(result));
         Assert.That(events, Has.Count.EqualTo(3));
         Assert.That(events[0], Is.EqualTo(new ValueChangedEvent("value 1")));
         Assert.That(events[1], Is.EqualTo(new ValueChangedEvent("value 2")));
