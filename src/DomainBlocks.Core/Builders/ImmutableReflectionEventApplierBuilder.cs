@@ -5,7 +5,7 @@ using System.Reflection;
 
 namespace DomainBlocks.Core.Builders;
 
-public class ImmutableReflectionEventApplierBuilder<TAggregate, TEventBase> : IIncludeNonPublicMethodsBuilder
+public sealed class ImmutableReflectionEventApplierBuilder<TAggregate, TEventBase> : IIncludeNonPublicMethodsBuilder
 {
     private string _methodName;
     private bool _includeNonPublicMethods;

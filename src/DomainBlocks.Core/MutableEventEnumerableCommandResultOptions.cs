@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace DomainBlocks.Core;
 
-public class MutableEventEnumerableCommandResultOptions<TAggregate, TEventBase> :
+public sealed class MutableEventEnumerableCommandResultOptions<TAggregate, TEventBase> :
     IMutableCommandResultOptions<TAggregate, IEnumerable<TEventBase>> where TEventBase : class
 {
     private EventEnumerationMode _mode = EventEnumerationMode.ApplyAfterEnumerating;

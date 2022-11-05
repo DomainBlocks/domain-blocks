@@ -5,14 +5,14 @@ namespace DomainBlocks.Core;
 
 public interface IMutableAggregateOptions<TAggregate> : IAggregateOptions<TAggregate>
 {
-    public new Action<TAggregate, object> EventApplier { get; }
-    public bool CanSelectRaisedEventsFromAggregate { get; }
+    bool CanSelectRaisedEventsFromAggregate { get; }
 
-    public IMutableCommandResultOptions<TAggregate, TCommandResult> GetCommandResultOptions<TCommandResult>();
-    public IEnumerable<object> SelectRaisedEvents(TAggregate aggregate);
+    new void ApplyEvent(TAggregate aggregate, object @event);
+    IMutableCommandResultOptions<TAggregate, TCommandResult> GetCommandResultOptions<TCommandResult>();
+    IEnumerable<object> SelectRaisedEvents(TAggregate aggregate);
 }
 
-public class MutableAggregateOptions<TAggregate, TEventBase> :
+public sealed class MutableAggregateOptions<TAggregate, TEventBase> :
     AggregateOptionsBase<TAggregate, TEventBase>,
     IMutableAggregateOptions<TAggregate> where TEventBase : class
 {
@@ -27,8 +27,6 @@ public class MutableAggregateOptions<TAggregate, TEventBase> :
         _raisedEventsSelector = copyFrom._raisedEventsSelector;
     }
 
-    public new Action<TAggregate, object> EventApplier => (agg, e) => base.EventApplier(agg, e);
-    
     public bool CanSelectRaisedEventsFromAggregate => _raisedEventsSelector != null;
 
     public MutableAggregateOptions<TAggregate, TEventBase> WithEventApplier(Action<TAggregate, TEventBase> eventApplier)
@@ -56,6 +54,8 @@ public class MutableAggregateOptions<TAggregate, TEventBase> :
     {
         return new MutableCommandExecutionContext<TAggregate>(aggregate, this);
     }
+
+    public new void ApplyEvent(TAggregate aggregate, object @event) => base.ApplyEvent(aggregate, @event);
 
     public new IMutableCommandResultOptions<TAggregate, TCommandResult> GetCommandResultOptions<TCommandResult>()
     {

@@ -11,11 +11,10 @@ public interface IAggregateOptions
 
 public interface IAggregateOptions<TAggregate> : IAggregateOptions
 {
-    Func<TAggregate, object, TAggregate> EventApplier { get; }
-
     TAggregate CreateNew();
     string MakeStreamKey(string id);
     string MakeSnapshotKey(string id);
     string MakeSnapshotKey(TAggregate aggregate);
     ICommandExecutionContext<TAggregate> CreateCommandExecutionContext(TAggregate aggregate);
+    TAggregate ApplyEvent(TAggregate aggregate, object @event);
 }

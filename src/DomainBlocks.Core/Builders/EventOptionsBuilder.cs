@@ -1,6 +1,6 @@
 namespace DomainBlocks.Core.Builders;
 
-public class EventOptionsBuilder<TEvent, TEventBase> where TEvent : TEventBase
+public sealed class EventOptionsBuilder<TEvent, TEventBase> where TEvent : TEventBase
 {
     public EventOptions<TEvent, TEventBase> Options { get; private set; } = new();
 

@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace DomainBlocks.Core;
 
-public class MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> :
+public sealed class MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> :
     IMutableCommandResultOptions<TAggregate, TCommandResult> where TEventBase : class
 {
     private bool _isApplyEventsEnabled;

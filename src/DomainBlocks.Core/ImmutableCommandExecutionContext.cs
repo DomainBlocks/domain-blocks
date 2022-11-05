@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace DomainBlocks.Core;
 
-public class ImmutableCommandExecutionContext<TAggregate> : ICommandExecutionContext<TAggregate>
+public sealed class ImmutableCommandExecutionContext<TAggregate> : ICommandExecutionContext<TAggregate>
 {
     private readonly IImmutableAggregateOptions<TAggregate> _aggregateOptions;
     private readonly List<object> _raisedEvents = new();
@@ -25,7 +25,7 @@ public class ImmutableCommandExecutionContext<TAggregate> : ICommandExecutionCon
         var commandResult = commandExecutor(State);
         var commandResultOptions = _aggregateOptions.GetCommandResultOptions<TCommandResult>();
         (var raisedEvents, State) =
-            commandResultOptions.SelectEventsAndUpdateState(commandResult, State, _aggregateOptions.EventApplier);
+            commandResultOptions.SelectEventsAndUpdateState(commandResult, State, _aggregateOptions.ApplyEvent);
         _raisedEvents.AddRange(raisedEvents);
 
         return commandResultOptions.Coerce(commandResult, raisedEvents);

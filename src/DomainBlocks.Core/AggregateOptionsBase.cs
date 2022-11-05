@@ -11,6 +11,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
     private Func<TAggregate, string> _idSelector;
     private Func<string, string> _idToStreamKeySelector;
     private Func<string, string> _idToSnapshotKeySelector;
+    private Func<TAggregate, object, TAggregate> _eventApplier;
 
     protected AggregateOptionsBase()
     {
@@ -20,7 +21,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
     {
         if (copyFrom == null) throw new ArgumentNullException(nameof(copyFrom));
 
-        EventApplier = copyFrom.EventApplier;
+        _eventApplier = copyFrom._eventApplier;
         _factory = copyFrom._factory;
         _idSelector = copyFrom._idSelector;
         _idToStreamKeySelector = copyFrom._idToStreamKeySelector;
@@ -32,13 +33,12 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
     public Type ClrType => typeof(TAggregate);
     public IEnumerable<IEventOptions> EventsOptions => _eventsOptions.Values;
 
-    public Func<TAggregate, object, TAggregate> EventApplier { get; private set; }
-
     public TAggregate CreateNew() => _factory();
     public string MakeStreamKey(string id) => _idToStreamKeySelector(id);
     public string MakeSnapshotKey(string id) => _idToSnapshotKeySelector(id);
     public string MakeSnapshotKey(TAggregate aggregate) => _idToSnapshotKeySelector(_idSelector(aggregate));
     public abstract ICommandExecutionContext<TAggregate> CreateCommandExecutionContext(TAggregate aggregate);
+    public TAggregate ApplyEvent(TAggregate aggregate, object @event) => _eventApplier(aggregate, @event);
 
     public AggregateOptionsBase<TAggregate, TEventBase> WithFactory(Func<TAggregate> factory)
     {
@@ -84,7 +84,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         if (eventApplier == null) throw new ArgumentNullException(nameof(eventApplier));
 
         var clone = Clone();
-        clone.EventApplier = (agg, e) => eventApplier(agg, (TEventBase)e);
+        clone._eventApplier = (agg, e) => eventApplier(agg, (TEventBase)e);
         return clone;
     }
 

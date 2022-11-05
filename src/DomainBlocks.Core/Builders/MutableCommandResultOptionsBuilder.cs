@@ -9,7 +9,7 @@ public interface IMutableCommandResultOptionsApplyEventsBuilder
     public void ApplyEvents();
 }
 
-public class MutableCommandResultOptionsBuilder<TAggregate, TEventBase, TCommandResult> :
+public sealed class MutableCommandResultOptionsBuilder<TAggregate, TEventBase, TCommandResult> :
     ICommandResultOptionsBuilder, IMutableCommandResultOptionsApplyEventsBuilder where TEventBase : class
 {
     private MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> _options = new();

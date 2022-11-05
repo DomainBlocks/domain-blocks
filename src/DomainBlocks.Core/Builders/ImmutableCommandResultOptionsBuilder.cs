@@ -8,7 +8,7 @@ public interface IImmutableCommandResultUpdatedStateSelectorBuilder<in TAggregat
     public void WithUpdatedStateFrom(Func<TCommandResult, TAggregate> updatedStateSelector);
 }
 
-public class ImmutableCommandResultOptionsBuilder<TAggregate, TEventBase, TCommandResult> :
+public sealed class ImmutableCommandResultOptionsBuilder<TAggregate, TEventBase, TCommandResult> :
     ICommandResultOptionsBuilder,
     IImmutableCommandResultUpdatedStateSelectorBuilder<TAggregate, TCommandResult>
     where TEventBase : class

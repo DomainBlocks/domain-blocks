@@ -44,11 +44,11 @@ public class ImmutableCommandExecutionContextTests
         }
 
         public ImmutableList<string> ObservedValues { get; } = ImmutableList<string>.Empty;
-        
+
         // This is a bit of a hack, but we keep a static property here to keep track of the call count, since this is
         // an immutable type.
         public static int CallCount { get; private set; }
-        
+
         public IEnumerable<object> MyCommandMethod(string newValue)
         {
             CallCount++;

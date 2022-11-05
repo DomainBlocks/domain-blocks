@@ -5,7 +5,7 @@ public interface IImmutableAggregateOptions<TAggregate> : IAggregateOptions<TAgg
     IImmutableCommandResultOptions<TAggregate, TCommandResult> GetCommandResultOptions<TCommandResult>();
 }
 
-public class ImmutableAggregateOptions<TAggregate, TEventBase> :
+public sealed class ImmutableAggregateOptions<TAggregate, TEventBase> :
     AggregateOptionsBase<TAggregate, TEventBase>, IImmutableAggregateOptions<TAggregate>
 {
     public ImmutableAggregateOptions()

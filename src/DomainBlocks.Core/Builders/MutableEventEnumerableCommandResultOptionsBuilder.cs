@@ -1,6 +1,6 @@
 namespace DomainBlocks.Core.Builders;
 
-public class MutableEventEnumerableCommandResultOptionsBuilder<TAggregate, TEventBase> :
+public sealed class MutableEventEnumerableCommandResultOptionsBuilder<TAggregate, TEventBase> :
     ICommandResultOptionsBuilder where TEventBase : class
 {
     private MutableEventEnumerableCommandResultOptions<TAggregate, TEventBase> _options = new();

@@ -5,7 +5,7 @@ using System.Reflection;
 
 namespace DomainBlocks.Core.Builders;
 
-public class AssemblyEventOptionsBuilder<TEventBase>
+public sealed class AssemblyEventOptionsBuilder<TEventBase>
 {
     private readonly Assembly _assembly;
     private Func<Type, bool> _eventTypePredicate;
@@ -41,7 +41,8 @@ public class AssemblyEventOptionsBuilder<TEventBase>
             if (eventClrTypes.Count == 0)
             {
                 throw new InvalidOperationException(
-                    $"No events found in assembly '{_assembly.GetName().Name}' with the specified predicate.");
+                    $"Events with base type '{typeof(TEventBase).Name}' where found in assembly " +
+                    $"'{_assembly.GetName().Name}', but none matched the specified predicate. ");
             }
         }
 

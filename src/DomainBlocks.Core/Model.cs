@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace DomainBlocks.Core;
 
-public class Model
+public sealed class Model
 {
     private readonly IReadOnlyDictionary<Type, IAggregateOptions> _aggregatesOptions;
     private readonly EventNameMap _eventNameMap;

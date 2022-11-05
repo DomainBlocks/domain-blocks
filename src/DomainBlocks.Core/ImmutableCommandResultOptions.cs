@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace DomainBlocks.Core;
 
-public class ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> :
+public sealed class ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> :
     IImmutableCommandResultOptions<TAggregate, TCommandResult> where TEventBase : class
 {
     private Func<TCommandResult, IEnumerable<TEventBase>> _eventsSelector;

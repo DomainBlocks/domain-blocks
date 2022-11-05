@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace DomainBlocks.Core;
 
-public class MutableCommandExecutionContext<TAggregate> : ICommandExecutionContext<TAggregate>
+public sealed class MutableCommandExecutionContext<TAggregate> : ICommandExecutionContext<TAggregate>
 {
     private readonly IMutableAggregateOptions<TAggregate> _aggregateOptions;
     private readonly List<object> _raisedEvents = new();
@@ -35,7 +35,7 @@ public class MutableCommandExecutionContext<TAggregate> : ICommandExecutionConte
         {
             var commandResultOptions = _aggregateOptions.GetCommandResultOptions<TCommandResult>();
             var raisedEvents =
-                commandResultOptions.SelectEventsAndUpdateState(commandResult, State, _aggregateOptions.EventApplier);
+                commandResultOptions.SelectEventsAndUpdateState(commandResult, State, _aggregateOptions.ApplyEvent);
             _raisedEvents.AddRange(raisedEvents);
 
             return commandResultOptions.Coerce(commandResult, raisedEvents);

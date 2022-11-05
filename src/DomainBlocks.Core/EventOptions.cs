@@ -2,7 +2,7 @@ using System;
 
 namespace DomainBlocks.Core;
 
-public class EventOptions<TEvent, TEventBase> : IEventOptions where TEvent : TEventBase
+public sealed class EventOptions<TEvent, TEventBase> : IEventOptions where TEvent : TEventBase
 {
     public EventOptions()
     {

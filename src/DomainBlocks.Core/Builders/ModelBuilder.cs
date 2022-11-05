@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace DomainBlocks.Core.Builders;
 
-public class ModelBuilder
+public sealed class ModelBuilder
 {
     private readonly List<IAggregateOptionsBuilder> _aggregateOptionsBuilders = new();
 

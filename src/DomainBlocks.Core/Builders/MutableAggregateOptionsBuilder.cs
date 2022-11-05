@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace DomainBlocks.Core.Builders;
 
-public class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
+public sealed class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     AggregateOptionsBuilderBase<TAggregate, TEventBase> where TEventBase : class
 {
     private MutableAggregateOptions<TAggregate, TEventBase> _options = new();

@@ -91,7 +91,7 @@ public sealed class AggregateRepository<TRawData> : IAggregateRepository
             },
             (acc, next) => new
             {
-                State = aggregateOptions.EventApplier(acc.State, next),
+                State = aggregateOptions.ApplyEvent(acc.State, next),
                 EventCount = acc.EventCount + 1
             }, 
             cancellationToken);
