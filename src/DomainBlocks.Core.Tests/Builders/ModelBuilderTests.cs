@@ -16,8 +16,7 @@ public class ModelBuilderTests
             {
                 aggregate
                     .DiscoverEventApplierMethods()
-                    .WithName(nameof(MutableAggregate.Apply))
-                    .IncludeNonPublic();
+                    .WithName(nameof(MutableAggregate.Apply));
             })
             .Build();
 
@@ -68,8 +67,7 @@ public class ModelBuilderTests
 
                 aggregate
                     .DiscoverEventApplierMethods()
-                    .WithName(nameof(MutableAggregate.Apply))
-                    .IncludeNonPublic();
+                    .WithName(nameof(MutableAggregate.Apply));
             })
             .Build();
 
@@ -97,7 +95,8 @@ public class ModelBuilderTests
             {
                 aggregate
                     .CommandResult<CommandResult>()
-                    .WithEventsFrom(x => x.Events);
+                    .WithEventsFrom(x => x.Events)
+                    .DoNotApplyEvents();
             })
             .Build();
 
@@ -130,8 +129,7 @@ public class ModelBuilderTests
 
                 aggregate
                     .DiscoverEventApplierMethods()
-                    .WithName(nameof(MutableAggregate.Apply))
-                    .IncludeNonPublic();
+                    .WithName(nameof(MutableAggregate.Apply));
             })
             .Build();
 
@@ -159,8 +157,7 @@ public class ModelBuilderTests
             {
                 aggregate
                     .DiscoverEventApplierMethods()
-                    .WithName(nameof(ImmutableAggregate.Apply))
-                    .IncludeNonPublic();
+                    .WithName(nameof(ImmutableAggregate.Apply));
             })
             .Build();
 
@@ -219,11 +216,9 @@ public class ModelBuilderTests
                     .CommandResult<CommandResult>()
                     .WithEventsFrom(x => x.Events);
 
-                // Event applier must be specified here
                 aggregate
                     .DiscoverEventApplierMethods()
-                    .WithName(nameof(ImmutableAggregate.Apply))
-                    .IncludeNonPublic();
+                    .WithName(nameof(ImmutableAggregate.Apply));
             })
             .Build();
 

@@ -5,6 +5,7 @@ namespace DomainBlocks.Core.Builders;
 
 public interface IMutableCommandResultOptionsApplyEventsBuilder
 {
+    public void DoNotApplyEvents();
     public void ApplyEvents();
 }
 
@@ -20,6 +21,11 @@ public class MutableCommandResultOptionsBuilder<TAggregate, TEventBase, TCommand
     {
         _options = _options.WithEventsSelector(eventsSelector);
         return this;
+    }
+
+    void IMutableCommandResultOptionsApplyEventsBuilder.DoNotApplyEvents()
+    {
+        _options = _options.WithApplyEventsEnabled(false);
     }
 
     void IMutableCommandResultOptionsApplyEventsBuilder.ApplyEvents()
