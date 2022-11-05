@@ -13,7 +13,7 @@ public class MutableCommandResultOptionsBuilder<TAggregate, TEventBase, TCommand
 {
     private MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> _options = new();
 
-    public ICommandResultOptions Options => _options;
+    ICommandResultOptions ICommandResultOptionsBuilder.Options => _options;
 
     public IMutableCommandResultOptionsApplyEventsBuilder WithEventsFrom(
         Func<TCommandResult, IEnumerable<TEventBase>> eventsSelector)

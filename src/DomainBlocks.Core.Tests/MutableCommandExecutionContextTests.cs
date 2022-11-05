@@ -14,7 +14,7 @@ public class MutableCommandExecutionContextTests
         var model = new ModelBuilder()
             .Aggregate<MutableAggregate>(aggregate =>
             {
-                aggregate.WithEventEnumerableCommandResult(EventEnumerationMode.ApplyWhileEnumerating);
+                aggregate.WithEventEnumerableCommandResult().ApplyEventsWhileEnumerating();
 
                 aggregate
                     .DiscoverEventApplierMethods()

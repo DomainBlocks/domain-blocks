@@ -46,12 +46,11 @@ public class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
         return builder;
     }
 
-    public void WithEventEnumerableCommandResult(EventEnumerationMode mode)
+    public MutableEventEnumerableCommandResultOptionsBuilder<TAggregate, TEventBase> WithEventEnumerableCommandResult()
     {
-        var commandResultOptions = new MutableEventEnumerableCommandResultOptions<TAggregate, TEventBase>()
-            .WithEventEnumerationMode(mode);
-
-        Options = _options.WithCommandResultOptions(commandResultOptions);
+        var builder = new MutableEventEnumerableCommandResultOptionsBuilder<TAggregate, TEventBase>();
+        _commandResultOptionsBuilders.Add(builder);
+        return builder;
     }
 
     public void ApplyEventsWith(Action<TAggregate, TEventBase> eventApplier)

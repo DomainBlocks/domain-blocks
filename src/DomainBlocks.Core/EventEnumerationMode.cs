@@ -2,7 +2,7 @@ namespace DomainBlocks.Core;
 
 public enum EventEnumerationMode
 {
-    None,
+    DoNotApply,
     ApplyAfterEnumerating,
     ApplyWhileEnumerating
 }

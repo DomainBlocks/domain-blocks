@@ -40,7 +40,7 @@ public class MutableEventEnumerableCommandResultOptions<TAggregate, TEventBase> 
     {
         return _mode switch
         {
-            EventEnumerationMode.None => commandResult.ToList().AsReadOnly(),
+            EventEnumerationMode.DoNotApply => commandResult.ToList().AsReadOnly(),
             EventEnumerationMode.ApplyAfterEnumerating => ApplyAfterEnumerating(commandResult, state, eventApplier),
             EventEnumerationMode.ApplyWhileEnumerating => ApplyWhileEnumerating(commandResult, state, eventApplier),
             _ => throw new InvalidOperationException($"Unknown enum value {nameof(EventEnumerationMode)}.{_mode}.")

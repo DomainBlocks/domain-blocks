@@ -15,7 +15,7 @@ public class ImmutableCommandResultOptionsBuilder<TAggregate, TEventBase, TComma
 {
     private ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> _options = new();
 
-    public ICommandResultOptions Options => _options;
+    ICommandResultOptions ICommandResultOptionsBuilder.Options => _options;
 
     public IImmutableCommandResultUpdatedStateSelectorBuilder<TAggregate, TCommandResult> WithEventsFrom(
         Func<TCommandResult, IEnumerable<TEventBase>> eventsSelector)
