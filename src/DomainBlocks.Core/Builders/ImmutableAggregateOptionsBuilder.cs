@@ -9,7 +9,7 @@ public sealed class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
 {
     private ImmutableAggregateOptions<TAggregate, TEventBase> _options = new();
     private readonly List<ICommandResultOptionsBuilder> _commandResultOptionsBuilders = new();
-    private ImmutableReflectionEventApplierBuilder<TAggregate, TEventBase> _reflectionEventApplierBuilder;
+    private ImmutableAutoEventApplierBuilder<TAggregate, TEventBase> _autoEventApplierBuilder;
 
     protected override AggregateOptionsBase<TAggregate, TEventBase> OptionsImpl
     {
@@ -28,12 +28,19 @@ public sealed class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
                 options = options.WithCommandResultOptions(commandResultOptions);
             }
 
-            var eventApplier = _reflectionEventApplierBuilder?.Build();
+            var eventApplier = _autoEventApplierBuilder?.Build();
             return eventApplier == null ? options : options.WithEventApplier(eventApplier);
         }
         set => _options = (ImmutableAggregateOptions<TAggregate, TEventBase>)value;
     }
 
+    /// <summary>
+    /// Returns an object that can be used to configure a command result type. Use this option to configure how to
+    /// access the raised events and updated state from returned command result objects.
+    /// <returns>
+    /// An object that can be used to configure the command result type.
+    /// </returns>
+    /// </summary>
     public ImmutableCommandResultOptionsBuilder<TAggregate, TEventBase, TCommandResult> CommandResult<TCommandResult>()
     {
         var builder = new ImmutableCommandResultOptionsBuilder<TAggregate, TEventBase, TCommandResult>();
@@ -41,15 +48,28 @@ public sealed class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
         return builder;
     }
 
+    /// <summary>
+    /// Specify an event applier for the aggregate. To arrive at the current state, the event applier is used to apply
+    /// events to aggregate instances loaded from the event store. If configured to do so, events are also applied when
+    /// commands are invoked.
+    /// </summary>
     public void ApplyEventsWith(Func<TAggregate, TEventBase, TAggregate> eventApplier)
     {
-        _reflectionEventApplierBuilder = null;
+        _autoEventApplierBuilder = null;
         OptionsImpl = _options.WithEventApplier(eventApplier);
     }
 
-    public ImmutableReflectionEventApplierBuilder<TAggregate, TEventBase> DiscoverEventApplierMethods()
+    /// <summary>
+    /// Auto-configures applying events by discovering event applier methods on the aggregate type. The event applier
+    /// methods are discovered by reflection during configuration, and for performance reasons, are compiled into IL
+    /// using lambda expressions.
+    /// </summary>
+    /// <returns>
+    /// An object that can be used to configure the discovery of event applier methods.
+    /// </returns>
+    public ImmutableAutoEventApplierBuilder<TAggregate, TEventBase> DiscoverEventApplierMethods()
     {
-        _reflectionEventApplierBuilder = new ImmutableReflectionEventApplierBuilder<TAggregate, TEventBase>();
-        return _reflectionEventApplierBuilder;
+        _autoEventApplierBuilder = new ImmutableAutoEventApplierBuilder<TAggregate, TEventBase>();
+        return _autoEventApplierBuilder;
     }
 }

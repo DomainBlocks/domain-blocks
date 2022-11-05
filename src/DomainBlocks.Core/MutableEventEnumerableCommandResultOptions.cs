@@ -7,7 +7,7 @@ namespace DomainBlocks.Core;
 public sealed class MutableEventEnumerableCommandResultOptions<TAggregate, TEventBase> :
     IMutableCommandResultOptions<TAggregate, IEnumerable<TEventBase>> where TEventBase : class
 {
-    private EventEnumerationMode _mode = EventEnumerationMode.ApplyAfterEnumerating;
+    private EventEnumerationMode _mode = EventEnumerationMode.DoNotApply;
 
     public MutableEventEnumerableCommandResultOptions()
     {

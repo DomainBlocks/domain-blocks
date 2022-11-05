@@ -48,18 +48,36 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
 
     protected abstract AggregateOptionsBase<TAggregate, TEventBase> OptionsImpl { get; set; }
 
+    /// <summary>
+    /// Specify a factory function for creating new instances of the aggregate type.
+    /// </summary>
+    /// <returns>
+    /// An object that can be used for further configuration.
+    /// </returns>
     public IIdSelectorBuilder<TAggregate> InitialState(Func<TAggregate> factory)
     {
         OptionsImpl = OptionsImpl.WithFactory(factory);
         return this;
     }
 
+    /// <summary>
+    /// Specify a unique ID selector for the aggregate.
+    /// </summary>
+    /// <returns>
+    /// An object that can be used for further configuration.
+    /// </returns>
     IIdToStreamKeySelectorBuilder IIdSelectorBuilder<TAggregate>.HasId(Func<TAggregate, string> idSelector)
     {
         OptionsImpl = OptionsImpl.WithIdSelector(idSelector);
         return this;
     }
 
+    /// <summary>
+    /// Specify a stream key selector.
+    /// </summary>
+    /// <returns>
+    /// An object that can be used for further configuration.
+    /// </returns>
     IIdToSnapshotKeySelectorBuilder IIdToStreamKeySelectorBuilder.WithStreamKey(
         Func<string, string> idToStreamKeySelector)
     {
@@ -67,11 +85,20 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
         return this;
     }
 
+    /// <summary>
+    /// Specify a snapshot key selector.
+    /// </summary>
     void IIdToSnapshotKeySelectorBuilder.WithSnapshotKey(Func<string, string> idToSnapshotKeySelector)
     {
         OptionsImpl = OptionsImpl.WithIdToSnapshotKeySelector(idToSnapshotKeySelector);
     }
 
+    /// <summary>
+    /// Adds the given event type to the aggregate options.
+    /// </summary>
+    /// <returns>
+    /// An object that can be used to further configure the event type.
+    /// </returns>
     public EventOptionsBuilder<TEvent, TEventBase> Event<TEvent>() where TEvent : TEventBase
     {
         var builder = new EventOptionsBuilder<TEvent, TEventBase>();
@@ -84,6 +111,13 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
         }
     }
 
+    /// <summary>
+    /// Finds events deriving from type <see cref="TEventBase"/> in the specified assembly, and adds them to the
+    /// aggregate options.
+    /// </summary>
+    /// <returns>
+    /// An object that can be used for further configuration.
+    /// </returns>
     public AssemblyEventOptionsBuilder<TEventBase> UseEventTypesFrom(Assembly assembly)
     {
         var builder = new AssemblyEventOptionsBuilder<TEventBase>(assembly);

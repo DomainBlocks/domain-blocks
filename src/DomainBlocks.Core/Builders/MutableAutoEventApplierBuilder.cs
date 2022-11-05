@@ -5,11 +5,19 @@ using System.Reflection;
 
 namespace DomainBlocks.Core.Builders;
 
-public sealed class MutableReflectionEventApplierBuilder<TAggregate, TEventBase> : IIncludeNonPublicMethodsBuilder
+public sealed class MutableAutoEventApplierBuilder<TAggregate, TEventBase> : IIncludeNonPublicMethodsBuilder
 {
     private string _methodName;
     private bool _includeNonPublicMethods;
 
+    /// <summary>
+    /// Specify the name of event applier methods on the aggregate type, e.g. if "ApplyEvent" is specified, then method
+    /// overloads with the signature <code>void ApplyEvent(SomeEvent)</code> will be used, where SomeEvent is derived
+    /// from <see cref="TEventBase"/>.
+    /// </summary>
+    /// <returns>
+    /// An object that can be used for further configuration.
+    /// </returns>
     public IIncludeNonPublicMethodsBuilder WithName(string methodName)
     {
         if (string.IsNullOrWhiteSpace(methodName))
@@ -19,6 +27,9 @@ public sealed class MutableReflectionEventApplierBuilder<TAggregate, TEventBase>
         return this;
     }
 
+    /// <summary>
+    /// Specify to include non-public event applier methods.
+    /// </summary>
     void IIncludeNonPublicMethodsBuilder.IncludeNonPublic()
     {
         _includeNonPublicMethods = true;
