@@ -11,22 +11,13 @@ public class MutableCommandExecutionContextTests
     [Test]
     public void EventEnumerableReturnTypeIsNotEnumeratedAgainWhenMaterializing()
     {
-        var model = new ModelBuilder()
-            .Aggregate<MutableAggregate>(aggregate =>
-            {
-                aggregate.WithEventEnumerableCommandResult().ApplyEventsWhileEnumerating();
-
-                aggregate
-                    .DiscoverEventApplierMethods()
-                    .WithName(nameof(MutableAggregate.Apply))
-                    .IncludeNonPublic();
-            })
-            .Build();
-
-        var aggregateOptions = model.GetAggregateOptions<MutableAggregate>();
+        var builder = new MutableAggregateOptionsBuilder<MutableAggregate, object>();
+        builder.WithEventEnumerableCommandResult().ApplyEventsWhileEnumerating();
+        builder.ApplyEventsWith((agg, e) => agg.Apply((dynamic)e));
+        var options = builder.Options;
 
         var aggregate = new MutableAggregate();
-        var context = aggregateOptions.CreateCommandExecutionContext(aggregate);
+        var context = options.CreateCommandExecutionContext(aggregate);
 
         // Materialize the results. We expect the comment method to be called only once.
         var events = context.ExecuteCommand(x => x.MyCommandMethod("value")).ToList();

@@ -11,7 +11,7 @@ public class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     private readonly List<ICommandResultOptionsBuilder> _commandResultOptionsBuilders = new();
     private ImmutableReflectionEventApplierBuilder<TAggregate, TEventBase> _reflectionEventApplierBuilder;
 
-    protected override AggregateOptionsBase<TAggregate, TEventBase> Options
+    protected override AggregateOptionsBase<TAggregate, TEventBase> OptionsImpl
     {
         get
         {
@@ -44,7 +44,7 @@ public class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     public void ApplyEventsWith(Func<TAggregate, TEventBase, TAggregate> eventApplier)
     {
         _reflectionEventApplierBuilder = null;
-        Options = _options.WithEventApplier(eventApplier);
+        OptionsImpl = _options.WithEventApplier(eventApplier);
     }
 
     public ImmutableReflectionEventApplierBuilder<TAggregate, TEventBase> DiscoverEventApplierMethods()

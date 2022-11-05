@@ -7,6 +7,10 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
 {
     private readonly Dictionary<Type, ICommandResultOptions> _commandResultsOptions = new();
     private readonly Dictionary<Type, IEventOptions> _eventsOptions = new();
+    private Func<TAggregate> _factory;
+    private Func<TAggregate, string> _idSelector;
+    private Func<string, string> _idToStreamKeySelector;
+    private Func<string, string> _idToSnapshotKeySelector;
 
     protected AggregateOptionsBase()
     {
@@ -16,28 +20,24 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
     {
         if (copyFrom == null) throw new ArgumentNullException(nameof(copyFrom));
 
-        Factory = copyFrom.Factory;
-        IdSelector = copyFrom.IdSelector;
-        IdToStreamKeySelector = copyFrom.IdToStreamKeySelector;
-        IdToSnapshotKeySelector = copyFrom.IdToSnapshotKeySelector;
         EventApplier = copyFrom.EventApplier;
+        _factory = copyFrom._factory;
+        _idSelector = copyFrom._idSelector;
+        _idToStreamKeySelector = copyFrom._idToStreamKeySelector;
+        _idToSnapshotKeySelector = copyFrom._idToSnapshotKeySelector;
         _commandResultsOptions = new Dictionary<Type, ICommandResultOptions>(copyFrom._commandResultsOptions);
         _eventsOptions = new Dictionary<Type, IEventOptions>(copyFrom._eventsOptions);
     }
 
     public Type ClrType => typeof(TAggregate);
-    public Type EventBaseType => typeof(TEventBase);
     public IEnumerable<IEventOptions> EventsOptions => _eventsOptions.Values;
 
-    public Func<TAggregate> Factory { get; private set; }
-    public Func<TAggregate, string> IdSelector { get; private set; }
-    public Func<string, string> IdToStreamKeySelector { get; private set; }
-    public Func<string, string> IdToSnapshotKeySelector { get; private set; }
     public Func<TAggregate, object, TAggregate> EventApplier { get; private set; }
 
-    public string SelectStreamKey(TAggregate aggregate) => IdToStreamKeySelector(IdSelector(aggregate));
-    public string SelectSnapshotKey(TAggregate aggregate) => IdToSnapshotKeySelector(IdSelector(aggregate));
-
+    public TAggregate CreateNew() => _factory();
+    public string MakeStreamKey(string id) => _idToStreamKeySelector(id);
+    public string MakeSnapshotKey(string id) => _idToSnapshotKeySelector(id);
+    public string MakeSnapshotKey(TAggregate aggregate) => _idToSnapshotKeySelector(_idSelector(aggregate));
     public abstract ICommandExecutionContext<TAggregate> CreateCommandExecutionContext(TAggregate aggregate);
 
     public AggregateOptionsBase<TAggregate, TEventBase> WithFactory(Func<TAggregate> factory)
@@ -45,7 +45,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         if (factory == null) throw new ArgumentNullException(nameof(factory));
 
         var clone = Clone();
-        clone.Factory = factory;
+        clone._factory = factory;
         return clone;
     }
 
@@ -54,7 +54,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         if (idSelector == null) throw new ArgumentNullException(nameof(idSelector));
 
         var clone = Clone();
-        clone.IdSelector = idSelector;
+        clone._idSelector = idSelector;
         return clone;
     }
 
@@ -64,7 +64,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         if (idToStreamKeySelector == null) throw new ArgumentNullException(nameof(idToStreamKeySelector));
 
         var clone = Clone();
-        clone.IdToStreamKeySelector = idToStreamKeySelector;
+        clone._idToStreamKeySelector = idToStreamKeySelector;
         return clone;
     }
 
@@ -74,7 +74,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         if (idToSnapshotKeySelector == null) throw new ArgumentNullException(nameof(idToSnapshotKeySelector));
 
         var clone = Clone();
-        clone.IdToSnapshotKeySelector = idToSnapshotKeySelector;
+        clone._idToSnapshotKeySelector = idToSnapshotKeySelector;
         return clone;
     }
 

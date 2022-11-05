@@ -12,20 +12,12 @@ public class ImmutableCommandExecutionContextTests
     [Test]
     public void EventEnumerableReturnTypeIsNotEnumeratedAgainWhenMaterializing()
     {
-        var model = new ModelBuilder()
-            .ImmutableAggregate<ImmutableAggregate>(aggregate =>
-            {
-                aggregate
-                    .DiscoverEventApplierMethods()
-                    .WithName(nameof(ImmutableAggregate.Apply))
-                    .IncludeNonPublic();
-            })
-            .Build();
-
-        var aggregateOptions = model.GetAggregateOptions<ImmutableAggregate>();
+        var builder = new ImmutableAggregateOptionsBuilder<ImmutableAggregate, object>();
+        builder.ApplyEventsWith((agg, e) => agg.Apply((dynamic)e));
+        var options = builder.Options;
 
         var aggregate = new ImmutableAggregate();
-        var context = aggregateOptions.CreateCommandExecutionContext(aggregate);
+        var context = options.CreateCommandExecutionContext(aggregate);
 
         // Materialize the results. We expect the comment method to be called only once.
         var events = context.ExecuteCommand(x => x.MyCommandMethod("value")).ToList();

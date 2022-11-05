@@ -11,7 +11,7 @@ public class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     private readonly List<ICommandResultOptionsBuilder> _commandResultOptionsBuilders = new();
     private MutableReflectionEventApplierBuilder<TAggregate, TEventBase> _reflectionEventApplierBuilder;
 
-    protected override AggregateOptionsBase<TAggregate, TEventBase> Options
+    protected override AggregateOptionsBase<TAggregate, TEventBase> OptionsImpl
     {
         get
         {

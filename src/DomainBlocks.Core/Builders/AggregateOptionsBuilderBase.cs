@@ -33,41 +33,43 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
     where TEventBase : class
 {
     private readonly List<Func<IEnumerable<IEventOptions>>> _eventsOptionsFactories = new();
-
-    protected abstract AggregateOptionsBase<TAggregate, TEventBase> Options { get; set; }
-
-    IAggregateOptions IAggregateOptionsBuilder.Options
+    
+    public IAggregateOptions<TAggregate> Options
     {
         get
         {
             var eventsOptions = _eventsOptionsFactories.SelectMany(x => x());
-            var options = Options.WithEventsOptions(eventsOptions);
+            var options = OptionsImpl.WithEventsOptions(eventsOptions);
             return options;
         }
     }
 
+    IAggregateOptions IAggregateOptionsBuilder.Options => Options;
+
+    protected abstract AggregateOptionsBase<TAggregate, TEventBase> OptionsImpl { get; set; }
+
     public IIdSelectorBuilder<TAggregate> InitialState(Func<TAggregate> factory)
     {
-        Options = Options.WithFactory(factory);
+        OptionsImpl = OptionsImpl.WithFactory(factory);
         return this;
     }
 
     IIdToStreamKeySelectorBuilder IIdSelectorBuilder<TAggregate>.HasId(Func<TAggregate, string> idSelector)
     {
-        Options = Options.WithIdSelector(idSelector);
+        OptionsImpl = OptionsImpl.WithIdSelector(idSelector);
         return this;
     }
 
     IIdToSnapshotKeySelectorBuilder IIdToStreamKeySelectorBuilder.WithStreamKey(
         Func<string, string> idToStreamKeySelector)
     {
-        Options = Options.WithIdToStreamKeySelector(idToStreamKeySelector);
+        OptionsImpl = OptionsImpl.WithIdToStreamKeySelector(idToStreamKeySelector);
         return this;
     }
 
     void IIdToSnapshotKeySelectorBuilder.WithSnapshotKey(Func<string, string> idToSnapshotKeySelector)
     {
-        Options = Options.WithIdToSnapshotKeySelector(idToSnapshotKeySelector);
+        OptionsImpl = OptionsImpl.WithIdToSnapshotKeySelector(idToSnapshotKeySelector);
     }
 
     public EventOptionsBuilder<TEvent, TEventBase> Event<TEvent>() where TEvent : TEventBase
