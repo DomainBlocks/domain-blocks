@@ -12,7 +12,7 @@ public class ImmutableCommandExecutionContextTests
     [Test]
     public void EventEnumerableReturnTypeIsNotEnumeratedAgainWhenMaterializing()
     {
-        var builder = new ImmutableAggregateOptionsBuilder<ImmutableAggregate, object>();
+        var builder = new ImmutableAggregateOptionsBuilder<ImmutableAggregate, IEvent>();
         builder.ApplyEventsWith((agg, e) => agg.Apply((dynamic)e));
         var options = builder.Options;
 
@@ -49,7 +49,7 @@ public class ImmutableCommandExecutionContextTests
         // an immutable type.
         public static int CallCount { get; private set; }
 
-        public IEnumerable<object> MyCommandMethod(string newValue)
+        public IEnumerable<IEvent> MyCommandMethod(string newValue)
         {
             CallCount++;
             yield return new ValueChangedEvent($"{newValue} 1");
@@ -62,8 +62,12 @@ public class ImmutableCommandExecutionContextTests
             return new ImmutableAggregate(ObservedValues.Add(@event.Value));
         }
     }
+    
+    private interface IEvent
+    {
+    }
 
-    private class ValueChangedEvent
+    private class ValueChangedEvent : IEvent
     {
         public ValueChangedEvent(string value)
         {

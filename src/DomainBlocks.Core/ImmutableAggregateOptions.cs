@@ -21,7 +21,7 @@ public sealed class ImmutableAggregateOptions<TAggregate, TEventBase> :
     public override ICommandExecutionContext<TAggregate> CreateCommandExecutionContext(TAggregate aggregate)
     {
         if (aggregate == null) throw new ArgumentNullException(nameof(aggregate));
-        return new ImmutableCommandExecutionContext<TAggregate>(aggregate, this);
+        return new ImmutableCommandExecutionContext<TAggregate, TEventBase>(aggregate, this);
     }
 
     public new IImmutableCommandResultOptions<TAggregate, TCommandResult> GetCommandResultOptions<TCommandResult>()

@@ -1,9 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace DomainBlocks.Core;
 
-public sealed class MutableCommandExecutionContext<TAggregate> : ICommandExecutionContext<TAggregate>
+public sealed class MutableCommandExecutionContext<TAggregate, TEventBase> : ICommandExecutionContext<TAggregate>
 {
     private readonly IMutableAggregateOptions<TAggregate> _aggregateOptions;
     private readonly List<object> _raisedEvents = new();
@@ -40,7 +41,11 @@ public sealed class MutableCommandExecutionContext<TAggregate> : ICommandExecuti
                 commandResultOptions.SelectEventsAndUpdateState(commandResult, State, _aggregateOptions.ApplyEvent);
             _raisedEvents.AddRange(raisedEvents);
 
-            return commandResultOptions.Coerce(commandResult, raisedEvents);
+            // If the command result is an event enumerable, return the materialized events to avoid multiple
+            // enumeration.
+            return typeof(TCommandResult) == typeof(IEnumerable<TEventBase>)
+                ? (TCommandResult)raisedEvents.Cast<TEventBase>()
+                : commandResult;
         }
     }
 

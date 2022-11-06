@@ -53,7 +53,7 @@ public sealed class MutableAggregateOptions<TAggregate, TEventBase> :
     public override ICommandExecutionContext<TAggregate> CreateCommandExecutionContext(TAggregate aggregate)
     {
         if (aggregate == null) throw new ArgumentNullException(nameof(aggregate));
-        return new MutableCommandExecutionContext<TAggregate>(aggregate, this);
+        return new MutableCommandExecutionContext<TAggregate, TEventBase>(aggregate, this);
     }
 
     public new void ApplyEvent(TAggregate aggregate, object @event) => base.ApplyEvent(aggregate, @event);

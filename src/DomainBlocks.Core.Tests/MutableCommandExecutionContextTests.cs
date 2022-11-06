@@ -11,7 +11,7 @@ public class MutableCommandExecutionContextTests
     [Test]
     public void EventEnumerableReturnTypeIsNotEnumeratedAgainWhenMaterializing()
     {
-        var builder = new MutableAggregateOptionsBuilder<MutableAggregate, object>();
+        var builder = new MutableAggregateOptionsBuilder<MutableAggregate, IEvent>();
         builder.WithEventEnumerableCommandResult().ApplyEventsWhileEnumerating();
         builder.ApplyEventsWith((agg, e) => agg.Apply((dynamic)e));
         var options = builder.Options;
@@ -37,7 +37,7 @@ public class MutableCommandExecutionContextTests
         public int CallCount { get; private set; }
         private string Value { get; set; }
 
-        public IEnumerable<object> MyCommandMethod(string newValue)
+        public IEnumerable<IEvent> MyCommandMethod(string newValue)
         {
             CallCount++;
             yield return new ValueChangedEvent($"{newValue} 1");
@@ -51,8 +51,12 @@ public class MutableCommandExecutionContextTests
             ObservedValues.Add(@event.Value);
         }
     }
+    
+    private interface IEvent
+    {
+    }
 
-    private class ValueChangedEvent
+    private class ValueChangedEvent : IEvent
     {
         public ValueChangedEvent(string value)
         {
