@@ -55,28 +55,27 @@ public sealed class ImmutableCommandResultOptions<TAggregate, TEventBase, TComma
         };
     }
 
-    public (IReadOnlyCollection<object>, TAggregate) SelectEventsAndUpdateState(
-        TCommandResult commandResult, TAggregate state, Func<TAggregate, object, TAggregate> eventApplier)
+    public IReadOnlyCollection<object> SelectEventsAndUpdateState(
+        TCommandResult commandResult, ref TAggregate state, Func<TAggregate, object, TAggregate> eventApplier)
     {
         var events = _eventsSelector(commandResult);
 
         if (_updatedStateSelector != null)
         {
-            var updatedState = _updatedStateSelector(commandResult);
-            return (events.ToList().AsReadOnly(), updatedState);
+            state = _updatedStateSelector(commandResult);
+            return events.ToList().AsReadOnly();
         }
 
         {
-            var updatedState = state;
             var appliedEvents = new List<object>();
 
             foreach (var @event in events)
             {
-                updatedState = eventApplier(updatedState, @event);
+                state = eventApplier(state, @event);
                 appliedEvents.Add(@event);
             }
 
-            return (appliedEvents.AsReadOnly(), updatedState);
+            return appliedEvents.AsReadOnly();
         }
     }
 }

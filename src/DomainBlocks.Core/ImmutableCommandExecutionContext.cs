@@ -7,15 +7,16 @@ public sealed class ImmutableCommandExecutionContext<TAggregate> : ICommandExecu
 {
     private readonly IImmutableAggregateOptions<TAggregate> _aggregateOptions;
     private readonly List<object> _raisedEvents = new();
+    private TAggregate _state;
 
     public ImmutableCommandExecutionContext(
         TAggregate state, IImmutableAggregateOptions<TAggregate> aggregateOptions)
     {
-        State = state ?? throw new ArgumentNullException(nameof(state));
+        _state = state ?? throw new ArgumentNullException(nameof(state));
         _aggregateOptions = aggregateOptions ?? throw new ArgumentNullException(nameof(aggregateOptions));
     }
 
-    public TAggregate State { get; private set; }
+    public TAggregate State => _state;
     public IReadOnlyCollection<object> RaisedEvents => _raisedEvents;
 
     public TCommandResult ExecuteCommand<TCommandResult>(Func<TAggregate, TCommandResult> commandExecutor)
@@ -26,8 +27,8 @@ public sealed class ImmutableCommandExecutionContext<TAggregate> : ICommandExecu
         // without executing the command if the options are missing.
         var commandResultOptions = _aggregateOptions.GetCommandResultOptions<TCommandResult>();
         var commandResult = commandExecutor(State);
-        (var raisedEvents, State) =
-            commandResultOptions.SelectEventsAndUpdateState(commandResult, State, _aggregateOptions.ApplyEvent);
+        var raisedEvents =
+            commandResultOptions.SelectEventsAndUpdateState(commandResult, ref _state, _aggregateOptions.ApplyEvent);
         _raisedEvents.AddRange(raisedEvents);
 
         return commandResultOptions.Coerce(commandResult, raisedEvents);

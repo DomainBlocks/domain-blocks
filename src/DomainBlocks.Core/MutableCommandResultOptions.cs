@@ -49,18 +49,14 @@ public sealed class MutableCommandResultOptions<TAggregate, TEventBase, TCommand
     public IReadOnlyCollection<object> SelectEventsAndUpdateState(
         TCommandResult commandResult, TAggregate state, Action<TAggregate, object> eventApplier)
     {
-        return _isApplyEventsEnabled
-            ? ApplyEvents(commandResult, state, eventApplier)
-            : _eventsSelector(commandResult).ToList().AsReadOnly();
-    }
-
-    private IReadOnlyCollection<object> ApplyEvents(
-        TCommandResult commandResult, TAggregate state, Action<TAggregate, object> eventApplier)
-    {
         var events = _eventsSelector(commandResult).ToList().AsReadOnly();
-        foreach (var @event in events)
+
+        if (_isApplyEventsEnabled)
         {
-            eventApplier(state, @event);
+            foreach (var @event in events)
+            {
+                eventApplier(state, @event);
+            }
         }
 
         return events;
