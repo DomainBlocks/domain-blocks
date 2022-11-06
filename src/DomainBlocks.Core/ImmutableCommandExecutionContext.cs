@@ -22,8 +22,10 @@ public sealed class ImmutableCommandExecutionContext<TAggregate> : ICommandExecu
     {
         if (commandExecutor == null) throw new ArgumentNullException(nameof(commandExecutor));
 
-        var commandResult = commandExecutor(State);
+        // We attempt to get the command result options before executing the command. This ensures that we throw
+        // without executing the command if the options are missing.
         var commandResultOptions = _aggregateOptions.GetCommandResultOptions<TCommandResult>();
+        var commandResult = commandExecutor(State);
         (var raisedEvents, State) =
             commandResultOptions.SelectEventsAndUpdateState(commandResult, State, _aggregateOptions.ApplyEvent);
         _raisedEvents.AddRange(raisedEvents);

@@ -21,10 +21,9 @@ public sealed class MutableCommandExecutionContext<TAggregate> : ICommandExecuti
     {
         if (commandExecutor == null) throw new ArgumentNullException(nameof(commandExecutor));
 
-        var commandResult = commandExecutor(State);
-
         if (_aggregateOptions.CanSelectRaisedEventsFromAggregate)
         {
+            var commandResult = commandExecutor(State);
             var raisedEvents = _aggregateOptions.SelectRaisedEvents(State);
             _raisedEvents.Clear();
             _raisedEvents.AddRange(raisedEvents);
@@ -33,7 +32,10 @@ public sealed class MutableCommandExecutionContext<TAggregate> : ICommandExecuti
         }
 
         {
+            // We attempt to get the command result options before executing the command. This ensures that we throw
+            // without executing the command if the options are missing.
             var commandResultOptions = _aggregateOptions.GetCommandResultOptions<TCommandResult>();
+            var commandResult = commandExecutor(State);
             var raisedEvents =
                 commandResultOptions.SelectEventsAndUpdateState(commandResult, State, _aggregateOptions.ApplyEvent);
             _raisedEvents.AddRange(raisedEvents);
