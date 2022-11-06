@@ -37,7 +37,7 @@ public sealed class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     /// <summary>
     /// Specify an events selector for the aggregate. Use this option when the aggregate itself exposes the events it
     /// raises via a method or property. Any command results configured with <see cref="CommandResult{TCommandResult}"/>
-    /// will be ignored when this method is used. 
+    /// will be ignored when this option is used. 
     /// </summary>
     public void WithRaisedEventsFrom(Func<TAggregate, IReadOnlyCollection<TEventBase>> eventsSelector)
     {
@@ -75,8 +75,8 @@ public sealed class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
 
     /// <summary>
     /// Specify an event applier for the aggregate. To arrive at the current state, the event applier is used to apply
-    /// events to aggregate instances loaded from the event store. If configured to do so, events are also applied when
-    /// commands are invoked.
+    /// events to aggregate instances loaded from the event store. Events are also applied when commands are executed,
+    /// if configured with command result options.
     /// </summary>
     public void ApplyEventsWith(Action<TAggregate, TEventBase> eventApplier)
     {

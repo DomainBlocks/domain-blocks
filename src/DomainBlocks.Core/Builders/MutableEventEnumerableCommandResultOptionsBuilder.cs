@@ -17,7 +17,7 @@ public sealed class MutableEventEnumerableCommandResultOptionsBuilder<TAggregate
 
     /// <summary>
     /// Specify to apply the events to the aggregate after the returned event enumerable has been materialized. This
-    /// avoids observing state changes as events are yield returned from the command method.
+    /// avoids intermediate state changes if events are yield returned from the command method.
     /// </summary>
     public void ApplyEventsAfterEnumerating()
     {
@@ -26,7 +26,7 @@ public sealed class MutableEventEnumerableCommandResultOptionsBuilder<TAggregate
 
     /// <summary>
     /// Specify to apply the events to the aggregate while enumerating through the returned event enumerable. Use this
-    /// option to observe state changes as events are yield returned from the command method.
+    /// option to enable intermediate state changes as events are yield returned from the command method.
     /// </summary>
     public void ApplyEventsWhileEnumerating()
     {

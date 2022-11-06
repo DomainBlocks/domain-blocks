@@ -1,3 +1,5 @@
+using System;
+
 namespace DomainBlocks.Core;
 
 public interface IImmutableAggregateOptions<TAggregate> : IAggregateOptions<TAggregate>
@@ -18,6 +20,7 @@ public sealed class ImmutableAggregateOptions<TAggregate, TEventBase> :
 
     public override ICommandExecutionContext<TAggregate> CreateCommandExecutionContext(TAggregate aggregate)
     {
+        if (aggregate == null) throw new ArgumentNullException(nameof(aggregate));
         return new ImmutableCommandExecutionContext<TAggregate>(aggregate, this);
     }
 

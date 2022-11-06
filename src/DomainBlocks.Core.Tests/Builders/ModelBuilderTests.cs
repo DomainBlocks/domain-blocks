@@ -29,7 +29,7 @@ public class ModelBuilderTests
         Assert.That(events[1], Is.EqualTo(new ValueChangedEvent("value 2")));
         Assert.That(events[2], Is.EqualTo(new ValueChangedEvent("value 3")));
     }
-    
+
     [Test]
     public void MutableAggregateApplyAfterEnumeratingScenario()
     {

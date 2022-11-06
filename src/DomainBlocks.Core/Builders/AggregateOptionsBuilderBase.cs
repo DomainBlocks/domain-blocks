@@ -12,16 +12,31 @@ public interface IAggregateOptionsBuilder
 
 public interface IIdSelectorBuilder<out TAggregate>
 {
+    /// <summary>
+    /// Specify a unique ID selector for the aggregate.
+    /// </summary>
+    /// <returns>
+    /// An object that can be used for further configuration.
+    /// </returns>
     public IIdToStreamKeySelectorBuilder HasId(Func<TAggregate, string> idSelector);
 }
 
 public interface IIdToStreamKeySelectorBuilder
 {
+    /// <summary>
+    /// Specify a stream key selector.
+    /// </summary>
+    /// <returns>
+    /// An object that can be used for further configuration.
+    /// </returns>
     public IIdToSnapshotKeySelectorBuilder WithStreamKey(Func<string, string> idToStreamKeySelector);
 }
 
 public interface IIdToSnapshotKeySelectorBuilder
 {
+    /// <summary>
+    /// Specify a snapshot key selector.
+    /// </summary>
     public void WithSnapshotKey(Func<string, string> idToSnapshotKeySelector);
 }
 
@@ -33,7 +48,7 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
     where TEventBase : class
 {
     private readonly List<Func<IEnumerable<IEventOptions>>> _eventsOptionsFactories = new();
-    
+
     public IAggregateOptions<TAggregate> Options
     {
         get
@@ -60,24 +75,12 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
         return this;
     }
 
-    /// <summary>
-    /// Specify a unique ID selector for the aggregate.
-    /// </summary>
-    /// <returns>
-    /// An object that can be used for further configuration.
-    /// </returns>
     IIdToStreamKeySelectorBuilder IIdSelectorBuilder<TAggregate>.HasId(Func<TAggregate, string> idSelector)
     {
         OptionsImpl = OptionsImpl.WithIdSelector(idSelector);
         return this;
     }
 
-    /// <summary>
-    /// Specify a stream key selector.
-    /// </summary>
-    /// <returns>
-    /// An object that can be used for further configuration.
-    /// </returns>
     IIdToSnapshotKeySelectorBuilder IIdToStreamKeySelectorBuilder.WithStreamKey(
         Func<string, string> idToStreamKeySelector)
     {
@@ -85,9 +88,6 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
         return this;
     }
 
-    /// <summary>
-    /// Specify a snapshot key selector.
-    /// </summary>
     void IIdToSnapshotKeySelectorBuilder.WithSnapshotKey(Func<string, string> idToSnapshotKeySelector)
     {
         OptionsImpl = OptionsImpl.WithIdToSnapshotKeySelector(idToSnapshotKeySelector);

@@ -33,12 +33,70 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
     public Type ClrType => typeof(TAggregate);
     public IEnumerable<IEventOptions> EventsOptions => _eventsOptions.Values;
 
-    public TAggregate CreateNew() => _factory();
-    public string MakeStreamKey(string id) => _idToStreamKeySelector(id);
-    public string MakeSnapshotKey(string id) => _idToSnapshotKeySelector(id);
-    public string MakeSnapshotKey(TAggregate aggregate) => _idToSnapshotKeySelector(_idSelector(aggregate));
+    public TAggregate CreateNew()
+    {
+        if (_factory == null)
+        {
+            throw new InvalidOperationException(
+                "Cannot create new aggregate instance as no factory has been specified.");
+        }
+
+        return _factory();
+    }
+
+    public string MakeStreamKey(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("ID cannot be null or whitespace", nameof(id));
+        
+        if (_idToStreamKeySelector == null)
+        {
+            throw new InvalidOperationException(
+                "Cannot make stream key as no ID to stream key selector has been specified.");
+        }
+        
+        return _idToStreamKeySelector(id);
+    }
+
+    public string MakeSnapshotKey(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("ID cannot be null or whitespace", nameof(id));
+
+        if (_idToSnapshotKeySelector == null)
+        {
+            throw new InvalidOperationException(
+                "Cannot make snapshot key as no ID to snapshot key selector has been specified.");
+        }
+
+        return _idToSnapshotKeySelector(id);
+    }
+
+    public string MakeSnapshotKey(TAggregate aggregate)
+    {
+        if (aggregate == null) throw new ArgumentNullException(nameof(aggregate));
+
+        if (_idSelector == null)
+        {
+            throw new InvalidOperationException("Cannot make snapshot key as no ID selector has been specified.");
+        }
+
+        return MakeSnapshotKey(_idSelector(aggregate));
+    }
+
     public abstract ICommandExecutionContext<TAggregate> CreateCommandExecutionContext(TAggregate aggregate);
-    public TAggregate ApplyEvent(TAggregate aggregate, object @event) => _eventApplier(aggregate, @event);
+
+    public TAggregate ApplyEvent(TAggregate aggregate, object @event)
+    {
+        if (aggregate == null) throw new ArgumentNullException(nameof(aggregate));
+        if (@event == null) throw new ArgumentNullException(nameof(@event));
+
+        if (_eventApplier == null)
+        {
+            throw new InvalidOperationException(
+                "Cannot apply event to aggregate as no event applier has been specified.");
+        }
+
+        return _eventApplier(aggregate, @event);
+    }
 
     public AggregateOptionsBase<TAggregate, TEventBase> WithFactory(Func<TAggregate> factory)
     {

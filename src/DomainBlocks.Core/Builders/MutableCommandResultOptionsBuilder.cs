@@ -7,13 +7,13 @@ public interface IMutableCommandResultOptionsApplyEventsBuilder
 {
     /// <summary>
     /// Specify to not apply the returned events to the aggregate. Use this option when the mutable aggregate's state
-    /// is updated as a result of invoking the command method. This option is the default behaviour.
+    /// is updated by the command method. This option is the default behaviour.
     /// </summary>
     public void DoNotApplyEvents();
     
     /// <summary>
     /// Specify to update the aggregate's state by applying the returned events. Use this option when the mutable
-    /// aggregate's state is not updated as a result of invoking the command method.
+    /// aggregate's state is not updated by the command method.
     /// </summary>
     public void ApplyEvents();
 }

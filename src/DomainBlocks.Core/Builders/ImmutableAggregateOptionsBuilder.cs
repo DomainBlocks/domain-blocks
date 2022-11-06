@@ -50,8 +50,8 @@ public sealed class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
 
     /// <summary>
     /// Specify an event applier for the aggregate. To arrive at the current state, the event applier is used to apply
-    /// events to aggregate instances loaded from the event store. If configured to do so, events are also applied when
-    /// commands are invoked.
+    /// events to aggregate instances loaded from the event store. By default, events are also applied when commands
+    /// are invoked.
     /// </summary>
     public void ApplyEventsWith(Func<TAggregate, TEventBase, TAggregate> eventApplier)
     {

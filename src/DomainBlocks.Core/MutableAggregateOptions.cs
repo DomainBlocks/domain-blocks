@@ -32,7 +32,7 @@ public sealed class MutableAggregateOptions<TAggregate, TEventBase> :
     public MutableAggregateOptions<TAggregate, TEventBase> WithEventApplier(Action<TAggregate, TEventBase> eventApplier)
     {
         if (eventApplier == null) throw new ArgumentNullException(nameof(eventApplier));
-        
+
         return (MutableAggregateOptions<TAggregate, TEventBase>)WithEventApplier((agg, e) =>
         {
             eventApplier(agg, e);
@@ -44,7 +44,7 @@ public sealed class MutableAggregateOptions<TAggregate, TEventBase> :
         Func<TAggregate, IReadOnlyCollection<TEventBase>> raisedEventsSelector)
     {
         if (raisedEventsSelector == null) throw new ArgumentNullException(nameof(raisedEventsSelector));
-        
+
         var clone = Clone();
         clone._raisedEventsSelector = raisedEventsSelector;
         return clone;
@@ -52,6 +52,7 @@ public sealed class MutableAggregateOptions<TAggregate, TEventBase> :
 
     public override ICommandExecutionContext<TAggregate> CreateCommandExecutionContext(TAggregate aggregate)
     {
+        if (aggregate == null) throw new ArgumentNullException(nameof(aggregate));
         return new MutableCommandExecutionContext<TAggregate>(aggregate, this);
     }
 
@@ -65,6 +66,8 @@ public sealed class MutableAggregateOptions<TAggregate, TEventBase> :
 
     public IEnumerable<object> SelectRaisedEvents(TAggregate aggregate)
     {
+        if (aggregate == null) throw new ArgumentNullException(nameof(aggregate));
+
         if (!CanSelectRaisedEventsFromAggregate)
         {
             throw new InvalidOperationException("Aggregate has no events selector specified");

@@ -46,14 +46,13 @@ public sealed class MutableCommandExecutionContext<TAggregate> : ICommandExecuti
     {
         if (commandExecutor == null) throw new ArgumentNullException(nameof(commandExecutor));
 
-        commandExecutor(State);
-
         if (!_aggregateOptions.CanSelectRaisedEventsFromAggregate)
         {
             throw new InvalidOperationException(
                 "Cannot execute void command. Aggregate has no raised events selector specified.");
         }
 
+        commandExecutor(State);
         var raisedEvents = _aggregateOptions.SelectRaisedEvents(State);
         _raisedEvents.Clear();
         _raisedEvents.AddRange(raisedEvents);
