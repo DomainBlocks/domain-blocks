@@ -7,7 +7,7 @@ namespace DomainBlocks.Core;
 public sealed class MutableEventEnumerableCommandResultOptions<TAggregate, TEventBase> :
     IMutableCommandResultOptions<TAggregate, IEnumerable<TEventBase>> where TEventBase : class
 {
-    private EventEnumerationMode _mode = EventEnumerationMode.DoNotApply;
+    private ApplyEventsBehavior _behavior = ApplyEventsBehavior.DoNotApply;
 
     public MutableEventEnumerableCommandResultOptions()
     {
@@ -16,15 +16,15 @@ public sealed class MutableEventEnumerableCommandResultOptions<TAggregate, TEven
     private MutableEventEnumerableCommandResultOptions(
         MutableEventEnumerableCommandResultOptions<TAggregate, TEventBase> copyFrom)
     {
-        _mode = copyFrom._mode;
+        _behavior = copyFrom._behavior;
     }
 
-    public MutableEventEnumerableCommandResultOptions<TAggregate, TEventBase> WithEventEnumerationMode(
-        EventEnumerationMode mode)
+    public MutableEventEnumerableCommandResultOptions<TAggregate, TEventBase> WithApplyEventsBehavior(
+        ApplyEventsBehavior behavior)
     {
         return new MutableEventEnumerableCommandResultOptions<TAggregate, TEventBase>(this)
         {
-            _mode = mode
+            _behavior = behavior
         };
     }
 
@@ -38,12 +38,12 @@ public sealed class MutableEventEnumerableCommandResultOptions<TAggregate, TEven
     public IReadOnlyCollection<object> SelectEventsAndUpdateState(
         IEnumerable<TEventBase> commandResult, TAggregate state, Action<TAggregate, object> eventApplier)
     {
-        return _mode switch
+        return _behavior switch
         {
-            EventEnumerationMode.DoNotApply => commandResult.ToList().AsReadOnly(),
-            EventEnumerationMode.ApplyAfterEnumerating => ApplyAfterEnumerating(commandResult, state, eventApplier),
-            EventEnumerationMode.ApplyWhileEnumerating => ApplyWhileEnumerating(commandResult, state, eventApplier),
-            _ => throw new InvalidOperationException($"Unknown enum value {nameof(EventEnumerationMode)}.{_mode}.")
+            ApplyEventsBehavior.DoNotApply => commandResult.ToList().AsReadOnly(),
+            ApplyEventsBehavior.MaterializeFirst => ApplyAfterEnumerating(commandResult, state, eventApplier),
+            ApplyEventsBehavior.ApplyWhileEnumerating => ApplyWhileEnumerating(commandResult, state, eventApplier),
+            _ => throw new InvalidOperationException($"Unknown enum value {nameof(ApplyEventsBehavior)}.{_behavior}.")
         };
     }
 

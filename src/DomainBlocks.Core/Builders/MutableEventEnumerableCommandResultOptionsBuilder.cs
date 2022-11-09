@@ -8,28 +8,11 @@ public sealed class MutableEventEnumerableCommandResultOptionsBuilder<TAggregate
     ICommandResultOptions ICommandResultOptionsBuilder.Options => _options;
 
     /// <summary>
-    /// Specify to not apply the returned events to the aggregate. This is the default behaviour.
+    /// Specify to apply the events to the aggregate.
     /// </summary>
-    public void DoNotApplyEvents()
+    /// <param name="behavior">An optional value indicating the behavior to use when applying events.</param>
+    public void ApplyEvents(ApplyEventsBehavior behavior = ApplyEventsBehavior.MaterializeFirst)
     {
-        _options = _options.WithEventEnumerationMode(EventEnumerationMode.DoNotApply);
-    }
-
-    /// <summary>
-    /// Specify to apply the events to the aggregate after the returned event enumerable has been materialized. This
-    /// avoids intermediate state changes if events are yield returned from the command method.
-    /// </summary>
-    public void ApplyEventsAfterEnumerating()
-    {
-        _options = _options.WithEventEnumerationMode(EventEnumerationMode.ApplyAfterEnumerating);
-    }
-
-    /// <summary>
-    /// Specify to apply the events to the aggregate while enumerating through the returned event enumerable. Use this
-    /// option to enable intermediate state changes as events are yield returned from the command method.
-    /// </summary>
-    public void ApplyEventsWhileEnumerating()
-    {
-        _options = _options.WithEventEnumerationMode(EventEnumerationMode.ApplyWhileEnumerating);
+        _options = _options.WithApplyEventsBehavior(behavior);
     }
 }

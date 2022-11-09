@@ -36,7 +36,7 @@ public class ModelBuilderTests
         var model = new ModelBuilder()
             .Aggregate<MutableAggregate, IEvent>(aggregate =>
             {
-                aggregate.WithEventEnumerableCommandResult().ApplyEventsAfterEnumerating();
+                aggregate.WithEventEnumerableCommandResult().ApplyEvents();
 
                 aggregate
                     .DiscoverEventApplierMethods()
@@ -65,7 +65,9 @@ public class ModelBuilderTests
         var model = new ModelBuilder()
             .Aggregate<MutableAggregate, IEvent>(aggregate =>
             {
-                aggregate.WithEventEnumerableCommandResult().ApplyEventsWhileEnumerating();
+                aggregate
+                    .WithEventEnumerableCommandResult()
+                    .ApplyEvents(ApplyEventsBehavior.ApplyWhileEnumerating);
 
                 aggregate
                     .DiscoverEventApplierMethods()

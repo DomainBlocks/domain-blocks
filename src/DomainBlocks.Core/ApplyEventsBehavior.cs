@@ -1,8 +1,8 @@
 namespace DomainBlocks.Core;
 
-public enum EventEnumerationMode
+public enum ApplyEventsBehavior
 {
     DoNotApply,
-    ApplyAfterEnumerating,
+    MaterializeFirst,
     ApplyWhileEnumerating
 }
