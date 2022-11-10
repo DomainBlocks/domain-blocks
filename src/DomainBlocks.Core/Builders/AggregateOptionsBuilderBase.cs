@@ -7,7 +7,7 @@ namespace DomainBlocks.Core.Builders;
 
 public interface IAggregateOptionsBuilder
 {
-    public IAggregateOptions Options { get; }
+    IAggregateOptions Options { get; }
 }
 
 public interface IIdSelectorBuilder<out TAggregate>
@@ -18,7 +18,7 @@ public interface IIdSelectorBuilder<out TAggregate>
     /// <returns>
     /// An object that can be used for further configuration.
     /// </returns>
-    public IIdToStreamKeySelectorBuilder HasId(Func<TAggregate, string> idSelector);
+    IIdToStreamKeySelectorBuilder HasId(Func<TAggregate, string> idSelector);
 }
 
 public interface IIdToStreamKeySelectorBuilder
@@ -29,7 +29,7 @@ public interface IIdToStreamKeySelectorBuilder
     /// <returns>
     /// An object that can be used for further configuration.
     /// </returns>
-    public IIdToSnapshotKeySelectorBuilder WithStreamKey(Func<string, string> idToStreamKeySelector);
+    IIdToSnapshotKeySelectorBuilder WithStreamKey(Func<string, string> idToStreamKeySelector);
 }
 
 public interface IIdToSnapshotKeySelectorBuilder
@@ -37,7 +37,7 @@ public interface IIdToSnapshotKeySelectorBuilder
     /// <summary>
     /// Specify a snapshot key selector.
     /// </summary>
-    public void WithSnapshotKey(Func<string, string> idToSnapshotKeySelector);
+    void WithSnapshotKey(Func<string, string> idToSnapshotKeySelector);
 }
 
 public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
