@@ -23,16 +23,6 @@ public sealed class ImmutableCommandResultOptions<TAggregate, TEventBase, TComma
 
     public Type ClrType => typeof(TCommandResult);
 
-    public TCommandResult Coerce(TCommandResult commandResult, IEnumerable<object> raisedEvents)
-    {
-        if (typeof(TCommandResult) == typeof(IEnumerable<TEventBase>))
-        {
-            return (TCommandResult)raisedEvents.Cast<TEventBase>();
-        }
-
-        return commandResult;
-    }
-
     public ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> WithEventsSelector(
         Func<TCommandResult, IEnumerable<TEventBase>> eventsSelector)
     {

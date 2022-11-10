@@ -22,11 +22,6 @@ public sealed class MutableCommandResultOptions<TAggregate, TEventBase, TCommand
 
     public Type ClrType => typeof(TCommandResult);
 
-    public TCommandResult Coerce(TCommandResult commandResult, IEnumerable<object> raisedEvents)
-    {
-        return commandResult;
-    }
-
     public MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> WithApplyEventsEnabled(bool isEnabled)
     {
         return new MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult>(this)

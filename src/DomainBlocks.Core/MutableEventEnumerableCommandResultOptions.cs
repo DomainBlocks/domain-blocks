@@ -30,11 +30,6 @@ public sealed class MutableEventEnumerableCommandResultOptions<TAggregate, TEven
 
     public Type ClrType => typeof(IEnumerable<TEventBase>);
 
-    public IEnumerable<TEventBase> Coerce(IEnumerable<TEventBase> commandResult, IEnumerable<object> raisedEvents)
-    {
-        return raisedEvents.Cast<TEventBase>();
-    }
-
     public IReadOnlyCollection<object> SelectEventsAndUpdateState(
         IEnumerable<TEventBase> commandResult, TAggregate state, Action<TAggregate, object> eventApplier)
     {
