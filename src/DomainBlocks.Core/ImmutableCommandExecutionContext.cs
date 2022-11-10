@@ -1,30 +1,42 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace DomainBlocks.Core;
 
-public class ImmutableCommandExecutionContext<TAggregate> : ICommandExecutionContext<TAggregate>
+public sealed class ImmutableCommandExecutionContext<TAggregate, TEventBase> : ICommandExecutionContext<TAggregate>
 {
-    private readonly IImmutableAggregateType<TAggregate> _aggregateType;
+    private readonly IImmutableAggregateOptions<TAggregate> _aggregateOptions;
     private readonly List<object> _raisedEvents = new();
+    private TAggregate _state;
 
-    public ImmutableCommandExecutionContext(TAggregate state, IImmutableAggregateType<TAggregate> aggregateType)
+    public ImmutableCommandExecutionContext(
+        TAggregate state, IImmutableAggregateOptions<TAggregate> aggregateOptions)
     {
-        State = state ?? throw new ArgumentNullException(nameof(state));
-        _aggregateType = aggregateType ?? throw new ArgumentNullException(nameof(aggregateType));
+        _state = state ?? throw new ArgumentNullException(nameof(state));
+        _aggregateOptions = aggregateOptions ?? throw new ArgumentNullException(nameof(aggregateOptions));
     }
 
-    public TAggregate State { get; private set; }
-    public IEnumerable<object> RaisedEvents => _raisedEvents;
+    public TAggregate State => _state;
+    public IReadOnlyCollection<object> RaisedEvents => _raisedEvents;
 
     public TCommandResult ExecuteCommand<TCommandResult>(Func<TAggregate, TCommandResult> commandExecutor)
     {
-        var commandResult = commandExecutor(State);
-        var commandReturnType = _aggregateType.GetCommandReturnType<TCommandResult>();
-        (var events, State) = commandReturnType.SelectEventsAndUpdateState(commandResult, State);
-        _raisedEvents.AddRange(events);
+        if (commandExecutor == null) throw new ArgumentNullException(nameof(commandExecutor));
 
-        return commandResult;
+        // We attempt to get the command result options before executing the command. This ensures that we throw
+        // without executing the command if the options are missing.
+        var commandResultOptions = _aggregateOptions.GetCommandResultOptions<TCommandResult>();
+        var commandResult = commandExecutor(State);
+        var raisedEvents =
+            commandResultOptions.SelectEventsAndUpdateState(commandResult, ref _state, _aggregateOptions.ApplyEvent);
+        _raisedEvents.AddRange(raisedEvents);
+
+        // If the command result is an event enumerable, return the materialized events to avoid multiple
+        // enumeration.
+        return typeof(TCommandResult) == typeof(IEnumerable<TEventBase>)
+            ? (TCommandResult)raisedEvents.Cast<TEventBase>()
+            : commandResult;
     }
 
     public void ExecuteCommand(Action<TAggregate> commandExecutor)

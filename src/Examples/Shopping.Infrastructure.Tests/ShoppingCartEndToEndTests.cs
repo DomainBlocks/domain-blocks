@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
@@ -19,8 +18,7 @@ using NUnit.Framework;
 using Shopping.Domain.Aggregates;
 using Shopping.Domain.Commands;
 using Shopping.Domain.Events;
-using ProjectionDispatcher =
-    DomainBlocks.Projections.EventDispatcher<EventStore.Client.EventRecord, Shopping.Domain.Events.IDomainEvent>;
+using ProjectionDispatcher = DomainBlocks.Projections.EventDispatcher<EventStore.Client.EventRecord, Shopping.Domain.Events.IDomainEvent>;
 using UserCredentials = DomainBlocks.Common.UserCredentials;
 
 namespace Shopping.Infrastructure.Tests;
@@ -106,19 +104,9 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
                     .WithStreamKey(id => $"shoppingCart-{id}")
                     .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");
 
-                aggregate
-                    .WithRaisedEventsFrom(commandReturnTypes =>
-                    {
-                        commandReturnTypes
-                            .CommandReturnType<IEnumerable<IDomainEvent>>()
-                            .WithEventsFrom(x => x)
-                            .ApplyEvents();
-                    })
-                    .ApplyEventsWith(ShoppingCartFunctions.Apply);
+                aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
 
-                aggregate.Event<ShoppingCartCreated>().HasName(ShoppingCartCreated.EventName);
-                aggregate.Event<ItemAddedToShoppingCart>().HasName(ItemAddedToShoppingCart.EventName);
-                aggregate.Event<ItemRemovedFromShoppingCart>().HasName(ItemRemovedFromShoppingCart.EventName);
+                aggregate.UseEventTypesFrom(typeof(IDomainEvent).Assembly);
             })
             .Build();
 
@@ -190,11 +178,10 @@ public class ShoppingCartSummarySqlProjection : ISqlProjection
     };
 }
 
-public class ShoppingCartProcess
+public static class ShoppingCartProcess
 {
     public static void Register(ProjectionRegistryBuilder builder)
     {
-        builder.Event<ItemRemovedFromShoppingCart>()
-            .FromName(ItemRemovedFromShoppingCart.EventName);
+        builder.Event<ItemRemovedFromShoppingCart>();
     }
 }

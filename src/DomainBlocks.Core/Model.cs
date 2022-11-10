@@ -4,28 +4,30 @@ using System.Linq;
 
 namespace DomainBlocks.Core;
 
-public class Model
+public sealed class Model
 {
-    private readonly IReadOnlyDictionary<Type, IAggregateType> _aggregateTypes;
+    private readonly IReadOnlyDictionary<Type, IAggregateOptions> _aggregatesOptions;
     private readonly EventNameMap _eventNameMap;
 
-    public Model(IEnumerable<IAggregateType> aggregateTypes)
+    public Model(IEnumerable<IAggregateOptions> aggregatesOptions)
     {
-        _aggregateTypes = aggregateTypes.ToDictionary(x => x.ClrType);
+        if (aggregatesOptions == null) throw new ArgumentNullException(nameof(aggregatesOptions));
 
-        // Build event name map from all aggregate types.
-        var allEventTypes = _aggregateTypes.Values.SelectMany(x => x.EventTypes);
+        _aggregatesOptions = aggregatesOptions.ToDictionary(x => x.ClrType);
+
+        // Build event name map from all aggregate options.
+        var allEventsOptions = _aggregatesOptions.Values.SelectMany(x => x.EventsOptions);
         _eventNameMap = new EventNameMap();
-        foreach (var eventType in allEventTypes)
+        foreach (var eventOptions in allEventsOptions)
         {
-            _eventNameMap.Add(eventType.EventName, eventType.ClrType);
+            _eventNameMap.Add(eventOptions.EventName, eventOptions.ClrType);
         }
     }
 
     public IEventNameMap EventNameMap => _eventNameMap;
-    
-    public IAggregateType<TAggregate> GetAggregateType<TAggregate>()
+
+    public IAggregateOptions<TAggregate> GetAggregateOptions<TAggregate>()
     {
-        return (IAggregateType<TAggregate>)_aggregateTypes[typeof(TAggregate)];
+        return (IAggregateOptions<TAggregate>)_aggregatesOptions[typeof(TAggregate)];
     }
 }

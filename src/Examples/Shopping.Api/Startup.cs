@@ -1,5 +1,4 @@
-﻿using System.Collections.Generic;
-using DomainBlocks.Persistence.AspNetCore;
+﻿using DomainBlocks.Persistence.AspNetCore;
 using DomainBlocks.Persistence.SqlStreamStore.AspNetCore;
 using DomainBlocks.Serialization.Json.AspNetCore;
 using MediatR;
@@ -37,29 +36,18 @@ public class Startup
             },
             modelBuilder =>
             {
-                modelBuilder
-                    .ImmutableAggregate<ShoppingCartState, IDomainEvent>(aggregate =>
-                    {
-                        aggregate
-                            .InitialState(() => new ShoppingCartState())
-                            .HasId(x => x.Id?.ToString())
-                            .WithStreamKey(id => $"shoppingCart-{id}")
-                            .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");
+                modelBuilder.ImmutableAggregate<ShoppingCartState, IDomainEvent>(aggregate =>
+                {
+                    aggregate
+                        .InitialState(() => new ShoppingCartState())
+                        .HasId(x => x.Id?.ToString())
+                        .WithStreamKey(id => $"shoppingCart-{id}")
+                        .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");
 
-                        aggregate
-                            .WithRaisedEventsFrom(commandReturnTypes =>
-                            {
-                                commandReturnTypes
-                                    .CommandReturnType<IEnumerable<IDomainEvent>>()
-                                    .WithEventsFrom(x => x)
-                                    .ApplyEvents();
-                            })
-                            .ApplyEventsWith(ShoppingCartFunctions.Apply);
+                    aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
 
-                        aggregate.Event<ShoppingCartCreated>().HasName(ShoppingCartCreated.EventName);
-                        aggregate.Event<ItemAddedToShoppingCart>().HasName(ItemAddedToShoppingCart.EventName);
-                        aggregate.Event<ItemRemovedFromShoppingCart>().HasName(ItemRemovedFromShoppingCart.EventName);
-                    });
+                    aggregate.UseEventTypesFrom(typeof(IDomainEvent).Assembly);
+                });
             });
     }
 

@@ -8,13 +8,13 @@ internal static class LoadedAggregate
 {
     internal static LoadedAggregate<TAggregate> Create<TAggregate>(
         TAggregate state,
-        IAggregateType<TAggregate> aggregateType,
+        IAggregateOptions<TAggregate> aggregateOptions,
         string id,
         long version,
         long? snapshotVersion,
         long eventsLoaded)
     {
-        return new LoadedAggregate<TAggregate>(state, aggregateType, id, version, snapshotVersion, eventsLoaded);
+        return new LoadedAggregate<TAggregate>(state, aggregateOptions, id, version, snapshotVersion, eventsLoaded);
     }
 }
 
@@ -24,18 +24,18 @@ public sealed class LoadedAggregate<TAggregate>
 
     internal LoadedAggregate(
         TAggregate state,
-        IAggregateType<TAggregate> aggregateType,
+        IAggregateOptions<TAggregate> aggregateOptions,
         string id,
         long version,
         long? snapshotVersion,
         long eventsLoadedCount)
     {
-        if (aggregateType == null) throw new ArgumentNullException(nameof(aggregateType));
+        if (aggregateOptions == null) throw new ArgumentNullException(nameof(aggregateOptions));
 
         if (string.IsNullOrWhiteSpace(id))
             throw new ArgumentException("Value cannot be null or whitespace.", nameof(id));
 
-        _commandExecutionContext = aggregateType.GetCommandExecutionContext(state);
+        _commandExecutionContext = aggregateOptions.CreateCommandExecutionContext(state);
 
         Id = id;
         Version = version;
@@ -48,7 +48,7 @@ public sealed class LoadedAggregate<TAggregate>
     public long Version { get; }
     public long? SnapshotVersion { get; }
     public long EventsLoadedCount { get; }
-    public IEnumerable<object> EventsToPersist => _commandExecutionContext.RaisedEvents;
+    public IReadOnlyCollection<object> EventsToPersist => _commandExecutionContext.RaisedEvents;
     internal bool HasBeenSaved { get; set; }
 
     public TResult ExecuteCommand<TResult>(Func<TAggregate, TResult> commandExecutor)
