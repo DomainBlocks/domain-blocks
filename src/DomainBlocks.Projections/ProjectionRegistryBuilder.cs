@@ -7,9 +7,8 @@ namespace DomainBlocks.Projections;
 public sealed class ProjectionRegistryBuilder
 {
     private readonly IList<IEventProjectionBuilder> _eventProjectionBuilders = new List<IEventProjectionBuilder>();
-    private readonly EventProjectionMap _eventProjectionMap = new();
-    private readonly ProjectionEventNameMap _eventNameMap = new();
-    private readonly ProjectionContextMap _projectionContextMap = new();
+    private ProjectionEventNameMap _eventNameMap = new();
+    private ProjectionContextMap _projectionContextMap = new();
 
     public EventProjectionBuilder<TEvent> Event<TEvent>()
     {
@@ -19,37 +18,34 @@ public sealed class ProjectionRegistryBuilder
         // Default event name to the .NET type.
         // This can be overridden by explicitly
         // specifying a name/names in the fluent builder
-        RegisterDefaultEventName<TEvent>();
+        _eventNameMap = _eventNameMap.RegisterDefaultEventName<TEvent>();
 
         return builder;
     }
 
     public ProjectionRegistry Build()
     {
-        foreach (var (eventType, func) in _eventProjectionBuilders.SelectMany(epb => epb.BuildProjectionFuncs()))
-        {
-            _eventProjectionMap.AddProjectionFunc(eventType, func);
-        }
+        var eventProjectionMap = _eventProjectionBuilders
+            .SelectMany(x => x.BuildProjectionFuncs())
+            .Aggregate(new EventProjectionMap(), (acc, next) =>
+            {
+                var (eventType, func) = next;
+                return acc.AddProjectionFunc(eventType, func);
+            });
 
-        return new ProjectionRegistry(_eventProjectionMap, _projectionContextMap, _eventNameMap);
-    }
-
-    private void RegisterDefaultEventName<TEvent>()
-    {
-        _eventNameMap.RegisterDefaultEventName<TEvent>();
+        return new ProjectionRegistry(_eventNameMap, eventProjectionMap, _projectionContextMap);
     }
 
     internal void OverrideEventNames<TEvent>(params string[] names)
     {
         if (names == null) throw new ArgumentNullException(nameof(names));
         if (names.Length == 0) throw new ArgumentException("Value cannot be an empty collection.", nameof(names));
-
-        _eventNameMap.OverrideEventNames<TEvent>(names);
+        _eventNameMap = _eventNameMap.OverrideEventNames<TEvent>(names);
     }
 
     internal void RegisterContextForEvent<TEvent>(IProjectionContext projectionContext)
     {
         if (projectionContext == null) throw new ArgumentNullException(nameof(projectionContext));
-        _projectionContextMap.RegisterProjectionContext<TEvent>(projectionContext);
+        _projectionContextMap = _projectionContextMap.RegisterProjectionContext<TEvent>(projectionContext);
     }
 }

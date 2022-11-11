@@ -2,5 +2,5 @@ namespace DomainBlocks.Projections.New;
 
 public interface IProjectionOptions
 {
-    public ProjectionRegistry ToProjectionRegistry();
+    ProjectionRegistry Register(ProjectionRegistry registry);
 }

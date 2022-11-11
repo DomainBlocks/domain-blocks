@@ -15,10 +15,12 @@ public class WithServiceOptionsBuilder<TResource, TService> where TResource : ID
         _initialOptions = initialOptions;
     }
 
-    public void AddProjection(Action<IServiceProjectionOptionsBuilder<TService>> optionsAction)
+    public WithServiceOptionsBuilder<TResource, TService> AddProjection(
+        Action<IServiceProjectionOptionsBuilder<TService>> optionsAction)
     {
         var builder = new ServiceProjectionOptionsBuilder<TResource, TService>(_initialOptions);
         optionsAction(builder);
         _coreBuilder.AddProjectionOptions(builder.Options);
+        return this;
     }
 }

@@ -8,7 +8,6 @@ namespace DomainBlocks.Projections.New;
 public class ServiceProjectionOptions<TResource, TService> : IServiceProjectionOptions<TService>
     where TResource : IDisposable
 {
-    private readonly ProjectionEventNameMap _eventNameMap = new();
     private readonly List<(Type, Func<object, TService, Task>)> _eventHandlers = new();
     private Func<TResource> _resourceFactory;
     private Func<TResource, TService> _serviceFactory;
@@ -17,9 +16,8 @@ public class ServiceProjectionOptions<TResource, TService> : IServiceProjectionO
     {
     }
 
-    public ServiceProjectionOptions(ServiceProjectionOptions<TResource, TService> copyFrom)
+    private ServiceProjectionOptions(ServiceProjectionOptions<TResource, TService> copyFrom)
     {
-        _eventNameMap = new ProjectionEventNameMap(copyFrom._eventNameMap);
         _eventHandlers = new List<(Type, Func<object, TService, Task>)>(copyFrom._eventHandlers);
         _resourceFactory = copyFrom._resourceFactory;
         _serviceFactory = copyFrom._serviceFactory;
@@ -83,24 +81,24 @@ public class ServiceProjectionOptions<TResource, TService> : IServiceProjectionO
         Func<TEvent, TService, Task> eventHandler)
     {
         var copy = new ServiceProjectionOptions<TResource, TService>(this);
-        copy._eventNameMap.RegisterDefaultEventName<TEvent>();
         copy._eventHandlers.Add((typeof(TEvent), (e, service) => eventHandler((TEvent)e, service)));
         return copy;
     }
-    
-    public ProjectionRegistry ToProjectionRegistry()
+
+    public ProjectionRegistry Register(ProjectionRegistry registry)
     {
         var projectionContext = new ServiceProjectionContext<TService>(this);
-        var eventProjectionMap = new EventProjectionMap();
-        var projectionContextMap = new ProjectionContextMap();
 
         foreach (var (eventType, handler) in _eventHandlers)
         {
             var projectionFunc = projectionContext.BindProjectionFunc(handler);
-            eventProjectionMap.AddProjectionFunc(eventType, projectionFunc);
-            projectionContextMap.RegisterProjectionContext(eventType, projectionContext);
+
+            registry = registry
+                .RegisterDefaultEventName(eventType)
+                .AddProjectionFunc(eventType, projectionFunc)
+                .RegisterProjectionContext(eventType, projectionContext);
         }
 
-        return new ProjectionRegistry(eventProjectionMap, projectionContextMap, _eventNameMap);
+        return registry;
     }
 }

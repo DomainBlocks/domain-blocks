@@ -34,8 +34,9 @@ public class EventCatchUpSubscriptionOptions
 
     public IEventDispatcher CreateEventDispatcher()
     {
-        // TODO (DS): Support more than one set of projections in a future PR.
-        var projectionRegistry = _projectionOptions.First().ToProjectionRegistry();
+        var projectionRegistry = _projectionOptions
+            .Aggregate(new ProjectionRegistry(), (acc, next) => next.Register(acc));
+
         return _eventDispatcherFactory(projectionRegistry);
     }
 }

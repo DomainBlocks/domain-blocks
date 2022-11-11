@@ -7,7 +7,6 @@ namespace DomainBlocks.Projections.New;
 
 public class ProjectionOptions : IProjectionOptions
 {
-    private readonly ProjectionEventNameMap _eventNameMap = new();
     private readonly List<(Type, RunProjection)> _eventHandlers = new();
     private Func<CancellationToken, Task> _onInitializing;
     private Func<CancellationToken, Task> _onCatchingUp;
@@ -21,7 +20,6 @@ public class ProjectionOptions : IProjectionOptions
 
     private ProjectionOptions(ProjectionOptions copyFrom)
     {
-        _eventNameMap = new ProjectionEventNameMap(copyFrom._eventNameMap);
         _eventHandlers = new List<(Type, RunProjection)>(copyFrom._eventHandlers);
         _onInitializing = copyFrom._onInitializing;
         _onCatchingUp = copyFrom._onCatchingUp;
@@ -58,16 +56,12 @@ public class ProjectionOptions : IProjectionOptions
     public ProjectionOptions WithEventHandler<TEvent>(Func<TEvent, Task> eventHandler)
     {
         var copy = new ProjectionOptions(this);
-        copy._eventNameMap.RegisterDefaultEventName<TEvent>();
         copy._eventHandlers.Add((typeof(TEvent), (e, _) => eventHandler((TEvent)e)));
         return copy;
     }
 
-    public ProjectionRegistry ToProjectionRegistry()
+    public ProjectionRegistry Register(ProjectionRegistry registry)
     {
-        var eventProjectionMap = new EventProjectionMap();
-        var projectionContextMap = new ProjectionContextMap();
-
         var projectionContext = new ProjectionContext(
             _onInitializing,
             _onCatchingUp,
@@ -77,10 +71,12 @@ public class ProjectionOptions : IProjectionOptions
 
         foreach (var (eventType, handler) in _eventHandlers)
         {
-            eventProjectionMap.AddProjectionFunc(eventType, handler);
-            projectionContextMap.RegisterProjectionContext(eventType, projectionContext);
+            registry = registry
+                .RegisterDefaultEventName(eventType)
+                .AddProjectionFunc(eventType, handler)
+                .RegisterProjectionContext(eventType, projectionContext);
         }
 
-        return new ProjectionRegistry(eventProjectionMap, projectionContextMap, _eventNameMap);
+        return registry;
     }
 }
