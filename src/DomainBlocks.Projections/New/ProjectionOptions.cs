@@ -21,11 +21,11 @@ public class ProjectionOptions : IProjectionOptions
     private ProjectionOptions(ProjectionOptions copyFrom)
     {
         _eventHandlers = new List<(Type, RunProjection)>(copyFrom._eventHandlers);
-        _onInitializing = copyFrom._onInitializing;
-        _onCatchingUp = copyFrom._onCatchingUp;
-        _onCaughtUp = copyFrom._onCaughtUp;
-        _onEventDispatching = copyFrom._onEventDispatching;
-        _onEventHandled = copyFrom._onEventHandled;
+        _onInitializing = copyFrom._onInitializing ?? (_ => Task.CompletedTask);
+        _onCatchingUp = copyFrom._onCatchingUp ?? (_ => Task.CompletedTask);
+        _onCaughtUp = copyFrom._onCaughtUp ?? (_ => Task.CompletedTask);
+        _onEventDispatching = copyFrom._onEventDispatching ?? (_ => Task.CompletedTask);
+        _onEventHandled = copyFrom._onEventHandled ?? (_ => Task.CompletedTask);
     }
 
     public ProjectionOptions WithOnInitializing(Func<CancellationToken, Task> onInitializing)

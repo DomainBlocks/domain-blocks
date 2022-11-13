@@ -4,14 +4,14 @@ using System.Threading.Tasks;
 
 namespace DomainBlocks.Projections.New;
 
-internal class ServiceProjectionContext<TService> : IProjectionContext
+internal class ServiceProjectionContext<TResource, TService> : IProjectionContext where TResource : IDisposable
 {
-    private readonly IServiceProjectionOptions<TService> _options;
+    private readonly ServiceProjectionOptions<TResource, TService> _options;
     private bool _isCatchingUp;
-    private IDisposable _resource;
+    private TResource _resource;
     private TService _service;
 
-    public ServiceProjectionContext(IServiceProjectionOptions<TService> options)
+    public ServiceProjectionContext(ServiceProjectionOptions<TResource, TService> options)
     {
         _options = options;
     }
@@ -84,6 +84,6 @@ internal class ServiceProjectionContext<TService> : IProjectionContext
     {
         _service = default;
         _resource?.Dispose();
-        _resource = null;
+        _resource = default;
     }
 }

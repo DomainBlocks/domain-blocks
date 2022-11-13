@@ -5,8 +5,7 @@ using System.Threading.Tasks;
 
 namespace DomainBlocks.Projections.New;
 
-public class ServiceProjectionOptions<TResource, TService> : IServiceProjectionOptions<TService>
-    where TResource : IDisposable
+public class ServiceProjectionOptions<TResource, TService> : IProjectionOptions where TResource : IDisposable
 {
     private readonly List<(Type, Func<object, TService, Task>)> _eventHandlers = new();
     private Func<TResource> _resourceFactory;
@@ -28,8 +27,8 @@ public class ServiceProjectionOptions<TResource, TService> : IServiceProjectionO
         OnEventHandled = copyFrom.OnEventHandled ?? ((_, _) => Task.CompletedTask);
     }
 
-    public Func<IDisposable> ResourceFactory => () => _resourceFactory();
-    public Func<IDisposable, TService> ServiceFactory => d => _serviceFactory((TResource)d);
+    public Func<TResource> ResourceFactory => () => _resourceFactory();
+    public Func<TResource, TService> ServiceFactory => d => _serviceFactory(d);
     public Func<TService, CancellationToken, Task> OnInitializing { get; private init; }
     public Func<TService, CancellationToken, Task> OnCatchingUp { get; private init; }
     public Func<TService, CancellationToken, Task> OnCaughtUp { get; private init; }
@@ -87,7 +86,7 @@ public class ServiceProjectionOptions<TResource, TService> : IServiceProjectionO
 
     public ProjectionRegistry Register(ProjectionRegistry registry)
     {
-        var projectionContext = new ServiceProjectionContext<TService>(this);
+        var projectionContext = new ServiceProjectionContext<TResource, TService>(this);
 
         foreach (var (eventType, handler) in _eventHandlers)
         {

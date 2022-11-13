@@ -8,13 +8,14 @@ public class SqlStreamStoreOptionsBuilder
 {
     public SqlStreamStoreOptions Options { get; private set; } = new();
 
-    public void WithStreamStoreFactory(Func<IStreamStore> streamStoreFactory)
-    {
-        Options = Options.WithStreamStoreFactory(streamStoreFactory);
-    }
-
-    public void UseJsonSerialization(JsonSerializerOptions jsonSerializerOptions = null)
+    public SqlStreamStoreOptionsBuilder UseJsonSerialization(JsonSerializerOptions jsonSerializerOptions = null)
     {
         Options = Options.WithEventDeserializerFactory(() => new StreamMessageJsonDeserializer(jsonSerializerOptions));
+        return this;
+    }
+    
+    internal void WithStreamStoreFactory(Func<IStreamStore> streamStoreFactory)
+    {
+        Options = Options.WithStreamStoreFactory(streamStoreFactory);
     }
 }

@@ -37,15 +37,15 @@ public sealed class EventProjectionMap
         return copy;
     }
 
-    public bool TryGetValue(Type key, out IReadOnlyCollection<RunProjection> value)
+    public bool TryGetProjections(Type eventType, out IReadOnlyCollection<RunProjection> projections)
     {
-        if (_projectionFuncs.TryGetValue(key, out var valueImpl))
+        if (_projectionFuncs.TryGetValue(eventType, out var value))
         {
-            value = valueImpl.AsReadOnly();
+            projections = value.AsReadOnly();
             return true;
         }
 
-        value = null;
+        projections = null;
         return false;
     }
 }

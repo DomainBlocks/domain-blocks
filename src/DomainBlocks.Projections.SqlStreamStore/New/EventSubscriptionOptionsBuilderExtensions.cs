@@ -5,28 +5,31 @@ namespace DomainBlocks.Projections.SqlStreamStore.New;
 
 public static class EventSubscriptionOptionsBuilderExtensions
 {
-    public static void UseSqlStreamStore(
+    public static EventCatchUpSubscriptionOptionsBuilder UseSqlStreamStore(
         this EventCatchUpSubscriptionOptionsBuilder optionsBuilder, Action<SqlStreamStoreOptionsBuilder> optionsAction)
     {
         var sqlStreamStoreOptionsBuilder = new SqlStreamStoreOptionsBuilder();
         optionsAction(sqlStreamStoreOptionsBuilder);
         var sqlStreamStoreOptions = sqlStreamStoreOptionsBuilder.Options;
 
-        optionsBuilder.WithEventDispatcherFactory(projections =>
-        {
-            var streamStore = sqlStreamStoreOptions.StreamStoreFactory();
-            var eventPublisher = new SqlStreamStoreEventPublisher(streamStore);
-            var eventDeserializer = sqlStreamStoreOptions.EventDeserializerFactory();
+        ((IEventCatchUpSubscriptionOptionsBuilderInfrastructure)optionsBuilder)
+            .WithEventDispatcherFactory(registry =>
+            {
+                var streamStore = sqlStreamStoreOptions.StreamStoreFactory();
+                var eventPublisher = new SqlStreamStoreEventPublisher(streamStore);
+                var eventDeserializer = sqlStreamStoreOptions.EventDeserializerFactory();
 
-            var eventDispatcher = new EventDispatcher<StreamMessageWrapper, object>(
-                eventPublisher,
-                projections.EventProjectionMap,
-                projections.ProjectionContextMap,
-                eventDeserializer,
-                projections.EventNameMap,
-                EventDispatcherConfiguration.ReadModelDefaults);
+                var eventDispatcher = new EventDispatcher<StreamMessageWrapper, object>(
+                    eventPublisher,
+                    registry.EventProjectionMap,
+                    registry.ProjectionContextMap,
+                    eventDeserializer,
+                    registry.EventNameMap,
+                    EventDispatcherConfiguration.ReadModelDefaults);
 
-            return eventDispatcher;
-        });
+                return eventDispatcher;
+            });
+
+        return optionsBuilder;
     }
 }

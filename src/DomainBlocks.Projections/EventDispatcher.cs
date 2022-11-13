@@ -131,7 +131,7 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
             Log.LogTrace("Context OnBeforeHandleEvent hooks called for event ID {EventId}", eventId);
             await Task.WhenAll(beforeEventActions).ConfigureAwait(false);
 
-            if (_projectionMap.TryGetValue(eventType, out var projections))
+            if (_projectionMap.TryGetProjections(eventType, out var projections))
             {
                 var stopwatch = new Stopwatch();
                 stopwatch.Start();
