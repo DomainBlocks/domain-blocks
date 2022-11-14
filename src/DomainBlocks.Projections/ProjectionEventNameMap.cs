@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 
 namespace DomainBlocks.Projections;
 
@@ -16,7 +17,7 @@ public sealed class ProjectionEventNameMap : IProjectionEventNameMap
     public ProjectionEventNameMap(ProjectionEventNameMap copyFrom)
     {
         _defaultEventNameMap = new Dictionary<string, Type>(copyFrom._defaultEventNameMap);
-        _eventNameMap = _eventNameMap.ToDictionary(x => x.Key, x => new HashSet<Type>(x.Value));
+        _eventNameMap = copyFrom._eventNameMap.ToDictionary(x => x.Key, x => new HashSet<Type>(x.Value));
     }
 
     public IEnumerable<Type> GetClrTypesForEventName(string eventName)
@@ -28,51 +29,64 @@ public sealed class ProjectionEventNameMap : IProjectionEventNameMap
             return EnumerableEx.Return(_defaultEventNameMap[eventName]);
         }
 
-        return _eventNameMap.TryGetValue(eventName, out var types) ? 
-            types : 
-            Enumerable.Empty<Type>();
+        return _eventNameMap.TryGetValue(eventName, out var types) ? types : Enumerable.Empty<Type>();
     }
 
-    public void OverrideEventNames<TEvent>(params string[] eventNames)
+    public ProjectionEventNameMap OverrideEventNames<TEvent>(params string[] eventNames)
     {
         if (eventNames == null) throw new ArgumentNullException(nameof(eventNames));
 
-        _defaultEventNameMap.Remove(GetDefaultEventName<TEvent>());
+        var copy = new ProjectionEventNameMap(this);
+        copy._defaultEventNameMap.Remove(GetDefaultEventName<TEvent>());
 
         foreach (var eventName in eventNames)
         {
-            if (_eventNameMap.TryGetValue(eventName, out var types))
+            if (copy._eventNameMap.TryGetValue(eventName, out var types))
             {
                 types.Add(typeof(TEvent));
             }
             else
             {
-                var typesSet = new HashSet<Type> { typeof(TEvent) };
-                _eventNameMap.Add(eventName, typesSet);
+                copy._eventNameMap.Add(eventName, new HashSet<Type> { typeof(TEvent) });
             }
         }
+
+        return copy;
     }
 
-    public void RegisterDefaultEventName<TEvent>()
+    public ProjectionEventNameMap RegisterDefaultEventName<TEvent>()
     {
-        var defaultEventName = GetDefaultEventName<TEvent>();
-        if (!_defaultEventNameMap.ContainsKey(defaultEventName))
+        return RegisterDefaultEventName(typeof(TEvent));
+    }
+
+    public ProjectionEventNameMap RegisterDefaultEventName(Type eventType)
+    {
+        var defaultEventName = GetDefaultEventName(eventType);
+
+        if (_defaultEventNameMap.TryGetValue(defaultEventName, out var mappedEventType))
         {
-            _defaultEventNameMap.Add(defaultEventName, typeof(TEvent));
-        }
-        else
-        {
-            if (_defaultEventNameMap[defaultEventName] != typeof(TEvent))
+            if (eventType != mappedEventType)
             {
-                throw new InvalidOperationException($"The name {defaultEventName} has already been registered " +
-                                                    $"to type {_defaultEventNameMap[defaultEventName].FullName}. " +
-                                                    $"Cannot also register is to type {typeof(TEvent).FullName}");
+                throw new InvalidOperationException(
+                    $"The name {defaultEventName} has already been registered for type {mappedEventType.FullName}. " +
+                    $"Cannot also register it for type {eventType.FullName}");
             }
+
+            return this;
         }
+
+        var copy = new ProjectionEventNameMap(this);
+        copy._defaultEventNameMap.Add(defaultEventName, eventType);
+        return copy;
     }
 
     private static string GetDefaultEventName<TEvent>()
     {
-        return typeof(TEvent).Name;
+        return GetDefaultEventName(typeof(TEvent));
+    }
+
+    private static string GetDefaultEventName(MemberInfo eventType)
+    {
+        return eventType.Name;
     }
 }

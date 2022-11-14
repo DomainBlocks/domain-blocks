@@ -6,7 +6,7 @@ public static class SqlStreamStoreOptionsBuilderExtensions
 {
     // Having this as an extension method allows us to move it to a different assembly. Consider moving this method out
     // to a separate infrastructure specific assembly.
-    public static void UsePostgres(
+    public static SqlStreamStoreOptionsBuilder UsePostgres(
         this SqlStreamStoreOptionsBuilder optionsBuilder, PostgresStreamStoreSettings settings)
     {
         optionsBuilder.WithStreamStoreFactory(() =>
@@ -15,5 +15,7 @@ public static class SqlStreamStoreOptionsBuilderExtensions
             streamStore.CreateSchemaIfNotExists().Wait();
             return streamStore;
         });
+
+        return optionsBuilder;
     }
 }

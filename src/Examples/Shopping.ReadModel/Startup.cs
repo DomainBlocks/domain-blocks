@@ -59,15 +59,13 @@ public class Startup
         // **** New approach ****
         services.AddHostedEventCatchUpSubscription((sp, subscriptionOptions) =>
         {
-            subscriptionOptions.UseSqlStreamStore(o =>
-            {
-                var connectionString = Configuration.GetValue<string>("SqlStreamStore:ConnectionString");
-                var settings = new PostgresStreamStoreSettings(connectionString);
-                o.UsePostgres(settings);
-                o.UseJsonSerialization();
-            });
-
             subscriptionOptions
+                .UseSqlStreamStore(o =>
+                {
+                    var connectionString = Configuration.GetValue<string>("SqlStreamStore:ConnectionString");
+                    var settings = new PostgresStreamStoreSettings(connectionString);
+                    o.UsePostgres(settings).UseJsonSerialization();
+                })
                 .Using(sp.CreateScope)
                 .WithService(x => x.ServiceProvider.GetRequiredService<ShoppingCartDbContext>())
                 .AddProjection(projection =>
@@ -77,12 +75,12 @@ public class Startup
                         await dbContext.Database.EnsureDeletedAsync(ct);
                         await dbContext.Database.EnsureCreatedAsync(ct);
                     });
-                    
+
                     projection.OnCaughtUp(async (dbContext, ct) =>
                     {
                         await dbContext.SaveChangesAsync(ct);
                     });
-                    
+
                     projection.OnEventHandled(async (dbContext, ct) =>
                     {
                         await dbContext.SaveChangesAsync(ct);

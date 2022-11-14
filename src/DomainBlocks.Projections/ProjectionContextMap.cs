@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 
 namespace DomainBlocks.Projections;
 
@@ -8,29 +9,41 @@ public sealed class ProjectionContextMap
 {
     private readonly HashSet<IProjectionContext> _allContexts = new();
     private readonly Dictionary<Type, HashSet<IProjectionContext>> _eventContextMap = new();
-    // ReSharper disable once CollectionNeverUpdated.Local
-    private static readonly Collection<IProjectionContext> EmptyContextCollection = new();
 
-    public void RegisterProjectionContext<TEvent>(IProjectionContext projectionContext)
+    public ProjectionContextMap()
     {
-        RegisterProjectionContext(typeof(TEvent), projectionContext);
     }
 
-    public void RegisterProjectionContext(Type eventType, IProjectionContext projectionContext)
+    public ProjectionContextMap(ProjectionContextMap copyFrom)
+    {
+        _allContexts = new HashSet<IProjectionContext>(copyFrom._allContexts);
+
+        _eventContextMap = copyFrom._eventContextMap
+            .ToDictionary(x => x.Key, x => new HashSet<IProjectionContext>(x.Value));
+    }
+
+    public ProjectionContextMap RegisterProjectionContext<TEvent>(IProjectionContext projectionContext)
+    {
+        return RegisterProjectionContext(typeof(TEvent), projectionContext);
+    }
+
+    public ProjectionContextMap RegisterProjectionContext(Type eventType, IProjectionContext projectionContext)
     {
         if (projectionContext == null) throw new ArgumentNullException(nameof(projectionContext));
 
-        _allContexts.Add(projectionContext);
+        var copy = new ProjectionContextMap(this);
+        copy._allContexts.Add(projectionContext);
 
-        if (_eventContextMap.TryGetValue(eventType, out var contexts))
+        if (copy._eventContextMap.TryGetValue(eventType, out var contexts))
         {
             contexts.Add(projectionContext);
         }
         else
         {
-            var contextsList = new HashSet<IProjectionContext>() {projectionContext};
-            _eventContextMap.Add(eventType, contextsList);
+            copy._eventContextMap.Add(eventType, new HashSet<IProjectionContext> { projectionContext });
         }
+
+        return copy;
     }
 
     public IEnumerable<IProjectionContext> GetAllContexts()
@@ -46,6 +59,6 @@ public sealed class ProjectionContextMap
             return contexts;
         }
 
-        return EmptyContextCollection;
+        return Array.Empty<IProjectionContext>();
     }
 }

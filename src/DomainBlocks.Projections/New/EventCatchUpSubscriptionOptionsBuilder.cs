@@ -2,15 +2,16 @@ using System;
 
 namespace DomainBlocks.Projections.New;
 
-public class EventCatchUpSubscriptionOptionsBuilder
+public class EventCatchUpSubscriptionOptionsBuilder : IEventCatchUpSubscriptionOptionsBuilderInfrastructure
 {
     public EventCatchUpSubscriptionOptions Options { get; private set; } = new();
 
-    public void AddProjection(Action<ProjectionOptionsBuilder> optionsAction)
+    public EventCatchUpSubscriptionOptionsBuilder AddProjection(Action<ProjectionOptionsBuilder> optionsAction)
     {
         var projectionOptionsBuilder = new ProjectionOptionsBuilder();
         optionsAction(projectionOptionsBuilder);
         AddProjectionOptions(projectionOptionsBuilder.Options);
+        return this;
     }
 
     public UsingResourceOptionsBuilder<TResource> Using<TResource>(Func<TResource> resourceFactory)
@@ -19,12 +20,13 @@ public class EventCatchUpSubscriptionOptionsBuilder
         return new UsingResourceOptionsBuilder<TResource>(this, resourceFactory);
     }
 
-    public void WithEventDispatcherFactory(Func<ProjectionRegistry, IEventDispatcher> eventDispatcherFactory)
+    void IEventCatchUpSubscriptionOptionsBuilderInfrastructure.WithEventDispatcherFactory(
+        Func<ProjectionRegistry, IEventDispatcher> eventDispatcherFactory)
     {
         Options = Options.WithEventDispatcherFactory(eventDispatcherFactory);
     }
 
-    public void AddProjectionOptions(IProjectionOptions projectionOptions)
+    internal void AddProjectionOptions(IProjectionOptions projectionOptions)
     {
         Options = Options.AddProjectionOptions(projectionOptions);
     }
