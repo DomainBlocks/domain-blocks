@@ -3,7 +3,6 @@ using DomainBlocks.Common;
 using DomainBlocks.Projections.Sql;
 using DomainBlocks.Projections.Sql.Tests.Fakes;
 using DomainBlocks.Projections.Sqlite.Tests.Events;
-using DomainBlocks.Serialization.Json;
 using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using System;
