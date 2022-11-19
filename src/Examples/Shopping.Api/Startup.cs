@@ -1,6 +1,5 @@
 ﻿using DomainBlocks.Persistence.AspNetCore;
-using DomainBlocks.Persistence.SqlStreamStore.AspNetCore;
-using DomainBlocks.Serialization.Json.AspNetCore;
+using DomainBlocks.Persistence.SqlStreamStore.New;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -10,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Shopping.Domain.Aggregates;
 using Shopping.Domain.Events;
+using SqlStreamStore;
 
 namespace Shopping.Api;
 
@@ -26,15 +26,15 @@ public class Startup
     {
         services.AddGrpc();
         services.AddMediatR(typeof(Startup));
+
         services.AddAggregateRepository(
-            _configuration,
-            options =>
+            (_, options) => options.UseSqlStreamStore(o =>
             {
-                options.RawEventDataType<string>()
-                    .UseSqlStreamStoreForEventsAndSnapshots()
-                    .UseJsonSerialization();
-            },
-            modelBuilder =>
+                var connectionString = _configuration.GetValue<string>("SqlStreamStore:ConnectionString");
+                var settings = new PostgresStreamStoreSettings(connectionString);
+                o.UsePostgres(settings).UseJsonSerialization();
+            }),
+            (_, modelBuilder) =>
             {
                 modelBuilder.ImmutableAggregate<ShoppingCartState, IDomainEvent>(aggregate =>
                 {
