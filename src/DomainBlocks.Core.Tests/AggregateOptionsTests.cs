@@ -12,25 +12,32 @@ public class AggregateOptionsTests
         var options = new MutableAggregateOptions<object, object>();
         Assert.Throws<InvalidOperationException>(() => options.CreateNew());
     }
-    
+
     [Test]
-    public void MakeStreamKeyThrowWhenMissingIdToStreamKeySelector()
-    {
-        var options = new MutableAggregateOptions<object, object>();
-        Assert.Throws<InvalidOperationException>(() => options.MakeStreamKey("id"));
-    }
-    
-    [Test]
-    public void MakeSnapshotKeyThrowWhenMissingIdToSnapshotKeySelector()
-    {
-        var options = new MutableAggregateOptions<object, object>();
-        Assert.Throws<InvalidOperationException>(() => options.MakeSnapshotKey("id"));
-    }
-    
-    [Test]
-    public void MakeSnapshotKeyThrowWhenMissingIdSelector()
+    public void MakeSnapshotKeyThrowsWhenMissingIdSelector()
     {
         var options = new MutableAggregateOptions<object, object>();
         Assert.Throws<InvalidOperationException>(() => options.MakeSnapshotKey(new object()));
+    }
+
+    [Test]
+    public void MakeStreamKeyUsesDefaultSelectorWhenNotSpecified()
+    {
+        var options = new MutableAggregateOptions<MyAggregate, object>();
+        var streamKey = options.MakeStreamKey("1");
+        Assert.That(streamKey, Is.EqualTo("myAggregate-1"));
+    }
+
+    [Test]
+    public void MakeSnapshotKeyUsesDefaultSelectorWhenNotSpecified()
+    {
+        var options = new MutableAggregateOptions<MyAggregate, object>();
+        var snapshotKey = options.MakeSnapshotKey("1");
+        Assert.That(snapshotKey, Is.EqualTo("myAggregateSnapshot-1"));
+    }
+
+    // ReSharper disable once ClassNeverInstantiated.Local
+    private class MyAggregate
+    {
     }
 }
