@@ -15,6 +15,8 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
 
     protected AggregateOptionsBase()
     {
+        _idToStreamKeySelector = GetDefaultIdToStreamKeySelector();
+        _idToSnapshotKeySelector = GetDefaultIdToSnapshotKeySelector();
     }
 
     protected AggregateOptionsBase(AggregateOptionsBase<TAggregate, TEventBase> copyFrom)
@@ -24,8 +26,8 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         _eventApplier = copyFrom._eventApplier;
         _factory = copyFrom._factory;
         _idSelector = copyFrom._idSelector;
-        _idToStreamKeySelector = copyFrom._idToStreamKeySelector;
-        _idToSnapshotKeySelector = copyFrom._idToSnapshotKeySelector;
+        _idToStreamKeySelector = copyFrom._idToStreamKeySelector ?? GetDefaultIdToStreamKeySelector();
+        _idToSnapshotKeySelector = copyFrom._idToSnapshotKeySelector ?? GetDefaultIdToSnapshotKeySelector();
         _commandResultsOptions = new Dictionary<Type, ICommandResultOptions>(copyFrom._commandResultsOptions);
         _eventsOptions = new Dictionary<Type, IEventOptions>(copyFrom._eventsOptions);
     }
@@ -47,25 +49,13 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
     public string MakeStreamKey(string id)
     {
         if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("ID cannot be null or whitespace", nameof(id));
-        
-        if (_idToStreamKeySelector == null)
-        {
-            throw new InvalidOperationException(
-                "Cannot make stream key as no ID to stream key selector has been specified.");
-        }
-        
+
         return _idToStreamKeySelector(id);
     }
 
     public string MakeSnapshotKey(string id)
     {
         if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("ID cannot be null or whitespace", nameof(id));
-
-        if (_idToSnapshotKeySelector == null)
-        {
-            throw new InvalidOperationException(
-                "Cannot make snapshot key as no ID to snapshot key selector has been specified.");
-        }
 
         return _idToSnapshotKeySelector(id);
     }
@@ -202,5 +192,19 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         }
 
         throw new KeyNotFoundException($"No command result options found for CLR type {commandResultClrType.Name}.");
+    }
+
+    private static Func<string, string> GetDefaultIdToStreamKeySelector()
+    {
+        var name = typeof(TAggregate).Name;
+        name = $"{name[..1].ToLower()}{name[1..]}";
+        return id => $"{name}-{id}";
+    }
+
+    private static Func<string, string> GetDefaultIdToSnapshotKeySelector()
+    {
+        var name = typeof(TAggregate).Name;
+        name = $"{name[..1].ToLower()}{name[1..]}Snapshot";
+        return id => $"{name}-{id}";
     }
 }
