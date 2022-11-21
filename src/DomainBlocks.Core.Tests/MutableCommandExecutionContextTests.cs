@@ -12,7 +12,7 @@ public class MutableCommandExecutionContextTests
     public void EventEnumerableReturnTypeIsNotEnumeratedAgainWhenMaterializing()
     {
         var builder = new MutableAggregateOptionsBuilder<MutableAggregate, IEvent>();
-        builder.WithEventEnumerableCommandResult().ApplyEvents(ApplyEventsBehavior.ApplyWhileEnumerating);
+        builder.WithEventEnumerableCommandResult().ApplyEvents(ApplyEventsBehavior.WhileEnumerating);
         builder.ApplyEventsWith((agg, e) => agg.Apply((dynamic)e));
         var options = builder.Options;
 

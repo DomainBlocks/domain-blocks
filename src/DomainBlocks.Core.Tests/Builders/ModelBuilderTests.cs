@@ -67,7 +67,7 @@ public class ModelBuilderTests
             {
                 aggregate
                     .WithEventEnumerableCommandResult()
-                    .ApplyEvents(ApplyEventsBehavior.ApplyWhileEnumerating);
+                    .ApplyEvents(ApplyEventsBehavior.WhileEnumerating);
 
                 aggregate
                     .DiscoverEventApplierMethods()

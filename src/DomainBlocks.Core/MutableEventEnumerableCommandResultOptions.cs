@@ -7,7 +7,7 @@ namespace DomainBlocks.Core;
 public sealed class MutableEventEnumerableCommandResultOptions<TAggregate, TEventBase> :
     IMutableCommandResultOptions<TAggregate, IEnumerable<TEventBase>> where TEventBase : class
 {
-    private ApplyEventsBehavior _behavior = ApplyEventsBehavior.DoNotApply;
+    private ApplyEventsBehavior _behavior = ApplyEventsBehavior.Never;
 
     public MutableEventEnumerableCommandResultOptions()
     {
@@ -35,9 +35,9 @@ public sealed class MutableEventEnumerableCommandResultOptions<TAggregate, TEven
     {
         return _behavior switch
         {
-            ApplyEventsBehavior.DoNotApply => commandResult.ToList().AsReadOnly(),
+            ApplyEventsBehavior.Never => commandResult.ToList().AsReadOnly(),
             ApplyEventsBehavior.MaterializeFirst => ApplyAfterEnumerating(commandResult, state, eventApplier),
-            ApplyEventsBehavior.ApplyWhileEnumerating => ApplyWhileEnumerating(commandResult, state, eventApplier),
+            ApplyEventsBehavior.WhileEnumerating => ApplyWhileEnumerating(commandResult, state, eventApplier),
             _ => throw new InvalidOperationException($"Unknown enum value {nameof(ApplyEventsBehavior)}.{_behavior}.")
         };
     }
