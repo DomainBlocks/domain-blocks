@@ -2,6 +2,7 @@
 using DomainBlocks.Core.Builders;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using NewAggregateRepositoryOptionsBuilder = DomainBlocks.Persistence.New.AggregateRepositoryOptionsBuilder;
 
 namespace DomainBlocks.Persistence.AspNetCore;
 
@@ -44,6 +45,28 @@ public static class AggregateServiceCollectionExtensions
                 aggregateRepositoryOptions.EventsRepository,
                 aggregateRepositoryOptions.SnapshotRepository,
                 model);
+        });
+
+        return services;
+    }
+
+    // New approach
+    public static IServiceCollection AddAggregateRepository(
+        this IServiceCollection services,
+        Action<IServiceProvider, NewAggregateRepositoryOptionsBuilder> optionsAction,
+        Action<IServiceProvider, ModelBuilder> modelBuilderAction)
+    {
+        services.AddSingleton(sp =>
+        {
+            var optionsBuilder = new NewAggregateRepositoryOptionsBuilder();
+            optionsAction(sp, optionsBuilder);
+            var options = optionsBuilder.Options;
+
+            var modelBuilder = new ModelBuilder();
+            modelBuilderAction(sp, modelBuilder);
+            var model = modelBuilder.Build();
+
+            return options.CreateAggregateRepository(model);
         });
 
         return services;

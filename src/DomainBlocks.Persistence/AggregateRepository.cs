@@ -30,7 +30,7 @@ public sealed class AggregateRepository<TRawData> : IAggregateRepository
     }
 
     public async Task<LoadedAggregate<TAggregateState>> LoadAsync<TAggregateState>(
-        string id, 
+        string id,
         AggregateLoadStrategy loadStrategy = AggregateLoadStrategy.PreferSnapshot, 
         CancellationToken cancellationToken = default)
     {
