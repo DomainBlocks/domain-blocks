@@ -7,17 +7,25 @@ namespace DomainBlocks.Core.Tests;
 public class AggregateOptionsTests
 {
     [Test]
-    public void CreateNewThrowsInvalidOperationWhenMissingFactory()
+    public void CreateNewUsesDefaultConstructorWhenNoFactorySpecified()
     {
-        var options = new MutableAggregateOptions<object, object>();
+        var options = new MutableAggregateOptions<MyAggregate, object>();
+        var aggregate = options.CreateNew();
+        Assert.That(aggregate, Is.Not.Null);
+    }
+
+    [Test]
+    public void CreateNewThrowsInvalidOperationWhenNoDefaultConstructorAndMissingFactory()
+    {
+        var options = new MutableAggregateOptions<MyAggregateWithNoPublicDefaultCtor, object>();
         Assert.Throws<InvalidOperationException>(() => options.CreateNew());
     }
 
     [Test]
     public void MakeSnapshotKeyThrowsWhenMissingIdSelector()
     {
-        var options = new MutableAggregateOptions<object, object>();
-        Assert.Throws<InvalidOperationException>(() => options.MakeSnapshotKey(new object()));
+        var options = new MutableAggregateOptions<MyAggregate, object>();
+        Assert.Throws<InvalidOperationException>(() => options.MakeSnapshotKey(new MyAggregate()));
     }
 
     [Test]
@@ -39,5 +47,13 @@ public class AggregateOptionsTests
     // ReSharper disable once ClassNeverInstantiated.Local
     private class MyAggregate
     {
+    }
+
+    // ReSharper disable once ClassNeverInstantiated.Local
+    private class MyAggregateWithNoPublicDefaultCtor
+    {
+        private MyAggregateWithNoPublicDefaultCtor()
+        {
+        }
     }
 }

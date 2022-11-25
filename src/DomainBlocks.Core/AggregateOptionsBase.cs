@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq.Expressions;
 
 namespace DomainBlocks.Core;
 
 public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateOptions<TAggregate>
 {
+    private static readonly Lazy<Func<TAggregate>> DefaultFactory = new(() => GetDefaultFactory());
     private readonly Dictionary<Type, ICommandResultOptions> _commandResultsOptions = new();
     private readonly Dictionary<Type, IEventOptions> _eventsOptions = new();
     private Func<TAggregate> _factory;
@@ -15,6 +17,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
 
     protected AggregateOptionsBase()
     {
+        _factory = DefaultFactory.Value;
         _idToStreamKeySelector = GetDefaultIdToStreamKeySelector();
         _idToSnapshotKeySelector = GetDefaultIdToSnapshotKeySelector();
     }
@@ -24,7 +27,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         if (copyFrom == null) throw new ArgumentNullException(nameof(copyFrom));
 
         _eventApplier = copyFrom._eventApplier;
-        _factory = copyFrom._factory;
+        _factory = copyFrom._factory ?? DefaultFactory.Value;
         _idSelector = copyFrom._idSelector;
         _idToStreamKeySelector = copyFrom._idToStreamKeySelector ?? GetDefaultIdToStreamKeySelector();
         _idToSnapshotKeySelector = copyFrom._idToSnapshotKeySelector ?? GetDefaultIdToSnapshotKeySelector();
@@ -194,17 +197,33 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         throw new KeyNotFoundException($"No command result options found for CLR type {commandResultClrType.Name}.");
     }
 
-    private static Func<string, string> GetDefaultIdToStreamKeySelector()
+    private static Func<TAggregate> GetDefaultFactory()
+    {
+        var ctor = typeof(TAggregate).GetConstructor(Type.EmptyTypes);
+        if (ctor == null)
+        {
+            return null;
+        }
+
+        var lambda = Expression.Lambda<Func<TAggregate>>(Expression.New(ctor));
+        return lambda.Compile();
+    }
+
+    private static string GetDefaultKeyPrefix()
     {
         var name = typeof(TAggregate).Name;
-        name = $"{name[..1].ToLower()}{name[1..]}";
-        return id => $"{name}-{id}";
+        return $"{name[..1].ToLower()}{name[1..]}";
+    }
+
+    private static Func<string, string> GetDefaultIdToStreamKeySelector()
+    {
+        var prefix = GetDefaultKeyPrefix();
+        return id => $"{prefix}-{id}";
     }
 
     private static Func<string, string> GetDefaultIdToSnapshotKeySelector()
     {
-        var name = typeof(TAggregate).Name;
-        name = $"{name[..1].ToLower()}{name[1..]}Snapshot";
-        return id => $"{name}-{id}";
+        var prefix = GetDefaultKeyPrefix();
+        return id => $"{prefix}Snapshot-{id}";
     }
 }
