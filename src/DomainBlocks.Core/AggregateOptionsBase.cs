@@ -7,6 +7,7 @@ namespace DomainBlocks.Core;
 public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateOptions<TAggregate>
 {
     private static readonly Lazy<Func<TAggregate>> DefaultFactory = new(() => GetDefaultFactory());
+    private static readonly Lazy<Func<TAggregate, string>> DefaultIdSelector = new(GetDefaultIdSelector);
     private readonly Dictionary<Type, ICommandResultOptions> _commandResultsOptions = new();
     private readonly Dictionary<Type, IEventOptions> _eventsOptions = new();
     private Func<TAggregate> _factory;
@@ -18,6 +19,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
     protected AggregateOptionsBase()
     {
         _factory = DefaultFactory.Value;
+        _idSelector = DefaultIdSelector.Value;
         _idToStreamKeySelector = GetDefaultIdToStreamKeySelector();
         _idToSnapshotKeySelector = GetDefaultIdToSnapshotKeySelector();
     }
@@ -28,7 +30,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
 
         _eventApplier = copyFrom._eventApplier;
         _factory = copyFrom._factory ?? DefaultFactory.Value;
-        _idSelector = copyFrom._idSelector;
+        _idSelector = copyFrom._idSelector ?? DefaultIdSelector.Value;
         _idToStreamKeySelector = copyFrom._idToStreamKeySelector ?? GetDefaultIdToStreamKeySelector();
         _idToSnapshotKeySelector = copyFrom._idToSnapshotKeySelector ?? GetDefaultIdToSnapshotKeySelector();
         _commandResultsOptions = new Dictionary<Type, ICommandResultOptions>(copyFrom._commandResultsOptions);
@@ -205,7 +207,25 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
             return null;
         }
 
-        var lambda = Expression.Lambda<Func<TAggregate>>(Expression.New(ctor));
+        var ctorExpr = Expression.New(ctor);
+        var lambda = Expression.Lambda<Func<TAggregate>>(ctorExpr);
+        return lambda.Compile();
+    }
+
+    private static Func<TAggregate, string> GetDefaultIdSelector()
+    {
+        const string defaultIdPropertyName = "Id";
+
+        var property = typeof(TAggregate).GetProperty(defaultIdPropertyName);
+        if (property == null)
+        {
+            return null;
+        }
+
+        var aggregateParam = Expression.Parameter(typeof(TAggregate));
+        var propertyExpr = Expression.Property(aggregateParam, property);
+        var asString = Expression.Call(propertyExpr, nameof(ToString), null);
+        var lambda = Expression.Lambda<Func<TAggregate, string>>(asString, aggregateParam);
         return lambda.Compile();
     }
 

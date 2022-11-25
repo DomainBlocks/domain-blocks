@@ -22,7 +22,15 @@ public class AggregateOptionsTests
     }
 
     [Test]
-    public void MakeSnapshotKeyThrowsWhenMissingIdSelector()
+    public void MakeSnapshotKeyUsesDefaultIdSelectorWhenIdPropertyExists()
+    {
+        var options = new MutableAggregateOptions<MyAggregateWithId, object>();
+        var aggregate = new MyAggregateWithId { Id = 123 };
+        Assert.That(options.MakeSnapshotKey(aggregate), Is.EqualTo("myAggregateWithIdSnapshot-123"));
+    }
+
+    [Test]
+    public void MakeSnapshotKeyThrowsWhenMissingIdSelectorAndNoIdPropertyExists()
     {
         var options = new MutableAggregateOptions<MyAggregate, object>();
         Assert.Throws<InvalidOperationException>(() => options.MakeSnapshotKey(new MyAggregate()));
@@ -47,6 +55,13 @@ public class AggregateOptionsTests
     // ReSharper disable once ClassNeverInstantiated.Local
     private class MyAggregate
     {
+    }
+
+    // ReSharper disable once ClassNeverInstantiated.Local
+    private class MyAggregateWithId
+    {
+        // ReSharper disable once UnusedAutoPropertyAccessor.Local
+        public int Id { get; init; }
     }
 
     // ReSharper disable once ClassNeverInstantiated.Local
