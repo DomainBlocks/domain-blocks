@@ -51,6 +51,18 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         return _factory();
     }
 
+    public string GetId(TAggregate aggregate)
+    {
+        if (aggregate == null) throw new ArgumentNullException(nameof(aggregate));
+
+        if (_idSelector == null)
+        {
+            throw new InvalidOperationException("Cannot get ID as no ID selector has been specified.");
+        }
+
+        return _idSelector(aggregate);
+    }
+
     public string MakeStreamKey(string id)
     {
         if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("ID cannot be null or whitespace", nameof(id));
@@ -67,14 +79,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
 
     public string MakeSnapshotKey(TAggregate aggregate)
     {
-        if (aggregate == null) throw new ArgumentNullException(nameof(aggregate));
-
-        if (_idSelector == null)
-        {
-            throw new InvalidOperationException("Cannot make snapshot key as no ID selector has been specified.");
-        }
-
-        return MakeSnapshotKey(_idSelector(aggregate));
+        return MakeSnapshotKey(GetId(aggregate));
     }
 
     public abstract ICommandExecutionContext<TAggregate> CreateCommandExecutionContext(TAggregate aggregate);
@@ -207,8 +212,8 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
             return null;
         }
 
-        var ctorExpr = Expression.New(ctor);
-        var lambda = Expression.Lambda<Func<TAggregate>>(ctorExpr);
+        var newExpr = Expression.New(ctor);
+        var lambda = Expression.Lambda<Func<TAggregate>>(newExpr);
         return lambda.Compile();
     }
 

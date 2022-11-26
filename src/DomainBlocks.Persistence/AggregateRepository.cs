@@ -124,7 +124,7 @@ public sealed class AggregateRepository<TRawData> : IAggregateRepository
 
         if (snapshotPredicate(loadedAggregate))
         {
-            var snapshotKey = aggregateType.MakeSnapshotKey(loadedAggregate.State);
+            var snapshotKey = aggregateType.MakeSnapshotKey(loadedAggregate.Id);
 
             await _snapshotRepository.SaveSnapshotAsync(
                 snapshotKey, loadedAggregate.Version, loadedAggregate.State, cancellationToken: cancellationToken);
