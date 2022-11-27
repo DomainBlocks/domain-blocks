@@ -1,7 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
 
 namespace DomainBlocks.Core.Builders;
 
@@ -53,17 +50,7 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
     IIdToKeySelectorBuilder
     where TEventBase : class
 {
-    private readonly List<Func<IEnumerable<IEventOptions>>> _eventsOptionsFactories = new();
-
-    public IAggregateOptions<TAggregate> Options
-    {
-        get
-        {
-            var eventsOptions = _eventsOptionsFactories.SelectMany(x => x());
-            var options = OptionsImpl.WithEventsOptions(eventsOptions);
-            return options;
-        }
-    }
+    public IAggregateOptions<TAggregate> Options => OptionsImpl;
 
     IAggregateOptions IAggregateOptionsBuilder.Options => Options;
 
@@ -91,37 +78,5 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
     {
         OptionsImpl = OptionsImpl.WithIdToSnapshotKeySelector(idToSnapshotKeySelector);
         return this;
-    }
-
-    /// <summary>
-    /// Adds the given event type to the aggregate options.
-    /// </summary>
-    /// <returns>
-    /// An object that can be used to further configure the event type.
-    /// </returns>
-    public EventOptionsBuilder<TEvent, TEventBase> Event<TEvent>() where TEvent : TEventBase
-    {
-        var builder = new EventOptionsBuilder<TEvent, TEventBase>();
-        _eventsOptionsFactories.Add(GetOptions);
-        return builder;
-
-        IEnumerable<IEventOptions> GetOptions()
-        {
-            yield return builder.Options;
-        }
-    }
-
-    /// <summary>
-    /// Finds events deriving from type <see cref="TEventBase"/> in the specified assembly, and adds them to the
-    /// aggregate options.
-    /// </summary>
-    /// <returns>
-    /// An object that can be used for further configuration.
-    /// </returns>
-    public AssemblyEventOptionsBuilder<TEventBase> UseEventTypesFrom(Assembly assembly)
-    {
-        var builder = new AssemblyEventOptionsBuilder<TEventBase>(assembly);
-        _eventsOptionsFactories.Add(() => builder.Build());
-        return builder;
     }
 }

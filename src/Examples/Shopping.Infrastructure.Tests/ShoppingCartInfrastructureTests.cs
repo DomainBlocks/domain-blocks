@@ -27,9 +27,9 @@ public class ShoppingCartInfrastructureTests : EventStoreIntegrationTest
                     .WithStreamKey(id => $"shoppingCart-{id}")
                     .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");
 
-                aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
+                //aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
 
-                aggregate.UseEventTypesFrom(typeof(IDomainEvent).Assembly);
+                //aggregate.UseEventTypesFrom(typeof(IDomainEvent).Assembly);
             })
             .Build();
 

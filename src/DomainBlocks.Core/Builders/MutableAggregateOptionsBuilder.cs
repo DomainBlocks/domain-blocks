@@ -7,9 +7,9 @@ namespace DomainBlocks.Core.Builders;
 public sealed class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     AggregateOptionsBuilderBase<TAggregate, TEventBase> where TEventBase : class
 {
-    private MutableAggregateOptions<TAggregate, TEventBase> _options = new();
     private readonly List<ICommandResultOptionsBuilder> _commandResultOptionsBuilders = new();
-    private MutableAutoEventApplierBuilder<TAggregate, TEventBase> _autoEventApplierBuilder;
+    private readonly List<IEventOptionsBuilder<TAggregate>> _eventOptionsBuilders = new();
+    private MutableAggregateOptions<TAggregate, TEventBase> _options = new();
 
     protected override AggregateOptionsBase<TAggregate, TEventBase> OptionsImpl
     {
@@ -25,11 +25,10 @@ public sealed class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
                 options = options.WithCommandResultOptions(commandResultOptions);
             }
 
-            var eventApplier = _autoEventApplierBuilder?.Build();
-            
-            return eventApplier == null
-                ? options
-                : ((MutableAggregateOptions<TAggregate, TEventBase>)options).WithEventApplier(eventApplier);
+            var eventsOptions = _eventOptionsBuilders.Select(x => x.Options);
+            options = options.WithEventsOptions(eventsOptions);
+
+            return options;
         }
         set => _options = (MutableAggregateOptions<TAggregate, TEventBase>)value;
     }
@@ -80,21 +79,14 @@ public sealed class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     /// </summary>
     public void ApplyEventsWith(Action<TAggregate, TEventBase> eventApplier)
     {
-        _autoEventApplierBuilder = null;
+        // TODO: Do we want to keep this?
         _options = _options.WithEventApplier(eventApplier);
     }
-
-    /// <summary>
-    /// Auto-configures applying events by discovering event applier methods on the aggregate type. The event applier
-    /// methods are discovered by reflection during configuration, and for performance reasons, are compiled into IL
-    /// using lambda expressions.
-    /// </summary>
-    /// <returns>
-    /// An object that can be used to configure the discovery of event applier methods.
-    /// </returns>
-    public MutableAutoEventApplierBuilder<TAggregate, TEventBase> DiscoverEventApplierMethods()
+    
+    public MutableEventOptionsBuilder<TAggregate, TEvent> Event<TEvent>()
     {
-        _autoEventApplierBuilder = new MutableAutoEventApplierBuilder<TAggregate, TEventBase>();
-        return _autoEventApplierBuilder;
+        var builder = new MutableEventOptionsBuilder<TAggregate, TEvent>();
+        _eventOptionsBuilders.Add(builder);
+        return builder;
     }
 }

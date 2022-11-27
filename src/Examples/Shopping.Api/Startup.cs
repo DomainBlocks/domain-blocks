@@ -43,9 +43,13 @@ public class Startup
                         .WithStreamKey(id => $"shoppingCart-{id}")
                         .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");
 
-                    aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
+                    //aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
 
-                    aggregate.UseEventTypesFrom(typeof(IDomainEvent).Assembly);
+                    //aggregate.UseEventTypesFrom(typeof(IDomainEvent).Assembly);
+
+                    aggregate.Event<ShoppingCartCreated>().ApplyWith(ShoppingCartFunctions.Apply);
+                    aggregate.Event<ItemAddedToShoppingCart>().ApplyWith(ShoppingCartFunctions.Apply);
+                    aggregate.Event<ItemRemovedFromShoppingCart>().ApplyWith(ShoppingCartFunctions.Apply);
                 });
             });
     }

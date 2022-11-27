@@ -65,24 +65,12 @@ public static class ShoppingCartFunctions
         yield return new ItemRemovedFromShoppingCart(command.Id, command.CartId);
     }
 
-    public static ShoppingCartState Apply(ShoppingCartState currentState, IDomainEvent @event)
-    {
-        return @event switch
-        {
-            ShoppingCartCreated e => Apply(currentState, e),
-            ItemAddedToShoppingCart e => Apply(currentState, e),
-            ItemRemovedFromShoppingCart e => Apply(currentState, e),
-            // Simply ignore unknown events
-            _ => currentState
-        };
-    }
-
-    private static ShoppingCartState Apply(ShoppingCartState currentState, ShoppingCartCreated @event)
+    public static ShoppingCartState Apply(ShoppingCartState currentState, ShoppingCartCreated @event)
     {
         return new ShoppingCartState(@event.Id);
     }
 
-    private static ShoppingCartState Apply(ShoppingCartState currentState, ItemAddedToShoppingCart @event)
+    public static ShoppingCartState Apply(ShoppingCartState currentState, ItemAddedToShoppingCart @event)
     {
         if (currentState.Id != @event.CartId)
         {
@@ -93,7 +81,7 @@ public static class ShoppingCartFunctions
         return new ShoppingCartState(currentState.Id, newItems);
     }
 
-    private static ShoppingCartState Apply(ShoppingCartState currentState, ItemRemovedFromShoppingCart @event)
+    public static ShoppingCartState Apply(ShoppingCartState currentState, ItemRemovedFromShoppingCart @event)
     {
         if (currentState.Id != @event.CartId)
         {

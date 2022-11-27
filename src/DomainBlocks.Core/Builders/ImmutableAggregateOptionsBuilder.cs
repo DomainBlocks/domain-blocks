@@ -7,9 +7,9 @@ namespace DomainBlocks.Core.Builders;
 public sealed class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     AggregateOptionsBuilderBase<TAggregate, TEventBase> where TEventBase : class
 {
-    private ImmutableAggregateOptions<TAggregate, TEventBase> _options = new();
     private readonly List<ICommandResultOptionsBuilder> _commandResultOptionsBuilders = new();
-    private ImmutableAutoEventApplierBuilder<TAggregate, TEventBase> _autoEventApplierBuilder;
+    private readonly List<IEventOptionsBuilder<TAggregate>> _eventOptionsBuilders = new();
+    private ImmutableAggregateOptions<TAggregate, TEventBase> _options = new();
 
     protected override AggregateOptionsBase<TAggregate, TEventBase> OptionsImpl
     {
@@ -28,8 +28,10 @@ public sealed class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
                 options = options.WithCommandResultOptions(commandResultOptions);
             }
 
-            var eventApplier = _autoEventApplierBuilder?.Build();
-            return eventApplier == null ? options : options.WithEventApplier(eventApplier);
+            var eventsOptions = _eventOptionsBuilders.Select(x => x.Options);
+            options = options.WithEventsOptions(eventsOptions);
+
+            return options;
         }
         set => _options = (ImmutableAggregateOptions<TAggregate, TEventBase>)value;
     }
@@ -55,21 +57,14 @@ public sealed class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     /// </summary>
     public void ApplyEventsWith(Func<TAggregate, TEventBase, TAggregate> eventApplier)
     {
-        _autoEventApplierBuilder = null;
+        // TODO: Do we want to keep this?
         OptionsImpl = _options.WithEventApplier(eventApplier);
     }
 
-    /// <summary>
-    /// Auto-configures applying events by discovering event applier methods on the aggregate type. The event applier
-    /// methods are discovered by reflection during configuration, and for performance reasons, are compiled into IL
-    /// using lambda expressions.
-    /// </summary>
-    /// <returns>
-    /// An object that can be used to configure the discovery of event applier methods.
-    /// </returns>
-    public ImmutableAutoEventApplierBuilder<TAggregate, TEventBase> DiscoverEventApplierMethods()
+    public ImmutableEventOptionsBuilder<TAggregate, TEvent> Event<TEvent>()
     {
-        _autoEventApplierBuilder = new ImmutableAutoEventApplierBuilder<TAggregate, TEventBase>();
-        return _autoEventApplierBuilder;
+        var builder = new ImmutableEventOptionsBuilder<TAggregate, TEvent>();
+        _eventOptionsBuilders.Add(builder);
+        return builder;
     }
 }
