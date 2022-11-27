@@ -62,7 +62,7 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
                 options = options.WithEventsOptions(AutoEventOptionsBuilder.Build());
             }
 
-            // Any individually configured event options will override corresponding auto configured event options.
+            // Any individually configured event options will override auto configured event options for a given type.
             var eventsOptions = EventOptionsBuilders.Select(x => x.Options);
             options = options.WithEventsOptions(eventsOptions);
 

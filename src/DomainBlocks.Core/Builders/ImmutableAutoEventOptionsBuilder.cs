@@ -78,7 +78,7 @@ public sealed class ImmutableAutoEventOptionsBuilder<TAggregate, TEventBase> : I
         {
             throw new InvalidOperationException(
                 $"Unable to auto configure events. No appropriate event applier methods named '{_methodName}' could " +
-                $"be found on type {typeof(TAggregate).Name}.");
+                $"be found in type {typeof(TAggregate).Name}.");
         }
 
         return eventOptions;
