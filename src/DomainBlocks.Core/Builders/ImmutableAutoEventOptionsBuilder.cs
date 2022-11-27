@@ -6,7 +6,7 @@ using System.Reflection;
 
 namespace DomainBlocks.Core.Builders;
 
-public sealed class ImmutableAutoEventOptionsBuilder<TAggregate, TEventBase>
+public sealed class ImmutableAutoEventOptionsBuilder<TAggregate, TEventBase> : IAutoEventOptionsBuilder<TAggregate>
 {
     private string _methodName = "Apply";
     private bool _includeNonPublicMethods;
@@ -37,7 +37,7 @@ public sealed class ImmutableAutoEventOptionsBuilder<TAggregate, TEventBase>
         return this;
     }
 
-    internal IEnumerable<EventOptions<TAggregate>> Build()
+    IEnumerable<EventOptions<TAggregate>> IAutoEventOptionsBuilder<TAggregate>.Build()
     {
         var bindingFlags = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static;
 

@@ -44,7 +44,7 @@ public class Startup
                         .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");
 
                     aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
-                    
+
                     aggregate.Event<ShoppingCartCreated>();
                     aggregate.Event<ItemAddedToShoppingCart>();
                     aggregate.Event<ItemRemovedFromShoppingCart>();

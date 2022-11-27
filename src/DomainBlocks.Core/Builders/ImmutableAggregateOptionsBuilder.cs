@@ -8,9 +8,7 @@ public sealed class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     AggregateOptionsBuilderBase<TAggregate, TEventBase> where TEventBase : class
 {
     private readonly List<ICommandResultOptionsBuilder> _commandResultOptionsBuilders = new();
-    private readonly List<IEventOptionsBuilder<TAggregate, TEventBase>> _eventOptionsBuilders = new();
     private ImmutableAggregateOptions<TAggregate, TEventBase> _options = new();
-    private ImmutableAutoEventOptionsBuilder<TAggregate, TEventBase> _autoEventOptionsBuilder;
 
     protected override AggregateOptionsBase<TAggregate, TEventBase> OptionsImpl
     {
@@ -19,26 +17,17 @@ public sealed class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
             var commandResultsOptions = _commandResultOptionsBuilders.Select(x => x.Options);
             var options = _options.WithCommandResultsOptions(commandResultsOptions);
 
-            if (!options.HasCommandResultOptions<IEnumerable<TEventBase>>())
+            if (options.HasCommandResultOptions<IEnumerable<TEventBase>>())
             {
-                // We support IEnumerable<TEventBase> as a command result by default.
-                var commandResultOptions =
-                    new ImmutableCommandResultOptions<TAggregate, TEventBase, IEnumerable<TEventBase>>()
-                        .WithEventsSelector(x => x);
-
-                options = options.WithCommandResultOptions(commandResultOptions);
+                return options;
             }
 
-            if (_autoEventOptionsBuilder != null)
-            {
-                options = options.WithEventsOptions(_autoEventOptionsBuilder.Build());
-            }
+            // We support IEnumerable<TEventBase> as a command result by default.
+            var commandResultOptions =
+                new ImmutableCommandResultOptions<TAggregate, TEventBase, IEnumerable<TEventBase>>()
+                    .WithEventsSelector(x => x);
 
-            // Any individually configured event options will override corresponding auto configured event options.
-            var eventsOptions = _eventOptionsBuilders.Select(x => x.Options);
-            options = options.WithEventsOptions(eventsOptions);
-
-            return options;
+            return options.WithCommandResultOptions(commandResultOptions);
         }
         set => _options = (ImmutableAggregateOptions<TAggregate, TEventBase>)value;
     }
@@ -76,7 +65,7 @@ public sealed class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     public ImmutableEventOptionsBuilder<TAggregate, TEventBase, TEvent> Event<TEvent>() where TEvent : TEventBase
     {
         var builder = new ImmutableEventOptionsBuilder<TAggregate, TEventBase, TEvent>();
-        _eventOptionsBuilders.Add(builder);
+        EventOptionsBuilders.Add(builder);
         return builder;
     }
 
@@ -88,7 +77,8 @@ public sealed class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     /// </returns>
     public ImmutableAutoEventOptionsBuilder<TAggregate, TEventBase> AutoConfigureEventsFromApplyMethods()
     {
-        _autoEventOptionsBuilder = new ImmutableAutoEventOptionsBuilder<TAggregate, TEventBase>();
-        return _autoEventOptionsBuilder;
+        var builder = new ImmutableAutoEventOptionsBuilder<TAggregate, TEventBase>();
+        AutoEventOptionsBuilder = builder;
+        return builder;
     }
 }

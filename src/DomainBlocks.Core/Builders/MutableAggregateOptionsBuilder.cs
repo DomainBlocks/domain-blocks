@@ -8,9 +8,7 @@ public sealed class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     AggregateOptionsBuilderBase<TAggregate, TEventBase> where TEventBase : class
 {
     private readonly List<ICommandResultOptionsBuilder> _commandResultOptionsBuilders = new();
-    private readonly List<IEventOptionsBuilder<TAggregate, TEventBase>> _eventOptionsBuilders = new();
     private MutableAggregateOptions<TAggregate, TEventBase> _options = new();
-    private MutableAutoEventOptionsBuilder<TAggregate, TEventBase> _autoEventOptionsBuilder;
 
     protected override AggregateOptionsBase<TAggregate, TEventBase> OptionsImpl
     {
@@ -19,21 +17,14 @@ public sealed class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
             var commandResultsOptions = _commandResultOptionsBuilders.Select(x => x.Options);
             var options = _options.WithCommandResultsOptions(commandResultsOptions);
 
-            if (!options.HasCommandResultOptions<IEnumerable<TEventBase>>())
+            if (options.HasCommandResultOptions<IEnumerable<TEventBase>>())
             {
-                // We support IEnumerable<TEventBase> as a command result by default.
-                var commandResultOptions = new MutableEventEnumerableCommandResultOptions<TAggregate, TEventBase>();
-                options = options.WithCommandResultOptions(commandResultOptions);
+                return options;
             }
 
-            if (_autoEventOptionsBuilder != null)
-            {
-                options = options.WithEventsOptions(_autoEventOptionsBuilder.Build());
-            }
-
-            // Any individually configured event options will override corresponding auto configured event options.
-            var eventsOptions = _eventOptionsBuilders.Select(x => x.Options);
-            options = options.WithEventsOptions(eventsOptions);
+            // We support IEnumerable<TEventBase> as a command result by default.
+            var commandResultOptions = new MutableEventEnumerableCommandResultOptions<TAggregate, TEventBase>();
+            options = options.WithCommandResultOptions(commandResultOptions);
 
             return options;
         }
@@ -98,7 +89,7 @@ public sealed class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     public MutableEventOptionsBuilder<TAggregate, TEventBase, TEvent> Event<TEvent>() where TEvent : TEventBase
     {
         var builder = new MutableEventOptionsBuilder<TAggregate, TEventBase, TEvent>();
-        _eventOptionsBuilders.Add(builder);
+        EventOptionsBuilders.Add(builder);
         return builder;
     }
 
@@ -110,7 +101,8 @@ public sealed class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     /// </returns>
     public MutableAutoEventOptionsBuilder<TAggregate, TEventBase> AutoConfigureEventsFromApplyMethods()
     {
-        _autoEventOptionsBuilder = new MutableAutoEventOptionsBuilder<TAggregate, TEventBase>();
-        return _autoEventOptionsBuilder;
+        var builder = new MutableAutoEventOptionsBuilder<TAggregate, TEventBase>();
+        AutoEventOptionsBuilder = builder;
+        return builder;
     }
 }
