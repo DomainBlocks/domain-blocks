@@ -2,9 +2,9 @@ using System;
 
 namespace DomainBlocks.Core;
 
-internal sealed class EventOptions<TAggregate, TEventBase> : IEventOptions
+internal sealed class EventOptions<TAggregate> : IEventOptions
 {
-    private Func<TAggregate, TEventBase, TAggregate> _eventApplier;
+    private Func<TAggregate, object, TAggregate> _eventApplier;
     private string _eventName;
 
     public EventOptions(Type clrType)
@@ -12,7 +12,7 @@ internal sealed class EventOptions<TAggregate, TEventBase> : IEventOptions
         ClrType = clrType ?? throw new ArgumentNullException(nameof(clrType));
     }
 
-    private EventOptions(EventOptions<TAggregate, TEventBase> copyFrom)
+    private EventOptions(EventOptions<TAggregate> copyFrom)
     {
         _eventApplier = copyFrom._eventApplier;
         _eventName = copyFrom._eventName;
@@ -21,16 +21,16 @@ internal sealed class EventOptions<TAggregate, TEventBase> : IEventOptions
 
     public Type ClrType { get; }
     public string EventName => _eventName ?? ClrType.Name;
+    public bool HasEventApplier => _eventApplier != null;
 
-    public EventOptions<TAggregate, TEventBase> WithEventApplier(
-        Func<TAggregate, TEventBase, TAggregate> eventApplier)
+    public EventOptions<TAggregate> WithEventApplier(Func<TAggregate, object, TAggregate> eventApplier)
     {
-        return new EventOptions<TAggregate, TEventBase>(this) { _eventApplier = eventApplier };
+        return new EventOptions<TAggregate>(this) { _eventApplier = eventApplier };
     }
 
-    public EventOptions<TAggregate, TEventBase> WithEventApplier(Action<TAggregate, TEventBase> eventApplier)
+    public EventOptions<TAggregate> WithEventApplier(Action<TAggregate, object> eventApplier)
     {
-        return new EventOptions<TAggregate, TEventBase>(this)
+        return new EventOptions<TAggregate>(this)
         {
             _eventApplier = (agg, e) =>
             {
@@ -40,12 +40,12 @@ internal sealed class EventOptions<TAggregate, TEventBase> : IEventOptions
         };
     }
 
-    public EventOptions<TAggregate, TEventBase> WithEventName(string eventName)
+    public EventOptions<TAggregate> WithEventName(string eventName)
     {
         if (string.IsNullOrWhiteSpace(eventName))
             throw new ArgumentException("Event name cannot be null or whitespace.", nameof(eventName));
 
-        return new EventOptions<TAggregate, TEventBase>(this) { _eventName = eventName };
+        return new EventOptions<TAggregate>(this) { _eventName = eventName };
     }
 
     public TAggregate ApplyEvent(TAggregate aggregate, object @event)
@@ -66,10 +66,10 @@ internal sealed class EventOptions<TAggregate, TEventBase> : IEventOptions
                 "been specified.");
         }
 
-        return _eventApplier(aggregate, (TEventBase)@event);
+        return _eventApplier(aggregate, @event);
     }
 
-    public EventOptions<TAggregate, TEventBase> Merge(EventOptions<TAggregate, TEventBase> other)
+    public EventOptions<TAggregate> Merge(EventOptions<TAggregate> other)
     {
         if (other == null) throw new ArgumentNullException(nameof(other));
 
@@ -78,7 +78,7 @@ internal sealed class EventOptions<TAggregate, TEventBase> : IEventOptions
             throw new ArgumentException("Cannot merge event options with for different event type.", nameof(other));
         }
 
-        return new EventOptions<TAggregate, TEventBase>(ClrType)
+        return new EventOptions<TAggregate>(ClrType)
         {
             _eventApplier = other._eventApplier ?? _eventApplier,
             _eventName = other._eventName ?? _eventName
@@ -88,7 +88,7 @@ internal sealed class EventOptions<TAggregate, TEventBase> : IEventOptions
 
 public sealed class EventOptions<TAggregate, TEventBase, TEvent> : IEventOptions where TEvent : TEventBase
 {
-    private EventOptions<TAggregate, TEventBase> _innerOptions = new(typeof(TEvent));
+    private EventOptions<TAggregate> _innerOptions = new(typeof(TEvent));
 
     public EventOptions()
     {
@@ -127,5 +127,5 @@ public sealed class EventOptions<TAggregate, TEventBase, TEvent> : IEventOptions
         };
     }
 
-    internal EventOptions<TAggregate, TEventBase> HideEventType() => _innerOptions;
+    internal EventOptions<TAggregate> HideEventType() => _innerOptions;
 }

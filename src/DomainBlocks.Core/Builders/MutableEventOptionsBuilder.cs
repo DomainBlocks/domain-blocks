@@ -8,8 +8,7 @@ public sealed class MutableEventOptionsBuilder<TAggregate, TEventBase, TEvent> :
 {
     private EventOptions<TAggregate, TEventBase, TEvent> _options = new();
 
-    EventOptions<TAggregate, TEventBase> IEventOptionsBuilder<TAggregate, TEventBase>.Options =>
-        _options.HideEventType();
+    EventOptions<TAggregate> IEventOptionsBuilder<TAggregate, TEventBase>.Options => _options.HideEventType();
 
     public MutableEventOptionsBuilder<TAggregate, TEventBase, TEvent> ApplyWith(Action<TAggregate, TEvent> eventApplier)
     {

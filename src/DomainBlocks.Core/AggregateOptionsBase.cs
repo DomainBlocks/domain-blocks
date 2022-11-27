@@ -9,7 +9,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
     private static readonly Lazy<Func<TAggregate>> DefaultFactory = new(() => GetDefaultFactory());
     private static readonly Lazy<Func<TAggregate, string>> DefaultIdSelector = new(GetDefaultIdSelector);
     private readonly Dictionary<Type, ICommandResultOptions> _commandResultsOptions = new();
-    private readonly Dictionary<Type, EventOptions<TAggregate, TEventBase>> _eventsOptions = new();
+    private readonly Dictionary<Type, EventOptions<TAggregate>> _eventsOptions = new();
     private Func<TAggregate> _factory;
     private Func<TAggregate, string> _idSelector;
     private Func<string, string> _idToStreamKeySelector;
@@ -34,7 +34,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         _idToStreamKeySelector = copyFrom._idToStreamKeySelector ?? GetDefaultIdToStreamKeySelector();
         _idToSnapshotKeySelector = copyFrom._idToSnapshotKeySelector ?? GetDefaultIdToSnapshotKeySelector();
         _commandResultsOptions = new Dictionary<Type, ICommandResultOptions>(copyFrom._commandResultsOptions);
-        _eventsOptions = new Dictionary<Type, EventOptions<TAggregate, TEventBase>>(copyFrom._eventsOptions);
+        _eventsOptions = new Dictionary<Type, EventOptions<TAggregate>>(copyFrom._eventsOptions);
     }
 
     public Type ClrType => typeof(TAggregate);
@@ -89,23 +89,19 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         if (aggregate == null) throw new ArgumentNullException(nameof(aggregate));
         if (@event == null) throw new ArgumentNullException(nameof(@event));
 
-        // TODO: Do we want to keep this behaviour as optional?
-        // if (_eventApplier == null)
-        // {
-        //     throw new InvalidOperationException(
-        //         "Cannot apply event to aggregate as no event applier has been specified.");
-        // }
-        //
-        // return _eventApplier(aggregate, @event);
-
-        if (!_eventsOptions.TryGetValue(@event.GetType(), out var eventOptions))
+        if (_eventsOptions.TryGetValue(@event.GetType(), out var eventOptions) && eventOptions.HasEventApplier)
         {
-            throw new InvalidOperationException(
-                $"Unable to apply event {@event.GetType().Name} to aggregate {typeof(TAggregate).Name} as no event" +
-                " options where found.");
+            return eventOptions.ApplyEvent(aggregate, (TEventBase)@event);
         }
 
-        return eventOptions.ApplyEvent(aggregate, @event);
+        if (_eventApplier != null)
+        {
+            return _eventApplier(aggregate, @event);
+        }
+
+        throw new InvalidOperationException(
+            $"Unable to apply event {@event.GetType().Name} to aggregate {typeof(TAggregate).Name} as no event " +
+            "applier was found.");
     }
 
     public AggregateOptionsBase<TAggregate, TEventBase> WithFactory(Func<TAggregate> factory)
@@ -182,7 +178,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
     }
 
     internal AggregateOptionsBase<TAggregate, TEventBase> WithEventsOptions(
-        IEnumerable<EventOptions<TAggregate, TEventBase>> eventsOptions)
+        IEnumerable<EventOptions<TAggregate>> eventsOptions)
     {
         if (eventsOptions == null) throw new ArgumentNullException(nameof(eventsOptions));
 

@@ -41,7 +41,7 @@ public class ShoppingCartItem
     public Guid Id { get; }
     public string Name { get; }
 }
-    
+
 public static class ShoppingCartFunctions
 {
     public static IEnumerable<IDomainEvent> Execute(ShoppingCartState state, AddItemToShoppingCart command)
@@ -65,12 +65,24 @@ public static class ShoppingCartFunctions
         yield return new ItemRemovedFromShoppingCart(command.Id, command.CartId);
     }
 
-    public static ShoppingCartState Apply(ShoppingCartState currentState, ShoppingCartCreated @event)
+    public static ShoppingCartState Apply(ShoppingCartState currentState, IDomainEvent @event)
+    {
+        return @event switch
+        {
+            ShoppingCartCreated e => Apply(currentState, e),
+            ItemAddedToShoppingCart e => Apply(currentState, e),
+            ItemRemovedFromShoppingCart e => Apply(currentState, e),
+            // Simply ignore unknown events
+            _ => currentState
+        };
+    }
+
+    private static ShoppingCartState Apply(ShoppingCartState currentState, ShoppingCartCreated @event)
     {
         return new ShoppingCartState(@event.Id);
     }
 
-    public static ShoppingCartState Apply(ShoppingCartState currentState, ItemAddedToShoppingCart @event)
+    private static ShoppingCartState Apply(ShoppingCartState currentState, ItemAddedToShoppingCart @event)
     {
         if (currentState.Id != @event.CartId)
         {
@@ -81,7 +93,7 @@ public static class ShoppingCartFunctions
         return new ShoppingCartState(currentState.Id, newItems);
     }
 
-    public static ShoppingCartState Apply(ShoppingCartState currentState, ItemRemovedFromShoppingCart @event)
+    private static ShoppingCartState Apply(ShoppingCartState currentState, ItemRemovedFromShoppingCart @event)
     {
         if (currentState.Id != @event.CartId)
         {

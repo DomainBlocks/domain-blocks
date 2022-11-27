@@ -6,7 +6,7 @@ using System.Reflection;
 
 namespace DomainBlocks.Core.Builders;
 
-public sealed class MutableAutoEventOptionsBuilder<TAggregate, TEventBase> : IIncludeNonPublicMethodsBuilder
+public sealed class MutableAutoEventOptionsBuilder<TAggregate, TEventBase>
 {
     private string _methodName = "Apply";
     private bool _includeNonPublicMethods;
@@ -19,7 +19,7 @@ public sealed class MutableAutoEventOptionsBuilder<TAggregate, TEventBase> : IIn
     /// <returns>
     /// An object that can be used for further configuration.
     /// </returns>
-    public IIncludeNonPublicMethodsBuilder WithName(string methodName)
+    public MutableAutoEventOptionsBuilder<TAggregate, TEventBase> WithName(string methodName)
     {
         if (string.IsNullOrWhiteSpace(methodName))
             throw new ArgumentException("Method name cannot be null or whitespace.", nameof(methodName));
@@ -31,12 +31,13 @@ public sealed class MutableAutoEventOptionsBuilder<TAggregate, TEventBase> : IIn
     /// <summary>
     /// Specify to include non-public event applier methods.
     /// </summary>
-    void IIncludeNonPublicMethodsBuilder.IncludeNonPublic()
+    public MutableAutoEventOptionsBuilder<TAggregate, TEventBase> IncludeNonPublic()
     {
         _includeNonPublicMethods = true;
+        return this;
     }
 
-    internal IEnumerable<EventOptions<TAggregate, TEventBase>> Build()
+    internal IEnumerable<EventOptions<TAggregate>> Build()
     {
         var bindingFlags = BindingFlags.Public | BindingFlags.Instance;
 
@@ -61,13 +62,12 @@ public sealed class MutableAutoEventOptionsBuilder<TAggregate, TEventBase> : IIn
             .Select(x =>
             {
                 var (method, eventType) = x;
-                var eventParam = Expression.Parameter(typeof(TEventBase), "event");
+                var eventParam = Expression.Parameter(typeof(object), "event");
                 var body = Expression.Call(aggregateParam, method, Expression.Convert(eventParam, eventType));
                 var block = Expression.Block(aggregateParam, body);
-                var lambda = Expression.Lambda<Action<TAggregate, TEventBase>>(block, aggregateParam, eventParam);
+                var lambda = Expression.Lambda<Action<TAggregate, object>>(block, aggregateParam, eventParam);
                 var applier = lambda.Compile();
-
-                return new EventOptions<TAggregate, TEventBase>(eventType).WithEventApplier(applier);
+                return new EventOptions<TAggregate>(eventType).WithEventApplier(applier);
             })
             .ToList();
 

@@ -2,5 +2,5 @@ namespace DomainBlocks.Core.Builders;
 
 internal interface IEventOptionsBuilder<TAggregate, TEventBase>
 {
-    EventOptions<TAggregate, TEventBase> Options { get; }
+    EventOptions<TAggregate> Options { get; }
 }

@@ -64,10 +64,15 @@ public sealed class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     /// </summary>
     public void ApplyEventsWith(Func<TAggregate, TEventBase, TAggregate> eventApplier)
     {
-        // TODO: Do we want to keep this?
         OptionsImpl = _options.WithEventApplier(eventApplier);
     }
 
+    /// <summary>
+    /// Adds the given event type to the aggregate options.
+    /// </summary>
+    /// <returns>
+    /// An object that can be used to further configure the event.
+    /// </returns>
     public ImmutableEventOptionsBuilder<TAggregate, TEventBase, TEvent> Event<TEvent>() where TEvent : TEventBase
     {
         var builder = new ImmutableEventOptionsBuilder<TAggregate, TEventBase, TEvent>();
@@ -75,6 +80,12 @@ public sealed class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
         return builder;
     }
 
+    /// <summary>
+    /// Automatically configure events by discovering event applier methods on the aggregate type.
+    /// </summary>
+    /// <returns>
+    /// An object that can be used for further configuration.
+    /// </returns>
     public ImmutableAutoEventOptionsBuilder<TAggregate, TEventBase> AutoConfigureEventsFromApplyMethods()
     {
         _autoEventOptionsBuilder = new ImmutableAutoEventOptionsBuilder<TAggregate, TEventBase>();

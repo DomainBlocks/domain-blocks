@@ -103,9 +103,11 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
                     .WithStreamKey(id => $"shoppingCart-{id}")
                     .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");
 
-                //aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
+                aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
 
-                //aggregate.UseEventTypesFrom(typeof(IDomainEvent).Assembly);
+                aggregate.Event<ShoppingCartCreated>();
+                aggregate.Event<ItemAddedToShoppingCart>();
+                aggregate.Event<ItemRemovedFromShoppingCart>();
             })
             .Build();
 
