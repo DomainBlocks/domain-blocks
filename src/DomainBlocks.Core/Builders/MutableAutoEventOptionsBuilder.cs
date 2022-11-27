@@ -1,13 +1,14 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 
 namespace DomainBlocks.Core.Builders;
 
-public sealed class ImmutableAutoEventApplierBuilder<TAggregate, TEventBase> : IIncludeNonPublicMethodsBuilder
+public sealed class MutableAutoEventOptionsBuilder<TAggregate, TEventBase> : IIncludeNonPublicMethodsBuilder
 {
-    private string _methodName;
+    private string _methodName = "Apply";
     private bool _includeNonPublicMethods;
 
     /// <summary>
@@ -35,12 +36,9 @@ public sealed class ImmutableAutoEventApplierBuilder<TAggregate, TEventBase> : I
         _includeNonPublicMethods = true;
     }
 
-    public Func<TAggregate, TEventBase, TAggregate> Build()
+    internal IEnumerable<EventOptions<TAggregate, TEventBase>> Build()
     {
-        if (_methodName == null)
-            throw new InvalidOperationException("No method name specified. Unable to find event applier methods.");
-
-        var bindingFlags = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static;
+        var bindingFlags = BindingFlags.Public | BindingFlags.Instance;
 
         if (_includeNonPublicMethods)
         {
@@ -52,8 +50,6 @@ public sealed class ImmutableAutoEventApplierBuilder<TAggregate, TEventBase> : I
             let @params = method.GetParameters()
             where @params.Length == 1
             let paramType = @params[0].ParameterType
-            let returnParam = method.ReturnParameter
-            where typeof(TAggregate).IsAssignableFrom(returnParam.ParameterType)
             where paramType.IsClass
             where !paramType.IsAbstract
             where typeof(TEventBase).IsAssignableFrom(paramType)
@@ -61,26 +57,27 @@ public sealed class ImmutableAutoEventApplierBuilder<TAggregate, TEventBase> : I
 
         var aggregateParam = Expression.Parameter(typeof(TAggregate), "aggregate");
 
-        var handlers = methods
+        var eventOptions = methods
             .Select(x =>
             {
                 var (method, eventType) = x;
                 var eventParam = Expression.Parameter(typeof(TEventBase), "event");
-                var instance = method.IsStatic ? null : aggregateParam;
-                var body = Expression.Call(instance, method, Expression.Convert(eventParam, eventType));
+                var body = Expression.Call(aggregateParam, method, Expression.Convert(eventParam, eventType));
                 var block = Expression.Block(aggregateParam, body);
+                var lambda = Expression.Lambda<Action<TAggregate, TEventBase>>(block, aggregateParam, eventParam);
+                var applier = lambda.Compile();
 
-                var lambda = Expression.Lambda<Func<TAggregate, TEventBase, TAggregate>>(
-                    block, aggregateParam, eventParam);
-
-                var handler = lambda.Compile();
-                return (eventType, handler);
+                return new EventOptions<TAggregate, TEventBase>(eventType).WithEventApplier(applier);
             })
-            .ToDictionary(x => x.eventType, x => x.handler);
+            .ToList();
 
-        if (handlers.Count == 0)
-            throw new InvalidOperationException($"No event applier methods named '{_methodName}' were found.");
+        if (eventOptions.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Unable to auto configure events. No appropriate event applier methods named '{_methodName}' could " +
+                $"be found on type {typeof(TAggregate).Name}.");
+        }
 
-        return (agg, e) => handlers.TryGetValue(e.GetType(), out var handler) ? handler(agg, e) : agg;
+        return eventOptions;
     }
 }

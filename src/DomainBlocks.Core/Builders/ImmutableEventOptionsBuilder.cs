@@ -2,20 +2,23 @@ using System;
 
 namespace DomainBlocks.Core.Builders;
 
-public sealed class ImmutableEventOptionsBuilder<TAggregate, TEvent> : IEventOptionsBuilder<TAggregate>
+public sealed class ImmutableEventOptionsBuilder<TAggregate, TEventBase, TEvent> :
+    IEventOptionsBuilder<TAggregate, TEventBase>
+    where TEvent : TEventBase
 {
-    private EventOptions<TAggregate, TEvent> _options = new();
+    private EventOptions<TAggregate, TEventBase, TEvent> _options = new();
 
-    IEventOptions<TAggregate> IEventOptionsBuilder<TAggregate>.Options => _options;
+    EventOptions<TAggregate, TEventBase> IEventOptionsBuilder<TAggregate, TEventBase>.Options =>
+        _options.HideEventType();
 
-    public ImmutableEventOptionsBuilder<TAggregate, TEvent> ApplyWith(
+    public ImmutableEventOptionsBuilder<TAggregate, TEventBase, TEvent> ApplyWith(
         Func<TAggregate, TEvent, TAggregate> eventApplier)
     {
         _options = _options.WithEventApplier(eventApplier);
         return this;
     }
 
-    public ImmutableEventOptionsBuilder<TAggregate, TEvent> HasName(string eventName)
+    public ImmutableEventOptionsBuilder<TAggregate, TEventBase, TEvent> HasName(string eventName)
     {
         _options = _options.WithEventName(eventName);
         return this;

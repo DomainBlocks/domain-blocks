@@ -8,8 +8,9 @@ public sealed class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     AggregateOptionsBuilderBase<TAggregate, TEventBase> where TEventBase : class
 {
     private readonly List<ICommandResultOptionsBuilder> _commandResultOptionsBuilders = new();
-    private readonly List<IEventOptionsBuilder<TAggregate>> _eventOptionsBuilders = new();
+    private readonly List<IEventOptionsBuilder<TAggregate, TEventBase>> _eventOptionsBuilders = new();
     private MutableAggregateOptions<TAggregate, TEventBase> _options = new();
+    private MutableAutoEventOptionsBuilder<TAggregate, TEventBase> _autoEventOptionsBuilder;
 
     protected override AggregateOptionsBase<TAggregate, TEventBase> OptionsImpl
     {
@@ -25,6 +26,12 @@ public sealed class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
                 options = options.WithCommandResultOptions(commandResultOptions);
             }
 
+            if (_autoEventOptionsBuilder != null)
+            {
+                options = options.WithEventsOptions(_autoEventOptionsBuilder.Build());
+            }
+
+            // Any individually configured event options will override corresponding auto configured event options.
             var eventsOptions = _eventOptionsBuilders.Select(x => x.Options);
             options = options.WithEventsOptions(eventsOptions);
 
@@ -82,11 +89,17 @@ public sealed class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
         // TODO: Do we want to keep this?
         _options = _options.WithEventApplier(eventApplier);
     }
-    
-    public MutableEventOptionsBuilder<TAggregate, TEvent> Event<TEvent>()
+
+    public MutableEventOptionsBuilder<TAggregate, TEventBase, TEvent> Event<TEvent>() where TEvent : TEventBase
     {
-        var builder = new MutableEventOptionsBuilder<TAggregate, TEvent>();
+        var builder = new MutableEventOptionsBuilder<TAggregate, TEventBase, TEvent>();
         _eventOptionsBuilders.Add(builder);
         return builder;
+    }
+
+    public MutableAutoEventOptionsBuilder<TAggregate, TEventBase> AutoConfigureEventsFromApplyMethods()
+    {
+        _autoEventOptionsBuilder = new MutableAutoEventOptionsBuilder<TAggregate, TEventBase>();
+        return _autoEventOptionsBuilder;
     }
 }

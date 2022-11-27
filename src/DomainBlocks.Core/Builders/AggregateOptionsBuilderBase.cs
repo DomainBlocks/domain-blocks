@@ -48,7 +48,6 @@ public interface IIdToKeySelectorBuilder
 public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
     IAggregateOptionsBuilder<TAggregate>,
     IIdToKeySelectorBuilder
-    where TEventBase : class
 {
     public IAggregateOptions<TAggregate> Options => OptionsImpl;
 

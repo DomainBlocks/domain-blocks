@@ -1,19 +1,20 @@
-using System;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 
 namespace DomainBlocks.Core.Builders;
 
-public sealed class MutableAutoEventApplierBuilder<TAggregate, TEventBase> : IIncludeNonPublicMethodsBuilder
+public sealed class ImmutableAutoEventOptionsBuilder<TAggregate, TEventBase> : IIncludeNonPublicMethodsBuilder
 {
-    private string _methodName;
+    private string _methodName = "Apply";
     private bool _includeNonPublicMethods;
 
     /// <summary>
     /// Specify the name of event applier methods on the aggregate type, e.g. if "ApplyEvent" is specified, then method
-    /// overloads with the signature <code>void ApplyEvent(SomeEvent)</code> will be used, where SomeEvent is derived
-    /// from <see cref="TEventBase"/>.
+    /// overloads with the signature <code>TAggregate ApplyEvent(SomeEvent)</code> will be used, where SomeEvent is
+    /// derived from <see cref="TEventBase"/>.
     /// </summary>
     /// <returns>
     /// An object that can be used for further configuration.
@@ -35,12 +36,9 @@ public sealed class MutableAutoEventApplierBuilder<TAggregate, TEventBase> : IIn
         _includeNonPublicMethods = true;
     }
 
-    public Action<TAggregate, TEventBase> Build()
+    internal IEnumerable<EventOptions<TAggregate, TEventBase>> Build()
     {
-        if (_methodName == null)
-            throw new InvalidOperationException("No method name specified. Unable to find event applier methods.");
-
-        var bindingFlags = BindingFlags.Public | BindingFlags.Instance;
+        var bindingFlags = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static;
 
         if (_includeNonPublicMethods)
         {
@@ -52,6 +50,8 @@ public sealed class MutableAutoEventApplierBuilder<TAggregate, TEventBase> : IIn
             let @params = method.GetParameters()
             where @params.Length == 1
             let paramType = @params[0].ParameterType
+            let returnParam = method.ReturnParameter
+            where typeof(TAggregate).IsAssignableFrom(returnParam.ParameterType)
             where paramType.IsClass
             where !paramType.IsAbstract
             where typeof(TEventBase).IsAssignableFrom(paramType)
@@ -59,28 +59,31 @@ public sealed class MutableAutoEventApplierBuilder<TAggregate, TEventBase> : IIn
 
         var aggregateParam = Expression.Parameter(typeof(TAggregate), "aggregate");
 
-        var handlers = methods
+        var eventOptions = methods
             .Select(x =>
             {
                 var (method, eventType) = x;
                 var eventParam = Expression.Parameter(typeof(TEventBase), "event");
-                var body = Expression.Call(aggregateParam, method, Expression.Convert(eventParam, eventType));
+                var instance = method.IsStatic ? null : aggregateParam;
+                var body = Expression.Call(instance, method, Expression.Convert(eventParam, eventType));
                 var block = Expression.Block(aggregateParam, body);
-                var lambda = Expression.Lambda<Action<TAggregate, TEventBase>>(block, aggregateParam, eventParam);
-                var handler = lambda.Compile();
-                return (eventType, handler);
+
+                var lambda = Expression.Lambda<Func<TAggregate, TEventBase, TAggregate>>(
+                    block, aggregateParam, eventParam);
+
+                var applier = lambda.Compile();
+
+                return new EventOptions<TAggregate, TEventBase>(eventType).WithEventApplier(applier);
             })
-            .ToDictionary(x => x.eventType, x => x.handler);
+            .ToList();
 
-        if (handlers.Count == 0)
-            throw new InvalidOperationException($"No event applier methods named '{_methodName}' were found.");
-
-        return (agg, e) =>
+        if (eventOptions.Count == 0)
         {
-            if (handlers.TryGetValue(e.GetType(), out var handler))
-            {
-                handler(agg, e);
-            }
-        };
+            throw new InvalidOperationException(
+                $"Unable to auto configure events. No appropriate event applier methods named '{_methodName}' could " +
+                $"be found on type {typeof(TAggregate).Name}.");
+        }
+
+        return eventOptions;
     }
 }

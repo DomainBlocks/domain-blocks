@@ -9,7 +9,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
     private static readonly Lazy<Func<TAggregate>> DefaultFactory = new(() => GetDefaultFactory());
     private static readonly Lazy<Func<TAggregate, string>> DefaultIdSelector = new(GetDefaultIdSelector);
     private readonly Dictionary<Type, ICommandResultOptions> _commandResultsOptions = new();
-    private readonly Dictionary<Type, IEventOptions<TAggregate>> _eventsOptions = new();
+    private readonly Dictionary<Type, EventOptions<TAggregate, TEventBase>> _eventsOptions = new();
     private Func<TAggregate> _factory;
     private Func<TAggregate, string> _idSelector;
     private Func<string, string> _idToStreamKeySelector;
@@ -34,7 +34,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         _idToStreamKeySelector = copyFrom._idToStreamKeySelector ?? GetDefaultIdToStreamKeySelector();
         _idToSnapshotKeySelector = copyFrom._idToSnapshotKeySelector ?? GetDefaultIdToSnapshotKeySelector();
         _commandResultsOptions = new Dictionary<Type, ICommandResultOptions>(copyFrom._commandResultsOptions);
-        _eventsOptions = new Dictionary<Type, IEventOptions<TAggregate>>(copyFrom._eventsOptions);
+        _eventsOptions = new Dictionary<Type, EventOptions<TAggregate, TEventBase>>(copyFrom._eventsOptions);
     }
 
     public Type ClrType => typeof(TAggregate);
@@ -181,8 +181,8 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         return clone;
     }
 
-    public AggregateOptionsBase<TAggregate, TEventBase> WithEventsOptions(
-        IEnumerable<IEventOptions<TAggregate>> eventsOptions)
+    internal AggregateOptionsBase<TAggregate, TEventBase> WithEventsOptions(
+        IEnumerable<EventOptions<TAggregate, TEventBase>> eventsOptions)
     {
         if (eventsOptions == null) throw new ArgumentNullException(nameof(eventsOptions));
 
@@ -190,7 +190,14 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
 
         foreach (var eventOptions in eventsOptions)
         {
-            clone._eventsOptions[eventOptions.ClrType] = eventOptions;
+            if (clone._eventsOptions.TryGetValue(eventOptions.ClrType, out var existingOptions))
+            {
+                clone._eventsOptions[eventOptions.ClrType] = existingOptions.Merge(eventOptions);
+            }
+            else
+            {
+                clone._eventsOptions.Add(eventOptions.ClrType, eventOptions);
+            }
         }
 
         return clone;
