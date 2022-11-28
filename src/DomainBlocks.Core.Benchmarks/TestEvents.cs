@@ -10,15 +10,12 @@ public static class TestEvents
 
         return Enumerable
             .Range(1, count)
-            .Select(x =>
+            .Select(x => (x % 3) switch
             {
-                return (x % 3) switch
-                {
-                    0 => event3,
-                    1 => event1,
-                    2 => event2,
-                    _ => throw new ArgumentOutOfRangeException()
-                };
+                0 => event3,
+                1 => event1,
+                2 => event2,
+                _ => throw new ArgumentOutOfRangeException()
             })
             .ToArray();
     }

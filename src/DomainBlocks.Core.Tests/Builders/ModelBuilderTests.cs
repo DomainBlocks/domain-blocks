@@ -155,8 +155,7 @@ public class ModelBuilderTests
         var context = aggregateOptions.CreateCommandExecutionContext(aggregate);
 
         context.ExecuteCommand(x => x.ChangeValueWithYieldReturnedEvents("value"));
-        var events = context.RaisedEvents.ToList();
-        var updatedAggregate = events.Aggregate(aggregate, aggregateOptions.ApplyEvent);
+        var updatedAggregate = context.RaisedEvents.Aggregate(aggregate, aggregateOptions.ApplyEvent);
 
         Assert.That(updatedAggregate, Is.SameAs(aggregate));
         Assert.That(updatedAggregate.Value, Is.EqualTo("value 3"));
@@ -259,8 +258,7 @@ public class ModelBuilderTests
         var context = aggregateOptions.CreateCommandExecutionContext(aggregate);
 
         context.ExecuteCommand(x => x.ChangeValueWithYieldReturnedEvents("value"));
-        var events = context.RaisedEvents.ToList();
-        var updatedAggregate = events.Aggregate(aggregate, aggregateOptions.ApplyEvent);
+        var updatedAggregate = context.RaisedEvents.Aggregate(aggregate, aggregateOptions.ApplyEvent);
 
         Assert.That(updatedAggregate, Is.Not.SameAs(aggregate));
         Assert.That(updatedAggregate.Value, Is.EqualTo("value 3"));

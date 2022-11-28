@@ -110,16 +110,13 @@ public class ImmutableEventApplierBenchmark
 
         public int Value { get; }
 
-        public ImmutableAggregate Apply(TestEvents.IEvent e)
+        public ImmutableAggregate Apply(TestEvents.IEvent e) => e switch
         {
-            return e switch
-            {
-                TestEvents.Event1 e1 => Apply(e1),
-                TestEvents.Event2 e2 => Apply(e2),
-                TestEvents.Event3 e3 => Apply(e3),
-                _ => throw new ArgumentOutOfRangeException(nameof(e), e, null)
-            };
-        }
+            TestEvents.Event1 e1 => Apply(e1),
+            TestEvents.Event2 e2 => Apply(e2),
+            TestEvents.Event3 e3 => Apply(e3),
+            _ => throw new ArgumentOutOfRangeException(nameof(e), e, null)
+        };
 
         public ImmutableAggregate Apply(TestEvents.Event1 e) => new(Value + e.Value);
         public ImmutableAggregate Apply(TestEvents.Event2 e) => new(Value + e.Value);

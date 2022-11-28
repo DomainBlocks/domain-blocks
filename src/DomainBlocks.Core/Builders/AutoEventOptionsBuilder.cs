@@ -120,9 +120,9 @@ public sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> :
 
         var methods = from method in _sourceType.GetMethods(bindingFlags)
             where method.Name == _methodName
-            let paramTypes = method.GetParameters().Select(x => x.ParameterType).ToArray()
-            where paramTypes.Length == 1
-            let eventParamType = paramTypes[0]
+            let @params = method.GetParameters()
+            where @params.Length == 1
+            let eventParamType = @params[0].ParameterType
             let returnParamType = method.ReturnParameter!.ParameterType
             where IsEventType(eventParamType)
             where isImmutable ? IsAggregateType(returnParamType) : IsVoid(returnParamType)
@@ -168,10 +168,10 @@ public sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> :
 
         var methods = from method in _sourceType.GetMethods(bindingFlags)
             where method.Name == _methodName
-            let paramTypes = method.GetParameters().Select(x => x.ParameterType).ToArray()
-            where paramTypes.Length == 2
-            let aggregateParamType = paramTypes[0]
-            let eventParamType = paramTypes[1]
+            let @params = method.GetParameters()
+            where @params.Length == 2
+            let aggregateParamType = @params[0].ParameterType
+            let eventParamType = @params[1].ParameterType
             let returnParamType = method.ReturnParameter!.ParameterType
             where IsAggregateType(aggregateParamType)
             where IsEventType(eventParamType)
