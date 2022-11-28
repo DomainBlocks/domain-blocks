@@ -82,6 +82,15 @@ public sealed class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
         return builder;
     }
 
+    /// <summary>
+    /// Automatically configure events by discovering static, non-member event applier methods from a given type.
+    /// Methods are expected have a signature with the following form:
+    /// <code>static TAggregate Apply(TAggregate state, MyEvent e)</code>
+    /// </summary>
+    /// <param name="sourceType">The type to discover events and applier methods from.</param>
+    /// <returns>
+    /// An object that can be used for further configuration.
+    /// </returns>
     public AutoEventOptionsBuilder<TAggregate, TEventBase> AutoConfigureEventsFrom(Type sourceType)
     {
         var builder = AutoEventOptionsBuilder<TAggregate, TEventBase>.ImmutableNonMember(sourceType);
