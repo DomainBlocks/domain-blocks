@@ -6,7 +6,27 @@ using System.Reflection;
 
 namespace DomainBlocks.Core.Builders;
 
-public sealed class AutoEventOptionsBuilder<TAggregate, TEventBase>
+public interface ICanIncludeNonPublicMethodsOrUseEventTypesOnly : ICanUseEventTypesOnly
+{
+    /// <summary>
+    /// Specify to include non-public event applier methods.
+    /// </summary>
+    /// <returns>
+    /// An object that can be used for further configuration.
+    /// </returns>
+    ICanUseEventTypesOnly IncludeNonPublicMethods();
+}
+
+public interface ICanUseEventTypesOnly
+{
+    /// <summary>
+    /// Specify to use the event types only, and ignore the event apply methods. Use this option for scenarios where a
+    /// manually written event applier (e.g. with a switch expression) is preferred.
+    /// </summary>
+    void UseEventTypesOnly();
+}
+
+public sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> : ICanIncludeNonPublicMethodsOrUseEventTypesOnly
 {
     private enum Mode
     {
@@ -18,7 +38,9 @@ public sealed class AutoEventOptionsBuilder<TAggregate, TEventBase>
     private readonly Mode _mode;
     private readonly Type _sourceType;
     private string _methodName = "Apply";
+
     private bool _includeNonPublicMethods;
+    private bool _useEventsTypesOnly;
 
     private AutoEventOptionsBuilder(Mode mode, Type sourceType = null)
     {
@@ -42,14 +64,12 @@ public sealed class AutoEventOptionsBuilder<TAggregate, TEventBase>
     }
 
     /// <summary>
-    /// Specify the name of event applier methods on the aggregate type, e.g. if "ApplyEvent" is specified, then method
-    /// overloads with the signature <code>TAggregate ApplyEvent(SomeEvent)</code> will be used, where SomeEvent is
-    /// derived from <see cref="TEventBase"/>.
+    /// Specify the name of the event applier method overloads on the aggregate type.
     /// </summary>
     /// <returns>
     /// An object that can be used for further configuration.
     /// </returns>
-    public AutoEventOptionsBuilder<TAggregate, TEventBase> WithMethodName(string methodName)
+    public ICanIncludeNonPublicMethodsOrUseEventTypesOnly WithMethodName(string methodName)
     {
         if (string.IsNullOrWhiteSpace(methodName))
             throw new ArgumentException("Method name cannot be null or whitespace.", nameof(methodName));
@@ -58,13 +78,15 @@ public sealed class AutoEventOptionsBuilder<TAggregate, TEventBase>
         return this;
     }
 
-    /// <summary>
-    /// Specify to include non-public event applier methods.
-    /// </summary>
-    public AutoEventOptionsBuilder<TAggregate, TEventBase> IncludeNonPublicMethods()
+    public ICanUseEventTypesOnly IncludeNonPublicMethods()
     {
         _includeNonPublicMethods = true;
         return this;
+    }
+
+    public void UseEventTypesOnly()
+    {
+        _useEventsTypesOnly = true;
     }
 
     internal IEnumerable<EventOptions<TAggregate>> Build()
@@ -110,24 +132,30 @@ public sealed class AutoEventOptionsBuilder<TAggregate, TEventBase>
         foreach (var method in methods)
         {
             var @params = method.GetParameters();
-            var instance = method.IsStatic ? null : aggregateParam;
             var eventType = @params[0].ParameterType;
+            var options = new EventOptions<TAggregate>(eventType);
+
+            if (_useEventsTypesOnly)
+            {
+                yield return options;
+                continue;
+            }
+
+            var instance = method.IsStatic ? null : aggregateParam;
             var call = Expression.Call(instance, method, Expression.Convert(eventParam, eventType));
 
             // Immutable
             if (IsAggregateType(method.ReturnType))
             {
                 var lambda = Expression.Lambda<Func<TAggregate, object, TAggregate>>(call, aggregateParam, eventParam);
-                var applier = lambda.Compile();
-                yield return new EventOptions<TAggregate>(eventType).WithEventApplier(applier);
+                yield return options.WithEventApplier(lambda.Compile());
             }
 
             // Mutable
             if (IsVoid(method.ReturnType))
             {
                 var lambda = Expression.Lambda<Action<TAggregate, object>>(call, aggregateParam, eventParam);
-                var applier = lambda.Compile();
-                yield return new EventOptions<TAggregate>(eventType).WithEventApplier(applier);
+                yield return options.WithEventApplier(lambda.Compile());
             }
         }
     }
@@ -155,10 +183,17 @@ public sealed class AutoEventOptionsBuilder<TAggregate, TEventBase>
         {
             var @params = method.GetParameters();
             var eventType = @params[1].ParameterType;
+            var options = new EventOptions<TAggregate>(eventType);
+
+            if (_useEventsTypesOnly)
+            {
+                yield return options;
+                continue;
+            }
+
             var call = Expression.Call(null, method, aggregateParam, Expression.Convert(eventParam, eventType));
             var lambda = Expression.Lambda<Func<TAggregate, object, TAggregate>>(call, aggregateParam, eventParam);
-            var applier = lambda.Compile();
-            yield return new EventOptions<TAggregate>(eventType).WithEventApplier(applier);
+            yield return options.WithEventApplier(lambda.Compile());
         }
     }
 

@@ -43,9 +43,12 @@ public class Startup
                         .WithStreamKey(id => $"shoppingCart-{id}")
                         .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");
 
+                    aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
+
                     aggregate
                         .AutoConfigureEventsFrom(typeof(ShoppingCartFunctions))
-                        .IncludeNonPublicMethods();
+                        .IncludeNonPublicMethods()
+                        .UseEventTypesOnly();
                 });
             });
     }
