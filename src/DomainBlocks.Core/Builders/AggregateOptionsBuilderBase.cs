@@ -74,7 +74,7 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
 
     protected abstract AggregateOptionsBase<TAggregate, TEventBase> OptionsImpl { get; set; }
 
-    internal IAutoEventOptionsBuilder<TAggregate> AutoEventOptionsBuilder { get; set; }
+    internal AutoEventOptionsBuilder<TAggregate, TEventBase> AutoEventOptionsBuilder { get; set; }
 
     internal List<IEventOptionsBuilder<TAggregate, TEventBase>> EventOptionsBuilders { get; } = new();
 

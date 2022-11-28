@@ -18,7 +18,8 @@ using NUnit.Framework;
 using Shopping.Domain.Aggregates;
 using Shopping.Domain.Commands;
 using Shopping.Domain.Events;
-using ProjectionDispatcher = DomainBlocks.Projections.EventDispatcher<EventStore.Client.EventRecord, Shopping.Domain.Events.IDomainEvent>;
+using ProjectionDispatcher =
+    DomainBlocks.Projections.EventDispatcher<EventStore.Client.EventRecord, Shopping.Domain.Events.IDomainEvent>;
 using UserCredentials = DomainBlocks.Common.UserCredentials;
 
 namespace Shopping.Infrastructure.Tests;
@@ -103,11 +104,9 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
                     .WithStreamKey(id => $"shoppingCart-{id}")
                     .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");
 
-                aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
-
-                aggregate.Event<ShoppingCartCreated>();
-                aggregate.Event<ItemAddedToShoppingCart>();
-                aggregate.Event<ItemRemovedFromShoppingCart>();
+                aggregate
+                    .AutoConfigureEventsFrom(typeof(ShoppingCartFunctions))
+                    .IncludeNonPublicMethods();
             })
             .Build();
 

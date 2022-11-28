@@ -27,7 +27,7 @@ public class EventApplierBenchmark
             .WithEventApplier((agg, e) => agg.Apply((dynamic)e));
 
         var builder = new MutableAggregateOptionsBuilder<MyAggregate, IEvent>();
-        builder.AutoConfigureEventsFromApplyMethods();
+        builder.AutoConfigureEvents();
         _options3 = builder.Options;
 
         builder = new MutableAggregateOptionsBuilder<MyAggregate, IEvent>();

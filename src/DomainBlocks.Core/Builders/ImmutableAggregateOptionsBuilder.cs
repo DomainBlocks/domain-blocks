@@ -75,9 +75,16 @@ public sealed class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     /// <returns>
     /// An object that can be used for further configuration.
     /// </returns>
-    public ImmutableAutoEventOptionsBuilder<TAggregate, TEventBase> AutoConfigureEventsFromApplyMethods()
+    public AutoEventOptionsBuilder<TAggregate, TEventBase> AutoConfigureEvents()
     {
-        var builder = new ImmutableAutoEventOptionsBuilder<TAggregate, TEventBase>();
+        var builder = AutoEventOptionsBuilder<TAggregate, TEventBase>.Immutable();
+        AutoEventOptionsBuilder = builder;
+        return builder;
+    }
+
+    public AutoEventOptionsBuilder<TAggregate, TEventBase> AutoConfigureEventsFrom(Type sourceType)
+    {
+        var builder = AutoEventOptionsBuilder<TAggregate, TEventBase>.ImmutableNonMember(sourceType);
         AutoEventOptionsBuilder = builder;
         return builder;
     }

@@ -147,7 +147,7 @@ public class ModelBuilderTests
     public void MutableAggregateWithAutoConfiguredEventsScenario()
     {
         var model = new ModelBuilder()
-            .Aggregate<MutableAggregate, IEvent>(options => options.AutoConfigureEventsFromApplyMethods())
+            .Aggregate<MutableAggregate, IEvent>(options => options.AutoConfigureEvents())
             .Build();
 
         var aggregateOptions = model.GetAggregateOptions<MutableAggregate>();
@@ -251,7 +251,7 @@ public class ModelBuilderTests
     public void ImmutableAggregateWithAutoConfiguredEventsScenario()
     {
         var model = new ModelBuilder()
-            .ImmutableAggregate<ImmutableAggregate, IEvent>(options => options.AutoConfigureEventsFromApplyMethods())
+            .ImmutableAggregate<ImmutableAggregate, IEvent>(options => options.AutoConfigureEvents())
             .Build();
 
         var aggregateOptions = model.GetAggregateOptions<ImmutableAggregate>();
