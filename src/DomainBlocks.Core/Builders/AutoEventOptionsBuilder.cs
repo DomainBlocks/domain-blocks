@@ -26,7 +26,9 @@ public interface ICanUseEventTypesOnly
     void UseEventTypesOnly();
 }
 
-public sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> : ICanIncludeNonPublicMethodsOrUseEventTypesOnly
+public sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> :
+    ICanIncludeNonPublicMethodsOrUseEventTypesOnly,
+    IAutoEventOptionsBuilder<TAggregate>
 {
     private enum Mode
     {
@@ -89,7 +91,7 @@ public sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> : ICanInclud
         _useEventsTypesOnly = true;
     }
 
-    internal IEnumerable<EventOptions<TAggregate>> Build()
+    IEnumerable<EventOptions<TAggregate>> IAutoEventOptionsBuilder<TAggregate>.Build()
     {
         var bindingFlags = _includeNonPublicMethods ? BindingFlags.NonPublic : BindingFlags.Default;
 

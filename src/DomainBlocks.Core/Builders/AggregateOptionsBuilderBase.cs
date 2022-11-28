@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 
 namespace DomainBlocks.Core.Builders;
 
@@ -74,7 +75,7 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
 
     protected abstract AggregateOptionsBase<TAggregate, TEventBase> OptionsImpl { get; set; }
 
-    internal AutoEventOptionsBuilder<TAggregate, TEventBase> AutoEventOptionsBuilder { get; set; }
+    internal IAutoEventOptionsBuilder<TAggregate> AutoEventOptionsBuilder { get; set; }
 
     internal List<IEventOptionsBuilder<TAggregate, TEventBase>> EventOptionsBuilders { get; } = new();
 
@@ -100,5 +101,19 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
     {
         OptionsImpl = OptionsImpl.WithIdToSnapshotKeySelector(idToSnapshotKeySelector);
         return this;
+    }
+
+    /// <summary>
+    /// Finds events deriving from type <see cref="TEventBase"/> in the specified assembly, and adds them to the
+    /// aggregate options.
+    /// </summary>
+    /// <returns>
+    /// An object that can be used for further configuration.
+    /// </returns>
+    public AssemblyEventOptionsBuilder<TAggregate, TEventBase> UseEventTypesFrom(Assembly assembly)
+    {
+        var builder = new AssemblyEventOptionsBuilder<TAggregate, TEventBase>(assembly);
+        AutoEventOptionsBuilder = builder;
+        return builder;
     }
 }

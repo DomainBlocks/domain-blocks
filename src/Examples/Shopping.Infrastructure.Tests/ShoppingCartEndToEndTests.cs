@@ -104,9 +104,9 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
                     .WithStreamKey(id => $"shoppingCart-{id}")
                     .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");
 
-                aggregate
-                    .AutoConfigureEventsFrom(typeof(ShoppingCartFunctions))
-                    .IncludeNonPublicMethods();
+                aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
+
+                aggregate.UseEventTypesFrom(typeof(IDomainEvent).Assembly);
             })
             .Build();
 

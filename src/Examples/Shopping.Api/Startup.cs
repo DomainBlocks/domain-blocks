@@ -45,10 +45,7 @@ public class Startup
 
                     aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
 
-                    aggregate
-                        .AutoConfigureEventsFrom(typeof(ShoppingCartFunctions))
-                        .IncludeNonPublicMethods()
-                        .UseEventTypesOnly();
+                    aggregate.UseEventTypesFrom(typeof(IDomainEvent).Assembly);
                 });
             });
     }
