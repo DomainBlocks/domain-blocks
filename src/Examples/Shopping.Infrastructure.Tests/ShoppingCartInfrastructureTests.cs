@@ -23,7 +23,6 @@ public class ShoppingCartInfrastructureTests : EventStoreIntegrationTest
             .ImmutableAggregate<ShoppingCartState, IDomainEvent>(aggregate =>
             {
                 aggregate
-                    .InitialState(() => new ShoppingCartState())
                     .HasId(o => o.Id?.ToString())
                     .WithStreamKey(id => $"shoppingCart-{id}")
                     .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");

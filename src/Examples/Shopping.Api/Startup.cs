@@ -39,7 +39,6 @@ public class Startup
                 modelBuilder.ImmutableAggregate<ShoppingCartState, IDomainEvent>(aggregate =>
                 {
                     aggregate
-                        .InitialState(() => new ShoppingCartState())
                         .HasId(x => x.Id?.ToString())
                         .WithStreamKey(id => $"shoppingCart-{id}")
                         .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");

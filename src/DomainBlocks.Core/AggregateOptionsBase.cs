@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Linq.Expressions;
 
 namespace DomainBlocks.Core;
 
 public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateOptions<TAggregate>
 {
+    private static readonly Lazy<Func<TAggregate>> DefaultFactory = new(() => GetDefaultFactory());
+    private static readonly Lazy<Func<TAggregate, string>> DefaultIdSelector = new(GetDefaultIdSelector);
     private readonly Dictionary<Type, ICommandResultOptions> _commandResultsOptions = new();
     private readonly Dictionary<Type, IEventOptions> _eventsOptions = new();
     private Func<TAggregate> _factory;
@@ -15,6 +18,8 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
 
     protected AggregateOptionsBase()
     {
+        _factory = DefaultFactory.Value;
+        _idSelector = DefaultIdSelector.Value;
         _idToStreamKeySelector = GetDefaultIdToStreamKeySelector();
         _idToSnapshotKeySelector = GetDefaultIdToSnapshotKeySelector();
     }
@@ -24,8 +29,8 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         if (copyFrom == null) throw new ArgumentNullException(nameof(copyFrom));
 
         _eventApplier = copyFrom._eventApplier;
-        _factory = copyFrom._factory;
-        _idSelector = copyFrom._idSelector;
+        _factory = copyFrom._factory ?? DefaultFactory.Value;
+        _idSelector = copyFrom._idSelector ?? DefaultIdSelector.Value;
         _idToStreamKeySelector = copyFrom._idToStreamKeySelector ?? GetDefaultIdToStreamKeySelector();
         _idToSnapshotKeySelector = copyFrom._idToSnapshotKeySelector ?? GetDefaultIdToSnapshotKeySelector();
         _commandResultsOptions = new Dictionary<Type, ICommandResultOptions>(copyFrom._commandResultsOptions);
@@ -46,6 +51,18 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         return _factory();
     }
 
+    public string GetId(TAggregate aggregate)
+    {
+        if (aggregate == null) throw new ArgumentNullException(nameof(aggregate));
+
+        if (_idSelector == null)
+        {
+            throw new InvalidOperationException("Cannot get ID as no ID selector has been specified.");
+        }
+
+        return _idSelector(aggregate);
+    }
+
     public string MakeStreamKey(string id)
     {
         if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("ID cannot be null or whitespace", nameof(id));
@@ -62,14 +79,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
 
     public string MakeSnapshotKey(TAggregate aggregate)
     {
-        if (aggregate == null) throw new ArgumentNullException(nameof(aggregate));
-
-        if (_idSelector == null)
-        {
-            throw new InvalidOperationException("Cannot make snapshot key as no ID selector has been specified.");
-        }
-
-        return MakeSnapshotKey(_idSelector(aggregate));
+        return MakeSnapshotKey(GetId(aggregate));
     }
 
     public abstract ICommandExecutionContext<TAggregate> CreateCommandExecutionContext(TAggregate aggregate);
@@ -194,17 +204,51 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         throw new KeyNotFoundException($"No command result options found for CLR type {commandResultClrType.Name}.");
     }
 
-    private static Func<string, string> GetDefaultIdToStreamKeySelector()
+    private static Func<TAggregate> GetDefaultFactory()
+    {
+        var ctor = typeof(TAggregate).GetConstructor(Type.EmptyTypes);
+        if (ctor == null)
+        {
+            return null;
+        }
+
+        var newExpr = Expression.New(ctor);
+        var lambda = Expression.Lambda<Func<TAggregate>>(newExpr);
+        return lambda.Compile();
+    }
+
+    private static Func<TAggregate, string> GetDefaultIdSelector()
+    {
+        const string defaultIdPropertyName = "Id";
+
+        var property = typeof(TAggregate).GetProperty(defaultIdPropertyName);
+        if (property == null)
+        {
+            return null;
+        }
+
+        var aggregateParam = Expression.Parameter(typeof(TAggregate));
+        var propertyExpr = Expression.Property(aggregateParam, property);
+        var asString = Expression.Call(propertyExpr, nameof(ToString), null);
+        var lambda = Expression.Lambda<Func<TAggregate, string>>(asString, aggregateParam);
+        return lambda.Compile();
+    }
+
+    private static string GetDefaultKeyPrefix()
     {
         var name = typeof(TAggregate).Name;
-        name = $"{name[..1].ToLower()}{name[1..]}";
-        return id => $"{name}-{id}";
+        return $"{name[..1].ToLower()}{name[1..]}";
+    }
+
+    private static Func<string, string> GetDefaultIdToStreamKeySelector()
+    {
+        var prefix = GetDefaultKeyPrefix();
+        return id => $"{prefix}-{id}";
     }
 
     private static Func<string, string> GetDefaultIdToSnapshotKeySelector()
     {
-        var name = typeof(TAggregate).Name;
-        name = $"{name[..1].ToLower()}{name[1..]}Snapshot";
-        return id => $"{name}-{id}";
+        var prefix = GetDefaultKeyPrefix();
+        return id => $"{prefix}Snapshot-{id}";
     }
 }
