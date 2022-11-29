@@ -52,6 +52,14 @@ public class AggregateOptionsTests
         Assert.That(snapshotKey, Is.EqualTo("myAggregateSnapshot-1"));
     }
 
+    [Test]
+    public void KeySelectorsUsesPrefixWhenSpecified()
+    {
+        var options = new MutableAggregateOptions<MyAggregate, object>().WithKeyPrefix("myPrefix");
+        Assert.That(options.MakeStreamKey("1"), Is.EqualTo("myPrefix-1"));
+        Assert.That(options.MakeSnapshotKey("1"), Is.EqualTo("myPrefixSnapshot-1"));
+    }
+
     // ReSharper disable once ClassNeverInstantiated.Local
     private class MyAggregate
     {

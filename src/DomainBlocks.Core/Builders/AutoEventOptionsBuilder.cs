@@ -6,19 +6,16 @@ using System.Reflection;
 
 namespace DomainBlocks.Core.Builders;
 
-public interface ICanIncludeNonPublicMethods
+public interface IMethodVisibilityOptionsBuilder
 {
     /// <summary>
     /// Specify to include non-public event applier methods.
     /// </summary>
-    /// <returns>
-    /// An object that can be used for further configuration.
-    /// </returns>
     void IncludeNonPublicMethods();
 }
 
 public sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> :
-    ICanIncludeNonPublicMethods,
+    IMethodVisibilityOptionsBuilder,
     IAutoEventOptionsBuilder<TAggregate>
 {
     private enum Mode
@@ -60,7 +57,7 @@ public sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> :
     /// <returns>
     /// An object that can be used for further configuration.
     /// </returns>
-    public ICanIncludeNonPublicMethods WithMethodName(string methodName)
+    public IMethodVisibilityOptionsBuilder WithMethodName(string methodName)
     {
         if (string.IsNullOrWhiteSpace(methodName))
             throw new ArgumentException("Method name cannot be null or whitespace.", nameof(methodName));

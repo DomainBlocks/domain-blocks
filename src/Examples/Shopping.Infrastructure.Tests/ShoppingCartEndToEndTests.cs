@@ -99,13 +99,8 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
         var model = new ModelBuilder()
             .ImmutableAggregate<ShoppingCartState, IDomainEvent>(aggregate =>
             {
-                aggregate
-                    .HasId(o => o.Id?.ToString())
-                    .WithStreamKey(id => $"shoppingCart-{id}")
-                    .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");
-
+                aggregate.WithKeyPrefix("shoppingCart");
                 aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
-
                 aggregate.UseEventTypesFrom(typeof(IDomainEvent).Assembly);
             })
             .Build();

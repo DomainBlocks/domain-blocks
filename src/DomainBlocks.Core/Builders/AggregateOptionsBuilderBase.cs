@@ -10,26 +10,26 @@ public interface IAggregateOptionsBuilder
     IAggregateOptions Options { get; }
 }
 
-public interface IAggregateOptionsBuilder<TAggregate> : IAggregateOptionsBuilder
+public interface IIdentityBuilder<out TAggregate> : IKeyPrefixBuilder
 {
-    /// <summary>
-    /// Specify a factory function for creating new instances of the aggregate type.
-    /// </summary>
-    /// <returns>
-    /// An object that can be used for further configuration.
-    /// </returns>
-    IAggregateOptionsBuilder<TAggregate> InitialState(Func<TAggregate> factory);
-
     /// <summary>
     /// Specify a unique ID selector for the aggregate.
     /// </summary>
     /// <returns>
     /// An object that can be used for further configuration.
     /// </returns>
-    IIdToKeySelectorBuilder HasId(Func<TAggregate, string> idSelector);
+    IKeyBuilder HasId(Func<TAggregate, string> idSelector);
 }
 
-public interface IIdToKeySelectorBuilder
+public interface IKeyPrefixBuilder
+{
+    /// <summary>
+    /// Specify a prefix to use for both stream and snapshot keys.
+    /// </summary>
+    void WithKeyPrefix(string prefix);
+}
+
+public interface IKeyBuilder : IKeyPrefixBuilder, ISnapshotKeyBuilder
 {
     /// <summary>
     /// Specify a stream key selector.
@@ -37,20 +37,21 @@ public interface IIdToKeySelectorBuilder
     /// <returns>
     /// An object that can be used for further configuration.
     /// </returns>
-    IIdToKeySelectorBuilder WithStreamKey(Func<string, string> idToStreamKeySelector);
+    ISnapshotKeyBuilder WithStreamKey(Func<string, string> idToStreamKeySelector);
+}
 
+public interface ISnapshotKeyBuilder
+{
     /// <summary>
     /// Specify a snapshot key selector.
     /// </summary>
-    /// <returns>
-    /// An object that can be used for further configuration.
-    /// </returns>
-    IIdToKeySelectorBuilder WithSnapshotKey(Func<string, string> idToSnapshotKeySelector);
+    void WithSnapshotKey(Func<string, string> idToSnapshotKeySelector);
 }
 
 public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
-    IAggregateOptionsBuilder<TAggregate>,
-    IIdToKeySelectorBuilder
+    IAggregateOptionsBuilder,
+    IIdentityBuilder<TAggregate>,
+    IKeyBuilder
 {
     public IAggregateOptions<TAggregate> Options
     {
@@ -79,28 +80,38 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
 
     internal List<IEventOptionsBuilder<TAggregate>> EventOptionsBuilders { get; } = new();
 
-    public IAggregateOptionsBuilder<TAggregate> InitialState(Func<TAggregate> factory)
+    /// <summary>
+    /// Specify a factory function for creating new instances of the aggregate type.
+    /// </summary>
+    /// <returns>
+    /// An object that can be used for further configuration.
+    /// </returns>
+    public IIdentityBuilder<TAggregate> InitialState(Func<TAggregate> factory)
     {
         OptionsImpl = OptionsImpl.WithFactory(factory);
         return this;
     }
 
-    public IIdToKeySelectorBuilder HasId(Func<TAggregate, string> idSelector)
+    public IKeyBuilder HasId(Func<TAggregate, string> idSelector)
     {
         OptionsImpl = OptionsImpl.WithIdSelector(idSelector);
         return this;
     }
 
-    IIdToKeySelectorBuilder IIdToKeySelectorBuilder.WithStreamKey(Func<string, string> idToStreamKeySelector)
+    public void WithKeyPrefix(string prefix)
+    {
+        OptionsImpl = OptionsImpl.WithKeyPrefix(prefix);
+    }
+
+    ISnapshotKeyBuilder IKeyBuilder.WithStreamKey(Func<string, string> idToStreamKeySelector)
     {
         OptionsImpl = OptionsImpl.WithIdToStreamKeySelector(idToStreamKeySelector);
         return this;
     }
 
-    IIdToKeySelectorBuilder IIdToKeySelectorBuilder.WithSnapshotKey(Func<string, string> idToSnapshotKeySelector)
+    void ISnapshotKeyBuilder.WithSnapshotKey(Func<string, string> idToSnapshotKeySelector)
     {
         OptionsImpl = OptionsImpl.WithIdToSnapshotKeySelector(idToSnapshotKeySelector);
-        return this;
     }
 
     /// <summary>

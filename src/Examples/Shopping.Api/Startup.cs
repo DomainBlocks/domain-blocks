@@ -38,13 +38,8 @@ public class Startup
             {
                 modelBuilder.ImmutableAggregate<ShoppingCartState, IDomainEvent>(aggregate =>
                 {
-                    aggregate
-                        .HasId(x => x.Id?.ToString())
-                        .WithStreamKey(id => $"shoppingCart-{id}")
-                        .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");
-
+                    aggregate.WithKeyPrefix("shoppingCart");
                     aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
-
                     aggregate.UseEventTypesFrom(typeof(IDomainEvent).Assembly);
                 });
             });

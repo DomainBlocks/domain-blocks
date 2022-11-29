@@ -20,8 +20,9 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
     {
         _factory = DefaultFactory.Value;
         _idSelector = DefaultIdSelector.Value;
-        _idToStreamKeySelector = GetDefaultIdToStreamKeySelector();
-        _idToSnapshotKeySelector = GetDefaultIdToSnapshotKeySelector();
+        var prefix = GetDefaultKeyPrefix();
+        _idToStreamKeySelector = GetIdToStreamKeySelector(prefix);
+        _idToSnapshotKeySelector = GetIdToSnapshotKeySelector(prefix);
     }
 
     protected AggregateOptionsBase(AggregateOptionsBase<TAggregate, TEventBase> copyFrom)
@@ -29,10 +30,10 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         if (copyFrom == null) throw new ArgumentNullException(nameof(copyFrom));
 
         _eventApplier = copyFrom._eventApplier;
-        _factory = copyFrom._factory ?? DefaultFactory.Value;
-        _idSelector = copyFrom._idSelector ?? DefaultIdSelector.Value;
-        _idToStreamKeySelector = copyFrom._idToStreamKeySelector ?? GetDefaultIdToStreamKeySelector();
-        _idToSnapshotKeySelector = copyFrom._idToSnapshotKeySelector ?? GetDefaultIdToSnapshotKeySelector();
+        _factory = copyFrom._factory;
+        _idSelector = copyFrom._idSelector;
+        _idToStreamKeySelector = copyFrom._idToStreamKeySelector;
+        _idToSnapshotKeySelector = copyFrom._idToSnapshotKeySelector;
         _commandResultsOptions = new Dictionary<Type, ICommandResultOptions>(copyFrom._commandResultsOptions);
         _eventsOptions = new Dictionary<Type, EventOptions<TAggregate>>(copyFrom._eventsOptions);
     }
@@ -119,6 +120,17 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
 
         var clone = Clone();
         clone._idSelector = idSelector;
+        return clone;
+    }
+
+    public AggregateOptionsBase<TAggregate, TEventBase> WithKeyPrefix(string prefix)
+    {
+        if (string.IsNullOrWhiteSpace(prefix))
+            throw new ArgumentException("Prefix cannot be null or whitespace.", nameof(prefix));
+
+        var clone = Clone();
+        clone._idToStreamKeySelector = GetIdToStreamKeySelector(prefix);
+        clone._idToSnapshotKeySelector = GetIdToSnapshotKeySelector(prefix);
         return clone;
     }
 
@@ -254,15 +266,13 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         return $"{name[..1].ToLower()}{name[1..]}";
     }
 
-    private static Func<string, string> GetDefaultIdToStreamKeySelector()
+    private static Func<string, string> GetIdToStreamKeySelector(string prefix)
     {
-        var prefix = GetDefaultKeyPrefix();
         return id => $"{prefix}-{id}";
     }
 
-    private static Func<string, string> GetDefaultIdToSnapshotKeySelector()
+    private static Func<string, string> GetIdToSnapshotKeySelector(string prefix)
     {
-        var prefix = GetDefaultKeyPrefix();
         return id => $"{prefix}Snapshot-{id}";
     }
 }
