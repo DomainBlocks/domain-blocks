@@ -121,7 +121,7 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
     /// <returns>
     /// An object that can be used for further configuration.
     /// </returns>
-    public AssemblyEventOptionsBuilder<TAggregate, TEventBase> UseEventTypesFrom(Assembly assembly)
+    public IAssemblyEventOptionsBuilder UseEventTypesFrom(Assembly assembly)
     {
         var builder = new AssemblyEventOptionsBuilder<TAggregate, TEventBase>(assembly);
         AutoEventOptionsBuilder = builder;

@@ -5,7 +5,18 @@ using System.Reflection;
 
 namespace DomainBlocks.Core.Builders;
 
-public sealed class AssemblyEventOptionsBuilder<TAggregate, TEventBase> : IAutoEventOptionsBuilder<TAggregate>
+public interface IAssemblyEventOptionsBuilder
+{
+    /// <summary>
+    /// Specify an additional filter to use on the event types which have been found in the specified assembly. The
+    /// argument of the predicate is a type derived from the specified base event type.
+    /// </summary>
+    void Where(Func<Type, bool> predicate);
+}
+
+internal sealed class AssemblyEventOptionsBuilder<TAggregate, TEventBase> :
+    IAssemblyEventOptionsBuilder,
+    IAutoEventOptionsBuilder<TAggregate>
 {
     private readonly Assembly _assembly;
     private Func<Type, bool> _eventTypePredicate;
@@ -20,7 +31,7 @@ public sealed class AssemblyEventOptionsBuilder<TAggregate, TEventBase> : IAutoE
         _eventTypePredicate = predicate;
     }
 
-    IEnumerable<EventOptions<TAggregate>> IAutoEventOptionsBuilder<TAggregate>.Build()
+    public IEnumerable<EventOptions<TAggregate>> Build()
     {
         var eventClrTypes = _assembly
             .GetTypes()
