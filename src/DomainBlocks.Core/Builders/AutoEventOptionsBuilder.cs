@@ -6,7 +6,7 @@ using System.Reflection;
 
 namespace DomainBlocks.Core.Builders;
 
-public interface ICanIncludeNonPublicMethodsOrUseEventTypesOnly : ICanUseEventTypesOnly
+public interface ICanIncludeNonPublicMethods
 {
     /// <summary>
     /// Specify to include non-public event applier methods.
@@ -14,20 +14,11 @@ public interface ICanIncludeNonPublicMethodsOrUseEventTypesOnly : ICanUseEventTy
     /// <returns>
     /// An object that can be used for further configuration.
     /// </returns>
-    ICanUseEventTypesOnly IncludeNonPublicMethods();
-}
-
-public interface ICanUseEventTypesOnly
-{
-    /// <summary>
-    /// Specify to use the event types only, and ignore the event apply methods. Use this option for scenarios where a
-    /// manually written event applier (e.g. with a switch expression) is preferred.
-    /// </summary>
-    void UseEventTypesOnly();
+    void IncludeNonPublicMethods();
 }
 
 public sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> :
-    ICanIncludeNonPublicMethodsOrUseEventTypesOnly,
+    ICanIncludeNonPublicMethods,
     IAutoEventOptionsBuilder<TAggregate>
 {
     private enum Mode
@@ -40,9 +31,7 @@ public sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> :
     private readonly Mode _mode;
     private readonly Type _sourceType;
     private string _methodName = "Apply";
-
     private bool _includeNonPublicMethods;
-    private bool _useEventsTypesOnly;
 
     private AutoEventOptionsBuilder(Mode mode, Type sourceType = null)
     {
@@ -71,7 +60,7 @@ public sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> :
     /// <returns>
     /// An object that can be used for further configuration.
     /// </returns>
-    public ICanIncludeNonPublicMethodsOrUseEventTypesOnly WithMethodName(string methodName)
+    public ICanIncludeNonPublicMethods WithMethodName(string methodName)
     {
         if (string.IsNullOrWhiteSpace(methodName))
             throw new ArgumentException("Method name cannot be null or whitespace.", nameof(methodName));
@@ -80,15 +69,9 @@ public sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> :
         return this;
     }
 
-    public ICanUseEventTypesOnly IncludeNonPublicMethods()
+    public void IncludeNonPublicMethods()
     {
         _includeNonPublicMethods = true;
-        return this;
-    }
-
-    public void UseEventTypesOnly()
-    {
-        _useEventsTypesOnly = true;
     }
 
     IEnumerable<EventOptions<TAggregate>> IAutoEventOptionsBuilder<TAggregate>.Build()
@@ -137,12 +120,6 @@ public sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> :
             var eventType = @params[0].ParameterType;
             var options = new EventOptions<TAggregate>(eventType);
 
-            if (_useEventsTypesOnly)
-            {
-                yield return options;
-                continue;
-            }
-
             var instance = method.IsStatic ? null : aggregateParam;
             var call = Expression.Call(instance, method, Expression.Convert(eventParam, eventType));
 
@@ -185,17 +162,9 @@ public sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> :
         {
             var @params = method.GetParameters();
             var eventType = @params[1].ParameterType;
-            var options = new EventOptions<TAggregate>(eventType);
-
-            if (_useEventsTypesOnly)
-            {
-                yield return options;
-                continue;
-            }
-
             var call = Expression.Call(null, method, aggregateParam, Expression.Convert(eventParam, eventType));
             var lambda = Expression.Lambda<Func<TAggregate, object, TAggregate>>(call, aggregateParam, eventParam);
-            yield return options.WithEventApplier(lambda.Compile());
+            yield return new EventOptions<TAggregate>(eventType).WithEventApplier(lambda.Compile());
         }
     }
 
