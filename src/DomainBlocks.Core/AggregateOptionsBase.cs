@@ -247,7 +247,13 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
     {
         const string defaultIdPropertyName = "Id";
 
-        var property = typeof(TAggregate).GetProperty(defaultIdPropertyName);
+        return GetIdSelector(defaultIdPropertyName) ??
+               GetIdSelector($"{typeof(TAggregate).Name}{defaultIdPropertyName}");
+    }
+
+    private static Func<TAggregate, string> GetIdSelector(string propertyName)
+    {
+        var property = typeof(TAggregate).GetProperty(propertyName);
         if (property == null)
         {
             return null;
