@@ -99,7 +99,7 @@ public sealed class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     /// <returns>
     /// An object that can be used for further configuration.
     /// </returns>
-    public AutoEventOptionsBuilder<TAggregate, TEventBase> AutoConfigureEvents()
+    public IAutoEventOptionsBuilder AutoConfigureEvents()
     {
         var builder = AutoEventOptionsBuilder<TAggregate, TEventBase>.Mutable();
         AutoEventOptionsBuilder = builder;

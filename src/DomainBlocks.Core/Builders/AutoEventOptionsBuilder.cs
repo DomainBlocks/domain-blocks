@@ -6,6 +6,17 @@ using System.Reflection;
 
 namespace DomainBlocks.Core.Builders;
 
+public interface IAutoEventOptionsBuilder : IMethodVisibilityOptionsBuilder
+{
+    /// <summary>
+    /// Specify the name of the event applier method overloads on the aggregate type.
+    /// </summary>
+    /// <returns>
+    /// An object that can be used for further configuration.
+    /// </returns>
+    IMethodVisibilityOptionsBuilder WithMethodName(string methodName);
+}
+
 public interface IMethodVisibilityOptionsBuilder
 {
     /// <summary>
@@ -14,8 +25,8 @@ public interface IMethodVisibilityOptionsBuilder
     void IncludeNonPublicMethods();
 }
 
-public sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> :
-    IMethodVisibilityOptionsBuilder,
+internal sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> :
+    IAutoEventOptionsBuilder,
     IAutoEventOptionsBuilder<TAggregate>
 {
     private enum Mode
@@ -36,27 +47,21 @@ public sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> :
         _sourceType = sourceType ?? typeof(TAggregate);
     }
 
-    internal static AutoEventOptionsBuilder<TAggregate, TEventBase> Mutable()
+    public static AutoEventOptionsBuilder<TAggregate, TEventBase> Mutable()
     {
         return new AutoEventOptionsBuilder<TAggregate, TEventBase>(Mode.Mutable);
     }
 
-    internal static AutoEventOptionsBuilder<TAggregate, TEventBase> Immutable()
+    public static AutoEventOptionsBuilder<TAggregate, TEventBase> Immutable()
     {
         return new AutoEventOptionsBuilder<TAggregate, TEventBase>(Mode.Immutable);
     }
 
-    internal static AutoEventOptionsBuilder<TAggregate, TEventBase> ImmutableNonMember(Type sourceType)
+    public static AutoEventOptionsBuilder<TAggregate, TEventBase> ImmutableNonMember(Type sourceType)
     {
         return new AutoEventOptionsBuilder<TAggregate, TEventBase>(Mode.ImmutableNonMember, sourceType);
     }
 
-    /// <summary>
-    /// Specify the name of the event applier method overloads on the aggregate type.
-    /// </summary>
-    /// <returns>
-    /// An object that can be used for further configuration.
-    /// </returns>
     public IMethodVisibilityOptionsBuilder WithMethodName(string methodName)
     {
         if (string.IsNullOrWhiteSpace(methodName))
@@ -71,7 +76,7 @@ public sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> :
         _includeNonPublicMethods = true;
     }
 
-    IEnumerable<EventOptions<TAggregate>> IAutoEventOptionsBuilder<TAggregate>.Build()
+    public IEnumerable<EventOptions<TAggregate>> Build()
     {
         var bindingFlags = _includeNonPublicMethods ? BindingFlags.NonPublic : BindingFlags.Default;
 
