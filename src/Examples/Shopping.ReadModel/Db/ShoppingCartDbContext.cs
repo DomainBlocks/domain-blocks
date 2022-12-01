@@ -17,12 +17,20 @@ public class ShoppingCartDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
+        modelBuilder.Entity<Bookmark>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedNever();
+        });
+
         modelBuilder.Entity<ShoppingCartSummaryItem>()
             .HasKey(i => i.Id);
 
         modelBuilder.Entity<ShoppingCartHistory>()
             .HasKey(i => i.Id);
     }
+
+    public DbSet<Bookmark> Bookmarks { get; set; }
 
     public DbSet<ShoppingCartSummaryItem> ShoppingCartSummaryItems { get; set; }
 

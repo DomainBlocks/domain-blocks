@@ -1,5 +1,6 @@
 using DomainBlocks.Projections.AspNetCore;
-using DomainBlocks.Projections.SqlStreamStore;
+using DomainBlocks.Projections.New;
+using DomainBlocks.Projections.SqlStreamStore.New;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
@@ -37,8 +38,11 @@ public class Startup
     // This method gets called by the runtime. Use this method to add services to the container.
     public void ConfigureServices(IServiceCollection services)
     {
-        services.AddDbContext<ShoppingCartDbContext>(options =>
-            options.UseNpgsql(Configuration.GetConnectionString("Default")));
+        services.AddDbContext<ShoppingCartDbContext>(
+            options => options.UseNpgsql(Configuration.GetConnectionString("Default")),
+            optionsLifetime: ServiceLifetime.Singleton);
+
+        services.AddDbContextFactory<ShoppingCartDbContext>();
 
         services.AddHostedEventCatchUpSubscription((sp, subscriptionOptions) =>
         {
@@ -48,38 +52,63 @@ public class Startup
                     var connectionString = Configuration.GetValue<string>("SqlStreamStore:ConnectionString");
                     var settings = new PostgresStreamStoreSettings(connectionString);
                     o.UsePostgres(settings).UseJsonSerialization();
-                })
-                .Using(sp.CreateScope)
-                .WithService(x => x.ServiceProvider.GetRequiredService<ShoppingCartDbContext>())
-                .AddProjection(projection =>
+                });
+
+            subscriptionOptions
+                .WithState(_ =>
                 {
-                    projection.OnInitializing(async (dbContext, ct) =>
-                    {
-                        await dbContext.Database.EnsureDeletedAsync(ct);
-                        await dbContext.Database.EnsureCreatedAsync(ct);
-                    });
+                    var dbContextFactory = sp.GetRequiredService<IDbContextFactory<ShoppingCartDbContext>>();
+                    return dbContextFactory.CreateDbContext();
+                })
+                .OnInitializing(async (state, ct) =>
+                {
+                    // We could run migrations here
+                    await state.Database.EnsureDeletedAsync(ct);
+                    await state.Database.EnsureCreatedAsync(ct);
+                })
+                .OnSubscribing(async (state, ct) =>
+                {
+                    var bookmark = await state.Bookmarks.FindAsync(
+                        new object[] { Bookmark.DefaultId }, cancellationToken: ct);
 
-                    projection.OnCaughtUp(async (dbContext, ct) => await dbContext.SaveChangesAsync(ct));
-                    projection.OnEventHandled(async (dbContext, ct) => await dbContext.SaveChangesAsync(ct));
+                    var position = bookmark == null
+                        ? StreamPosition.Empty
+                        : StreamPosition.FromJsonString(bookmark.Position);
 
-                    projection.When<ItemAddedToShoppingCart>((e, dbContext) =>
-                    {
-                        dbContext.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem
-                        {
-                            CartId = e.CartId,
-                            Id = e.Id,
-                            ItemDescription = e.Item
-                        });
-                    });
+                    return position;
+                })
+                .OnSave(async (state, position, ct) =>
+                {
+                    var bookmark = await state.Bookmarks.FindAsync(
+                        new object[] { Bookmark.DefaultId }, cancellationToken: ct);
 
-                    projection.When<ItemRemovedFromShoppingCart>(async (e, dbContext) =>
+                    if (bookmark == null)
                     {
-                        var item = await dbContext.ShoppingCartSummaryItems.FindAsync(e.Id);
-                        if (item != null)
-                        {
-                            dbContext.ShoppingCartSummaryItems.Remove(item);
-                        }
+                        bookmark = new Bookmark();
+                        state.Bookmarks.Add(bookmark);
+                    }
+
+                    bookmark.Position = position.ToJsonString();
+
+                    await state.SaveChangesAsync(ct);
+                })
+                .When<ItemAddedToShoppingCart>((e, context) =>
+                {
+                    // Context can expose metadata and cancellation token
+                    context.State.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem
+                    {
+                        CartId = e.CartId,
+                        Id = e.Id,
+                        ItemDescription = e.Item
                     });
+                })
+                .When<ItemRemovedFromShoppingCart>(async (e, context, ct) =>
+                {
+                    var item = await context.State.ShoppingCartSummaryItems.FindAsync(new object[] { e.Id }, ct);
+                    if (item != null)
+                    {
+                        context.State.ShoppingCartSummaryItems.Remove(item);
+                    }
                 });
         });
 

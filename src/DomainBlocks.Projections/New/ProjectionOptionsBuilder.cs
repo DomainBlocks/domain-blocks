@@ -7,7 +7,7 @@ namespace DomainBlocks.Projections.New;
 public class ProjectionOptionsBuilder
 {
     public ProjectionOptions Options { get; private set; } = new();
-    
+
     public void OnInitializing(Func<CancellationToken, Task> onInitializing)
     {
         Options = Options.WithOnInitializing(onInitializing);
@@ -33,7 +33,7 @@ public class ProjectionOptionsBuilder
         Options = Options.WithOnEventHandled(onEventHandled);
     }
 
-    public void When<TEvent>(Func<TEvent, Task> eventHandler)
+    public void When<TEvent>(Func<TEvent, CancellationToken, Task> eventHandler)
     {
         Options = Options.WithEventHandler(eventHandler);
     }

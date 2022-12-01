@@ -30,13 +30,20 @@ internal class ProjectionContext : IProjectionContext
     {
         await _onInitializing(cancellationToken);
     }
-    
+
+    public Task<IStreamPosition> OnSubscribing(CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(StreamPosition.Empty);
+    }
+
     public Task OnCatchingUp(CancellationToken cancellationToken = default) => _onCatchingUp(cancellationToken);
 
-    public Task OnCaughtUp(CancellationToken cancellationToken = default) => _onCaughtUp(cancellationToken);
+    public Task OnCaughtUp(IStreamPosition position, CancellationToken cancellationToken = default) =>
+        _onCaughtUp(cancellationToken);
 
     public Task OnEventDispatching(CancellationToken cancellationToken = default) =>
         _onEventDispatching(cancellationToken);
 
-    public Task OnEventHandled(CancellationToken cancellationToken = default) => _onEventHandled(cancellationToken);
+    public Task OnEventHandled(IStreamPosition position, CancellationToken cancellationToken = default) =>
+        _onEventHandled(cancellationToken);
 }
