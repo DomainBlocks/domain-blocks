@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
+using DomainBlocks.Projections.New;
 using DomainBlocks.Projections.SqlStreamStore.New;
 using SqlStreamStore;
 using SqlStreamStore.Streams;
@@ -25,10 +26,15 @@ public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper
 
     public async Task StartAsync(
         Func<EventNotification<StreamMessageWrapper>, CancellationToken, Task> onEvent,
+        IStreamPosition position = null,
         CancellationToken cancellationToken = default)
     {
         _onEvent = onEvent ?? throw new ArgumentNullException(nameof(onEvent));
-        await SubscribeToStore(null, cancellationToken).ConfigureAwait(false);
+
+        var allStreamPosition = position == null ? null : AllStreamPosition.FromJsonString(position.ToJsonString());
+        _lastProcessedPosition = allStreamPosition?.Position;
+
+        await SubscribeToStore(_lastProcessedPosition, cancellationToken).ConfigureAwait(false);
     }
 
     public void Stop()
@@ -64,7 +70,8 @@ public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper
                     // SqlStreamStore doesn't provide us with an async delegate. To avoid ordering issues, we want to
                     // ensure no other event processing is done until our caught up notification is published - so wait
                     // on the task
-                    var notification = EventNotification.CaughtUp<StreamMessageWrapper>();
+                    var position = AllStreamPosition.From(_lastProcessedPosition);
+                    var notification = EventNotification.CaughtUp<StreamMessageWrapper>(position);
                     _onEvent(notification, cancellationToken).Wait(cancellationToken);
                 }
                 else

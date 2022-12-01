@@ -21,6 +21,6 @@ internal sealed class AllStreamPosition : IStreamPosition
 
     public string ToJsonString()
     {
-        return JsonSerializer.Serialize(Position);
+        return JsonSerializer.Serialize(this);
     }
 }

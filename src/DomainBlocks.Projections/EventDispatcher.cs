@@ -44,9 +44,14 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
     {
         Log.LogDebug("Starting EventStream");
         await ForAllContexts((c, ct) => c.OnInitializing(ct), cancellationToken).ConfigureAwait(false);
+        Log.LogDebug("Context OnInitializing hooks called");
+        
+        // TODO: Hack for now to get a single position.
+        // We'll need to get all positions here, and subscribe from the lowest.
+        var position = await _projectionContextMap.GetAllContexts().First().OnSubscribing(cancellationToken);
         Log.LogDebug("Context OnSubscribing hooks called");
 
-        await _publisher.StartAsync(HandleEventNotificationAsync, cancellationToken).ConfigureAwait(false);
+        await _publisher.StartAsync(HandleEventNotificationAsync, position, cancellationToken).ConfigureAwait(false);
         Log.LogDebug("Event publisher started");
     }
 
@@ -73,7 +78,8 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
                 break;
             case EventNotificationKind.CaughtUp:
                 Log.LogDebug("Received caught up notification");
-                await ForAllContexts((c, ct) => c.OnCaughtUp(ct), cancellationToken).ConfigureAwait(false);
+                await ForAllContexts(
+                    (c, ct) => c.OnCaughtUp(notification.Position, ct), cancellationToken).ConfigureAwait(false);
                 Log.LogDebug("Context OnCaughtUp hooks called");
                 break;
             case EventNotificationKind.Event:

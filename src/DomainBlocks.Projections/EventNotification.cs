@@ -33,9 +33,9 @@ public static class EventNotification
         return new EventNotification<TEventBase>(EventNotificationKind.CatchingUp);
     }
 
-    public static EventNotification<TEventBase> CaughtUp<TEventBase>()
+    public static EventNotification<TEventBase> CaughtUp<TEventBase>(IStreamPosition position)
     {
-        return new EventNotification<TEventBase>(EventNotificationKind.CaughtUp);
+        return new EventNotification<TEventBase>(EventNotificationKind.CaughtUp, position: position);
     }
 
     public static EventNotification<TEventBase> FromEvent<TEventBase>(

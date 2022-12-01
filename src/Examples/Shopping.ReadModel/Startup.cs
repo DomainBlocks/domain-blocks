@@ -1,9 +1,5 @@
-using System.Threading.Tasks;
 using DomainBlocks.Projections.AspNetCore;
-using DomainBlocks.Projections.EntityFramework.AspNetCore;
 using DomainBlocks.Projections.New;
-using DomainBlocks.Projections.SqlStreamStore;
-using DomainBlocks.Projections.SqlStreamStore.AspNetCore;
 using DomainBlocks.Projections.SqlStreamStore.New;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -42,26 +38,12 @@ public class Startup
     // This method gets called by the runtime. Use this method to add services to the container.
     public void ConfigureServices(IServiceCollection services)
     {
-        // services.AddDbContext<ShoppingCartDbContext>(options =>
-        //     options.UseNpgsql(Configuration.GetConnectionString("Default")));
+        services.AddDbContext<ShoppingCartDbContext>(
+            options => options.UseNpgsql(Configuration.GetConnectionString("Default")),
+            optionsLifetime: ServiceLifetime.Singleton);
 
-        services.AddDbContextFactory<ShoppingCartDbContext>(
-            options => options.UseNpgsql(Configuration.GetConnectionString("Default")));
+        services.AddDbContextFactory<ShoppingCartDbContext>();
 
-        // TODO (DS): Remove this example once we can support multiple projections with the new approach.
-        // services.AddReadModel(Configuration,
-        //     options =>
-        //     {
-        //         options.UseSqlStreamStorePublishedEvents()
-        //             .UseEntityFramework<ShoppingCartDbContext, StreamMessageWrapper>()
-        //             .WithProjections((builder, dbContext) =>
-        //             {
-        //                 ShoppingClassSummaryEfProjection.Register(builder, dbContext);
-        //                 ShoppingCartHistoryEfProjection.Register(builder, dbContext);
-        //             });
-        //     });
-
-        // **** New approach ****
         services.AddHostedEventCatchUpSubscription((sp, subscriptionOptions) =>
         {
             subscriptionOptions
@@ -80,13 +62,14 @@ public class Startup
                 })
                 .OnInitializing(async (resource, ct) =>
                 {
-                    // This could run migrations
+                    // We could run migrations here
                     await resource.Database.EnsureDeletedAsync(ct);
                     await resource.Database.EnsureCreatedAsync(ct);
                 })
                 .OnSubscribing(async (resource, ct) =>
                 {
-                    var bookmark = await resource.Bookmark.FirstOrDefaultAsync(ct);
+                    var bookmark = await resource.Bookmarks.FindAsync(
+                        new object[] { Bookmark.DefaultId }, cancellationToken: ct);
 
                     var position = bookmark == null
                         ? StreamPosition.Empty
@@ -96,11 +79,16 @@ public class Startup
                 })
                 .OnSave(async (resource, position, ct) =>
                 {
-                    resource.Bookmark.RemoveRange(resource.Bookmark);
-                    resource.Bookmark.Add(new Bookmark
+                    var bookmark = await resource.Bookmarks.FindAsync(
+                        new object[] { Bookmark.DefaultId }, cancellationToken: ct);
+
+                    if (bookmark == null)
                     {
-                        Position = position.ToJsonString()
-                    });
+                        bookmark = new Bookmark();
+                        resource.Bookmarks.Add(bookmark);
+                    }
+
+                    bookmark.Position = position.ToJsonString();
 
                     await resource.SaveChangesAsync(ct);
                 })

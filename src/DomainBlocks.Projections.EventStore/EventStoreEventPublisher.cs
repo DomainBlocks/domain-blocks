@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
+using DomainBlocks.Projections.New;
 using EventStore.Client;
+using StreamPosition = DomainBlocks.Projections.New.StreamPosition;
 
 namespace DomainBlocks.Projections.EventStore;
 
@@ -23,6 +25,7 @@ public class EventStoreEventPublisher : IEventPublisher<EventRecord>, IDisposabl
 
     public async Task StartAsync(
         Func<EventNotification<EventRecord>, CancellationToken, Task> onEvent,
+        IStreamPosition position = null,
         CancellationToken cancellationToken = default)
     {
         _onEvent = onEvent ?? throw new ArgumentNullException(nameof(onEvent));
@@ -61,7 +64,7 @@ public class EventStoreEventPublisher : IEventPublisher<EventRecord>, IDisposabl
             await SendEventNotification(historicEvent);
         }
 
-        await _onEvent(EventNotification.CaughtUp<EventRecord>(), cancellationToken);
+        await _onEvent(EventNotification.CaughtUp<EventRecord>(StreamPosition.Empty), cancellationToken);
 
         _subscription = await _client.SubscribeToAllAsync(
             _lastProcessedPosition,

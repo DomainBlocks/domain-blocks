@@ -75,7 +75,7 @@ public sealed class SqlProjectionContext : IProjectionContext
         return Task.CompletedTask;
     }
 
-    public Task OnCaughtUp(CancellationToken cancellationToken = default)
+    public Task OnCaughtUp(IStreamPosition position, CancellationToken cancellationToken = default)
     {
         try
         {

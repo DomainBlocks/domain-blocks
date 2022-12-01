@@ -47,7 +47,7 @@ public class EntityFrameworkProjectionContext : IProjectionContext
         return Task.CompletedTask;
     }
 
-    public async Task OnCaughtUp(CancellationToken cancellationToken = default)
+    public async Task OnCaughtUp(IStreamPosition position, CancellationToken cancellationToken = default)
     {
         _isProcessingLiveEvents = true;
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

@@ -12,7 +12,6 @@ public sealed class ResourceProjectionContext<TResource> : IProjectionContext wh
     private readonly Func<TResource, IStreamPosition, CancellationToken, Task> _onSave;
     private CatchUpSubscriptionStatus _subscriptionStatus;
     private EventHandlingContext<TResource> _eventHandlingContext;
-    private IStreamPosition _lastHandledPosition = StreamPosition.Empty;
 
     public ResourceProjectionContext(
         Func<TResource> resourceFactory,
@@ -45,20 +44,19 @@ public sealed class ResourceProjectionContext<TResource> : IProjectionContext wh
         return Task.CompletedTask;
     }
 
-    public async Task OnCaughtUp(CancellationToken cancellationToken = default)
+    public async Task OnCaughtUp(IStreamPosition position, CancellationToken cancellationToken = default)
     {
         _subscriptionStatus = CatchUpSubscriptionStatus.Live;
-        await EndHandlingEvents(cancellationToken);
+        await EndHandlingEvents(position, cancellationToken);
     }
 
     public Task OnEventDispatching(CancellationToken cancellationToken = default)
     {
-        if (_subscriptionStatus != CatchUpSubscriptionStatus.Live)
+        if (_subscriptionStatus == CatchUpSubscriptionStatus.Live)
         {
-            return Task.CompletedTask;
+            BeginHandlingEvents(cancellationToken);
         }
 
-        BeginHandlingEvents(cancellationToken);
         return Task.CompletedTask;
     }
 
@@ -66,10 +64,8 @@ public sealed class ResourceProjectionContext<TResource> : IProjectionContext wh
     {
         if (_subscriptionStatus == CatchUpSubscriptionStatus.Live)
         {
-            await EndHandlingEvents(cancellationToken);
+            await EndHandlingEvents(position, cancellationToken);
         }
-
-        _lastHandledPosition = position;
     }
 
     internal RunProjection BindProjection(Func<object, EventHandlingContext<TResource>, Task> projection)
@@ -99,14 +95,14 @@ public sealed class ResourceProjectionContext<TResource> : IProjectionContext wh
         };
     }
 
-    private async Task EndHandlingEvents(CancellationToken cancellationToken)
+    private async Task EndHandlingEvents(IStreamPosition position, CancellationToken cancellationToken)
     {
         if (_onSave == null)
         {
             throw new InvalidOperationException("Unable to save as no on-save action has been specified.");
         }
 
-        await _onSave(_eventHandlingContext.Resource, _lastHandledPosition, cancellationToken);
+        await _onSave(_eventHandlingContext.Resource, position, cancellationToken);
         _eventHandlingContext.Resource.Dispose();
         _eventHandlingContext = null;
     }

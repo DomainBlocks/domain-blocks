@@ -5,9 +5,11 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using DomainBlocks.Projections.New;
 using EventStore.Client;
 using NUnit.Framework;
 using DomainBlocksStreamPosition = DomainBlocks.Projections.New.StreamPosition;
+using StreamPosition = EventStore.Client.StreamPosition;
 
 namespace DomainBlocks.Projections.Sql.Tests.Fakes
 {
@@ -18,6 +20,7 @@ namespace DomainBlocks.Projections.Sql.Tests.Fakes
 
         public Task StartAsync(
             Func<EventNotification<EventRecord>, CancellationToken, Task> onEvent,
+            IStreamPosition position = null,
             CancellationToken cancellationToken = default)
         {
             _onEvent = onEvent;
@@ -62,7 +65,8 @@ namespace DomainBlocks.Projections.Sql.Tests.Fakes
         public async Task SendCaughtUp(CancellationToken cancellationToken = default)
         {
             AssertPublisherStarted();
-            await _onEvent(EventNotification.CaughtUp<EventRecord>(), cancellationToken);
+            var notification = EventNotification.CaughtUp<EventRecord>(DomainBlocksStreamPosition.Empty);
+            await _onEvent(notification, cancellationToken);
         }
 
         private void AssertPublisherStarted()
