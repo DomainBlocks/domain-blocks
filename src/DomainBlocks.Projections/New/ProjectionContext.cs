@@ -43,5 +43,6 @@ internal class ProjectionContext : IProjectionContext
     public Task OnEventDispatching(CancellationToken cancellationToken = default) =>
         _onEventDispatching(cancellationToken);
 
-    public Task OnEventHandled(CancellationToken cancellationToken = default) => _onEventHandled(cancellationToken);
+    public Task OnEventHandled(IStreamPosition position, CancellationToken cancellationToken = default) =>
+        _onEventHandled(cancellationToken);
 }

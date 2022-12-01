@@ -84,14 +84,24 @@ public class Startup
                     await resource.Database.EnsureDeletedAsync(ct);
                     await resource.Database.EnsureCreatedAsync(ct);
                 })
-                .OnSubscribing((resource, ct) =>
+                .OnSubscribing(async (resource, ct) =>
                 {
-                    // Bookmark can be loaded here
-                    return Task.FromResult(StreamPosition.Empty);
+                    var bookmark = await resource.Bookmark.FirstOrDefaultAsync(ct);
+
+                    var position = bookmark == null
+                        ? StreamPosition.Empty
+                        : StreamPosition.FromJsonString(bookmark.Position);
+
+                    return position;
                 })
                 .OnSave(async (resource, position, ct) =>
                 {
-                    // Bookmark can be saved here
+                    resource.Bookmark.RemoveRange(resource.Bookmark);
+                    resource.Bookmark.Add(new Bookmark
+                    {
+                        Position = position.ToJsonString()
+                    });
+
                     await resource.SaveChangesAsync(ct);
                 })
                 .When<ItemAddedToShoppingCart>((e, context) =>

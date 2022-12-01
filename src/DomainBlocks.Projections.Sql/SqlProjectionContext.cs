@@ -113,7 +113,7 @@ public sealed class SqlProjectionContext : IProjectionContext
         }
     }
 
-    public Task OnEventHandled(CancellationToken cancellationToken = default)
+    public Task OnEventHandled(IStreamPosition position, CancellationToken cancellationToken = default)
     {
         if (_isProcessingLiveEvents)
         {

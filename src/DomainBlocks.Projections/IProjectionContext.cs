@@ -11,5 +11,5 @@ public interface IProjectionContext
     Task OnCatchingUp(CancellationToken cancellationToken = default);
     Task OnCaughtUp(CancellationToken cancellationToken = default);
     Task OnEventDispatching(CancellationToken cancellationToken = default);
-    Task OnEventHandled(CancellationToken cancellationToken = default);
+    Task OnEventHandled(IStreamPosition position, CancellationToken cancellationToken = default);
 }

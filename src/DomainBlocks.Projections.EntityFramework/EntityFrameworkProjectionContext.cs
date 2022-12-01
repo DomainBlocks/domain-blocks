@@ -58,7 +58,7 @@ public class EntityFrameworkProjectionContext : IProjectionContext
         return Task.CompletedTask;
     }
 
-    public async Task OnEventHandled(CancellationToken cancellationToken = default)
+    public async Task OnEventHandled(IStreamPosition position, CancellationToken cancellationToken = default)
     {
         if (_isProcessingLiveEvents)
         {

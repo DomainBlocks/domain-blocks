@@ -12,6 +12,7 @@ public sealed class ResourceProjectionContext<TResource> : IProjectionContext wh
     private readonly Func<TResource, IStreamPosition, CancellationToken, Task> _onSave;
     private CatchUpSubscriptionStatus _subscriptionStatus;
     private EventHandlingContext<TResource> _eventHandlingContext;
+    private IStreamPosition _lastHandledPosition = StreamPosition.Empty;
 
     public ResourceProjectionContext(
         Func<TResource> resourceFactory,
@@ -61,14 +62,14 @@ public sealed class ResourceProjectionContext<TResource> : IProjectionContext wh
         return Task.CompletedTask;
     }
 
-    public async Task OnEventHandled(CancellationToken cancellationToken = default)
+    public async Task OnEventHandled(IStreamPosition position, CancellationToken cancellationToken = default)
     {
-        if (_subscriptionStatus != CatchUpSubscriptionStatus.Live)
+        if (_subscriptionStatus == CatchUpSubscriptionStatus.Live)
         {
-            return;
+            await EndHandlingEvents(cancellationToken);
         }
 
-        await EndHandlingEvents(cancellationToken);
+        _lastHandledPosition = position;
     }
 
     internal RunProjection BindProjection(Func<object, EventHandlingContext<TResource>, Task> projection)
@@ -105,7 +106,7 @@ public sealed class ResourceProjectionContext<TResource> : IProjectionContext wh
             throw new InvalidOperationException("Unable to save as no on-save action has been specified.");
         }
 
-        await _onSave(_eventHandlingContext.Resource, StreamPosition.Empty, cancellationToken);
+        await _onSave(_eventHandlingContext.Resource, _lastHandledPosition, cancellationToken);
         _eventHandlingContext.Resource.Dispose();
         _eventHandlingContext = null;
     }

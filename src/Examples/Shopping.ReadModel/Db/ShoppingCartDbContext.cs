@@ -24,6 +24,8 @@ public class ShoppingCartDbContext : DbContext
             .HasKey(i => i.Id);
     }
 
+    public DbSet<Bookmark> Bookmark { get; set; }
+
     public DbSet<ShoppingCartSummaryItem> ShoppingCartSummaryItems { get; set; }
 
     public DbSet<ShoppingCartHistory> ShoppingCartHistory { get; set; }

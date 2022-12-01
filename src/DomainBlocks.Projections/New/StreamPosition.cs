@@ -2,7 +2,7 @@ namespace DomainBlocks.Projections.New;
 
 public static class StreamPosition
 {
-    public static readonly IStreamPosition Empty = new EmptyStreamPosition();
+    public static readonly IStreamPosition Empty = EmptyStreamPosition.Instance;
 
     public static IStreamPosition FromJsonString(string json)
     {
@@ -17,6 +17,12 @@ public interface IStreamPosition
 
 internal sealed class EmptyStreamPosition : IStreamPosition
 {
+    public static readonly IStreamPosition Instance = new EmptyStreamPosition();
+
+    private EmptyStreamPosition()
+    {
+    }
+
     public string ToJsonString() => "{}";
 }
 

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using DomainBlocks.Common;
+using DomainBlocks.Projections.New;
 using DomainBlocks.Serialization;
 using Microsoft.Extensions.Logging;
 
@@ -80,6 +81,7 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
                     notification.Event,
                     notification.EventType,
                     notification.EventId,
+                    notification.Position,
                     cancellationToken).ConfigureAwait(false);
                 break;
             default:
@@ -91,6 +93,7 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
         TRawData eventData,
         string eventType,
         Guid eventId,
+        IStreamPosition position,
         CancellationToken cancellationToken = default)
     {
         var tasks = new List<Task>();
@@ -109,7 +112,7 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
                 throw;
             }
 
-            tasks.Add(DispatchEventToProjections(@event, metadata, eventId, cancellationToken));
+            tasks.Add(DispatchEventToProjections(@event, metadata, eventId, position, cancellationToken));
         }
 
         await Task.WhenAll(tasks).ConfigureAwait(false);
@@ -119,6 +122,7 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
         TEventBase @event,
         EventMetadata metadata,
         Guid eventId,
+        IStreamPosition position,
         CancellationToken cancellationToken = default)
     {
         try
@@ -144,7 +148,7 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
                     if (stopwatch.Elapsed >= _configuration.ProjectionHandlerTimeout)
                     {
                         Log.LogError("Timed out waiting for projections for event if {EventId}", eventId);
-                        
+
                         if (!_configuration.ContinueAfterTimeout)
                         {
                             _publisher.Stop();
@@ -162,7 +166,7 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
 
             foreach (var projectionContext in contextsForEvent)
             {
-                await projectionContext.OnEventHandled(cancellationToken).ConfigureAwait(false);
+                await projectionContext.OnEventHandled(position, cancellationToken).ConfigureAwait(false);
             }
 
             Log.LogTrace("Context OnAfterHandleEvent hooks called for event ID {EventId}", eventId);
