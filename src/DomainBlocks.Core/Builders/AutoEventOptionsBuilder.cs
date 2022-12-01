@@ -6,7 +6,7 @@ using System.Reflection;
 
 namespace DomainBlocks.Core.Builders;
 
-public interface IAutoEventOptionsBuilder : IMethodVisibilityOptionsBuilder
+public interface IAutoEventOptionsBuilder : IMethodVisibilityBuilder
 {
     /// <summary>
     /// Specify the name of the event applier method overloads on the aggregate type.
@@ -14,10 +14,10 @@ public interface IAutoEventOptionsBuilder : IMethodVisibilityOptionsBuilder
     /// <returns>
     /// An object that can be used for further configuration.
     /// </returns>
-    IMethodVisibilityOptionsBuilder WithMethodName(string methodName);
+    IMethodVisibilityBuilder WithMethodName(string methodName);
 }
 
-public interface IMethodVisibilityOptionsBuilder
+public interface IMethodVisibilityBuilder
 {
     /// <summary>
     /// Specify to include non-public event applier methods.
@@ -62,7 +62,7 @@ internal sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> :
         return new AutoEventOptionsBuilder<TAggregate, TEventBase>(Mode.ImmutableNonMember, sourceType);
     }
 
-    public IMethodVisibilityOptionsBuilder WithMethodName(string methodName)
+    public IMethodVisibilityBuilder WithMethodName(string methodName)
     {
         if (string.IsNullOrWhiteSpace(methodName))
             throw new ArgumentException("Method name cannot be null or whitespace.", nameof(methodName));
