@@ -1,5 +1,7 @@
+using System.Threading.Tasks;
 using DomainBlocks.Projections.AspNetCore;
 using DomainBlocks.Projections.EntityFramework.AspNetCore;
+using DomainBlocks.Projections.New;
 using DomainBlocks.Projections.SqlStreamStore;
 using DomainBlocks.Projections.SqlStreamStore.AspNetCore;
 using DomainBlocks.Projections.SqlStreamStore.New;
@@ -40,8 +42,11 @@ public class Startup
     // This method gets called by the runtime. Use this method to add services to the container.
     public void ConfigureServices(IServiceCollection services)
     {
-        services.AddDbContext<ShoppingCartDbContext>(options =>
-            options.UseNpgsql(Configuration.GetConnectionString("Default")));
+        // services.AddDbContext<ShoppingCartDbContext>(options =>
+        //     options.UseNpgsql(Configuration.GetConnectionString("Default")));
+
+        services.AddDbContextFactory<ShoppingCartDbContext>(
+            options => options.UseNpgsql(Configuration.GetConnectionString("Default")));
 
         // TODO (DS): Remove this example once we can support multiple projections with the new approach.
         // services.AddReadModel(Configuration,
@@ -65,45 +70,47 @@ public class Startup
                     var connectionString = Configuration.GetValue<string>("SqlStreamStore:ConnectionString");
                     var settings = new PostgresStreamStoreSettings(connectionString);
                     o.UsePostgres(settings).UseJsonSerialization();
-                })
-                .Using(sp.CreateScope)
-                .WithService(x => x.ServiceProvider.GetRequiredService<ShoppingCartDbContext>())
-                .AddProjection(projection =>
+                });
+
+            subscriptionOptions
+                .Using(() =>
                 {
-                    projection.OnInitializing(async (dbContext, ct) =>
+                    var dbContextFactory = sp.GetRequiredService<IDbContextFactory<ShoppingCartDbContext>>();
+                    return dbContextFactory.CreateDbContext();
+                })
+                .OnInitializing(async (resource, ct) =>
+                {
+                    // This could run migrations
+                    await resource.Database.EnsureDeletedAsync(ct);
+                    await resource.Database.EnsureCreatedAsync(ct);
+                })
+                .OnSubscribing((resource, ct) =>
+                {
+                    // Bookmark can be loaded here
+                    return Task.FromResult(StreamPosition.Empty);
+                })
+                .OnSave(async (resource, position, ct) =>
+                {
+                    // Bookmark can be saved here
+                    await resource.SaveChangesAsync(ct);
+                })
+                .When<ItemAddedToShoppingCart>((e, context) =>
+                {
+                    // Context can expose metadata and cancellation token
+                    context.Resource.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem
                     {
-                        await dbContext.Database.EnsureDeletedAsync(ct);
-                        await dbContext.Database.EnsureCreatedAsync(ct);
+                        CartId = e.CartId,
+                        Id = e.Id,
+                        ItemDescription = e.Item
                     });
-
-                    projection.OnCaughtUp(async (dbContext, ct) =>
+                })
+                .When<ItemRemovedFromShoppingCart>(async (e, context) =>
+                {
+                    var item = await context.Resource.ShoppingCartSummaryItems.FindAsync(e.Id);
+                    if (item != null)
                     {
-                        await dbContext.SaveChangesAsync(ct);
-                    });
-
-                    projection.OnEventHandled(async (dbContext, ct) =>
-                    {
-                        await dbContext.SaveChangesAsync(ct);
-                    });
-
-                    projection.When<ItemAddedToShoppingCart>((e, dbContext) =>
-                    {
-                        dbContext.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem
-                        {
-                            CartId = e.CartId,
-                            Id = e.Id,
-                            ItemDescription = e.Item
-                        });
-                    });
-
-                    projection.When<ItemRemovedFromShoppingCart>(async (e, dbContext) =>
-                    {
-                        var item = await dbContext.ShoppingCartSummaryItems.FindAsync(e.Id);
-                        if (item != null)
-                        {
-                            dbContext.ShoppingCartSummaryItems.Remove(item);
-                        }
-                    });
+                        context.Resource.ShoppingCartSummaryItems.Remove(item);
+                    }
                 });
         });
 
@@ -129,7 +136,7 @@ public class Startup
         app.UseAuthorization();
         app.UseEndpoints(endpoints => { endpoints.MapControllers(); });
     }
-    
+
     // TODO (DS): Move this somewhere common in a future PR.
     private class SqlStreamStoreLogProvider : LogProviderBase
     {

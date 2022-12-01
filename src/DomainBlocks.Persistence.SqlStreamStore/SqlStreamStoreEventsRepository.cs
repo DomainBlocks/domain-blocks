@@ -41,7 +41,8 @@ public class SqlStreamStoreEventsRepository : IEventsRepository<string>
         NewStreamMessage[] messages;
         try
         {
-            messages = events.Select(e => _serializer.ToNewStreamMessage(e)).ToArray();
+            var metadata = KeyValuePair.Create("Foo", "Bar"); // TODO: for testing only. Remove.
+            messages = events.Select(e => _serializer.ToNewStreamMessage(e, additionalMetadata: metadata)).ToArray();
         }
         catch (Exception ex)
         {

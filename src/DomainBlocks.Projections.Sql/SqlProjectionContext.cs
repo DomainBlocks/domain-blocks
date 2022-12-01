@@ -7,6 +7,7 @@ using System.Data.Common;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using DomainBlocks.Projections.New;
 
 namespace DomainBlocks.Projections.Sql;
 
@@ -61,6 +62,11 @@ public sealed class SqlProjectionContext : IProjectionContext
             Log.LogCritical(ex, "Exception occurred attempting to handle subscribing to event stream");
             throw;
         }
+    }
+    
+    public Task<IStreamPosition> OnSubscribing(CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(StreamPosition.Empty);
     }
 
     public Task OnCatchingUp(CancellationToken cancellationToken = default)

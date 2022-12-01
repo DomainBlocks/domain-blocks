@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using EventStore.Client;
 using NUnit.Framework;
+using DomainBlocksStreamPosition = DomainBlocks.Projections.New.StreamPosition;
 
 namespace DomainBlocks.Projections.Sql.Tests.Fakes
 {
@@ -45,16 +46,17 @@ namespace DomainBlocks.Projections.Sql.Tests.Fakes
             };
 
             var eventRecord = new EventRecord("dummyStreamId",
-                                              Uuid.FromGuid(eventId ?? Guid.NewGuid()),
-                                              StreamPosition.Start,
-                                              Position.Start,
-                                              eventMetadata,
-                                              data,
-                                              null);
+                Uuid.FromGuid(eventId ?? Guid.NewGuid()),
+                StreamPosition.Start,
+                Position.Start,
+                eventMetadata,
+                data,
+                null);
 
-            await _onEvent(
-                EventNotification.FromEvent(eventRecord, eventRecord.EventType, eventRecord.EventId.ToGuid()),
-                cancellationToken);
+            var notification = EventNotification.FromEvent(
+                eventRecord, eventRecord.EventType, eventRecord.EventId.ToGuid(), DomainBlocksStreamPosition.Empty);
+
+            await _onEvent(notification, cancellationToken);
         }
 
         public async Task SendCaughtUp(CancellationToken cancellationToken = default)
@@ -71,5 +73,4 @@ namespace DomainBlocks.Projections.Sql.Tests.Fakes
             }
         }
     }
-
 }

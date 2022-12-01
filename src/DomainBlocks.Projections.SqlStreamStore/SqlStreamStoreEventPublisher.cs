@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
+using DomainBlocks.Projections.SqlStreamStore.New;
 using SqlStreamStore;
 using SqlStreamStore.Streams;
 using SqlStreamStore.Subscriptions;
@@ -97,7 +98,8 @@ public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper
     {
         var jsonData = await message.GetJsonData(cancellationToken).ConfigureAwait(false);
         var wrapper = new StreamMessageWrapper(message, jsonData);
-        var notification = EventNotification.FromEvent(wrapper, wrapper.Type, wrapper.MessageId);
+        var position = AllStreamPosition.From(message.Position);
+        var notification = EventNotification.FromEvent(wrapper, wrapper.Type, wrapper.MessageId, position);
 
         await _onEvent(notification, cancellationToken).ConfigureAwait(false);
 
