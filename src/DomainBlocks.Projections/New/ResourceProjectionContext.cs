@@ -70,9 +70,10 @@ public sealed class ResourceProjectionContext<TResource> : IProjectionContext wh
 
     internal RunProjection BindProjection(Func<object, EventHandlingContext<TResource>, Task> projection)
     {
-        return (e, metadata) =>
+        return (e, metadata, ct) =>
         {
-            // TODO: Do we want to mutate the context here?
+            // TODO (DS): Do we want to mutate the context here?
+            _eventHandlingContext.CancellationToken = ct;
             _eventHandlingContext.Metadata = metadata;
             return projection(e, _eventHandlingContext);
         };

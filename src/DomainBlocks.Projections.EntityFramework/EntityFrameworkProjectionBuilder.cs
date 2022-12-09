@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using DomainBlocks.Serialization;
 using Microsoft.EntityFrameworkCore;
@@ -69,7 +70,9 @@ public class EntityFrameworkProjectionBuilder<TEvent, TDbContext> : IProjectionB
 
     public IEnumerable<(Type eventType, RunProjection func)> BuildProjections()
     {
-        Task RunProjection(object evt, EventMetadata metadata) => _executeAction(_dbContext, (TEvent) evt, metadata);
-        return EnumerableEx.Return((typeof(TEvent), (RunProjection) RunProjection));
+        Task RunProjection(object evt, EventMetadata metadata, CancellationToken _) =>
+            _executeAction(_dbContext, (TEvent)evt, metadata);
+
+        return EnumerableEx.Return((typeof(TEvent), (RunProjection)RunProjection));
     }
 }

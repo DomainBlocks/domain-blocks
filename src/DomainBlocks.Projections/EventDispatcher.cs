@@ -148,7 +148,7 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
 
                 foreach (var executeAsync in projections)
                 {
-                    await executeAsync(@event, metadata).ConfigureAwait(false);
+                    await executeAsync(@event, metadata, cancellationToken).ConfigureAwait(false);
 
                     // Timeout is best effort as it's only able to check after each projection finishes.
                     if (stopwatch.Elapsed >= _configuration.ProjectionHandlerTimeout)

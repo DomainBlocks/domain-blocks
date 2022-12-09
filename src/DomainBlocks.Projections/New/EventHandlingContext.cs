@@ -14,7 +14,7 @@ public class EventHandlingContext<TResource>
 
     public CatchUpSubscriptionStatus SubscriptionStatus { get; }
     public TResource Resource { get; }
-    public CancellationToken CancellationToken { get; internal init; }
+    public CancellationToken CancellationToken { get; internal set; }
     public IReadOnlyDictionary<string, string> Metadata { get; internal set; }
 
     public void DoOnSaved(Action<TResource> onSaved)

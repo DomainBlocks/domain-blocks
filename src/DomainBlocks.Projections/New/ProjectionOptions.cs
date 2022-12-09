@@ -53,10 +53,10 @@ public class ProjectionOptions : IProjectionOptions
         return new ProjectionOptions(this) { _onEventHandled = onEventHandled };
     }
 
-    public ProjectionOptions WithEventHandler<TEvent>(Func<TEvent, Task> eventHandler)
+    public ProjectionOptions WithEventHandler<TEvent>(Func<TEvent, CancellationToken, Task> eventHandler)
     {
         var copy = new ProjectionOptions(this);
-        copy._eventHandlers.Add((typeof(TEvent), (e, _) => eventHandler((TEvent)e)));
+        copy._eventHandlers.Add((typeof(TEvent), (e, _, ct) => eventHandler((TEvent)e, ct)));
         return copy;
     }
 

@@ -11,7 +11,7 @@ namespace DomainBlocks.Projections.Sql;
 public sealed class SqlProjectionBuilder<TEvent, TSqlProjection> : IProjectionBuilder
     where TSqlProjection : ISqlProjection
 {
-    public static readonly ILogger<SqlProjectionBuilder<TEvent, TSqlProjection>> Log =
+    private static readonly ILogger<SqlProjectionBuilder<TEvent, TSqlProjection>> Log =
         Logger.CreateFor<SqlProjectionBuilder<TEvent, TSqlProjection>>();
     private readonly TSqlProjection _sqlProjection;
     private readonly IDbConnector _connector;
@@ -118,7 +118,7 @@ public sealed class SqlProjectionBuilder<TEvent, TSqlProjection> : IProjectionBu
             commandTextBuilder.Append(_customSqlCommandText);
         }
 
-        return async (@event, _) =>
+        return async (@event, _, ct) =>
         {
             // The DB command must be created within this func, which is called within a transaction. If it is
             // called outside the func, the transaction on the command is not set.
@@ -142,7 +142,7 @@ public sealed class SqlProjectionBuilder<TEvent, TSqlProjection> : IProjectionBu
             {
                 if (dbCommand is DbCommand concreteCommand)
                 {
-                    rowsAffected = await concreteCommand.ExecuteNonQueryAsync();
+                    rowsAffected = await concreteCommand.ExecuteNonQueryAsync(ct);
                 }
                 else
                 {
