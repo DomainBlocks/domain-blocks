@@ -2,7 +2,7 @@ namespace DomainBlocks.Projections.New;
 
 public enum CatchUpSubscriptionStatus
 {
-    Initializing,
+    WarmingUp,
     CatchingUp,
     Live
 }

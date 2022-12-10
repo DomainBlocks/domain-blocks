@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 namespace DomainBlocks.Projections.New;
 
-public class EventHandlerContext<TResource>
+public class EventHandlerContext<TResource> : IEventHandlerContext<TResource>
 {
     private readonly List<Func<TResource, CancellationToken, Task>> _onSavedActions = new();
 

@@ -8,7 +8,7 @@ namespace DomainBlocks.Projections.New;
 
 public class ResourceProjectionOptions<TResource> : IProjectionOptions where TResource : IDisposable
 {
-    private readonly List<(Type, Func<object, EventHandlerContext<TResource>, CancellationToken, Task>)> _projections =
+    private readonly List<(Type, Func<object, IEventHandlerContext<TResource>, CancellationToken, Task>)> _projections =
         new();
 
     private Func<TResource> _resourceFactory;
@@ -60,7 +60,7 @@ public class ResourceProjectionOptions<TResource> : IProjectionOptions where TRe
     }
 
     public ResourceProjectionOptions<TResource> WithProjection<TEvent>(
-        Func<TEvent, EventHandlerContext<TResource>, CancellationToken, Task> projection)
+        Func<TEvent, IEventHandlerContext<TResource>, CancellationToken, Task> projection)
     {
         var copy = new ResourceProjectionOptions<TResource>(this);
         copy._projections.Add((typeof(TEvent), (e, context, ct) => projection((TEvent)e, context, ct)));
@@ -68,7 +68,7 @@ public class ResourceProjectionOptions<TResource> : IProjectionOptions where TRe
     }
 
     public ResourceProjectionOptions<TResource> WithProjection<TEvent>(
-        Action<TEvent, EventHandlerContext<TResource>> projection)
+        Action<TEvent, IEventHandlerContext<TResource>> projection)
     {
         return WithProjection<TEvent>((e, context, _) =>
         {

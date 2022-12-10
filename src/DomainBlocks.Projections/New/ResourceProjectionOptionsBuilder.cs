@@ -37,14 +37,14 @@ public class ResourceProjectionOptionsBuilder<TResource> : IProjectionOptionsBui
     }
 
     public ResourceProjectionOptionsBuilder<TResource> When<TEvent>(
-        Func<TEvent, EventHandlerContext<TResource>, CancellationToken, Task> projection)
+        Func<TEvent, IEventHandlerContext<TResource>, CancellationToken, Task> projection)
     {
         _options = _options.WithProjection(projection);
         return this;
     }
 
     public ResourceProjectionOptionsBuilder<TResource> When<TEvent>(
-        Action<TEvent, EventHandlerContext<TResource>> projection)
+        Action<TEvent, IEventHandlerContext<TResource>> projection)
     {
         _options = _options.WithProjection(projection);
         return this;

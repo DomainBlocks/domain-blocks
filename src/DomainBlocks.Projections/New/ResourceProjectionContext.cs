@@ -39,15 +39,19 @@ public sealed class ResourceProjectionContext<TResource> : IProjectionContext wh
 
     public Task OnCatchingUp(CancellationToken cancellationToken = default)
     {
-        _subscriptionStatus = CatchUpSubscriptionStatus.CatchingUp;
+        if (_subscriptionStatus == CatchUpSubscriptionStatus.Live)
+        {
+            _subscriptionStatus = CatchUpSubscriptionStatus.CatchingUp;
+        }
+
         BeginHandlingEvents();
         return Task.CompletedTask;
     }
 
     public async Task OnCaughtUp(IStreamPosition position, CancellationToken cancellationToken = default)
     {
-        _subscriptionStatus = CatchUpSubscriptionStatus.Live;
         await EndHandlingEvents(position, cancellationToken);
+        _subscriptionStatus = CatchUpSubscriptionStatus.Live;
     }
 
     public Task OnEventDispatching(CancellationToken cancellationToken = default)
@@ -69,7 +73,7 @@ public sealed class ResourceProjectionContext<TResource> : IProjectionContext wh
     }
 
     internal RunProjection BindProjection(
-        Func<object, EventHandlerContext<TResource>, CancellationToken, Task> projection)
+        Func<object, IEventHandlerContext<TResource>, CancellationToken, Task> projection)
     {
         return (e, metadata, ct) =>
         {
