@@ -5,21 +5,21 @@ using System.Threading.Tasks;
 
 namespace DomainBlocks.Projections.New;
 
-public class EventHandlerContext<TResource> : IEventHandlerContext<TResource>
+public class EventHandlerContext<TState> : IEventHandlerContext<TState>
 {
-    private readonly List<Func<TResource, CancellationToken, Task>> _onSavedActions = new();
+    private readonly List<Func<TState, CancellationToken, Task>> _onSavedActions = new();
 
-    internal EventHandlerContext(CatchUpSubscriptionStatus subscriptionStatus, TResource resource)
+    internal EventHandlerContext(CatchUpSubscriptionStatus subscriptionStatus, TState state)
     {
         SubscriptionStatus = subscriptionStatus;
-        Resource = resource;
+        State = state;
     }
 
     public CatchUpSubscriptionStatus SubscriptionStatus { get; }
-    public TResource Resource { get; }
+    public TState State { get; }
     public IReadOnlyDictionary<string, string> Metadata { get; internal set; }
 
-    public void DoOnSaved(Action<TResource> onSaved)
+    public void DoOnSaved(Action<TState> onSaved)
     {
         DoOnSaved((x, _) =>
         {
@@ -28,7 +28,7 @@ public class EventHandlerContext<TResource> : IEventHandlerContext<TResource>
         });
     }
 
-    public void DoOnSaved(Func<TResource, CancellationToken, Task> onSaved)
+    public void DoOnSaved(Func<TState, CancellationToken, Task> onSaved)
     {
         _onSavedActions.Add(onSaved);
     }
@@ -37,7 +37,7 @@ public class EventHandlerContext<TResource> : IEventHandlerContext<TResource>
     {
         foreach (var onSaved in _onSavedActions)
         {
-            await onSaved(Resource, cancellationToken);
+            await onSaved(State, cancellationToken);
         }
 
         _onSavedActions.Clear();

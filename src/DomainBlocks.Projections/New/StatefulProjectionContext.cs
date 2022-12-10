@@ -4,22 +4,26 @@ using System.Threading.Tasks;
 
 namespace DomainBlocks.Projections.New;
 
-public sealed class ResourceProjectionContext<TResource> : IProjectionContext where TResource : IDisposable
+public sealed class StatefulProjectionContext<TResource, TState> : IProjectionContext where TResource : IDisposable
 {
     private readonly Func<TResource> _resourceFactory;
-    private readonly Func<TResource, CancellationToken, Task> _onInitializing;
-    private readonly Func<TResource, CancellationToken, Task<IStreamPosition>> _onSubscribing;
-    private readonly Func<TResource, IStreamPosition, CancellationToken, Task> _onSave;
+    private readonly Func<TResource, TState> _stateFactory;
+    private readonly Func<TState, CancellationToken, Task> _onInitializing;
+    private readonly Func<TState, CancellationToken, Task<IStreamPosition>> _onSubscribing;
+    private readonly Func<TState, IStreamPosition, CancellationToken, Task> _onSave;
     private CatchUpSubscriptionStatus _subscriptionStatus;
-    private EventHandlerContext<TResource> _eventHandlerContext;
+    private TResource _resource;
+    private EventHandlerContext<TState> _eventHandlerContext;
 
-    public ResourceProjectionContext(
+    public StatefulProjectionContext(
         Func<TResource> resourceFactory,
-        Func<TResource, CancellationToken, Task> onInitializing,
-        Func<TResource, CancellationToken, Task<IStreamPosition>> onSubscribing,
-        Func<TResource, IStreamPosition, CancellationToken, Task> onSave)
+        Func<TResource, TState> serviceFactory,
+        Func<TState, CancellationToken, Task> onInitializing,
+        Func<TState, CancellationToken, Task<IStreamPosition>> onSubscribing,
+        Func<TState, IStreamPosition, CancellationToken, Task> onSave)
     {
         _resourceFactory = resourceFactory ?? throw new ArgumentNullException(nameof(resourceFactory));
+        _stateFactory = serviceFactory ?? throw new ArgumentNullException(nameof(serviceFactory));
         _onInitializing = onInitializing ?? throw new ArgumentNullException(nameof(onInitializing));
         _onSubscribing = onSubscribing ?? throw new ArgumentNullException(nameof(onSubscribing));
         _onSave = onSave ?? throw new ArgumentNullException(nameof(onSave));
@@ -28,13 +32,15 @@ public sealed class ResourceProjectionContext<TResource> : IProjectionContext wh
     public async Task OnInitializing(CancellationToken cancellationToken = default)
     {
         using var resource = _resourceFactory();
-        await _onInitializing(resource, cancellationToken);
+        var state = _stateFactory(resource);
+        await _onInitializing(state, cancellationToken);
     }
 
     public async Task<IStreamPosition> OnSubscribing(CancellationToken cancellationToken = default)
     {
         using var resource = _resourceFactory();
-        return await _onSubscribing(resource, cancellationToken);
+        var state = _stateFactory(resource);
+        return await _onSubscribing(state, cancellationToken);
     }
 
     public Task OnCatchingUp(CancellationToken cancellationToken = default)
@@ -73,7 +79,7 @@ public sealed class ResourceProjectionContext<TResource> : IProjectionContext wh
     }
 
     internal RunProjection BindProjection(
-        Func<object, IEventHandlerContext<TResource>, CancellationToken, Task> projection)
+        Func<object, IEventHandlerContext<TState>, CancellationToken, Task> projection)
     {
         return (e, metadata, ct) =>
         {
@@ -91,8 +97,9 @@ public sealed class ResourceProjectionContext<TResource> : IProjectionContext wh
                 "as no resource factory has been specified.");
         }
 
-        var resource = _resourceFactory();
-        _eventHandlerContext = new EventHandlerContext<TResource>(_subscriptionStatus, resource);
+        _resource = _resourceFactory();
+        var state = _stateFactory(_resource);
+        _eventHandlerContext = new EventHandlerContext<TState>(_subscriptionStatus, state);
     }
 
     private async Task EndHandlingEvents(IStreamPosition position, CancellationToken cancellationToken)
@@ -102,9 +109,9 @@ public sealed class ResourceProjectionContext<TResource> : IProjectionContext wh
             throw new InvalidOperationException("Unable to save as no on-save action has been specified.");
         }
 
-        await _onSave(_eventHandlerContext.Resource, position, cancellationToken);
+        await _onSave(_eventHandlerContext.State, position, cancellationToken);
         await _eventHandlerContext.RunOnSavedActions(cancellationToken);
-        _eventHandlerContext.Resource.Dispose();
+        _resource.Dispose();
         _eventHandlerContext = null;
     }
 }

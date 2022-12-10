@@ -28,12 +28,24 @@ public class EventCatchUpSubscriptionOptionsBuilder : IEventCatchUpSubscriptionO
         return this;
     }
 
-    public ResourceProjectionOptionsBuilder<TResource> Using<TResource>(Func<TResource> resourceFactory)
-        where TResource : IDisposable
+    public IStatefulProjectionOptionsBuilder<TState> WithState<TState>(Func<TState> stateFactory)
+        where TState : IDisposable
     {
-        var builder = new ResourceProjectionOptionsBuilder<TResource>(resourceFactory);
+        var builder = new StatefulProjectionOptionsBuilder<TState, TState>(stateFactory, s => s);
         _projectionOptionsBuilders.Add(builder);
         return builder;
+    }
+
+    public StatefulProjectionOptionsBuilder<TResource> Using<TResource>(Func<TResource> resourceFactory)
+        where TResource : IDisposable
+    {
+        var builder = new StatefulProjectionOptionsBuilder<TResource>(resourceFactory, this);
+        return builder;
+    }
+
+    internal void AddProjectionOptionsBuilder(IProjectionOptionsBuilder builder)
+    {
+        _projectionOptionsBuilders.Add(builder);
     }
 
     void IEventCatchUpSubscriptionOptionsBuilderInfrastructure.WithEventDispatcherFactory(

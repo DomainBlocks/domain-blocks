@@ -55,20 +55,20 @@ public class Startup
                 });
 
             subscriptionOptions
-                .Using(() =>
+                .WithState(() =>
                 {
                     var dbContextFactory = sp.GetRequiredService<IDbContextFactory<ShoppingCartDbContext>>();
                     return dbContextFactory.CreateDbContext();
                 })
-                .OnInitializing(async (resource, ct) =>
+                .OnInitializing(async (state, ct) =>
                 {
                     // We could run migrations here
-                    await resource.Database.EnsureDeletedAsync(ct);
-                    await resource.Database.EnsureCreatedAsync(ct);
+                    await state.Database.EnsureDeletedAsync(ct);
+                    await state.Database.EnsureCreatedAsync(ct);
                 })
-                .OnSubscribing(async (resource, ct) =>
+                .OnSubscribing(async (state, ct) =>
                 {
-                    var bookmark = await resource.Bookmarks.FindAsync(
+                    var bookmark = await state.Bookmarks.FindAsync(
                         new object[] { Bookmark.DefaultId }, cancellationToken: ct);
 
                     var position = bookmark == null
@@ -77,25 +77,25 @@ public class Startup
 
                     return position;
                 })
-                .OnSave(async (resource, position, ct) =>
+                .OnSave(async (state, position, ct) =>
                 {
-                    var bookmark = await resource.Bookmarks.FindAsync(
+                    var bookmark = await state.Bookmarks.FindAsync(
                         new object[] { Bookmark.DefaultId }, cancellationToken: ct);
 
                     if (bookmark == null)
                     {
                         bookmark = new Bookmark();
-                        resource.Bookmarks.Add(bookmark);
+                        state.Bookmarks.Add(bookmark);
                     }
 
                     bookmark.Position = position.ToJsonString();
 
-                    await resource.SaveChangesAsync(ct);
+                    await state.SaveChangesAsync(ct);
                 })
                 .When<ItemAddedToShoppingCart>((e, context) =>
                 {
                     // Context can expose metadata and cancellation token
-                    context.Resource.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem
+                    context.State.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem
                     {
                         CartId = e.CartId,
                         Id = e.Id,
@@ -104,10 +104,10 @@ public class Startup
                 })
                 .When<ItemRemovedFromShoppingCart>(async (e, context, ct) =>
                 {
-                    var item = await context.Resource.ShoppingCartSummaryItems.FindAsync(new object[] { e.Id }, ct);
+                    var item = await context.State.ShoppingCartSummaryItems.FindAsync(new object[] { e.Id }, ct);
                     if (item != null)
                     {
-                        context.Resource.ShoppingCartSummaryItems.Remove(item);
+                        context.State.ShoppingCartSummaryItems.Remove(item);
                     }
                 });
         });
