@@ -55,7 +55,7 @@ public class Startup
                 });
 
             subscriptionOptions
-                .WithState(() =>
+                .WithState(_ =>
                 {
                     var dbContextFactory = sp.GetRequiredService<IDbContextFactory<ShoppingCartDbContext>>();
                     return dbContextFactory.CreateDbContext();

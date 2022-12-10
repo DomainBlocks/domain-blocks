@@ -16,7 +16,8 @@ public class StatefulProjectionOptionsBuilder<TResource> where TResource : IDisp
         _coreBuilder = coreBuilder;
     }
 
-    public IStatefulProjectionOptionsBuilder<TState> WithState<TState>(Func<TResource, TState> stateFactory)
+    public IStatefulProjectionOptionsBuilder<TState> WithState<TState>(
+        Func<TResource, CatchUpSubscriptionStatus, TState> stateFactory)
     {
         var builder = new StatefulProjectionOptionsBuilder<TResource, TState>(_resourceFactory, stateFactory);
         _coreBuilder.AddProjectionOptionsBuilder(builder);
@@ -31,7 +32,8 @@ public class StatefulProjectionOptionsBuilder<TResource, TState> :
 {
     private StatefulProjectionOptions<TResource, TState> _options;
 
-    public StatefulProjectionOptionsBuilder(Func<TResource> resourceFactory, Func<TResource, TState> stateFactory)
+    public StatefulProjectionOptionsBuilder(
+        Func<TResource> resourceFactory, Func<TResource, CatchUpSubscriptionStatus, TState> stateFactory)
     {
         _options = new StatefulProjectionOptions<TResource, TState>()
             .WithResourceFactory(resourceFactory)

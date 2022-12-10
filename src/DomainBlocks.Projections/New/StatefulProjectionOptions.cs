@@ -12,7 +12,7 @@ public class StatefulProjectionOptions<TResource, TState> : IProjectionOptions w
         new();
 
     private Func<TResource> _resourceFactory;
-    private Func<TResource, TState> _stateFactory;
+    private Func<TResource, CatchUpSubscriptionStatus, TState> _stateFactory;
     private Func<TState, CancellationToken, Task> _onInitializing;
     private Func<TState, CancellationToken, Task<IStreamPosition>> _onSubscribing;
     private Func<TState, IStreamPosition, CancellationToken, Task> _onSave;
@@ -40,7 +40,8 @@ public class StatefulProjectionOptions<TResource, TState> : IProjectionOptions w
         return new StatefulProjectionOptions<TResource, TState>(this) { _resourceFactory = resourceFactory };
     }
 
-    public StatefulProjectionOptions<TResource, TState> WithStateFactory(Func<TResource, TState> stateFactory)
+    public StatefulProjectionOptions<TResource, TState> WithStateFactory(
+        Func<TResource, CatchUpSubscriptionStatus, TState> stateFactory)
     {
         if (stateFactory == null) throw new ArgumentNullException(nameof(stateFactory));
         return new StatefulProjectionOptions<TResource, TState>(this) { _stateFactory = stateFactory };

@@ -28,10 +28,10 @@ public class EventCatchUpSubscriptionOptionsBuilder : IEventCatchUpSubscriptionO
         return this;
     }
 
-    public IStatefulProjectionOptionsBuilder<TState> WithState<TState>(Func<TState> stateFactory)
-        where TState : IDisposable
+    public IStatefulProjectionOptionsBuilder<TState> WithState<TState>(
+        Func<CatchUpSubscriptionStatus, TState> stateFactory) where TState : IDisposable
     {
-        var builder = new StatefulProjectionOptionsBuilder<TState, TState>(stateFactory, s => s);
+        var builder = new StatefulProjectionOptionsBuilder<IDisposable, TState>(() => null, (_, s) => stateFactory(s));
         _projectionOptionsBuilders.Add(builder);
         return builder;
     }

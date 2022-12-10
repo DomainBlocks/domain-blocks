@@ -7,23 +7,23 @@ namespace DomainBlocks.Projections.New;
 public sealed class StatefulProjectionContext<TResource, TState> : IProjectionContext where TResource : IDisposable
 {
     private readonly Func<TResource> _resourceFactory;
-    private readonly Func<TResource, TState> _stateFactory;
+    private readonly Func<TResource, CatchUpSubscriptionStatus, TState> _stateFactory;
     private readonly Func<TState, CancellationToken, Task> _onInitializing;
     private readonly Func<TState, CancellationToken, Task<IStreamPosition>> _onSubscribing;
     private readonly Func<TState, IStreamPosition, CancellationToken, Task> _onSave;
-    private CatchUpSubscriptionStatus _subscriptionStatus;
+    private CatchUpSubscriptionStatus _subscriptionStatus = CatchUpSubscriptionStatus.WarmingUp;
     private TResource _resource;
     private EventHandlerContext<TState> _eventHandlerContext;
 
     public StatefulProjectionContext(
         Func<TResource> resourceFactory,
-        Func<TResource, TState> serviceFactory,
+        Func<TResource, CatchUpSubscriptionStatus, TState> stateFactory,
         Func<TState, CancellationToken, Task> onInitializing,
         Func<TState, CancellationToken, Task<IStreamPosition>> onSubscribing,
         Func<TState, IStreamPosition, CancellationToken, Task> onSave)
     {
         _resourceFactory = resourceFactory ?? throw new ArgumentNullException(nameof(resourceFactory));
-        _stateFactory = serviceFactory ?? throw new ArgumentNullException(nameof(serviceFactory));
+        _stateFactory = stateFactory ?? throw new ArgumentNullException(nameof(stateFactory));
         _onInitializing = onInitializing ?? throw new ArgumentNullException(nameof(onInitializing));
         _onSubscribing = onSubscribing ?? throw new ArgumentNullException(nameof(onSubscribing));
         _onSave = onSave ?? throw new ArgumentNullException(nameof(onSave));
@@ -32,14 +32,14 @@ public sealed class StatefulProjectionContext<TResource, TState> : IProjectionCo
     public async Task OnInitializing(CancellationToken cancellationToken = default)
     {
         using var resource = _resourceFactory();
-        var state = _stateFactory(resource);
+        var state = _stateFactory(resource, _subscriptionStatus);
         await _onInitializing(state, cancellationToken);
     }
 
     public async Task<IStreamPosition> OnSubscribing(CancellationToken cancellationToken = default)
     {
         using var resource = _resourceFactory();
-        var state = _stateFactory(resource);
+        var state = _stateFactory(resource, _subscriptionStatus);
         return await _onSubscribing(state, cancellationToken);
     }
 
@@ -90,15 +90,8 @@ public sealed class StatefulProjectionContext<TResource, TState> : IProjectionCo
 
     private void BeginHandlingEvents()
     {
-        if (_resourceFactory == null)
-        {
-            throw new InvalidOperationException(
-                $"Unable to create resource of type {typeof(TResource).Name} " +
-                "as no resource factory has been specified.");
-        }
-
         _resource = _resourceFactory();
-        var state = _stateFactory(_resource);
+        var state = _stateFactory(_resource, _subscriptionStatus);
         _eventHandlerContext = new EventHandlerContext<TState>(_subscriptionStatus, state);
     }
 
