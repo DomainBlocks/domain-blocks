@@ -102,9 +102,9 @@ public class Startup
                         ItemDescription = e.Item
                     });
                 })
-                .When<ItemRemovedFromShoppingCart>(async (e, context) =>
+                .When<ItemRemovedFromShoppingCart>(async (e, context, ct) =>
                 {
-                    var item = await context.Resource.ShoppingCartSummaryItems.FindAsync(e.Id);
+                    var item = await context.Resource.ShoppingCartSummaryItems.FindAsync(new object[] { e.Id }, ct);
                     if (item != null)
                     {
                         context.Resource.ShoppingCartSummaryItems.Remove(item);

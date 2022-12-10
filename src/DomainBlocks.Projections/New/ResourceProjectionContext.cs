@@ -11,7 +11,7 @@ public sealed class ResourceProjectionContext<TResource> : IProjectionContext wh
     private readonly Func<TResource, CancellationToken, Task<IStreamPosition>> _onSubscribing;
     private readonly Func<TResource, IStreamPosition, CancellationToken, Task> _onSave;
     private CatchUpSubscriptionStatus _subscriptionStatus;
-    private EventHandlingContext<TResource> _eventHandlingContext;
+    private EventHandlerContext<TResource> _eventHandlerContext;
 
     public ResourceProjectionContext(
         Func<TResource> resourceFactory,
@@ -40,7 +40,7 @@ public sealed class ResourceProjectionContext<TResource> : IProjectionContext wh
     public Task OnCatchingUp(CancellationToken cancellationToken = default)
     {
         _subscriptionStatus = CatchUpSubscriptionStatus.CatchingUp;
-        BeginHandlingEvents(cancellationToken);
+        BeginHandlingEvents();
         return Task.CompletedTask;
     }
 
@@ -54,7 +54,7 @@ public sealed class ResourceProjectionContext<TResource> : IProjectionContext wh
     {
         if (_subscriptionStatus == CatchUpSubscriptionStatus.Live)
         {
-            BeginHandlingEvents(cancellationToken);
+            BeginHandlingEvents();
         }
 
         return Task.CompletedTask;
@@ -68,18 +68,17 @@ public sealed class ResourceProjectionContext<TResource> : IProjectionContext wh
         }
     }
 
-    internal RunProjection BindProjection(Func<object, EventHandlingContext<TResource>, Task> projection)
+    internal RunProjection BindProjection(
+        Func<object, EventHandlerContext<TResource>, CancellationToken, Task> projection)
     {
         return (e, metadata, ct) =>
         {
-            // TODO (DS): Do we want to mutate the context here?
-            _eventHandlingContext.CancellationToken = ct;
-            _eventHandlingContext.Metadata = metadata;
-            return projection(e, _eventHandlingContext);
+            _eventHandlerContext.Metadata = metadata;
+            return projection(e, _eventHandlerContext, ct);
         };
     }
 
-    private void BeginHandlingEvents(CancellationToken cancellationToken)
+    private void BeginHandlingEvents()
     {
         if (_resourceFactory == null)
         {
@@ -89,11 +88,7 @@ public sealed class ResourceProjectionContext<TResource> : IProjectionContext wh
         }
 
         var resource = _resourceFactory();
-
-        _eventHandlingContext = new EventHandlingContext<TResource>(_subscriptionStatus, resource)
-        {
-            CancellationToken = cancellationToken
-        };
+        _eventHandlerContext = new EventHandlerContext<TResource>(_subscriptionStatus, resource);
     }
 
     private async Task EndHandlingEvents(IStreamPosition position, CancellationToken cancellationToken)
@@ -103,8 +98,9 @@ public sealed class ResourceProjectionContext<TResource> : IProjectionContext wh
             throw new InvalidOperationException("Unable to save as no on-save action has been specified.");
         }
 
-        await _onSave(_eventHandlingContext.Resource, position, cancellationToken);
-        _eventHandlingContext.Resource.Dispose();
-        _eventHandlingContext = null;
+        await _onSave(_eventHandlerContext.Resource, position, cancellationToken);
+        await _eventHandlerContext.RunOnSavedActions(cancellationToken);
+        _eventHandlerContext.Resource.Dispose();
+        _eventHandlerContext = null;
     }
 }
