@@ -9,6 +9,7 @@ using DomainBlocks.Projections.New;
 using EventStore.Client;
 using NUnit.Framework;
 using DomainBlocksStreamPosition = DomainBlocks.Projections.New.StreamPosition;
+using EventRecord = EventStore.Client.EventRecord;
 using StreamPosition = EventStore.Client.StreamPosition;
 
 namespace DomainBlocks.Projections.Sql.Tests.Fakes

@@ -1,79 +1,126 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace DomainBlocks.Projections.New;
 
-public class ProjectionOptions : IProjectionOptions
+public class ProjectionOptions<TState> : IProjectionOptions
 {
-    private readonly List<(Type, RunProjection)> _eventHandlers = new();
-    private Func<CancellationToken, Task> _onInitializing;
-    private Func<CancellationToken, Task> _onCatchingUp;
-    private Func<CancellationToken, Task> _onCaughtUp;
-    private Func<CancellationToken, Task> _onEventDispatching;
-    private Func<CancellationToken, Task> _onEventHandled;
+    private readonly List<(Type, Func<EventRecord, TState, CancellationToken, Task>)> _eventHandlers = new();
+    private Func<IDisposable> _resourceFactory;
+    private Func<IDisposable, CatchUpSubscriptionStatus, TState> _stateFactory;
+    private Func<TState, CancellationToken, Task> _onInitializing;
+    private Func<TState, CancellationToken, Task<IStreamPosition>> _onSubscribing;
+    private Func<TState, IStreamPosition, CancellationToken, Task> _onSave;
 
     public ProjectionOptions()
     {
+        _onInitializing = (_, _) => Task.CompletedTask;
+        _onSubscribing = (_, _) => Task.FromResult(StreamPosition.Empty);
     }
 
-    private ProjectionOptions(ProjectionOptions copyFrom)
+    private ProjectionOptions(ProjectionOptions<TState> copyFrom)
     {
-        _eventHandlers = new List<(Type, RunProjection)>(copyFrom._eventHandlers);
-        _onInitializing = copyFrom._onInitializing ?? (_ => Task.CompletedTask);
-        _onCatchingUp = copyFrom._onCatchingUp ?? (_ => Task.CompletedTask);
-        _onCaughtUp = copyFrom._onCaughtUp ?? (_ => Task.CompletedTask);
-        _onEventDispatching = copyFrom._onEventDispatching ?? (_ => Task.CompletedTask);
-        _onEventHandled = copyFrom._onEventHandled ?? (_ => Task.CompletedTask);
+        _eventHandlers = copyFrom._eventHandlers.ToList();
+        _resourceFactory = copyFrom._resourceFactory;
+        _stateFactory = copyFrom._stateFactory;
+        _onInitializing = copyFrom._onInitializing;
+        _onSubscribing = copyFrom._onSubscribing;
+        _onSave = copyFrom._onSave;
+        _resourceFactory = copyFrom._resourceFactory;
     }
 
-    public ProjectionOptions WithOnInitializing(Func<CancellationToken, Task> onInitializing)
+    public ProjectionOptions<TState> WithStateFactory(Func<CatchUpSubscriptionStatus, TState> stateFactory)
     {
-        return new ProjectionOptions(this) { _onInitializing = onInitializing };
+        if (stateFactory == null) throw new ArgumentNullException(nameof(stateFactory));
+
+        return new ProjectionOptions<TState>(this)
+        {
+            _resourceFactory = () => null,
+            _stateFactory = (_, status) => stateFactory(status)
+        };
     }
 
-    public ProjectionOptions WithOnCatchingUp(Func<CancellationToken, Task> onCatchingUp)
+    public ProjectionOptions<TState> WithStateFactory<TResource>(
+        Func<TResource> resourceFactory,
+        Func<TResource, CatchUpSubscriptionStatus, TState> stateFactory) where TResource : IDisposable
     {
-        return new ProjectionOptions(this) { _onCatchingUp = onCatchingUp };
+        if (resourceFactory == null) throw new ArgumentNullException(nameof(resourceFactory));
+        if (stateFactory == null) throw new ArgumentNullException(nameof(stateFactory));
+
+        return new ProjectionOptions<TState>(this)
+        {
+            _resourceFactory = () => resourceFactory(),
+            _stateFactory = (d, s) => stateFactory((TResource)d, s)
+        };
     }
 
-    public ProjectionOptions WithOnCaughtUp(Func<CancellationToken, Task> onCaughtUp)
+    public ProjectionOptions<TState> WithOnInitializing(Func<TState, CancellationToken, Task> onInitializing)
     {
-        return new ProjectionOptions(this) { _onCaughtUp = onCaughtUp };
+        if (onInitializing == null) throw new ArgumentNullException(nameof(onInitializing));
+        return new ProjectionOptions<TState>(this) { _onInitializing = onInitializing };
     }
 
-    public ProjectionOptions WithOnEventDispatching(Func<CancellationToken, Task> onEventDispatching)
+    public ProjectionOptions<TState> WithOnSubscribing(
+        Func<TState, CancellationToken, Task<IStreamPosition>> onSubscribing)
     {
-        return new ProjectionOptions(this) { _onEventDispatching = onEventDispatching };
+        if (onSubscribing == null) throw new ArgumentNullException(nameof(onSubscribing));
+        return new ProjectionOptions<TState>(this) { _onSubscribing = onSubscribing };
     }
 
-    public ProjectionOptions WithOnEventHandled(Func<CancellationToken, Task> onEventHandled)
+    public ProjectionOptions<TState> WithOnSave(Func<TState, IStreamPosition, CancellationToken, Task> onSave)
     {
-        return new ProjectionOptions(this) { _onEventHandled = onEventHandled };
+        if (onSave == null) throw new ArgumentNullException(nameof(onSave));
+        return new ProjectionOptions<TState>(this) { _onSave = onSave };
     }
 
-    public ProjectionOptions WithEventHandler<TEvent>(Func<TEvent, CancellationToken, Task> eventHandler)
+    public ProjectionOptions<TState> WithHandler<TEvent>(
+        Func<EventRecord<TEvent>, TState, CancellationToken, Task> handler)
     {
-        var copy = new ProjectionOptions(this);
-        copy._eventHandlers.Add((typeof(TEvent), (e, _, ct) => eventHandler((TEvent)e, ct)));
+        var copy = new ProjectionOptions<TState>(this);
+        copy._eventHandlers.Add((typeof(TEvent), (e, s, ct) => handler(e.Cast<TEvent>(), s, ct)));
         return copy;
+    }
+
+    public ProjectionOptions<TState> WithHandler<TEvent>(Action<EventRecord<TEvent>, TState> handler)
+    {
+        return WithHandler<TEvent>((e, s, _) =>
+        {
+            handler(e, s);
+            return Task.CompletedTask;
+        });
+    }
+
+    public ProjectionOptions<TState> WithHandler<TEvent>(Func<TEvent, TState, CancellationToken, Task> handler)
+    {
+        var copy = new ProjectionOptions<TState>(this);
+        copy._eventHandlers.Add((typeof(TEvent), (e, s, ct) => handler((TEvent)e.Event, s, ct)));
+        return copy;
+    }
+
+    public ProjectionOptions<TState> WithHandler<TEvent>(Action<TEvent, TState> handler)
+    {
+        return WithHandler<TEvent>((e, s, _) =>
+        {
+            handler(e, s);
+            return Task.CompletedTask;
+        });
     }
 
     public ProjectionRegistry Register(ProjectionRegistry registry)
     {
-        var projectionContext = new ProjectionContext(
-            _onInitializing,
-            _onCatchingUp,
-            _onCaughtUp,
-            _onEventDispatching,
-            _onEventHandled);
+        var projectionContext = new ProjectionContext<TState>(
+            _resourceFactory, _stateFactory, _onInitializing, _onSubscribing, _onSave);
 
         foreach (var (eventType, handler) in _eventHandlers)
         {
+            var projectionFunc = projectionContext.BindEventHandler(handler);
+
             registry = registry
                 .RegisterDefaultEventName(eventType)
-                .AddProjectionFunc(eventType, handler)
+                .AddProjectionFunc(eventType, projectionFunc)
                 .RegisterProjectionContext(eventType, projectionContext);
         }
 

@@ -65,7 +65,7 @@ public static class ReadModelServiceCollectionExtensions
 
     public static IServiceCollection AddHostedEventCatchUpSubscription(
         this IServiceCollection serviceCollection,
-        Action<IServiceProvider, EventCatchUpSubscriptionOptionsBuilder> optionsAction)
+        Action<IServiceProvider, EventCatchUpSubscriptionOptionsBuilder, ProjectionModelBuilder> optionsAction)
     {
         return serviceCollection
             .AddEventCatchUpSubscription(optionsAction)

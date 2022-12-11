@@ -62,7 +62,6 @@ public static class AggregateServiceCollectionExtensions
             optionsAction(sp, optionsBuilder, modelBuilder);
             var options = optionsBuilder.Options;
             var model = modelBuilder.Build();
-
             return options.CreateAggregateRepository(model);
         });
     }
