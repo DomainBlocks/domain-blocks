@@ -3,12 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using DomainBlocks.Projections.New.Internal;
 
 namespace DomainBlocks.Projections.New;
 
 public class ProjectionOptions<TState> : IProjectionOptions
 {
-    private readonly List<(Type, Func<EventRecord, TState, CancellationToken, Task>)> _eventHandlers = new();
+    private readonly List<(Type, IEventHandlerInvoker<TState>)> _eventHandlerInvokers = new();
+    private readonly List<IEventHandlerInterceptor> _eventHandlerInterceptors = new();
     private Func<IDisposable> _resourceFactory;
     private Func<IDisposable, CatchUpSubscriptionStatus, TState> _stateFactory;
     private Func<TState, CancellationToken, Task> _onInitializing;
@@ -23,7 +25,8 @@ public class ProjectionOptions<TState> : IProjectionOptions
 
     private ProjectionOptions(ProjectionOptions<TState> copyFrom)
     {
-        _eventHandlers = copyFrom._eventHandlers.ToList();
+        _eventHandlerInvokers = copyFrom._eventHandlerInvokers.ToList();
+        _eventHandlerInterceptors = copyFrom._eventHandlerInterceptors.ToList();
         _resourceFactory = copyFrom._resourceFactory;
         _stateFactory = copyFrom._stateFactory;
         _onInitializing = copyFrom._onInitializing;
@@ -76,15 +79,15 @@ public class ProjectionOptions<TState> : IProjectionOptions
         return new ProjectionOptions<TState>(this) { _onSave = onSave };
     }
 
-    public ProjectionOptions<TState> WithHandler<TEvent>(
-        Func<EventRecord<TEvent>, TState, CancellationToken, Task> handler)
+    public ProjectionOptions<TState> WithHandler<TEvent>(EventHandler<TEvent, TState> handler)
     {
         var copy = new ProjectionOptions<TState>(this);
-        copy._eventHandlers.Add((typeof(TEvent), (e, s, ct) => handler(e.Cast<TEvent>(), s, ct)));
+        var invoker = EventHandlerInvoker.Create(handler).Intercept(_eventHandlerInterceptors);
+        copy._eventHandlerInvokers.Add((typeof(TEvent), invoker));
         return copy;
     }
 
-    public ProjectionOptions<TState> WithHandler<TEvent>(Action<EventRecord<TEvent>, TState> handler)
+    public ProjectionOptions<TState> WithHandler<TEvent>(Action<IEventRecord<TEvent>, TState> handler)
     {
         return WithHandler<TEvent>((e, s, _) =>
         {
@@ -95,18 +98,36 @@ public class ProjectionOptions<TState> : IProjectionOptions
 
     public ProjectionOptions<TState> WithHandler<TEvent>(Func<TEvent, TState, CancellationToken, Task> handler)
     {
-        var copy = new ProjectionOptions<TState>(this);
-        copy._eventHandlers.Add((typeof(TEvent), (e, s, ct) => handler((TEvent)e.Event, s, ct)));
-        return copy;
+        return WithHandler<TEvent>((e, s, ct) => handler(e.Event, s, ct));
     }
 
     public ProjectionOptions<TState> WithHandler<TEvent>(Action<TEvent, TState> handler)
     {
         return WithHandler<TEvent>((e, s, _) =>
         {
-            handler(e, s);
+            handler(e.Event, s);
             return Task.CompletedTask;
         });
+    }
+
+    public ProjectionOptions<TState> WithInterceptors(IEnumerable<IEventHandlerInterceptor> interceptors)
+    {
+        var copy = new ProjectionOptions<TState>(this);
+
+        var interceptorArray = interceptors as IEventHandlerInterceptor[] ?? interceptors.ToArray();
+        copy._eventHandlerInterceptors.AddRange(interceptorArray);
+
+        // Apply the interceptors to any existing invokers.
+        var invokers = copy._eventHandlerInvokers.Select(x =>
+        {
+            var (type, invoker) = x;
+            return (type, invoker.Intercept(interceptorArray));
+        });
+
+        copy._eventHandlerInvokers.Clear();
+        copy._eventHandlerInvokers.AddRange(invokers);
+
+        return copy;
     }
 
     public ProjectionRegistry Register(ProjectionRegistry registry)
@@ -114,9 +135,9 @@ public class ProjectionOptions<TState> : IProjectionOptions
         var projectionContext = new ProjectionContext<TState>(
             _resourceFactory, _stateFactory, _onInitializing, _onSubscribing, _onSave);
 
-        foreach (var (eventType, handler) in _eventHandlers)
+        foreach (var (eventType, invoker) in _eventHandlerInvokers)
         {
-            var projectionFunc = projectionContext.BindEventHandler(handler);
+            var projectionFunc = projectionContext.BindEventHandler(invoker.Invoke);
 
             registry = registry
                 .RegisterDefaultEventName(eventType)

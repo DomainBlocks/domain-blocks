@@ -2,7 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace DomainBlocks.Projections.New;
+namespace DomainBlocks.Projections.New.Internal;
 
 internal sealed class ProjectionContext<TState> : IProjectionContext
 {
@@ -11,6 +11,7 @@ internal sealed class ProjectionContext<TState> : IProjectionContext
     private readonly Func<TState, CancellationToken, Task> _onInitializing;
     private readonly Func<TState, CancellationToken, Task<IStreamPosition>> _onSubscribing;
     private readonly Func<TState, IStreamPosition, CancellationToken, Task> _onSave;
+
     private CatchUpSubscriptionStatus _subscriptionStatus = CatchUpSubscriptionStatus.WarmingUp;
     private IDisposable _resource;
     private TState _state;
@@ -78,9 +79,13 @@ internal sealed class ProjectionContext<TState> : IProjectionContext
         }
     }
 
-    internal RunProjection BindEventHandler(Func<EventRecord, TState, CancellationToken, Task> handler)
+    internal RunProjection BindEventHandler(EventHandler<object, TState> handler)
     {
-        return (e, metadata, ct) => handler(new EventRecord(e, metadata), _state, ct);
+        return async (e, metadata, ct) =>
+        {
+            var eventRecord = new EventRecord<object>(e, metadata);
+            await handler(eventRecord, _state, ct);
+        };
     }
 
     private void BeginHandlingEvents()

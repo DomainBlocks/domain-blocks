@@ -1,3 +1,5 @@
+using DomainBlocks.Projections.New.Internal;
+
 namespace DomainBlocks.Projections.New;
 
 public static class StreamPosition
