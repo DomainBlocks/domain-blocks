@@ -1,7 +1,6 @@
 using System.Text.Json;
-using DomainBlocks.Projections.New;
 
-namespace DomainBlocks.Projections.SqlStreamStore.New;
+namespace DomainBlocks.Projections.SqlStreamStore;
 
 internal sealed class AllStreamPosition : IStreamPosition
 {

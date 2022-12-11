@@ -1,10 +1,9 @@
 ﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
-using DomainBlocks.Projections.New;
 using EventStore.Client;
 using EventRecord = EventStore.Client.EventRecord;
-using StreamPosition = DomainBlocks.Projections.New.StreamPosition;
+using StreamPosition = DomainBlocks.Projections.StreamPosition;
 
 namespace DomainBlocks.Projections.EventStore;
 

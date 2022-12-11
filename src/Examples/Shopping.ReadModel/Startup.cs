@@ -1,6 +1,6 @@
+using DomainBlocks.Projections;
 using DomainBlocks.Projections.AspNetCore;
-using DomainBlocks.Projections.New;
-using DomainBlocks.Projections.SqlStreamStore.New;
+using DomainBlocks.Projections.SqlStreamStore;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
@@ -33,7 +33,7 @@ public class Startup
         Configuration = configuration;
     }
 
-    public IConfiguration Configuration { get; }
+    private IConfiguration Configuration { get; }
 
     // This method gets called by the runtime. Use this method to add services to the container.
     public void ConfigureServices(IServiceCollection services)
@@ -57,7 +57,7 @@ public class Startup
             {
                 projection
                     .Using(sp.CreateScope)
-                    .InitialState((scope, _) => scope.ServiceProvider
+                    .WithStateFactory((scope, _) => scope.ServiceProvider
                         .GetRequiredService<IDbContextFactory<ShoppingCartDbContext>>()
                         .CreateDbContext());
 
@@ -70,8 +70,7 @@ public class Startup
                     })
                     .OnSubscribing(async (state, ct) =>
                     {
-                        var bookmark = await state.Bookmarks.FindAsync(
-                            new object[] { Bookmark.DefaultId }, cancellationToken: ct);
+                        var bookmark = await state.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, ct);
 
                         var position = bookmark == null
                             ? StreamPosition.Empty
@@ -81,9 +80,9 @@ public class Startup
                     })
                     .OnSave(async (state, position, ct) =>
                     {
-                        var bookmark = await state.Bookmarks.FindAsync(
-                            new object[] { Bookmark.DefaultId }, cancellationToken: ct);
-
+                        // TODO (DS): Consider a checkpoint hook, where the frequency can be specified,
+                        // e.g. bookmark every 100 events.
+                        var bookmark = await state.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, ct);
                         if (bookmark == null)
                         {
                             bookmark = new Bookmark();

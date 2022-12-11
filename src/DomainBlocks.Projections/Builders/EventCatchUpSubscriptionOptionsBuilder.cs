@@ -1,6 +1,6 @@
 using System;
 
-namespace DomainBlocks.Projections.New;
+namespace DomainBlocks.Projections.Builders;
 
 public class EventCatchUpSubscriptionOptionsBuilder : IEventCatchUpSubscriptionOptionsBuilderInfrastructure
 {

@@ -1,8 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace DomainBlocks.Projections.New;
+namespace DomainBlocks.Projections.Builders;
 
 public sealed class ProjectionOptionsBuilder<TState> : IProjectionOptionsBuilder
 {
@@ -15,7 +16,7 @@ public sealed class ProjectionOptionsBuilder<TState> : IProjectionOptionsBuilder
         return new ProjectionOptionsBuilder<TResource, TState>(resourceFactory, this);
     }
 
-    public void InitialState(Func<CatchUpSubscriptionStatus, TState> stateFactory)
+    public void WithStateFactory(Func<CatchUpSubscriptionStatus, TState> stateFactory)
     {
         Options = Options.WithStateFactory(stateFactory);
     }
@@ -40,13 +41,13 @@ public sealed class ProjectionOptionsBuilder<TState> : IProjectionOptionsBuilder
     }
 
     public ProjectionOptionsBuilder<TState> When<TEvent>(
-        Func<EventRecord<TEvent>, TState, CancellationToken, Task> handler)
+        Func<IEventRecord<TEvent>, TState, CancellationToken, Task> handler)
     {
         Options = Options.WithHandler(handler);
         return this;
     }
 
-    public ProjectionOptionsBuilder<TState> When<TEvent>(Action<EventRecord<TEvent>, TState> handler)
+    public ProjectionOptionsBuilder<TState> When<TEvent>(Action<IEventRecord<TEvent>, TState> handler)
     {
         Options = Options.WithHandler(handler);
         return this;
@@ -63,6 +64,18 @@ public sealed class ProjectionOptionsBuilder<TState> : IProjectionOptionsBuilder
         Options = Options.WithHandler(handler);
         return this;
     }
+
+    public ProjectionOptionsBuilder<TState> AddInterceptors(IEnumerable<IEventHandlerInterceptor<TState>> interceptors)
+    {
+        Options = Options.WithInterceptors(interceptors);
+        return this;
+    }
+
+    public ProjectionOptionsBuilder<TState> AddInterceptors(params IEventHandlerInterceptor<TState>[] interceptors)
+    {
+        Options = Options.WithInterceptors(interceptors);
+        return this;
+    }
 }
 
 public sealed class ProjectionOptionsBuilder<TResource, TState> where TResource : IDisposable
@@ -76,7 +89,7 @@ public sealed class ProjectionOptionsBuilder<TResource, TState> where TResource 
         _parentBuilder = parentBuilder ?? throw new ArgumentNullException(nameof(parentBuilder));
     }
 
-    public void InitialState(Func<TResource, CatchUpSubscriptionStatus, TState> stateFactory)
+    public void WithStateFactory(Func<TResource, CatchUpSubscriptionStatus, TState> stateFactory)
     {
         _parentBuilder.Options = _parentBuilder.Options.WithStateFactory(_resourceFactory, stateFactory);
     }

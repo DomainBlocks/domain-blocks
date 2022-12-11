@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
-using DomainBlocks.Projections.New;
 
 namespace DomainBlocks.Projections;
 

@@ -1,5 +1,5 @@
 ﻿using EventStore.Client;
-using StreamPosition = DomainBlocks.Projections.New.StreamPosition;
+using StreamPosition = DomainBlocks.Projections.StreamPosition;
 
 namespace DomainBlocks.Projections.EventStore;
 

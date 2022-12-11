@@ -5,7 +5,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using DomainBlocks.Common;
-using DomainBlocks.Projections.New;
 using DomainBlocks.Serialization;
 using Microsoft.Extensions.Logging;
 

@@ -1,5 +1,5 @@
 ﻿using System;
-using DomainBlocks.Projections.New;
+using DomainBlocks.Projections.Builders;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DomainBlocks.Projections.DependencyInjection;

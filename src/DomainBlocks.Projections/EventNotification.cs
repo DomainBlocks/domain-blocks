@@ -1,5 +1,4 @@
 ﻿using System;
-using DomainBlocks.Projections.New;
 
 namespace DomainBlocks.Projections;
 
