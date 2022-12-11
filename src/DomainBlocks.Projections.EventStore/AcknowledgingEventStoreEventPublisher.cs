@@ -5,6 +5,7 @@ using DomainBlocks.Common;
 using DomainBlocks.Projections.New;
 using EventStore.Client;
 using Microsoft.Extensions.Logging;
+using EventRecord = EventStore.Client.EventRecord;
 
 namespace DomainBlocks.Projections.EventStore;
 

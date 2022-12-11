@@ -4,46 +4,102 @@ using System.Threading.Tasks;
 
 namespace DomainBlocks.Projections.New;
 
-internal class ProjectionContext : IProjectionContext
+internal sealed class ProjectionContext<TState> : IProjectionContext
 {
-    private readonly Func<CancellationToken, Task> _onInitializing;
-    private readonly Func<CancellationToken, Task> _onCatchingUp;
-    private readonly Func<CancellationToken, Task> _onCaughtUp;
-    private readonly Func<CancellationToken, Task> _onEventDispatching;
-    private readonly Func<CancellationToken, Task> _onEventHandled;
+    private readonly Func<IDisposable> _resourceFactory;
+    private readonly Func<IDisposable, CatchUpSubscriptionStatus, TState> _contextFactory;
+    private readonly Func<TState, CancellationToken, Task> _onInitializing;
+    private readonly Func<TState, CancellationToken, Task<IStreamPosition>> _onSubscribing;
+    private readonly Func<TState, IStreamPosition, CancellationToken, Task> _onSave;
+    private CatchUpSubscriptionStatus _subscriptionStatus = CatchUpSubscriptionStatus.WarmingUp;
+    private IDisposable _resource;
+    private TState _state;
 
     public ProjectionContext(
-        Func<CancellationToken, Task> onInitializing,
-        Func<CancellationToken, Task> onCatchingUp,
-        Func<CancellationToken, Task> onCaughtUp,
-        Func<CancellationToken, Task> onEventDispatching,
-        Func<CancellationToken, Task> onEventHandled)
+        Func<IDisposable> resourceFactory,
+        Func<IDisposable, CatchUpSubscriptionStatus, TState> contextFactory,
+        Func<TState, CancellationToken, Task> onInitializing,
+        Func<TState, CancellationToken, Task<IStreamPosition>> onSubscribing,
+        Func<TState, IStreamPosition, CancellationToken, Task> onSave)
     {
-        _onInitializing = onInitializing ?? (_ => Task.CompletedTask);
-        _onCatchingUp = onCatchingUp ?? (_ => Task.CompletedTask);
-        _onCaughtUp = onCaughtUp ?? (_ => Task.CompletedTask);
-        _onEventDispatching = onEventDispatching ?? (_ => Task.CompletedTask);
-        _onEventHandled = onEventHandled ?? (_ => Task.CompletedTask);
+        _resourceFactory = resourceFactory ?? throw new ArgumentNullException(nameof(resourceFactory));
+        _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
+        _onInitializing = onInitializing ?? throw new ArgumentNullException(nameof(onInitializing));
+        _onSubscribing = onSubscribing ?? throw new ArgumentNullException(nameof(onSubscribing));
+        _onSave = onSave ?? throw new ArgumentNullException(nameof(onSave));
     }
 
     public async Task OnInitializing(CancellationToken cancellationToken = default)
     {
-        await _onInitializing(cancellationToken);
+        using var resource = _resourceFactory();
+        var state = _contextFactory(resource, _subscriptionStatus);
+        await _onInitializing(state, cancellationToken);
     }
 
-    public Task<IStreamPosition> OnSubscribing(CancellationToken cancellationToken = default)
+    public async Task<IStreamPosition> OnSubscribing(CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(StreamPosition.Empty);
+        using var resource = _resourceFactory();
+        var state = _contextFactory(resource, _subscriptionStatus);
+        return await _onSubscribing(state, cancellationToken);
     }
 
-    public Task OnCatchingUp(CancellationToken cancellationToken = default) => _onCatchingUp(cancellationToken);
+    public Task OnCatchingUp(CancellationToken cancellationToken = default)
+    {
+        if (_subscriptionStatus == CatchUpSubscriptionStatus.Live)
+        {
+            _subscriptionStatus = CatchUpSubscriptionStatus.CatchingUp;
+        }
 
-    public Task OnCaughtUp(IStreamPosition position, CancellationToken cancellationToken = default) =>
-        _onCaughtUp(cancellationToken);
+        BeginHandlingEvents();
+        return Task.CompletedTask;
+    }
 
-    public Task OnEventDispatching(CancellationToken cancellationToken = default) =>
-        _onEventDispatching(cancellationToken);
+    public async Task OnCaughtUp(IStreamPosition position, CancellationToken cancellationToken = default)
+    {
+        await EndHandlingEvents(position, cancellationToken);
+        _subscriptionStatus = CatchUpSubscriptionStatus.Live;
+    }
 
-    public Task OnEventHandled(IStreamPosition position, CancellationToken cancellationToken = default) =>
-        _onEventHandled(cancellationToken);
+    public Task OnEventDispatching(CancellationToken cancellationToken = default)
+    {
+        if (_subscriptionStatus == CatchUpSubscriptionStatus.Live)
+        {
+            BeginHandlingEvents();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public async Task OnEventHandled(IStreamPosition position, CancellationToken cancellationToken = default)
+    {
+        if (_subscriptionStatus == CatchUpSubscriptionStatus.Live)
+        {
+            await EndHandlingEvents(position, cancellationToken);
+        }
+    }
+
+    internal RunProjection BindEventHandler(Func<EventRecord, TState, CancellationToken, Task> handler)
+    {
+        return (e, metadata, ct) => handler(new EventRecord(e, metadata), _state, ct);
+    }
+
+    private void BeginHandlingEvents()
+    {
+        _resource = _resourceFactory();
+        _state = _contextFactory(_resource, _subscriptionStatus);
+    }
+
+    private async Task EndHandlingEvents(IStreamPosition position, CancellationToken cancellationToken)
+    {
+        if (_onSave == null)
+        {
+            throw new InvalidOperationException("Unable to save as no on-save action has been specified.");
+        }
+
+        await _onSave(_state, position, cancellationToken);
+
+        _resource.Dispose();
+        _resource = null;
+        _state = default;
+    }
 }

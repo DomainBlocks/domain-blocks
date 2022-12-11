@@ -4,37 +4,80 @@ using System.Threading.Tasks;
 
 namespace DomainBlocks.Projections.New;
 
-public class ProjectionOptionsBuilder
+public sealed class ProjectionOptionsBuilder<TState> : IProjectionOptionsBuilder
 {
-    public ProjectionOptions Options { get; private set; } = new();
+    public ProjectionOptions<TState> Options { get; internal set; } = new();
+    IProjectionOptions IProjectionOptionsBuilder.Options => Options;
 
-    public void OnInitializing(Func<CancellationToken, Task> onInitializing)
+    public ProjectionOptionsBuilder<TResource, TState> Using<TResource>(Func<TResource> resourceFactory)
+        where TResource : IDisposable
+    {
+        return new ProjectionOptionsBuilder<TResource, TState>(resourceFactory, this);
+    }
+
+    public void InitialState(Func<CatchUpSubscriptionStatus, TState> stateFactory)
+    {
+        Options = Options.WithStateFactory(stateFactory);
+    }
+
+    public ProjectionOptionsBuilder<TState> OnInitializing(Func<TState, CancellationToken, Task> onInitializing)
     {
         Options = Options.WithOnInitializing(onInitializing);
+        return this;
     }
 
-    public void OnCatchingUp(Func<CancellationToken, Task> onCatchingUp)
+    public ProjectionOptionsBuilder<TState> OnSubscribing(
+        Func<TState, CancellationToken, Task<IStreamPosition>> onSubscribing)
     {
-        Options = Options.WithOnCatchingUp(onCatchingUp);
+        Options = Options.WithOnSubscribing(onSubscribing);
+        return this;
     }
 
-    public void OnCaughtUp(Func<CancellationToken, Task> onCaughtUp)
+    public ProjectionOptionsBuilder<TState> OnSave(Func<TState, IStreamPosition, CancellationToken, Task> onSave)
     {
-        Options = Options.WithOnCaughtUp(onCaughtUp);
+        Options = Options.WithOnSave(onSave);
+        return this;
     }
 
-    public void OnEventDispatching(Func<CancellationToken, Task> onEventDispatching)
+    public ProjectionOptionsBuilder<TState> When<TEvent>(
+        Func<EventRecord<TEvent>, TState, CancellationToken, Task> handler)
     {
-        Options = Options.WithOnEventDispatching(onEventDispatching);
+        Options = Options.WithHandler(handler);
+        return this;
     }
 
-    public void OnEventHandled(Func<CancellationToken, Task> onEventHandled)
+    public ProjectionOptionsBuilder<TState> When<TEvent>(Action<EventRecord<TEvent>, TState> handler)
     {
-        Options = Options.WithOnEventHandled(onEventHandled);
+        Options = Options.WithHandler(handler);
+        return this;
     }
 
-    public void When<TEvent>(Func<TEvent, CancellationToken, Task> eventHandler)
+    public ProjectionOptionsBuilder<TState> When<TEvent>(Func<TEvent, TState, CancellationToken, Task> handler)
     {
-        Options = Options.WithEventHandler(eventHandler);
+        Options = Options.WithHandler(handler);
+        return this;
+    }
+
+    public ProjectionOptionsBuilder<TState> When<TEvent>(Action<TEvent, TState> handler)
+    {
+        Options = Options.WithHandler(handler);
+        return this;
+    }
+}
+
+public sealed class ProjectionOptionsBuilder<TResource, TState> where TResource : IDisposable
+{
+    private readonly Func<TResource> _resourceFactory;
+    private readonly ProjectionOptionsBuilder<TState> _parentBuilder;
+
+    internal ProjectionOptionsBuilder(Func<TResource> resourceFactory, ProjectionOptionsBuilder<TState> parentBuilder)
+    {
+        _resourceFactory = resourceFactory ?? throw new ArgumentNullException(nameof(resourceFactory));
+        _parentBuilder = parentBuilder ?? throw new ArgumentNullException(nameof(parentBuilder));
+    }
+
+    public void InitialState(Func<TResource, CatchUpSubscriptionStatus, TState> stateFactory)
+    {
+        _parentBuilder.Options = _parentBuilder.Options.WithStateFactory(_resourceFactory, stateFactory);
     }
 }
