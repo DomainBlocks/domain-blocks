@@ -7,7 +7,7 @@ namespace DomainBlocks.Projections.New;
 public interface IEventHandlerInterceptor<in TState>
 {
     Task Handle(
-        IEventRecord<object> eventRecord,
+        IEventRecord eventRecord,
         TState state,
         Func<CancellationToken, Task> continuation,
         CancellationToken cancellationToken);

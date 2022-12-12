@@ -11,5 +11,6 @@ public class EventRecord<TEvent> : IEventRecord<TEvent>
     }
 
     public TEvent Event { get; }
+    object IEventRecord.Event => Event;
     public IReadOnlyDictionary<string, string> Metadata { get; }
 }

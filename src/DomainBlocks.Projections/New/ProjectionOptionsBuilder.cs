@@ -41,13 +41,13 @@ public sealed class ProjectionOptionsBuilder<TState> : IProjectionOptionsBuilder
     }
 
     public ProjectionOptionsBuilder<TState> When<TEvent>(
-        Func<EventRecord<TEvent>, TState, CancellationToken, Task> handler)
+        Func<IEventRecord<TEvent>, TState, CancellationToken, Task> handler)
     {
         Options = Options.WithHandler(handler);
         return this;
     }
 
-    public ProjectionOptionsBuilder<TState> When<TEvent>(Action<EventRecord<TEvent>, TState> handler)
+    public ProjectionOptionsBuilder<TState> When<TEvent>(Action<IEventRecord<TEvent>, TState> handler)
     {
         Options = Options.WithHandler(handler);
         return this;

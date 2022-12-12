@@ -7,7 +7,7 @@ internal static class EventHandlerInvoker
 {
     public static EventHandlerInvoker<TState> Create<TEvent, TState>(EventHandler<TEvent, TState> eventHandler)
     {
-        return new EventHandlerInvoker<TState>((e, s, ct) => eventHandler((IEventRecord<TEvent>)e, s, ct));
+        return new EventHandlerInvoker<TState>((e, s, ct) => eventHandler(e.Cast<TEvent>(), s, ct));
     }
 }
 
@@ -20,8 +20,8 @@ internal sealed class EventHandlerInvoker<TState> : IEventHandlerInvoker<TState>
         _eventHandler = eventHandler;
     }
 
-    public Task Invoke(IEventRecord<object> eventRecord, TState state, CancellationToken cancellationToken)
+    public Task Invoke(IEventRecord eventRecord, TState state, CancellationToken cancellationToken)
     {
-        return _eventHandler(eventRecord, state, cancellationToken);
+        return _eventHandler((IEventRecord<object>)eventRecord, state, cancellationToken);
     }
 }

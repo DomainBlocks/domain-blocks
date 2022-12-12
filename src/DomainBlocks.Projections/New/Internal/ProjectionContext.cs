@@ -83,6 +83,8 @@ internal sealed class ProjectionContext<TState> : IProjectionContext
     {
         return async (e, metadata, ct) =>
         {
+            // TODO (DS): See if there is a way to construct the EventRecord with the event type.
+            // This will allow casting the entire EventRecord object.
             var eventRecord = new EventRecord<object>(e, metadata);
             await handler(eventRecord, _state, ct);
         };

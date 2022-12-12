@@ -15,7 +15,7 @@ internal sealed class InterceptingEventHandlerInvoker<TState> : IEventHandlerInv
         _interceptor = interceptor;
     }
 
-    public Task Invoke(IEventRecord<object> eventRecord, TState state, CancellationToken cancellationToken)
+    public Task Invoke(IEventRecord eventRecord, TState state, CancellationToken cancellationToken)
     {
         return _interceptor.Handle(
             eventRecord,
