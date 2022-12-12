@@ -70,8 +70,7 @@ public class Startup
                     })
                     .OnSubscribing(async (state, ct) =>
                     {
-                        var bookmark = await state.Bookmarks.FindAsync(
-                            new object[] { Bookmark.DefaultId }, cancellationToken: ct);
+                        var bookmark = await state.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, ct);
 
                         var position = bookmark == null
                             ? StreamPosition.Empty
@@ -81,9 +80,9 @@ public class Startup
                     })
                     .OnSave(async (state, position, ct) =>
                     {
-                        var bookmark = await state.Bookmarks.FindAsync(
-                            new object[] { Bookmark.DefaultId }, cancellationToken: ct);
-
+                        // TODO (DS): Consider a checkpoint hook, where the frequency can be specified,
+                        // e.g. bookmark every 100 events.
+                        var bookmark = await state.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, ct);
                         if (bookmark == null)
                         {
                             bookmark = new Bookmark();
