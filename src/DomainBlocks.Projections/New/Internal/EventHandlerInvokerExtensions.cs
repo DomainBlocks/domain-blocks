@@ -6,7 +6,7 @@ namespace DomainBlocks.Projections.New.Internal;
 internal static class EventHandlerInvokerExtensions
 {
     public static IEventHandlerInvoker<TState> Intercept<TState>(
-        this IEventHandlerInvoker<TState> invoker, IEnumerable<IEventHandlerInterceptor> interceptors)
+        this IEventHandlerInvoker<TState> invoker, IEnumerable<IEventHandlerInterceptor<TState>> interceptors)
     {
         return interceptors
             .Reverse()
@@ -14,7 +14,7 @@ internal static class EventHandlerInvokerExtensions
     }
 
     private static IEventHandlerInvoker<TState> Intercept<TState>(
-        this IEventHandlerInvoker<TState> invoker, IEventHandlerInterceptor interceptor)
+        this IEventHandlerInvoker<TState> invoker, IEventHandlerInterceptor<TState> interceptor)
     {
         return new InterceptingEventHandlerInvoker<TState>(invoker, interceptor);
     }

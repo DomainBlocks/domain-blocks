@@ -10,7 +10,7 @@ namespace DomainBlocks.Projections.New;
 public class ProjectionOptions<TState> : IProjectionOptions
 {
     private readonly List<(Type, IEventHandlerInvoker<TState>)> _eventHandlerInvokers = new();
-    private readonly List<IEventHandlerInterceptor> _eventHandlerInterceptors = new();
+    private readonly List<IEventHandlerInterceptor<TState>> _eventHandlerInterceptors = new();
     private Func<IDisposable> _resourceFactory;
     private Func<IDisposable, CatchUpSubscriptionStatus, TState> _stateFactory;
     private Func<TState, CancellationToken, Task> _onInitializing;
@@ -110,11 +110,11 @@ public class ProjectionOptions<TState> : IProjectionOptions
         });
     }
 
-    public ProjectionOptions<TState> WithInterceptors(IEnumerable<IEventHandlerInterceptor> interceptors)
+    public ProjectionOptions<TState> WithInterceptors(IEnumerable<IEventHandlerInterceptor<TState>> interceptors)
     {
         var copy = new ProjectionOptions<TState>(this);
 
-        var interceptorArray = interceptors as IEventHandlerInterceptor[] ?? interceptors.ToArray();
+        var interceptorArray = interceptors as IEventHandlerInterceptor<TState>[] ?? interceptors.ToArray();
         copy._eventHandlerInterceptors.AddRange(interceptorArray);
 
         // Apply the interceptors to any existing invokers.

@@ -65,13 +65,13 @@ public sealed class ProjectionOptionsBuilder<TState> : IProjectionOptionsBuilder
         return this;
     }
 
-    public ProjectionOptionsBuilder<TState> AddInterceptors(IEnumerable<IEventHandlerInterceptor> interceptors)
+    public ProjectionOptionsBuilder<TState> AddInterceptors(IEnumerable<IEventHandlerInterceptor<TState>> interceptors)
     {
         Options = Options.WithInterceptors(interceptors);
         return this;
     }
 
-    public ProjectionOptionsBuilder<TState> AddInterceptors(params IEventHandlerInterceptor[] interceptors)
+    public ProjectionOptionsBuilder<TState> AddInterceptors(params IEventHandlerInterceptor<TState>[] interceptors)
     {
         Options = Options.WithInterceptors(interceptors);
         return this;

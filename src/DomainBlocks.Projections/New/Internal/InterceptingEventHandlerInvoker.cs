@@ -6,9 +6,10 @@ namespace DomainBlocks.Projections.New.Internal;
 internal sealed class InterceptingEventHandlerInvoker<TState> : IEventHandlerInvoker<TState>
 {
     private readonly IEventHandlerInvoker<TState> _invoker;
-    private readonly IEventHandlerInterceptor _interceptor;
+    private readonly IEventHandlerInterceptor<TState> _interceptor;
 
-    public InterceptingEventHandlerInvoker(IEventHandlerInvoker<TState> invoker, IEventHandlerInterceptor interceptor)
+    public InterceptingEventHandlerInvoker(
+        IEventHandlerInvoker<TState> invoker, IEventHandlerInterceptor<TState> interceptor)
     {
         _invoker = invoker;
         _interceptor = interceptor;

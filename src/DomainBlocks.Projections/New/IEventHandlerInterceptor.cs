@@ -4,9 +4,9 @@ using System.Threading.Tasks;
 
 namespace DomainBlocks.Projections.New;
 
-public interface IEventHandlerInterceptor
+public interface IEventHandlerInterceptor<in TState>
 {
-    Task Handle<TState>(
+    Task Handle(
         IEventRecord<object> eventRecord,
         TState state,
         Func<CancellationToken, Task> continuation,
