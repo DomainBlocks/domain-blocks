@@ -41,7 +41,7 @@ public class ShoppingCartItem
     public Guid Id { get; }
     public string Name { get; }
 }
-    
+
 public static class ShoppingCartFunctions
 {
     public static IEnumerable<IDomainEvent> Execute(ShoppingCartState state, AddItemToShoppingCart command)

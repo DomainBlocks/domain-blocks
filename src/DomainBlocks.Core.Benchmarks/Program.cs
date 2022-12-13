@@ -1,4 +1,3 @@
 ﻿using BenchmarkDotNet.Running;
-using DomainBlocks.Core.Benchmarks;
 
-BenchmarkRunner.Run<AggregateIdSelectorBenchmark>();
+BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);

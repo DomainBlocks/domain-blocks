@@ -9,7 +9,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
     private static readonly Lazy<Func<TAggregate>> DefaultFactory = new(() => GetDefaultFactory());
     private static readonly Lazy<Func<TAggregate, string>> DefaultIdSelector = new(GetDefaultIdSelector);
     private readonly Dictionary<Type, ICommandResultOptions> _commandResultsOptions = new();
-    private readonly Dictionary<Type, IEventOptions> _eventsOptions = new();
+    private readonly Dictionary<Type, EventOptions<TAggregate>> _eventsOptions = new();
     private Func<TAggregate> _factory;
     private Func<TAggregate, string> _idSelector;
     private Func<string, string> _idToStreamKeySelector;
@@ -20,8 +20,9 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
     {
         _factory = DefaultFactory.Value;
         _idSelector = DefaultIdSelector.Value;
-        _idToStreamKeySelector = GetDefaultIdToStreamKeySelector();
-        _idToSnapshotKeySelector = GetDefaultIdToSnapshotKeySelector();
+        var prefix = GetDefaultKeyPrefix();
+        _idToStreamKeySelector = GetIdToStreamKeySelector(prefix);
+        _idToSnapshotKeySelector = GetIdToSnapshotKeySelector(prefix);
     }
 
     protected AggregateOptionsBase(AggregateOptionsBase<TAggregate, TEventBase> copyFrom)
@@ -29,12 +30,12 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         if (copyFrom == null) throw new ArgumentNullException(nameof(copyFrom));
 
         _eventApplier = copyFrom._eventApplier;
-        _factory = copyFrom._factory ?? DefaultFactory.Value;
-        _idSelector = copyFrom._idSelector ?? DefaultIdSelector.Value;
-        _idToStreamKeySelector = copyFrom._idToStreamKeySelector ?? GetDefaultIdToStreamKeySelector();
-        _idToSnapshotKeySelector = copyFrom._idToSnapshotKeySelector ?? GetDefaultIdToSnapshotKeySelector();
+        _factory = copyFrom._factory;
+        _idSelector = copyFrom._idSelector;
+        _idToStreamKeySelector = copyFrom._idToStreamKeySelector;
+        _idToSnapshotKeySelector = copyFrom._idToSnapshotKeySelector;
         _commandResultsOptions = new Dictionary<Type, ICommandResultOptions>(copyFrom._commandResultsOptions);
-        _eventsOptions = new Dictionary<Type, IEventOptions>(copyFrom._eventsOptions);
+        _eventsOptions = new Dictionary<Type, EventOptions<TAggregate>>(copyFrom._eventsOptions);
     }
 
     public Type ClrType => typeof(TAggregate);
@@ -89,13 +90,19 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         if (aggregate == null) throw new ArgumentNullException(nameof(aggregate));
         if (@event == null) throw new ArgumentNullException(nameof(@event));
 
-        if (_eventApplier == null)
+        if (_eventsOptions.TryGetValue(@event.GetType(), out var eventOptions) && eventOptions.HasEventApplier)
         {
-            throw new InvalidOperationException(
-                "Cannot apply event to aggregate as no event applier has been specified.");
+            return eventOptions.ApplyEvent(aggregate, (TEventBase)@event);
         }
 
-        return _eventApplier(aggregate, @event);
+        if (_eventApplier != null)
+        {
+            return _eventApplier(aggregate, @event);
+        }
+
+        throw new InvalidOperationException(
+            $"Unable to apply event {@event.GetType().Name} to aggregate {typeof(TAggregate).Name} as no event " +
+            "applier was found.");
     }
 
     public AggregateOptionsBase<TAggregate, TEventBase> WithFactory(Func<TAggregate> factory)
@@ -113,6 +120,17 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
 
         var clone = Clone();
         clone._idSelector = idSelector;
+        return clone;
+    }
+
+    public AggregateOptionsBase<TAggregate, TEventBase> WithKeyPrefix(string prefix)
+    {
+        if (string.IsNullOrWhiteSpace(prefix))
+            throw new ArgumentException("Prefix cannot be null or whitespace.", nameof(prefix));
+
+        var clone = Clone();
+        clone._idToStreamKeySelector = GetIdToStreamKeySelector(prefix);
+        clone._idToSnapshotKeySelector = GetIdToSnapshotKeySelector(prefix);
         return clone;
     }
 
@@ -171,7 +189,8 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         return clone;
     }
 
-    public AggregateOptionsBase<TAggregate, TEventBase> WithEventsOptions(IEnumerable<IEventOptions> eventsOptions)
+    internal AggregateOptionsBase<TAggregate, TEventBase> WithEventsOptions(
+        IEnumerable<EventOptions<TAggregate>> eventsOptions)
     {
         if (eventsOptions == null) throw new ArgumentNullException(nameof(eventsOptions));
 
@@ -179,7 +198,14 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
 
         foreach (var eventOptions in eventsOptions)
         {
-            clone._eventsOptions[eventOptions.ClrType] = eventOptions;
+            if (clone._eventsOptions.TryGetValue(eventOptions.ClrType, out var existingOptions))
+            {
+                clone._eventsOptions[eventOptions.ClrType] = existingOptions.Merge(eventOptions);
+            }
+            else
+            {
+                clone._eventsOptions.Add(eventOptions.ClrType, eventOptions);
+            }
         }
 
         return clone;
@@ -221,7 +247,13 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
     {
         const string defaultIdPropertyName = "Id";
 
-        var property = typeof(TAggregate).GetProperty(defaultIdPropertyName);
+        return GetIdSelector(defaultIdPropertyName) ??
+               GetIdSelector($"{typeof(TAggregate).Name}{defaultIdPropertyName}");
+    }
+
+    private static Func<TAggregate, string> GetIdSelector(string propertyName)
+    {
+        var property = typeof(TAggregate).GetProperty(propertyName);
         if (property == null)
         {
             return null;
@@ -240,15 +272,13 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         return $"{name[..1].ToLower()}{name[1..]}";
     }
 
-    private static Func<string, string> GetDefaultIdToStreamKeySelector()
+    private static Func<string, string> GetIdToStreamKeySelector(string prefix)
     {
-        var prefix = GetDefaultKeyPrefix();
         return id => $"{prefix}-{id}";
     }
 
-    private static Func<string, string> GetDefaultIdToSnapshotKeySelector()
+    private static Func<string, string> GetIdToSnapshotKeySelector(string prefix)
     {
-        var prefix = GetDefaultKeyPrefix();
         return id => $"{prefix}Snapshot-{id}";
     }
 }

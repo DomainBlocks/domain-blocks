@@ -22,21 +22,29 @@ public class AggregateIdSelectorBenchmark
     }
 
     [Benchmark]
-    public void ExplicitIdSelector()
+    public string ExplicitIdSelector()
     {
+        string id = null;
+
         for (var i = 0; i < Iterations; i++)
         {
-            _ = _optionsWithExplicitIdSelector.GetId(_aggregate);
+            id = _optionsWithExplicitIdSelector.GetId(_aggregate);
         }
+
+        return id;
     }
 
     [Benchmark]
-    public void DefaultIdSelector()
+    public string DefaultIdSelector()
     {
+        string id = null;
+
         for (var i = 0; i < Iterations; i++)
         {
-            _ = _optionsWithDefaultIdSelector.GetId(_aggregate);
+            id = _optionsWithDefaultIdSelector.GetId(_aggregate);
         }
+
+        return id;
     }
 
     private class MyAggregate

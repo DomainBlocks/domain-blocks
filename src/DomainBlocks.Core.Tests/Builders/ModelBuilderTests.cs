@@ -12,7 +12,7 @@ public class ModelBuilderTests
     public void MutableAggregateWithEventsPropertyScenario()
     {
         var model = new ModelBuilder()
-            .Aggregate<MutableAggregate, IEvent>(agg => agg.WithRaisedEventsFrom(x => x.RaisedEvents))
+            .Aggregate<MutableAggregate, IEvent>(options => options.WithRaisedEventsFrom(x => x.RaisedEvents))
             .Build();
 
         var aggregateOptions = model.GetAggregateOptions<MutableAggregate>();
@@ -34,13 +34,10 @@ public class ModelBuilderTests
     public void MutableAggregateApplyAfterEnumeratingScenario()
     {
         var model = new ModelBuilder()
-            .Aggregate<MutableAggregate, IEvent>(aggregate =>
+            .Aggregate<MutableAggregate, IEvent>(options =>
             {
-                aggregate.WithEventEnumerableCommandResult().ApplyEvents();
-
-                aggregate
-                    .DiscoverEventApplierMethods()
-                    .WithName(nameof(MutableAggregate.Apply));
+                options.WithEventEnumerableCommandResult().ApplyEvents();
+                options.Event<ValueChangedEvent>().ApplyWith((a, e) => a.Apply(e));
             })
             .Build();
 
@@ -63,15 +60,13 @@ public class ModelBuilderTests
     public void MutableAggregateApplyWhileEnumeratingScenario()
     {
         var model = new ModelBuilder()
-            .Aggregate<MutableAggregate, IEvent>(aggregate =>
+            .Aggregate<MutableAggregate, IEvent>(options =>
             {
-                aggregate
+                options
                     .WithEventEnumerableCommandResult()
                     .ApplyEvents(ApplyEventsBehavior.WhileEnumerating);
 
-                aggregate
-                    .DiscoverEventApplierMethods()
-                    .WithName(nameof(MutableAggregate.Apply));
+                options.Event<ValueChangedEvent>().ApplyWith((a, e) => a.Apply(e));
             })
             .Build();
 
@@ -95,11 +90,9 @@ public class ModelBuilderTests
     public void MutableAggregateWithCommandResultAndEventsAppliedScenario()
     {
         var model = new ModelBuilder()
-            .Aggregate<MutableAggregate, IEvent>(aggregate =>
+            .Aggregate<MutableAggregate, IEvent>(options =>
             {
-                aggregate
-                    .CommandResult<CommandResult>()
-                    .WithEventsFrom(x => x.Events);
+                options.CommandResult<CommandResult>().WithEventsFrom(x => x.Events);
             })
             .Build();
 
@@ -123,16 +116,14 @@ public class ModelBuilderTests
     public void MutableAggregateWithCommandResultAndEventsNotAppliedScenario()
     {
         var model = new ModelBuilder()
-            .Aggregate<MutableAggregate, IEvent>(aggregate =>
+            .Aggregate<MutableAggregate, IEvent>(options =>
             {
-                aggregate
+                options
                     .CommandResult<CommandResult>()
                     .WithEventsFrom(x => x.Events)
                     .ApplyEvents();
 
-                aggregate
-                    .DiscoverEventApplierMethods()
-                    .WithName(nameof(MutableAggregate.Apply));
+                options.Event<ValueChangedEvent>().ApplyWith((a, e) => a.Apply(e));
             })
             .Build();
 
@@ -153,14 +144,30 @@ public class ModelBuilderTests
     }
 
     [Test]
+    public void MutableAggregateWithAutoConfiguredEventsScenario()
+    {
+        var model = new ModelBuilder()
+            .Aggregate<MutableAggregate, IEvent>(options => options.AutoConfigureEvents())
+            .Build();
+
+        var aggregateOptions = model.GetAggregateOptions<MutableAggregate>();
+        var aggregate = new MutableAggregate();
+        var context = aggregateOptions.CreateCommandExecutionContext(aggregate);
+
+        context.ExecuteCommand(x => x.ChangeValueWithYieldReturnedEvents("value"));
+        var updatedAggregate = context.RaisedEvents.Aggregate(aggregate, aggregateOptions.ApplyEvent);
+
+        Assert.That(updatedAggregate, Is.SameAs(aggregate));
+        Assert.That(updatedAggregate.Value, Is.EqualTo("value 3"));
+    }
+
+    [Test]
     public void ImmutableAggregateDefaultScenario()
     {
         var model = new ModelBuilder()
-            .ImmutableAggregate<ImmutableAggregate, IEvent>(aggregate =>
+            .ImmutableAggregate<ImmutableAggregate, IEvent>(options =>
             {
-                aggregate
-                    .DiscoverEventApplierMethods()
-                    .WithName(nameof(ImmutableAggregate.Apply));
+                options.Event<ValueChangedEvent>().ApplyWith((a, e) => a.Apply(e));
             })
             .Build();
 
@@ -184,9 +191,9 @@ public class ModelBuilderTests
     public void ImmutableAggregateWithCommandResultAndEventsAppliedScenario()
     {
         var model = new ModelBuilder()
-            .ImmutableAggregate<ImmutableAggregate, IEvent>(aggregate =>
+            .ImmutableAggregate<ImmutableAggregate, IEvent>(options =>
             {
-                aggregate
+                options
                     .CommandResult<CommandResult>()
                     .WithEventsFrom(x => x.Events)
                     .WithUpdatedStateFrom(x => x.UpdatedState);
@@ -213,15 +220,13 @@ public class ModelBuilderTests
     public void ImmutableAggregateWithCommandResultAndEventsNotAppliedScenario()
     {
         var model = new ModelBuilder()
-            .ImmutableAggregate<ImmutableAggregate, IEvent>(aggregate =>
+            .ImmutableAggregate<ImmutableAggregate, IEvent>(options =>
             {
-                aggregate
+                options
                     .CommandResult<CommandResult>()
                     .WithEventsFrom(x => x.Events);
 
-                aggregate
-                    .DiscoverEventApplierMethods()
-                    .WithName(nameof(ImmutableAggregate.Apply));
+                options.Event<ValueChangedEvent>().ApplyWith((a, e) => a.Apply(e));
             })
             .Build();
 
@@ -239,6 +244,24 @@ public class ModelBuilderTests
         Assert.That(events[0], Is.EqualTo(new ValueChangedEvent("value 1")));
         Assert.That(events[1], Is.EqualTo(new ValueChangedEvent("value 2")));
         Assert.That(events[2], Is.EqualTo(new ValueChangedEvent("value 3")));
+    }
+
+    [Test]
+    public void ImmutableAggregateWithAutoConfiguredEventsScenario()
+    {
+        var model = new ModelBuilder()
+            .ImmutableAggregate<ImmutableAggregate, IEvent>(options => options.AutoConfigureEvents())
+            .Build();
+
+        var aggregateOptions = model.GetAggregateOptions<ImmutableAggregate>();
+        var aggregate = new ImmutableAggregate();
+        var context = aggregateOptions.CreateCommandExecutionContext(aggregate);
+
+        context.ExecuteCommand(x => x.ChangeValueWithYieldReturnedEvents("value"));
+        var updatedAggregate = context.RaisedEvents.Aggregate(aggregate, aggregateOptions.ApplyEvent);
+
+        Assert.That(updatedAggregate, Is.Not.SameAs(aggregate));
+        Assert.That(updatedAggregate.Value, Is.EqualTo("value 3"));
     }
 
     private interface IEvent

@@ -24,9 +24,12 @@ public class AggregateOptionsTests
     [Test]
     public void MakeSnapshotKeyUsesDefaultIdSelectorWhenIdPropertyExists()
     {
-        var options = new MutableAggregateOptions<MyAggregateWithId, object>();
-        var aggregate = new MyAggregateWithId { Id = 123 };
-        Assert.That(options.MakeSnapshotKey(aggregate), Is.EqualTo("myAggregateWithIdSnapshot-123"));
+        var options1 = new MutableAggregateOptions<MyAggregateWithId1, object>();
+        var options2 = new MutableAggregateOptions<MyAggregateWithId2, object>();
+        var aggregate1 = new MyAggregateWithId1 { Id = 123 };
+        var aggregate2 = new MyAggregateWithId2 { MyAggregateWithId2Id = 456 };
+        Assert.That(options1.MakeSnapshotKey(aggregate1), Is.EqualTo("myAggregateWithId1Snapshot-123"));
+        Assert.That(options2.MakeSnapshotKey(aggregate2), Is.EqualTo("myAggregateWithId2Snapshot-456"));
     }
 
     [Test]
@@ -52,17 +55,29 @@ public class AggregateOptionsTests
         Assert.That(snapshotKey, Is.EqualTo("myAggregateSnapshot-1"));
     }
 
-    // ReSharper disable once ClassNeverInstantiated.Local
+    [Test]
+    public void KeySelectorsUsesPrefixWhenSpecified()
+    {
+        var options = new MutableAggregateOptions<MyAggregate, object>().WithKeyPrefix("myPrefix");
+        Assert.That(options.MakeStreamKey("1"), Is.EqualTo("myPrefix-1"));
+        Assert.That(options.MakeSnapshotKey("1"), Is.EqualTo("myPrefixSnapshot-1"));
+    }
+
     private class MyAggregate
     {
     }
 
-    // ReSharper disable once ClassNeverInstantiated.Local
-    private class MyAggregateWithId
+    // ReSharper disable UnusedAutoPropertyAccessor.Local
+    private class MyAggregateWithId1
     {
-        // ReSharper disable once UnusedAutoPropertyAccessor.Local
         public int Id { get; init; }
     }
+
+    private class MyAggregateWithId2
+    {
+        public int MyAggregateWithId2Id { get; init; }
+    }
+    // ReSharper restore UnusedAutoPropertyAccessor.Local
 
     // ReSharper disable once ClassNeverInstantiated.Local
     private class MyAggregateWithNoPublicDefaultCtor

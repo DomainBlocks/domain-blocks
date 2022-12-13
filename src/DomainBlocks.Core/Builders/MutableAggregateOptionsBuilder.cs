@@ -7,9 +7,8 @@ namespace DomainBlocks.Core.Builders;
 public sealed class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     AggregateOptionsBuilderBase<TAggregate, TEventBase> where TEventBase : class
 {
-    private MutableAggregateOptions<TAggregate, TEventBase> _options = new();
     private readonly List<ICommandResultOptionsBuilder> _commandResultOptionsBuilders = new();
-    private MutableAutoEventApplierBuilder<TAggregate, TEventBase> _autoEventApplierBuilder;
+    private MutableAggregateOptions<TAggregate, TEventBase> _options = new();
 
     protected override AggregateOptionsBase<TAggregate, TEventBase> OptionsImpl
     {
@@ -18,18 +17,16 @@ public sealed class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
             var commandResultsOptions = _commandResultOptionsBuilders.Select(x => x.Options);
             var options = _options.WithCommandResultsOptions(commandResultsOptions);
 
-            if (!options.HasCommandResultOptions<IEnumerable<TEventBase>>())
+            if (options.HasCommandResultOptions<IEnumerable<TEventBase>>())
             {
-                // We support IEnumerable<TEventBase> as a command result by default.
-                var commandResultOptions = new MutableEventEnumerableCommandResultOptions<TAggregate, TEventBase>();
-                options = options.WithCommandResultOptions(commandResultOptions);
+                return options;
             }
 
-            var eventApplier = _autoEventApplierBuilder?.Build();
-            
-            return eventApplier == null
-                ? options
-                : ((MutableAggregateOptions<TAggregate, TEventBase>)options).WithEventApplier(eventApplier);
+            // We support IEnumerable<TEventBase> as a command result by default.
+            var commandResultOptions = new MutableEventEnumerableCommandResultOptions<TAggregate, TEventBase>();
+            options = options.WithCommandResultOptions(commandResultOptions);
+
+            return options;
         }
         set => _options = (MutableAggregateOptions<TAggregate, TEventBase>)value;
     }
@@ -80,21 +77,32 @@ public sealed class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     /// </summary>
     public void ApplyEventsWith(Action<TAggregate, TEventBase> eventApplier)
     {
-        _autoEventApplierBuilder = null;
         _options = _options.WithEventApplier(eventApplier);
     }
 
     /// <summary>
-    /// Auto-configures applying events by discovering event applier methods on the aggregate type. The event applier
-    /// methods are discovered by reflection during configuration, and for performance reasons, are compiled into IL
-    /// using lambda expressions.
+    /// Adds the given event type to the aggregate options.
     /// </summary>
     /// <returns>
-    /// An object that can be used to configure the discovery of event applier methods.
+    /// An object that can be used to further configure the event.
     /// </returns>
-    public MutableAutoEventApplierBuilder<TAggregate, TEventBase> DiscoverEventApplierMethods()
+    public IMutableEventBuilder<TAggregate, TEvent> Event<TEvent>() where TEvent : TEventBase
     {
-        _autoEventApplierBuilder = new MutableAutoEventApplierBuilder<TAggregate, TEventBase>();
-        return _autoEventApplierBuilder;
+        var builder = new MutableEventOptionsBuilder<TAggregate, TEventBase, TEvent>();
+        EventOptionsBuilders.Add(builder);
+        return builder;
+    }
+
+    /// <summary>
+    /// Automatically configure events by discovering event applier methods on the aggregate type.
+    /// </summary>
+    /// <returns>
+    /// An object that can be used for further configuration.
+    /// </returns>
+    public IAutoEventOptionsBuilder AutoConfigureEvents()
+    {
+        var builder = AutoEventOptionsBuilder<TAggregate, TEventBase>.Mutable();
+        AutoEventOptionsBuilder = builder;
+        return builder;
     }
 }

@@ -27,27 +27,22 @@ public class Startup
         services.AddGrpc();
         services.AddMediatR(typeof(Startup));
 
-        services.AddAggregateRepository(
-            (_, options) => options.UseSqlStreamStore(o =>
+        services.AddAggregateRepository((options, model) =>
+        {
+            options.UseSqlStreamStore(o =>
             {
                 var connectionString = _configuration.GetValue<string>("SqlStreamStore:ConnectionString");
                 var settings = new PostgresStreamStoreSettings(connectionString);
                 o.UsePostgres(settings).UseJsonSerialization();
-            }),
-            (_, modelBuilder) =>
-            {
-                modelBuilder.ImmutableAggregate<ShoppingCartState, IDomainEvent>(aggregate =>
-                {
-                    aggregate
-                        .HasId(x => x.Id?.ToString())
-                        .WithStreamKey(id => $"shoppingCart-{id}")
-                        .WithSnapshotKey(id => $"shoppingCartSnapshot-{id}");
-
-                    aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
-
-                    aggregate.UseEventTypesFrom(typeof(IDomainEvent).Assembly);
-                });
             });
+
+            model.ImmutableAggregate<ShoppingCartState, IDomainEvent>(aggregate =>
+            {
+                aggregate.WithKeyPrefix("shoppingCart");
+                aggregate.ApplyEventsWith(ShoppingCartFunctions.Apply);
+                aggregate.UseEventTypesFrom(typeof(IDomainEvent).Assembly);
+            });
+        });
     }
 
     // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

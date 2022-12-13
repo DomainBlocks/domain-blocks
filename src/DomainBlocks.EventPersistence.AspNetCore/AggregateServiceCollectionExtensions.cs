@@ -53,22 +53,24 @@ public static class AggregateServiceCollectionExtensions
     // New approach
     public static IServiceCollection AddAggregateRepository(
         this IServiceCollection services,
-        Action<IServiceProvider, NewAggregateRepositoryOptionsBuilder> optionsAction,
-        Action<IServiceProvider, ModelBuilder> modelBuilderAction)
+        Action<IServiceProvider, NewAggregateRepositoryOptionsBuilder, ModelBuilder> optionsAction)
     {
-        services.AddSingleton(sp =>
+        return services.AddSingleton(sp =>
         {
             var optionsBuilder = new NewAggregateRepositoryOptionsBuilder();
-            optionsAction(sp, optionsBuilder);
-            var options = optionsBuilder.Options;
-
             var modelBuilder = new ModelBuilder();
-            modelBuilderAction(sp, modelBuilder);
+            optionsAction(sp, optionsBuilder, modelBuilder);
+            var options = optionsBuilder.Options;
             var model = modelBuilder.Build();
 
             return options.CreateAggregateRepository(model);
         });
+    }
 
-        return services;
+    public static IServiceCollection AddAggregateRepository(
+        this IServiceCollection services,
+        Action<NewAggregateRepositoryOptionsBuilder, ModelBuilder> optionsAction)
+    {
+        return services.AddAggregateRepository((_, options, model) => optionsAction(options, model));
     }
 }

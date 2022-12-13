@@ -1,11 +1,22 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 
 namespace DomainBlocks.Core.Builders;
 
-public sealed class AssemblyEventOptionsBuilder<TEventBase>
+public interface IAssemblyEventOptionsBuilder
+{
+    /// <summary>
+    /// Specify an additional filter to use on the event types which have been found in the specified assembly. The
+    /// argument of the predicate is a type derived from the specified base event type.
+    /// </summary>
+    void Where(Func<Type, bool> predicate);
+}
+
+internal sealed class AssemblyEventOptionsBuilder<TAggregate, TEventBase> :
+    IAssemblyEventOptionsBuilder,
+    IAutoEventOptionsBuilder<TAggregate>
 {
     private readonly Assembly _assembly;
     private Func<Type, bool> _eventTypePredicate;
@@ -20,7 +31,7 @@ public sealed class AssemblyEventOptionsBuilder<TEventBase>
         _eventTypePredicate = predicate;
     }
 
-    public IEnumerable<IEventOptions> Build()
+    public IEnumerable<EventOptions<TAggregate>> Build()
     {
         var eventClrTypes = _assembly
             .GetTypes()
@@ -46,14 +57,6 @@ public sealed class AssemblyEventOptionsBuilder<TEventBase>
             }
         }
 
-        var eventsOptions = eventClrTypes
-            .Select(eventClrType =>
-            {
-                var typeArgs = new[] { eventClrType, typeof(TEventBase) };
-                var eventTypeClrType = typeof(EventOptions<,>).MakeGenericType(typeArgs);
-                return (IEventOptions)Activator.CreateInstance(eventTypeClrType);
-            });
-
-        return eventsOptions;
+        return eventClrTypes.Select(x => new EventOptions<TAggregate>(x));
     }
 }
