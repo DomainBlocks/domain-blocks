@@ -15,14 +15,11 @@
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.10.14" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="5.0.7" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="5.6.3" />
-    <PackageReference Include="System.Linq.Async" Version="5.0.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\DomainBlocks.Projections.EntityFramework.AspNetCore\DomainBlocks.Projections.EntityFramework.AspNetCore.csproj" />
-    <ProjectReference Include="..\..\DomainBlocks.Projections.EntityFramework\DomainBlocks.Projections.EntityFramework.csproj" />
-    <ProjectReference Include="..\..\DomainBlocks.Projections.EventStore.AspNetCore\DomainBlocks.Projections.EventStore.AspNetCore.csproj" />
-    <ProjectReference Include="..\..\DomainBlocks.Projections.SqlStreamStore.AspNetCore\DomainBlocks.Projections.SqlStreamStore.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\DomainBlocks.Projections.AspNetCore\DomainBlocks.Projections.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\DomainBlocks.Projections.SqlStreamStore\DomainBlocks.Projections.SqlStreamStore.csproj" />
     <ProjectReference Include="..\Shopping.Domain.Events\Shopping.Domain.Events.csproj" />
   </ItemGroup>
 

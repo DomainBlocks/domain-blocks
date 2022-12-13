@@ -19,10 +19,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\DomainBlocks.EventStore.Testing\DomainBlocks.EventStore.Testing.csproj" />
     <ProjectReference Include="..\..\DomainBlocks.Persistence.EventStore\DomainBlocks.Persistence.EventStore.csproj" />
-    <ProjectReference Include="..\..\DomainBlocks.Projections.EntityFramework\DomainBlocks.Projections.EntityFramework.csproj" />
     <ProjectReference Include="..\..\DomainBlocks.Projections.EventStore\DomainBlocks.Projections.EventStore.csproj" />
-    <ProjectReference Include="..\..\DomainBlocks.Projections.Sqlite\DomainBlocks.Projections.Sqlite.csproj" />
-    <ProjectReference Include="..\..\DomainBlocks.Projections.Sql\DomainBlocks.Projections.Sql.csproj" />
     <ProjectReference Include="..\..\DomainBlocks.Projections\DomainBlocks.Projections.csproj" />
     <ProjectReference Include="..\..\DomainBlocks.Serialization.Json\DomainBlocks.Serialization.Json.csproj" />
     <ProjectReference Include="..\..\DomainBlocks.Serialization\DomainBlocks.Serialization.csproj" />

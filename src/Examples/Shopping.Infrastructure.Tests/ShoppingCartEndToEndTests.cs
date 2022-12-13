@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
 using DomainBlocks.Common;
@@ -9,8 +8,6 @@ using DomainBlocks.Persistence;
 using DomainBlocks.Persistence.EventStore;
 using DomainBlocks.Projections;
 using DomainBlocks.Projections.EventStore;
-using DomainBlocks.Projections.Sql;
-using DomainBlocks.Projections.Sqlite;
 using DomainBlocks.Serialization.Json;
 using EventStore.Client;
 using Microsoft.Extensions.Logging;
@@ -18,8 +15,7 @@ using NUnit.Framework;
 using Shopping.Domain.Aggregates;
 using Shopping.Domain.Commands;
 using Shopping.Domain.Events;
-using ProjectionDispatcher =
-    DomainBlocks.Projections.EventDispatcher<EventStore.Client.EventRecord, Shopping.Domain.Events.IDomainEvent>;
+using ProjectionDispatcher = DomainBlocks.Projections.EventDispatcher<EventStore.Client.EventRecord, Shopping.Domain.Events.IDomainEvent>;
 using UserCredentials = DomainBlocks.Common.UserCredentials;
 
 namespace Shopping.Infrastructure.Tests;
@@ -29,6 +25,7 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
 {
     [Test]
     [Ignore("Need to figure out a better end to end test")]
+    // TODO (DS): These tests are pretty much broken. We need to give EventStore support some TLC.
     public async Task ReadModelIsBuilt()
     {
         var loggerFactory = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Debug).AddConsole());
@@ -45,14 +42,15 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
     private async Task SetUpReadModelProjections()
     {
         var projectionRegistryBuilder = new ProjectionRegistryBuilder();
-
-        ShoppingCartSummarySqlProjection.Register(projectionRegistryBuilder);
+        
+        // TODO (DS): We need some projections here!
 
         var registry = projectionRegistryBuilder.Build();
 
         var readModelEventPublisher = new EventStoreEventPublisher(EventStoreClient);
 
-        var readModelDispatcher = new ProjectionDispatcher(readModelEventPublisher,
+        var readModelDispatcher = new ProjectionDispatcher(
+            readModelEventPublisher,
             registry.EventProjectionMap,
             registry.ProjectionContextMap,
             new EventRecordJsonDeserializer(),
@@ -135,42 +133,6 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
 
         Assert.That(nextEventVersion, Is.EqualTo(expectedNextEventVersion));
     }
-}
-
-public class ShoppingCartSummarySqlProjection : ISqlProjection
-{
-    public static void Register(ProjectionRegistryBuilder builder)
-    {
-        var shoppingCartSummary = new ShoppingCartSummarySqlProjection();
-
-        builder.Event<ItemAddedToShoppingCart>()
-            .ToSqlProjection(shoppingCartSummary)
-            .ExecutesUpsert();
-
-        builder.Event<ItemRemovedFromShoppingCart>()
-            .ToSqlProjection(shoppingCartSummary)
-            .ExecutesDelete();
-    }
-
-    public IDbConnector DbConnector { get; } = new SqliteDbConnector("Data Source=test.db");
-    public ISqlDialect SqlDialect { get; } = new SqliteSqlDialect();
-    public string TableName => "ShoppingCartSummary";
-
-    public SqlColumnDefinitions Columns { get; } = new()
-    {
-        {
-            nameof(ItemAddedToShoppingCart.Id),
-            new SqlColumnDefinitionBuilder().Name("Id").Type(DbType.String).PrimaryKey().Build()
-        },
-        {
-            nameof(ItemAddedToShoppingCart.CartId),
-            new SqlColumnDefinitionBuilder().Name("CartId").Type(DbType.String).Build()
-        },
-        {
-            nameof(ItemAddedToShoppingCart.Item),
-            new SqlColumnDefinitionBuilder().Name("Item").Type(DbType.String).Build()
-        }
-    };
 }
 
 public static class ShoppingCartProcess

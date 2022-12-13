@@ -57,6 +57,7 @@ public class SqlStreamStoreSnapshotRepository : ISnapshotRepository
                 snapshotKey,
                 snapshotVersion,
                 typeof(TState).FullName);
+
             throw;
         }
     }
@@ -68,6 +69,7 @@ public class SqlStreamStoreSnapshotRepository : ISnapshotRepository
         try
         {
             if (snapshotKey == null) throw new ArgumentNullException(nameof(snapshotKey));
+
             var readStreamPage = await _streamStore.ReadStreamBackwards(
                 snapshotKey,
                 global::SqlStreamStore.Streams.StreamVersion.End,
@@ -100,6 +102,7 @@ public class SqlStreamStoreSnapshotRepository : ISnapshotRepository
                 "Snapshot Type {SnapshotType}",
                 snapshotKey,
                 typeof(TState).FullName);
+
             throw;
         }
     }

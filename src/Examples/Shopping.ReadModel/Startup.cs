@@ -1,8 +1,5 @@
 using DomainBlocks.Projections.AspNetCore;
-using DomainBlocks.Projections.EntityFramework.AspNetCore;
 using DomainBlocks.Projections.SqlStreamStore;
-using DomainBlocks.Projections.SqlStreamStore.AspNetCore;
-using DomainBlocks.Projections.SqlStreamStore.New;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
@@ -43,20 +40,6 @@ public class Startup
         services.AddDbContext<ShoppingCartDbContext>(options =>
             options.UseNpgsql(Configuration.GetConnectionString("Default")));
 
-        // TODO (DS): Remove this example once we can support multiple projections with the new approach.
-        // services.AddReadModel(Configuration,
-        //     options =>
-        //     {
-        //         options.UseSqlStreamStorePublishedEvents()
-        //             .UseEntityFramework<ShoppingCartDbContext, StreamMessageWrapper>()
-        //             .WithProjections((builder, dbContext) =>
-        //             {
-        //                 ShoppingClassSummaryEfProjection.Register(builder, dbContext);
-        //                 ShoppingCartHistoryEfProjection.Register(builder, dbContext);
-        //             });
-        //     });
-
-        // **** New approach ****
         services.AddHostedEventCatchUpSubscription((sp, subscriptionOptions) =>
         {
             subscriptionOptions
@@ -76,15 +59,8 @@ public class Startup
                         await dbContext.Database.EnsureCreatedAsync(ct);
                     });
 
-                    projection.OnCaughtUp(async (dbContext, ct) =>
-                    {
-                        await dbContext.SaveChangesAsync(ct);
-                    });
-
-                    projection.OnEventHandled(async (dbContext, ct) =>
-                    {
-                        await dbContext.SaveChangesAsync(ct);
-                    });
+                    projection.OnCaughtUp(async (dbContext, ct) => await dbContext.SaveChangesAsync(ct));
+                    projection.OnEventHandled(async (dbContext, ct) => await dbContext.SaveChangesAsync(ct));
 
                     projection.When<ItemAddedToShoppingCart>((e, dbContext) =>
                     {
@@ -129,7 +105,7 @@ public class Startup
         app.UseAuthorization();
         app.UseEndpoints(endpoints => { endpoints.MapControllers(); });
     }
-    
+
     // TODO (DS): Move this somewhere common in a future PR.
     private class SqlStreamStoreLogProvider : LogProviderBase
     {

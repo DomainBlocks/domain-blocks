@@ -14,7 +14,9 @@ namespace DomainBlocks.Persistence.SqlStreamStore;
 
 public class SqlStreamStoreEventsRepository : IEventsRepository<string>
 {
-    private static readonly ILogger<SqlStreamStoreEventsRepository> Log = Logger.CreateFor<SqlStreamStoreEventsRepository>();
+    private static readonly ILogger<SqlStreamStoreEventsRepository> Log =
+        Logger.CreateFor<SqlStreamStoreEventsRepository>();
+
     private readonly IStreamStore _streamStore;
     private readonly IEventSerializer<string> _serializer;
     private readonly int _readPageSize;
@@ -58,7 +60,8 @@ public class SqlStreamStoreEventsRepository : IEventsRepository<string>
         // Use the ID of the first event in the batch as an identifier for the whole write
         var writeId = messages[0].MessageId;
 
-        Log.LogDebug("Appending {EventCount} events to stream {StreamName}. Expected stream version {StreamVersion}. Write ID {WriteId}",
+        Log.LogDebug(
+            "Appending {EventCount} events to stream {StreamName}. Expected stream version {StreamVersion}. Write ID {WriteId}",
             messages.Length, streamName, expectedVersion, writeId);
 
         if (Log.IsEnabled(LogLevel.Trace))
@@ -88,7 +91,9 @@ public class SqlStreamStoreEventsRepository : IEventsRepository<string>
     }
 
     public async IAsyncEnumerable<object> LoadEventsAsync(
-        string streamName, long startPosition = 0, Action<IEventPersistenceData<string>> onEventError = null,
+        string streamName,
+        long startPosition = 0,
+        Action<IEventPersistenceData<string>> onEventError = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         if (streamName == null) throw new ArgumentNullException(nameof(streamName));
