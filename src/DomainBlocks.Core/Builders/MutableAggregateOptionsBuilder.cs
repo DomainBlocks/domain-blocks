@@ -86,7 +86,7 @@ public sealed class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     /// <returns>
     /// An object that can be used to further configure the event.
     /// </returns>
-    public IMutableApplyEventBuilder<TAggregate, TEvent> Event<TEvent>() where TEvent : TEventBase
+    public IMutableEventBuilder<TAggregate, TEvent> Event<TEvent>() where TEvent : TEventBase
     {
         var builder = new MutableEventOptionsBuilder<TAggregate, TEventBase, TEvent>();
         EventOptionsBuilders.Add(builder);

@@ -2,15 +2,14 @@ using System;
 
 namespace DomainBlocks.Core.Builders;
 
-public interface IImmutableApplyEventBuilder<TAggregate, out TEvent>
+public interface IImmutableEventBuilder<TAggregate, out TEvent> : IEventNameBuilder
 {
     IEventNameBuilder ApplyWith(Func<TAggregate, TEvent, TAggregate> eventApplier);
 }
 
 public sealed class ImmutableEventOptionsBuilder<TAggregate, TEventBase, TEvent> :
     IEventOptionsBuilder<TAggregate>,
-    IImmutableApplyEventBuilder<TAggregate, TEvent>,
-    IEventNameBuilder
+    IImmutableEventBuilder<TAggregate, TEvent>
     where TEvent : TEventBase
 {
     private EventOptions<TAggregate, TEventBase, TEvent> _options = new();
