@@ -45,8 +45,8 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
         await ForAllContexts((c, ct) => c.OnInitializing(ct), cancellationToken).ConfigureAwait(false);
         Log.LogDebug("Context OnInitializing hooks called");
         
-        // TODO: Hack for now to get a single position.
-        // We'll need to get all positions here, and subscribe from the lowest.
+        // TODO (DS): Hack for now to get the position from the first projection. We'll need to get all positions here,
+        // and subscribe from the lowest. To be fixed in a future PR.
         var position = await _projectionContextMap.GetAllContexts().First().OnSubscribing(cancellationToken);
         Log.LogDebug("Context OnSubscribing hooks called");
 

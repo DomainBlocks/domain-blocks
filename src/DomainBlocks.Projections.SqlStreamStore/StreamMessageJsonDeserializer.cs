@@ -23,16 +23,17 @@ public class StreamMessageJsonDeserializer : IEventDeserializer<StreamMessageWra
 
         try
         {
-            var evt = JsonSerializer.Deserialize(streamMessage.JsonData, eventType, _serializerOptions);
+            var @event = JsonSerializer.Deserialize(streamMessage.JsonData, eventType, _serializerOptions);
 
             var metadata = EventMetadata.Empty;
-            if (streamMessage.JsonMetadata != null)
+            if (!string.IsNullOrEmpty(streamMessage.JsonMetadata))
             {
                 metadata = JsonSerializer.Deserialize<EventMetadata>(streamMessage.JsonMetadata, _serializerOptions);
             }
-            if (evt is TEventBase @event)
+
+            if (@event is TEventBase e)
             {
-                return (@event, metadata);
+                return (e, metadata);
             }
         }
         catch (Exception ex)

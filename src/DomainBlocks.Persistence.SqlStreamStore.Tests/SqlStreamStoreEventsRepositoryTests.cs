@@ -44,11 +44,11 @@ public class SqlStreamStoreEventsRepositoryTests
 
         public string Value { get; }
     }
-    
+
     private sealed class EventSavedEqualityComparer : IEqualityComparer<EventSaved>
     {
         public static readonly IEqualityComparer<EventSaved> Instance = new EventSavedEqualityComparer();
-            
+
         public bool Equals(EventSaved x, EventSaved y)
         {
             if (ReferenceEquals(x, y)) return true;

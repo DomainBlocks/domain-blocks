@@ -19,12 +19,13 @@ using UserCredentials = DomainBlocks.Common.UserCredentials;
 
 namespace Shopping.Infrastructure.Tests;
 
+// TODO (DS): These tests are pretty much broken. We need to give EventStore support some TLC.
+// To be addressed in a future PR.
 [TestFixture]
 public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
 {
     [Test]
     [Ignore("Need to figure out a better end to end test")]
-    // TODO (DS): These tests are pretty much broken. We need to give EventStore support some TLC.
     public async Task ReadModelIsBuilt()
     {
         var loggerFactory = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Debug).AddConsole());

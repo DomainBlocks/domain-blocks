@@ -55,11 +55,8 @@ public class Startup
 
             model.Projection<ShoppingCartDbContext>(projection =>
             {
-                projection
-                    .Using(sp.CreateScope)
-                    .WithStateFactory((scope, _) => scope.ServiceProvider
-                        .GetRequiredService<IDbContextFactory<ShoppingCartDbContext>>()
-                        .CreateDbContext());
+                projection.WithStateFactory(
+                    _ => sp.GetRequiredService<IDbContextFactory<ShoppingCartDbContext>>().CreateDbContext());
 
                 projection
                     .OnInitializing(async (state, ct) =>
