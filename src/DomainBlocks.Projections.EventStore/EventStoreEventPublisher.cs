@@ -54,6 +54,8 @@ public class EventStoreEventPublisher : IEventPublisher<EventRecord>, IDisposabl
             }
         }
 
+        // TODO (DS): We need to limit the number of events we read at a time here.
+        // Do we even need to do this in combination with the call to SubscribeToAllAsync?
         var historicEvents = _client.ReadAllAsync(Direction.Forwards, position, cancellationToken: cancellationToken);
 
         await foreach (var historicEvent in historicEvents.WithCancellation(cancellationToken))

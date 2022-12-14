@@ -8,7 +8,8 @@ namespace DomainBlocks.Persistence.SqlStreamStore;
 
 public class SqlStreamStoreEventPersistenceData : IEventPersistenceData<string>
 {
-    private SqlStreamStoreEventPersistenceData(Guid eventId,
+    private SqlStreamStoreEventPersistenceData(
+        Guid eventId,
         string eventName,
         string eventData,
         string eventMetadata)
@@ -28,9 +29,12 @@ public class SqlStreamStoreEventPersistenceData : IEventPersistenceData<string>
 
     public static async Task<IEventPersistenceData<string>> FromStreamMessage(StreamMessage streamMessage)
     {
-        return new SqlStreamStoreEventPersistenceData(streamMessage.MessageId,
+        var eventData = await streamMessage.GetJsonData();
+
+        return new SqlStreamStoreEventPersistenceData(
+            streamMessage.MessageId,
             streamMessage.Type,
-            await streamMessage.GetJsonData(),
+            eventData,
             streamMessage.JsonMetadata);
     }
 }

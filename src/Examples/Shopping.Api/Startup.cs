@@ -1,5 +1,5 @@
-﻿using DomainBlocks.Persistence.AspNetCore;
-using DomainBlocks.Persistence.SqlStreamStore.New;
+﻿using DomainBlocks.Persistence.DependencyInjection;
+using DomainBlocks.Persistence.SqlStreamStore;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;

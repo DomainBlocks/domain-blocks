@@ -26,5 +26,6 @@ public class ShoppingCartDbContext : DbContext
 
     public DbSet<ShoppingCartSummaryItem> ShoppingCartSummaryItems { get; set; }
 
+    // TODO (DS): Reinstate history projection in future PR.
     public DbSet<ShoppingCartHistory> ShoppingCartHistory { get; set; }
 }
