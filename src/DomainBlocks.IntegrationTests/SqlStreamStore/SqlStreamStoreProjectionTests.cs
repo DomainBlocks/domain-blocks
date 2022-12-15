@@ -28,11 +28,6 @@ public class SqlStreamStoreProjectionTests
         {
             options.UseSqlStreamStore(o => o.UseInMemoryStreamStore(streamStore));
 
-            // Ideas to model the duality between the write and read side:
-            // model.Aggregate<MutableShoppingCart>().With<IDomainEvent>();
-            // model.Project<IDomainEvent>().Onto<State>();
-            // model.ProjectEventsTo<State>();
-
             model.Aggregate<MutableShoppingCart, IDomainEvent>(aggregate =>
             {
                 aggregate.WithRaisedEventsFrom(x => x.RaisedEvents);
