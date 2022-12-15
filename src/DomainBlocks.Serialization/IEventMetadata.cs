@@ -4,8 +4,7 @@ namespace DomainBlocks.Serialization;
 
 public class EventMetadata : Dictionary<string, string>
 {
-
-    public static readonly EventMetadata Empty = new EventMetadata();
+    public static readonly EventMetadata Empty = new();
 
     public static EventMetadata FromKeyValuePairs(IEnumerable<KeyValuePair<string, string>> pairs)
     {

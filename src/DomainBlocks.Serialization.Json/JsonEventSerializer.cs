@@ -12,17 +12,17 @@ public class JsonEventSerializer<TRawData> : IEventSerializer<TRawData>
     private readonly IEventNameMap _eventNameMap;
     private readonly IJsonSerializationAdapter<TRawData> _adapter;
     private EventMetadataContext _metadataContext;
-        
-    public JsonEventSerializer(IEventNameMap eventNameMap, IJsonSerializationAdapter<TRawData> adapter, JsonSerializerOptions options = null)
+
+    public JsonEventSerializer(
+        IEventNameMap eventNameMap, IJsonSerializationAdapter<TRawData> adapter, JsonSerializerOptions options = null)
     {
         _eventNameMap = eventNameMap ?? throw new ArgumentNullException(nameof(eventNameMap));
         _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
-        _options = options ??
-                   new JsonSerializerOptions
-                   {
-                       WriteIndented = true,
-                       AllowTrailingCommas = false,
-                   };
+        _options = options ?? new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            AllowTrailingCommas = false,
+        };
     }
 
     public void RegisterConverter(JsonConverter customConverter)
@@ -36,7 +36,8 @@ public class JsonEventSerializer<TRawData> : IEventSerializer<TRawData>
         _metadataContext = metadataContext ?? throw new ArgumentNullException(nameof(metadataContext));
     }
 
-    public IEventPersistenceData<TRawData> GetPersistenceData(object @event, string eventNameOverride = null, params KeyValuePair<string, string>[] additionalMetadata)
+    public IEventPersistenceData<TRawData> GetPersistenceData(
+        object @event, string eventNameOverride = null, params KeyValuePair<string, string>[] additionalMetadata)
     {
         if (@event == null) throw new ArgumentNullException(nameof(@event));
 
@@ -52,7 +53,8 @@ public class JsonEventSerializer<TRawData> : IEventSerializer<TRawData>
             ? default
             : _adapter.Serialize(_metadataContext.BuildMetadata(additionalMetadata), _options);
 
-        return new JsonEventPersistenceData<TRawData>(Guid.NewGuid(),
+        return new JsonEventPersistenceData<TRawData>(
+            Guid.NewGuid(),
             eventName,
             eventData,
             eventMetadata);
@@ -62,7 +64,7 @@ public class JsonEventSerializer<TRawData> : IEventSerializer<TRawData>
     {
         if (eventData == null) throw new ArgumentNullException(nameof(eventData));
         if (eventName == null) throw new ArgumentNullException(nameof(eventName));
-            
+
         var eventType = typeOverride ?? _eventNameMap.GetEventType(eventName);
 
         try
@@ -81,7 +83,7 @@ public class JsonEventSerializer<TRawData> : IEventSerializer<TRawData>
         if (rawMetadata == null) throw new ArgumentNullException(nameof(rawMetadata));
 
         var metadata = _adapter.Deserialize<EventMetadata>(rawMetadata, _options);
-                               
+
         return metadata;
     }
 }

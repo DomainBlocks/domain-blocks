@@ -1,5 +1,5 @@
 using System;
-using DomainBlocks.Projections.New;
+using DomainBlocks.Projections.Builders;
 
 namespace DomainBlocks.Projections.SqlStreamStore;
 

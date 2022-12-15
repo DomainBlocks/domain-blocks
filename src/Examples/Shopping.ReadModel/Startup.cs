@@ -1,3 +1,4 @@
+using DomainBlocks.Projections;
 using DomainBlocks.Projections.AspNetCore;
 using DomainBlocks.Projections.SqlStreamStore;
 using Microsoft.AspNetCore.Builder;
@@ -32,55 +33,82 @@ public class Startup
         Configuration = configuration;
     }
 
-    public IConfiguration Configuration { get; }
+    private IConfiguration Configuration { get; }
 
     // This method gets called by the runtime. Use this method to add services to the container.
     public void ConfigureServices(IServiceCollection services)
     {
-        services.AddDbContext<ShoppingCartDbContext>(options =>
-            options.UseNpgsql(Configuration.GetConnectionString("Default")));
+        services.AddDbContext<ShoppingCartDbContext>(
+            options => options.UseNpgsql(Configuration.GetConnectionString("Default")),
+            optionsLifetime: ServiceLifetime.Singleton);
 
-        services.AddHostedEventCatchUpSubscription((sp, subscriptionOptions) =>
+        services.AddDbContextFactory<ShoppingCartDbContext>();
+
+        services.AddHostedEventCatchUpSubscription((sp, options, model) =>
         {
-            subscriptionOptions
-                .UseSqlStreamStore(o =>
-                {
-                    var connectionString = Configuration.GetValue<string>("SqlStreamStore:ConnectionString");
-                    var settings = new PostgresStreamStoreSettings(connectionString);
-                    o.UsePostgres(settings).UseJsonSerialization();
-                })
-                .Using(sp.CreateScope)
-                .WithService(x => x.ServiceProvider.GetRequiredService<ShoppingCartDbContext>())
-                .AddProjection(projection =>
-                {
-                    projection.OnInitializing(async (dbContext, ct) =>
-                    {
-                        await dbContext.Database.EnsureDeletedAsync(ct);
-                        await dbContext.Database.EnsureCreatedAsync(ct);
-                    });
+            options.UseSqlStreamStore(o =>
+            {
+                var connectionString = Configuration.GetValue<string>("SqlStreamStore:ConnectionString");
+                var settings = new PostgresStreamStoreSettings(connectionString);
+                o.UsePostgres(settings);
+            });
 
-                    projection.OnCaughtUp(async (dbContext, ct) => await dbContext.SaveChangesAsync(ct));
-                    projection.OnEventHandled(async (dbContext, ct) => await dbContext.SaveChangesAsync(ct));
+            model.Projection<ShoppingCartDbContext>(projection =>
+            {
+                projection.WithStateFactory(
+                    _ => sp.GetRequiredService<IDbContextFactory<ShoppingCartDbContext>>().CreateDbContext());
 
-                    projection.When<ItemAddedToShoppingCart>((e, dbContext) =>
+                projection
+                    .OnInitializing(async (state, ct) =>
                     {
-                        dbContext.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem
+                        // We could run migrations here
+                        await state.Database.EnsureDeletedAsync(ct);
+                        await state.Database.EnsureCreatedAsync(ct);
+                    })
+                    .OnSubscribing(async (state, ct) =>
+                    {
+                        var bookmark = await state.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, ct);
+
+                        var position = bookmark == null
+                            ? StreamPosition.Empty
+                            : StreamPosition.FromJsonString(bookmark.Position);
+
+                        return position;
+                    })
+                    .OnSave(async (state, position, ct) =>
+                    {
+                        // TODO (DS): Consider a checkpoint hook, where the frequency can be specified,
+                        // e.g. bookmark every 100 events.
+                        var bookmark = await state.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, ct);
+                        if (bookmark == null)
+                        {
+                            bookmark = new Bookmark();
+                            state.Bookmarks.Add(bookmark);
+                        }
+
+                        bookmark.Position = position.ToJsonString();
+
+                        await state.SaveChangesAsync(ct);
+                    })
+                    .When<ItemAddedToShoppingCart>((e, state) =>
+                    {
+                        // Context can expose metadata and cancellation token
+                        state.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem
                         {
                             CartId = e.CartId,
                             Id = e.Id,
                             ItemDescription = e.Item
                         });
-                    });
-
-                    projection.When<ItemRemovedFromShoppingCart>(async (e, dbContext) =>
+                    })
+                    .When<ItemRemovedFromShoppingCart>(async (e, state, ct) =>
                     {
-                        var item = await dbContext.ShoppingCartSummaryItems.FindAsync(e.Id);
+                        var item = await state.ShoppingCartSummaryItems.FindAsync(new object[] { e.Id }, ct);
                         if (item != null)
                         {
-                            dbContext.ShoppingCartSummaryItems.Remove(item);
+                            state.ShoppingCartSummaryItems.Remove(item);
                         }
                     });
-                });
+            });
         });
 
         services.AddControllers();

@@ -1,4 +1,4 @@
-namespace DomainBlocks.Projections.New;
+namespace DomainBlocks.Projections;
 
 public interface IProjectionOptions
 {

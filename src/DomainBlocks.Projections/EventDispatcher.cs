@@ -43,9 +43,14 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
     {
         Log.LogDebug("Starting EventStream");
         await ForAllContexts((c, ct) => c.OnInitializing(ct), cancellationToken).ConfigureAwait(false);
+        Log.LogDebug("Context OnInitializing hooks called");
+        
+        // TODO (DS): Hack for now to get the position from the first projection. We'll need to get all positions here,
+        // and subscribe from the lowest. To be fixed in a future PR.
+        var position = await _projectionContextMap.GetAllContexts().First().OnSubscribing(cancellationToken);
         Log.LogDebug("Context OnSubscribing hooks called");
 
-        await _publisher.StartAsync(HandleEventNotificationAsync, cancellationToken).ConfigureAwait(false);
+        await _publisher.StartAsync(HandleEventNotificationAsync, position, cancellationToken).ConfigureAwait(false);
         Log.LogDebug("Event publisher started");
     }
 
@@ -72,7 +77,8 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
                 break;
             case EventNotificationKind.CaughtUp:
                 Log.LogDebug("Received caught up notification");
-                await ForAllContexts((c, ct) => c.OnCaughtUp(ct), cancellationToken).ConfigureAwait(false);
+                await ForAllContexts(
+                    (c, ct) => c.OnCaughtUp(notification.Position, ct), cancellationToken).ConfigureAwait(false);
                 Log.LogDebug("Context OnCaughtUp hooks called");
                 break;
             case EventNotificationKind.Event:
@@ -80,6 +86,7 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
                     notification.Event,
                     notification.EventType,
                     notification.EventId,
+                    notification.Position,
                     cancellationToken).ConfigureAwait(false);
                 break;
             default:
@@ -91,6 +98,7 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
         TRawData eventData,
         string eventType,
         Guid eventId,
+        IStreamPosition position,
         CancellationToken cancellationToken = default)
     {
         var tasks = new List<Task>();
@@ -109,7 +117,7 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
                 throw;
             }
 
-            tasks.Add(DispatchEventToProjections(@event, metadata, eventId, cancellationToken));
+            tasks.Add(DispatchEventToProjections(@event, metadata, eventId, position, cancellationToken));
         }
 
         await Task.WhenAll(tasks).ConfigureAwait(false);
@@ -119,6 +127,7 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
         TEventBase @event,
         EventMetadata metadata,
         Guid eventId,
+        IStreamPosition position,
         CancellationToken cancellationToken = default)
     {
         try
@@ -138,13 +147,13 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
 
                 foreach (var executeAsync in projections)
                 {
-                    await executeAsync(@event, metadata).ConfigureAwait(false);
+                    await executeAsync(@event, metadata, cancellationToken).ConfigureAwait(false);
 
                     // Timeout is best effort as it's only able to check after each projection finishes.
                     if (stopwatch.Elapsed >= _configuration.ProjectionHandlerTimeout)
                     {
                         Log.LogError("Timed out waiting for projections for event if {EventId}", eventId);
-                        
+
                         if (!_configuration.ContinueAfterTimeout)
                         {
                             _publisher.Stop();
@@ -162,7 +171,7 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
 
             foreach (var projectionContext in contextsForEvent)
             {
-                await projectionContext.OnEventHandled(cancellationToken).ConfigureAwait(false);
+                await projectionContext.OnEventHandled(position, cancellationToken).ConfigureAwait(false);
             }
 
             Log.LogTrace("Context OnAfterHandleEvent hooks called for event ID {EventId}", eventId);

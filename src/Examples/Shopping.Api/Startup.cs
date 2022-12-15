@@ -33,7 +33,7 @@ public class Startup
             {
                 var connectionString = _configuration.GetValue<string>("SqlStreamStore:ConnectionString");
                 var settings = new PostgresStreamStoreSettings(connectionString);
-                o.UsePostgres(settings).UseJsonSerialization();
+                o.UsePostgresStreamStore(settings);
             });
 
             model.ImmutableAggregate<ShoppingCartState, IDomainEvent>(aggregate =>

@@ -14,7 +14,8 @@ public static class NewStreamMessageExtensions
     {
         var eventPersistenceData = eventSerializer.GetPersistenceData(@event, eventNameOverride, additionalMetadata);
 
-        return new NewStreamMessage(eventPersistenceData.EventId,
+        return new NewStreamMessage(
+            eventPersistenceData.EventId,
             eventPersistenceData.EventName,
             eventPersistenceData.EventData,
             eventPersistenceData.EventMetadata);

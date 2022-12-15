@@ -6,7 +6,6 @@ using DomainBlocks.Core.Builders;
 using DomainBlocks.EventStore.Testing;
 using DomainBlocks.Persistence;
 using DomainBlocks.Persistence.EventStore;
-using DomainBlocks.Projections;
 using DomainBlocks.Projections.EventStore;
 using DomainBlocks.Serialization.Json;
 using EventStore.Client;
@@ -20,12 +19,13 @@ using UserCredentials = DomainBlocks.Common.UserCredentials;
 
 namespace Shopping.Infrastructure.Tests;
 
+// TODO (DS): These tests are pretty much broken. We need to give EventStore support some TLC.
+// To be addressed in a future PR.
 [TestFixture]
 public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
 {
     [Test]
     [Ignore("Need to figure out a better end to end test")]
-    // TODO (DS): These tests are pretty much broken. We need to give EventStore support some TLC.
     public async Task ReadModelIsBuilt()
     {
         var loggerFactory = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Debug).AddConsole());
@@ -41,23 +41,25 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
 
     private async Task SetUpReadModelProjections()
     {
-        var projectionRegistryBuilder = new ProjectionRegistryBuilder();
-        
         // TODO (DS): We need some projections here!
 
-        var registry = projectionRegistryBuilder.Build();
+        //var projectionRegistryBuilder = new ProjectionRegistryBuilder();
+
+        //var registry = projectionRegistryBuilder.Build();
 
         var readModelEventPublisher = new EventStoreEventPublisher(EventStoreClient);
 
-        var readModelDispatcher = new ProjectionDispatcher(
-            readModelEventPublisher,
-            registry.EventProjectionMap,
-            registry.ProjectionContextMap,
-            new EventRecordJsonDeserializer(),
-            registry.EventNameMap,
-            EventDispatcherConfiguration.ReadModelDefaults);
+        // var readModelDispatcher = new ProjectionDispatcher(
+        //     readModelEventPublisher,
+        //     registry.EventProjectionMap,
+        //     registry.ProjectionContextMap,
+        //     new EventRecordJsonDeserializer(),
+        //     registry.EventNameMap,
+        //     EventDispatcherConfiguration.ReadModelDefaults);
+        //
+        // await readModelDispatcher.StartAsync();
 
-        await readModelDispatcher.StartAsync();
+        await Task.CompletedTask;
     }
 
     private async Task SetUpProcessManagerProjections()
@@ -71,10 +73,10 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
 
         await PersistentSubscriptionsClient.CreateAsync(stream, groupName, settings, credentials.ToEsUserCredentials());
 
-        var processProjectionRegistryBuilder = new ProjectionRegistryBuilder();
+        //var processProjectionRegistryBuilder = new ProjectionRegistryBuilder();
 
-        ShoppingCartProcess.Register(processProjectionRegistryBuilder);
-        var processRegistry = processProjectionRegistryBuilder.Build();
+        //ShoppingCartProcess.Register(processProjectionRegistryBuilder);
+        //var processRegistry = processProjectionRegistryBuilder.Build();
 
         var persistentSubscriptionDescriptor =
             new EventStorePersistentConnectionDescriptor(stream, groupName, 10, credentials);
@@ -82,12 +84,12 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
         var processEventPublisher =
             new AcknowledgingEventStoreEventPublisher(PersistentSubscriptionsClient, persistentSubscriptionDescriptor);
 
-        var processDispatcher = new ProjectionDispatcher(processEventPublisher,
-            processRegistry.EventProjectionMap,
-            processRegistry.ProjectionContextMap,
-            new EventRecordJsonDeserializer(),
-            processRegistry.EventNameMap,
-            EventDispatcherConfiguration.ReadModelDefaults);
+        // var processDispatcher = new ProjectionDispatcher(processEventPublisher,
+        //     processRegistry.EventProjectionMap,
+        //     processRegistry.ProjectionContextMap,
+        //     new EventRecordJsonDeserializer(),
+        //     processRegistry.EventNameMap,
+        //     EventDispatcherConfiguration.ReadModelDefaults);
     }
 
     private async Task WriteEventsToStream()
@@ -135,10 +137,10 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
     }
 }
 
-public static class ShoppingCartProcess
-{
-    public static void Register(ProjectionRegistryBuilder builder)
-    {
-        builder.Event<ItemRemovedFromShoppingCart>();
-    }
-}
+// public static class ShoppingCartProcess
+// {
+//     public static void Register(ProjectionRegistryBuilder builder)
+//     {
+//         builder.Event<ItemRemovedFromShoppingCart>();
+//     }
+// }

@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using DomainBlocks.Common;
 using EventStore.Client;
 using Microsoft.Extensions.Logging;
+using EventRecord = EventStore.Client.EventRecord;
 
 namespace DomainBlocks.Projections.EventStore;
 
@@ -27,6 +28,7 @@ public class AcknowledgingEventStoreEventPublisher : IEventPublisher<EventRecord
 
     public async Task StartAsync(
         Func<EventNotification<EventRecord>, CancellationToken, Task> onEvent,
+        IStreamPosition position = null,
         CancellationToken cancellationToken = default)
     {
         _onEvent = onEvent ?? throw new ArgumentNullException(nameof(onEvent));
