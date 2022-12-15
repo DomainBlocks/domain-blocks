@@ -4,6 +4,7 @@ using DomainBlocks.Persistence.SqlStreamStore;
 using DomainBlocks.Projections;
 using DomainBlocks.Projections.DependencyInjection;
 using DomainBlocks.Projections.SqlStreamStore;
+using DomainBlocks.SqlStreamStore;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 using Shopping.Domain.Aggregates;

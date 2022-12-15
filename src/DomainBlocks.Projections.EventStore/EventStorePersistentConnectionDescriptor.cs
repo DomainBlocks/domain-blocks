@@ -5,10 +5,11 @@ namespace DomainBlocks.Projections.EventStore;
 
 public class EventStorePersistentConnectionDescriptor
 {
-    public EventStorePersistentConnectionDescriptor(string stream,
+    public EventStorePersistentConnectionDescriptor(
+        string stream,
         string groupName,
         int bufferSize,
-        Common.UserCredentials userCredentials,
+        Core.UserCredentials userCredentials,
         TimeSpan? subscriptionStopTimeout = null,
         EventStorePersistentConnectionRetrySettings retrySettings = null)
     {

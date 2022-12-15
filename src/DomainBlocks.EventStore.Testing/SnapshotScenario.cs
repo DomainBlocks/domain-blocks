@@ -2,16 +2,17 @@
 using System.Linq;
 using System.Threading.Tasks;
 using DomainBlocks.Core.Builders;
+using DomainBlocks.Core.Serialization;
+using DomainBlocks.Core.Serialization.EventStore;
 using DomainBlocks.Persistence;
 using DomainBlocks.Persistence.EventStore;
-using DomainBlocks.Serialization.Json;
 
 namespace DomainBlocks.EventStore.Testing;
 
 public class SnapshotScenario
 {
     private EventStoreIntegrationTest _test;
-    private AggregateRepository<ReadOnlyMemory<byte>> _aggregateRepository;
+    private AggregateRepository _aggregateRepository;
     private LoadedAggregate<TestAggregateState> _loadedAggregate;
     private readonly Guid _id;
     private long _aggregateVersion = StreamVersion.NewStream;
@@ -84,14 +85,14 @@ public class SnapshotScenario
     {
         var modelBuilder = new ModelBuilder();
         TestAggregateFunctions.BuildModel(modelBuilder, _id);
-
         var model = modelBuilder.Build();
 
-        var serializer = new JsonBytesEventSerializer(model.EventNameMap);
+        var serializer = new JsonBytesEventDataSerializer();
+        var adapter = new EventStoreEventAdapter(serializer);
+        var eventConverter = EventConverter.Create(model.EventNameMap, adapter);
+        var snapshotRepository = new EventStoreSnapshotRepository(_test.EventStoreClient, eventConverter);
+        var eventsRepository = new EventStoreEventsRepository(_test.EventStoreClient, eventConverter);
 
-        var snapshotRepository = new EventStoreSnapshotRepository(_test.EventStoreClient, serializer);
-        var eventsRepository = new EventStoreEventsRepository(_test.EventStoreClient, serializer);
-
-        _aggregateRepository = AggregateRepository.Create(eventsRepository, snapshotRepository, model);
+        _aggregateRepository = new AggregateRepository(eventsRepository, snapshotRepository, model);
     }
 }

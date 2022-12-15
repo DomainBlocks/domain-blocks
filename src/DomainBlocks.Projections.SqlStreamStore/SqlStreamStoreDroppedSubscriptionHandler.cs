@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Threading.Tasks;
-using DomainBlocks.Common;
+using DomainBlocks.Core;
 using Microsoft.Extensions.Logging;
 using SqlStreamStore.Subscriptions;
 

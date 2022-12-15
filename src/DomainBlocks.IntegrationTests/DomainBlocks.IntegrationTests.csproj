@@ -14,7 +14,6 @@
 
     <ItemGroup>
       <ProjectReference Include="..\DomainBlocks.Persistence.SqlStreamStore\DomainBlocks.Persistence.SqlStreamStore.csproj" />
-      <ProjectReference Include="..\DomainBlocks.Persistence\DomainBlocks.Persistence.csproj" />
       <ProjectReference Include="..\DomainBlocks.Projections.SqlStreamStore\DomainBlocks.Projections.SqlStreamStore.csproj" />
       <ProjectReference Include="..\Examples\Shopping.Domain\Shopping.Domain.csproj" />
     </ItemGroup>

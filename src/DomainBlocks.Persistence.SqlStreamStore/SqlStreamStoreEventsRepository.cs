@@ -4,28 +4,30 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
-using DomainBlocks.Common;
-using DomainBlocks.Serialization;
+using DomainBlocks.Core;
+using DomainBlocks.Core.Serialization;
 using Microsoft.Extensions.Logging;
 using SqlStreamStore;
 using SqlStreamStore.Streams;
 
 namespace DomainBlocks.Persistence.SqlStreamStore;
 
-public class SqlStreamStoreEventsRepository : IEventsRepository<string>
+public class SqlStreamStoreEventsRepository : IEventsRepository
 {
     private static readonly ILogger<SqlStreamStoreEventsRepository> Log =
         Logger.CreateFor<SqlStreamStoreEventsRepository>();
 
     private readonly IStreamStore _streamStore;
-    private readonly IEventSerializer<string> _serializer;
+    private readonly IEventConverter<StreamMessage, NewStreamMessage> _eventConverter;
     private readonly int _readPageSize;
 
     public SqlStreamStoreEventsRepository(
-        IStreamStore streamStore, IEventSerializer<string> serializer, int readPageSize = 600)
+        IStreamStore streamStore,
+        IEventConverter<StreamMessage, NewStreamMessage> eventConverter,
+        int readPageSize = 600)
     {
         _streamStore = streamStore ?? throw new ArgumentNullException(nameof(streamStore));
-        _serializer = serializer;
+        _eventConverter = eventConverter;
         _readPageSize = readPageSize;
     }
 
@@ -43,7 +45,7 @@ public class SqlStreamStoreEventsRepository : IEventsRepository<string>
         NewStreamMessage[] messages;
         try
         {
-            messages = events.Select(e => _serializer.ToNewStreamMessage(e)).ToArray();
+            messages = events.Select(e => _eventConverter.SerializeToWriteEvent(e)).ToArray();
         }
         catch (Exception ex)
         {
@@ -61,16 +63,25 @@ public class SqlStreamStoreEventsRepository : IEventsRepository<string>
         var writeId = messages[0].MessageId;
 
         Log.LogDebug(
-            "Appending {EventCount} events to stream {StreamName}. Expected stream version {StreamVersion}. Write ID {WriteId}",
-            messages.Length, streamName, expectedVersion, writeId);
+            "Appending {EventCount} events to stream {StreamName}. Expected stream version {StreamVersion}. " +
+            "Write ID {WriteId}",
+            messages.Length,
+            streamName,
+            expectedVersion,
+            writeId);
 
         if (Log.IsEnabled(LogLevel.Trace))
         {
             foreach (var eventData in messages)
             {
-                Log.LogTrace("Event to append {EventId}. EventType {EventType}. WriteId {WriteId}. " +
-                             "EventJsonString {EventJsonString}. MetadataJsonString {MetadataJsonString}",
-                    eventData.MessageId, eventData.Type, writeId, eventData.JsonData, eventData.JsonMetadata);
+                Log.LogTrace(
+                    "Event to append {EventId}. EventType {EventType}. WriteId {WriteId}. " +
+                    "EventJsonString {EventJsonString}. MetadataJsonString {MetadataJsonString}",
+                    eventData.MessageId,
+                    eventData.Type,
+                    writeId,
+                    eventData.JsonData,
+                    eventData.JsonMetadata);
             }
         }
 
@@ -93,7 +104,6 @@ public class SqlStreamStoreEventsRepository : IEventsRepository<string>
     public async IAsyncEnumerable<object> LoadEventsAsync(
         string streamName,
         long startPosition = 0,
-        Action<IEventPersistenceData<string>> onEventError = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         if (streamName == null) throw new ArgumentNullException(nameof(streamName));
@@ -119,22 +129,11 @@ public class SqlStreamStoreEventsRepository : IEventsRepository<string>
 
                 try
                 {
-                    var jsonData = await message.GetJsonData(cancellationToken);
-                    deserializedEvent = _serializer.DeserializeEvent(jsonData, message.Type);
+                    deserializedEvent = await _eventConverter.DeserializeEvent(message, cancellationToken: cancellationToken);
                 }
                 catch (EventDeserializeException ex)
                 {
-                    if (onEventError == null)
-                    {
-                        Log.LogWarning(ex, "Error deserializing event and no error handler set up." +
-                                           " This may cause data inconsistencies");
-                    }
-                    else
-                    {
-                        onEventError(await SqlStreamStoreEventPersistenceData.FromStreamMessage(message));
-                        Log.LogInformation(ex, "Error deserializing event. Calling onEventError handler");
-                    }
-
+                    Log.LogWarning(ex, "Error deserializing event. This may cause data inconsistencies");
                     continue;
                 }
                 catch (Exception ex)
@@ -168,8 +167,9 @@ public class SqlStreamStoreEventsRepository : IEventsRepository<string>
     {
         if (expectedStreamVersion > int.MaxValue)
         {
-            throw new ArgumentException($"SqlStreamStore uses a 32-bit integer for {nameof(expectedStreamVersion)}. " +
-                                        $"Your value of {expectedStreamVersion} is too large");
+            throw new ArgumentException(
+                $"SqlStreamStore uses a 32-bit integer for {nameof(expectedStreamVersion)}. " +
+                $"Your value of {expectedStreamVersion} is too large");
         }
 
         return expectedStreamVersion switch

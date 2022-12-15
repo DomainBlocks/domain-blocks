@@ -1,5 +1,6 @@
 ﻿using DomainBlocks.Persistence.DependencyInjection;
 using DomainBlocks.Persistence.SqlStreamStore;
+using DomainBlocks.SqlStreamStore;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -27,14 +28,12 @@ public class Startup
         services.AddGrpc();
         services.AddMediatR(typeof(Startup));
 
+        var connectionString = _configuration.GetValue<string>("SqlStreamStore:ConnectionString");
+        var settings = new PostgresStreamStoreSettings(connectionString);
+
         services.AddAggregateRepository((options, model) =>
         {
-            options.UseSqlStreamStore(o =>
-            {
-                var connectionString = _configuration.GetValue<string>("SqlStreamStore:ConnectionString");
-                var settings = new PostgresStreamStoreSettings(connectionString);
-                o.UsePostgresStreamStore(settings);
-            });
+            options.UseSqlStreamStore(o => o.UsePostgresStreamStore(settings));
 
             model.ImmutableAggregate<ShoppingCartState, IDomainEvent>(aggregate =>
             {
@@ -43,6 +42,8 @@ public class Startup
                 aggregate.UseEventTypesFrom(typeof(IDomainEvent).Assembly);
             });
         });
+
+        new PostgresStreamStore(settings).CreateSchemaIfNotExists().Wait();
     }
 
     // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

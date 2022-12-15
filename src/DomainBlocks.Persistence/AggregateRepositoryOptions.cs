@@ -6,7 +6,7 @@ namespace DomainBlocks.Persistence;
 public class AggregateRepositoryOptions
 {
     private Func<Model, IAggregateRepository> _aggregateRepositoryFactory;
-    private Func<IEventNameMap, ISnapshotRepository> _snapshotRepositoryFactory;
+    private Func<Model, ISnapshotRepository> _snapshotRepositoryFactory;
 
     public AggregateRepositoryOptions()
     {
@@ -25,7 +25,7 @@ public class AggregateRepositoryOptions
         return new AggregateRepositoryOptions(this) { _aggregateRepositoryFactory = factory };
     }
 
-    public AggregateRepositoryOptions WithSnapshotRepositoryFactory(Func<IEventNameMap, ISnapshotRepository> factory)
+    public AggregateRepositoryOptions WithSnapshotRepositoryFactory(Func<Model, ISnapshotRepository> factory)
     {
         if (factory == null) throw new ArgumentNullException(nameof(factory));
 
@@ -44,13 +44,13 @@ public class AggregateRepositoryOptions
         return _aggregateRepositoryFactory(model);
     }
 
-    public ISnapshotRepository CreateSnapshotRepository(IEventNameMap eventNameMap)
+    public ISnapshotRepository CreateSnapshotRepository(Model model)
     {
         if (_snapshotRepositoryFactory == null)
         {
             throw new InvalidOperationException("Cannot create snapshot repository as no factory has been specified.");
         }
 
-        return _snapshotRepositoryFactory(eventNameMap);
+        return _snapshotRepositoryFactory(model);
     }
 }

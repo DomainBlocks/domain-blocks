@@ -1,5 +1,8 @@
 using System;
+using DomainBlocks.Core.Serialization.SqlStreamStore;
+using DomainBlocks.SqlStreamStore;
 using DomainBlocks.Projections.Builders;
+using SqlStreamStore.Streams;
 
 namespace DomainBlocks.Projections.SqlStreamStore;
 
@@ -15,15 +18,16 @@ public static class EventSubscriptionOptionsBuilderExtensions
         ((IEventCatchUpSubscriptionOptionsBuilderInfrastructure)optionsBuilder)
             .WithEventDispatcherFactory(registry =>
             {
-                var streamStore = sqlStreamStoreOptions.StreamStoreFactory();
+                var streamStore = sqlStreamStoreOptions.GetOrCreateStreamStore();
                 var eventPublisher = new SqlStreamStoreEventPublisher(streamStore);
-                var eventDeserializer = sqlStreamStoreOptions.EventDeserializerFactory();
+                var eventSerializer = sqlStreamStoreOptions.GetEventDataSerializer();
+                var eventConverter = new SqlStreamStoreEventAdapter(eventSerializer);
 
-                var eventDispatcher = new EventDispatcher<StreamMessageWrapper, object>(
+                var eventDispatcher = new EventDispatcher<StreamMessage>(
                     eventPublisher,
                     registry.EventProjectionMap,
                     registry.ProjectionContextMap,
-                    eventDeserializer,
+                    eventConverter,
                     registry.EventNameMap,
                     EventDispatcherConfiguration.ReadModelDefaults);
 

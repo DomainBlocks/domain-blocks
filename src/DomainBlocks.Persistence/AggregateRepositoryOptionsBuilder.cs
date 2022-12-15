@@ -14,7 +14,7 @@ public class AggregateRepositoryOptionsBuilder : IAggregateRepositoryOptionsBuil
     }
 
     void IAggregateRepositoryOptionsBuilderInfrastructure.WithSnapshotRepositoryFactory(
-        Func<IEventNameMap, ISnapshotRepository> factory)
+        Func<Model, ISnapshotRepository> factory)
     {
         Options = Options.WithSnapshotRepositoryFactory(factory);
     }

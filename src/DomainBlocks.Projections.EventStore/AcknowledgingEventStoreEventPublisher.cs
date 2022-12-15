@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
-using DomainBlocks.Common;
+using DomainBlocks.Core;
 using EventStore.Client;
 using Microsoft.Extensions.Logging;
 using EventRecord = EventStore.Client.EventRecord;

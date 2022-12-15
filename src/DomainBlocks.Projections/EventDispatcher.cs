@@ -4,36 +4,36 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using DomainBlocks.Common;
-using DomainBlocks.Serialization;
+using DomainBlocks.Core;
+using DomainBlocks.Core.Metadata;
+using DomainBlocks.Core.Serialization;
 using Microsoft.Extensions.Logging;
 
 namespace DomainBlocks.Projections;
 
-public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
+public sealed class EventDispatcher<TReadEvent> : IEventDispatcher
 {
-    private static readonly ILogger<EventDispatcher<TRawData, TEventBase>> Log =
-        Logger.CreateFor<EventDispatcher<TRawData, TEventBase>>();
+    private static readonly ILogger<EventDispatcher<TReadEvent>> Log = Logger.CreateFor<EventDispatcher<TReadEvent>>();
 
-    private readonly IEventPublisher<TRawData> _publisher;
+    private readonly IEventPublisher<TReadEvent> _publisher;
     private readonly EventProjectionMap _projectionMap;
     private readonly ProjectionContextMap _projectionContextMap;
-    private readonly EventDispatcherConfiguration _configuration;
-    private readonly IEventDeserializer<TRawData> _deserializer;
+    private readonly IReadEventAdapter<TReadEvent> _eventAdapter;
     private readonly IProjectionEventNameMap _projectionEventNameMap;
+    private readonly EventDispatcherConfiguration _configuration;
 
     public EventDispatcher(
-        IEventPublisher<TRawData> publisher,
+        IEventPublisher<TReadEvent> publisher,
         EventProjectionMap projectionMap,
         ProjectionContextMap projectionContextMap,
-        IEventDeserializer<TRawData> deserializer,
+        IReadEventAdapter<TReadEvent> eventAdapter,
         IProjectionEventNameMap projectionEventNameMap,
         EventDispatcherConfiguration configuration)
     {
         _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
         _projectionMap = projectionMap ?? throw new ArgumentNullException(nameof(projectionMap));
         _projectionContextMap = projectionContextMap ?? throw new ArgumentNullException(nameof(projectionContextMap));
-        _deserializer = deserializer ?? throw new ArgumentNullException(nameof(deserializer));
+        _eventAdapter = eventAdapter ?? throw new ArgumentNullException(nameof(eventAdapter));
         _projectionEventNameMap =
             projectionEventNameMap ?? throw new ArgumentNullException(nameof(projectionEventNameMap));
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
@@ -44,7 +44,7 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
         Log.LogDebug("Starting EventStream");
         await ForAllContexts((c, ct) => c.OnInitializing(ct), cancellationToken).ConfigureAwait(false);
         Log.LogDebug("Context OnInitializing hooks called");
-        
+
         // TODO (DS): Hack for now to get the position from the first projection. We'll need to get all positions here,
         // and subscribe from the lowest. To be fixed in a future PR.
         var position = await _projectionContextMap.GetAllContexts().First().OnSubscribing(cancellationToken);
@@ -65,7 +65,7 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
     }
 
     private async Task HandleEventNotificationAsync(
-        EventNotification<TRawData> notification,
+        EventNotification<TReadEvent> notification,
         CancellationToken cancellationToken = default)
     {
         switch (notification.NotificationKind)
@@ -95,7 +95,7 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
     }
 
     private async Task HandleEventAsync(
-        TRawData eventData,
+        TReadEvent readEvent,
         string eventType,
         Guid eventId,
         IStreamPosition position,
@@ -105,11 +105,12 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
 
         foreach (var type in _projectionEventNameMap.GetClrTypesForEventName(eventType))
         {
-            TEventBase @event;
+            object @event;
             EventMetadata metadata;
             try
             {
-                (@event, metadata) = _deserializer.DeserializeEventAndMetadata<TEventBase>(eventData, eventType, type);
+                @event = await _eventAdapter.DeserializeEvent(readEvent, type, cancellationToken);
+                metadata = EventMetadata.FromKeyValuePairs(_eventAdapter.DeserializeMetadata(readEvent));
             }
             catch (Exception e)
             {
@@ -124,7 +125,7 @@ public sealed class EventDispatcher<TRawData, TEventBase> : IEventDispatcher
     }
 
     private async Task DispatchEventToProjections(
-        TEventBase @event,
+        object @event,
         EventMetadata metadata,
         Guid eventId,
         IStreamPosition position,

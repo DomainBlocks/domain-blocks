@@ -2,8 +2,8 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using DomainBlocks.Common;
-using DomainBlocks.Serialization;
+using DomainBlocks.Core;
+using DomainBlocks.Core.Serialization;
 using Microsoft.Extensions.Logging;
 using SqlStreamStore;
 using SqlStreamStore.Streams;
@@ -19,12 +19,14 @@ public class SqlStreamStoreSnapshotRepository : ISnapshotRepository
         Logger.CreateFor<SqlStreamStoreSnapshotRepository>();
 
     private readonly IStreamStore _streamStore;
-    private readonly IEventSerializer<string> _serializer;
+    private readonly IEventConverter<StreamMessage, NewStreamMessage> _eventAdapter;
 
-    public SqlStreamStoreSnapshotRepository(IStreamStore streamStore, IEventSerializer<string> serializer)
+    public SqlStreamStoreSnapshotRepository(
+        IStreamStore streamStore,
+        IEventConverter<StreamMessage, NewStreamMessage> eventAdapter)
     {
         _streamStore = streamStore;
-        _serializer = serializer;
+        _eventAdapter = eventAdapter;
     }
 
     public async Task SaveSnapshotAsync<TState>(
@@ -38,15 +40,15 @@ public class SqlStreamStoreSnapshotRepository : ISnapshotRepository
 
         try
         {
-            var snapshotData = new[]
+            var messages = new[]
             {
-                _serializer.ToNewStreamMessage(
+                _eventAdapter.SerializeToWriteEvent(
                     snapshotState,
                     SnapshotEventName,
                     KeyValuePair.Create(SnapshotVersionMetadataKey, snapshotVersion.ToString()))
             };
 
-            await _streamStore.AppendToStream(snapshotKey, ExpectedVersion.Any, snapshotData, cancellationToken);
+            await _streamStore.AppendToStream(snapshotKey, ExpectedVersion.Any, messages, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -85,21 +87,19 @@ public class SqlStreamStoreSnapshotRepository : ISnapshotRepository
 
             var snapshotMessage = messages[0];
 
-            var snapshotState = (TState)_serializer.DeserializeEvent(
-                await snapshotMessage.GetJsonData(cancellationToken),
-                snapshotMessage.Type,
-                typeof(TState));
+            var snapshotState =
+                (TState)await _eventAdapter.DeserializeEvent(snapshotMessage, typeof(TState), cancellationToken);
 
-            var snapshotVersion = long.Parse(
-                _serializer.DeserializeMetadata(snapshotMessage.JsonMetadata)[SnapshotVersionMetadataKey]);
+            var metadata = _eventAdapter.DeserializeMetadata(snapshotMessage);
+            var snapshotVersion = long.Parse(metadata[SnapshotVersionMetadataKey]);
+
             return (true, new Snapshot<TState>(snapshotState, snapshotVersion));
         }
         catch (Exception ex)
         {
             Log.LogError(
                 ex,
-                "Error when attempting to load snapshot. Stream Name: {StreamName}. " +
-                "Snapshot Type {SnapshotType}",
+                "Error when attempting to load snapshot. Stream Name: {StreamName}. Snapshot Type {SnapshotType}",
                 snapshotKey,
                 typeof(TState).FullName);
 

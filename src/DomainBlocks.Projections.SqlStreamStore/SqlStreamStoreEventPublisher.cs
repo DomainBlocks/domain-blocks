@@ -7,11 +7,11 @@ using SqlStreamStore.Subscriptions;
 
 namespace DomainBlocks.Projections.SqlStreamStore;
 
-public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper>, IDisposable
+public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessage>, IDisposable
 {
     private const int DefaultPageSize = 600;
     private readonly IStreamStore _streamStore;
-    private Func<EventNotification<StreamMessageWrapper>, CancellationToken, Task> _onEvent;
+    private Func<EventNotification<StreamMessage>, CancellationToken, Task> _onEvent;
     private IAllStreamSubscription _subscription;
     private readonly SqlStreamStoreDroppedSubscriptionHandler _subscriptionDroppedHandler;
     private long? _lastProcessedPosition;
@@ -23,7 +23,7 @@ public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper
     }
 
     public async Task StartAsync(
-        Func<EventNotification<StreamMessageWrapper>, CancellationToken, Task> onEvent,
+        Func<EventNotification<StreamMessage>, CancellationToken, Task> onEvent,
         IStreamPosition position = null,
         CancellationToken cancellationToken = default)
     {
@@ -48,7 +48,7 @@ public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper
     private async Task SubscribeToStore(long? subscribePosition, CancellationToken cancellationToken = default)
     {
         // Initially signal that we're catching up.
-        await _onEvent(EventNotification.CatchingUp<StreamMessageWrapper>(), cancellationToken);
+        await _onEvent(EventNotification.CatchingUp<StreamMessage>(), cancellationToken);
 
         // SQLStreamStore invokes the HasCaughtUp delegate multiple times with the same hasCaughtUp value. We keep the
         // last value here in order to deduplicate the CatchingUp and CaughtUp signals.
@@ -69,12 +69,12 @@ public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper
                     // ensure no other event processing is done until our caught up notification is published - so wait
                     // on the task
                     var position = AllStreamPosition.From(_lastProcessedPosition);
-                    var notification = EventNotification.CaughtUp<StreamMessageWrapper>(position);
+                    var notification = EventNotification.CaughtUp<StreamMessage>(position);
                     _onEvent(notification, cancellationToken).Wait(cancellationToken);
                 }
                 else
                 {
-                    var notification = EventNotification.CatchingUp<StreamMessageWrapper>();
+                    var notification = EventNotification.CatchingUp<StreamMessage>();
                     _onEvent(notification, cancellationToken).Wait(cancellationToken);
                 }
             });
@@ -101,10 +101,8 @@ public class SqlStreamStoreEventPublisher : IEventPublisher<StreamMessageWrapper
 
     private async Task SendEventNotification(StreamMessage message, CancellationToken cancellationToken = default)
     {
-        var jsonData = await message.GetJsonData(cancellationToken).ConfigureAwait(false);
-        var wrapper = new StreamMessageWrapper(message, jsonData);
         var position = AllStreamPosition.From(message.Position);
-        var notification = EventNotification.FromEvent(wrapper, wrapper.Type, wrapper.MessageId, position);
+        var notification = EventNotification.FromEvent(message, message.Type, message.MessageId, position);
 
         await _onEvent(notification, cancellationToken).ConfigureAwait(false);
 

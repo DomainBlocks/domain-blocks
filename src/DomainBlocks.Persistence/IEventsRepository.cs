@@ -1,12 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using DomainBlocks.Serialization;
 
 namespace DomainBlocks.Persistence;
 
-public interface IEventsRepository<out TRawData>
+public interface IEventsRepository
 {
     Task<long> SaveEventsAsync(
         string streamName,
@@ -17,6 +15,5 @@ public interface IEventsRepository<out TRawData>
     IAsyncEnumerable<object> LoadEventsAsync(
         string streamName,
         long startPosition = 0,
-        Action<IEventPersistenceData<TRawData>> onEventError = null,
         CancellationToken cancellationToken = default);
 }

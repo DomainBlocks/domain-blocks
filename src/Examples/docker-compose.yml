@@ -44,7 +44,7 @@ services:
       - "5000:80"
       - "5001:443"
     depends_on:
-      - shopping.eventstore
+      - database
     networks:
       - shopping-example
 
@@ -58,7 +58,7 @@ services:
       - "5010:80"
       - "5011:443"
     depends_on:
-      - shopping.eventstore
+      - database
     networks:
       - shopping-example
 

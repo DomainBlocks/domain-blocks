@@ -3,7 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using DomainBlocks.Core;
-using DomainBlocks.Serialization.Json;
+using DomainBlocks.Core.Serialization;
+using DomainBlocks.Core.Serialization.SqlStreamStore;
 using NUnit.Framework;
 using SqlStreamStore;
 
@@ -18,10 +19,12 @@ public class SqlStreamStoreEventsRepositoryTests
         using var streamStore = new InMemoryStreamStore();
         var eventNameMap = new EventNameMap();
         eventNameMap.Add(nameof(EventSaved), typeof(EventSaved));
-        var eventSerializer = new JsonStringEventSerializer(eventNameMap);
+        var serializer = new JsonStringEventDataSerializer();
+        var eventAdapter = new SqlStreamStoreEventAdapter(serializer);
+        var eventConverter = EventConverter.Create(eventNameMap, eventAdapter);
 
         const int readPageSize = 2;
-        var eventsRepository = new SqlStreamStoreEventsRepository(streamStore, eventSerializer, readPageSize);
+        var eventsRepository = new SqlStreamStoreEventsRepository(streamStore, eventConverter, readPageSize);
 
         var events = Enumerable
             .Range(0, 10)

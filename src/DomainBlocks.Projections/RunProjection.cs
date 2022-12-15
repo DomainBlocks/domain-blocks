@@ -1,6 +1,6 @@
 ﻿using System.Threading;
 using System.Threading.Tasks;
-using DomainBlocks.Serialization;
+using DomainBlocks.Core.Metadata;
 
 namespace DomainBlocks.Projections;
 
