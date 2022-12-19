@@ -131,11 +131,6 @@ public class SqlStreamStoreEventsRepository : IEventsRepository
                 {
                     deserializedEvent = await _eventConverter.DeserializeEvent(message, cancellationToken: cancellationToken);
                 }
-                catch (EventDeserializeException ex)
-                {
-                    Log.LogWarning(ex, "Error deserializing event. This may cause data inconsistencies");
-                    continue;
-                }
                 catch (Exception ex)
                 {
                     Log.LogError(ex, "Unable to load events from {StreamName}", streamName);

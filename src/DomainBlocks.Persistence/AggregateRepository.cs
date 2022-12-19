@@ -70,9 +70,7 @@ public sealed class AggregateRepository : IAggregateRepository
                                                 "was supplied onto which to append events");
         }
 
-        var events =
-            _eventsRepository.LoadEventsAsync(streamName, loadStartPosition, cancellationToken: cancellationToken);
-
+        var events = _eventsRepository.LoadEventsAsync(streamName, loadStartPosition, cancellationToken);
         var state = stateToAppendEventsTo;
         var eventCount = 0;
 
