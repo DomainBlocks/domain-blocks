@@ -1,28 +1,18 @@
 ﻿using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using DomainBlocks.Core;
 
 namespace DomainBlocks.Persistence;
 
-public static class AggregateRepository
+public sealed class AggregateRepository : IAggregateRepository
 {
-    public static AggregateRepository<TRawData> Create<TRawData>(
-        IEventsRepository<TRawData> eventsRepository, ISnapshotRepository snapshotRepository, Model model)
-    {
-        return new AggregateRepository<TRawData>(eventsRepository, snapshotRepository, model);
-    }
-}
-
-public sealed class AggregateRepository<TRawData> : IAggregateRepository
-{
-    private readonly IEventsRepository<TRawData> _eventsRepository;
+    private readonly IEventsRepository _eventsRepository;
     private readonly ISnapshotRepository _snapshotRepository;
     private readonly Model _model;
 
     public AggregateRepository(
-        IEventsRepository<TRawData> eventsRepository, ISnapshotRepository snapshotRepository, Model model)
+        IEventsRepository eventsRepository, ISnapshotRepository snapshotRepository, Model model)
     {
         _eventsRepository = eventsRepository ?? throw new ArgumentNullException(nameof(eventsRepository));
         _snapshotRepository = snapshotRepository ?? throw new ArgumentNullException(nameof(snapshotRepository));
@@ -31,7 +21,7 @@ public sealed class AggregateRepository<TRawData> : IAggregateRepository
 
     public async Task<LoadedAggregate<TAggregateState>> LoadAsync<TAggregateState>(
         string id,
-        AggregateLoadStrategy loadStrategy = AggregateLoadStrategy.PreferSnapshot, 
+        AggregateLoadStrategy loadStrategy = AggregateLoadStrategy.PreferSnapshot,
         CancellationToken cancellationToken = default)
     {
         if (id == null) throw new ArgumentNullException(nameof(id));
@@ -80,25 +70,19 @@ public sealed class AggregateRepository<TRawData> : IAggregateRepository
                                                 "was supplied onto which to append events");
         }
 
-        var events = 
-            _eventsRepository.LoadEventsAsync(streamName, loadStartPosition, cancellationToken: cancellationToken);
+        var events = _eventsRepository.LoadEventsAsync(streamName, loadStartPosition, cancellationToken);
+        var state = stateToAppendEventsTo;
+        var eventCount = 0;
 
-        var result = await events.AggregateAsync(
-            new
-            {
-                State = stateToAppendEventsTo,
-                EventCount = 0
-            },
-            (acc, next) => new
-            {
-                State = aggregateOptions.ApplyEvent(acc.State, next),
-                EventCount = acc.EventCount + 1
-            }, 
-            cancellationToken);
+        await foreach (var @event in events.WithCancellation(cancellationToken))
+        {
+            state = aggregateOptions.ApplyEvent(state, @event);
+            eventCount++;
+        }
 
-        var newVersion = loadStartPosition + result.EventCount - 1;
+        var newVersion = loadStartPosition + eventCount - 1;
 
-        return LoadedAggregate.Create(result.State, aggregateOptions, id, newVersion, snapshotVersion, result.EventCount);
+        return LoadedAggregate.Create(state, aggregateOptions, id, newVersion, snapshotVersion, eventCount);
     }
 
     public async Task<long> SaveAsync<TAggregateState>(
@@ -116,10 +100,10 @@ public sealed class AggregateRepository<TRawData> : IAggregateRepository
         snapshotPredicate ??= _ => false;
         var aggregateType = _model.GetAggregateOptions<TAggregateState>();
         var streamName = aggregateType.MakeStreamKey(loadedAggregate.Id);
-        
+
         var newVersion = await _eventsRepository.SaveEventsAsync(
             streamName, loadedAggregate.Version, loadedAggregate.EventsToPersist, cancellationToken);
-        
+
         loadedAggregate.HasBeenSaved = true;
 
         if (snapshotPredicate(loadedAggregate))

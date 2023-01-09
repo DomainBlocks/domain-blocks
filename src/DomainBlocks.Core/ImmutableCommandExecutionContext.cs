@@ -32,8 +32,7 @@ public sealed class ImmutableCommandExecutionContext<TAggregate, TEventBase> : I
             commandResultOptions.SelectEventsAndUpdateState(commandResult, ref _state, _aggregateOptions.ApplyEvent);
         _raisedEvents.AddRange(raisedEvents);
 
-        // If the command result is an event enumerable, return the materialized events to avoid multiple
-        // enumeration.
+        // If the command result is an event enumerable, return the materialized events to avoid multiple enumeration.
         return typeof(TCommandResult) == typeof(IEnumerable<TEventBase>)
             ? (TCommandResult)raisedEvents.Cast<TEventBase>()
             : commandResult;

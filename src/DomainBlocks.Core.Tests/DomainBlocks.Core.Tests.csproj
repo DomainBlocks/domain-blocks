@@ -13,6 +13,8 @@
 
     <ItemGroup>
       <ProjectReference Include="..\DomainBlocks.Core\DomainBlocks.Core.csproj" />
+      <ProjectReference Include="..\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj" />
+      <ProjectReference Include="..\DomainBlocks.Testing\DomainBlocks.Testing.csproj" />
     </ItemGroup>
 
 </Project>

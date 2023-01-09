@@ -2,10 +2,11 @@
 using System.Linq;
 using System.Threading.Tasks;
 using DomainBlocks.Core.Builders;
+using DomainBlocks.Core.Serialization;
+using DomainBlocks.Core.Serialization.EventStore;
 using DomainBlocks.EventStore.Testing;
 using DomainBlocks.Persistence;
 using DomainBlocks.Persistence.EventStore;
-using DomainBlocks.Serialization.Json;
 using NUnit.Framework;
 using Shopping.Domain.Aggregates;
 using Shopping.Domain.Commands;
@@ -30,11 +31,13 @@ public class ShoppingCartInfrastructureTests : EventStoreIntegrationTest
 
         var shoppingCartId = Guid.NewGuid(); // This could come from a sequence, or could be the customer's ID.
 
-        var serializer = new JsonBytesEventSerializer(model.EventNameMap);
-        var eventsRepository = new EventStoreEventsRepository(EventStoreClient, serializer);
-        var snapshotRepository = new EventStoreSnapshotRepository(EventStoreClient, serializer);
+        var serializer = new JsonBytesEventDataSerializer();
+        var eventAdapter = new EventStoreEventAdapter(serializer);
+        var eventConverter = EventConverter.Create(model.EventNameMap, eventAdapter);
+        var eventsRepository = new EventStoreEventsRepository(EventStoreClient, eventConverter);
+        var snapshotRepository = new EventStoreSnapshotRepository(EventStoreClient, eventConverter);
 
-        var aggregateRepository = AggregateRepository.Create(eventsRepository, snapshotRepository, model);
+        var aggregateRepository = new AggregateRepository(eventsRepository, snapshotRepository, model);
         var loadedAggregate = await aggregateRepository.LoadAsync<ShoppingCartState>(shoppingCartId.ToString());
 
         // Execute the first command.

@@ -1,6 +1,7 @@
 using DomainBlocks.Projections;
 using DomainBlocks.Projections.AspNetCore;
 using DomainBlocks.Projections.SqlStreamStore;
+using DomainBlocks.SqlStreamStore;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
@@ -14,7 +15,6 @@ using Shopping.ReadModel.Db;
 using Shopping.ReadModel.Db.Model;
 using SqlStreamStore;
 using SqlStreamStore.Logging;
-using SqlStreamStore.Logging.LogProviders;
 using LogLevel = Microsoft.Extensions.Logging.LogLevel;
 
 namespace Shopping.ReadModel;
@@ -24,7 +24,7 @@ public class Startup
     static Startup()
     {
         var loggerFactory = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Trace).AddConsole());
-        DomainBlocks.Common.Logger.SetLoggerFactory(loggerFactory);
+        DomainBlocks.Core.Logger.SetLoggerFactory(loggerFactory);
         LogProvider.SetCurrentLogProvider(new SqlStreamStoreLogProvider(loggerFactory));
     }
 
@@ -50,7 +50,7 @@ public class Startup
             {
                 var connectionString = Configuration.GetValue<string>("SqlStreamStore:ConnectionString");
                 var settings = new PostgresStreamStoreSettings(connectionString);
-                o.UsePostgres(settings);
+                o.UsePostgresStreamStore(settings);
             });
 
             model.Projection<ShoppingCartDbContext>(projection =>
@@ -132,41 +132,5 @@ public class Startup
         app.UseRouting();
         app.UseAuthorization();
         app.UseEndpoints(endpoints => { endpoints.MapControllers(); });
-    }
-
-    // TODO (DS): Move this somewhere common in a future PR.
-    private class SqlStreamStoreLogProvider : LogProviderBase
-    {
-        private readonly ILoggerFactory _loggerFactory;
-
-        public SqlStreamStoreLogProvider(ILoggerFactory loggerFactory)
-        {
-            _loggerFactory = loggerFactory;
-        }
-
-        public override Logger GetLogger(string name)
-        {
-            var logger = _loggerFactory.CreateLogger(name);
-
-            return (level, func, exception, parameters) =>
-            {
-                var message = func?.Invoke();
-
-                var logLevel = level switch
-                {
-                    SqlStreamStore.Logging.LogLevel.Trace => LogLevel.Trace,
-                    SqlStreamStore.Logging.LogLevel.Debug => LogLevel.Debug,
-                    SqlStreamStore.Logging.LogLevel.Info => LogLevel.Information,
-                    SqlStreamStore.Logging.LogLevel.Warn => LogLevel.Warning,
-                    SqlStreamStore.Logging.LogLevel.Error => LogLevel.Error,
-                    SqlStreamStore.Logging.LogLevel.Fatal => LogLevel.Critical,
-                    _ => LogLevel.Information
-                };
-
-                logger.Log(logLevel, exception, message, parameters);
-
-                return true;
-            };
-        }
     }
 }

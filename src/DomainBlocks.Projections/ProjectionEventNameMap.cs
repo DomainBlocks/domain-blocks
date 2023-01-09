@@ -26,10 +26,15 @@ public sealed class ProjectionEventNameMap : IProjectionEventNameMap
 
         if (_defaultEventNameMap.ContainsKey(eventName))
         {
-            return EnumerableEx.Return(_defaultEventNameMap[eventName]);
+            yield return _defaultEventNameMap[eventName];
         }
 
-        return _eventNameMap.TryGetValue(eventName, out var types) ? types : Enumerable.Empty<Type>();
+        if (!_eventNameMap.TryGetValue(eventName, out var types)) yield break;
+
+        foreach (var type in types)
+        {
+            yield return type;
+        }
     }
 
     public ProjectionEventNameMap OverrideEventNames<TEvent>(params string[] eventNames)

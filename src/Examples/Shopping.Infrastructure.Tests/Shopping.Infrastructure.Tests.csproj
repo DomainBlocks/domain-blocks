@@ -21,8 +21,6 @@
     <ProjectReference Include="..\..\DomainBlocks.Persistence.EventStore\DomainBlocks.Persistence.EventStore.csproj" />
     <ProjectReference Include="..\..\DomainBlocks.Projections.EventStore\DomainBlocks.Projections.EventStore.csproj" />
     <ProjectReference Include="..\..\DomainBlocks.Projections\DomainBlocks.Projections.csproj" />
-    <ProjectReference Include="..\..\DomainBlocks.Serialization.Json\DomainBlocks.Serialization.Json.csproj" />
-    <ProjectReference Include="..\..\DomainBlocks.Serialization\DomainBlocks.Serialization.csproj" />
     <ProjectReference Include="..\Shopping.Domain\Shopping.Domain.csproj" />
   </ItemGroup>
 

@@ -2,8 +2,8 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using DomainBlocks.Common;
-using DomainBlocks.Serialization;
+using DomainBlocks.Core;
+using DomainBlocks.Core.Serialization;
 using EventStore.Client;
 using Microsoft.Extensions.Logging;
 
@@ -18,19 +18,19 @@ public class EventStoreSnapshotRepository : ISnapshotRepository
         Log = Logger.CreateFor<EventStoreSnapshotRepository>();
 
     private readonly EventStoreClient _client;
-    private readonly IEventSerializer<ReadOnlyMemory<byte>> _serializer;
+    private readonly IEventConverter<EventRecord, EventData> _eventConverter;
 
-    public EventStoreSnapshotRepository(EventStoreClient client, IEventSerializer<ReadOnlyMemory<byte>> serializer)
+    public EventStoreSnapshotRepository(EventStoreClient client, IEventConverter<EventRecord, EventData> eventAdapter)
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
-        _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+        _eventConverter = eventAdapter ?? throw new ArgumentNullException(nameof(eventAdapter));
     }
 
     public async Task SaveSnapshotAsync<TState>(
         string snapshotKey,
         long snapshotVersion,
         TState snapshotState,
-        CancellationToken cancellationToken = default) 
+        CancellationToken cancellationToken = default)
     {
         try
         {
@@ -39,7 +39,7 @@ public class EventStoreSnapshotRepository : ISnapshotRepository
 
             var snapshotData = new[]
             {
-                _serializer.ToEventData(
+                _eventConverter.SerializeToWriteEvent(
                     snapshotState,
                     SnapshotEventName,
                     KeyValuePair.Create(SnapshotVersionMetadataKey, snapshotVersion.ToString()))
@@ -57,7 +57,8 @@ public class EventStoreSnapshotRepository : ISnapshotRepository
                 ex,
                 "Error when attempting to save snapshot. Stream Name {StreamName}. " +
                 "Snapshot Version {SnapshotVersion}, Snapshot Type {SnapshotType}",
-                snapshotKey, snapshotVersion, typeof(TState).FullName); 
+                snapshotKey, snapshotVersion, typeof(TState).FullName);
+
             throw;
         }
     }
@@ -69,6 +70,7 @@ public class EventStoreSnapshotRepository : ISnapshotRepository
         try
         {
             if (snapshotKey == null) throw new ArgumentNullException(nameof(snapshotKey));
+
             var readStreamResult = _client.ReadStreamAsync(
                 Direction.Backwards,
                 snapshotKey,
@@ -78,28 +80,26 @@ public class EventStoreSnapshotRepository : ISnapshotRepository
 
             var readState = await readStreamResult.ReadState;
 
-            if (readState == ReadState.StreamNotFound ||
-                !await readStreamResult.MoveNextAsync())
+            if (readState == ReadState.StreamNotFound || !await readStreamResult.MoveNextAsync())
             {
                 return (false, null);
             }
 
-            var resolvedEvent = readStreamResult.Current;
+            var eventRecord = readStreamResult.Current.OriginalEvent;
+            var snapshotState = (TState)await _eventConverter.DeserializeEvent(eventRecord, typeof(TState), cancellationToken);
+            var metadata = _eventConverter.DeserializeMetadata(eventRecord);
+            var snapshotVersion = long.Parse(metadata[SnapshotVersionMetadataKey]);
 
-            var snapshotData = (TState)_serializer.DeserializeEvent(
-                resolvedEvent.OriginalEvent.Data,
-                resolvedEvent.OriginalEvent.EventType,
-                typeof(TState));
-
-            var snapshotVersion = long.Parse(
-                _serializer.DeserializeMetadata(resolvedEvent.OriginalEvent.Metadata)[SnapshotVersionMetadataKey]);
-
-            return (true, new Snapshot<TState>(snapshotData, snapshotVersion));
+            return (true, new Snapshot<TState>(snapshotState, snapshotVersion));
         }
         catch (Exception ex)
         {
-            Log.LogError(ex, "Error when attempting to load snapshot. Stream Name: {StreamName}. " +
-                             "Snapshot Type {SnapshotType}", snapshotKey, typeof(TState).FullName);
+            Log.LogError(
+                ex, 
+                "Error when attempting to load snapshot. Stream Name: {StreamName}. Snapshot Type {SnapshotType}",
+                snapshotKey,
+                typeof(TState).FullName);
+
             throw;
         }
     }

@@ -105,7 +105,7 @@ internal sealed class ProjectionContext<TState> : IProjectionContext
 
         await _onSave(_state, position, cancellationToken);
 
-        _resource.Dispose();
+        _resource?.Dispose();
         _resource = null;
         _state = default;
     }

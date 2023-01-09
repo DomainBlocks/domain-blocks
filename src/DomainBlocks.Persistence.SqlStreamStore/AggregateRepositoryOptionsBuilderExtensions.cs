@@ -1,4 +1,7 @@
 using System;
+using DomainBlocks.Core.Serialization;
+using DomainBlocks.Core.Serialization.SqlStreamStore;
+using DomainBlocks.SqlStreamStore;
 
 namespace DomainBlocks.Persistence.SqlStreamStore;
 
@@ -19,19 +22,23 @@ public static class AggregateRepositoryOptionsBuilderExtensions
             .WithAggregateRepositoryFactory(model =>
             {
                 var streamStore = streamStoreOptions.GetOrCreateStreamStore();
-                var eventSerializer = streamStoreOptions.GetOrCreateEventSerializer(model.EventNameMap);
-                var eventsRepository = new SqlStreamStoreEventsRepository(streamStore, eventSerializer);
-                var snapshotRepository = optionsBuilder.Options.CreateSnapshotRepository(model.EventNameMap);
-                return new AggregateRepository<string>(eventsRepository, snapshotRepository, model);
+                var eventSerializer = streamStoreOptions.GetEventDataSerializer();
+                var eventAdapter = new SqlStreamStoreEventAdapter(eventSerializer);
+                var eventConverter = EventConverter.Create(model.EventNameMap, eventAdapter);
+                var eventsRepository = new SqlStreamStoreEventsRepository(streamStore, eventConverter);
+                var snapshotRepository = optionsBuilder.Options.CreateSnapshotRepository(model);
+                return new AggregateRepository(eventsRepository, snapshotRepository, model);
             });
 
         // This can be made configurable via the builder if we need to.
         ((IAggregateRepositoryOptionsBuilderInfrastructure)optionsBuilder)
-            .WithSnapshotRepositoryFactory(eventNameMap =>
+            .WithSnapshotRepositoryFactory(model =>
             {
                 var streamStore = streamStoreOptions.GetOrCreateStreamStore();
-                var eventSerializer = streamStoreOptions.GetOrCreateEventSerializer(eventNameMap);
-                return new SqlStreamStoreSnapshotRepository(streamStore, eventSerializer);
+                var eventSerializer = streamStoreOptions.GetEventDataSerializer();
+                var eventAdapter = new SqlStreamStoreEventAdapter(eventSerializer);
+                var eventConverter = EventConverter.Create(model.EventNameMap, eventAdapter);
+                return new SqlStreamStoreSnapshotRepository(streamStore, eventConverter);
             });
 
         return optionsBuilder;

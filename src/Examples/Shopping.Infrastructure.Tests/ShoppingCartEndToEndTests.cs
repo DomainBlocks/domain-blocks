@@ -1,21 +1,22 @@
 ﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
-using DomainBlocks.Common;
+using DomainBlocks.Core;
 using DomainBlocks.Core.Builders;
+using DomainBlocks.Core.Serialization;
+using DomainBlocks.Core.Serialization.EventStore;
 using DomainBlocks.EventStore.Testing;
 using DomainBlocks.Persistence;
 using DomainBlocks.Persistence.EventStore;
 using DomainBlocks.Projections.EventStore;
-using DomainBlocks.Serialization.Json;
 using EventStore.Client;
 using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using Shopping.Domain.Aggregates;
 using Shopping.Domain.Commands;
 using Shopping.Domain.Events;
-using ProjectionDispatcher = DomainBlocks.Projections.EventDispatcher<EventStore.Client.EventRecord, Shopping.Domain.Events.IDomainEvent>;
-using UserCredentials = DomainBlocks.Common.UserCredentials;
+using ProjectionDispatcher = DomainBlocks.Projections.EventDispatcher<EventStore.Client.EventRecord>;
+using UserCredentials = DomainBlocks.Core.UserCredentials;
 
 namespace Shopping.Infrastructure.Tests;
 
@@ -107,11 +108,13 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
 
         var shoppingCartId = Guid.NewGuid(); // This could come from a sequence, or could be the customer's ID.
 
-        var serializer = new JsonBytesEventSerializer(model.EventNameMap);
-        var eventsRepository = new EventStoreEventsRepository(EventStoreClient, serializer);
-        var snapshotRepository = new EventStoreSnapshotRepository(EventStoreClient, serializer);
+        var serializer = new JsonBytesEventDataSerializer();
+        var eventAdapter = new EventStoreEventAdapter(serializer);
+        var eventConverter = EventConverter.Create(model.EventNameMap, eventAdapter);
+        var eventsRepository = new EventStoreEventsRepository(EventStoreClient, eventConverter);
+        var snapshotRepository = new EventStoreSnapshotRepository(EventStoreClient, eventConverter);
 
-        var aggregateRepository = AggregateRepository.Create(eventsRepository, snapshotRepository, model);
+        var aggregateRepository = new AggregateRepository(eventsRepository, snapshotRepository, model);
 
         // Execute the first command.
         var loadedAggregate = await aggregateRepository.LoadAsync<ShoppingCartState>(shoppingCartId.ToString());

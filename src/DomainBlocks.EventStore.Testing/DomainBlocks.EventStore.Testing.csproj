@@ -10,9 +10,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj" />
     <ProjectReference Include="..\DomainBlocks.Persistence.EventStore\DomainBlocks.Persistence.EventStore.csproj" />
-    <ProjectReference Include="..\DomainBlocks.Persistence\DomainBlocks.Persistence.csproj" />
-    <ProjectReference Include="..\DomainBlocks.Serialization.Json\DomainBlocks.Serialization.Json.csproj" />
     <ProjectReference Include="..\DomainBlocks.Testing\DomainBlocks.Testing.csproj" />
   </ItemGroup>
 
