@@ -1,4 +1,3 @@
-using System;
 using System.Net.Mime;
 using System.Text.Json;
 
@@ -6,9 +5,9 @@ namespace DomainBlocks.Core.Serialization;
 
 public class JsonStringEventDataSerializer : IEventDataSerializer<string>
 {
-    private readonly JsonSerializerOptions _options;
+    private readonly JsonSerializerOptions? _options;
 
-    public JsonStringEventDataSerializer(JsonSerializerOptions options = null)
+    public JsonStringEventDataSerializer(JsonSerializerOptions? options = null)
     {
         _options = options;
     }
@@ -24,7 +23,8 @@ public class JsonStringEventDataSerializer : IEventDataSerializer<string>
     {
         try
         {
-            return JsonSerializer.Deserialize(data, type, _options);
+            return JsonSerializer.Deserialize(data, type, _options) ??
+                   throw new EventDeserializeException("Event deserialize result was null");
         }
         catch (Exception ex)
         {

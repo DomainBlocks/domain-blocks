@@ -1,6 +1,4 @@
-﻿using System.Collections.Generic;
-
-namespace DomainBlocks.Core.Metadata;
+﻿namespace DomainBlocks.Core.Metadata;
 
 public class EventMetadata : Dictionary<string, string>
 {

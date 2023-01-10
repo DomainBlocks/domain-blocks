@@ -1,11 +1,9 @@
-using System;
-
 namespace DomainBlocks.Core;
 
 internal sealed class EventOptions<TAggregate> : IEventOptions
 {
-    private Func<TAggregate, object, TAggregate> _eventApplier;
-    private string _eventName;
+    private Func<TAggregate, object, TAggregate>? _eventApplier;
+    private string? _eventName;
 
     public EventOptions(Type clrType)
     {
@@ -88,7 +86,7 @@ internal sealed class EventOptions<TAggregate> : IEventOptions
 
 public sealed class EventOptions<TAggregate, TEventBase, TEvent> : IEventOptions where TEvent : TEventBase
 {
-    private EventOptions<TAggregate> _innerOptions = new(typeof(TEvent));
+    private EventOptions<TAggregate> _typeErasedOptions = new(typeof(TEvent));
 
     public EventOptions()
     {
@@ -96,18 +94,18 @@ public sealed class EventOptions<TAggregate, TEventBase, TEvent> : IEventOptions
 
     private EventOptions(EventOptions<TAggregate, TEventBase, TEvent> copyFrom)
     {
-        _innerOptions = copyFrom._innerOptions;
+        _typeErasedOptions = copyFrom._typeErasedOptions;
     }
 
-    public Type ClrType => _innerOptions.ClrType;
-    public string EventName => _innerOptions.EventName;
+    public Type ClrType => _typeErasedOptions.ClrType;
+    public string EventName => _typeErasedOptions.EventName;
 
     public EventOptions<TAggregate, TEventBase, TEvent> WithEventApplier(
         Func<TAggregate, TEvent, TAggregate> eventApplier)
     {
         return new EventOptions<TAggregate, TEventBase, TEvent>(this)
         {
-            _innerOptions = _innerOptions.WithEventApplier((agg, e) => eventApplier(agg, (TEvent)e))
+            _typeErasedOptions = _typeErasedOptions.WithEventApplier((agg, e) => eventApplier(agg, (TEvent)e))
         };
     }
 
@@ -115,7 +113,7 @@ public sealed class EventOptions<TAggregate, TEventBase, TEvent> : IEventOptions
     {
         return new EventOptions<TAggregate, TEventBase, TEvent>(this)
         {
-            _innerOptions = _innerOptions.WithEventApplier((agg, e) => eventApplier(agg, (TEvent)e))
+            _typeErasedOptions = _typeErasedOptions.WithEventApplier((agg, e) => eventApplier(agg, (TEvent)e))
         };
     }
 
@@ -123,9 +121,9 @@ public sealed class EventOptions<TAggregate, TEventBase, TEvent> : IEventOptions
     {
         return new EventOptions<TAggregate, TEventBase, TEvent>(this)
         {
-            _innerOptions = _innerOptions.WithEventName(eventName)
+            _typeErasedOptions = _typeErasedOptions.WithEventName(eventName)
         };
     }
 
-    internal EventOptions<TAggregate> HideEventType() => _innerOptions;
+    internal EventOptions<TAggregate> HideEventType() => _typeErasedOptions;
 }

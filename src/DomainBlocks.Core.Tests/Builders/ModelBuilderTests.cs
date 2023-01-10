@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-using System.Linq;
 using DomainBlocks.Core.Builders;
 using NUnit.Framework;
 
@@ -272,15 +270,15 @@ public class ModelBuilderTests
 
     private class CommandResult
     {
-        public IReadOnlyCollection<IEvent> Events { get; init; }
-        public ImmutableAggregate UpdatedState { get; init; }
+        public IReadOnlyCollection<IEvent> Events { get; init; } = null!;
+        public ImmutableAggregate UpdatedState { get; init; } = null!;
     }
 
     private class MutableAggregate
     {
         private readonly List<IEvent> _raisedEvents = new();
 
-        public string Value { get; private set; }
+        public string? Value { get; private set; }
         public IReadOnlyCollection<IEvent> RaisedEvents => _raisedEvents;
 
         public IEnumerable<IEvent> ChangeValueWithYieldReturnedEvents(string newValue)
@@ -347,7 +345,7 @@ public class ModelBuilderTests
             Value = value;
         }
 
-        public string Value { get; }
+        public string? Value { get; }
 
         public IEnumerable<IEvent> ChangeValueWithYieldReturnedEvents(string newValue)
         {

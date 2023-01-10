@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Linq.Expressions;
 
 namespace DomainBlocks.Core;
@@ -14,7 +12,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
     private Func<TAggregate, string> _idSelector;
     private Func<string, string> _idToStreamKeySelector;
     private Func<string, string> _idToSnapshotKeySelector;
-    private Func<TAggregate, object, TAggregate> _eventApplier;
+    private Func<TAggregate, object, TAggregate>? _eventApplier;
 
     protected AggregateOptionsBase()
     {
@@ -235,7 +233,8 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         var ctor = typeof(TAggregate).GetConstructor(Type.EmptyTypes);
         if (ctor == null)
         {
-            return null;
+            return () => throw new InvalidOperationException(
+                "No factory function specified, and no default constructor found");
         }
 
         var newExpr = Expression.New(ctor);
@@ -247,11 +246,15 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
     {
         const string defaultIdPropertyName = "Id";
 
-        return GetIdSelector(defaultIdPropertyName) ??
-               GetIdSelector($"{typeof(TAggregate).Name}{defaultIdPropertyName}");
+        var idSelector =
+            (GetIdSelector(defaultIdPropertyName) ??
+             GetIdSelector($"{typeof(TAggregate).Name}{defaultIdPropertyName}")) ??
+            (_ => throw new InvalidOperationException("No ID selector specified, and no suitable ID property found"));
+
+        return idSelector;
     }
 
-    private static Func<TAggregate, string> GetIdSelector(string propertyName)
+    private static Func<TAggregate, string>? GetIdSelector(string propertyName)
     {
         var property = typeof(TAggregate).GetProperty(propertyName);
         if (property == null)

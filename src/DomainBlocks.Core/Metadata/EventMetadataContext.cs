@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-
-namespace DomainBlocks.Core.Metadata;
+﻿namespace DomainBlocks.Core.Metadata;
 
 public sealed class EventMetadataContext
 {

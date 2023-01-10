@@ -1,5 +1,4 @@
-﻿using System;
-using System.Runtime.Serialization;
+﻿using System.Runtime.Serialization;
 
 namespace DomainBlocks.Core;
 
@@ -24,10 +23,10 @@ public class UnmappedEventNameException : Exception
 
     protected UnmappedEventNameException(SerializationInfo info, StreamingContext context) : base(info, context)
     {
-        EventName = (string)info.GetValue(nameof(EventName), typeof(string));
+        EventName = info.GetValue(nameof(EventName), typeof(string)) as string;
     }
 
-    public string EventName { get; }
+    public string? EventName { get; }
 
     public override void GetObjectData(SerializationInfo info, StreamingContext context)
     {

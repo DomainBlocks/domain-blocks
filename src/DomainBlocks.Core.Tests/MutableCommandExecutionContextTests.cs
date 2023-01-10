@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-using System.Linq;
 using DomainBlocks.Core.Builders;
 using NUnit.Framework;
 
@@ -35,7 +33,7 @@ public class MutableCommandExecutionContextTests
     {
         public List<string> ObservedValues { get; } = new();
         public int CallCount { get; private set; }
-        private string Value { get; set; }
+        private string? Value { get; set; }
 
         public IEnumerable<IEvent> MyCommandMethod(string newValue)
         {

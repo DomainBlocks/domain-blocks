@@ -1,5 +1,3 @@
-using System;
-
 namespace DomainBlocks.Core;
 
 public interface IImmutableAggregateOptions<TAggregate> : IAggregateOptions<TAggregate>

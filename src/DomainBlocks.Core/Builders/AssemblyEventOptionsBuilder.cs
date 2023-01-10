@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
+﻿using System.Reflection;
 
 namespace DomainBlocks.Core.Builders;
 
@@ -19,7 +16,7 @@ internal sealed class AssemblyEventOptionsBuilder<TAggregate, TEventBase> :
     IAutoEventOptionsBuilder<TAggregate>
 {
     private readonly Assembly _assembly;
-    private Func<Type, bool> _eventTypePredicate;
+    private Func<Type, bool>? _eventTypePredicate;
 
     public AssemblyEventOptionsBuilder(Assembly assembly)
     {

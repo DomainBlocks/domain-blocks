@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using System.Reflection;
 
 namespace DomainBlocks.Core.Builders;
@@ -41,7 +38,7 @@ internal sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> :
     private string _methodName = "Apply";
     private bool _includeNonPublicMethods;
 
-    private AutoEventOptionsBuilder(Mode mode, Type sourceType = null)
+    private AutoEventOptionsBuilder(Mode mode, Type? sourceType = null)
     {
         _mode = mode;
         _sourceType = sourceType ?? typeof(TAggregate);
