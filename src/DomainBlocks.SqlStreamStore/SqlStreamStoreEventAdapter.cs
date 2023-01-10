@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using SqlStreamStore.Streams;
 
 // ReSharper disable once CheckNamespace
@@ -25,8 +26,14 @@ public sealed class SqlStreamStoreEventAdapter : IEventAdapter<StreamMessage, Ne
 
     public IReadOnlyDictionary<string, string> DeserializeMetadata(StreamMessage readEvent)
     {
+        var json = readEvent.JsonMetadata;
+        if (json == null)
+        {
+            return new Dictionary<string, string>();
+        }
+
         return (IReadOnlyDictionary<string, string>)_serializer.Deserialize(
-            readEvent.JsonMetadata,
+            json,
             typeof(IReadOnlyDictionary<string, string>));
     }
 
