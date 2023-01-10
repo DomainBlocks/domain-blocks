@@ -61,6 +61,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.SqlStreamStore
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.EventStore", "DomainBlocks.EventStore\DomainBlocks.EventStore.csproj", "{0C4BBF0F-EE58-403C-832F-6A6178C73408}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.SqlStreamStore.Tests", "DomainBlocks.SqlStreamStore.Tests\DomainBlocks.SqlStreamStore.Tests.csproj", "{4C40FC22-5F33-43F4-AB98-06B3EC59B627}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -159,6 +161,10 @@ Global
 		{0C4BBF0F-EE58-403C-832F-6A6178C73408}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0C4BBF0F-EE58-403C-832F-6A6178C73408}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0C4BBF0F-EE58-403C-832F-6A6178C73408}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4C40FC22-5F33-43F4-AB98-06B3EC59B627}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4C40FC22-5F33-43F4-AB98-06B3EC59B627}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4C40FC22-5F33-43F4-AB98-06B3EC59B627}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4C40FC22-5F33-43F4-AB98-06B3EC59B627}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -177,6 +183,7 @@ Global
 		{D169B6EA-A094-47B4-BCD5-187E8E857489} = {2FE61C82-E166-4A8B-ABDB-F4FB87FA3F91}
 		{2BE7F87E-6325-4C05-99EF-3CB8C622DDCB} = {2FE61C82-E166-4A8B-ABDB-F4FB87FA3F91}
 		{469992AB-5703-4339-8F78-DD2843622393} = {2FE61C82-E166-4A8B-ABDB-F4FB87FA3F91}
+		{4C40FC22-5F33-43F4-AB98-06B3EC59B627} = {2FE61C82-E166-4A8B-ABDB-F4FB87FA3F91}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {BA018103-0F59-4D7F-9119-099BF2CC020F}
