@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace DomainBlocks.EventStore.Testing;
+﻿namespace DomainBlocks.EventStore.Testing;
 
 public class TestAggregateState
 {

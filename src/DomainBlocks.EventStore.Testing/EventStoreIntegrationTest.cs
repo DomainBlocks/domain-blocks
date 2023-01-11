@@ -1,5 +1,4 @@
-﻿using System;
-using EventStore.Client;
+﻿using EventStore.Client;
 using NUnit.Framework;
 
 namespace DomainBlocks.EventStore.Testing;
@@ -7,8 +6,10 @@ namespace DomainBlocks.EventStore.Testing;
 [SetUpFixture]
 public abstract class EventStoreIntegrationTest : IDisposable
 {
-    protected internal EventStoreClient EventStoreClient { get; private set; }
-    protected internal EventStorePersistentSubscriptionsClient PersistentSubscriptionsClient { get; private set; }
+    protected internal EventStoreClient EventStoreClient { get; private set; } = null!;
+
+    protected internal EventStorePersistentSubscriptionsClient
+        PersistentSubscriptionsClient { get; private set; } = null!;
 
     [OneTimeSetUp]
     public void SetUp()

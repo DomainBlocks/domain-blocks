@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-
-namespace DomainBlocks.EventStore.Testing;
+﻿namespace DomainBlocks.EventStore.Testing;
 
 public static class EventStoreTestHelpers
 {

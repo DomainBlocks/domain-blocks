@@ -31,4 +31,17 @@ public class JsonStringEventDataSerializer : IEventDataSerializer<string>
             throw new EventDeserializeException("Unable to deserialize event", ex);
         }
     }
+
+    public T Deserialize<T>(string data)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<T>(data, _options) ??
+                   throw new EventDeserializeException("Event deserialize result was null");
+        }
+        catch (Exception ex)
+        {
+            throw new EventDeserializeException("Unable to deserialize event", ex);
+        }
+    }
 }

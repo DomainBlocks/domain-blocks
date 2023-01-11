@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net6.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+<!--      <PackageReference Include="Npgsql" Version="7.0.1" />-->
+      <PackageReference Include="SqlStreamStore.Postgres" Version="1.2.0-beta.8" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj" />
+      <ProjectReference Include="..\DomainBlocks.SqlStreamStore.Postgres\DomainBlocks.SqlStreamStore.Postgres.csproj" />
+      <ProjectReference Include="..\DomainBlocks.SqlStreamStore\DomainBlocks.SqlStreamStore.csproj" />
+      <ProjectReference Include="..\Examples\Shopping.Domain.Events\Shopping.Domain.Events.csproj" />
+    </ItemGroup>
+
+</Project>

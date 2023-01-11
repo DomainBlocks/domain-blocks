@@ -1,7 +1,9 @@
-using DomainBlocks.Projections;
-using DomainBlocks.Projections.AspNetCore;
-using DomainBlocks.Projections.SqlStreamStore;
+using System;
+using DomainBlocks.Core.Projections.Experimental.Builders;
+using DomainBlocks.Hosting;
 using DomainBlocks.SqlStreamStore;
+using DomainBlocks.SqlStreamStore.Postgres;
+using DomainBlocks.SqlStreamStore.Subscriptions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
@@ -44,71 +46,55 @@ public class Startup
 
         services.AddDbContextFactory<ShoppingCartDbContext>();
 
-        services.AddHostedEventCatchUpSubscription((sp, options, model) =>
+        services.AddHostedEventStreamSubscription((sp, options) =>
         {
-            options.UseSqlStreamStore(o =>
-            {
-                var connectionString = Configuration.GetValue<string>("SqlStreamStore:ConnectionString");
-                var settings = new PostgresStreamStoreSettings(connectionString);
-                o.UsePostgresStreamStore(settings);
-            });
-
-            model.Projection<ShoppingCartDbContext>(projection =>
-            {
-                projection.WithStateFactory(
-                    _ => sp.GetRequiredService<IDbContextFactory<ShoppingCartDbContext>>().CreateDbContext());
-
-                projection
-                    .OnInitializing(async (state, ct) =>
+            options
+                .UseSqlStreamStore(o =>
+                {
+                    var connectionString = Configuration.GetValue<string>("SqlStreamStore:ConnectionString");
+                    var settings = new PostgresStreamStoreSettings(connectionString);
+                    o.UsePostgresStreamStore(settings);
+                })
+                .FromAllEventsStream()
+                .ProjectTo()
+                .State(_ => sp.GetRequiredService<IDbContextFactory<ShoppingCartDbContext>>().CreateDbContext())
+                .WithCatchUpCheckpoints(x => x.PerEventCount(100))
+                .WithLiveCheckpoints(x => x.PerEventCount(10).Or().PerTimeInterval(TimeSpan.FromSeconds(1)))
+                .OnStarting(async (s, ct) =>
+                {
+                    await s.Database.EnsureCreatedAsync(ct);
+                    var bookmark = await s.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, ct);
+                    return bookmark?.Position;
+                })
+                .OnCheckpoint(async (s, pos, ct) =>
+                {
+                    var bookmark = await s.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, ct);
+                    if (bookmark == null)
                     {
-                        // We could run migrations here
-                        await state.Database.EnsureDeletedAsync(ct);
-                        await state.Database.EnsureCreatedAsync(ct);
-                    })
-                    .OnSubscribing(async (state, ct) =>
-                    {
-                        var bookmark = await state.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, ct);
+                        bookmark = new Bookmark();
+                        s.Bookmarks.Add(bookmark);
+                    }
 
-                        var position = bookmark == null
-                            ? StreamPosition.Empty
-                            : StreamPosition.FromJsonString(bookmark.Position);
-
-                        return position;
-                    })
-                    .OnSave(async (state, position, ct) =>
+                    bookmark.Position = pos;
+                    await s.SaveChangesAsync(ct);
+                })
+                .When<ItemAddedToShoppingCart>((e, s) =>
+                {
+                    s.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem
                     {
-                        // TODO (DS): Consider a checkpoint hook, where the frequency can be specified,
-                        // e.g. bookmark every 100 events.
-                        var bookmark = await state.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, ct);
-                        if (bookmark == null)
-                        {
-                            bookmark = new Bookmark();
-                            state.Bookmarks.Add(bookmark);
-                        }
-
-                        bookmark.Position = position.ToJsonString();
-
-                        await state.SaveChangesAsync(ct);
-                    })
-                    .When<ItemAddedToShoppingCart>((e, state) =>
-                    {
-                        // Context can expose metadata and cancellation token
-                        state.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem
-                        {
-                            CartId = e.CartId,
-                            Id = e.Id,
-                            ItemDescription = e.Item
-                        });
-                    })
-                    .When<ItemRemovedFromShoppingCart>(async (e, state, ct) =>
-                    {
-                        var item = await state.ShoppingCartSummaryItems.FindAsync(new object[] { e.Id }, ct);
-                        if (item != null)
-                        {
-                            state.ShoppingCartSummaryItems.Remove(item);
-                        }
+                        CartId = e.CartId,
+                        Id = e.Id,
+                        ItemDescription = e.Item
                     });
-            });
+                })
+                .When<ItemRemovedFromShoppingCart>(async (e, s, ct) =>
+                {
+                    var item = await s.ShoppingCartSummaryItems.FindAsync(new object[] { e.Id }, ct);
+                    if (item != null)
+                    {
+                        s.ShoppingCartSummaryItems.Remove(item);
+                    }
+                });
         });
 
         services.AddControllers();

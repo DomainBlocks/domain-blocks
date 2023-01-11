@@ -2,7 +2,7 @@
 using System.Text.Json;
 using DomainBlocks.Core.Metadata;
 using DomainBlocks.Core.Serialization;
-using DomainBlocks.Core.Serialization.EventStore;
+using DomainBlocks.EventStore.Serialization;
 using DomainBlocks.Testing;
 using EventStore.Client;
 using NUnit.Framework;
@@ -158,7 +158,7 @@ public class MetadataSerializationTests
         Assert.That(metadata[MetadataKeys.UtcDateTime], Is.Not.Null);
     }
 
-    private static IEventConverter<EventRecord, EventData> CreateEventConverterWithMetadata(
+    private static IEventConverter<ResolvedEvent, EventData> CreateEventConverterWithMetadata(
         Action<EventMetadataContext>? applyCustomMetadata = null)
     {
         var adapter = new EventStoreEventAdapter(new JsonBytesEventDataSerializer());

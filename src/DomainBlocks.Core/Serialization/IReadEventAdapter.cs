@@ -1,13 +1,13 @@
 namespace DomainBlocks.Core.Serialization;
 
-public interface IReadEventAdapter<in TReadEvent>
+public interface IReadEventAdapter<in TEvent>
 {
-    string GetEventName(TReadEvent readEvent);
+    string GetEventName(TEvent @event);
 
-    ValueTask<object> DeserializeEvent(
-        TReadEvent readEvent,
+    Task<object> DeserializeEvent(
+        TEvent @event,
         Type eventType,
         CancellationToken cancellationToken = default);
 
-    IReadOnlyDictionary<string, string> DeserializeMetadata(TReadEvent readEvent);
+    IReadOnlyDictionary<string, string> DeserializeMetadata(TEvent @event);
 }

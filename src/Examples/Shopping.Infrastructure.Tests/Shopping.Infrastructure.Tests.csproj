@@ -18,9 +18,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\DomainBlocks.EventStore.Testing\DomainBlocks.EventStore.Testing.csproj" />
-    <ProjectReference Include="..\..\DomainBlocks.Persistence.EventStore\DomainBlocks.Persistence.EventStore.csproj" />
-    <ProjectReference Include="..\..\DomainBlocks.Projections.EventStore\DomainBlocks.Projections.EventStore.csproj" />
-    <ProjectReference Include="..\..\DomainBlocks.Projections\DomainBlocks.Projections.csproj" />
     <ProjectReference Include="..\Shopping.Domain\Shopping.Domain.csproj" />
   </ItemGroup>
 

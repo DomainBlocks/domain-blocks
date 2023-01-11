@@ -8,6 +8,12 @@ public class SqlStreamStoreOptionsBuilder
 {
     public SqlStreamStoreOptions Options { get; private set; } = new();
 
+    public SqlStreamStoreOptionsBuilder WithInstance(IStreamStore streamStore)
+    {
+        WithStreamStoreFactory(() => streamStore);
+        return this;
+    }
+
     public SqlStreamStoreOptionsBuilder UseJsonSerialization(JsonSerializerOptions? jsonSerializerOptions = null)
     {
         Options = Options
@@ -16,7 +22,7 @@ public class SqlStreamStoreOptionsBuilder
         return this;
     }
 
-    internal void WithStreamStoreFactory(Func<IStreamStore> factory)
+    public void WithStreamStoreFactory(Func<IStreamStore> factory)
     {
         Options = Options.WithStreamStoreFactory(factory);
     }
