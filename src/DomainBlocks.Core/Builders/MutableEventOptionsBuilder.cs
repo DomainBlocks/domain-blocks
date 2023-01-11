@@ -1,5 +1,3 @@
-using System;
-
 namespace DomainBlocks.Core.Builders;
 
 public interface IMutableEventBuilder<out TAggregate, out TEvent> : IEventNameBuilder

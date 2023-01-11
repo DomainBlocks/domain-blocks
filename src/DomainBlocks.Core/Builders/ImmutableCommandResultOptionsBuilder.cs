@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 namespace DomainBlocks.Core.Builders;
 
 public interface IImmutableCommandResultUpdatedStateBuilder<in TAggregate, out TCommandResult>

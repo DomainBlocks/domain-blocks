@@ -1,5 +1,3 @@
-using System;
-
 namespace DomainBlocks.Core.Serialization;
 
 public interface IEventDataSerializer<TRawData>

@@ -1,14 +1,10 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-
 namespace DomainBlocks.Core;
 
 public sealed class MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> :
     IMutableCommandResultOptions<TAggregate, TCommandResult> where TEventBase : class
 {
     private bool _isApplyEventsEnabled;
-    private Func<TCommandResult, IEnumerable<TEventBase>> _eventsSelector;
+    private Func<TCommandResult, IEnumerable<TEventBase>>? _eventsSelector;
 
     public MutableCommandResultOptions()
     {
@@ -44,6 +40,11 @@ public sealed class MutableCommandResultOptions<TAggregate, TEventBase, TCommand
     public IReadOnlyCollection<object> SelectEventsAndUpdateState(
         TCommandResult commandResult, TAggregate state, Action<TAggregate, object> eventApplier)
     {
+        if (_eventsSelector == null)
+        {
+            throw new InvalidOperationException("No events selector specified");
+        }
+
         var events = _eventsSelector(commandResult).ToList().AsReadOnly();
 
         if (_isApplyEventsEnabled)

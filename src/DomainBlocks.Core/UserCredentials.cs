@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace DomainBlocks.Core;
+﻿namespace DomainBlocks.Core;
 
 public class UserCredentials
 {
@@ -15,7 +13,7 @@ public class UserCredentials
         AuthToken = authToken ?? throw new ArgumentNullException(nameof(authToken));
     }
 
-    public string AuthToken { get; }
-    public string UserName { get; }
-    public string Password { get; }
+    public string? AuthToken { get; }
+    public string? UserName { get; }
+    public string? Password { get; }
 }

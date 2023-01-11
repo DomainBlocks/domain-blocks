@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace DomainBlocks.Core;
+﻿namespace DomainBlocks.Core;
 
 public interface IEventNameMap
 {

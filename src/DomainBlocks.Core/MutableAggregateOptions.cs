@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 namespace DomainBlocks.Core;
 
 public interface IMutableAggregateOptions<TAggregate> : IAggregateOptions<TAggregate>
@@ -16,7 +13,7 @@ public sealed class MutableAggregateOptions<TAggregate, TEventBase> :
     AggregateOptionsBase<TAggregate, TEventBase>,
     IMutableAggregateOptions<TAggregate> where TEventBase : class
 {
-    private Func<TAggregate, IReadOnlyCollection<TEventBase>> _raisedEventsSelector;
+    private Func<TAggregate, IReadOnlyCollection<TEventBase>>? _raisedEventsSelector;
 
     public MutableAggregateOptions()
     {
@@ -68,7 +65,7 @@ public sealed class MutableAggregateOptions<TAggregate, TEventBase> :
     {
         if (aggregate == null) throw new ArgumentNullException(nameof(aggregate));
 
-        if (!CanSelectRaisedEventsFromAggregate)
+        if (_raisedEventsSelector == null)
         {
             throw new InvalidOperationException("Aggregate has no events selector specified");
         }

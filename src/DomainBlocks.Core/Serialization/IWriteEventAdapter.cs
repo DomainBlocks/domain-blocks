@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-
 namespace DomainBlocks.Core.Serialization;
 
 public interface IWriteEventAdapter<out TWriteEvent>

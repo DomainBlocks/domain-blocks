@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
 
 namespace DomainBlocks.Core.Builders;
@@ -76,7 +73,7 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
 
     protected abstract AggregateOptionsBase<TAggregate, TEventBase> OptionsImpl { get; set; }
 
-    internal IAutoEventOptionsBuilder<TAggregate> AutoEventOptionsBuilder { get; set; }
+    internal IAutoEventOptionsBuilder<TAggregate>? AutoEventOptionsBuilder { get; set; }
 
     internal List<IEventOptionsBuilder<TAggregate>> EventOptionsBuilders { get; } = new();
 

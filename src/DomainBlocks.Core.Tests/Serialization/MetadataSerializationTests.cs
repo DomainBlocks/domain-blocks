@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections;
-using System.Collections.Generic;
+﻿using System.Collections;
 using System.Text.Json;
 using DomainBlocks.Core.Metadata;
 using DomainBlocks.Core.Serialization;
@@ -161,7 +159,7 @@ public class MetadataSerializationTests
     }
 
     private static IEventConverter<EventRecord, EventData> CreateEventConverterWithMetadata(
-        Action<EventMetadataContext> applyCustomMetadata = null)
+        Action<EventMetadataContext>? applyCustomMetadata = null)
     {
         var adapter = new EventStoreEventAdapter(new JsonBytesEventDataSerializer());
         var metadataContext = EventMetadataContext.CreateWithDefaults(TestServiceName);
@@ -171,7 +169,7 @@ public class MetadataSerializationTests
 
     private static IDictionary<string, string> GetMetadataFromEventPersistenceData(EventData writeEvent)
     {
-        return JsonSerializer.Deserialize<EventMetadata>(writeEvent.Metadata.Span);
+        return JsonSerializer.Deserialize<EventMetadata>(writeEvent.Metadata.Span)!;
     }
 
     private class TestEvent

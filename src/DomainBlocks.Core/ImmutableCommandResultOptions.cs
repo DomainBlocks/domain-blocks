@@ -1,14 +1,10 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-
 namespace DomainBlocks.Core;
 
 public sealed class ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> :
     IImmutableCommandResultOptions<TAggregate, TCommandResult> where TEventBase : class
 {
-    private Func<TCommandResult, IEnumerable<TEventBase>> _eventsSelector;
-    private Func<TCommandResult, TAggregate> _updatedStateSelector;
+    private Func<TCommandResult, IEnumerable<TEventBase>>? _eventsSelector;
+    private Func<TCommandResult, TAggregate>? _updatedStateSelector;
 
     public ImmutableCommandResultOptions()
     {
@@ -48,6 +44,11 @@ public sealed class ImmutableCommandResultOptions<TAggregate, TEventBase, TComma
     public IReadOnlyCollection<object> SelectEventsAndUpdateState(
         TCommandResult commandResult, ref TAggregate state, Func<TAggregate, object, TAggregate> eventApplier)
     {
+        if (_eventsSelector == null)
+        {
+            throw new InvalidOperationException("No events selector specified");
+        }
+
         var events = _eventsSelector(commandResult);
 
         if (_updatedStateSelector != null)

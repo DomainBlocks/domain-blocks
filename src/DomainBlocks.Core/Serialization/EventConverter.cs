@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using DomainBlocks.Core.Metadata;
 
 namespace DomainBlocks.Core.Serialization;
@@ -11,7 +7,7 @@ public static class EventConverter
     public static EventConverter<TReadEvent, TWriteEvent> Create<TReadEvent, TWriteEvent>(
         IEventNameMap eventNameMap,
         IEventAdapter<TReadEvent, TWriteEvent> eventAdapter,
-        EventMetadataContext metadataContext = null)
+        EventMetadataContext? metadataContext = null)
     {
         return new EventConverter<TReadEvent, TWriteEvent>(eventNameMap, eventAdapter, metadataContext);
     }
@@ -26,7 +22,7 @@ public class EventConverter<TReadEvent, TWriteEvent> : IEventConverter<TReadEven
     public EventConverter(
         IEventNameMap eventNameMap,
         IEventAdapter<TReadEvent, TWriteEvent> eventAdapter,
-        EventMetadataContext metadataContext = null)
+        EventMetadataContext? metadataContext = null)
     {
         _eventNameMap = eventNameMap ?? throw new ArgumentNullException(nameof(eventNameMap));
         _eventAdapter = eventAdapter ?? throw new ArgumentNullException(nameof(eventAdapter));
@@ -35,7 +31,7 @@ public class EventConverter<TReadEvent, TWriteEvent> : IEventConverter<TReadEven
 
     public ValueTask<object> DeserializeEvent(
         TReadEvent readEvent,
-        Type eventTypeOverride = null,
+        Type? eventTypeOverride = null,
         CancellationToken cancellationToken = default)
     {
         var eventName = _eventAdapter.GetEventName(readEvent);
@@ -48,7 +44,7 @@ public class EventConverter<TReadEvent, TWriteEvent> : IEventConverter<TReadEven
 
     public TWriteEvent SerializeToWriteEvent(
         object @event,
-        string eventNameOverride = null,
+        string? eventNameOverride = null,
         params KeyValuePair<string, string>[] additionalMetadata)
     {
         var eventName = eventNameOverride ?? _eventNameMap.GetEventName(@event.GetType());

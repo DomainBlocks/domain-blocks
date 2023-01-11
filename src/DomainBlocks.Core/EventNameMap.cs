@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace DomainBlocks.Core;
+﻿namespace DomainBlocks.Core;
 
 public sealed class EventNameMap : IEventNameMap
 {
@@ -49,6 +46,6 @@ public sealed class EventNameMap : IEventNameMap
     {
         return _eventTypeToNameMap.TryGetValue(eventType, out var eventName)
             ? eventName
-            : throw new UnmappedEventTypeException(eventType.FullName);
+            : throw new UnmappedEventTypeException(eventType.FullName!);
     }
 }
