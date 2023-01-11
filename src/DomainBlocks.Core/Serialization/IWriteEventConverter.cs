@@ -1,8 +1,8 @@
 namespace DomainBlocks.Core.Serialization;
 
-public interface IWriteEventConverter<out TWriteEvent>
+public interface IWriteEventConverter<out TEvent>
 {
-    TWriteEvent SerializeToWriteEvent(
+    TEvent SerializeToWriteEvent(
         object @event,
         string? eventNameOverride = null,
         params KeyValuePair<string, string>[] additionalMetadata);

@@ -1,19 +1,16 @@
-﻿using System;
-using System.Linq;
-using System.Threading.Tasks;
-using DomainBlocks.Core.Builders;
+﻿using DomainBlocks.Core.Builders;
+using DomainBlocks.Core.Persistence;
 using DomainBlocks.Core.Serialization;
-using DomainBlocks.Core.Serialization.EventStore;
-using DomainBlocks.Persistence;
-using DomainBlocks.Persistence.EventStore;
+using DomainBlocks.EventStore.Persistence;
+using DomainBlocks.EventStore.Serialization;
 
 namespace DomainBlocks.EventStore.Testing;
 
 public class SnapshotScenario
 {
-    private EventStoreIntegrationTest _test;
-    private AggregateRepository _aggregateRepository;
-    private LoadedAggregate<TestAggregateState> _loadedAggregate;
+    private EventStoreIntegrationTest _test = null!;
+    private AggregateRepository _aggregateRepository = null!;
+    private LoadedAggregate<TestAggregateState> _loadedAggregate = null!;
     private readonly Guid _id;
     private long _aggregateVersion = StreamVersion.NewStream;
 
@@ -22,7 +19,7 @@ public class SnapshotScenario
         _id = Guid.NewGuid();
     }
 
-    public TestAggregateState AggregateState { get; private set; }
+    public TestAggregateState AggregateState { get; private set; } = null!;
 
     public async Task Initialise(EventStoreIntegrationTest test)
     {

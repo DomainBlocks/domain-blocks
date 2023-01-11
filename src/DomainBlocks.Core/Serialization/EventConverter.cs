@@ -29,18 +29,18 @@ public class EventConverter<TReadEvent, TWriteEvent> : IEventConverter<TReadEven
         _metadataContext = metadataContext ?? EventMetadataContext.CreateEmpty();
     }
 
-    public ValueTask<object> DeserializeEvent(
-        TReadEvent readEvent,
+    public Task<object> DeserializeEvent(
+        TReadEvent @event,
         Type? eventTypeOverride = null,
         CancellationToken cancellationToken = default)
     {
-        var eventName = _eventAdapter.GetEventName(readEvent);
+        var eventName = _eventAdapter.GetEventName(@event);
         var eventType = eventTypeOverride ?? _eventNameMap.GetEventType(eventName);
-        return _eventAdapter.DeserializeEvent(readEvent, eventType, cancellationToken);
+        return _eventAdapter.DeserializeEvent(@event, eventType, cancellationToken);
     }
 
-    public IReadOnlyDictionary<string, string> DeserializeMetadata(TReadEvent readEvent) =>
-        _eventAdapter.DeserializeMetadata(readEvent);
+    public IReadOnlyDictionary<string, string> DeserializeMetadata(TReadEvent @event) =>
+        _eventAdapter.DeserializeMetadata(@event);
 
     public TWriteEvent SerializeToWriteEvent(
         object @event,

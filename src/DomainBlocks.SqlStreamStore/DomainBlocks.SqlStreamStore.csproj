@@ -6,12 +6,12 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="SqlStreamStore" Version="1.2.0-beta.8" />
-      <PackageReference Include="SqlStreamStore.Postgres" Version="1.2.0-beta.8" />
+        <PackageReference Include="SqlStreamStore" Version="1.2.0-beta.8" />
+        <PackageReference Include="System.Linq.Async" Version="5.0.0" />
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\DomainBlocks.Core\DomainBlocks.Core.csproj" />
+        <ProjectReference Include="..\DomainBlocks.Core\DomainBlocks.Core.csproj" />
     </ItemGroup>
 
 </Project>

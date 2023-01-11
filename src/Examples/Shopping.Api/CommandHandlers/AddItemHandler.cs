@@ -1,7 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using DomainBlocks.Persistence;
+using DomainBlocks.Core.Persistence;
 using Shopping.Domain.Aggregates;
 
 namespace Shopping.Api.CommandHandlers;

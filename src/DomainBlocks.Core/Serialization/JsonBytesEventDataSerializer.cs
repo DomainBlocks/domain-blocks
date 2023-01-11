@@ -31,4 +31,17 @@ public class JsonBytesEventDataSerializer : IEventDataSerializer<ReadOnlyMemory<
             throw new EventDeserializeException("Unable to deserialize event", ex);
         }
     }
+
+    public T Deserialize<T>(ReadOnlyMemory<byte> data)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<T>(data.Span, _options) ??
+                   throw new EventDeserializeException("Event deserialize result was null");
+        }
+        catch (Exception ex)
+        {
+            throw new EventDeserializeException("Unable to deserialize event", ex);
+        }
+    }
 }

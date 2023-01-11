@@ -18,8 +18,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\DomainBlocks.Projections.AspNetCore\DomainBlocks.Projections.AspNetCore.csproj" />
-    <ProjectReference Include="..\..\DomainBlocks.Projections.SqlStreamStore\DomainBlocks.Projections.SqlStreamStore.csproj" />
+    <ProjectReference Include="..\..\DomainBlocks.Hosting\DomainBlocks.Hosting.csproj" />
+    <ProjectReference Include="..\..\DomainBlocks.SqlStreamStore.Postgres\DomainBlocks.SqlStreamStore.Postgres.csproj" />
     <ProjectReference Include="..\Shopping.Domain.Events\Shopping.Domain.Events.csproj" />
   </ItemGroup>
 

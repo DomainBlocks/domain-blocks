@@ -1,6 +1,6 @@
-﻿using DomainBlocks.Persistence.DependencyInjection;
-using DomainBlocks.Persistence.SqlStreamStore;
-using DomainBlocks.SqlStreamStore;
+﻿using DomainBlocks.DependencyInjection;
+using DomainBlocks.SqlStreamStore.Persistence;
+using DomainBlocks.SqlStreamStore.Postgres;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;

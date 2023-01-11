@@ -15,9 +15,9 @@ public sealed class EventNameMap : IEventNameMap
     {
         if (string.IsNullOrEmpty(eventName))
             throw new ArgumentException("Event name cannot be null or empty", nameof(eventName));
-        
+
         if (eventType == null) throw new ArgumentNullException(nameof(eventType));
-        
+
         switch (throwOnConflict)
         {
             case true when _eventNameToTypeMap.ContainsKey(eventName) && _eventNameToTypeMap[eventName] != eventType:
@@ -30,7 +30,7 @@ public sealed class EventNameMap : IEventNameMap
                     $"'{_eventTypeToNameMap[eventType]}'. Cannot map to '{eventName}'");
             default:
                 _eventNameToTypeMap[eventName] = eventType;
-                _eventTypeToNameMap[eventType] = eventName; 
+                _eventTypeToNameMap[eventType] = eventName;
                 break;
         }
     }

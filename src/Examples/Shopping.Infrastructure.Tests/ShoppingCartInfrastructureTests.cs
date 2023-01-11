@@ -2,11 +2,11 @@
 using System.Linq;
 using System.Threading.Tasks;
 using DomainBlocks.Core.Builders;
+using DomainBlocks.Core.Persistence;
 using DomainBlocks.Core.Serialization;
-using DomainBlocks.Core.Serialization.EventStore;
+using DomainBlocks.EventStore.Persistence;
+using DomainBlocks.EventStore.Serialization;
 using DomainBlocks.EventStore.Testing;
-using DomainBlocks.Persistence;
-using DomainBlocks.Persistence.EventStore;
 using NUnit.Framework;
 using Shopping.Domain.Aggregates;
 using Shopping.Domain.Commands;
