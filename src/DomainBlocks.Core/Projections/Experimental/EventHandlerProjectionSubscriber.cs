@@ -24,9 +24,10 @@ internal sealed class EventHandlerProjectionSubscriber<TRawEvent, TPosition> :
 
     public CheckpointFrequency LiveCheckpointFrequency => _options.LiveCheckpointFrequency;
 
-    public Task<TPosition?> OnStarting(CancellationToken cancellationToken) => _options.OnStarting(cancellationToken);
+    public Task<TPosition?> OnStarting(CancellationToken cancellationToken) =>
+        _options.OnStartingCallback(cancellationToken);
 
-    public Task OnCatchingUp(CancellationToken cancellationToken) => _options.OnCatchingUp(cancellationToken);
+    public Task OnCatchingUp(CancellationToken cancellationToken) => _options.OnCatchingUpCallback(cancellationToken);
 
     public async Task<OnEventResult> OnEvent(TRawEvent @event, TPosition position, CancellationToken cancellationToken)
     {
@@ -58,9 +59,9 @@ internal sealed class EventHandlerProjectionSubscriber<TRawEvent, TPosition> :
     }
 
     public Task OnCheckpoint(TPosition position, CancellationToken cancellationToken) =>
-        _options.OnCheckpoint(position, cancellationToken);
+        _options.OnCheckpointCallback(position, cancellationToken);
 
-    public Task OnLive(CancellationToken cancellationToken) => _options.OnLive(cancellationToken);
+    public Task OnLive(CancellationToken cancellationToken) => _options.OnLiveCallback(cancellationToken);
 
     public Task<EventErrorResolution> OnEventError(
         TRawEvent @event,
@@ -77,7 +78,7 @@ internal sealed class EventHandlerProjectionSubscriber<TRawEvent, TPosition> :
                 _currentDeserializedMetadata!,
                 exception);
 
-            return _options.OnEventError(eventError, cancellationToken);
+            return _options.OnEventErrorCallback(eventError, cancellationToken);
         }
         finally
         {
@@ -91,6 +92,6 @@ internal sealed class EventHandlerProjectionSubscriber<TRawEvent, TPosition> :
         Exception? exception,
         CancellationToken cancellationToken)
     {
-        return _options.OnSubscriptionDropped(reason, exception, cancellationToken);
+        return _options.OnSubscriptionDroppedCallback(reason, exception, cancellationToken);
     }
 }

@@ -12,12 +12,12 @@ internal sealed class EventHandlerProjectionOptions<TRawEvent, TPosition>
     {
         CatchupCheckpointFrequency = CheckpointFrequency.Default;
         LiveCheckpointFrequency = CheckpointFrequency.Default;
-        OnStarting = _ => Task.FromResult<TPosition?>(null);
-        OnCatchingUp = _ => Task.CompletedTask;
-        OnCheckpoint = (_, _) => Task.CompletedTask;
-        OnLive = _ => Task.CompletedTask;
-        OnEventError = (_, _) => Task.FromResult(EventErrorResolution.Abort);
-        OnSubscriptionDropped = (_, _, _) => Task.CompletedTask;
+        OnStartingCallback = _ => Task.FromResult<TPosition?>(null);
+        OnCatchingUpCallback = _ => Task.CompletedTask;
+        OnCheckpointCallback = (_, _) => Task.CompletedTask;
+        OnLiveCallback = _ => Task.CompletedTask;
+        OnEventErrorCallback = (_, _) => Task.FromResult(EventErrorResolution.Abort);
+        OnSubscriptionDroppedCallback = (_, _, _) => Task.CompletedTask;
     }
 
     private EventHandlerProjectionOptions(EventHandlerProjectionOptions<TRawEvent, TPosition> copyFrom)
@@ -25,24 +25,24 @@ internal sealed class EventHandlerProjectionOptions<TRawEvent, TPosition>
         _onEventCallbacks = copyFrom._onEventCallbacks.ToDictionary(x => x.Key, x => x.Value);
         CatchupCheckpointFrequency = copyFrom.CatchupCheckpointFrequency;
         LiveCheckpointFrequency = copyFrom.LiveCheckpointFrequency;
-        OnStarting = copyFrom.OnStarting;
-        OnCatchingUp = copyFrom.OnCatchingUp;
-        OnCheckpoint = copyFrom.OnCheckpoint;
-        OnLive = copyFrom.OnLive;
-        OnEventError = copyFrom.OnEventError;
-        OnSubscriptionDropped = copyFrom.OnSubscriptionDropped;
+        OnStartingCallback = copyFrom.OnStartingCallback;
+        OnCatchingUpCallback = copyFrom.OnCatchingUpCallback;
+        OnCheckpointCallback = copyFrom.OnCheckpointCallback;
+        OnLiveCallback = copyFrom.OnLiveCallback;
+        OnEventErrorCallback = copyFrom.OnEventErrorCallback;
+        OnSubscriptionDroppedCallback = copyFrom.OnSubscriptionDroppedCallback;
         EventTypeMap = copyFrom.EventTypeMap;
     }
 
     public CheckpointFrequency CatchupCheckpointFrequency { get; private init; }
     public CheckpointFrequency LiveCheckpointFrequency { get; private init; }
-    public Func<CancellationToken, Task<TPosition?>> OnStarting { get; private init; }
-    public Func<CancellationToken, Task> OnCatchingUp { get; private init; }
-    public Func<TPosition, CancellationToken, Task> OnCheckpoint { get; private init; }
-    public Func<CancellationToken, Task> OnLive { get; private init; }
-    public OnEventErrorCallback<TRawEvent, TPosition> OnEventError { get; private init; }
+    public Func<CancellationToken, Task<TPosition?>> OnStartingCallback { get; private init; }
+    public Func<CancellationToken, Task> OnCatchingUpCallback { get; private init; }
+    public Func<TPosition, CancellationToken, Task> OnCheckpointCallback { get; private init; }
+    public Func<CancellationToken, Task> OnLiveCallback { get; private init; }
+    public OnEventErrorCallback<TRawEvent, TPosition> OnEventErrorCallback { get; private init; }
 
-    public Func<SubscriptionDroppedReason, Exception?, CancellationToken, Task> OnSubscriptionDropped
+    public Func<SubscriptionDroppedReason, Exception?, CancellationToken, Task> OnSubscriptionDroppedCallback
     {
         get;
         private init;
@@ -77,34 +77,34 @@ internal sealed class EventHandlerProjectionOptions<TRawEvent, TPosition>
         Func<CancellationToken, Task<TPosition?>> onStarting)
     {
         if (onStarting == null) throw new ArgumentNullException(nameof(onStarting));
-        return new EventHandlerProjectionOptions<TRawEvent, TPosition>(this) { OnStarting = onStarting };
+        return new EventHandlerProjectionOptions<TRawEvent, TPosition>(this) { OnStartingCallback = onStarting };
     }
 
     public EventHandlerProjectionOptions<TRawEvent, TPosition> WithOnCatchingUp(
         Func<CancellationToken, Task> onCatchingUp)
     {
         if (onCatchingUp == null) throw new ArgumentNullException(nameof(onCatchingUp));
-        return new EventHandlerProjectionOptions<TRawEvent, TPosition>(this) { OnCatchingUp = onCatchingUp };
+        return new EventHandlerProjectionOptions<TRawEvent, TPosition>(this) { OnCatchingUpCallback = onCatchingUp };
     }
 
     public EventHandlerProjectionOptions<TRawEvent, TPosition> WithOnCheckpoint(
         Func<TPosition, CancellationToken, Task> onCheckpoint)
     {
         if (onCheckpoint == null) throw new ArgumentNullException(nameof(onCheckpoint));
-        return new EventHandlerProjectionOptions<TRawEvent, TPosition>(this) { OnCheckpoint = onCheckpoint };
+        return new EventHandlerProjectionOptions<TRawEvent, TPosition>(this) { OnCheckpointCallback = onCheckpoint };
     }
 
     public EventHandlerProjectionOptions<TRawEvent, TPosition> WithOnLive(Func<CancellationToken, Task> onLive)
     {
         if (onLive == null) throw new ArgumentNullException(nameof(onLive));
-        return new EventHandlerProjectionOptions<TRawEvent, TPosition>(this) { OnLive = onLive };
+        return new EventHandlerProjectionOptions<TRawEvent, TPosition>(this) { OnLiveCallback = onLive };
     }
 
     public EventHandlerProjectionOptions<TRawEvent, TPosition> WithOnEventError(
         OnEventErrorCallback<TRawEvent, TPosition> onEventError)
     {
         if (onEventError == null) throw new ArgumentNullException(nameof(onEventError));
-        return new EventHandlerProjectionOptions<TRawEvent, TPosition>(this) { OnEventError = onEventError };
+        return new EventHandlerProjectionOptions<TRawEvent, TPosition>(this) { OnEventErrorCallback = onEventError };
     }
 
     public EventHandlerProjectionOptions<TRawEvent, TPosition> WithOnSubscriptionDropped(
@@ -114,7 +114,7 @@ internal sealed class EventHandlerProjectionOptions<TRawEvent, TPosition>
 
         return new EventHandlerProjectionOptions<TRawEvent, TPosition>(this)
         {
-            OnSubscriptionDropped = onSubscriptionDropped
+            OnSubscriptionDroppedCallback = onSubscriptionDropped
         };
     }
 

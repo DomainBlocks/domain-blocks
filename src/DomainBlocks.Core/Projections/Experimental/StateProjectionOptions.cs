@@ -14,12 +14,12 @@ internal sealed class StateProjectionOptions<TRawEvent, TPosition, TState>
         StateFactory = (_, _) => throw new InvalidOperationException("No state factory specified");
         CatchupCheckpointFrequency = CheckpointFrequency.Default;
         LiveCheckpointFrequency = CheckpointFrequency.Default;
-        OnStarting = (_, _) => Task.FromResult<TPosition?>(null);
-        OnCatchingUp = (_, _) => Task.CompletedTask;
-        OnCheckpoint = (_, _, _) => Task.CompletedTask;
-        OnLive = (_, _) => Task.CompletedTask;
-        OnEventError = (_, _, _) => Task.FromResult(EventErrorResolution.Abort);
-        OnSubscriptionDropped = (_, _, _) => Task.CompletedTask;
+        OnStartingCallback = (_, _) => Task.FromResult<TPosition?>(null);
+        OnCatchingUpCallback = (_, _) => Task.CompletedTask;
+        OnCheckpointCallback = (_, _, _) => Task.CompletedTask;
+        OnLiveCallback = (_, _) => Task.CompletedTask;
+        OnEventErrorCallback = (_, _, _) => Task.FromResult(EventErrorResolution.Abort);
+        OnSubscriptionDroppedCallback = (_, _, _) => Task.CompletedTask;
     }
 
     private StateProjectionOptions(StateProjectionOptions<TRawEvent, TPosition, TState> copyFrom)
@@ -30,12 +30,12 @@ internal sealed class StateProjectionOptions<TRawEvent, TPosition, TState>
         StateLifetime = copyFrom.StateLifetime;
         CatchupCheckpointFrequency = copyFrom.CatchupCheckpointFrequency;
         LiveCheckpointFrequency = copyFrom.LiveCheckpointFrequency;
-        OnStarting = copyFrom.OnStarting;
-        OnCatchingUp = copyFrom.OnCatchingUp;
-        OnCheckpoint = copyFrom.OnCheckpoint;
-        OnLive = copyFrom.OnLive;
-        OnEventError = copyFrom.OnEventError;
-        OnSubscriptionDropped = copyFrom.OnSubscriptionDropped;
+        OnStartingCallback = copyFrom.OnStartingCallback;
+        OnCatchingUpCallback = copyFrom.OnCatchingUpCallback;
+        OnCheckpointCallback = copyFrom.OnCheckpointCallback;
+        OnLiveCallback = copyFrom.OnLiveCallback;
+        OnEventErrorCallback = copyFrom.OnEventErrorCallback;
+        OnSubscriptionDroppedCallback = copyFrom.OnSubscriptionDroppedCallback;
         EventTypeMap = copyFrom.EventTypeMap;
     }
 
@@ -44,13 +44,13 @@ internal sealed class StateProjectionOptions<TRawEvent, TPosition, TState>
     public ProjectionStateLifetime StateLifetime { get; private init; }
     public CheckpointFrequency CatchupCheckpointFrequency { get; private init; }
     public CheckpointFrequency LiveCheckpointFrequency { get; private init; }
-    public Func<TState, CancellationToken, Task<TPosition?>> OnStarting { get; private init; }
-    public Func<TState, CancellationToken, Task> OnCatchingUp { get; private init; }
-    public Func<TState, TPosition, CancellationToken, Task> OnCheckpoint { get; private init; }
-    public Func<TState, CancellationToken, Task> OnLive { get; private init; }
-    public OnEventErrorCallback<TRawEvent, TPosition, TState> OnEventError { get; private init; }
+    public Func<TState, CancellationToken, Task<TPosition?>> OnStartingCallback { get; private init; }
+    public Func<TState, CancellationToken, Task> OnCatchingUpCallback { get; private init; }
+    public Func<TState, TPosition, CancellationToken, Task> OnCheckpointCallback { get; private init; }
+    public Func<TState, CancellationToken, Task> OnLiveCallback { get; private init; }
+    public OnEventErrorCallback<TRawEvent, TPosition, TState> OnEventErrorCallback { get; private init; }
 
-    public Func<SubscriptionDroppedReason, Exception?, CancellationToken, Task> OnSubscriptionDropped
+    public Func<SubscriptionDroppedReason, Exception?, CancellationToken, Task> OnSubscriptionDroppedCallback
     {
         get;
         private init;
@@ -122,34 +122,34 @@ internal sealed class StateProjectionOptions<TRawEvent, TPosition, TState>
         Func<TState, CancellationToken, Task<TPosition?>> onStarting)
     {
         if (onStarting == null) throw new ArgumentNullException(nameof(onStarting));
-        return new StateProjectionOptions<TRawEvent, TPosition, TState>(this) { OnStarting = onStarting };
+        return new StateProjectionOptions<TRawEvent, TPosition, TState>(this) { OnStartingCallback = onStarting };
     }
 
     public StateProjectionOptions<TRawEvent, TPosition, TState> WithOnCatchingUp(
         Func<TState, CancellationToken, Task> onCatchingUp)
     {
         if (onCatchingUp == null) throw new ArgumentNullException(nameof(onCatchingUp));
-        return new StateProjectionOptions<TRawEvent, TPosition, TState>(this) { OnCatchingUp = onCatchingUp };
+        return new StateProjectionOptions<TRawEvent, TPosition, TState>(this) { OnCatchingUpCallback = onCatchingUp };
     }
 
     public StateProjectionOptions<TRawEvent, TPosition, TState> WithOnCheckpoint(
         Func<TState, TPosition, CancellationToken, Task> onCheckpoint)
     {
         if (onCheckpoint == null) throw new ArgumentNullException(nameof(onCheckpoint));
-        return new StateProjectionOptions<TRawEvent, TPosition, TState>(this) { OnCheckpoint = onCheckpoint };
+        return new StateProjectionOptions<TRawEvent, TPosition, TState>(this) { OnCheckpointCallback = onCheckpoint };
     }
 
     public StateProjectionOptions<TRawEvent, TPosition, TState> WithOnLive(Func<TState, CancellationToken, Task> onLive)
     {
         if (onLive == null) throw new ArgumentNullException(nameof(onLive));
-        return new StateProjectionOptions<TRawEvent, TPosition, TState>(this) { OnLive = onLive };
+        return new StateProjectionOptions<TRawEvent, TPosition, TState>(this) { OnLiveCallback = onLive };
     }
 
     public StateProjectionOptions<TRawEvent, TPosition, TState> WithOnEventError(
         OnEventErrorCallback<TRawEvent, TPosition, TState> onEventError)
     {
         if (onEventError == null) throw new ArgumentNullException(nameof(onEventError));
-        return new StateProjectionOptions<TRawEvent, TPosition, TState>(this) { OnEventError = onEventError };
+        return new StateProjectionOptions<TRawEvent, TPosition, TState>(this) { OnEventErrorCallback = onEventError };
     }
 
     public StateProjectionOptions<TRawEvent, TPosition, TState> WithOnSubscriptionDropped(
@@ -159,7 +159,7 @@ internal sealed class StateProjectionOptions<TRawEvent, TPosition, TState>
 
         return new StateProjectionOptions<TRawEvent, TPosition, TState>(this)
         {
-            OnSubscriptionDropped = onSubscriptionDropped
+            OnSubscriptionDroppedCallback = onSubscriptionDropped
         };
     }
 

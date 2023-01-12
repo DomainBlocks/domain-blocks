@@ -43,6 +43,13 @@ public interface IEventStreamSubscriber<in TEvent, TPosition>
     /// </summary>
     Task OnLive(CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Invoked when an exception is thrown from <see cref="OnEvent"/>, giving the subscriber an opportunity to resolve
+    /// the error.
+    /// </summary>
+    /// <returns>
+    /// The resolution to apply.
+    /// </returns>
     Task<EventErrorResolution> OnEventError(
         TEvent @event,
         TPosition position,
