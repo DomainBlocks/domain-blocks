@@ -66,7 +66,7 @@ public class SqlStreamStoreProjectionTests
                     return Task.CompletedTask;
                 })
                 .OnEventError((_, _, _) => Task.FromResult(EventErrorResolution.Retry))
-                .Map(x => x.EventName("ItemAddedToShoppingCart").To<ItemAddedToShoppingCart2>())
+                .Map(x => x.EventName("ItemAddedToShoppingCart").ToType<ItemAddedToShoppingCart2>())
                 .When<ShoppingCartCreated>((e, s) =>
                 {
                     try
