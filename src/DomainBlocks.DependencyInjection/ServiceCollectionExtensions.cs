@@ -50,6 +50,11 @@ public static class ServiceCollectionExtensions
 
     public static IServiceCollection AddEventStreamSubscription(
         this IServiceCollection services,
+        Action<EventStreamSubscriptionBuilder> builderAction) =>
+        services.AddEventStreamSubscription((_, options) => builderAction(options));
+
+    public static IServiceCollection AddEventStreamSubscription(
+        this IServiceCollection services,
         Action<IServiceProvider, EventStreamSubscriptionBuilder> builderAction)
     {
         services.AddSingleton(sp =>

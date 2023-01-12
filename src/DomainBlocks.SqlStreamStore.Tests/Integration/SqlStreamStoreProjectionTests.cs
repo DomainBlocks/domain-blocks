@@ -51,7 +51,7 @@ public class SqlStreamStoreProjectionTests
         var checkpointSignal = new TaskCompletionSource();
         var exception = new Exception("Event handler error");
 
-        readServices.AddEventStreamSubscription((_, options) =>
+        readServices.AddEventStreamSubscription(options =>
         {
             options
                 .UseSqlStreamStore(o => o.WithInstance(streamStore))
