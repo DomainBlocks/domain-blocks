@@ -92,13 +92,15 @@ internal sealed class StateProjectionSubscriber<TRawEvent, TPosition, TState> :
     {
         _subscriptionStatus = SubscriptionStatus.Live;
 
-        if (_state != null)
+        if (_state == null)
         {
-            await _options.OnLive(_state, cancellationToken);
+            return;
         }
 
-        // Clean the state if required here. This allows us to free resources in the case there were no events at all
-        // during catching up.
+        await _options.OnLive(_state, cancellationToken);
+
+        // Clean the state if required here. This allows us to free resources in the case there were no events during
+        // catchup.
         CleanUpStateIfRequired();
     }
 
