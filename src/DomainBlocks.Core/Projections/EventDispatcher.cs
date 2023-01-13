@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using DomainBlocks.Core.Metadata;
 using DomainBlocks.Core.Serialization;
+using DomainBlocks.Logging;
 using Microsoft.Extensions.Logging;
 
 namespace DomainBlocks.Core.Projections;

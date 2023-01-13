@@ -1,7 +1,7 @@
 using DomainBlocks.Core.Projections;
 using DomainBlocks.Core.Projections.Builders;
+using DomainBlocks.ThirdParty.SqlStreamStore.Streams;
 using DomainBlocks.SqlStreamStore.Serialization;
-using SqlStreamStore.Streams;
 
 namespace DomainBlocks.SqlStreamStore.Projections;
 

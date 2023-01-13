@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DomainBlocks.ThirdParty.SqlStreamStore</RootNamespace>
+    <PackageId>DomainBlocks.ThirdParty.SqlStreamStore.Tests</PackageId>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\DomainBlocks.ThirdParty.SqlStreamStore.AcceptanceTests\*.cs" Exclude="..\DomainBlocks.ThirdParty.SqlStreamStore.AcceptanceTests\AcceptanceTests.DeletionTracking.cs" LinkBase="InMemory" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DomainBlocks.ThirdParty.SqlStreamStore.TestUtils\DomainBlocks.ThirdParty.SqlStreamStore.TestUtils.csproj" />
+    <ProjectReference Include="..\DomainBlocks.ThirdParty.SqlStreamStore\DomainBlocks.ThirdParty.SqlStreamStore.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.6.1" />
+    <PackageReference Include="Shouldly" Version="3.0.2" />
+    <PackageReference Include="xunit" Version="2.4.1" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.4.3">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>

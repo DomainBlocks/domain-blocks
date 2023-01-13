@@ -1,6 +1,6 @@
 using System.Text.Json;
 using DomainBlocks.Core.Serialization;
-using SqlStreamStore;
+using DomainBlocks.ThirdParty.SqlStreamStore;
 
 namespace DomainBlocks.SqlStreamStore;
 

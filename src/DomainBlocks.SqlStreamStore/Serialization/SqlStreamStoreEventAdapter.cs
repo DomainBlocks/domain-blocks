@@ -1,5 +1,5 @@
 using DomainBlocks.Core.Serialization;
-using SqlStreamStore.Streams;
+using DomainBlocks.ThirdParty.SqlStreamStore.Streams;
 
 namespace DomainBlocks.SqlStreamStore.Serialization;
 

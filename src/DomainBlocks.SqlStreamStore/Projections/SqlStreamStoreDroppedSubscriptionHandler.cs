@@ -1,6 +1,6 @@
-﻿using DomainBlocks.Core;
+﻿using DomainBlocks.ThirdParty.SqlStreamStore.Subscriptions;
+using DomainBlocks.Logging;
 using Microsoft.Extensions.Logging;
-using SqlStreamStore.Subscriptions;
 
 namespace DomainBlocks.SqlStreamStore.Projections;
 
@@ -8,7 +8,9 @@ public class SqlStreamStoreDroppedSubscriptionHandler
 {
     private readonly Action _stop;
     private readonly Func<Task> _resubscribe;
-    private static readonly ILogger<SqlStreamStoreDroppedSubscriptionHandler> Log = Logger.CreateFor<SqlStreamStoreDroppedSubscriptionHandler>();
+
+    private static readonly ILogger<SqlStreamStoreDroppedSubscriptionHandler> Log =
+        Logger.CreateFor<SqlStreamStoreDroppedSubscriptionHandler>();
 
     private int _maxSubscribeAttempts = 3;
     private int _subscribeAttempts;

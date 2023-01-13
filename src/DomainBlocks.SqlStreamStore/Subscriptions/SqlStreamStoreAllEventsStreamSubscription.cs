@@ -1,8 +1,8 @@
 using System.Runtime.CompilerServices;
 using DomainBlocks.Core.Subscriptions;
-using SqlStreamStore;
-using SqlStreamStore.Streams;
-using SqlStreamStoreSubscriptionDroppedReason = SqlStreamStore.Subscriptions.SubscriptionDroppedReason;
+using DomainBlocks.ThirdParty.SqlStreamStore;
+using DomainBlocks.ThirdParty.SqlStreamStore.Streams;
+using SqlStreamStoreSubscriptionDroppedReason = DomainBlocks.ThirdParty.SqlStreamStore.Subscriptions.SubscriptionDroppedReason;
 
 namespace DomainBlocks.SqlStreamStore.Subscriptions;
 

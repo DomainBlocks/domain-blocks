@@ -1,5 +1,5 @@
-﻿using DomainBlocks.Core;
-using DomainBlocks.Core.Projections;
+﻿using DomainBlocks.Core.Projections;
+using DomainBlocks.Logging;
 using EventStore.Client;
 using Microsoft.Extensions.Logging;
 using EventRecord = EventStore.Client.EventRecord;

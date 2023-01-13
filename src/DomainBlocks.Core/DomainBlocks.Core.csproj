@@ -3,8 +3,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
-  
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="5.0.0" />
+    <ProjectReference Include="..\DomainBlocks.Logging\DomainBlocks.Logging.csproj" />
   </ItemGroup>
 </Project>
