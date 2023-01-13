@@ -55,6 +55,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.DependencyInje
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.SqlStreamStore.Postgres", "DomainBlocks.SqlStreamStore.Postgres\DomainBlocks.SqlStreamStore.Postgres.csproj", "{C71B3879-71AC-4299-949A-CE5CF2ED5057}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Postgres", "DomainBlocks.Postgres\DomainBlocks.Postgres.csproj", "{60505052-9A17-482E-A1D4-83F0F4C06CA9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Postgres.Playground", "DomainBlocks.Postgres.Playground\DomainBlocks.Postgres.Playground\DomainBlocks.Postgres.Playground.csproj", "{FE628BC7-B17D-42E6-A802-A7F3F09DAF0D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -141,6 +145,14 @@ Global
 		{C71B3879-71AC-4299-949A-CE5CF2ED5057}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C71B3879-71AC-4299-949A-CE5CF2ED5057}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C71B3879-71AC-4299-949A-CE5CF2ED5057}.Release|Any CPU.Build.0 = Release|Any CPU
+		{60505052-9A17-482E-A1D4-83F0F4C06CA9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{60505052-9A17-482E-A1D4-83F0F4C06CA9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{60505052-9A17-482E-A1D4-83F0F4C06CA9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{60505052-9A17-482E-A1D4-83F0F4C06CA9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FE628BC7-B17D-42E6-A802-A7F3F09DAF0D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FE628BC7-B17D-42E6-A802-A7F3F09DAF0D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FE628BC7-B17D-42E6-A802-A7F3F09DAF0D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FE628BC7-B17D-42E6-A802-A7F3F09DAF0D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -160,6 +172,7 @@ Global
 		{4C40FC22-5F33-43F4-AB98-06B3EC59B627} = {2FE61C82-E166-4A8B-ABDB-F4FB87FA3F91}
 		{23EDB3B7-EAA2-44A0-B8FB-4915C29368B4} = {2FE61C82-E166-4A8B-ABDB-F4FB87FA3F91}
 		{DBC9F3D3-EE97-4298-BBEC-8A40F81759F0} = {2FE61C82-E166-4A8B-ABDB-F4FB87FA3F91}
+		{FE628BC7-B17D-42E6-A802-A7F3F09DAF0D} = {2FE61C82-E166-4A8B-ABDB-F4FB87FA3F91}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {BA018103-0F59-4D7F-9119-099BF2CC020F}

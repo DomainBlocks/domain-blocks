@@ -1,4 +1,4 @@
-namespace DomainBlocks.Playground.Npgsql;
+namespace DomainBlocks.Postgres;
 
 public record EventsSubscriptionOptions(
     string ConnectionString,
