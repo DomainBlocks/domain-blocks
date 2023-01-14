@@ -1,4 +1,4 @@
-﻿using DomainBlocks.Core;
+﻿using DomainBlocks.Logging;
 using EventStore.Client;
 using Microsoft.Extensions.Logging;
 
@@ -8,7 +8,9 @@ public class EventStoreDroppedSubscriptionHandler
 {
     private readonly Action _stop;
     private readonly Func<CancellationToken, Task> _resubscribe;
-    private static readonly ILogger<EventStoreDroppedSubscriptionHandler> Log = Logger.CreateFor<EventStoreDroppedSubscriptionHandler>();
+
+    private static readonly ILogger<EventStoreDroppedSubscriptionHandler> Log =
+        Logger.CreateFor<EventStoreDroppedSubscriptionHandler>();
 
     private int _maxSubscribeAttempts = 3;
     private int _subscribeAttempts;

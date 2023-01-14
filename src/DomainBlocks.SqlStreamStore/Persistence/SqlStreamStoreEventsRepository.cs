@@ -1,10 +1,10 @@
 ﻿using System.Runtime.CompilerServices;
-using DomainBlocks.Core;
 using DomainBlocks.Core.Persistence;
 using DomainBlocks.Core.Serialization;
+using DomainBlocks.ThirdParty.SqlStreamStore;
+using DomainBlocks.ThirdParty.SqlStreamStore.Streams;
+using DomainBlocks.Logging;
 using Microsoft.Extensions.Logging;
-using SqlStreamStore;
-using SqlStreamStore.Streams;
 using StreamVersion = DomainBlocks.Core.Persistence.StreamVersion;
 
 namespace DomainBlocks.SqlStreamStore.Persistence;

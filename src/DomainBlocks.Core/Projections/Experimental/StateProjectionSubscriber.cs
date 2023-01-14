@@ -32,14 +32,14 @@ internal sealed class StateProjectionSubscriber<TRawEvent, TPosition, TState> :
     {
         _subscriptionStatus = SubscriptionStatus.Starting;
         var state = GetOrCreateState();
-        return await _options.OnStarting(state, cancellationToken);
+        return await _options.OnStartingCallback(state, cancellationToken);
     }
 
     public async Task OnCatchingUp(CancellationToken cancellationToken)
     {
         _subscriptionStatus = SubscriptionStatus.CatchingUp;
         var state = GetOrCreateState();
-        await _options.OnCatchingUp(state, cancellationToken);
+        await _options.OnCatchingUpCallback(state, cancellationToken);
     }
 
     public async Task<OnEventResult> OnEvent(TRawEvent @event, TPosition position, CancellationToken cancellationToken)
@@ -84,7 +84,7 @@ internal sealed class StateProjectionSubscriber<TRawEvent, TPosition, TState> :
             return;
         }
 
-        await _options.OnCheckpoint(_state, position, cancellationToken);
+        await _options.OnCheckpointCallback(_state, position, cancellationToken);
         CleanUpStateIfRequired();
     }
 
@@ -97,7 +97,7 @@ internal sealed class StateProjectionSubscriber<TRawEvent, TPosition, TState> :
             return;
         }
 
-        await _options.OnLive(_state, cancellationToken);
+        await _options.OnLiveCallback(_state, cancellationToken);
 
         // Clean the state if required here. This allows us to free resources in the case there were no events during
         // catchup.
@@ -119,7 +119,7 @@ internal sealed class StateProjectionSubscriber<TRawEvent, TPosition, TState> :
                 _currentDeserializedMetadata!,
                 exception);
 
-            return _options.OnEventError(eventError, _state!, cancellationToken);
+            return _options.OnEventErrorCallback(eventError, _state!, cancellationToken);
         }
         finally
         {
@@ -134,7 +134,7 @@ internal sealed class StateProjectionSubscriber<TRawEvent, TPosition, TState> :
         CancellationToken cancellationToken)
     {
         // TODO (DS): What should we do with the state here?
-        return _options.OnSubscriptionDropped(reason, exception, cancellationToken);
+        return _options.OnSubscriptionDroppedCallback(reason, exception, cancellationToken);
     }
 
     private TState GetOrCreateState()

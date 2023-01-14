@@ -1,7 +1,7 @@
 ﻿using System.Runtime.CompilerServices;
-using DomainBlocks.Core;
 using DomainBlocks.Core.Persistence;
 using DomainBlocks.Core.Serialization;
+using DomainBlocks.Logging;
 using EventStore.Client;
 using Microsoft.Extensions.Logging;
 

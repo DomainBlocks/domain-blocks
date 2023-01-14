@@ -1,4 +1,4 @@
-using SqlStreamStore;
+using DomainBlocks.ThirdParty.SqlStreamStore.Postgres;
 
 namespace DomainBlocks.SqlStreamStore.Postgres;
 

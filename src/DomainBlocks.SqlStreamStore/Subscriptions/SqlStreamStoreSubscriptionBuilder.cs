@@ -1,6 +1,6 @@
 using DomainBlocks.Core.Subscriptions.Builders;
+using DomainBlocks.ThirdParty.SqlStreamStore.Streams;
 using DomainBlocks.SqlStreamStore.Serialization;
-using SqlStreamStore.Streams;
 
 namespace DomainBlocks.SqlStreamStore.Subscriptions;
 

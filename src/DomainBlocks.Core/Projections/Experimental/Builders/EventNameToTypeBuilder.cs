@@ -11,7 +11,7 @@ public sealed class EventNameToTypeBuilder
         _eventName = eventName;
     }
 
-    public void To<TEvent>()
+    public void ToType<TEvent>()
     {
         _eventTypeMapBuilder.EventTypeMap = _eventTypeMapBuilder.EventTypeMap.Add(typeof(TEvent), _eventName);
     }

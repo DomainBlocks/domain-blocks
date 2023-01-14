@@ -3,14 +3,12 @@
     <PropertyGroup>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <RootNamespace>DomainBlocks.SqlStreamStore.Postgres</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>
+      <ProjectReference Include="..\..\third_party\SQLStreamStore\DomainBlocks.ThirdParty.SqlStreamStore.Postgres\DomainBlocks.ThirdParty.SqlStreamStore.Postgres.csproj" />
       <ProjectReference Include="..\DomainBlocks.SqlStreamStore\DomainBlocks.SqlStreamStore.csproj" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <PackageReference Include="SqlStreamStore.Postgres" Version="1.2.0-beta.8" />
     </ItemGroup>
 
 </Project>
