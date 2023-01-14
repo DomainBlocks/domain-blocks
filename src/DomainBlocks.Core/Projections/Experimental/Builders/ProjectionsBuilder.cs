@@ -44,7 +44,7 @@ public sealed class ProjectionsBuilder<TEvent, TPosition>
     }
 
     public StateProjectionOptionsBuilder<TEvent, TPosition, TState> State<TState>(
-        Func<SubscriptionStatus, TState> stateFactory) where TState : class
+        Func<ProjectionStatus, TState> stateFactory) where TState : class
     {
         var options = new StateProjectionOptions<TEvent, TPosition, TState>().WithStateFactory(stateFactory);
         var builder = new StateProjectionOptionsBuilder<TEvent, TPosition, TState>(_subscriberBuilder, options);
@@ -55,7 +55,7 @@ public sealed class ProjectionsBuilder<TEvent, TPosition>
 
     public StateProjectionOptionsBuilder<TEvent, TPosition, TState> State<TResource, TState>(
         Func<TResource> resourceFactory,
-        Func<TResource, SubscriptionStatus, TState> stateFactory)
+        Func<TResource, ProjectionStatus, TState> stateFactory)
         where TResource : IDisposable
         where TState : class
     {

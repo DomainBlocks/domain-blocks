@@ -8,7 +8,7 @@ namespace DomainBlocks.Core.Projections;
 
 public sealed class EventDispatcher<TReadEvent> : IEventDispatcher
 {
-    private static readonly ILogger<EventDispatcher<TReadEvent>> Log = Logger.CreateFor<EventDispatcher<TReadEvent>>();
+    private static readonly ILogger<EventDispatcher<TReadEvent>> Logger = Log.Create<EventDispatcher<TReadEvent>>();
 
     private readonly IEventPublisher<TReadEvent> _publisher;
     private readonly EventProjectionMap _projectionMap;
@@ -36,17 +36,17 @@ public sealed class EventDispatcher<TReadEvent> : IEventDispatcher
 
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
-        Log.LogDebug("Starting EventStream");
+        Logger.LogDebug("Starting EventStream");
         await ForAllContexts((c, ct) => c.OnInitializing(ct), cancellationToken).ConfigureAwait(false);
-        Log.LogDebug("Context OnInitializing hooks called");
+        Logger.LogDebug("Context OnInitializing hooks called");
 
         // TODO (DS): Hack for now to get the position from the first projection. We'll need to get all positions here,
         // and subscribe from the lowest. To be fixed in a future PR.
         var position = await _projectionContextMap.GetAllContexts().First().OnSubscribing(cancellationToken);
-        Log.LogDebug("Context OnSubscribing hooks called");
+        Logger.LogDebug("Context OnSubscribing hooks called");
 
         await _publisher.StartAsync(HandleEventNotificationAsync, position, cancellationToken).ConfigureAwait(false);
-        Log.LogDebug("Event publisher started");
+        Logger.LogDebug("Event publisher started");
     }
 
     private async Task ForAllContexts(
@@ -66,15 +66,15 @@ public sealed class EventDispatcher<TReadEvent> : IEventDispatcher
         switch (notification.NotificationKind)
         {
             case EventNotificationKind.CatchingUp:
-                Log.LogDebug("Received catching up notification");
+                Logger.LogDebug("Received catching up notification");
                 await ForAllContexts((c, ct) => c.OnCatchingUp(ct), cancellationToken).ConfigureAwait(false);
-                Log.LogDebug("Context OnCatchingUp hooks called");
+                Logger.LogDebug("Context OnCatchingUp hooks called");
                 break;
             case EventNotificationKind.CaughtUp:
-                Log.LogDebug("Received caught up notification");
+                Logger.LogDebug("Received caught up notification");
                 await ForAllContexts(
                     (c, ct) => c.OnCaughtUp(notification.Position, ct), cancellationToken).ConfigureAwait(false);
-                Log.LogDebug("Context OnCaughtUp hooks called");
+                Logger.LogDebug("Context OnCaughtUp hooks called");
                 break;
             case EventNotificationKind.Event:
                 await HandleEventAsync(
@@ -109,7 +109,7 @@ public sealed class EventDispatcher<TReadEvent> : IEventDispatcher
             }
             catch (Exception e)
             {
-                Log.LogError(e, "Exception occurred with deserializing event");
+                Logger.LogError(e, "Exception occurred with deserializing event");
                 throw;
             }
 
@@ -128,12 +128,12 @@ public sealed class EventDispatcher<TReadEvent> : IEventDispatcher
     {
         try
         {
-            Log.LogTrace("Handling event ID {EventId}", eventId);
+            Logger.LogTrace("Handling event ID {EventId}", eventId);
             var eventType = @event.GetType();
             var contextsForEvent = _projectionContextMap.GetContextsForEventType(eventType);
 
             var beforeEventActions = contextsForEvent.Select(c => c.OnEventDispatching(cancellationToken));
-            Log.LogTrace("Context OnBeforeHandleEvent hooks called for event ID {EventId}", eventId);
+            Logger.LogTrace("Context OnBeforeHandleEvent hooks called for event ID {EventId}", eventId);
             await Task.WhenAll(beforeEventActions).ConfigureAwait(false);
 
             if (_projectionMap.TryGetProjections(eventType, out var projections))
@@ -148,7 +148,7 @@ public sealed class EventDispatcher<TReadEvent> : IEventDispatcher
                     // Timeout is best effort as it's only able to check after each projection finishes.
                     if (stopwatch.Elapsed >= _configuration.ProjectionHandlerTimeout)
                     {
-                        Log.LogError("Timed out waiting for projections for event if {EventId}", eventId);
+                        Logger.LogError("Timed out waiting for projections for event if {EventId}", eventId);
 
                         if (!_configuration.ContinueAfterTimeout)
                         {
@@ -163,18 +163,18 @@ public sealed class EventDispatcher<TReadEvent> : IEventDispatcher
                 stopwatch.Stop();
             }
 
-            Log.LogTrace("All projections completed for event ID {EventId}", eventId);
+            Logger.LogTrace("All projections completed for event ID {EventId}", eventId);
 
             foreach (var projectionContext in contextsForEvent)
             {
                 await projectionContext.OnEventHandled(position, cancellationToken).ConfigureAwait(false);
             }
 
-            Log.LogTrace("Context OnAfterHandleEvent hooks called for event ID {EventId}", eventId);
+            Logger.LogTrace("Context OnAfterHandleEvent hooks called for event ID {EventId}", eventId);
         }
         catch (Exception ex)
         {
-            Log.LogError(ex, "Exception occurred handling event id {EventId}", eventId);
+            Logger.LogError(ex, "Exception occurred handling event id {EventId}", eventId);
             if (!_configuration.ContinueAfterProjectionException)
             {
                 _publisher.Stop();

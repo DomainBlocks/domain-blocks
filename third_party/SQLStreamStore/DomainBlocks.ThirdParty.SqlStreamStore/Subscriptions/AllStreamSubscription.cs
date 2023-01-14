@@ -13,7 +13,7 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Subscriptions
     public sealed class AllStreamSubscription : IAllStreamSubscription
     {
         public const int DefaultPageSize = 10;
-        private static readonly ILogger<AllStreamSubscription> Log = Logger.CreateFor<AllStreamSubscription>();
+        private static readonly ILogger<AllStreamSubscription> Logger = Log.Create<AllStreamSubscription>();
         private int _pageSize = DefaultPageSize;
         private long _nextPosition;
         private readonly IReadonlyStreamStore _readonlyStreamStore;
@@ -56,7 +56,7 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Subscriptions
 
             Task.Run(PullAndPush);
 
-            Log.LogInformation(
+            Logger.LogInformation(
                 "AllStream subscription created {name} continuing after position {position}",
                 Name,
                 continueAfterPosition?.ToString() ?? "<null>");
@@ -163,7 +163,7 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Subscriptions
             }
             catch (Exception ex)
             {
-                Log.LogError(ex, "Error reading stream {Name}", Name);
+                Logger.LogError(ex, "Error reading stream {Name}", Name);
                 NotifySubscriptionDropped(SubscriptionDroppedReason.StreamStoreError, ex);
                 throw;
             }
@@ -194,7 +194,7 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Subscriptions
             }
             catch (Exception ex)
             {
-                Log.LogError(ex, "Error reading all stream {Name}", Name);
+                Logger.LogError(ex, "Error reading all stream {Name}", Name);
                 NotifySubscriptionDropped(SubscriptionDroppedReason.StreamStoreError, ex);
                 throw;
             }
@@ -218,7 +218,7 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Subscriptions
                 }
                 catch (Exception ex)
                 {
-                    Log.LogError(
+                    Logger.LogError(
                         ex,
                         "Exception with subscriber receiving message {Name}" +
                         "Message: {message}.", Name, message);
@@ -236,12 +236,12 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Subscriptions
             }
             try
             {
-                Log.LogInformation(exception, "All stream subscription dropped {Name}. Reason: {reason}", Name, reason);
+                Logger.LogInformation(exception, "All stream subscription dropped {Name}. Reason: {reason}", Name, reason);
                 _subscriptionDropped.Invoke(this, reason, exception);
             }
             catch (Exception ex)
             {
-                Log.LogError(
+                Logger.LogError(
                     ex,
                     "Error notifying subscriber that subscription has been dropped ({Name}).",
                     Name);

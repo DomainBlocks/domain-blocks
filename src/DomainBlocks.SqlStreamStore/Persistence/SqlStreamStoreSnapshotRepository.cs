@@ -13,8 +13,8 @@ public class SqlStreamStoreSnapshotRepository : ISnapshotRepository
     private const string SnapshotVersionMetadataKey = "SnapshotVersion";
     private const string SnapshotEventName = "Snapshot";
 
-    private static readonly ILogger<SqlStreamStoreSnapshotRepository> Log =
-        Logger.CreateFor<SqlStreamStoreSnapshotRepository>();
+    private static readonly ILogger<SqlStreamStoreSnapshotRepository> Logger =
+        Log.Create<SqlStreamStoreSnapshotRepository>();
 
     private readonly IStreamStore _streamStore;
     private readonly IEventConverter<StreamMessage, NewStreamMessage> _eventAdapter;
@@ -50,7 +50,7 @@ public class SqlStreamStoreSnapshotRepository : ISnapshotRepository
         }
         catch (Exception ex)
         {
-            Log.LogError(
+            Logger.LogError(
                 ex,
                 "Error when attempting to save snapshot. Stream Name {StreamName}. " +
                 "Snapshot Version {SnapshotVersion}, Snapshot Type {SnapshotType}",
@@ -95,7 +95,7 @@ public class SqlStreamStoreSnapshotRepository : ISnapshotRepository
         }
         catch (Exception ex)
         {
-            Log.LogError(
+            Logger.LogError(
                 ex,
                 "Error when attempting to load snapshot. Stream Name: {StreamName}. Snapshot Type {SnapshotType}",
                 snapshotKey,

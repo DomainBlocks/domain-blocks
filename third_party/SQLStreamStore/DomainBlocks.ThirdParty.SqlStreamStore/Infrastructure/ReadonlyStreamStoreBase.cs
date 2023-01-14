@@ -25,7 +25,7 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Infrastructure
             string logName)
         {
             GetUtcNow = getUtcNow ?? SystemClock.GetUtcNow;
-            Logger = Logging.Logger.Create(logName);
+            Logger = Logging.Log.Create(logName);
 
             _metadataMaxAgeCache = new MetadataMaxAgeCache(this, metadataMaxAgeCacheExpiry,
                 metadataMaxAgeCacheMaxSize, GetUtcNow);
@@ -34,7 +34,7 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Infrastructure
         protected ReadonlyStreamStoreBase(GetUtcNow getUtcNow, string logName)
         {
             GetUtcNow = getUtcNow ?? SystemClock.GetUtcNow;
-            Logger = Logging.Logger.Create(logName);
+            Logger = Logging.Log.Create(logName);
             _disableMetadataCache = true;
         }
 

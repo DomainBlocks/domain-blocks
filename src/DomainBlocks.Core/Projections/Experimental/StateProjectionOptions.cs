@@ -40,7 +40,7 @@ internal sealed class StateProjectionOptions<TRawEvent, TPosition, TState>
     }
 
     public Func<IDisposable> ResourceFactory { get; private init; }
-    public Func<IDisposable, SubscriptionStatus, TState> StateFactory { get; private init; }
+    public Func<IDisposable, ProjectionStatus, TState> StateFactory { get; private init; }
     public ProjectionStateLifetime StateLifetime { get; private init; }
     public CheckpointFrequency CatchupCheckpointFrequency { get; private init; }
     public CheckpointFrequency LiveCheckpointFrequency { get; private init; }
@@ -71,14 +71,14 @@ internal sealed class StateProjectionOptions<TRawEvent, TPosition, TState>
     }
 
     public StateProjectionOptions<TRawEvent, TPosition, TState> WithStateFactory(
-        Func<SubscriptionStatus, TState> stateFactory)
+        Func<ProjectionStatus, TState> stateFactory)
     {
         return WithStateFactory(() => EmptyDisposable.Instance, (_, s) => stateFactory(s));
     }
 
     public StateProjectionOptions<TRawEvent, TPosition, TState> WithStateFactory<TResource>(
         Func<TResource> resourceFactory,
-        Func<TResource, SubscriptionStatus, TState> stateFactory)
+        Func<TResource, ProjectionStatus, TState> stateFactory)
         where TResource : IDisposable
     {
         if (resourceFactory == null) throw new ArgumentNullException(nameof(resourceFactory));

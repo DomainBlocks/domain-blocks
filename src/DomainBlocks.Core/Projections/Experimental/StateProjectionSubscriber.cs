@@ -10,7 +10,7 @@ internal sealed class StateProjectionSubscriber<TRawEvent, TPosition, TState> :
 {
     private readonly StateProjectionOptions<TRawEvent, TPosition, TState> _options;
     private readonly IReadEventAdapter<TRawEvent> _readEventAdapter;
-    private SubscriptionStatus _subscriptionStatus;
+    private ProjectionStatus _projectionStatus;
     private IDisposable? _resource;
     private TState? _state;
     private object? _currentDeserializedEvent;
@@ -30,14 +30,14 @@ internal sealed class StateProjectionSubscriber<TRawEvent, TPosition, TState> :
 
     public async Task<TPosition?> OnStarting(CancellationToken cancellationToken)
     {
-        _subscriptionStatus = SubscriptionStatus.Starting;
+        _projectionStatus = ProjectionStatus.Starting;
         var state = GetOrCreateState();
         return await _options.OnStartingCallback(state, cancellationToken);
     }
 
     public async Task OnCatchingUp(CancellationToken cancellationToken)
     {
-        _subscriptionStatus = SubscriptionStatus.CatchingUp;
+        _projectionStatus = ProjectionStatus.CatchingUp;
         var state = GetOrCreateState();
         await _options.OnCatchingUpCallback(state, cancellationToken);
     }
@@ -90,7 +90,7 @@ internal sealed class StateProjectionSubscriber<TRawEvent, TPosition, TState> :
 
     public async Task OnLive(CancellationToken cancellationToken)
     {
-        _subscriptionStatus = SubscriptionStatus.Live;
+        _projectionStatus = ProjectionStatus.Live;
 
         if (_state == null)
         {
@@ -145,7 +145,7 @@ internal sealed class StateProjectionSubscriber<TRawEvent, TPosition, TState> :
         }
 
         _resource = _options.ResourceFactory();
-        _state = _options.StateFactory(_resource, _subscriptionStatus);
+        _state = _options.StateFactory(_resource, _projectionStatus);
         return _state;
     }
 

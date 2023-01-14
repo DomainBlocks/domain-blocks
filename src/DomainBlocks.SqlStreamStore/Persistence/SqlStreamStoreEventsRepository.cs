@@ -11,8 +11,8 @@ namespace DomainBlocks.SqlStreamStore.Persistence;
 
 public class SqlStreamStoreEventsRepository : IEventsRepository
 {
-    private static readonly ILogger<SqlStreamStoreEventsRepository> Log =
-        Logger.CreateFor<SqlStreamStoreEventsRepository>();
+    private static readonly ILogger<SqlStreamStoreEventsRepository> Logger =
+        Log.Create<SqlStreamStoreEventsRepository>();
 
     private readonly IStreamStore _streamStore;
     private readonly IEventConverter<StreamMessage, NewStreamMessage> _eventConverter;
@@ -46,20 +46,20 @@ public class SqlStreamStoreEventsRepository : IEventsRepository
         }
         catch (Exception ex)
         {
-            Log.LogError(ex, "Unable to serialize events. Aborting write to stream {StreamName}", streamName);
+            Logger.LogError(ex, "Unable to serialize events. Aborting write to stream {StreamName}", streamName);
             throw;
         }
 
         if (messages.Length == 0)
         {
-            Log.LogWarning("No events in batch. Exiting");
+            Logger.LogWarning("No events in batch. Exiting");
             return expectedVersion;
         }
 
         // Use the ID of the first event in the batch as an identifier for the whole write
         var writeId = messages[0].MessageId;
 
-        Log.LogDebug(
+        Logger.LogDebug(
             "Appending {EventCount} events to stream {StreamName}. Expected stream version {StreamVersion}. " +
             "Write ID {WriteId}",
             messages.Length,
@@ -67,11 +67,11 @@ public class SqlStreamStoreEventsRepository : IEventsRepository
             expectedVersion,
             writeId);
 
-        if (Log.IsEnabled(LogLevel.Trace))
+        if (Logger.IsEnabled(LogLevel.Trace))
         {
             foreach (var eventData in messages)
             {
-                Log.LogTrace(
+                Logger.LogTrace(
                     "Event to append {EventId}. EventType {EventType}. WriteId {WriteId}. " +
                     "EventJsonString {EventJsonString}. MetadataJsonString {MetadataJsonString}",
                     eventData.MessageId,
@@ -87,11 +87,12 @@ public class SqlStreamStoreEventsRepository : IEventsRepository
         try
         {
             appendResult = await _streamStore.AppendToStream(streamName, expectedVersion, messages, cancellationToken);
-            Log.LogDebug("Written events to stream. WriteId {WriteId}", writeId);
+            Logger.LogDebug("Written events to stream. WriteId {WriteId}", writeId);
         }
         catch (Exception ex)
         {
-            Log.LogError(ex, "Unable to save events to stream {StreamName}. Write Id {WriteId}", streamName, writeId);
+            Logger.LogError(ex, "Unable to save events to stream {StreamName}. Write Id {WriteId}", streamName,
+                writeId);
             throw;
         }
 
@@ -114,7 +115,7 @@ public class SqlStreamStoreEventsRepository : IEventsRepository
         }
         catch (Exception ex)
         {
-            Log.LogError(ex, "Unable to load events from {StreamName}", streamName);
+            Logger.LogError(ex, "Unable to load events from {StreamName}", streamName);
             throw;
         }
 
@@ -126,11 +127,12 @@ public class SqlStreamStoreEventsRepository : IEventsRepository
 
                 try
                 {
-                    deserializedEvent = await _eventConverter.DeserializeEvent(message, cancellationToken: cancellationToken);
+                    deserializedEvent =
+                        await _eventConverter.DeserializeEvent(message, cancellationToken: cancellationToken);
                 }
                 catch (Exception ex)
                 {
-                    Log.LogError(ex, "Unable to load events from {StreamName}", streamName);
+                    Logger.LogError(ex, "Unable to load events from {StreamName}", streamName);
                     throw;
                 }
 
@@ -149,7 +151,7 @@ public class SqlStreamStoreEventsRepository : IEventsRepository
             }
             catch (Exception ex)
             {
-                Log.LogError(ex, "Unable to load events from {StreamName}", streamName);
+                Logger.LogError(ex, "Unable to load events from {StreamName}", streamName);
                 throw;
             }
         }

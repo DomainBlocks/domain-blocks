@@ -6,13 +6,12 @@ namespace DomainBlocks.SqlStreamStore.Projections;
 
 public class SqlStreamStoreDroppedSubscriptionHandler
 {
+    private static readonly ILogger<SqlStreamStoreDroppedSubscriptionHandler> Logger =
+        Log.Create<SqlStreamStoreDroppedSubscriptionHandler>();
+
+    private const int MaxSubscribeAttempts = 3;
     private readonly Action _stop;
     private readonly Func<Task> _resubscribe;
-
-    private static readonly ILogger<SqlStreamStoreDroppedSubscriptionHandler> Log =
-        Logger.CreateFor<SqlStreamStoreDroppedSubscriptionHandler>();
-
-    private int _maxSubscribeAttempts = 3;
     private int _subscribeAttempts;
     private TimeSpan _backOffTimeSpan = TimeSpan.FromSeconds(1);
 
@@ -27,16 +26,16 @@ public class SqlStreamStoreDroppedSubscriptionHandler
         switch (reason)
         {
             case SubscriptionDroppedReason.Disposed:
-                Log.LogInformation("Subscription was disposed. Stopping event publisher");
+                Logger.LogInformation("Subscription was disposed. Stopping event publisher");
                 _stop();
                 break;
             case SubscriptionDroppedReason.SubscriberError:
-                Log.LogCritical(
+                Logger.LogCritical(
                     exception, "Exception occurred in subscriber. Stopping event publisher. Reason {Reason}", reason);
                 _stop();
                 break;
             case SubscriptionDroppedReason.StreamStoreError:
-                Log.LogCritical(exception,
+                Logger.LogCritical(exception,
                     "Server error in SqlStreamStore. Stopping event publisher. Reason {Reason}", reason);
                 _stop();
                 break;
@@ -48,14 +47,16 @@ public class SqlStreamStoreDroppedSubscriptionHandler
     // TODO: Need to better understand the exceptions that are thrown to understand when to resubscribe
     private async Task TryToResubscribe()
     {
-        if (_subscribeAttempts > _maxSubscribeAttempts)
+        if (_subscribeAttempts > MaxSubscribeAttempts)
         {
-            Log.LogCritical($"Unable to reconnect to SqlStreamStore after {_maxSubscribeAttempts} attempts. Stopping event publisher");
+            Logger.LogCritical(
+                $"Unable to reconnect to SqlStreamStore after {MaxSubscribeAttempts} attempts. Stopping event publisher");
             _stop();
             return;
         }
 
-        Log.LogInformation($"Waiting for {_backOffTimeSpan.TotalSeconds} seconds before resubscribing. Resubscribe attempt {_subscribeAttempts}");
+        Logger.LogInformation(
+            $"Waiting for {_backOffTimeSpan.TotalSeconds} seconds before resubscribing. Resubscribe attempt {_subscribeAttempts}");
         await Task.Delay(_backOffTimeSpan);
 
         _backOffTimeSpan *= 2;

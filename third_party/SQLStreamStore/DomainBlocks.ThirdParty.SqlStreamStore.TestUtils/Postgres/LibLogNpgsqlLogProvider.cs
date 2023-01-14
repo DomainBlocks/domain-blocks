@@ -10,7 +10,7 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.TestUtils.Postgres
     {
         public NpgsqlLogger CreateLogger(string name)
         {
-            var logger = Logger.Create(name);
+            var logger = Log.Create(name);
             return new LibLogNpgsqlLogger(logger, name);
         }
 

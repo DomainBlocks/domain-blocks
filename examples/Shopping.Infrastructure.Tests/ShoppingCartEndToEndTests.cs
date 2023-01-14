@@ -31,7 +31,7 @@ public class ShoppingCartEndToEndTests : EventStoreIntegrationTest
     public async Task ReadModelIsBuilt()
     {
         var loggerFactory = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Debug).AddConsole());
-        Logger.SetLoggerFactory(loggerFactory);
+        Log.SetLoggerFactory(loggerFactory);
 
         await SetUpReadModelProjections();
         await SetUpProcessManagerProjections();
