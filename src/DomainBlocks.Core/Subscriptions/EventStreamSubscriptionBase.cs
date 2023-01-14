@@ -42,7 +42,20 @@ public abstract class EventStreamSubscriptionBase<TEvent, TPosition> : IEventStr
 
         _lastPosition = await _subscriber.OnStarting(_cancellationTokenSource.Token);
         RunEventLoop();
-        _subscription = await Subscribe(_lastPosition, _cancellationTokenSource.Token);
+
+        var subscribeTask = Subscribe(_lastPosition, _cancellationTokenSource.Token);
+
+        // We wait for either the subscription or event loop to complete here, in case there is an error on the event
+        // loop while catching up, causing it to terminate early.
+        var task = await Task.WhenAny(subscribeTask, _eventLoopCompletedSignal.Task);
+
+        if (task == _eventLoopCompletedSignal.Task)
+        {
+            await _eventLoopCompletedSignal.Task;
+            return;
+        }
+
+        _subscription = await subscribeTask;
     }
 
     public Task WaitForCompletedAsync(CancellationToken cancellationToken = default) =>
