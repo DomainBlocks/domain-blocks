@@ -16,7 +16,7 @@
   },
   "release": {
     "branchName": "release/v{version}",
-	"versionIncrement" : "minor",
-    "firstUnstableTag" : "preview"
+    "versionIncrement": "minor",
+    "firstUnstableTag": "preview"
   }
 }

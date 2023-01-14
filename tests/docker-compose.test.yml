@@ -23,7 +23,7 @@ services:
       - EVENTSTORE_ENABLE_ATOM_PUB_OVER_HTTP=true
     # ES healthcheck doesnt't work properly. Turn it off in docker compose
     healthcheck:
-      test: ["NONE"]
+      test: [ "NONE" ]
     volumes:
       - type: volume
         source: eventstore-volume-data

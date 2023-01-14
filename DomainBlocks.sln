@@ -29,6 +29,7 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SQLStreamStore", "SQLStreamStore", "{4CFE9955-FE90-41E6-943A-0253EFDCD438}"
 	ProjectSection(SolutionItems) = preProject
 		third_party\SQLStreamStore\Directory.Build.props = third_party\SQLStreamStore\Directory.Build.props
+		third_party\SQLStreamStore\readme.md = third_party\SQLStreamStore\readme.md
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.ThirdParty.SqlStreamStore", "third_party\SQLStreamStore\DomainBlocks.ThirdParty.SqlStreamStore\DomainBlocks.ThirdParty.SqlStreamStore.csproj", "{E3939DD1-4A71-4949-8255-61CDF56F3D87}"
