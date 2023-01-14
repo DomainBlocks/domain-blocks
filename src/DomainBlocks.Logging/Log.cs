@@ -3,12 +3,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DomainBlocks.Logging;
 
-public static class Logger
+public static class Log
 {
     private static ILoggerFactory _loggerFactory;
     private static int _userLoggerFactorySet;
 
-    static Logger()
+    static Log()
     {
         _loggerFactory = new NullLoggerFactory();
     }
@@ -35,7 +35,7 @@ public static class Logger
         }
     }
 
-    public static ILogger<T> CreateFor<T>()
+    public static ILogger<T> Create<T>()
     {
         return _loggerFactory.CreateLogger<T>();
     }

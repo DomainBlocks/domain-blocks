@@ -9,7 +9,7 @@ namespace DomainBlocks.EventStore.Persistence;
 
 public class EventStoreEventsRepository : IEventsRepository
 {
-    private static readonly ILogger<EventStoreEventsRepository> Log = Logger.CreateFor<EventStoreEventsRepository>();
+    private static readonly ILogger<EventStoreEventsRepository> Logger = Log.Create<EventStoreEventsRepository>();
     private readonly EventStoreClient _client;
     private readonly IEventConverter<ResolvedEvent, EventData> _eventConverter;
 
@@ -18,7 +18,7 @@ public class EventStoreEventsRepository : IEventsRepository
         _client = client ?? throw new ArgumentNullException(nameof(client));
         _eventConverter = eventConverter ?? throw new ArgumentNullException(nameof(eventConverter));
 
-        Log.LogDebug(
+        Logger.LogDebug(
             "EventStoreEventsRepository created using {EventConverterType} serializer",
             eventConverter.GetType().Name);
     }
@@ -39,21 +39,21 @@ public class EventStoreEventsRepository : IEventsRepository
         }
         catch (Exception ex)
         {
-            Log.LogError(ex, "Unable to serialize events. Aborting write to stream {StreamName}", streamName);
+            Logger.LogError(ex, "Unable to serialize events. Aborting write to stream {StreamName}", streamName);
             throw;
         }
 
         var streamVersion = MapStreamVersionToEventStoreStreamRevision(expectedStreamVersion);
         if (eventDataArray.Length == 0)
         {
-            Log.LogWarning("No events in batch. Exiting");
+            Logger.LogWarning("No events in batch. Exiting");
             return streamVersion.ToInt64();
         }
 
         // Use the ID of the first event in the batch as an identifier for the whole write to ES
         var writeId = eventDataArray[0].EventId;
 
-        Log.LogDebug(
+        Logger.LogDebug(
             "Appending {EventCount} events to stream {StreamName}. Expected stream version {StreamVersion}. " +
             "Write ID {WriteId}",
             eventDataArray.Length,
@@ -61,11 +61,11 @@ public class EventStoreEventsRepository : IEventsRepository
             streamVersion,
             writeId);
 
-        if (Log.IsEnabled(LogLevel.Trace))
+        if (Logger.IsEnabled(LogLevel.Trace))
         {
             foreach (var eventData in eventDataArray)
             {
-                Log.LogTrace(
+                Logger.LogTrace(
                     "Event to append {EventId}. EventType {EventType}. WriteId {WriteId}. EventBytes {EventBytes}. " +
                     "MetadataBytes {MetadataBytes}. ContentType {ContentType} ",
                     eventData.EventId,
@@ -86,11 +86,12 @@ public class EventStoreEventsRepository : IEventsRepository
                 eventDataArray,
                 cancellationToken: cancellationToken);
 
-            Log.LogDebug("Written events to stream. WriteId {WriteId}", writeId);
+            Logger.LogDebug("Written events to stream. WriteId {WriteId}", writeId);
         }
         catch (Exception ex)
         {
-            Log.LogError(ex, "Unable to save events to stream {StreamName}. Write Id {WriteId}", streamName, writeId);
+            Logger.LogError(ex, "Unable to save events to stream {StreamName}. Write Id {WriteId}", streamName,
+                writeId);
             throw;
         }
 
@@ -116,7 +117,7 @@ public class EventStoreEventsRepository : IEventsRepository
         }
         catch (Exception ex)
         {
-            Log.LogError(ex, "Unable to load events from {StreamName}", streamName);
+            Logger.LogError(ex, "Unable to load events from {StreamName}", streamName);
             throw;
         }
 
@@ -137,7 +138,7 @@ public class EventStoreEventsRepository : IEventsRepository
             }
             catch (Exception ex)
             {
-                Log.LogError(ex, "Unable to load events from {StreamName}", streamName);
+                Logger.LogError(ex, "Unable to load events from {StreamName}", streamName);
                 throw;
             }
 

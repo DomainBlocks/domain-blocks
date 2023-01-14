@@ -1,6 +1,6 @@
 namespace DomainBlocks.Core.Projections.Experimental;
 
-public enum SubscriptionStatus
+public enum ProjectionStatus
 {
     Starting,
     CatchingUp,

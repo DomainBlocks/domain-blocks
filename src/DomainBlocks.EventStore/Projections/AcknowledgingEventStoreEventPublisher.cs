@@ -8,8 +8,8 @@ namespace DomainBlocks.EventStore.Projections;
 
 public class AcknowledgingEventStoreEventPublisher : IEventPublisher<EventRecord>, IDisposable
 {
-    private static readonly ILogger<AcknowledgingEventStoreEventPublisher> Log =
-        Logger.CreateFor<AcknowledgingEventStoreEventPublisher>();
+    private static readonly ILogger<AcknowledgingEventStoreEventPublisher> Logger =
+        Log.Create<AcknowledgingEventStoreEventPublisher>();
 
     private readonly EventStorePersistentSubscriptionsClient _client;
     private Func<EventNotification<EventRecord>, CancellationToken, Task>? _onEvent;
@@ -80,18 +80,18 @@ public class AcknowledgingEventStoreEventPublisher : IEventPublisher<EventRecord
         {
             await _onEvent!(resolvedEvent.ToEventNotification(), cancellationToken);
             await subscription.Ack(resolvedEvent);
-            Log.LogTrace("Handled and acknowledged event {EventId}", resolvedEvent.Event.EventId);
+            Logger.LogTrace("Handled and acknowledged event {EventId}", resolvedEvent.Event.EventId);
         }
         catch (Exception ex)
         {
-            Log.LogWarning(ex, "Failed to handle event {EventId}", resolvedEvent.Event.EventId);
+            Logger.LogWarning(ex, "Failed to handle event {EventId}", resolvedEvent.Event.EventId);
             try
             {
                 await RetryHandlingEventOrFail(subscription, resolvedEvent, retryNumber, cancellationToken);
             }
             catch (Exception ex2)
             {
-                Log.LogCritical(
+                Logger.LogCritical(
                     ex2,
                     "Failed while trying to handle the failure case for event {EventId}. Stopping persistent " +
                     "subscription for stream {StreamName} and group {GroupName}",
@@ -121,7 +121,7 @@ public class AcknowledgingEventStoreEventPublisher : IEventPublisher<EventRecord
             var nextRetryNumber = retryNumber + 1;
             var delay = retrySettings.GetRetryDelay(nextRetryNumber);
 
-            Log.LogInformation(
+            Logger.LogInformation(
                 "Retrying event {EventId}. Retry number {RetryNumber}. Delaying for {RetryDelay} before trying again",
                 resolvedEvent.Event.EventId,
                 nextRetryNumber,
@@ -144,7 +144,7 @@ public class AcknowledgingEventStoreEventPublisher : IEventPublisher<EventRecord
             var reason = $"{actionDescription} event {resolvedEvent.Event.EventId} after maximum retries reached " +
                          "and event could not be processed successfully";
 
-            Log.LogError(
+            Logger.LogError(
                 "Could not handle event {EventId} after maximum retries. {ActionDescription} event",
                 resolvedEvent.Event.EventId,
                 actionDescription);

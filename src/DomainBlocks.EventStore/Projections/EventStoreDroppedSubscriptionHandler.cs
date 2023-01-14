@@ -6,13 +6,12 @@ namespace DomainBlocks.EventStore.Projections;
 
 public class EventStoreDroppedSubscriptionHandler
 {
+    private static readonly ILogger<EventStoreDroppedSubscriptionHandler> Logger =
+        Log.Create<EventStoreDroppedSubscriptionHandler>();
+
+    private const int MaxSubscribeAttempts = 3;
     private readonly Action _stop;
     private readonly Func<CancellationToken, Task> _resubscribe;
-
-    private static readonly ILogger<EventStoreDroppedSubscriptionHandler> Log =
-        Logger.CreateFor<EventStoreDroppedSubscriptionHandler>();
-
-    private int _maxSubscribeAttempts = 3;
     private int _subscribeAttempts;
     private TimeSpan _backOffTimeSpan = TimeSpan.FromSeconds(1);
 
@@ -21,23 +20,23 @@ public class EventStoreDroppedSubscriptionHandler
         _stop = stop;
         _resubscribe = resubscribe;
     }
-        
+
     public void HandleDroppedSubscription(SubscriptionDroppedReason reason, Exception? exception)
     {
         switch (reason)
         {
             case SubscriptionDroppedReason.Disposed:
-                Log.LogInformation("Subscription was disposed. Stopping event publisher");
+                Logger.LogInformation("Subscription was disposed. Stopping event publisher");
                 _stop();
                 break;
             case SubscriptionDroppedReason.SubscriberError:
-                Log.LogCritical(exception,
+                Logger.LogCritical(exception,
                     "Exception occurred in subscriber. Stopping event publisher. Reason {Reason}",
                     reason);
                 _stop();
                 break;
             case SubscriptionDroppedReason.ServerError:
-                Log.LogCritical(exception,
+                Logger.LogCritical(exception,
                     "Server error in EventStore subscription. Stopping event publisher. Reason {Reason}",
                     reason);
                 _stop();
@@ -46,21 +45,21 @@ public class EventStoreDroppedSubscriptionHandler
                 throw new ArgumentOutOfRangeException(nameof(reason), reason, null);
         }
     }
-        
+
     // TODO: Need to better understand the new reasons for subscriptions being dropped
     // to see if it still makes sense to try resubscribing
     private async Task TryToResubscribe(CancellationToken cancellationToken = default)
     {
-        if (_subscribeAttempts > _maxSubscribeAttempts)
+        if (_subscribeAttempts > MaxSubscribeAttempts)
         {
-            Log.LogCritical(
+            Logger.LogCritical(
                 "Unable to reconnect to EventStore after {MaxSubscribeAttempts} attempts. Stopping event publisher",
-                _maxSubscribeAttempts);
+                MaxSubscribeAttempts);
             _stop();
             return;
         }
 
-        Log.LogInformation(
+        Logger.LogInformation(
             "Waiting for {TotalSeconds} seconds before resubscribing. Resubscribe attempt {SubscribeAttempts}",
             _backOffTimeSpan.TotalSeconds,
             _subscribeAttempts);

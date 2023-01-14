@@ -1,6 +1,7 @@
 using System;
 using DomainBlocks.Core.Projections.Experimental.Builders;
 using DomainBlocks.Hosting;
+using DomainBlocks.Logging;
 using DomainBlocks.SqlStreamStore.Postgres;
 using DomainBlocks.SqlStreamStore.Subscriptions;
 using DomainBlocks.ThirdParty.SqlStreamStore.Postgres;
@@ -23,7 +24,7 @@ public class Startup
     static Startup()
     {
         var loggerFactory = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Trace).AddConsole());
-        DomainBlocks.Logging.Logger.SetLoggerFactory(loggerFactory);
+        Log.SetLoggerFactory(loggerFactory);
     }
 
     public Startup(IConfiguration configuration)

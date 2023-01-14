@@ -10,7 +10,7 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Subscriptions
     /// </summary>
     public sealed class PollingStreamStoreNotifier : IStreamStoreNotifier
     {
-        private static readonly ILogger<PollingStreamStoreNotifier> Log = Logger.CreateFor<PollingStreamStoreNotifier>();
+        private static readonly ILogger<PollingStreamStoreNotifier> Logger = Log.Create<PollingStreamStoreNotifier>();
 
         private readonly CancellationTokenSource _disposed = new CancellationTokenSource();
         private readonly Func<CancellationToken, Task<long>> _readHeadPosition;
@@ -55,16 +55,16 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Subscriptions
                 try
                 {
                     headPosition = await _readHeadPosition(_disposed.Token);
-                    if(Log.IsEnabled(LogLevel.Trace))
+                    if(Logger.IsEnabled(LogLevel.Trace))
                     {
-                        Log.LogTrace("Polling head position {headPosition}. Previous {previousHeadPosition}",
+                        Logger.LogTrace("Polling head position {headPosition}. Previous {previousHeadPosition}",
                             headPosition, previousHeadPosition);
                     }
                 }
                 catch(Exception ex)
                 {
-                    Log.LogError(ex, "Exception occurred polling stream store for messages. " +
-                                     "HeadPosition: {headPosition}", headPosition);
+                    Logger.LogError(ex, "Exception occurred polling stream store for messages. " +
+                                        "HeadPosition: {headPosition}", headPosition);
                 }
 
                 if(headPosition > previousHeadPosition)

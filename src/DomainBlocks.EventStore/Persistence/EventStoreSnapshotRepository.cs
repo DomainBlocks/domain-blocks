@@ -10,10 +10,7 @@ public class EventStoreSnapshotRepository : ISnapshotRepository
 {
     private const string SnapshotVersionMetadataKey = "SnapshotVersion";
     private const string SnapshotEventName = "Snapshot";
-
-    private static readonly ILogger<EventStoreSnapshotRepository>
-        Log = Logger.CreateFor<EventStoreSnapshotRepository>();
-
+    private static readonly ILogger<EventStoreSnapshotRepository> Logger = Log.Create<EventStoreSnapshotRepository>();
     private readonly EventStoreClient _client;
     private readonly IEventConverter<ResolvedEvent, EventData> _eventConverter;
 
@@ -50,7 +47,7 @@ public class EventStoreSnapshotRepository : ISnapshotRepository
         }
         catch (Exception ex)
         {
-            Log.LogError(
+            Logger.LogError(
                 ex,
                 "Error when attempting to save snapshot. Stream Name {StreamName}. " +
                 "Snapshot Version {SnapshotVersion}, Snapshot Type {SnapshotType}",
@@ -92,7 +89,7 @@ public class EventStoreSnapshotRepository : ISnapshotRepository
         }
         catch (Exception ex)
         {
-            Log.LogError(
+            Logger.LogError(
                 ex,
                 "Error when attempting to load snapshot. Stream Name: {StreamName}. Snapshot Type {SnapshotType}",
                 snapshotKey,
