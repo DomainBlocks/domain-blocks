@@ -15,7 +15,7 @@
     <ItemGroup>
       <ProjectReference Include="..\..\src\DomainBlocks.DependencyInjection\DomainBlocks.DependencyInjection.csproj" />
       <ProjectReference Include="..\..\src\DomainBlocks.SqlStreamStore\DomainBlocks.SqlStreamStore.csproj" />
-      <ProjectReference Include="..\..\examples\Shopping.Domain\Shopping.Domain.csproj" />
+      <ProjectReference Include="..\..\examples\shopping\Shopping.Domain\Shopping.Domain.csproj" />
     </ItemGroup>
 
 </Project>
