@@ -25,7 +25,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\DomainBlocks.DependencyInjection\DomainBlocks.DependencyInjection.csproj" />
     <ProjectReference Include="..\..\src\DomainBlocks.SqlStreamStore.Postgres\DomainBlocks.SqlStreamStore.Postgres.csproj" />
-    <ProjectReference Include="..\..\third_party\SQLStreamStore\DomainBlocks.ThirdParty.SqlStreamStore.Postgres\DomainBlocks.ThirdParty.SqlStreamStore.Postgres.csproj" />
+    <ProjectReference Include="..\..\third_party\SQLStreamStore\src\DomainBlocks.ThirdParty.SqlStreamStore.Postgres\DomainBlocks.ThirdParty.SqlStreamStore.Postgres.csproj" />
     <ProjectReference Include="..\Shopping.Domain\Shopping.Domain.csproj" />
   </ItemGroup>
 

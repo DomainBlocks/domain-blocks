@@ -1,0 +1,14 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <RootNamespace>DomainBlocks.ThirdParty.SqlStreamStore</RootNamespace>
+        <PackageId>DomainBlocks.ThirdParty.SqlStreamStore.Postgres.Tests</PackageId>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="..\DomainBlocks.ThirdParty.SqlStreamStore.AcceptanceTests\*.cs"/>
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\DomainBlocks.ThirdParty.SqlStreamStore.Postgres\DomainBlocks.ThirdParty.SqlStreamStore.Postgres.csproj"/>
+        <ProjectReference Include="..\DomainBlocks.ThirdParty.SqlStreamStore.TestUtils\DomainBlocks.ThirdParty.SqlStreamStore.TestUtils.csproj"/>
+        <ProjectReference Include="..\..\src\DomainBlocks.ThirdParty.SqlStreamStore\DomainBlocks.ThirdParty.SqlStreamStore.csproj"/>
+    </ItemGroup>
+</Project>

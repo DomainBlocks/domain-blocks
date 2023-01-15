@@ -6,7 +6,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\..\src\DomainBlocks.Logging\DomainBlocks.Logging.csproj" />
+      <ProjectReference Include="..\..\..\..\src\DomainBlocks.Logging\DomainBlocks.Logging.csproj" />
     </ItemGroup>
 
 </Project>
