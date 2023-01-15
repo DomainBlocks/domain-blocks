@@ -2,7 +2,7 @@
 // using Npgsql.Replication.PgOutput.Messages;
 // using Shopping.Domain.Events;
 //
-// namespace DomainBlocks.Playground.Npgsql;
+// namespace Projections.Playground.Npgsql;
 //
 // public static class InsertMessageHandler
 // {

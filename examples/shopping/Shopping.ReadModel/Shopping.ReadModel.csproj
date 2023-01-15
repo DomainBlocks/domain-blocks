@@ -18,8 +18,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\DomainBlocks.Hosting\DomainBlocks.Hosting.csproj" />
-    <ProjectReference Include="..\..\src\DomainBlocks.SqlStreamStore.Postgres\DomainBlocks.SqlStreamStore.Postgres.csproj" />
+    <ProjectReference Include="..\..\..\src\DomainBlocks.Hosting\DomainBlocks.Hosting.csproj" />
+    <ProjectReference Include="..\..\..\src\DomainBlocks.SqlStreamStore.Postgres\DomainBlocks.SqlStreamStore.Postgres.csproj" />
     <ProjectReference Include="..\Shopping.Domain.Events\Shopping.Domain.Events.csproj" />
   </ItemGroup>
 

@@ -13,9 +13,9 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\examples\Shopping.Domain.Events\Shopping.Domain.Events.csproj" />
-      <ProjectReference Include="..\..\src\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj" />
-      <ProjectReference Include="..\..\src\DomainBlocks.SqlStreamStore.Postgres\DomainBlocks.SqlStreamStore.Postgres.csproj" />
+      <ProjectReference Include="..\..\..\src\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj" />
+      <ProjectReference Include="..\..\..\src\DomainBlocks.SqlStreamStore.Postgres\DomainBlocks.SqlStreamStore.Postgres.csproj" />
+      <ProjectReference Include="..\..\shopping\Shopping.Domain.Events\Shopping.Domain.Events.csproj" />
     </ItemGroup>
 
 </Project>

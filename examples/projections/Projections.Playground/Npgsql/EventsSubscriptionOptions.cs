@@ -1,4 +1,4 @@
-namespace DomainBlocks.Playground.Npgsql;
+namespace Projections.Playground.Npgsql;
 
 public record EventsSubscriptionOptions(
     string ConnectionString,

@@ -17,7 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\tests\DomainBlocks.EventStore.Testing\DomainBlocks.EventStore.Testing.csproj" />
+    <ProjectReference Include="..\..\..\tests\DomainBlocks.EventStore.Testing\DomainBlocks.EventStore.Testing.csproj" />
     <ProjectReference Include="..\Shopping.Domain\Shopping.Domain.csproj" />
   </ItemGroup>
 

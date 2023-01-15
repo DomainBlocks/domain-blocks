@@ -5,10 +5,10 @@ EXPOSE 443
 
 FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
 WORKDIR /
-COPY /examples /examples
+COPY /examples/shopping /examples/shopping
 COPY /src /src
 COPY /third_party /third_party
-WORKDIR "/examples/Shopping.Api"
+WORKDIR "/examples/shopping/Shopping.Api"
 RUN dotnet build "Shopping.Api.csproj" -c Release -o /app/build
 
 FROM build AS publish

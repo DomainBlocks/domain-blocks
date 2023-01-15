@@ -6,7 +6,7 @@ using DomainBlocks.SqlStreamStore.Subscriptions;
 using EventStore.Client;
 using Shopping.Domain.Events;
 
-namespace DomainBlocks.Playground;
+namespace Projections.Playground;
 
 internal static class Program
 {
