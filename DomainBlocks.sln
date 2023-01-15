@@ -28,19 +28,18 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "third_party", "third_party"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SQLStreamStore", "SQLStreamStore", "{4CFE9955-FE90-41E6-943A-0253EFDCD438}"
 	ProjectSection(SolutionItems) = preProject
-		third_party\SQLStreamStore\Directory.Build.props = third_party\SQLStreamStore\Directory.Build.props
 		third_party\SQLStreamStore\readme.md = third_party\SQLStreamStore\readme.md
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.ThirdParty.SqlStreamStore", "third_party\SQLStreamStore\DomainBlocks.ThirdParty.SqlStreamStore\DomainBlocks.ThirdParty.SqlStreamStore.csproj", "{E3939DD1-4A71-4949-8255-61CDF56F3D87}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.ThirdParty.SqlStreamStore", "third_party\SQLStreamStore\src\DomainBlocks.ThirdParty.SqlStreamStore\DomainBlocks.ThirdParty.SqlStreamStore.csproj", "{E3939DD1-4A71-4949-8255-61CDF56F3D87}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.ThirdParty.SqlStreamStore.Postgres", "third_party\SQLStreamStore\DomainBlocks.ThirdParty.SqlStreamStore.Postgres\DomainBlocks.ThirdParty.SqlStreamStore.Postgres.csproj", "{C3D4FCA8-6208-4011-AC4B-35C1D8144D41}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.ThirdParty.SqlStreamStore.Postgres", "third_party\SQLStreamStore\src\DomainBlocks.ThirdParty.SqlStreamStore.Postgres\DomainBlocks.ThirdParty.SqlStreamStore.Postgres.csproj", "{C3D4FCA8-6208-4011-AC4B-35C1D8144D41}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.ThirdParty.SqlStreamStore.TestUtils", "third_party\SQLStreamStore\DomainBlocks.ThirdParty.SqlStreamStore.TestUtils\DomainBlocks.ThirdParty.SqlStreamStore.TestUtils.csproj", "{FC2E6F59-E812-4AF3-B0C8-388952D17AE6}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.ThirdParty.SqlStreamStore.TestUtils", "third_party\SQLStreamStore\tests\DomainBlocks.ThirdParty.SqlStreamStore.TestUtils\DomainBlocks.ThirdParty.SqlStreamStore.TestUtils.csproj", "{FC2E6F59-E812-4AF3-B0C8-388952D17AE6}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.ThirdParty.SqlStreamStore.Tests", "third_party\SQLStreamStore\DomainBlocks.ThirdParty.SqlStreamStore.Tests\DomainBlocks.ThirdParty.SqlStreamStore.Tests.csproj", "{87EF13AE-4A46-4BF8-8153-0C45851F9D06}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.ThirdParty.SqlStreamStore.Tests", "third_party\SQLStreamStore\tests\DomainBlocks.ThirdParty.SqlStreamStore.Tests\DomainBlocks.ThirdParty.SqlStreamStore.Tests.csproj", "{87EF13AE-4A46-4BF8-8153-0C45851F9D06}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.ThirdParty.SqlStreamStore.Postgres.Tests", "third_party\SQLStreamStore\DomainBlocks.ThirdParty.SqlStreamStore.Postgres.Tests\DomainBlocks.ThirdParty.SqlStreamStore.Postgres.Tests.csproj", "{6F59C307-C2BD-4443-AD16-0B79ADCDA59B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.ThirdParty.SqlStreamStore.Postgres.Tests", "third_party\SQLStreamStore\tests\DomainBlocks.ThirdParty.SqlStreamStore.Postgres.Tests\DomainBlocks.ThirdParty.SqlStreamStore.Postgres.Tests.csproj", "{6F59C307-C2BD-4443-AD16-0B79ADCDA59B}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.SqlStreamStore", "src\DomainBlocks.SqlStreamStore\DomainBlocks.SqlStreamStore.csproj", "{87722ABD-FD3A-418F-A949-84B2BF100F2C}"
 EndProject
@@ -85,6 +84,18 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shopping.Infrastructure.Tests", "examples\Shopping.Infrastructure.Tests\Shopping.Infrastructure.Tests.csproj", "{D0FC6464-AB53-4D94-8B00-C6DD852974B2}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shopping.ReadModel", "examples\Shopping.ReadModel\Shopping.ReadModel.csproj", "{E113C316-78EE-4EA0-9B1F-AA8F1D21CF62}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{AA4572A1-AF9B-46E4-9AB2-976680BBDD13}"
+	ProjectSection(SolutionItems) = preProject
+		third_party\SQLStreamStore\src\Directory.Build.props = third_party\SQLStreamStore\src\Directory.Build.props
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{AE5A2B5F-DD18-49AC-8D85-98422011FD42}"
+	ProjectSection(SolutionItems) = preProject
+		third_party\SQLStreamStore\tests\Directory.Build.props = third_party\SQLStreamStore\tests\Directory.Build.props
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "benchmarks", "benchmarks", "{AF9DE3C6-EFAF-40E5-8A73-A90DD16EE19B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -203,11 +214,6 @@ Global
 		{D11A9586-142D-479E-AECB-FFA6E3DE1E3F} = {EC8B7EC4-14F0-46F7-B330-0DDEDB5D28F0}
 		{3F1FE6CB-B808-4547-9C2D-9443F1C7AD90} = {EC8B7EC4-14F0-46F7-B330-0DDEDB5D28F0}
 		{4CFE9955-FE90-41E6-943A-0253EFDCD438} = {C0A26D9E-7E06-4AD8-9830-B1052A2ADD68}
-		{E3939DD1-4A71-4949-8255-61CDF56F3D87} = {4CFE9955-FE90-41E6-943A-0253EFDCD438}
-		{C3D4FCA8-6208-4011-AC4B-35C1D8144D41} = {4CFE9955-FE90-41E6-943A-0253EFDCD438}
-		{FC2E6F59-E812-4AF3-B0C8-388952D17AE6} = {4CFE9955-FE90-41E6-943A-0253EFDCD438}
-		{87EF13AE-4A46-4BF8-8153-0C45851F9D06} = {4CFE9955-FE90-41E6-943A-0253EFDCD438}
-		{6F59C307-C2BD-4443-AD16-0B79ADCDA59B} = {4CFE9955-FE90-41E6-943A-0253EFDCD438}
 		{87722ABD-FD3A-418F-A949-84B2BF100F2C} = {EC8B7EC4-14F0-46F7-B330-0DDEDB5D28F0}
 		{6F6CAF02-7A36-4A08-A332-760B22417CE7} = {EC8B7EC4-14F0-46F7-B330-0DDEDB5D28F0}
 		{01A53BF4-89CA-483A-854F-6BA1E28B5BDC} = {D35B40DA-5431-4CEE-B5B7-87648803FA12}
@@ -223,6 +229,13 @@ Global
 		{A4AE4A41-8266-4925-BAA5-1CD1B27CDFFD} = {D35B40DA-5431-4CEE-B5B7-87648803FA12}
 		{D0FC6464-AB53-4D94-8B00-C6DD852974B2} = {D35B40DA-5431-4CEE-B5B7-87648803FA12}
 		{E113C316-78EE-4EA0-9B1F-AA8F1D21CF62} = {D35B40DA-5431-4CEE-B5B7-87648803FA12}
+		{AA4572A1-AF9B-46E4-9AB2-976680BBDD13} = {4CFE9955-FE90-41E6-943A-0253EFDCD438}
+		{AE5A2B5F-DD18-49AC-8D85-98422011FD42} = {4CFE9955-FE90-41E6-943A-0253EFDCD438}
+		{E3939DD1-4A71-4949-8255-61CDF56F3D87} = {AA4572A1-AF9B-46E4-9AB2-976680BBDD13}
+		{C3D4FCA8-6208-4011-AC4B-35C1D8144D41} = {AA4572A1-AF9B-46E4-9AB2-976680BBDD13}
+		{6F59C307-C2BD-4443-AD16-0B79ADCDA59B} = {AE5A2B5F-DD18-49AC-8D85-98422011FD42}
+		{87EF13AE-4A46-4BF8-8153-0C45851F9D06} = {AE5A2B5F-DD18-49AC-8D85-98422011FD42}
+		{FC2E6F59-E812-4AF3-B0C8-388952D17AE6} = {AE5A2B5F-DD18-49AC-8D85-98422011FD42}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {BA018103-0F59-4D7F-9119-099BF2CC020F}
