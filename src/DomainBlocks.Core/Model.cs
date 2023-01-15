@@ -2,10 +2,10 @@ namespace DomainBlocks.Core;
 
 public sealed class Model
 {
-    private readonly IReadOnlyDictionary<Type, IAggregateOptions> _aggregatesOptions;
+    private readonly IReadOnlyDictionary<Type, IEntityType> _aggregatesOptions;
     private readonly EventNameMap _eventNameMap;
 
-    public Model(IEnumerable<IAggregateOptions> aggregatesOptions)
+    public Model(IEnumerable<IEntityType> aggregatesOptions)
     {
         if (aggregatesOptions == null) throw new ArgumentNullException(nameof(aggregatesOptions));
 

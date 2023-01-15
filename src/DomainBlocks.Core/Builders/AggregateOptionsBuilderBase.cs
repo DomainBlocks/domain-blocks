@@ -4,7 +4,7 @@ namespace DomainBlocks.Core.Builders;
 
 public interface IAggregateOptionsBuilder
 {
-    IAggregateOptions Options { get; }
+    IEntityType Options { get; }
 }
 
 public interface IIdentityBuilder<out TAggregate> : IKeyPrefixBuilder
@@ -69,7 +69,7 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
         }
     }
 
-    IAggregateOptions IAggregateOptionsBuilder.Options => Options;
+    IEntityType IAggregateOptionsBuilder.Options => Options;
 
     protected abstract AggregateOptionsBase<TAggregate, TEventBase> OptionsImpl { get; set; }
 
