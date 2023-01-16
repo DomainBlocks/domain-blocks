@@ -152,4 +152,24 @@ public class EventStreamSubscriptionBaseTests
 
         _mockSubscriber.Verify(x => x.OnEvent("event1", 0, It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
+
+    [Test]
+    public void ExceptionWhileCatchingUpDoesNotBlockStartAsync()
+    {
+        // We need to emit at least two events to test this behaviour. This is because when the first call to OnEvent
+        // throws, the event loop terminates without releasing the empty count semaphore. This means that awaiting
+        // StartAsync would block indefinitely while the Subscribe method waits to push the second event - which it
+        // can't due to the unreleased semaphore. The fix to stop StartAsync from waiting indefinitely in this situation
+        // is to also await for the event loop completion signal using Task.WhenAny. This way, if the event loop does
+        // terminate early, we can also exit from StartAsync and throw any exception that occured.
+        _subscription.SetCatchupEvents("event1", "event2");
+
+        var exception = new Exception("Something bad happened");
+
+        _mockSubscriber
+            .Setup(x => x.OnEvent(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(exception);
+
+        Assert.ThrowsAsync<Exception>(() => _subscription.StartAsync(), exception.Message);
+    }
 }

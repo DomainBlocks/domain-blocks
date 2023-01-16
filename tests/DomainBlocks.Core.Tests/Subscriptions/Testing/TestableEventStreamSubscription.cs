@@ -4,11 +4,19 @@ namespace DomainBlocks.Core.Tests.Subscriptions.Testing;
 
 public class TestableEventStreamSubscription : EventStreamSubscriptionBase<string, int>
 {
+    private readonly List<string> _catchupEvents = new();
+
     public TestableEventStreamSubscription(IEventStreamSubscriber<string, int> subscriber) : base(subscriber)
     {
     }
 
     public TestableDisposable? CurrentSubscriptionDisposable { get; private set; }
+
+    public void SetCatchupEvents(params string[] events)
+    {
+        _catchupEvents.Clear();
+        _catchupEvents.AddRange(events);
+    }
 
     public new Task NotifyCatchingUp() => base.NotifyCatchingUp();
 
@@ -17,9 +25,16 @@ public class TestableEventStreamSubscription : EventStreamSubscriptionBase<strin
 
     public new Task NotifyLive() => base.NotifyLive();
 
-    protected override Task<IDisposable> Subscribe(int? fromPositionExclusive, CancellationToken cancellationToken)
+    protected override async Task<IDisposable> Subscribe(
+        int? fromPositionExclusive,
+        CancellationToken cancellationToken)
     {
+        for (var i = 0; i < _catchupEvents.Count; i++)
+        {
+            await base.NotifyEvent(_catchupEvents[i], i, cancellationToken);
+        }
+
         CurrentSubscriptionDisposable = new TestableDisposable();
-        return Task.FromResult<IDisposable>(CurrentSubscriptionDisposable);
+        return CurrentSubscriptionDisposable;
     }
 }
