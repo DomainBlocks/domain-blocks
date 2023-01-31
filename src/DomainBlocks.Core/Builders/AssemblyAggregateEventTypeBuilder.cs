@@ -2,7 +2,7 @@
 
 namespace DomainBlocks.Core.Builders;
 
-public interface IAssemblyEventOptionsBuilder
+public interface ITypeFilterBuilder
 {
     /// <summary>
     /// Specify an additional filter to use on the event types which have been found in the specified assembly. The
@@ -11,14 +11,14 @@ public interface IAssemblyEventOptionsBuilder
     void Where(Func<Type, bool> predicate);
 }
 
-internal sealed class AssemblyEventOptionsBuilder<TAggregate, TEventBase> :
-    IAssemblyEventOptionsBuilder,
-    IAutoEventOptionsBuilder<TAggregate>
+internal sealed class AssemblyAggregateEventTypeBuilder<TAggregate, TEventBase> :
+    IAutoAggregateEventTypeBuilder<TAggregate>,
+    ITypeFilterBuilder
 {
     private readonly Assembly _assembly;
     private Func<Type, bool>? _eventTypePredicate;
 
-    public AssemblyEventOptionsBuilder(Assembly assembly)
+    public AssemblyAggregateEventTypeBuilder(Assembly assembly)
     {
         _assembly = assembly ?? throw new ArgumentNullException(nameof(assembly));
     }
@@ -28,7 +28,7 @@ internal sealed class AssemblyEventOptionsBuilder<TAggregate, TEventBase> :
         _eventTypePredicate = predicate;
     }
 
-    public IEnumerable<EventOptions<TAggregate>> Build()
+    public IEnumerable<AggregateEventType<TAggregate>> Build()
     {
         var eventClrTypes = _assembly
             .GetTypes()
@@ -54,6 +54,6 @@ internal sealed class AssemblyEventOptionsBuilder<TAggregate, TEventBase> :
             }
         }
 
-        return eventClrTypes.Select(x => new EventOptions<TAggregate>(x));
+        return eventClrTypes.Select(x => new AggregateEventType<TAggregate>(x));
     }
 }

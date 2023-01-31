@@ -3,7 +3,7 @@ namespace DomainBlocks.Core;
 public interface IAggregateOptions
 {
     Type ClrType { get; }
-    IEnumerable<IEventOptions> EventsOptions { get; }
+    IEnumerable<IEventType> EventTypes { get; }
 }
 
 public interface IAggregateOptions<TAggregate> : IAggregateOptions

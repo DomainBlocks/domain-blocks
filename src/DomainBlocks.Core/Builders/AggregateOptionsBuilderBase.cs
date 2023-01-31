@@ -56,14 +56,14 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
         {
             var options = OptionsImpl;
 
-            if (AutoEventOptionsBuilder != null)
+            if (AutoEventTypeBuilder != null)
             {
-                options = options.WithEventsOptions(AutoEventOptionsBuilder.Build());
+                options = options.WithEventTypes(AutoEventTypeBuilder.Build());
             }
 
             // Any individually configured event options will override auto configured event options for a given type.
-            var eventsOptions = EventOptionsBuilders.Select(x => x.Options);
-            options = options.WithEventsOptions(eventsOptions);
+            var eventTypes = EventTypeBuilders.Select(x => x.EventType);
+            options = options.WithEventTypes(eventTypes);
 
             return options;
         }
@@ -73,9 +73,9 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
 
     protected abstract AggregateOptionsBase<TAggregate, TEventBase> OptionsImpl { get; set; }
 
-    internal IAutoEventOptionsBuilder<TAggregate>? AutoEventOptionsBuilder { get; set; }
+    internal IAutoAggregateEventTypeBuilder<TAggregate>? AutoEventTypeBuilder { get; set; }
 
-    internal List<IEventOptionsBuilder<TAggregate>> EventOptionsBuilders { get; } = new();
+    internal List<IAggregateEventTypeBuilder<TAggregate>> EventTypeBuilders { get; } = new();
 
     /// <summary>
     /// Specify a factory function for creating new instances of the aggregate type.
@@ -118,10 +118,10 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
     /// <returns>
     /// An object that can be used for further configuration.
     /// </returns>
-    public IAssemblyEventOptionsBuilder UseEventTypesFrom(Assembly assembly)
+    public ITypeFilterBuilder UseEventTypesFrom(Assembly assembly)
     {
-        var builder = new AssemblyEventOptionsBuilder<TAggregate, TEventBase>(assembly);
-        AutoEventOptionsBuilder = builder;
+        var builder = new AssemblyAggregateEventTypeBuilder<TAggregate, TEventBase>(assembly);
+        AutoEventTypeBuilder = builder;
         return builder;
     }
 }

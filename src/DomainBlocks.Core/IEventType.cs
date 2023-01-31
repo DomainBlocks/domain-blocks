@@ -1,6 +1,6 @@
 namespace DomainBlocks.Core;
 
-public interface IEventOptions
+public interface IEventType
 {
     Type ClrType { get; }
     string EventName { get; }

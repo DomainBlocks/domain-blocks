@@ -3,28 +3,28 @@
 namespace DomainBlocks.Core.Tests;
 
 [TestFixture]
-public class EventOptionsTests
+public class AggregateEventTypeTests
 {
     [Test]
     public void MergeMergesValuesCorrectly()
     {
-        var eventOptions1 = new EventOptions<MyAggregate, IEvent, MyEvent>()
-            .HideEventType();
+        var eventType1 = new AggregateEventType<MyAggregate, IEvent, MyEvent>()
+            .HideGenericType();
 
-        var eventOptions2 = new EventOptions<MyAggregate, IEvent, MyEvent>()
-            .WithEventApplier((agg, e) => agg.Apply(e))
-            .HideEventType();
+        var eventType2 = new AggregateEventType<MyAggregate, IEvent, MyEvent>()
+            .SetEventApplier((agg, e) => agg.Apply(e))
+            .HideGenericType();
 
-        var eventOptions3 = new EventOptions<MyAggregate, IEvent, MyEvent>()
-            .WithEventName("MyEvent2")
-            .HideEventType();
+        var eventType3 = new AggregateEventType<MyAggregate, IEvent, MyEvent>()
+            .SetEventName("MyEvent2")
+            .HideGenericType();
 
-        var result = eventOptions1
-            .Merge(eventOptions2)
-            .Merge(eventOptions3);
+        var result = eventType1
+            .Merge(eventType2)
+            .Merge(eventType3);
 
         var aggregate = new MyAggregate();
-        result.ApplyEvent(aggregate, new MyEvent());
+        result.InvokeEventApplier(aggregate, new MyEvent());
 
         Assert.That(result.ClrType, Is.EqualTo(typeof(MyEvent)));
         Assert.That(aggregate.IsEventApplied, Is.True);
