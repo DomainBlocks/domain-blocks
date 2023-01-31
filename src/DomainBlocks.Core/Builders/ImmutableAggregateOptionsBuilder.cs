@@ -58,10 +58,10 @@ public sealed class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     /// <returns>
     /// An object that can be used to further configure the event.
     /// </returns>
-    public IImmutableEventBuilder<TAggregate, TEvent> Event<TEvent>() where TEvent : TEventBase
+    public IImmutableAggregateEventTypeBuilder<TAggregate, TEvent> Event<TEvent>() where TEvent : TEventBase
     {
-        var builder = new ImmutableEventOptionsBuilder<TAggregate, TEventBase, TEvent>();
-        EventOptionsBuilders.Add(builder);
+        var builder = new ImmutableAggregateEventTypeBuilder<TAggregate, TEventBase, TEvent>();
+        EventTypeBuilders.Add(builder);
         return builder;
     }
 
@@ -73,8 +73,8 @@ public sealed class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     /// </returns>
     public IAutoEventOptionsBuilder AutoConfigureEvents()
     {
-        var builder = AutoEventOptionsBuilder<TAggregate, TEventBase>.Immutable();
-        AutoEventOptionsBuilder = builder;
+        var builder = AutoAggregateEventTypeBuilder<TAggregate, TEventBase>.Immutable();
+        AutoEventTypeBuilder = builder;
         return builder;
     }
 
@@ -89,8 +89,8 @@ public sealed class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     /// </returns>
     public IAutoEventOptionsBuilder AutoConfigureEventsFrom(Type sourceType)
     {
-        var builder = AutoEventOptionsBuilder<TAggregate, TEventBase>.ImmutableNonMember(sourceType);
-        AutoEventOptionsBuilder = builder;
+        var builder = AutoAggregateEventTypeBuilder<TAggregate, TEventBase>.ImmutableNonMember(sourceType);
+        AutoEventTypeBuilder = builder;
         return builder;
     }
 }

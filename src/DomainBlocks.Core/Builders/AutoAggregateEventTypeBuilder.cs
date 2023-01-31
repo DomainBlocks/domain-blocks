@@ -22,9 +22,9 @@ public interface IMethodVisibilityBuilder
     void IncludeNonPublicMethods();
 }
 
-internal sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> :
+internal sealed class AutoAggregateEventTypeBuilder<TAggregate, TEventBase> :
     IAutoEventOptionsBuilder,
-    IAutoEventOptionsBuilder<TAggregate>
+    IAutoAggregateEventTypeBuilder<TAggregate>
 {
     private enum Mode
     {
@@ -38,25 +38,25 @@ internal sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> :
     private string _methodName = "Apply";
     private bool _includeNonPublicMethods;
 
-    private AutoEventOptionsBuilder(Mode mode, Type? sourceType = null)
+    private AutoAggregateEventTypeBuilder(Mode mode, Type? sourceType = null)
     {
         _mode = mode;
         _sourceType = sourceType ?? typeof(TAggregate);
     }
 
-    public static AutoEventOptionsBuilder<TAggregate, TEventBase> Mutable()
+    public static AutoAggregateEventTypeBuilder<TAggregate, TEventBase> Mutable()
     {
-        return new AutoEventOptionsBuilder<TAggregate, TEventBase>(Mode.Mutable);
+        return new AutoAggregateEventTypeBuilder<TAggregate, TEventBase>(Mode.Mutable);
     }
 
-    public static AutoEventOptionsBuilder<TAggregate, TEventBase> Immutable()
+    public static AutoAggregateEventTypeBuilder<TAggregate, TEventBase> Immutable()
     {
-        return new AutoEventOptionsBuilder<TAggregate, TEventBase>(Mode.Immutable);
+        return new AutoAggregateEventTypeBuilder<TAggregate, TEventBase>(Mode.Immutable);
     }
 
-    public static AutoEventOptionsBuilder<TAggregate, TEventBase> ImmutableNonMember(Type sourceType)
+    public static AutoAggregateEventTypeBuilder<TAggregate, TEventBase> ImmutableNonMember(Type sourceType)
     {
-        return new AutoEventOptionsBuilder<TAggregate, TEventBase>(Mode.ImmutableNonMember, sourceType);
+        return new AutoAggregateEventTypeBuilder<TAggregate, TEventBase>(Mode.ImmutableNonMember, sourceType);
     }
 
     public IMethodVisibilityBuilder WithMethodName(string methodName)
@@ -73,30 +73,30 @@ internal sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> :
         _includeNonPublicMethods = true;
     }
 
-    public IEnumerable<EventOptions<TAggregate>> Build()
+    public IEnumerable<AggregateEventType<TAggregate>> Build()
     {
         var bindingFlags = _includeNonPublicMethods ? BindingFlags.NonPublic : BindingFlags.Default;
 
-        var eventOptions = (_mode switch
+        var eventTypes = (_mode switch
             {
-                Mode.Mutable => BuildEventOptions(bindingFlags, false),
-                Mode.Immutable => BuildEventOptions(bindingFlags, true),
-                Mode.ImmutableNonMember => BuildNonMemberEventOptions(bindingFlags),
+                Mode.Mutable => BuildEventTypes(bindingFlags, false),
+                Mode.Immutable => BuildEventTypes(bindingFlags, true),
+                Mode.ImmutableNonMember => BuildNonMemberEventTypes(bindingFlags),
                 _ => throw new ArgumentOutOfRangeException() // Should never happen
             })
             .ToList();
 
-        if (eventOptions.Count == 0)
+        if (eventTypes.Count == 0)
         {
             throw new InvalidOperationException(
                 $"Unable to auto configure events. No appropriate event applier methods named '{_methodName}' could " +
                 $"be found in type {typeof(TAggregate).Name}.");
         }
 
-        return eventOptions;
+        return eventTypes;
     }
 
-    private IEnumerable<EventOptions<TAggregate>> BuildEventOptions(BindingFlags bindingFlags, bool isImmutable)
+    private IEnumerable<AggregateEventType<TAggregate>> BuildEventTypes(BindingFlags bindingFlags, bool isImmutable)
     {
         bindingFlags |= BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static;
 
@@ -106,8 +106,8 @@ internal sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> :
             where @params.Length == 1
             let eventParamType = @params[0].ParameterType
             let returnParamType = method.ReturnParameter!.ParameterType
-            where IsEventType(eventParamType)
-            where isImmutable ? IsAggregateType(returnParamType) : IsVoid(returnParamType)
+            where IsEventClrType(eventParamType)
+            where isImmutable ? IsAggregateClrType(returnParamType) : IsVoid(returnParamType)
             select method;
 
         var aggregateParam = Expression.Parameter(typeof(TAggregate), "aggregate");
@@ -116,29 +116,29 @@ internal sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> :
         foreach (var method in methods)
         {
             var @params = method.GetParameters();
-            var eventType = @params[0].ParameterType;
-            var options = new EventOptions<TAggregate>(eventType);
+            var eventClrType = @params[0].ParameterType;
+            var eventType = new AggregateEventType<TAggregate>(eventClrType);
 
             var instance = method.IsStatic ? null : aggregateParam;
-            var call = Expression.Call(instance, method, Expression.Convert(eventParam, eventType));
+            var call = Expression.Call(instance, method, Expression.Convert(eventParam, eventClrType));
 
             // Immutable
-            if (IsAggregateType(method.ReturnType))
+            if (IsAggregateClrType(method.ReturnType))
             {
                 var lambda = Expression.Lambda<Func<TAggregate, object, TAggregate>>(call, aggregateParam, eventParam);
-                yield return options.WithEventApplier(lambda.Compile());
+                yield return eventType.SetEventApplier(lambda.Compile());
             }
 
             // Mutable
             if (IsVoid(method.ReturnType))
             {
                 var lambda = Expression.Lambda<Action<TAggregate, object>>(call, aggregateParam, eventParam);
-                yield return options.WithEventApplier(lambda.Compile());
+                yield return eventType.SetEventApplier(lambda.Compile());
             }
         }
     }
 
-    private IEnumerable<EventOptions<TAggregate>> BuildNonMemberEventOptions(BindingFlags bindingFlags)
+    private IEnumerable<AggregateEventType<TAggregate>> BuildNonMemberEventTypes(BindingFlags bindingFlags)
     {
         bindingFlags |= BindingFlags.Public | BindingFlags.Static;
 
@@ -149,9 +149,9 @@ internal sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> :
             let aggregateParamType = @params[0].ParameterType
             let eventParamType = @params[1].ParameterType
             let returnParamType = method.ReturnParameter!.ParameterType
-            where IsAggregateType(aggregateParamType)
-            where IsEventType(eventParamType)
-            where IsAggregateType(returnParamType)
+            where IsAggregateClrType(aggregateParamType)
+            where IsEventClrType(eventParamType)
+            where IsAggregateClrType(returnParamType)
             select method;
 
         var aggregateParam = Expression.Parameter(typeof(TAggregate), "aggregate");
@@ -160,17 +160,17 @@ internal sealed class AutoEventOptionsBuilder<TAggregate, TEventBase> :
         foreach (var method in methods)
         {
             var @params = method.GetParameters();
-            var eventType = @params[1].ParameterType;
-            var call = Expression.Call(null, method, aggregateParam, Expression.Convert(eventParam, eventType));
+            var eventClrType = @params[1].ParameterType;
+            var call = Expression.Call(null, method, aggregateParam, Expression.Convert(eventParam, eventClrType));
             var lambda = Expression.Lambda<Func<TAggregate, object, TAggregate>>(call, aggregateParam, eventParam);
-            yield return new EventOptions<TAggregate>(eventType).WithEventApplier(lambda.Compile());
+            yield return new AggregateEventType<TAggregate>(eventClrType).SetEventApplier(lambda.Compile());
         }
     }
 
-    private static bool IsEventType(Type type) =>
-        type.IsClass && !type.IsAbstract && type.IsAssignableTo(typeof(TEventBase));
+    private static bool IsEventClrType(Type type) =>
+        type is { IsClass: true, IsAbstract: false } && type.IsAssignableTo(typeof(TEventBase));
 
-    private static bool IsAggregateType(Type type) => type.IsAssignableTo(typeof(TAggregate));
+    private static bool IsAggregateClrType(Type type) => type.IsAssignableTo(typeof(TAggregate));
 
     private static bool IsVoid(Type type) => type == typeof(void);
 }

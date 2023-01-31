@@ -12,11 +12,11 @@ public sealed class Model
         _aggregatesOptions = aggregatesOptions.ToDictionary(x => x.ClrType);
 
         // Build event name map from all aggregate options.
-        var allEventsOptions = _aggregatesOptions.Values.SelectMany(x => x.EventsOptions);
+        var eventTypes = _aggregatesOptions.Values.SelectMany(x => x.EventTypes);
         _eventNameMap = new EventNameMap();
-        foreach (var eventOptions in allEventsOptions)
+        foreach (var eventType in eventTypes)
         {
-            _eventNameMap.Add(eventOptions.EventName, eventOptions.ClrType);
+            _eventNameMap.Add(eventType.EventName, eventType.ClrType);
         }
     }
 

@@ -7,7 +7,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
     private static readonly Lazy<Func<TAggregate>> DefaultFactory = new(() => GetDefaultFactory());
     private static readonly Lazy<Func<TAggregate, string>> DefaultIdSelector = new(GetDefaultIdSelector);
     private readonly Dictionary<Type, ICommandResultOptions> _commandResultsOptions = new();
-    private readonly Dictionary<Type, EventOptions<TAggregate>> _eventsOptions = new();
+    private readonly Dictionary<Type, AggregateEventType<TAggregate>> _eventTypes = new();
     private Func<TAggregate> _factory;
     private Func<TAggregate, string> _idSelector;
     private Func<string, string> _idToStreamKeySelector;
@@ -33,11 +33,11 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         _idToStreamKeySelector = copyFrom._idToStreamKeySelector;
         _idToSnapshotKeySelector = copyFrom._idToSnapshotKeySelector;
         _commandResultsOptions = new Dictionary<Type, ICommandResultOptions>(copyFrom._commandResultsOptions);
-        _eventsOptions = new Dictionary<Type, EventOptions<TAggregate>>(copyFrom._eventsOptions);
+        _eventTypes = new Dictionary<Type, AggregateEventType<TAggregate>>(copyFrom._eventTypes);
     }
 
     public Type ClrType => typeof(TAggregate);
-    public IEnumerable<IEventOptions> EventsOptions => _eventsOptions.Values;
+    public IEnumerable<IEventType> EventTypes => _eventTypes.Values;
 
     public TAggregate CreateNew()
     {
@@ -88,9 +88,9 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         if (aggregate == null) throw new ArgumentNullException(nameof(aggregate));
         if (@event == null) throw new ArgumentNullException(nameof(@event));
 
-        if (_eventsOptions.TryGetValue(@event.GetType(), out var eventOptions) && eventOptions.HasEventApplier)
+        if (_eventTypes.TryGetValue(@event.GetType(), out var eventType) && eventType.HasEventApplier)
         {
-            return eventOptions.ApplyEvent(aggregate, (TEventBase)@event);
+            return eventType.InvokeEventApplier(aggregate, (TEventBase)@event);
         }
 
         if (_eventApplier != null)
@@ -187,22 +187,22 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         return clone;
     }
 
-    internal AggregateOptionsBase<TAggregate, TEventBase> WithEventsOptions(
-        IEnumerable<EventOptions<TAggregate>> eventsOptions)
+    internal AggregateOptionsBase<TAggregate, TEventBase> WithEventTypes(
+        IEnumerable<AggregateEventType<TAggregate>> eventTypes)
     {
-        if (eventsOptions == null) throw new ArgumentNullException(nameof(eventsOptions));
+        if (eventTypes == null) throw new ArgumentNullException(nameof(eventTypes));
 
         var clone = Clone();
 
-        foreach (var eventOptions in eventsOptions)
+        foreach (var eventType in eventTypes)
         {
-            if (clone._eventsOptions.TryGetValue(eventOptions.ClrType, out var existingOptions))
+            if (clone._eventTypes.TryGetValue(eventType.ClrType, out var existingEventType))
             {
-                clone._eventsOptions[eventOptions.ClrType] = existingOptions.Merge(eventOptions);
+                clone._eventTypes[eventType.ClrType] = existingEventType.Merge(eventType);
             }
             else
             {
-                clone._eventsOptions.Add(eventOptions.ClrType, eventOptions);
+                clone._eventTypes.Add(eventType.ClrType, eventType);
             }
         }
 
