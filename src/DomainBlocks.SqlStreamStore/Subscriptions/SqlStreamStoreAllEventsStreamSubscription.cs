@@ -2,7 +2,8 @@ using System.Runtime.CompilerServices;
 using DomainBlocks.Core.Subscriptions;
 using DomainBlocks.ThirdParty.SqlStreamStore;
 using DomainBlocks.ThirdParty.SqlStreamStore.Streams;
-using SqlStreamStoreSubscriptionDroppedReason = DomainBlocks.ThirdParty.SqlStreamStore.Subscriptions.SubscriptionDroppedReason;
+using SqlStreamStoreSubscriptionDroppedReason =
+    DomainBlocks.ThirdParty.SqlStreamStore.Subscriptions.SubscriptionDroppedReason;
 
 namespace DomainBlocks.SqlStreamStore.Subscriptions;
 
@@ -42,8 +43,6 @@ public sealed class SqlStreamStoreAllEventsStreamSubscription : EventStreamSubsc
             }
         }
 
-        await NotifyLive();
-
         var subscription = _streamStore.SubscribeToAll(
             subscribePosition,
             (_, e, ct) => NotifyEvent(e, e.Position, ct),
@@ -53,6 +52,8 @@ public sealed class SqlStreamStoreAllEventsStreamSubscription : EventStreamSubsc
                 NotifySubscriptionDropped(reason, ex);
             },
             prefetchJsonData: false);
+
+        await NotifyLive();
 
         return subscription;
     }
