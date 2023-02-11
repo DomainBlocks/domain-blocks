@@ -40,8 +40,6 @@ public sealed class EventStoreAllEventsStreamSubscription : EventStreamSubscript
             }
         }
 
-        await NotifyLive();
-
         var filter = new SubscriptionFilterOptions(EventTypeFilter.ExcludeSystemEvents());
 
         var subscription = await _eventStoreClient.SubscribeToAllAsync(
@@ -55,6 +53,8 @@ public sealed class EventStoreAllEventsStreamSubscription : EventStreamSubscript
             filterOptions: filter,
             userCredentials: _userCredentials,
             cancellationToken: cancellationToken);
+
+        await NotifyLive();
 
         return subscription;
     }
