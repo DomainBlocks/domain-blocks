@@ -3,7 +3,7 @@ using System.Reflection;
 
 namespace DomainBlocks.Core.Builders;
 
-public interface IAutoEventOptionsBuilder : IMethodVisibilityBuilder
+public interface IAutoEventTypeBuilder : IMethodVisibilityBuilder
 {
     /// <summary>
     /// Specify the name of the event applier method overloads on the aggregate type.
@@ -23,7 +23,7 @@ public interface IMethodVisibilityBuilder
 }
 
 internal sealed class AutoAggregateEventTypeBuilder<TAggregate, TEventBase> :
-    IAutoEventOptionsBuilder,
+    IAutoEventTypeBuilder,
     IAutoAggregateEventTypeBuilder<TAggregate>
 {
     private enum Mode

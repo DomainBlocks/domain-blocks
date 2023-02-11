@@ -21,8 +21,8 @@ public sealed class AggregateRepository : IAggregateRepository
     {
         if (id == null) throw new ArgumentNullException(nameof(id));
 
-        var aggregateOptions = _model.GetAggregateOptions<TAggregateState>();
-        var initialState = aggregateOptions.CreateNew();
+        var aggregateType = _model.GetAggregateType<TAggregateState>();
+        var initialState = aggregateType.CreateNew();
 
         // If we choose to load solely from an event stream, then we need some initial state
         // onto which to apply the events.
@@ -34,13 +34,13 @@ public sealed class AggregateRepository : IAggregateRepository
 
         var stateToAppendEventsTo = initialState;
 
-        var streamName = aggregateOptions.MakeStreamKey(id);
+        var streamName = aggregateType.MakeStreamKey(id);
         long loadStartPosition = 0;
         long? snapshotVersion = null;
 
         if (loadStrategy is AggregateLoadStrategy.UseSnapshot or AggregateLoadStrategy.PreferSnapshot)
         {
-            var snapshotKey = aggregateOptions.MakeSnapshotKey(id);
+            var snapshotKey = aggregateType.MakeSnapshotKey(id);
             var (isSuccess, snapshot) =
                 await _snapshotRepository.TryLoadSnapshotAsync<TAggregateState>(snapshotKey, cancellationToken);
 
@@ -71,13 +71,13 @@ public sealed class AggregateRepository : IAggregateRepository
 
         await foreach (var @event in events.WithCancellation(cancellationToken))
         {
-            state = aggregateOptions.ApplyEvent(state, @event);
+            state = aggregateType.InvokeEventApplier(state, @event);
             eventCount++;
         }
 
         var newVersion = loadStartPosition + eventCount - 1;
 
-        return LoadedAggregate.Create(state, aggregateOptions, id, newVersion, snapshotVersion, eventCount);
+        return LoadedAggregate.Create(state, aggregateType, id, newVersion, snapshotVersion, eventCount);
     }
 
     public async Task<long> SaveAsync<TAggregateState>(
@@ -93,7 +93,7 @@ public sealed class AggregateRepository : IAggregateRepository
         }
 
         snapshotPredicate ??= _ => false;
-        var aggregateType = _model.GetAggregateOptions<TAggregateState>();
+        var aggregateType = _model.GetAggregateType<TAggregateState>();
         var streamName = aggregateType.MakeStreamKey(loadedAggregate.Id);
 
         var newVersion = await _eventsRepository.SaveEventsAsync(
@@ -118,7 +118,7 @@ public sealed class AggregateRepository : IAggregateRepository
     {
         if (versionedState == null) throw new ArgumentNullException(nameof(versionedState));
 
-        var aggregateType = _model.GetAggregateOptions<TAggregateState>();
+        var aggregateType = _model.GetAggregateType<TAggregateState>();
         var snapshotStreamId = aggregateType.MakeSnapshotKey(versionedState.AggregateState);
 
         await _snapshotRepository.SaveSnapshotAsync(

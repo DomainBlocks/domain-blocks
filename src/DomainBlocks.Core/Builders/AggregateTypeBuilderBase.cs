@@ -2,9 +2,9 @@ using System.Reflection;
 
 namespace DomainBlocks.Core.Builders;
 
-public interface IAggregateOptionsBuilder
+public interface IAggregateTypeBuilder
 {
-    IAggregateOptions Options { get; }
+    IAggregateType AggregateType { get; }
 }
 
 public interface IIdentityBuilder<out TAggregate> : IKeyPrefixBuilder
@@ -45,33 +45,33 @@ public interface ISnapshotKeyBuilder
     void WithSnapshotKey(Func<string, string> idToSnapshotKeySelector);
 }
 
-public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
-    IAggregateOptionsBuilder,
+public abstract class AggregateTypeBuilderBase<TAggregate, TEventBase> :
+    IAggregateTypeBuilder,
     IIdentityBuilder<TAggregate>,
     IKeyBuilder
 {
-    public IAggregateOptions<TAggregate> Options
+    public IAggregateType<TAggregate> AggregateType
     {
         get
         {
-            var options = OptionsImpl;
+            var aggregateType = AggregateTypeImpl;
 
             if (AutoEventTypeBuilder != null)
             {
-                options = options.WithEventTypes(AutoEventTypeBuilder.Build());
+                aggregateType = aggregateType.SetEventTypes(AutoEventTypeBuilder.Build());
             }
 
-            // Any individually configured event options will override auto configured event options for a given type.
+            // Any individually configured event types will override auto configured event types for a given CLR type.
             var eventTypes = EventTypeBuilders.Select(x => x.EventType);
-            options = options.WithEventTypes(eventTypes);
+            aggregateType = aggregateType.SetEventTypes(eventTypes);
 
-            return options;
+            return aggregateType;
         }
     }
 
-    IAggregateOptions IAggregateOptionsBuilder.Options => Options;
+    IAggregateType IAggregateTypeBuilder.AggregateType => AggregateType;
 
-    protected abstract AggregateOptionsBase<TAggregate, TEventBase> OptionsImpl { get; set; }
+    protected abstract AggregateTypeBase<TAggregate, TEventBase> AggregateTypeImpl { get; set; }
 
     internal IAutoAggregateEventTypeBuilder<TAggregate>? AutoEventTypeBuilder { get; set; }
 
@@ -85,35 +85,35 @@ public abstract class AggregateOptionsBuilderBase<TAggregate, TEventBase> :
     /// </returns>
     public IIdentityBuilder<TAggregate> InitialState(Func<TAggregate> factory)
     {
-        OptionsImpl = OptionsImpl.WithFactory(factory);
+        AggregateTypeImpl = AggregateTypeImpl.SetFactory(factory);
         return this;
     }
 
     public IKeyBuilder HasId(Func<TAggregate, string> idSelector)
     {
-        OptionsImpl = OptionsImpl.WithIdSelector(idSelector);
+        AggregateTypeImpl = AggregateTypeImpl.SetIdSelector(idSelector);
         return this;
     }
 
     public void WithKeyPrefix(string prefix)
     {
-        OptionsImpl = OptionsImpl.WithKeyPrefix(prefix);
+        AggregateTypeImpl = AggregateTypeImpl.SetKeyPrefix(prefix);
     }
 
     ISnapshotKeyBuilder IKeyBuilder.WithStreamKey(Func<string, string> idToStreamKeySelector)
     {
-        OptionsImpl = OptionsImpl.WithIdToStreamKeySelector(idToStreamKeySelector);
+        AggregateTypeImpl = AggregateTypeImpl.SetIdToStreamKeySelector(idToStreamKeySelector);
         return this;
     }
 
     void ISnapshotKeyBuilder.WithSnapshotKey(Func<string, string> idToSnapshotKeySelector)
     {
-        OptionsImpl = OptionsImpl.WithIdToSnapshotKeySelector(idToSnapshotKeySelector);
+        AggregateTypeImpl = AggregateTypeImpl.SetIdToSnapshotKeySelector(idToSnapshotKeySelector);
     }
 
     /// <summary>
     /// Finds events deriving from type <see cref="TEventBase"/> in the specified assembly, and adds them to the
-    /// aggregate options.
+    /// aggregate types.
     /// </summary>
     /// <returns>
     /// An object that can be used for further configuration.

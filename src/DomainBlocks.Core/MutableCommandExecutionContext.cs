@@ -2,13 +2,13 @@ namespace DomainBlocks.Core;
 
 public sealed class MutableCommandExecutionContext<TAggregate, TEventBase> : ICommandExecutionContext<TAggregate>
 {
-    private readonly IMutableAggregateOptions<TAggregate> _aggregateOptions;
+    private readonly IMutableAggregateType<TAggregate> _aggregateType;
     private readonly List<object> _raisedEvents = new();
 
-    public MutableCommandExecutionContext(TAggregate state, IMutableAggregateOptions<TAggregate> aggregateOptions)
+    public MutableCommandExecutionContext(TAggregate state, IMutableAggregateType<TAggregate> aggregateType)
     {
         State = state ?? throw new ArgumentNullException(nameof(state));
-        _aggregateOptions = aggregateOptions ?? throw new ArgumentNullException(nameof(aggregateOptions));
+        _aggregateType = aggregateType ?? throw new ArgumentNullException(nameof(aggregateType));
     }
 
     public TAggregate State { get; }
@@ -18,10 +18,10 @@ public sealed class MutableCommandExecutionContext<TAggregate, TEventBase> : ICo
     {
         if (commandExecutor == null) throw new ArgumentNullException(nameof(commandExecutor));
 
-        if (_aggregateOptions.CanSelectRaisedEventsFromAggregate)
+        if (_aggregateType.CanSelectRaisedEventsFromAggregate)
         {
             var commandResult = commandExecutor(State);
-            var raisedEvents = _aggregateOptions.SelectRaisedEvents(State);
+            var raisedEvents = _aggregateType.SelectRaisedEvents(State);
             _raisedEvents.Clear();
             _raisedEvents.AddRange(raisedEvents);
 
@@ -29,12 +29,14 @@ public sealed class MutableCommandExecutionContext<TAggregate, TEventBase> : ICo
         }
 
         {
-            // We attempt to get the command result options before executing the command. This ensures that we throw
-            // without executing the command if the options are missing.
-            var commandResultOptions = _aggregateOptions.GetCommandResultOptions<TCommandResult>();
+            // We attempt to get the command result type before executing the command. This ensures that we throw
+            // without executing the command if the type is missing.
+            var commandResultType = _aggregateType.GetCommandResultType<TCommandResult>();
             var commandResult = commandExecutor(State);
-            var raisedEvents =
-                commandResultOptions.SelectEventsAndUpdateState(commandResult, State, _aggregateOptions.ApplyEvent);
+
+            var raisedEvents = commandResultType.SelectEventsAndUpdateStateIfRequired(
+                commandResult, State, _aggregateType.InvokeEventApplier);
+
             _raisedEvents.AddRange(raisedEvents);
 
             // If the command result is an event enumerable, return the materialized events to avoid multiple
@@ -49,14 +51,14 @@ public sealed class MutableCommandExecutionContext<TAggregate, TEventBase> : ICo
     {
         if (commandExecutor == null) throw new ArgumentNullException(nameof(commandExecutor));
 
-        if (!_aggregateOptions.CanSelectRaisedEventsFromAggregate)
+        if (!_aggregateType.CanSelectRaisedEventsFromAggregate)
         {
             throw new InvalidOperationException(
                 "Cannot execute void command. Aggregate has no raised events selector specified.");
         }
 
         commandExecutor(State);
-        var raisedEvents = _aggregateOptions.SelectRaisedEvents(State);
+        var raisedEvents = _aggregateType.SelectRaisedEvents(State);
         _raisedEvents.Clear();
         _raisedEvents.AddRange(raisedEvents);
     }

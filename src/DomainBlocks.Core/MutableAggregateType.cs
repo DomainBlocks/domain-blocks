@@ -1,43 +1,43 @@
 namespace DomainBlocks.Core;
 
-public interface IMutableAggregateOptions<TAggregate> : IAggregateOptions<TAggregate>
+public interface IMutableAggregateType<TAggregate> : IAggregateType<TAggregate>
 {
     bool CanSelectRaisedEventsFromAggregate { get; }
 
-    new void ApplyEvent(TAggregate aggregate, object @event);
-    IMutableCommandResultOptions<TAggregate, TCommandResult> GetCommandResultOptions<TCommandResult>();
+    new void InvokeEventApplier(TAggregate aggregate, object @event);
+    IMutableCommandResultType<TAggregate, TCommandResult> GetCommandResultType<TCommandResult>();
     IEnumerable<object> SelectRaisedEvents(TAggregate aggregate);
 }
 
-public sealed class MutableAggregateOptions<TAggregate, TEventBase> :
-    AggregateOptionsBase<TAggregate, TEventBase>,
-    IMutableAggregateOptions<TAggregate> where TEventBase : class
+public sealed class MutableAggregateType<TAggregate, TEventBase> :
+    AggregateTypeBase<TAggregate, TEventBase>,
+    IMutableAggregateType<TAggregate> where TEventBase : class
 {
     private Func<TAggregate, IReadOnlyCollection<TEventBase>>? _raisedEventsSelector;
 
-    public MutableAggregateOptions()
+    public MutableAggregateType()
     {
     }
 
-    private MutableAggregateOptions(MutableAggregateOptions<TAggregate, TEventBase> copyFrom) : base(copyFrom)
+    private MutableAggregateType(MutableAggregateType<TAggregate, TEventBase> copyFrom) : base(copyFrom)
     {
         _raisedEventsSelector = copyFrom._raisedEventsSelector;
     }
 
     public bool CanSelectRaisedEventsFromAggregate => _raisedEventsSelector != null;
 
-    public MutableAggregateOptions<TAggregate, TEventBase> WithEventApplier(Action<TAggregate, TEventBase> eventApplier)
+    public MutableAggregateType<TAggregate, TEventBase> SetEventApplier(Action<TAggregate, TEventBase> eventApplier)
     {
         if (eventApplier == null) throw new ArgumentNullException(nameof(eventApplier));
 
-        return (MutableAggregateOptions<TAggregate, TEventBase>)WithEventApplier((agg, e) =>
+        return (MutableAggregateType<TAggregate, TEventBase>)SetEventApplier((agg, e) =>
         {
             eventApplier(agg, e);
             return agg;
         });
     }
 
-    public MutableAggregateOptions<TAggregate, TEventBase> WithRaisedEventsSelector(
+    public MutableAggregateType<TAggregate, TEventBase> SetRaisedEventsSelector(
         Func<TAggregate, IReadOnlyCollection<TEventBase>> raisedEventsSelector)
     {
         if (raisedEventsSelector == null) throw new ArgumentNullException(nameof(raisedEventsSelector));
@@ -53,12 +53,13 @@ public sealed class MutableAggregateOptions<TAggregate, TEventBase> :
         return new MutableCommandExecutionContext<TAggregate, TEventBase>(aggregate, this);
     }
 
-    public new void ApplyEvent(TAggregate aggregate, object @event) => base.ApplyEvent(aggregate, @event);
+    public new void InvokeEventApplier(TAggregate aggregate, object @event) =>
+        base.InvokeEventApplier(aggregate, @event);
 
-    public new IMutableCommandResultOptions<TAggregate, TCommandResult> GetCommandResultOptions<TCommandResult>()
+    public new IMutableCommandResultType<TAggregate, TCommandResult> GetCommandResultType<TCommandResult>()
     {
-        var commandResultOptions = base.GetCommandResultOptions<TCommandResult>();
-        return (IMutableCommandResultOptions<TAggregate, TCommandResult>)commandResultOptions;
+        var commandResultType = base.GetCommandResultType<TCommandResult>();
+        return (IMutableCommandResultType<TAggregate, TCommandResult>)commandResultType;
     }
 
     public IEnumerable<object> SelectRaisedEvents(TAggregate aggregate)
@@ -73,8 +74,8 @@ public sealed class MutableAggregateOptions<TAggregate, TEventBase> :
         return _raisedEventsSelector(aggregate);
     }
 
-    protected override MutableAggregateOptions<TAggregate, TEventBase> Clone()
+    protected override MutableAggregateType<TAggregate, TEventBase> Clone()
     {
-        return new MutableAggregateOptions<TAggregate, TEventBase>(this);
+        return new MutableAggregateType<TAggregate, TEventBase>(this);
     }
 }
