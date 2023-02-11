@@ -2,15 +2,15 @@ namespace DomainBlocks.Core;
 
 public sealed class ImmutableCommandExecutionContext<TAggregate, TEventBase> : ICommandExecutionContext<TAggregate>
 {
-    private readonly IImmutableAggregateOptions<TAggregate> _aggregateOptions;
+    private readonly IImmutableAggregateType<TAggregate> _aggregateType;
     private readonly List<object> _raisedEvents = new();
     private TAggregate _state;
 
     public ImmutableCommandExecutionContext(
-        TAggregate state, IImmutableAggregateOptions<TAggregate> aggregateOptions)
+        TAggregate state, IImmutableAggregateType<TAggregate> aggregateType)
     {
         _state = state ?? throw new ArgumentNullException(nameof(state));
-        _aggregateOptions = aggregateOptions ?? throw new ArgumentNullException(nameof(aggregateOptions));
+        _aggregateType = aggregateType ?? throw new ArgumentNullException(nameof(aggregateType));
     }
 
     public TAggregate State => _state;
@@ -20,12 +20,14 @@ public sealed class ImmutableCommandExecutionContext<TAggregate, TEventBase> : I
     {
         if (commandExecutor == null) throw new ArgumentNullException(nameof(commandExecutor));
 
-        // We attempt to get the command result options before executing the command. This ensures that we throw
-        // without executing the command if the options are missing.
-        var commandResultOptions = _aggregateOptions.GetCommandResultOptions<TCommandResult>();
+        // We attempt to get the command result type before executing the command. This ensures that we throw without
+        // executing the command if the type is missing.
+        var commandResultType = _aggregateType.GetCommandResultType<TCommandResult>();
         var commandResult = commandExecutor(State);
-        var raisedEvents =
-            commandResultOptions.SelectEventsAndUpdateState(commandResult, ref _state, _aggregateOptions.ApplyEvent);
+
+        var raisedEvents = commandResultType.SelectEventsAndUpdateStateIfRequired(
+            commandResult, ref _state, _aggregateType.InvokeEventApplier);
+
         _raisedEvents.AddRange(raisedEvents);
 
         // If the command result is an event enumerable, return the materialized events to avoid multiple enumeration.

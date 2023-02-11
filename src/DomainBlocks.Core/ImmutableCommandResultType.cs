@@ -1,17 +1,17 @@
 namespace DomainBlocks.Core;
 
-public sealed class ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> :
-    IImmutableCommandResultOptions<TAggregate, TCommandResult> where TEventBase : class
+public sealed class ImmutableCommandResultType<TAggregate, TEventBase, TCommandResult> :
+    IImmutableCommandResultType<TAggregate, TCommandResult> where TEventBase : class
 {
     private Func<TCommandResult, IEnumerable<TEventBase>>? _eventsSelector;
     private Func<TCommandResult, TAggregate>? _updatedStateSelector;
 
-    public ImmutableCommandResultOptions()
+    public ImmutableCommandResultType()
     {
     }
 
-    private ImmutableCommandResultOptions(
-        ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> copyFrom)
+    private ImmutableCommandResultType(
+        ImmutableCommandResultType<TAggregate, TEventBase, TCommandResult> copyFrom)
     {
         _eventsSelector = copyFrom._eventsSelector;
         _updatedStateSelector = copyFrom._updatedStateSelector;
@@ -19,29 +19,29 @@ public sealed class ImmutableCommandResultOptions<TAggregate, TEventBase, TComma
 
     public Type ClrType => typeof(TCommandResult);
 
-    public ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> WithEventsSelector(
+    public ImmutableCommandResultType<TAggregate, TEventBase, TCommandResult> SetEventsSelector(
         Func<TCommandResult, IEnumerable<TEventBase>> eventsSelector)
     {
         if (eventsSelector == null) throw new ArgumentNullException(nameof(eventsSelector));
 
-        return new ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult>(this)
+        return new ImmutableCommandResultType<TAggregate, TEventBase, TCommandResult>(this)
         {
             _eventsSelector = eventsSelector
         };
     }
 
-    public ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> WithUpdatedStateSelector(
+    public ImmutableCommandResultType<TAggregate, TEventBase, TCommandResult> SetUpdatedStateSelector(
         Func<TCommandResult, TAggregate> updatedStateSelector)
     {
         if (updatedStateSelector == null) throw new ArgumentNullException(nameof(updatedStateSelector));
 
-        return new ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult>(this)
+        return new ImmutableCommandResultType<TAggregate, TEventBase, TCommandResult>(this)
         {
             _updatedStateSelector = updatedStateSelector
         };
     }
 
-    public IReadOnlyCollection<object> SelectEventsAndUpdateState(
+    public IReadOnlyCollection<object> SelectEventsAndUpdateStateIfRequired(
         TCommandResult commandResult, ref TAggregate state, Func<TAggregate, object, TAggregate> eventApplier)
     {
         if (_eventsSelector == null)

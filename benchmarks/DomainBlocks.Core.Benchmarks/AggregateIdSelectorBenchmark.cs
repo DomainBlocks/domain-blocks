@@ -6,17 +6,17 @@ namespace DomainBlocks.Core.Benchmarks;
 public class AggregateIdSelectorBenchmark
 {
     private const int Iterations = 1000;
-    private AggregateOptionsBase<MyAggregate, object> _optionsWithExplicitIdSelector;
-    private AggregateOptionsBase<MyAggregate, object> _optionsWithDefaultIdSelector;
+    private AggregateTypeBase<MyAggregate, object> _typeWithExplicitIdSelector;
+    private AggregateTypeBase<MyAggregate, object> _typeWithDefaultIdSelector;
     private MyAggregate _aggregate;
 
     [GlobalSetup]
     public void SetUp()
     {
-        _optionsWithExplicitIdSelector = new ImmutableAggregateOptions<MyAggregate, object>()
-            .WithIdSelector(x => x.Id.ToString());
+        _typeWithExplicitIdSelector = new ImmutableAggregateType<MyAggregate, object>()
+            .SetIdSelector(x => x.Id.ToString());
 
-        _optionsWithDefaultIdSelector = new ImmutableAggregateOptions<MyAggregate, object>();
+        _typeWithDefaultIdSelector = new ImmutableAggregateType<MyAggregate, object>();
 
         _aggregate = new MyAggregate { Id = 123 };
     }
@@ -28,7 +28,7 @@ public class AggregateIdSelectorBenchmark
 
         for (var i = 0; i < Iterations; i++)
         {
-            id = _optionsWithExplicitIdSelector.GetId(_aggregate);
+            id = _typeWithExplicitIdSelector.GetId(_aggregate);
         }
 
         return id;
@@ -41,7 +41,7 @@ public class AggregateIdSelectorBenchmark
 
         for (var i = 0; i < Iterations; i++)
         {
-            id = _optionsWithDefaultIdSelector.GetId(_aggregate);
+            id = _typeWithDefaultIdSelector.GetId(_aggregate);
         }
 
         return id;

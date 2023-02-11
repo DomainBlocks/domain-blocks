@@ -1,31 +1,30 @@
 namespace DomainBlocks.Core.Builders;
 
-public sealed class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
-    AggregateOptionsBuilderBase<TAggregate, TEventBase> where TEventBase : class
+public sealed class ImmutableAggregateTypeBuilder<TAggregate, TEventBase> :
+    AggregateTypeBuilderBase<TAggregate, TEventBase> where TEventBase : class
 {
-    private readonly List<ICommandResultOptionsBuilder> _commandResultOptionsBuilders = new();
-    private ImmutableAggregateOptions<TAggregate, TEventBase> _options = new();
+    private readonly List<ICommandResultTypeBuilder> _commandResultTypeBuilders = new();
+    private ImmutableAggregateType<TAggregate, TEventBase> _aggregateType = new();
 
-    protected override AggregateOptionsBase<TAggregate, TEventBase> OptionsImpl
+    protected override AggregateTypeBase<TAggregate, TEventBase> AggregateTypeImpl
     {
         get
         {
-            var commandResultsOptions = _commandResultOptionsBuilders.Select(x => x.Options);
-            var options = _options.WithCommandResultsOptions(commandResultsOptions);
+            var commandResultTypes = _commandResultTypeBuilders.Select(x => x.CommandResultType);
+            var aggregateType = _aggregateType.SetCommandResultTypes(commandResultTypes);
 
-            if (options.HasCommandResultOptions<IEnumerable<TEventBase>>())
+            if (aggregateType.HasCommandResultType<IEnumerable<TEventBase>>())
             {
-                return options;
+                return aggregateType;
             }
 
             // We support IEnumerable<TEventBase> as a command result by default.
-            var commandResultOptions =
-                new ImmutableCommandResultOptions<TAggregate, TEventBase, IEnumerable<TEventBase>>()
-                    .WithEventsSelector(x => x);
+            var commandResultType = new ImmutableCommandResultType<TAggregate, TEventBase, IEnumerable<TEventBase>>()
+                .SetEventsSelector(x => x);
 
-            return options.WithCommandResultOptions(commandResultOptions);
+            return aggregateType.SetCommandResultType(commandResultType);
         }
-        set => _options = (ImmutableAggregateOptions<TAggregate, TEventBase>)value;
+        set => _aggregateType = (ImmutableAggregateType<TAggregate, TEventBase>)value;
     }
 
     /// <summary>
@@ -35,10 +34,10 @@ public sealed class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     /// An object that can be used to configure the command result type.
     /// </returns>
     /// </summary>
-    public ImmutableCommandResultOptionsBuilder<TAggregate, TEventBase, TCommandResult> CommandResult<TCommandResult>()
+    public ImmutableCommandResultTypeBuilder<TAggregate, TEventBase, TCommandResult> CommandResult<TCommandResult>()
     {
-        var builder = new ImmutableCommandResultOptionsBuilder<TAggregate, TEventBase, TCommandResult>();
-        _commandResultOptionsBuilders.Add(builder);
+        var builder = new ImmutableCommandResultTypeBuilder<TAggregate, TEventBase, TCommandResult>();
+        _commandResultTypeBuilders.Add(builder);
         return builder;
     }
 
@@ -49,11 +48,11 @@ public sealed class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     /// </summary>
     public void ApplyEventsWith(Func<TAggregate, TEventBase, TAggregate> eventApplier)
     {
-        OptionsImpl = _options.WithEventApplier(eventApplier);
+        AggregateTypeImpl = _aggregateType.SetEventApplier(eventApplier);
     }
 
     /// <summary>
-    /// Adds the given event type to the aggregate options.
+    /// Adds the given event type to the aggregate type.
     /// </summary>
     /// <returns>
     /// An object that can be used to further configure the event.
@@ -71,7 +70,7 @@ public sealed class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     /// <returns>
     /// An object that can be used for further configuration.
     /// </returns>
-    public IAutoEventOptionsBuilder AutoConfigureEvents()
+    public IAutoEventTypeBuilder AutoConfigureEvents()
     {
         var builder = AutoAggregateEventTypeBuilder<TAggregate, TEventBase>.Immutable();
         AutoEventTypeBuilder = builder;
@@ -87,7 +86,7 @@ public sealed class ImmutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     /// <returns>
     /// An object that can be used for further configuration.
     /// </returns>
-    public IAutoEventOptionsBuilder AutoConfigureEventsFrom(Type sourceType)
+    public IAutoEventTypeBuilder AutoConfigureEventsFrom(Type sourceType)
     {
         var builder = AutoAggregateEventTypeBuilder<TAggregate, TEventBase>.ImmutableNonMember(sourceType);
         AutoEventTypeBuilder = builder;

@@ -1,24 +1,24 @@
 namespace DomainBlocks.Core;
 
-public sealed class MutableEventEnumerableCommandResultOptions<TAggregate, TEventBase> :
-    IMutableCommandResultOptions<TAggregate, IEnumerable<TEventBase>> where TEventBase : class
+public sealed class MutableEventEnumerableCommandResultType<TAggregate, TEventBase> :
+    IMutableCommandResultType<TAggregate, IEnumerable<TEventBase>> where TEventBase : class
 {
     private ApplyEventsBehavior _behavior = ApplyEventsBehavior.Never;
 
-    public MutableEventEnumerableCommandResultOptions()
+    public MutableEventEnumerableCommandResultType()
     {
     }
 
-    private MutableEventEnumerableCommandResultOptions(
-        MutableEventEnumerableCommandResultOptions<TAggregate, TEventBase> copyFrom)
+    private MutableEventEnumerableCommandResultType(
+        MutableEventEnumerableCommandResultType<TAggregate, TEventBase> copyFrom)
     {
         _behavior = copyFrom._behavior;
     }
 
-    public MutableEventEnumerableCommandResultOptions<TAggregate, TEventBase> WithApplyEventsBehavior(
+    public MutableEventEnumerableCommandResultType<TAggregate, TEventBase> SetApplyEventsBehavior(
         ApplyEventsBehavior behavior)
     {
-        return new MutableEventEnumerableCommandResultOptions<TAggregate, TEventBase>(this)
+        return new MutableEventEnumerableCommandResultType<TAggregate, TEventBase>(this)
         {
             _behavior = behavior
         };
@@ -26,7 +26,7 @@ public sealed class MutableEventEnumerableCommandResultOptions<TAggregate, TEven
 
     public Type ClrType => typeof(IEnumerable<TEventBase>);
 
-    public IReadOnlyCollection<object> SelectEventsAndUpdateState(
+    public IReadOnlyCollection<object> SelectEventsAndUpdateStateIfRequired(
         IEnumerable<TEventBase> commandResult, TAggregate state, Action<TAggregate, object> eventApplier)
     {
         return _behavior switch

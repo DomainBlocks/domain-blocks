@@ -1,17 +1,17 @@
 namespace DomainBlocks.Core;
 
-public interface IAggregateOptions
+public interface IAggregateType
 {
     Type ClrType { get; }
     IEnumerable<IEventType> EventTypes { get; }
 }
 
-public interface IAggregateOptions<TAggregate> : IAggregateOptions
+public interface IAggregateType<TAggregate> : IAggregateType
 {
     TAggregate CreateNew();
     string MakeStreamKey(string id);
     string MakeSnapshotKey(string id);
     string MakeSnapshotKey(TAggregate aggregate);
     ICommandExecutionContext<TAggregate> CreateCommandExecutionContext(TAggregate aggregate);
-    TAggregate ApplyEvent(TAggregate aggregate, object @event);
+    TAggregate InvokeEventApplier(TAggregate aggregate, object @event);
 }

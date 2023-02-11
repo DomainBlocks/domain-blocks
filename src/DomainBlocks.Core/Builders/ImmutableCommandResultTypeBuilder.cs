@@ -9,14 +9,14 @@ public interface IImmutableCommandResultUpdatedStateBuilder<in TAggregate, out T
     public void WithUpdatedStateFrom(Func<TCommandResult, TAggregate> updatedStateSelector);
 }
 
-public sealed class ImmutableCommandResultOptionsBuilder<TAggregate, TEventBase, TCommandResult> :
-    ICommandResultOptionsBuilder,
+public sealed class ImmutableCommandResultTypeBuilder<TAggregate, TEventBase, TCommandResult> :
+    ICommandResultTypeBuilder,
     IImmutableCommandResultUpdatedStateBuilder<TAggregate, TCommandResult>
     where TEventBase : class
 {
-    private ImmutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> _options = new();
+    private ImmutableCommandResultType<TAggregate, TEventBase, TCommandResult> _commandResultType = new();
 
-    ICommandResultOptions ICommandResultOptionsBuilder.Options => _options;
+    ICommandResultType ICommandResultTypeBuilder.CommandResultType => _commandResultType;
 
     /// <summary>
     /// Specify where to select the events from in the command result object. The events are applied to arrived at the
@@ -29,13 +29,13 @@ public sealed class ImmutableCommandResultOptionsBuilder<TAggregate, TEventBase,
     public IImmutableCommandResultUpdatedStateBuilder<TAggregate, TCommandResult> WithEventsFrom(
         Func<TCommandResult, IEnumerable<TEventBase>> eventsSelector)
     {
-        _options = _options.WithEventsSelector(eventsSelector);
+        _commandResultType = _commandResultType.SetEventsSelector(eventsSelector);
         return this;
     }
 
     void IImmutableCommandResultUpdatedStateBuilder<TAggregate, TCommandResult>.WithUpdatedStateFrom(
         Func<TCommandResult, TAggregate> updatedStateSelector)
     {
-        _options = _options.WithUpdatedStateSelector(updatedStateSelector);
+        _commandResultType = _commandResultType.SetUpdatedStateSelector(updatedStateSelector);
     }
 }

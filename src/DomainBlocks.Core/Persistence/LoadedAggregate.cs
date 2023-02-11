@@ -4,13 +4,13 @@ internal static class LoadedAggregate
 {
     internal static LoadedAggregate<TAggregate> Create<TAggregate>(
         TAggregate state,
-        IAggregateOptions<TAggregate> aggregateOptions,
+        IAggregateType<TAggregate> aggregateType,
         string id,
         long version,
         long? snapshotVersion,
         long eventsLoaded)
     {
-        return new LoadedAggregate<TAggregate>(state, aggregateOptions, id, version, snapshotVersion, eventsLoaded);
+        return new LoadedAggregate<TAggregate>(state, aggregateType, id, version, snapshotVersion, eventsLoaded);
     }
 }
 
@@ -20,18 +20,18 @@ public sealed class LoadedAggregate<TAggregate>
 
     internal LoadedAggregate(
         TAggregate state,
-        IAggregateOptions<TAggregate> aggregateOptions,
+        IAggregateType<TAggregate> aggregateType,
         string id,
         long version,
         long? snapshotVersion,
         long eventsLoadedCount)
     {
-        if (aggregateOptions == null) throw new ArgumentNullException(nameof(aggregateOptions));
+        if (aggregateType == null) throw new ArgumentNullException(nameof(aggregateType));
 
         if (string.IsNullOrWhiteSpace(id))
             throw new ArgumentException("Value cannot be null or whitespace.", nameof(id));
 
-        _commandExecutionContext = aggregateOptions.CreateCommandExecutionContext(state);
+        _commandExecutionContext = aggregateType.CreateCommandExecutionContext(state);
 
         Id = id;
         Version = version;
