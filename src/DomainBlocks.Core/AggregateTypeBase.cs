@@ -2,11 +2,11 @@ using System.Linq.Expressions;
 
 namespace DomainBlocks.Core;
 
-public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateOptions<TAggregate>
+public abstract class AggregateTypeBase<TAggregate, TEventBase> : IAggregateType<TAggregate>
 {
     private static readonly Lazy<Func<TAggregate>> DefaultFactory = new(() => GetDefaultFactory());
     private static readonly Lazy<Func<TAggregate, string>> DefaultIdSelector = new(GetDefaultIdSelector);
-    private readonly Dictionary<Type, ICommandResultOptions> _commandResultsOptions = new();
+    private readonly Dictionary<Type, ICommandResultType> _commandResultTypes = new();
     private readonly Dictionary<Type, AggregateEventType<TAggregate>> _eventTypes = new();
     private Func<TAggregate> _factory;
     private Func<TAggregate, string> _idSelector;
@@ -14,7 +14,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
     private Func<string, string> _idToSnapshotKeySelector;
     private Func<TAggregate, object, TAggregate>? _eventApplier;
 
-    protected AggregateOptionsBase()
+    protected AggregateTypeBase()
     {
         _factory = DefaultFactory.Value;
         _idSelector = DefaultIdSelector.Value;
@@ -23,7 +23,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         _idToSnapshotKeySelector = GetIdToSnapshotKeySelector(prefix);
     }
 
-    protected AggregateOptionsBase(AggregateOptionsBase<TAggregate, TEventBase> copyFrom)
+    protected AggregateTypeBase(AggregateTypeBase<TAggregate, TEventBase> copyFrom)
     {
         if (copyFrom == null) throw new ArgumentNullException(nameof(copyFrom));
 
@@ -32,7 +32,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         _idSelector = copyFrom._idSelector;
         _idToStreamKeySelector = copyFrom._idToStreamKeySelector;
         _idToSnapshotKeySelector = copyFrom._idToSnapshotKeySelector;
-        _commandResultsOptions = new Dictionary<Type, ICommandResultOptions>(copyFrom._commandResultsOptions);
+        _commandResultTypes = new Dictionary<Type, ICommandResultType>(copyFrom._commandResultTypes);
         _eventTypes = new Dictionary<Type, AggregateEventType<TAggregate>>(copyFrom._eventTypes);
     }
 
@@ -83,7 +83,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
 
     public abstract ICommandExecutionContext<TAggregate> CreateCommandExecutionContext(TAggregate aggregate);
 
-    public TAggregate ApplyEvent(TAggregate aggregate, object @event)
+    public TAggregate InvokeEventApplier(TAggregate aggregate, object @event)
     {
         if (aggregate == null) throw new ArgumentNullException(nameof(aggregate));
         if (@event == null) throw new ArgumentNullException(nameof(@event));
@@ -103,7 +103,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
             "applier was found.");
     }
 
-    public AggregateOptionsBase<TAggregate, TEventBase> WithFactory(Func<TAggregate> factory)
+    public AggregateTypeBase<TAggregate, TEventBase> SetFactory(Func<TAggregate> factory)
     {
         if (factory == null) throw new ArgumentNullException(nameof(factory));
 
@@ -112,7 +112,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         return clone;
     }
 
-    public AggregateOptionsBase<TAggregate, TEventBase> WithIdSelector(Func<TAggregate, string> idSelector)
+    public AggregateTypeBase<TAggregate, TEventBase> SetIdSelector(Func<TAggregate, string> idSelector)
     {
         if (idSelector == null) throw new ArgumentNullException(nameof(idSelector));
 
@@ -121,7 +121,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         return clone;
     }
 
-    public AggregateOptionsBase<TAggregate, TEventBase> WithKeyPrefix(string prefix)
+    public AggregateTypeBase<TAggregate, TEventBase> SetKeyPrefix(string prefix)
     {
         if (string.IsNullOrWhiteSpace(prefix))
             throw new ArgumentException("Prefix cannot be null or whitespace.", nameof(prefix));
@@ -132,7 +132,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         return clone;
     }
 
-    public AggregateOptionsBase<TAggregate, TEventBase> WithIdToStreamKeySelector(
+    public AggregateTypeBase<TAggregate, TEventBase> SetIdToStreamKeySelector(
         Func<string, string> idToStreamKeySelector)
     {
         if (idToStreamKeySelector == null) throw new ArgumentNullException(nameof(idToStreamKeySelector));
@@ -142,7 +142,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         return clone;
     }
 
-    public AggregateOptionsBase<TAggregate, TEventBase> WithIdToSnapshotKeySelector(
+    public AggregateTypeBase<TAggregate, TEventBase> SetIdToSnapshotKeySelector(
         Func<string, string> idToSnapshotKeySelector)
     {
         if (idToSnapshotKeySelector == null) throw new ArgumentNullException(nameof(idToSnapshotKeySelector));
@@ -152,7 +152,7 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         return clone;
     }
 
-    public AggregateOptionsBase<TAggregate, TEventBase> WithEventApplier(
+    public AggregateTypeBase<TAggregate, TEventBase> SetEventApplier(
         Func<TAggregate, TEventBase, TAggregate> eventApplier)
     {
         if (eventApplier == null) throw new ArgumentNullException(nameof(eventApplier));
@@ -162,32 +162,31 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         return clone;
     }
 
-    public AggregateOptionsBase<TAggregate, TEventBase> WithCommandResultOptions(
-        ICommandResultOptions commandResultOptions)
+    public AggregateTypeBase<TAggregate, TEventBase> SetCommandResultType(ICommandResultType commandResultType)
     {
-        if (commandResultOptions == null) throw new ArgumentNullException(nameof(commandResultOptions));
+        if (commandResultType == null) throw new ArgumentNullException(nameof(commandResultType));
 
         var clone = Clone();
-        clone._commandResultsOptions[commandResultOptions.ClrType] = commandResultOptions;
+        clone._commandResultTypes[commandResultType.ClrType] = commandResultType;
         return clone;
     }
 
-    public AggregateOptionsBase<TAggregate, TEventBase> WithCommandResultsOptions(
-        IEnumerable<ICommandResultOptions> commandResultsOptions)
+    public AggregateTypeBase<TAggregate, TEventBase> SetCommandResultTypes(
+        IEnumerable<ICommandResultType> commandResultTypes)
     {
-        if (commandResultsOptions == null) throw new ArgumentNullException(nameof(commandResultsOptions));
+        if (commandResultTypes == null) throw new ArgumentNullException(nameof(commandResultTypes));
 
         var clone = Clone();
 
-        foreach (var commandResultOptions in commandResultsOptions)
+        foreach (var commandResultType in commandResultTypes)
         {
-            clone._commandResultsOptions[commandResultOptions.ClrType] = commandResultOptions;
+            clone._commandResultTypes[commandResultType.ClrType] = commandResultType;
         }
 
         return clone;
     }
 
-    internal AggregateOptionsBase<TAggregate, TEventBase> WithEventTypes(
+    internal AggregateTypeBase<TAggregate, TEventBase> SetEventTypes(
         IEnumerable<AggregateEventType<TAggregate>> eventTypes)
     {
         if (eventTypes == null) throw new ArgumentNullException(nameof(eventTypes));
@@ -209,23 +208,23 @@ public abstract class AggregateOptionsBase<TAggregate, TEventBase> : IAggregateO
         return clone;
     }
 
-    public bool HasCommandResultOptions<TCommandResult>()
+    public bool HasCommandResultType<TCommandResult>()
     {
-        return _commandResultsOptions.ContainsKey(typeof(TCommandResult));
+        return _commandResultTypes.ContainsKey(typeof(TCommandResult));
     }
 
-    protected abstract AggregateOptionsBase<TAggregate, TEventBase> Clone();
+    protected abstract AggregateTypeBase<TAggregate, TEventBase> Clone();
 
-    protected ICommandResultOptions GetCommandResultOptions<TCommandResult>()
+    protected ICommandResultType GetCommandResultType<TCommandResult>()
     {
         var commandResultClrType = typeof(TCommandResult);
 
-        if (_commandResultsOptions.TryGetValue(commandResultClrType, out var commandResultOptions))
+        if (_commandResultTypes.TryGetValue(commandResultClrType, out var commandResultType))
         {
-            return commandResultOptions;
+            return commandResultType;
         }
 
-        throw new KeyNotFoundException($"No command result options found for CLR type {commandResultClrType.Name}.");
+        throw new KeyNotFoundException($"No command result type found for CLR type {commandResultClrType.Name}.");
     }
 
     private static Func<TAggregate> GetDefaultFactory()

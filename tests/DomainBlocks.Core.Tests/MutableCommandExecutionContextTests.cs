@@ -9,13 +9,13 @@ public class MutableCommandExecutionContextTests
     [Test]
     public void EventEnumerableReturnTypeIsNotEnumeratedAgainWhenMaterializing()
     {
-        var builder = new MutableAggregateOptionsBuilder<MutableAggregate, IEvent>();
+        var builder = new MutableAggregateTypeBuilder<MutableAggregate, IEvent>();
         builder.WithEventEnumerableCommandResult().ApplyEvents(ApplyEventsBehavior.WhileEnumerating);
         builder.ApplyEventsWith((agg, e) => agg.Apply((dynamic)e));
-        var options = builder.Options;
+        var aggregateType = builder.AggregateType;
 
         var aggregate = new MutableAggregate();
-        var context = options.CreateCommandExecutionContext(aggregate);
+        var context = aggregateType.CreateCommandExecutionContext(aggregate);
 
         // Materialize the results. We expect the comment method to be called only once.
         var events = context.ExecuteCommand(x => x.MyCommandMethod("value")).ToList();

@@ -1,30 +1,30 @@
 namespace DomainBlocks.Core.Builders;
 
-public sealed class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
-    AggregateOptionsBuilderBase<TAggregate, TEventBase> where TEventBase : class
+public sealed class MutableAggregateTypeBuilder<TAggregate, TEventBase> :
+    AggregateTypeBuilderBase<TAggregate, TEventBase> where TEventBase : class
 {
-    private readonly List<ICommandResultOptionsBuilder> _commandResultOptionsBuilders = new();
-    private MutableAggregateOptions<TAggregate, TEventBase> _options = new();
+    private readonly List<ICommandResultTypeBuilder> _commandResultTypeBuilders = new();
+    private MutableAggregateType<TAggregate, TEventBase> _aggregateType = new();
 
-    protected override AggregateOptionsBase<TAggregate, TEventBase> OptionsImpl
+    protected override AggregateTypeBase<TAggregate, TEventBase> AggregateTypeImpl
     {
         get
         {
-            var commandResultsOptions = _commandResultOptionsBuilders.Select(x => x.Options);
-            var options = _options.WithCommandResultsOptions(commandResultsOptions);
+            var commandResultTypes = _commandResultTypeBuilders.Select(x => x.CommandResultType);
+            var aggregateType = _aggregateType.SetCommandResultTypes(commandResultTypes);
 
-            if (options.HasCommandResultOptions<IEnumerable<TEventBase>>())
+            if (aggregateType.HasCommandResultType<IEnumerable<TEventBase>>())
             {
-                return options;
+                return aggregateType;
             }
 
             // We support IEnumerable<TEventBase> as a command result by default.
-            var commandResultOptions = new MutableEventEnumerableCommandResultOptions<TAggregate, TEventBase>();
-            options = options.WithCommandResultOptions(commandResultOptions);
+            var commandResultType = new MutableEventEnumerableCommandResultType<TAggregate, TEventBase>();
+            aggregateType = aggregateType.SetCommandResultType(commandResultType);
 
-            return options;
+            return aggregateType;
         }
-        set => _options = (MutableAggregateOptions<TAggregate, TEventBase>)value;
+        set => _aggregateType = (MutableAggregateType<TAggregate, TEventBase>)value;
     }
 
     /// <summary>
@@ -34,7 +34,7 @@ public sealed class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     /// </summary>
     public void WithRaisedEventsFrom(Func<TAggregate, IReadOnlyCollection<TEventBase>> eventsSelector)
     {
-        _options = _options.WithRaisedEventsSelector(eventsSelector);
+        _aggregateType = _aggregateType.SetRaisedEventsSelector(eventsSelector);
     }
 
     /// <summary>
@@ -44,10 +44,10 @@ public sealed class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     /// An object that can be used to configure the command result type.
     /// </returns>
     /// </summary>
-    public MutableCommandResultOptionsBuilder<TAggregate, TEventBase, TCommandResult> CommandResult<TCommandResult>()
+    public MutableCommandResultTypeBuilder<TAggregate, TEventBase, TCommandResult> CommandResult<TCommandResult>()
     {
-        var builder = new MutableCommandResultOptionsBuilder<TAggregate, TEventBase, TCommandResult>();
-        _commandResultOptionsBuilders.Add(builder);
+        var builder = new MutableCommandResultTypeBuilder<TAggregate, TEventBase, TCommandResult>();
+        _commandResultTypeBuilders.Add(builder);
         return builder;
     }
 
@@ -59,25 +59,25 @@ public sealed class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     /// <returns>
     /// An object that can be used to configure event enumerable command results.
     /// </returns>
-    public MutableEventEnumerableCommandResultOptionsBuilder<TAggregate, TEventBase> WithEventEnumerableCommandResult()
+    public MutableEventEnumerableCommandResultTypeBuilder<TAggregate, TEventBase> WithEventEnumerableCommandResult()
     {
-        var builder = new MutableEventEnumerableCommandResultOptionsBuilder<TAggregate, TEventBase>();
-        _commandResultOptionsBuilders.Add(builder);
+        var builder = new MutableEventEnumerableCommandResultTypeBuilder<TAggregate, TEventBase>();
+        _commandResultTypeBuilders.Add(builder);
         return builder;
     }
 
     /// <summary>
     /// Specify an event applier for the aggregate. To arrive at the current state, the event applier is used to apply
     /// events to aggregate instances loaded from the event store. Events are also applied when commands are executed,
-    /// if configured with command result options.
+    /// if configured with command result type.
     /// </summary>
     public void ApplyEventsWith(Action<TAggregate, TEventBase> eventApplier)
     {
-        _options = _options.WithEventApplier(eventApplier);
+        _aggregateType = _aggregateType.SetEventApplier(eventApplier);
     }
 
     /// <summary>
-    /// Adds the given event type to the aggregate options.
+    /// Adds the given event type to the aggregate type.
     /// </summary>
     /// <returns>
     /// An object that can be used to further configure the event.
@@ -95,7 +95,7 @@ public sealed class MutableAggregateOptionsBuilder<TAggregate, TEventBase> :
     /// <returns>
     /// An object that can be used for further configuration.
     /// </returns>
-    public IAutoEventOptionsBuilder AutoConfigureEvents()
+    public IAutoEventTypeBuilder AutoConfigureEvents()
     {
         var builder = AutoAggregateEventTypeBuilder<TAggregate, TEventBase>.Mutable();
         AutoEventTypeBuilder = builder;

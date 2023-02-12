@@ -10,9 +10,9 @@ public class ImmutableCommandExecutionContextTests
     [Test]
     public void EventEnumerableReturnTypeIsNotEnumeratedAgainWhenMaterializing()
     {
-        var builder = new ImmutableAggregateOptionsBuilder<ImmutableAggregate, IEvent>();
+        var builder = new ImmutableAggregateTypeBuilder<ImmutableAggregate, IEvent>();
         builder.ApplyEventsWith((agg, e) => agg.Apply((dynamic)e));
-        var options = builder.Options;
+        var options = builder.AggregateType;
 
         var aggregate = new ImmutableAggregate();
         var context = options.CreateCommandExecutionContext(aggregate);

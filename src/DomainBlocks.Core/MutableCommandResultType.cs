@@ -1,16 +1,16 @@
 namespace DomainBlocks.Core;
 
-public sealed class MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> :
-    IMutableCommandResultOptions<TAggregate, TCommandResult> where TEventBase : class
+public sealed class MutableCommandResultType<TAggregate, TEventBase, TCommandResult> :
+    IMutableCommandResultType<TAggregate, TCommandResult> where TEventBase : class
 {
     private bool _isApplyEventsEnabled;
     private Func<TCommandResult, IEnumerable<TEventBase>>? _eventsSelector;
 
-    public MutableCommandResultOptions()
+    public MutableCommandResultType()
     {
     }
 
-    private MutableCommandResultOptions(MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> copyFrom)
+    private MutableCommandResultType(MutableCommandResultType<TAggregate, TEventBase, TCommandResult> copyFrom)
     {
         _isApplyEventsEnabled = copyFrom._isApplyEventsEnabled;
         _eventsSelector = copyFrom._eventsSelector;
@@ -18,26 +18,26 @@ public sealed class MutableCommandResultOptions<TAggregate, TEventBase, TCommand
 
     public Type ClrType => typeof(TCommandResult);
 
-    public MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> WithApplyEventsEnabled(bool isEnabled)
+    public MutableCommandResultType<TAggregate, TEventBase, TCommandResult> SetApplyEventsEnabled(bool isEnabled)
     {
-        return new MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult>(this)
+        return new MutableCommandResultType<TAggregate, TEventBase, TCommandResult>(this)
         {
             _isApplyEventsEnabled = isEnabled
         };
     }
 
-    public MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult> WithEventsSelector(
+    public MutableCommandResultType<TAggregate, TEventBase, TCommandResult> SetEventsSelector(
         Func<TCommandResult, IEnumerable<TEventBase>> eventsSelector)
     {
         if (eventsSelector == null) throw new ArgumentNullException(nameof(eventsSelector));
 
-        return new MutableCommandResultOptions<TAggregate, TEventBase, TCommandResult>(this)
+        return new MutableCommandResultType<TAggregate, TEventBase, TCommandResult>(this)
         {
             _eventsSelector = eventsSelector
         };
     }
 
-    public IReadOnlyCollection<object> SelectEventsAndUpdateState(
+    public IReadOnlyCollection<object> SelectEventsAndUpdateStateIfRequired(
         TCommandResult commandResult, TAggregate state, Action<TAggregate, object> eventApplier)
     {
         if (_eventsSelector == null)

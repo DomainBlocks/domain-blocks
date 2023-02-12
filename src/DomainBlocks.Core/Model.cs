@@ -2,17 +2,17 @@ namespace DomainBlocks.Core;
 
 public sealed class Model
 {
-    private readonly IReadOnlyDictionary<Type, IAggregateOptions> _aggregatesOptions;
+    private readonly IReadOnlyDictionary<Type, IAggregateType> _aggregateTypes;
     private readonly EventNameMap _eventNameMap;
 
-    public Model(IEnumerable<IAggregateOptions> aggregatesOptions)
+    public Model(IEnumerable<IAggregateType> aggregatesTypes)
     {
-        if (aggregatesOptions == null) throw new ArgumentNullException(nameof(aggregatesOptions));
+        if (aggregatesTypes == null) throw new ArgumentNullException(nameof(aggregatesTypes));
 
-        _aggregatesOptions = aggregatesOptions.ToDictionary(x => x.ClrType);
+        _aggregateTypes = aggregatesTypes.ToDictionary(x => x.ClrType);
 
-        // Build event name map from all aggregate options.
-        var eventTypes = _aggregatesOptions.Values.SelectMany(x => x.EventTypes);
+        // Build event name map from all aggregate types.
+        var eventTypes = _aggregateTypes.Values.SelectMany(x => x.EventTypes);
         _eventNameMap = new EventNameMap();
         foreach (var eventType in eventTypes)
         {
@@ -22,8 +22,8 @@ public sealed class Model
 
     public IEventNameMap EventNameMap => _eventNameMap;
 
-    public IAggregateOptions<TAggregate> GetAggregateOptions<TAggregate>()
+    public IAggregateType<TAggregate> GetAggregateType<TAggregate>()
     {
-        return (IAggregateOptions<TAggregate>)_aggregatesOptions[typeof(TAggregate)];
+        return (IAggregateType<TAggregate>)_aggregateTypes[typeof(TAggregate)];
     }
 }

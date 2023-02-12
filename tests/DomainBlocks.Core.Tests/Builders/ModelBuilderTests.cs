@@ -10,12 +10,12 @@ public class ModelBuilderTests
     public void MutableAggregateWithEventsPropertyScenario()
     {
         var model = new ModelBuilder()
-            .Aggregate<MutableAggregate, IEvent>(options => options.WithRaisedEventsFrom(x => x.RaisedEvents))
+            .Aggregate<MutableAggregate, IEvent>(builder => builder.WithRaisedEventsFrom(x => x.RaisedEvents))
             .Build();
 
-        var aggregateOptions = model.GetAggregateOptions<MutableAggregate>();
+        var aggregateType = model.GetAggregateType<MutableAggregate>();
         var aggregate = new MutableAggregate();
-        var context = aggregateOptions.CreateCommandExecutionContext(aggregate);
+        var context = aggregateType.CreateCommandExecutionContext(aggregate);
 
         context.ExecuteCommand(x => x.ChangeValueWithEventsProperty("value"));
         var events = context.RaisedEvents.ToList();
@@ -32,16 +32,16 @@ public class ModelBuilderTests
     public void MutableAggregateApplyAfterEnumeratingScenario()
     {
         var model = new ModelBuilder()
-            .Aggregate<MutableAggregate, IEvent>(options =>
+            .Aggregate<MutableAggregate, IEvent>(builder =>
             {
-                options.WithEventEnumerableCommandResult().ApplyEvents();
-                options.Event<ValueChangedEvent>().ApplyWith((a, e) => a.Apply(e));
+                builder.WithEventEnumerableCommandResult().ApplyEvents();
+                builder.Event<ValueChangedEvent>().ApplyWith((a, e) => a.Apply(e));
             })
             .Build();
 
-        var aggregateOptions = model.GetAggregateOptions<MutableAggregate>();
+        var aggregateType = model.GetAggregateType<MutableAggregate>();
         var aggregate = new MutableAggregate();
-        var context = aggregateOptions.CreateCommandExecutionContext(aggregate);
+        var context = aggregateType.CreateCommandExecutionContext(aggregate);
 
         context.ExecuteCommand(x => x.ChangeValueWithYieldReturnedEvents("value"));
         var events = context.RaisedEvents.ToList();
@@ -58,19 +58,19 @@ public class ModelBuilderTests
     public void MutableAggregateApplyWhileEnumeratingScenario()
     {
         var model = new ModelBuilder()
-            .Aggregate<MutableAggregate, IEvent>(options =>
+            .Aggregate<MutableAggregate, IEvent>(builder =>
             {
-                options
+                builder
                     .WithEventEnumerableCommandResult()
                     .ApplyEvents(ApplyEventsBehavior.WhileEnumerating);
 
-                options.Event<ValueChangedEvent>().ApplyWith((a, e) => a.Apply(e));
+                builder.Event<ValueChangedEvent>().ApplyWith((a, e) => a.Apply(e));
             })
             .Build();
 
-        var aggregateOptions = model.GetAggregateOptions<MutableAggregate>();
+        var aggregateType = model.GetAggregateType<MutableAggregate>();
         var aggregate = new MutableAggregate();
-        var context = aggregateOptions.CreateCommandExecutionContext(aggregate);
+        var context = aggregateType.CreateCommandExecutionContext(aggregate);
 
         var result = context.ExecuteCommand(x => x.ChangeValueWithYieldReturnedEvents("value"));
         var events = context.RaisedEvents.ToList();
@@ -88,15 +88,15 @@ public class ModelBuilderTests
     public void MutableAggregateWithCommandResultAndEventsAppliedScenario()
     {
         var model = new ModelBuilder()
-            .Aggregate<MutableAggregate, IEvent>(options =>
+            .Aggregate<MutableAggregate, IEvent>(builder =>
             {
-                options.CommandResult<CommandResult>().WithEventsFrom(x => x.Events);
+                builder.CommandResult<CommandResult>().WithEventsFrom(x => x.Events);
             })
             .Build();
 
-        var aggregateOptions = model.GetAggregateOptions<MutableAggregate>();
+        var aggregateType = model.GetAggregateType<MutableAggregate>();
         var aggregate = new MutableAggregate();
-        var context = aggregateOptions.CreateCommandExecutionContext(aggregate);
+        var context = aggregateType.CreateCommandExecutionContext(aggregate);
 
         var result = context.ExecuteCommand(x => x.ChangeValueWithCommandResultAndEventsApplied("value"));
         var events = context.RaisedEvents.ToList();
@@ -114,20 +114,20 @@ public class ModelBuilderTests
     public void MutableAggregateWithCommandResultAndEventsNotAppliedScenario()
     {
         var model = new ModelBuilder()
-            .Aggregate<MutableAggregate, IEvent>(options =>
+            .Aggregate<MutableAggregate, IEvent>(builder =>
             {
-                options
+                builder
                     .CommandResult<CommandResult>()
                     .WithEventsFrom(x => x.Events)
                     .ApplyEvents();
 
-                options.Event<ValueChangedEvent>().ApplyWith((a, e) => a.Apply(e));
+                builder.Event<ValueChangedEvent>().ApplyWith((a, e) => a.Apply(e));
             })
             .Build();
 
-        var aggregateOptions = model.GetAggregateOptions<MutableAggregate>();
+        var aggregateType = model.GetAggregateType<MutableAggregate>();
         var aggregate = new MutableAggregate();
-        var context = aggregateOptions.CreateCommandExecutionContext(aggregate);
+        var context = aggregateType.CreateCommandExecutionContext(aggregate);
 
         var result = context.ExecuteCommand(x => x.ChangeValueWithCommandResultAndEventsNotApplied("value"));
         var events = context.RaisedEvents.ToList();
@@ -145,15 +145,15 @@ public class ModelBuilderTests
     public void MutableAggregateWithAutoConfiguredEventsScenario()
     {
         var model = new ModelBuilder()
-            .Aggregate<MutableAggregate, IEvent>(options => options.AutoConfigureEvents())
+            .Aggregate<MutableAggregate, IEvent>(builder => builder.AutoConfigureEvents())
             .Build();
 
-        var aggregateOptions = model.GetAggregateOptions<MutableAggregate>();
+        var aggregateType = model.GetAggregateType<MutableAggregate>();
         var aggregate = new MutableAggregate();
-        var context = aggregateOptions.CreateCommandExecutionContext(aggregate);
+        var context = aggregateType.CreateCommandExecutionContext(aggregate);
 
         context.ExecuteCommand(x => x.ChangeValueWithYieldReturnedEvents("value"));
-        var updatedAggregate = context.RaisedEvents.Aggregate(aggregate, aggregateOptions.ApplyEvent);
+        var updatedAggregate = context.RaisedEvents.Aggregate(aggregate, aggregateType.InvokeEventApplier);
 
         Assert.That(updatedAggregate, Is.SameAs(aggregate));
         Assert.That(updatedAggregate.Value, Is.EqualTo("value 3"));
@@ -163,15 +163,15 @@ public class ModelBuilderTests
     public void ImmutableAggregateDefaultScenario()
     {
         var model = new ModelBuilder()
-            .ImmutableAggregate<ImmutableAggregate, IEvent>(options =>
+            .ImmutableAggregate<ImmutableAggregate, IEvent>(builder =>
             {
-                options.Event<ValueChangedEvent>().ApplyWith((a, e) => a.Apply(e));
+                builder.Event<ValueChangedEvent>().ApplyWith((a, e) => a.Apply(e));
             })
             .Build();
 
-        var aggregateOptions = model.GetAggregateOptions<ImmutableAggregate>();
+        var aggregateType = model.GetAggregateType<ImmutableAggregate>();
         var aggregate = new ImmutableAggregate();
-        var context = aggregateOptions.CreateCommandExecutionContext(aggregate);
+        var context = aggregateType.CreateCommandExecutionContext(aggregate);
 
         var result = context.ExecuteCommand(x => x.ChangeValueWithYieldReturnedEvents("value"));
         var events = context.RaisedEvents.ToList();
@@ -189,18 +189,18 @@ public class ModelBuilderTests
     public void ImmutableAggregateWithCommandResultAndEventsAppliedScenario()
     {
         var model = new ModelBuilder()
-            .ImmutableAggregate<ImmutableAggregate, IEvent>(options =>
+            .ImmutableAggregate<ImmutableAggregate, IEvent>(builder =>
             {
-                options
+                builder
                     .CommandResult<CommandResult>()
                     .WithEventsFrom(x => x.Events)
                     .WithUpdatedStateFrom(x => x.UpdatedState);
             })
             .Build();
 
-        var aggregateOptions = model.GetAggregateOptions<ImmutableAggregate>();
+        var aggregateType = model.GetAggregateType<ImmutableAggregate>();
         var aggregate = new ImmutableAggregate();
-        var context = aggregateOptions.CreateCommandExecutionContext(aggregate);
+        var context = aggregateType.CreateCommandExecutionContext(aggregate);
 
         var result = context.ExecuteCommand(x => x.ChangeValueWithCommandResultAndEventsApplied("value"));
         var events = context.RaisedEvents.ToList();
@@ -218,19 +218,19 @@ public class ModelBuilderTests
     public void ImmutableAggregateWithCommandResultAndEventsNotAppliedScenario()
     {
         var model = new ModelBuilder()
-            .ImmutableAggregate<ImmutableAggregate, IEvent>(options =>
+            .ImmutableAggregate<ImmutableAggregate, IEvent>(builder =>
             {
-                options
+                builder
                     .CommandResult<CommandResult>()
                     .WithEventsFrom(x => x.Events);
 
-                options.Event<ValueChangedEvent>().ApplyWith((a, e) => a.Apply(e));
+                builder.Event<ValueChangedEvent>().ApplyWith((a, e) => a.Apply(e));
             })
             .Build();
 
-        var aggregateOptions = model.GetAggregateOptions<ImmutableAggregate>();
+        var aggregateType = model.GetAggregateType<ImmutableAggregate>();
         var aggregate = new ImmutableAggregate();
-        var context = aggregateOptions.CreateCommandExecutionContext(aggregate);
+        var context = aggregateType.CreateCommandExecutionContext(aggregate);
 
         var result = context.ExecuteCommand(x => x.ChangeValueWithCommandResultAndEventsNotApplied("value"));
         var events = context.RaisedEvents.ToList();
@@ -248,15 +248,15 @@ public class ModelBuilderTests
     public void ImmutableAggregateWithAutoConfiguredEventsScenario()
     {
         var model = new ModelBuilder()
-            .ImmutableAggregate<ImmutableAggregate, IEvent>(options => options.AutoConfigureEvents())
+            .ImmutableAggregate<ImmutableAggregate, IEvent>(builder => builder.AutoConfigureEvents())
             .Build();
 
-        var aggregateOptions = model.GetAggregateOptions<ImmutableAggregate>();
+        var aggregateType = model.GetAggregateType<ImmutableAggregate>();
         var aggregate = new ImmutableAggregate();
-        var context = aggregateOptions.CreateCommandExecutionContext(aggregate);
+        var context = aggregateType.CreateCommandExecutionContext(aggregate);
 
         context.ExecuteCommand(x => x.ChangeValueWithYieldReturnedEvents("value"));
-        var updatedAggregate = context.RaisedEvents.Aggregate(aggregate, aggregateOptions.ApplyEvent);
+        var updatedAggregate = context.RaisedEvents.Aggregate(aggregate, aggregateType.InvokeEventApplier);
 
         Assert.That(updatedAggregate, Is.Not.SameAs(aggregate));
         Assert.That(updatedAggregate.Value, Is.EqualTo("value 3"));

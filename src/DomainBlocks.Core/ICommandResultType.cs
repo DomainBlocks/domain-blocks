@@ -1,6 +1,6 @@
 namespace DomainBlocks.Core;
 
-public interface ICommandResultOptions
+public interface ICommandResultType
 {
     Type ClrType { get; }
 }

@@ -9,35 +9,35 @@ public class ImmutableEventApplierBenchmark
 {
     private const int EventCount = 1000;
     private static readonly TestEvents.IEvent[] Events = TestEvents.Generate(EventCount).ToArray();
-    private IAggregateOptions<ImmutableAggregate> _switchEventApplierOptions;
-    private IAggregateOptions<ImmutableAggregate> _dynamicEventApplierOptions;
-    private IAggregateOptions<ImmutableAggregate> _autoConfiguredEventAppliersOptions;
-    private IAggregateOptions<ImmutableAggregate> _autoConfiguredNonMemberEventAppliersOptions;
-    private IAggregateOptions<ImmutableAggregate> _manuallyConfiguredEventAppliersOptions;
+    private IAggregateType<ImmutableAggregate> _switchEventApplierType;
+    private IAggregateType<ImmutableAggregate> _dynamicEventApplierType;
+    private IAggregateType<ImmutableAggregate> _autoConfiguredEventAppliersType;
+    private IAggregateType<ImmutableAggregate> _autoConfiguredNonMemberEventAppliersType;
+    private IAggregateType<ImmutableAggregate> _manuallyConfiguredEventAppliersType;
     private ImmutableAggregate _aggregate;
 
     [GlobalSetup]
     public void SetUp()
     {
-        _switchEventApplierOptions = new ImmutableAggregateOptions<ImmutableAggregate, TestEvents.IEvent>()
-            .WithEventApplier((agg, e) => agg.Apply(e));
+        _switchEventApplierType = new ImmutableAggregateType<ImmutableAggregate, TestEvents.IEvent>()
+            .SetEventApplier((agg, e) => agg.Apply(e));
 
-        _dynamicEventApplierOptions = new ImmutableAggregateOptions<ImmutableAggregate, TestEvents.IEvent>()
-            .WithEventApplier((agg, e) => agg.Apply((dynamic)e));
+        _dynamicEventApplierType = new ImmutableAggregateType<ImmutableAggregate, TestEvents.IEvent>()
+            .SetEventApplier((agg, e) => agg.Apply((dynamic)e));
 
-        var builder = new ImmutableAggregateOptionsBuilder<ImmutableAggregate, TestEvents.IEvent>();
+        var builder = new ImmutableAggregateTypeBuilder<ImmutableAggregate, TestEvents.IEvent>();
         builder.AutoConfigureEvents();
-        _autoConfiguredEventAppliersOptions = builder.Options;
+        _autoConfiguredEventAppliersType = builder.AggregateType;
 
-        builder = new ImmutableAggregateOptionsBuilder<ImmutableAggregate, TestEvents.IEvent>();
+        builder = new ImmutableAggregateTypeBuilder<ImmutableAggregate, TestEvents.IEvent>();
         builder.AutoConfigureEventsFrom(typeof(ImmutableAggregateFunctions));
-        _autoConfiguredNonMemberEventAppliersOptions = builder.Options;
+        _autoConfiguredNonMemberEventAppliersType = builder.AggregateType;
 
-        builder = new ImmutableAggregateOptionsBuilder<ImmutableAggregate, TestEvents.IEvent>();
+        builder = new ImmutableAggregateTypeBuilder<ImmutableAggregate, TestEvents.IEvent>();
         builder.Event<TestEvents.Event1>().ApplyWith((agg, e) => agg.Apply(e));
         builder.Event<TestEvents.Event2>().ApplyWith((agg, e) => agg.Apply(e));
         builder.Event<TestEvents.Event3>().ApplyWith((agg, e) => agg.Apply(e));
-        _manuallyConfiguredEventAppliersOptions = builder.Options;
+        _manuallyConfiguredEventAppliersType = builder.AggregateType;
 
         _aggregate = new ImmutableAggregate();
     }
@@ -47,7 +47,7 @@ public class ImmutableEventApplierBenchmark
     {
         foreach (var @event in Events)
         {
-            _switchEventApplierOptions.ApplyEvent(_aggregate, @event);
+            _switchEventApplierType.InvokeEventApplier(_aggregate, @event);
         }
 
         return _aggregate.Value;
@@ -58,7 +58,7 @@ public class ImmutableEventApplierBenchmark
     {
         foreach (var @event in Events)
         {
-            _dynamicEventApplierOptions.ApplyEvent(_aggregate, @event);
+            _dynamicEventApplierType.InvokeEventApplier(_aggregate, @event);
         }
 
         return _aggregate.Value;
@@ -69,7 +69,7 @@ public class ImmutableEventApplierBenchmark
     {
         foreach (var @event in Events)
         {
-            _autoConfiguredEventAppliersOptions.ApplyEvent(_aggregate, @event);
+            _autoConfiguredEventAppliersType.InvokeEventApplier(_aggregate, @event);
         }
 
         return _aggregate.Value;
@@ -80,7 +80,7 @@ public class ImmutableEventApplierBenchmark
     {
         foreach (var @event in Events)
         {
-            _autoConfiguredNonMemberEventAppliersOptions.ApplyEvent(_aggregate, @event);
+            _autoConfiguredNonMemberEventAppliersType.InvokeEventApplier(_aggregate, @event);
         }
 
         return _aggregate.Value;
@@ -91,7 +91,7 @@ public class ImmutableEventApplierBenchmark
     {
         foreach (var @event in Events)
         {
-            _manuallyConfiguredEventAppliersOptions.ApplyEvent(_aggregate, @event);
+            _manuallyConfiguredEventAppliersType.InvokeEventApplier(_aggregate, @event);
         }
 
         return _aggregate.Value;
