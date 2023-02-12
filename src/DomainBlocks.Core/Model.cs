@@ -5,11 +5,11 @@ public sealed class Model
     private readonly IReadOnlyDictionary<Type, IAggregateType> _aggregateTypes;
     private readonly EventNameMap _eventNameMap;
 
-    public Model(IEnumerable<IAggregateType> aggregatesTypes)
+    public Model(IEnumerable<IAggregateType> aggregateTypes)
     {
-        if (aggregatesTypes == null) throw new ArgumentNullException(nameof(aggregatesTypes));
+        if (aggregateTypes == null) throw new ArgumentNullException(nameof(aggregateTypes));
 
-        _aggregateTypes = aggregatesTypes.ToDictionary(x => x.ClrType);
+        _aggregateTypes = aggregateTypes.ToDictionary(x => x.ClrType);
 
         // Build event name map from all aggregate types.
         var eventTypes = _aggregateTypes.Values.SelectMany(x => x.EventTypes);
