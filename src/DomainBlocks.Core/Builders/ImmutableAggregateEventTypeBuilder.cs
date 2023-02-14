@@ -1,10 +1,5 @@
 namespace DomainBlocks.Core.Builders;
 
-public interface IImmutableAggregateEventTypeBuilder<TAggregate, out TEvent> : IEventNameBuilder
-{
-    IEventNameBuilder ApplyWith(Func<TAggregate, TEvent, TAggregate> eventApplier);
-}
-
 public sealed class ImmutableAggregateEventTypeBuilder<TAggregate, TEventBase, TEvent> :
     IAggregateEventTypeBuilder<TAggregate>,
     IImmutableAggregateEventTypeBuilder<TAggregate, TEvent>

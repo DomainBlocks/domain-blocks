@@ -30,7 +30,7 @@ public sealed class ModelBuilder
         builderAction(builder);
         return this;
     }
-    
+
     public ModelBuilder ImmutableAggregate<TAggregate>(
         Action<ImmutableAggregateTypeBuilder<TAggregate, object>> builderAction)
     {
@@ -39,7 +39,7 @@ public sealed class ModelBuilder
 
     public Model Build()
     {
-        var aggregateTypes = _aggregateTypeBuilders.Select(x => x.AggregateType);
+        var aggregateTypes = _aggregateTypeBuilders.Select(x => x.Build());
         return new Model(aggregateTypes);
     }
 }

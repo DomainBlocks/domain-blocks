@@ -12,7 +12,7 @@ public class MutableCommandExecutionContextTests
         var builder = new MutableAggregateTypeBuilder<MutableAggregate, IEvent>();
         builder.WithEventEnumerableCommandResult().ApplyEvents(ApplyEventsBehavior.WhileEnumerating);
         builder.ApplyEventsWith((agg, e) => agg.Apply((dynamic)e));
-        var aggregateType = builder.AggregateType;
+        var aggregateType = builder.Build();
 
         var aggregate = new MutableAggregate();
         var context = aggregateType.CreateCommandExecutionContext(aggregate);
@@ -49,7 +49,7 @@ public class MutableCommandExecutionContextTests
             ObservedValues.Add(@event.Value);
         }
     }
-    
+
     private interface IEvent
     {
     }
