@@ -4,27 +4,9 @@ public sealed class ImmutableAggregateTypeBuilder<TAggregate, TEventBase> :
     AggregateTypeBuilderBase<TAggregate, TEventBase> where TEventBase : class
 {
     private readonly List<ICommandResultTypeBuilder> _commandResultTypeBuilders = new();
-    private ImmutableAggregateType<TAggregate, TEventBase> _aggregateType = new();
 
-    protected override AggregateTypeBase<TAggregate, TEventBase> AggregateTypeImpl
+    public ImmutableAggregateTypeBuilder() : base(new ImmutableAggregateType<TAggregate, TEventBase>())
     {
-        get
-        {
-            var commandResultTypes = _commandResultTypeBuilders.Select(x => x.CommandResultType);
-            var aggregateType = _aggregateType.SetCommandResultTypes(commandResultTypes);
-
-            if (aggregateType.HasCommandResultType<IEnumerable<TEventBase>>())
-            {
-                return aggregateType;
-            }
-
-            // We support IEnumerable<TEventBase> as a command result by default.
-            var commandResultType = new ImmutableCommandResultType<TAggregate, TEventBase, IEnumerable<TEventBase>>()
-                .SetEventsSelector(x => x);
-
-            return aggregateType.SetCommandResultType(commandResultType);
-        }
-        set => _aggregateType = (ImmutableAggregateType<TAggregate, TEventBase>)value;
     }
 
     /// <summary>
@@ -48,7 +30,7 @@ public sealed class ImmutableAggregateTypeBuilder<TAggregate, TEventBase> :
     /// </summary>
     public void ApplyEventsWith(Func<TAggregate, TEventBase, TAggregate> eventApplier)
     {
-        AggregateTypeImpl = _aggregateType.SetEventApplier(eventApplier);
+        EntityType = ((ImmutableAggregateType<TAggregate, TEventBase>)EntityType).SetEventApplier(eventApplier);
     }
 
     /// <summary>
@@ -91,5 +73,27 @@ public sealed class ImmutableAggregateTypeBuilder<TAggregate, TEventBase> :
         var builder = AutoAggregateEventTypeBuilder<TAggregate, TEventBase>.ImmutableNonMember(sourceType);
         AutoEventTypeBuilder = builder;
         return builder;
+    }
+
+    public new ImmutableAggregateType<TAggregate, TEventBase> Build() =>
+        (ImmutableAggregateType<TAggregate, TEventBase>)base.Build();
+
+    protected override EventSourcedEntityTypeBase<TAggregate> OnBuild(EventSourcedEntityTypeBase<TAggregate> source)
+    {
+        var commandResultTypes = _commandResultTypeBuilders.Select(x => x.CommandResultType);
+
+        var aggregateType = ((ImmutableAggregateType<TAggregate, TEventBase>)EntityType)
+            .SetCommandResultTypes(commandResultTypes);
+
+        if (aggregateType.HasCommandResultType<IEnumerable<TEventBase>>())
+        {
+            return base.OnBuild(aggregateType);
+        }
+
+        // We support IEnumerable<TEventBase> as a command result by default.
+        var commandResultType = new ImmutableCommandResultType<TAggregate, TEventBase, IEnumerable<TEventBase>>()
+            .SetEventsSelector(x => x);
+
+        return base.OnBuild(aggregateType.SetCommandResultType(commandResultType));
     }
 }

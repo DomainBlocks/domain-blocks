@@ -27,17 +27,17 @@ public class ImmutableEventApplierBenchmark
 
         var builder = new ImmutableAggregateTypeBuilder<ImmutableAggregate, TestEvents.IEvent>();
         builder.AutoConfigureEvents();
-        _autoConfiguredEventAppliersType = builder.AggregateType;
+        _autoConfiguredEventAppliersType = builder.Build();
 
         builder = new ImmutableAggregateTypeBuilder<ImmutableAggregate, TestEvents.IEvent>();
         builder.AutoConfigureEventsFrom(typeof(ImmutableAggregateFunctions));
-        _autoConfiguredNonMemberEventAppliersType = builder.AggregateType;
+        _autoConfiguredNonMemberEventAppliersType = builder.Build();
 
         builder = new ImmutableAggregateTypeBuilder<ImmutableAggregate, TestEvents.IEvent>();
         builder.Event<TestEvents.Event1>().ApplyWith((agg, e) => agg.Apply(e));
         builder.Event<TestEvents.Event2>().ApplyWith((agg, e) => agg.Apply(e));
         builder.Event<TestEvents.Event3>().ApplyWith((agg, e) => agg.Apply(e));
-        _manuallyConfiguredEventAppliersType = builder.AggregateType;
+        _manuallyConfiguredEventAppliersType = builder.Build();
 
         _aggregate = new ImmutableAggregate();
     }

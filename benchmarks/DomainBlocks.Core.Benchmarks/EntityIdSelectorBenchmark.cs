@@ -3,11 +3,11 @@ using BenchmarkDotNet.Attributes;
 namespace DomainBlocks.Core.Benchmarks;
 
 [MemoryDiagnoser]
-public class AggregateIdSelectorBenchmark
+public class EntityIdSelectorBenchmark
 {
     private const int Iterations = 1000;
-    private AggregateTypeBase<MyAggregate, object> _typeWithExplicitIdSelector;
-    private AggregateTypeBase<MyAggregate, object> _typeWithDefaultIdSelector;
+    private EventSourcedEntityTypeBase<MyAggregate> _typeWithExplicitIdSelector;
+    private EventSourcedEntityTypeBase<MyAggregate> _typeWithDefaultIdSelector;
     private MyAggregate _aggregate;
 
     [GlobalSetup]

@@ -12,10 +12,10 @@ public class ImmutableCommandExecutionContextTests
     {
         var builder = new ImmutableAggregateTypeBuilder<ImmutableAggregate, IEvent>();
         builder.ApplyEventsWith((agg, e) => agg.Apply((dynamic)e));
-        var options = builder.AggregateType;
+        var aggregateType = builder.Build();
 
         var aggregate = new ImmutableAggregate();
-        var context = options.CreateCommandExecutionContext(aggregate);
+        var context = aggregateType.CreateCommandExecutionContext(aggregate);
 
         // Materialize the results. We expect the comment method to be called only once.
         var events = context.ExecuteCommand(x => x.MyCommandMethod("value")).ToList();
@@ -60,7 +60,7 @@ public class ImmutableCommandExecutionContextTests
             return new ImmutableAggregate(ObservedValues.Add(@event.Value));
         }
     }
-    
+
     private interface IEvent
     {
     }
