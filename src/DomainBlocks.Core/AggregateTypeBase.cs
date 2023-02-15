@@ -50,7 +50,7 @@ public abstract class AggregateTypeBase<TAggregate, TEventBase> :
     {
         if (eventApplier == null) throw new ArgumentNullException(nameof(eventApplier));
 
-        var clone = CloneImpl();
+        var clone = Clone();
         clone._eventApplier = (agg, e) => eventApplier(agg, (TEventBase)e);
         return clone;
     }
@@ -59,7 +59,7 @@ public abstract class AggregateTypeBase<TAggregate, TEventBase> :
     {
         if (commandResultType == null) throw new ArgumentNullException(nameof(commandResultType));
 
-        var clone = CloneImpl();
+        var clone = Clone();
         clone._commandResultTypes[commandResultType.ClrType] = commandResultType;
         return clone;
     }
@@ -69,7 +69,7 @@ public abstract class AggregateTypeBase<TAggregate, TEventBase> :
     {
         if (commandResultTypes == null) throw new ArgumentNullException(nameof(commandResultTypes));
 
-        var clone = CloneImpl();
+        var clone = Clone();
 
         foreach (var commandResultType in commandResultTypes)
         {
@@ -84,7 +84,7 @@ public abstract class AggregateTypeBase<TAggregate, TEventBase> :
     {
         if (eventTypes == null) throw new ArgumentNullException(nameof(eventTypes));
 
-        var clone = CloneImpl();
+        var clone = Clone();
 
         foreach (var eventType in eventTypes)
         {
@@ -106,6 +106,8 @@ public abstract class AggregateTypeBase<TAggregate, TEventBase> :
         return _commandResultTypes.ContainsKey(typeof(TCommandResult));
     }
 
+    protected abstract override AggregateTypeBase<TAggregate, TEventBase> Clone();
+
     protected ICommandResultType GetCommandResultType<TCommandResult>()
     {
         var commandResultClrType = typeof(TCommandResult);
@@ -117,6 +119,4 @@ public abstract class AggregateTypeBase<TAggregate, TEventBase> :
 
         throw new KeyNotFoundException($"No command result type found for CLR type {commandResultClrType.Name}.");
     }
-
-    private AggregateTypeBase<TAggregate, TEventBase> CloneImpl() => (AggregateTypeBase<TAggregate, TEventBase>)Clone();
 }
