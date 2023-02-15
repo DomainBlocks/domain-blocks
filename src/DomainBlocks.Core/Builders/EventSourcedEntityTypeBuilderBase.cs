@@ -13,7 +13,7 @@ public abstract class EventSourcedEntityTypeBuilderBase<TEntity> :
     protected EventSourcedEntityTypeBase<TEntity> EntityType { get; set; }
 
     /// <summary>
-    /// Specify a factory function for creating new instances of the aggregate type.
+    /// Specify a factory function for creating new instances of the entity type.
     /// </summary>
     /// <returns>
     /// An object that can be used for further configuration.
