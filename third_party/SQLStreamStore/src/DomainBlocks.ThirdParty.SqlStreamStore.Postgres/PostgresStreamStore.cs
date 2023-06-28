@@ -27,7 +27,15 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Postgres
             : base(settings.GetUtcNow, settings.LogName)
         {
             _settings = settings;
-            _createConnection = () => _settings.ConnectionFactory(_settings.ConnectionString);
+            _schema = new Schema(_settings.Schema);
+
+            var dataSourceBuilder = new NpgsqlDataSourceBuilder(_settings.ConnectionString);
+            dataSourceBuilder.MapComposite<PostgresNewStreamMessage>(_schema.NewStreamMessage);
+
+            // TODO: Consider multihost support?
+            var dataSource = dataSourceBuilder.Build();
+
+            _createConnection = () => dataSource.CreateConnection();
             _streamStoreNotifier = new Lazy<IStreamStoreNotifier>(() =>
             {
                 if(_settings.CreateStreamStoreNotifier == null)
@@ -38,7 +46,6 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Postgres
 
                 return settings.CreateStreamStoreNotifier.Invoke(this);
             });
-            _schema = new Schema(_settings.Schema);
         }
 
         private async Task<NpgsqlConnection> OpenConnection(CancellationToken cancellationToken)
@@ -47,17 +54,13 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Postgres
 
             await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
 
-            connection.ReloadTypes();
+            await connection.ReloadTypesAsync();
 
-            connection.TypeMapper.MapComposite<PostgresNewStreamMessage>(_schema.NewStreamMessage);
-
-            if(_settings.ExplainAnalyze)
-            {
-                using(var command = new NpgsqlCommand(_schema.EnableExplainAnalyze, connection))
-                {
-                    await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-                }
-            }
+            if (!_settings.ExplainAnalyze) return connection;
+            
+            await using var command = new NpgsqlCommand(_schema.EnableExplainAnalyze, connection);
+            
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
 
             return connection;
         }
@@ -166,9 +169,17 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Postgres
             NpgsqlTransaction transaction,
             params NpgsqlParameter[] parameters)
         {
-            var command = new NpgsqlCommand(function, transaction.Connection, transaction)
+            string sql = $"SELECT * FROM {function}()";
+            
+            var sqlParams = string.Join(", $", Enumerable.Range(1, parameters.Length));
+            if (parameters.Length > 0)
             {
-                CommandType = CommandType.StoredProcedure,
+                sql = $@"SELECT * FROM {function}(${sqlParams})";
+            }
+            
+            var command = new NpgsqlCommand(sql, transaction.Connection, transaction)
+            {
+                CommandType = CommandType.Text,
             };
 
             foreach(var parameter in parameters)

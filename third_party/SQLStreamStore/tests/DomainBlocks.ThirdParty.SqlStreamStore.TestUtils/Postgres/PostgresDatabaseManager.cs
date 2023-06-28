@@ -1,13 +1,18 @@
+using DomainBlocks.ThirdParty.SqlStreamStore.Postgres;
+using Microsoft.Extensions.Logging;
+
 namespace DomainBlocks.ThirdParty.SqlStreamStore.TestUtils.Postgres
 {
     using System.Threading;
     using System.Threading.Tasks;
     using Npgsql;
-    using Npgsql.Logging;
 
     public abstract class PostgresDatabaseManager
     {
         protected readonly string DatabaseName;
+
+        private static readonly ILoggerFactory DefaultLoggerFactory =
+            new LoggerFactory(new[] { new LibLogNpgsqlLogProvider() });
 
         private bool _started;
 
@@ -20,12 +25,8 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.TestUtils.Postgres
 
         static PostgresDatabaseManager()
         {
-#if DEBUG
-            NpgsqlLogManager.IsParameterLoggingEnabled = true;
-            NpgsqlLogManager.Provider = new LibLogNpgsqlLogProvider();
-#endif
         }
-
+        
         protected PostgresDatabaseManager(string databaseName)
         {
             DatabaseName = databaseName;
@@ -33,7 +34,12 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.TestUtils.Postgres
 
         public virtual async Task CreateDatabase(CancellationToken cancellationToken = default)
         {
-            using(var connection = new NpgsqlConnection(DefaultConnectionString))
+            var dataSource = new NpgsqlDataSourceBuilder(DefaultConnectionString);
+#if DEBUG
+                             dataSource.UseLoggerFactory(DefaultLoggerFactory);
+#endif
+            
+            await using(var connection = dataSource.Build().CreateConnection())
             {
                 await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
 
@@ -73,22 +79,20 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.TestUtils.Postgres
                 return;
             }
 
-            using(var connection = new NpgsqlConnection(DefaultConnectionString))
+            using var connection = new NpgsqlConnection(DefaultConnectionString);
+            connection.Open();
+
+            using(var command =
+                  new NpgsqlCommand(
+                      $"SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity  WHERE pg_stat_activity.datname = '{DatabaseName}' AND pid <> pg_backend_pid()",
+                      connection))
             {
-                connection.Open();
+                command.ExecuteNonQuery();
+            }
 
-                using(var command =
-                    new NpgsqlCommand(
-                        $"SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity  WHERE pg_stat_activity.datname = '{DatabaseName}' AND pid <> pg_backend_pid()",
-                        connection))
-                {
-                    command.ExecuteNonQuery();
-                }
-
-                using(var command = new NpgsqlCommand($"DROP DATABASE {DatabaseName}", connection))
-                {
-                    command.ExecuteNonQuery();
-                }
+            using(var command = new NpgsqlCommand($"DROP DATABASE {DatabaseName}", connection))
+            {
+                command.ExecuteNonQuery();
             }
         }
     }
