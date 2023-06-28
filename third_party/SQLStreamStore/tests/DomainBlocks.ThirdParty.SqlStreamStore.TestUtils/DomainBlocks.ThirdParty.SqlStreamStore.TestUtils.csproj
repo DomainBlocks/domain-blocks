@@ -20,7 +20,4 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
     </ItemGroup>
-    <ItemGroup>
-        <ProjectReference Include="..\..\..\..\src\DomainBlocks.Logging\DomainBlocks.Logging.csproj" />
-    </ItemGroup>
 </Project>

@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Logging;
-
 namespace DomainBlocks.ThirdParty.SqlStreamStore.TestUtils.Postgres
 {
     using System.Threading;
@@ -10,9 +8,6 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.TestUtils.Postgres
     {
         protected readonly string DatabaseName;
 
-        private static readonly ILoggerFactory DefaultLoggerFactory =
-            new LoggerFactory(new[] { new LibLogNpgsqlLogProvider() });
-
         private bool _started;
 
         protected string DefaultConnectionString => new NpgsqlConnectionStringBuilder(ConnectionString)
@@ -21,10 +16,6 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.TestUtils.Postgres
         }.ConnectionString;
 
         public abstract string ConnectionString { get; }
-
-        static PostgresDatabaseManager()
-        {
-        }
         
         protected PostgresDatabaseManager(string databaseName)
         {
@@ -34,10 +25,6 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.TestUtils.Postgres
         public virtual async Task CreateDatabase(CancellationToken cancellationToken = default)
         {
             var dataSource = new NpgsqlDataSourceBuilder(DefaultConnectionString);
-#if DEBUG
-                             dataSource.UseLoggerFactory(DefaultLoggerFactory);
-                             dataSource.EnableParameterLogging();
-#endif
             
             await using(var connection = dataSource.Build().CreateConnection())
             {
