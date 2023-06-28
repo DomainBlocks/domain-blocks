@@ -1,4 +1,3 @@
-using DomainBlocks.ThirdParty.SqlStreamStore.Postgres;
 using Microsoft.Extensions.Logging;
 
 namespace DomainBlocks.ThirdParty.SqlStreamStore.TestUtils.Postgres
