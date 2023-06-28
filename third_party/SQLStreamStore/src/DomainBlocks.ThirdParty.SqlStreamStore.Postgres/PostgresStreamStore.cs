@@ -27,7 +27,19 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Postgres
             : base(settings.GetUtcNow, settings.LogName)
         {
             _settings = settings;
-            _createConnection = () => _settings.ConnectionFactory(_settings.ConnectionString);
+            _schema = new Schema(_settings.Schema);
+
+            var dataSourceBuilder = new NpgsqlDataSourceBuilder(_settings.ConnectionString);
+            dataSourceBuilder.MapComposite<PostgresNewStreamMessage>(_schema.NewStreamMessage);
+
+            // TODO: Consider proper multihost support?
+            // https://www.npgsql.org/doc/api/Npgsql.NpgsqlDataSourceBuilder.html#Npgsql_NpgsqlDataSourceBuilder_BuildMultiHost
+            // Multihost data sources have built-in load balancing and failover support. 
+            // We are using Build() which is for single hosts. 
+            // We need to understand the implications of having a MultiHost data source.
+            var dataSource = dataSourceBuilder.Build();
+
+            _createConnection = () => dataSource.CreateConnection();
             _streamStoreNotifier = new Lazy<IStreamStoreNotifier>(() =>
             {
                 if(_settings.CreateStreamStoreNotifier == null)
@@ -38,7 +50,6 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Postgres
 
                 return settings.CreateStreamStoreNotifier.Invoke(this);
             });
-            _schema = new Schema(_settings.Schema);
         }
 
         private async Task<NpgsqlConnection> OpenConnection(CancellationToken cancellationToken)
@@ -47,17 +58,13 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Postgres
 
             await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
 
-            connection.ReloadTypes();
+            await connection.ReloadTypesAsync();
 
-            connection.TypeMapper.MapComposite<PostgresNewStreamMessage>(_schema.NewStreamMessage);
-
-            if(_settings.ExplainAnalyze)
-            {
-                using(var command = new NpgsqlCommand(_schema.EnableExplainAnalyze, connection))
-                {
-                    await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-                }
-            }
+            if (!_settings.ExplainAnalyze) return connection;
+            
+            await using var command = new NpgsqlCommand(_schema.EnableExplainAnalyze, connection);
+            
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
 
             return connection;
         }
@@ -71,24 +78,21 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Postgres
         /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
         public async Task CreateSchemaIfNotExists(CancellationToken cancellationToken = default)
         {
-            using(var connection = _createConnection())
+            await using var connection = _createConnection();
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            
+            await using(var command = BuildCommand($"CREATE SCHEMA IF NOT EXISTS {_settings.Schema}", transaction))
             {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-                using(var transaction = connection.BeginTransaction())
-                {
-                    using(var command = BuildCommand($"CREATE SCHEMA IF NOT EXISTS {_settings.Schema}", transaction))
-                    {
-                        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-                    }
-
-                    using(var command = BuildCommand(_schema.Definition, transaction))
-                    {
-                        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-                    }
-
-                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-                }
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             }
+
+            await using(var command = BuildCommand(_schema.Definition, transaction))
+            {
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -100,19 +104,13 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Postgres
         {
             GuardAgainstDisposed();
 
-            using(var connection = _createConnection())
-            {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-                using(var transaction = connection.BeginTransaction())
-                using(var command = BuildCommand(_schema.DropAll, transaction))
-                {
-                    await command
-                        .ExecuteNonQueryAsync(cancellationToken)
-                        .ConfigureAwait(false);
-
-                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-                }
-            }
+            await using var connection = _createConnection();
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await using var command = BuildCommand(_schema.DropAll, transaction);
+            
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -122,13 +120,13 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Postgres
         /// <returns>A <see cref="CheckSchemaResult"/> representing the result of the operation.</returns>
         public async Task<CheckSchemaResult> CheckSchema(CancellationToken cancellationToken = default)
         {
-            using(var connection = _createConnection())
+            await using(var connection = _createConnection())
             {
                 await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-                using(var transaction = connection.BeginTransaction())
-                using(var command = BuildFunctionCommand(_schema.ReadSchemaVersion, transaction))
+                await using(var transaction = await connection.BeginTransactionAsync(cancellationToken))
+                await using(var command = BuildFunctionCommand(_schema.ReadSchemaVersion, transaction))
                 {
-                    var result = (int) await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+                    var result = (int) (await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
 
                     return new CheckSchemaResult(result, CurrentVersion);
                 }
@@ -138,23 +136,23 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Postgres
         private Func<CancellationToken, Task<string>> GetJsonData(PostgresqlStreamId streamId, int version)
             => async cancellationToken =>
             {
-                using(var connection = await OpenConnection(cancellationToken))
-                using(var transaction = connection.BeginTransaction())
-                using(var command = BuildFunctionCommand(
-                    _schema.ReadJsonData,
-                    transaction,
-                    Parameters.StreamId(streamId),
-                    Parameters.Version(version)))
-                using(var reader = await command
-                    .ExecuteReaderAsync(CommandBehavior.SequentialAccess, cancellationToken)
-                    .ConfigureAwait(false))
+                await using var connection = await OpenConnection(cancellationToken);
+                await using(var transaction = await connection.BeginTransactionAsync(cancellationToken))
+                await using(var command = BuildFunctionCommand(
+                                _schema.ReadJsonData,
+                                transaction,
+                                Parameters.StreamId(streamId),
+                                Parameters.Version(version)))
+                await using(var reader = await command
+                                .ExecuteReaderAsync(CommandBehavior.SequentialAccess, cancellationToken)
+                                .ConfigureAwait(false))
                 {
                     if(!await reader.ReadAsync(cancellationToken).ConfigureAwait(false) || reader.IsDBNull(0))
                     {
                         return null;
                     }
 
-                    using(var textReader = reader.GetTextReader(0))
+                    using(var textReader = await reader.GetTextReaderAsync(0, cancellationToken))
                     {
                         return await textReader.ReadToEndAsync().ConfigureAwait(false);
                     }
@@ -166,9 +164,17 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Postgres
             NpgsqlTransaction transaction,
             params NpgsqlParameter[] parameters)
         {
-            var command = new NpgsqlCommand(function, transaction.Connection, transaction)
+            string sql = $"SELECT * FROM {function}()";
+            
+            var sqlParams = string.Join(", $", Enumerable.Range(1, parameters.Length));
+            if (parameters.Length > 0)
             {
-                CommandType = CommandType.StoredProcedure,
+                sql = $@"SELECT * FROM {function}(${sqlParams})";
+            }
+            
+            var command = new NpgsqlCommand(sql, transaction.Connection, transaction)
+            {
+                CommandType = CommandType.Text,
             };
 
             foreach(var parameter in parameters)
@@ -194,17 +200,17 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Postgres
 
             try
             {
-                using(var connection = await OpenConnection(cancellationToken))
-                using(var transaction = connection.BeginTransaction())
+                await using(var connection = await OpenConnection(cancellationToken))
+                await using(var transaction = connection.BeginTransaction())
                 {
                     var deletedMessageIds = new List<Guid>();
-                    using(var command = BuildFunctionCommand(
-                        _schema.Scavenge,
-                        transaction,
-                        Parameters.StreamId(streamIdInfo.PostgresqlStreamId)))
-                    using(var reader = await command
-                        .ExecuteReaderAsync(cancellationToken)
-                        .ConfigureAwait(false))
+                    await using(var command = BuildFunctionCommand(
+                                    _schema.Scavenge,
+                                    transaction,
+                                    Parameters.StreamId(streamIdInfo.PostgresqlStreamId)))
+                    await using(var reader = await command
+                                    .ExecuteReaderAsync(cancellationToken)
+                                    .ConfigureAwait(false))
                     {
                         while(await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                         {

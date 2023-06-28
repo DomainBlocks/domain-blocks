@@ -8,12 +8,15 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.TestUtils.Postgres
     using Npgsql;
     using Polly;
 
+    // TODO: Consider stopping the use of a container here and use an external running Postgres instance to test.
+    // This would reduce dependencies for the tests (i.e.Docker.DotNet)  and would potentially facilitate some setup. 
     public class PostgresContainer : PostgresDatabaseManager
     {
         private readonly IContainerService _containerService;
-        private const string Image = "postgres:10.4-alpine";
+        private const string Image = "postgres:15.3-alpine";
         private const string ContainerName = "sql-stream-store-tests-postgres";
         private const int Port = 5432;
+        private const string Password = "password";
 
         public override string ConnectionString => ConnectionStringBuilder.ConnectionString;
 
@@ -28,6 +31,7 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.TestUtils.Postgres
                 .ReuseIfExists()
                 .ExposePort(Port, Port)
                 .Command("-N", "500")
+                .WithEnvironment($"POSTGRES_PASSWORD={Password}")
                 .Build();
         }
 
@@ -50,9 +54,7 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.TestUtils.Postgres
         private NpgsqlConnectionStringBuilder ConnectionStringBuilder => new NpgsqlConnectionStringBuilder
         {
             Database = DatabaseName,
-            Password = Environment.OSVersion.IsWindows()
-                ? "password"
-                : null,
+            Password = Password,
             Port = Port,
             Username = "postgres",
             Host = "localhost",
