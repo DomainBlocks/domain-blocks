@@ -11,7 +11,7 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.TestUtils.Postgres
     public class PostgresContainer : PostgresDatabaseManager
     {
         private readonly IContainerService _containerService;
-        private const string Image = "postgres:10.4-alpine";
+        private const string Image = "postgres:15.3-alpine";
         private const string ContainerName = "sql-stream-store-tests-postgres";
         private const int Port = 5432;
 
