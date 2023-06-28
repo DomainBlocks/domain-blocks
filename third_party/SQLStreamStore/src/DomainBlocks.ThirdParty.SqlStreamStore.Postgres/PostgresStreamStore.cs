@@ -32,7 +32,11 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Postgres
             var dataSourceBuilder = new NpgsqlDataSourceBuilder(_settings.ConnectionString);
             dataSourceBuilder.MapComposite<PostgresNewStreamMessage>(_schema.NewStreamMessage);
 
-            // TODO: Consider multihost support?
+            // TODO: Consider proper multihost support?
+            // https://www.npgsql.org/doc/api/Npgsql.NpgsqlDataSourceBuilder.html#Npgsql_NpgsqlDataSourceBuilder_BuildMultiHost
+            // Multihost data sources have built-in load balancing and failover support. 
+            // We are using Build() which is for single hosts. 
+            // We need to understand the implications of having a MultiHost data source.
             var dataSource = dataSourceBuilder.Build();
 
             _createConnection = () => dataSource.CreateConnection();

@@ -8,7 +8,8 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.TestUtils.Postgres
     using Npgsql;
     using Polly;
 
-    // TODO: Stop using a container here and use an external running Postgres instance to test.
+    // TODO: Consider stopping the use of a container here and use an external running Postgres instance to test.
+    // This would reduce dependencies for the tests (i.e.Docker.DotNet)  and would potentially facilitate some setup. 
     public class PostgresContainer : PostgresDatabaseManager
     {
         private readonly IContainerService _containerService;
@@ -27,6 +28,7 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.TestUtils.Postgres
                 .WithName(ContainerName)
                 .UseImage(Image)
                 .KeepRunning()
+                .ReuseIfExists()
                 .ExposePort(Port, Port)
                 .Command("-N", "500")
                 .WithEnvironment($"POSTGRES_PASSWORD={Password}")
