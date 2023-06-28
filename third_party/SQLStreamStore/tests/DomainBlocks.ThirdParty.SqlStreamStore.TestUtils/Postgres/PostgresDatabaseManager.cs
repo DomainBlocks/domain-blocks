@@ -36,6 +36,7 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.TestUtils.Postgres
             var dataSource = new NpgsqlDataSourceBuilder(DefaultConnectionString);
 #if DEBUG
                              dataSource.UseLoggerFactory(DefaultLoggerFactory);
+                             dataSource.EnableParameterLogging();
 #endif
             
             await using(var connection = dataSource.Build().CreateConnection())
