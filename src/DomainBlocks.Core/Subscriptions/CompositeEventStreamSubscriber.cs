@@ -47,7 +47,7 @@ public sealed class CompositeEventStreamSubscriber<TEvent, TPosition> :
         var tasks = _subscribers.Select(async x =>
         {
             var subscriberStartPosition = _subscriberStartPositions[x];
-            if (subscriberStartPosition is not null && position.CompareTo(subscriberStartPosition.Value) == 1)
+            if (subscriberStartPosition is null || position.CompareTo(subscriberStartPosition.Value) == 1)
             {
                 return await OnEvent(@event, position, x, cancellationToken);
             }
@@ -56,6 +56,9 @@ public sealed class CompositeEventStreamSubscriber<TEvent, TPosition> :
         });
 
         var results = await Task.WhenAll(tasks);
+
+        // TODO (DS): We need to better handle errors from underlying subscribers.
+        // See https://github.com/DomainBlocks/domain-blocks/issues/118
         return results.FirstOrDefault(x => x == OnEventResult.Processed, OnEventResult.Ignored);
     }
 
@@ -64,7 +67,7 @@ public sealed class CompositeEventStreamSubscriber<TEvent, TPosition> :
         var tasks = _subscribers.Select(async x =>
         {
             var subscriberStartPosition = _subscriberStartPositions[x];
-            if (subscriberStartPosition is not null && position.CompareTo(subscriberStartPosition.Value) == 1)
+            if (subscriberStartPosition is null || position.CompareTo(subscriberStartPosition.Value) == 1)
             {
                 await x.OnCheckpoint(position, cancellationToken);
             }
