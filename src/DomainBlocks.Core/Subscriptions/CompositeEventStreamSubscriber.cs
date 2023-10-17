@@ -5,6 +5,7 @@ public sealed class CompositeEventStreamSubscriber<TEvent, TPosition> :
     where TPosition : struct, IEquatable<TPosition>, IComparable<TPosition>
 {
     private readonly IReadOnlyCollection<IEventStreamSubscriber<TEvent, TPosition>> _subscribers;
+    private Dictionary<IEventStreamSubscriber<TEvent, TPosition>, TPosition?> _subscriberStartPositions = new();
 
     public CompositeEventStreamSubscriber(IEnumerable<IEventStreamSubscriber<TEvent, TPosition>> subscribers)
     {
@@ -22,12 +23,17 @@ public sealed class CompositeEventStreamSubscriber<TEvent, TPosition> :
 
     public async Task<TPosition?> OnStarting(CancellationToken cancellationToken)
     {
-        var tasks = _subscribers.Select(x => x.OnStarting(cancellationToken)).ToArray();
-        var positions = await Task.WhenAll(tasks);
+        var tasks = _subscribers.Select(async x =>
+        {
+            var position = await x.OnStarting(cancellationToken);
+            return (x, position);
+        });
 
-        // TODO (DS): Add ability to specify checkpoint frequency at the top level of the builder chain - which can
-        // apply to all subscribers.
-        return positions.First();
+        var positions = await Task.WhenAll(tasks);
+        _subscriberStartPositions = positions.ToDictionary(x => x.x, x => x.position);
+        var minPosition = positions.Min(x => x.position);
+
+        return minPosition;
     }
 
     public Task OnCatchingUp(CancellationToken cancellationToken)
@@ -38,14 +44,32 @@ public sealed class CompositeEventStreamSubscriber<TEvent, TPosition> :
 
     public async Task<OnEventResult> OnEvent(TEvent @event, TPosition position, CancellationToken cancellationToken)
     {
-        var tasks = _subscribers.Select(x => OnEvent(@event, position, x, cancellationToken));
+        var tasks = _subscribers.Select(async x =>
+        {
+            var subscriberStartPosition = _subscriberStartPositions[x];
+            if (subscriberStartPosition is not null && position.CompareTo(subscriberStartPosition.Value) == 1)
+            {
+                return await OnEvent(@event, position, x, cancellationToken);
+            }
+
+            return OnEventResult.Ignored;
+        });
+
         var results = await Task.WhenAll(tasks);
         return results.FirstOrDefault(x => x == OnEventResult.Processed, OnEventResult.Ignored);
     }
 
     public Task OnCheckpoint(TPosition position, CancellationToken cancellationToken)
     {
-        var tasks = _subscribers.Select(x => x.OnCheckpoint(position, cancellationToken));
+        var tasks = _subscribers.Select(async x =>
+        {
+            var subscriberStartPosition = _subscriberStartPositions[x];
+            if (subscriberStartPosition is not null && position.CompareTo(subscriberStartPosition.Value) == 1)
+            {
+                await x.OnCheckpoint(position, cancellationToken);
+            }
+        });
+
         return Task.WhenAll(tasks);
     }
 
