@@ -7,5 +7,5 @@ public interface IEventStreamSubscriberBuilderInfrastructure<TEvent, TPosition>
 {
     void AddSubscriberBuilder(IEventStreamSubscriberBuilder<TEvent, TPosition> builder);
 
-    IEventStreamSubscriber<TEvent, TPosition> Build(IReadEventAdapter<TEvent> readEventAdapter);
+    IEnumerable<IEventStreamSubscriber<TEvent, TPosition>> Build(IReadEventAdapter<TEvent> readEventAdapter);
 }

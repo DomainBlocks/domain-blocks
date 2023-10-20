@@ -16,7 +16,7 @@ public class EventStreamSubscriptionBaseTests
     public async Task SetUp()
     {
         _mockSubscriber = new Mock<IEventStreamSubscriber<string, int>>();
-        _subscription = new TestableEventStreamSubscription(_mockSubscriber.Object);
+        _subscription = new TestableEventStreamSubscription(new[] { _mockSubscriber.Object });
         await _subscription.StartAsync();
     }
 

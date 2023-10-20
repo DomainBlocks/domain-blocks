@@ -36,16 +36,10 @@ public class EventStreamSubscriberBuilder<TEvent, TPosition> :
         _subscriberBuilders.Add(builder);
     }
 
-    IEventStreamSubscriber<TEvent, TPosition> IEventStreamSubscriberBuilderInfrastructure<TEvent, TPosition>.Build(
-        IReadEventAdapter<TEvent> readEventAdapter)
+    IEnumerable<IEventStreamSubscriber<TEvent, TPosition>>
+        IEventStreamSubscriberBuilderInfrastructure<TEvent, TPosition>.Build(IReadEventAdapter<TEvent> readEventAdapter)
     {
-        var subscribers = _subscriberBuilders.Select(x => x.Build(readEventAdapter)).ToList();
-
-        return subscribers.Count switch
-        {
-            0 => throw new InvalidOperationException("Expected at least one subscriber"),
-            1 => subscribers.First().Intercept(_interceptors),
-            _ => new CompositeEventStreamSubscriber<TEvent, TPosition>(subscribers).Intercept(_interceptors)
-        };
+        var subscribers = _subscriberBuilders.Select(x => x.Build(readEventAdapter).Intercept(_interceptors));
+        return subscribers;
     }
 }

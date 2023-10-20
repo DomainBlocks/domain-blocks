@@ -6,7 +6,8 @@ public class TestableEventStreamSubscription : EventStreamSubscriptionBase<strin
 {
     private readonly List<string> _catchupEvents = new();
 
-    public TestableEventStreamSubscription(IEventStreamSubscriber<string, int> subscriber) : base(subscriber)
+    public TestableEventStreamSubscription(IEnumerable<IEventStreamSubscriber<string, int>> subscriber) :
+        base(subscriber)
     {
     }
 

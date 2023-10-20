@@ -3,25 +3,20 @@ namespace DomainBlocks.Core.Subscriptions;
 public abstract class EventStreamSubscriptionBase<TEvent, TPosition> : IEventStreamSubscription
     where TPosition : struct, IEquatable<TPosition>, IComparable<TPosition>
 {
-    private readonly IEventStreamSubscriber<TEvent, TPosition> _subscriber;
+    private readonly IReadOnlyDictionary<IEventStreamSubscriber<TEvent, TPosition>, SubscriberState> _subscriberStates;
     private readonly SharedNotification _sharedNotification = new();
     private readonly SemaphoreSlim _emptyCount = new(1, 1);
     private readonly SemaphoreSlim _fullCount = new(0, 1);
-    private readonly CheckpointTimer _checkpointTimer = new(Timeout.InfiniteTimeSpan);
 
     private readonly TaskCompletionSource _eventLoopCompletedSignal =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     private CancellationTokenSource _cancellationTokenSource = null!;
     private IDisposable? _subscription;
-    private TPosition? _lastPosition;
-    private TPosition? _lastProcessedPosition;
-    private int _checkpointEventCount;
-    private CheckpointFrequency _checkpointFrequency = CheckpointFrequency.Default;
 
-    protected EventStreamSubscriptionBase(IEventStreamSubscriber<TEvent, TPosition> subscriber)
+    protected EventStreamSubscriptionBase(IEnumerable<IEventStreamSubscriber<TEvent, TPosition>> subscribers)
     {
-        _subscriber = subscriber;
+        _subscriberStates = subscribers.ToDictionary(x => x, x => new SubscriberState(x));
     }
 
     public void Dispose()
@@ -40,10 +35,26 @@ public abstract class EventStreamSubscriptionBase<TEvent, TPosition> : IEventStr
         _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _cancellationTokenSource.Token.Register(Dispose);
 
-        _lastPosition = await _subscriber.OnStarting(_cancellationTokenSource.Token);
+        // Get start positions of each subscriber.
+        var tasks = _subscriberStates.Select(async x =>
+        {
+            var position = await x.Key.OnStarting(cancellationToken);
+            return (x.Key, position);
+        });
+
+        var subscriberStartPositions = await Task.WhenAll(tasks);
+
+        foreach (var position in subscriberStartPositions)
+        {
+            _subscriberStates[position.Key].LastPosition = position.position;
+        }
+
+        // Find the minimum start position to subscribe from.
+        var startPosition = _subscriberStates.Values.Min(x => x.LastPosition);
+
         RunEventLoop();
 
-        var subscribeTask = Subscribe(_lastPosition, _cancellationTokenSource.Token);
+        var subscribeTask = Subscribe(startPosition, _cancellationTokenSource.Token);
 
         // We wait for either the subscription or event loop to complete here, in case there is an error on the event
         // loop while catching up, causing it to terminate early.
@@ -85,7 +96,8 @@ public abstract class EventStreamSubscriptionBase<TEvent, TPosition> : IEventStr
 
             while (!_cancellationTokenSource.IsCancellationRequested)
             {
-                var completedTask = await Task.WhenAny(nextNotification, _checkpointTimer.Task);
+                var checkpointTimerTasks = _subscriberStates.Values.Select(x => x.CheckpointTimer.Task);
+                var completedTask = await Task.WhenAny(nextNotification, Task.WhenAny(checkpointTimerTasks));
 
                 if (completedTask == nextNotification)
                 {
@@ -95,7 +107,10 @@ public abstract class EventStreamSubscriptionBase<TEvent, TPosition> : IEventStr
                 }
                 else
                 {
-                    await HandleCheckpointTimerElapsed();
+                    var checkpointTimerTask = (Task<IEventStreamSubscriber<TEvent, TPosition>>)completedTask;
+                    var subscriber = await checkpointTimerTask;
+                    var subscriberState = _subscriberStates[subscriber];
+                    await HandleCheckpointTimerElapsed(subscriberState);
                 }
             }
         }
@@ -111,7 +126,10 @@ public abstract class EventStreamSubscriptionBase<TEvent, TPosition> : IEventStr
         }
         finally
         {
-            _checkpointTimer.Dispose();
+            foreach (var state in _subscriberStates.Values)
+            {
+                state.CheckpointTimer.Dispose();
+            }
         }
 
         if (_cancellationTokenSource.IsCancellationRequested)
@@ -163,27 +181,42 @@ public abstract class EventStreamSubscriptionBase<TEvent, TPosition> : IEventStr
 
     private async Task HandleCatchingUp()
     {
-        await _subscriber.OnCatchingUp(_cancellationTokenSource.Token);
-        _checkpointFrequency = _subscriber.CatchUpCheckpointFrequency;
-        _checkpointTimer.Reset(_checkpointFrequency.PerTimeInterval ?? Timeout.InfiniteTimeSpan);
+        var tasks = _subscriberStates.Keys.Select(x => x.OnCatchingUp(_cancellationTokenSource.Token));
+        await Task.WhenAll(tasks);
+
+        foreach (var state in _subscriberStates.Values)
+        {
+            state.CheckpointFrequency = state.Subscriber.CatchUpCheckpointFrequency;
+            state.CheckpointTimer.Reset(state.CheckpointFrequency.PerTimeInterval ?? Timeout.InfiniteTimeSpan);
+        }
     }
 
-    private async Task HandleEvent(TEvent @event, TPosition position)
+    private Task HandleEvent(TEvent @event, TPosition position)
+    {
+        var tasks = _subscriberStates.Values.Select(x => HandleEvent(@event, position, x));
+        return Task.WhenAll(tasks);
+    }
+
+    private async Task HandleEvent(
+        TEvent @event,
+        TPosition position,
+        SubscriberState subscriberState)
     {
         var isHandled = false;
         var result = OnEventResult.Ignored;
+        var subscriber = subscriberState.Subscriber;
 
         do
         {
             try
             {
-                result = await _subscriber.OnEvent(@event, position, _cancellationTokenSource.Token);
+                result = await subscriber.OnEvent(@event, position, _cancellationTokenSource.Token);
                 isHandled = true;
                 break;
             }
             catch (Exception ex)
             {
-                var resolution = await _subscriber.OnEventError(@event, position, ex, _cancellationTokenSource.Token);
+                var resolution = await subscriber.OnEventError(@event, position, ex, _cancellationTokenSource.Token);
 
                 switch (resolution)
                 {
@@ -200,50 +233,65 @@ public abstract class EventStreamSubscriptionBase<TEvent, TPosition> : IEventStr
             }
         } while (!isHandled);
 
-        _lastPosition = position;
+        subscriberState.LastPosition = position;
 
         if (result == OnEventResult.Processed)
         {
-            _lastProcessedPosition = position;
-            _checkpointEventCount += _checkpointFrequency.CanCheckpoint ? 1 : 0;
+            subscriberState.LastProcessedPosition = position;
+            subscriberState.CheckpointEventCount += subscriberState.CheckpointFrequency.CanCheckpoint ? 1 : 0;
 
-            if (_checkpointEventCount == _checkpointFrequency.PerEventCount)
+            if (subscriberState.CheckpointEventCount == subscriberState.CheckpointFrequency.PerEventCount)
             {
-                await _subscriber.OnCheckpoint(position, _cancellationTokenSource.Token);
-                _checkpointEventCount = 0;
-                _checkpointTimer.Reset();
+                await subscriber.OnCheckpoint(position, _cancellationTokenSource.Token);
+                subscriberState.CheckpointEventCount = 0;
+                subscriberState.CheckpointTimer.Reset();
             }
         }
     }
 
     private async Task HandleLive()
     {
-        // Close off any remaining catch-up phase checkpoint if we processed any events.
-        if (_checkpointEventCount > 0)
+        var onCheckpointTasks = _subscriberStates.Values.Select(async state =>
         {
-            await _subscriber.OnCheckpoint(_lastProcessedPosition!.Value, _cancellationTokenSource.Token);
-            _checkpointEventCount = 0;
-        }
+            if (state.CheckpointEventCount > 0)
+            {
+                await state.Subscriber.OnCheckpoint(state.LastProcessedPosition!.Value, _cancellationTokenSource.Token);
+                state.CheckpointEventCount = 0;
+            }
+        });
 
-        await _subscriber.OnLive(_cancellationTokenSource.Token);
-        _checkpointFrequency = _subscriber.LiveCheckpointFrequency;
-        _checkpointTimer.Reset(_checkpointFrequency.PerTimeInterval ?? Timeout.InfiniteTimeSpan);
+        await Task.WhenAll(onCheckpointTasks);
+
+        var onLiveTasks = _subscriberStates.Values.Select(async state =>
+        {
+            await state.Subscriber.OnLive(_cancellationTokenSource.Token);
+            state.CheckpointFrequency = state.Subscriber.LiveCheckpointFrequency;
+            state.CheckpointTimer.Reset(state.CheckpointFrequency.PerTimeInterval ?? Timeout.InfiniteTimeSpan);
+        });
+
+        await Task.WhenAll(onLiveTasks);
     }
 
     private Task HandleSubscriptionDropped(SubscriptionDroppedReason reason, Exception? exception)
     {
-        return _subscriber.OnSubscriptionDropped(reason, exception, _cancellationTokenSource.Token);
+        var tasks = _subscriberStates.Values.Select(x =>
+            x.Subscriber.OnSubscriptionDropped(reason, exception, _cancellationTokenSource.Token));
+
+        return Task.WhenAll(tasks);
     }
 
-    private async Task HandleCheckpointTimerElapsed()
+    private async Task HandleCheckpointTimerElapsed(SubscriberState subscriberState)
     {
-        if (_checkpointEventCount > 0)
+        if (subscriberState.CheckpointEventCount > 0)
         {
-            await _subscriber.OnCheckpoint(_lastProcessedPosition!.Value, _cancellationTokenSource.Token);
-            _checkpointEventCount = 0;
+            await subscriberState.Subscriber.OnCheckpoint(
+                subscriberState.LastProcessedPosition!.Value,
+                _cancellationTokenSource.Token);
+
+            subscriberState.CheckpointEventCount = 0;
         }
 
-        _checkpointTimer.Reset();
+        subscriberState.CheckpointTimer.Reset();
     }
 
     private enum NotificationType
@@ -299,18 +347,40 @@ public abstract class EventStreamSubscriptionBase<TEvent, TPosition> : IEventStr
         }
     }
 
-    private sealed class CheckpointTimer : IDisposable
+    private sealed class SubscriberState
     {
+        public SubscriberState(IEventStreamSubscriber<TEvent, TPosition> subscriber)
+        {
+            Subscriber = subscriber;
+            CheckpointTimer = new SubscriberCheckpointTimer(subscriber, Timeout.InfiniteTimeSpan);
+            CheckpointFrequency = CheckpointFrequency.Default;
+        }
+
+        public IEventStreamSubscriber<TEvent, TPosition> Subscriber { get; }
+        public TPosition? LastPosition { get; set; }
+        public TPosition? LastProcessedPosition { get; set; }
+        public SubscriberCheckpointTimer CheckpointTimer { get; }
+        public int CheckpointEventCount { get; set; }
+        public CheckpointFrequency CheckpointFrequency { get; set; }
+    }
+
+    private sealed class SubscriberCheckpointTimer : IDisposable
+    {
+        private readonly IEventStreamSubscriber<TEvent, TPosition> _subscriber;
         private TimeSpan _duration;
         private CancellationTokenSource _cancellationTokenSource = new();
 
-        public CheckpointTimer(TimeSpan duration)
+        public SubscriberCheckpointTimer(IEventStreamSubscriber<TEvent, TPosition> subscriber, TimeSpan duration)
         {
+            _subscriber = subscriber;
             _duration = duration;
-            Task = Task.Delay(duration, _cancellationTokenSource.Token);
+
+            Task = System.Threading.Tasks.Task
+                .Delay(duration, _cancellationTokenSource.Token)
+                .ContinueWith(_ => _subscriber);
         }
 
-        public Task Task { get; private set; }
+        public Task<IEventStreamSubscriber<TEvent, TPosition>> Task { get; private set; }
 
         public void Reset(TimeSpan duration)
         {
@@ -327,7 +397,9 @@ public abstract class EventStreamSubscriptionBase<TEvent, TPosition> : IEventStr
                 _cancellationTokenSource = new CancellationTokenSource();
             }
 
-            Task = Task.Delay(_duration, _cancellationTokenSource.Token);
+            Task = System.Threading.Tasks.Task
+                .Delay(_duration, _cancellationTokenSource.Token)
+                .ContinueWith(_ => _subscriber);
         }
 
         public void Dispose()
