@@ -3,7 +3,8 @@ namespace DomainBlocks.Core.Subscriptions;
 public abstract class EventStreamSubscriptionBase<TEvent, TPosition> : IEventStreamSubscription
     where TPosition : struct, IEquatable<TPosition>, IComparable<TPosition>
 {
-    private readonly IReadOnlyDictionary<IEventStreamSubscriber<TEvent, TPosition>, SubscriberState> _subscriberStates;
+    private readonly IEnumerable<IEventStreamSubscriber<TEvent, TPosition>> _subscribers;
+    private readonly Dictionary<IEventStreamSubscriber<TEvent, TPosition>, SubscriberState> _subscriberStates = new();
     private readonly SharedNotification _sharedNotification = new();
     private readonly SemaphoreSlim _emptyCount = new(1, 1);
     private readonly SemaphoreSlim _fullCount = new(0, 1);
@@ -16,7 +17,7 @@ public abstract class EventStreamSubscriptionBase<TEvent, TPosition> : IEventStr
 
     protected EventStreamSubscriptionBase(IEnumerable<IEventStreamSubscriber<TEvent, TPosition>> subscribers)
     {
-        _subscriberStates = subscribers.ToDictionary(x => x, x => new SubscriberState(x));
+        _subscribers = subscribers;
     }
 
     public void Dispose()
@@ -32,29 +33,31 @@ public abstract class EventStreamSubscriptionBase<TEvent, TPosition> : IEventStr
 
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
+        _subscriberStates.Clear();
         _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _cancellationTokenSource.Token.Register(Dispose);
 
         // Get start positions of each subscriber.
-        var tasks = _subscriberStates.Select(async x =>
+        var tasks = _subscribers.Select(async x =>
         {
-            var position = await x.Key.OnStarting(cancellationToken);
-            return (x.Key, position);
+            var position = await x.OnStarting(cancellationToken);
+            return (x, position);
         });
 
         var subscriberStartPositions = await Task.WhenAll(tasks);
 
-        foreach (var position in subscriberStartPositions)
+        foreach (var (subscriber, startPosition) in subscriberStartPositions)
         {
-            _subscriberStates[position.Key].LastPosition = position.position;
+            var subscriberState = new SubscriberState(subscriber, startPosition);
+            _subscriberStates.Add(subscriber, subscriberState);
         }
 
         // Find the minimum start position to subscribe from.
-        var startPosition = _subscriberStates.Values.Min(x => x.LastPosition);
+        var minStartPosition = _subscriberStates.Values.Min(x => x.StartPosition);
 
         RunEventLoop();
 
-        var subscribeTask = Subscribe(startPosition, _cancellationTokenSource.Token);
+        var subscribeTask = Subscribe(minStartPosition, _cancellationTokenSource.Token);
 
         // We wait for either the subscription or event loop to complete here, in case there is an error on the event
         // loop while catching up, causing it to terminate early.
@@ -202,6 +205,12 @@ public abstract class EventStreamSubscriptionBase<TEvent, TPosition> : IEventStr
         TPosition position,
         SubscriberState subscriberState)
     {
+        if (subscriberState.StartPosition != null && position.CompareTo(subscriberState.StartPosition.Value) < 1)
+        {
+            // This subscriber's start position is ahead of the event's position. Ignore.
+            return;
+        }
+
         var isHandled = false;
         var result = OnEventResult.Ignored;
         var subscriber = subscriberState.Subscriber;
@@ -349,14 +358,16 @@ public abstract class EventStreamSubscriptionBase<TEvent, TPosition> : IEventStr
 
     private sealed class SubscriberState
     {
-        public SubscriberState(IEventStreamSubscriber<TEvent, TPosition> subscriber)
+        public SubscriberState(IEventStreamSubscriber<TEvent, TPosition> subscriber, TPosition? startPosition)
         {
             Subscriber = subscriber;
+            StartPosition = startPosition;
             CheckpointTimer = new SubscriberCheckpointTimer(subscriber, Timeout.InfiniteTimeSpan);
             CheckpointFrequency = CheckpointFrequency.Default;
         }
 
         public IEventStreamSubscriber<TEvent, TPosition> Subscriber { get; }
+        public TPosition? StartPosition { get; }
         public TPosition? LastPosition { get; set; }
         public TPosition? LastProcessedPosition { get; set; }
         public SubscriberCheckpointTimer CheckpointTimer { get; }

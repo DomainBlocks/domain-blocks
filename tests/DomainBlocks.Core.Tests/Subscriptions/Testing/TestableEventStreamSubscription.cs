@@ -12,6 +12,7 @@ public class TestableEventStreamSubscription : EventStreamSubscriptionBase<strin
     }
 
     public TestableDisposable? CurrentSubscriptionDisposable { get; private set; }
+    public int? StartPositionSubscribedFrom { get; private set; }
 
     public void SetCatchupEvents(params string[] events)
     {
@@ -30,6 +31,8 @@ public class TestableEventStreamSubscription : EventStreamSubscriptionBase<strin
         int? fromPositionExclusive,
         CancellationToken cancellationToken)
     {
+        StartPositionSubscribedFrom = fromPositionExclusive;
+
         for (var i = 0; i < _catchupEvents.Count; i++)
         {
             await base.NotifyEvent(_catchupEvents[i], i, cancellationToken);

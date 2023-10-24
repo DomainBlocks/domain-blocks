@@ -172,4 +172,30 @@ public class EventStreamSubscriptionBaseTests
 
         Assert.ThrowsAsync<Exception>(() => _subscription.StartAsync(), exception.Message);
     }
+
+    [Test]
+    public async Task SubscriptionSubscribesFromMinimumStartPositionOfSubscribers()
+    {
+        const int startPosition1 = 1;
+        const int startPosition2 = 2;
+
+        var mockSubscriber1 = new Mock<IEventStreamSubscriber<string, int>>();
+        var mockSubscriber2 = new Mock<IEventStreamSubscriber<string, int>>();
+
+        mockSubscriber1.Setup(x => x.OnStarting(It.IsAny<CancellationToken>())).ReturnsAsync(startPosition1);
+        mockSubscriber2.Setup(x => x.OnStarting(It.IsAny<CancellationToken>())).ReturnsAsync(startPosition2);
+
+        var subscription =
+            new TestableEventStreamSubscription(new[] { mockSubscriber1.Object, mockSubscriber2.Object });
+
+        await subscription.StartAsync();
+
+        Assert.That(subscription.StartPositionSubscribedFrom, Is.EqualTo(startPosition1));
+    }
+
+    [Test]
+    public void EventBeforeSubscriberStartPositionIsIgnored()
+    {
+        // TODO (DS, CF): fix everything
+    }
 }
