@@ -18,8 +18,10 @@ public partial class EventStreamSubscription<TEvent, TPosition>
         {
             _consumer = consumer;
             _checkpointTimer =
-                new CheckpointTimer(ct => queue.WriteAsync(x => x.SetCheckpointTimerElapsed(consumer), ct));
+                new CheckpointTimer(ct => queue.WriteAsync(x => x.SetCheckpointTimerElapsed(Id), ct));
         }
+
+        public Guid Id { get; } = Guid.NewGuid();
 
         public void Dispose()
         {

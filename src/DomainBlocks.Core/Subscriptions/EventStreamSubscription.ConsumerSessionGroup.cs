@@ -6,13 +6,13 @@ public partial class EventStreamSubscription<TEvent, TPosition>
 {
     private sealed class ConsumerSessionGroup : IDisposable
     {
-        private readonly IReadOnlyDictionary<IEventStreamConsumer<TEvent, TPosition>, ConsumerSession> _sessions;
+        private readonly IReadOnlyDictionary<Guid, ConsumerSession> _sessions;
 
         public ConsumerSessionGroup(
             IEnumerable<IEventStreamConsumer<TEvent, TPosition>> consumers,
             ArenaQueue<Notification> queue)
         {
-            _sessions = consumers.ToDictionary(x => x, x => new ConsumerSession(x, queue));
+            _sessions = consumers.Select(x => new ConsumerSession(x, queue)).ToDictionary(x => x.Id);
         }
 
         public void Dispose()
@@ -68,10 +68,9 @@ public partial class EventStreamSubscription<TEvent, TPosition>
             return Task.WhenAll(tasks);
         }
 
-        public async Task NotifyCheckpointTimerElapsed(
-            IEventStreamConsumer<TEvent, TPosition> consumer, CancellationToken cancellationToken)
+        public async Task NotifyCheckpointTimerElapsed(Guid sessionId, CancellationToken cancellationToken)
         {
-            var session = _sessions[consumer];
+            var session = _sessions[sessionId];
             await session.NotifyCheckpoint(cancellationToken);
             session.ResetCheckpointTimer();
         }

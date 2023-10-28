@@ -121,7 +121,8 @@ public partial class EventStreamSubscription<TEvent, TPosition> :
                 await _sessions.NotifySubscriptionDropped(reason, exception, _cancellationTokenSource.Token);
                 break;
             case NotificationType.CheckpointTimerElapsed:
-                await _sessions.NotifyCheckpointTimerElapsed(notification.Consumer!, _cancellationTokenSource.Token);
+                await _sessions.NotifyCheckpointTimerElapsed(
+                    notification.ConsumerSessionId!.Value, _cancellationTokenSource.Token);
                 break;
             default:
                 throw new ArgumentOutOfRangeException(

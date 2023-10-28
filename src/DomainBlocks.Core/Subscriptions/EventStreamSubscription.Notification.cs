@@ -19,7 +19,7 @@ public partial class EventStreamSubscription<TEvent, TPosition>
         public TPosition? Position { get; private set; }
         public SubscriptionDroppedReason? SubscriptionDroppedReason { get; private set; }
         public Exception? Exception { get; private set; }
-        public IEventStreamConsumer<TEvent, TPosition>? Consumer { get; private set; }
+        public Guid? ConsumerSessionId { get; private set; }
 
         public void SetCatchingUp()
         {
@@ -49,11 +49,11 @@ public partial class EventStreamSubscription<TEvent, TPosition>
             Exception = exception;
         }
 
-        public void SetCheckpointTimerElapsed(IEventStreamConsumer<TEvent, TPosition> consumer)
+        public void SetCheckpointTimerElapsed(Guid consumerSessionId)
         {
             Clear();
             NotificationType = NotificationType.CheckpointTimerElapsed;
-            Consumer = consumer;
+            ConsumerSessionId = consumerSessionId;
         }
 
         private void Clear()
@@ -62,7 +62,7 @@ public partial class EventStreamSubscription<TEvent, TPosition>
             Position = null;
             SubscriptionDroppedReason = null;
             Exception = null;
-            Consumer = null;
+            ConsumerSessionId = null;
         }
     }
 }
