@@ -1,3 +1,4 @@
+using DomainBlocks.Core.Subscriptions;
 using DomainBlocks.Core.Subscriptions.Builders;
 using DomainBlocks.EventStore.Serialization;
 using EventStore.Client;
@@ -24,12 +25,13 @@ public sealed class EventStoreSubscriptionBuilder
         ((IEventStreamSubscriptionBuilderInfrastructure)_coreBuilder).WithSubscriptionFactory(() =>
         {
             var eventStoreClient = _eventStoreOptions.GetOrCreateEventStoreClient();
+            var subscriber = new EventStoreAllEventsStreamSubscriber(eventStoreClient);
             var eventAdapter = new EventStoreEventAdapter(_eventStoreOptions.GetEventDataSerializer());
 
             var consumers = ((IEventStreamConsumerBuilderInfrastructure<ResolvedEvent, Position>)subscribersBuilder)
                 .Build(eventAdapter);
 
-            return new EventStoreAllEventsStreamSubscription(consumers, eventStoreClient);
+            return new EventStreamSubscription<ResolvedEvent, Position>(subscriber, consumers);
         });
 
         return subscribersBuilder;

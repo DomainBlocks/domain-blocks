@@ -1,4 +1,4 @@
-namespace DomainBlocks.Core.Subscriptions;
+namespace DomainBlocks.Core.Subscriptions.Extensions;
 
 internal static class EventStreamConsumerExtensions
 {

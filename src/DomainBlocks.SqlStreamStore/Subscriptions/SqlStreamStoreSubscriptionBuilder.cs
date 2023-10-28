@@ -1,3 +1,4 @@
+using DomainBlocks.Core.Subscriptions;
 using DomainBlocks.Core.Subscriptions.Builders;
 using DomainBlocks.ThirdParty.SqlStreamStore.Streams;
 using DomainBlocks.SqlStreamStore.Serialization;
@@ -24,12 +25,13 @@ public class SqlStreamStoreSubscriptionBuilder
         ((IEventStreamSubscriptionBuilderInfrastructure)_coreBuilder).WithSubscriptionFactory(() =>
         {
             var streamStore = _streamStoreOptions.GetOrCreateStreamStore();
+            var subscriber = new SqlStreamStoreAllEventsStreamSubscriber(streamStore);
             var eventAdapter = new SqlStreamStoreEventAdapter(_streamStoreOptions.GetEventDataSerializer());
 
             var consumers = ((IEventStreamConsumerBuilderInfrastructure<StreamMessage, long>)subscribersBuilder)
                 .Build(eventAdapter);
 
-            return new SqlStreamStoreAllEventsStreamSubscription(consumers, streamStore);
+            return new EventStreamSubscription<StreamMessage, long>(subscriber, consumers);
         });
 
         return subscribersBuilder;

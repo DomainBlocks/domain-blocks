@@ -5,25 +5,24 @@ using SubscriptionDroppedReason = DomainBlocks.Core.Subscriptions.SubscriptionDr
 
 namespace DomainBlocks.EventStore.Subscriptions;
 
-public sealed class EventStoreAllEventsStreamSubscription : EventStreamSubscriptionBase<ResolvedEvent, Position>
+public sealed class EventStoreAllEventsStreamSubscriber : IEventStreamSubscriber<ResolvedEvent, Position>
 {
     private readonly EventStoreClient _eventStoreClient;
     private readonly UserCredentials _userCredentials;
 
-    public EventStoreAllEventsStreamSubscription(
-        IEnumerable<IEventStreamConsumer<ResolvedEvent, Position>> consumers,
-        EventStoreClient eventStoreClient,
-        UserCredentials? userCredentials = null) : base(consumers)
+    public EventStoreAllEventsStreamSubscriber(
+        EventStoreClient eventStoreClient, UserCredentials? userCredentials = null)
     {
         _eventStoreClient = eventStoreClient;
         _userCredentials = userCredentials ?? new UserCredentials("admin", "changeit");
     }
 
-    protected override async Task<IDisposable> Subscribe(
+    public async Task<IDisposable> Subscribe(
+        IEventStreamListener<ResolvedEvent, Position> listener,
         Position? fromPositionExclusive,
         CancellationToken cancellationToken)
     {
-        await NotifyCatchingUp();
+        await listener.OnCatchingUp(cancellationToken);
 
         var position = fromPositionExclusive ?? Position.Start;
 
@@ -35,7 +34,7 @@ public sealed class EventStoreAllEventsStreamSubscription : EventStreamSubscript
 
             await foreach (var @event in historicEvents.WithCancellation(cancellationToken))
             {
-                await NotifyEvent(@event, @event.Event.Position, cancellationToken);
+                await listener.OnEvent(@event, @event.Event.Position, cancellationToken);
                 position = @event.Event.Position;
             }
         }
@@ -44,17 +43,19 @@ public sealed class EventStoreAllEventsStreamSubscription : EventStreamSubscript
 
         var subscription = await _eventStoreClient.SubscribeToAllAsync(
             position,
-            (_, e, ct) => NotifyEvent(e, e.Event.Position, ct),
+            (_, e, ct) => listener.OnEvent(e, e.Event.Position, ct),
             subscriptionDropped: (_, r, ex) =>
             {
                 var reason = GetSubscriptionDroppedReason(r);
-                NotifySubscriptionDropped(reason, ex);
+                var task = Task.Run(
+                    () => listener.OnSubscriptionDropped(reason, ex, cancellationToken), cancellationToken);
+                task.Wait(cancellationToken);
             },
             filterOptions: filter,
             userCredentials: _userCredentials,
             cancellationToken: cancellationToken);
 
-        await NotifyLive();
+        await listener.OnLive(cancellationToken);
 
         return subscription;
     }

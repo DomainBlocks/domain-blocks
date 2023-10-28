@@ -1,4 +1,5 @@
 using DomainBlocks.Core.Serialization;
+using DomainBlocks.Core.Subscriptions.Extensions;
 
 namespace DomainBlocks.Core.Subscriptions.Builders;
 
