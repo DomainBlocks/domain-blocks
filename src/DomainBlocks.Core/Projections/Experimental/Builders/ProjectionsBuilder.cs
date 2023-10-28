@@ -5,16 +5,16 @@ namespace DomainBlocks.Core.Projections.Experimental.Builders;
 public sealed class ProjectionsBuilder<TEvent, TPosition>
     where TPosition : struct, IEquatable<TPosition>, IComparable<TPosition>
 {
-    private readonly EventStreamConsumerBuilder<TEvent, TPosition> _consumerBuilder;
+    private readonly EventStreamConsumersBuilder<TEvent, TPosition> _consumersBuilder;
 
-    internal ProjectionsBuilder(EventStreamConsumerBuilder<TEvent, TPosition> consumerBuilder)
+    internal ProjectionsBuilder(EventStreamConsumersBuilder<TEvent, TPosition> consumersBuilder)
     {
-        _consumerBuilder = consumerBuilder;
+        _consumersBuilder = consumersBuilder;
     }
 
     public EventHandlerProjectionOptionsBuilder<TEvent, TPosition> EventHandlers()
     {
-        var builder = new EventHandlerProjectionOptionsBuilder<TEvent, TPosition>(_consumerBuilder);
+        var builder = new EventHandlerProjectionOptionsBuilder<TEvent, TPosition>(_consumersBuilder);
         AddSubscriberBuilder(builder);
 
         return builder;
@@ -24,7 +24,7 @@ public sealed class ProjectionsBuilder<TEvent, TPosition>
         where TState : class
     {
         var options = new StateProjectionOptions<TEvent, TPosition, TState>().WithSingletonState(state);
-        var builder = new StateProjectionOptionsBuilder<TEvent, TPosition, TState>(_consumerBuilder, options);
+        var builder = new StateProjectionOptionsBuilder<TEvent, TPosition, TState>(_consumersBuilder, options);
         AddSubscriberBuilder(builder);
 
         return builder;
@@ -37,7 +37,7 @@ public sealed class ProjectionsBuilder<TEvent, TPosition>
             .WithStateFactory(stateFactory)
             .WithStateLifetime(ProjectionStateLifetime.Singleton);
 
-        var builder = new StateProjectionOptionsBuilder<TEvent, TPosition, TState>(_consumerBuilder, options);
+        var builder = new StateProjectionOptionsBuilder<TEvent, TPosition, TState>(_consumersBuilder, options);
         AddSubscriberBuilder(builder);
 
         return builder;
@@ -47,7 +47,7 @@ public sealed class ProjectionsBuilder<TEvent, TPosition>
         Func<ProjectionStatus, TState> stateFactory) where TState : class
     {
         var options = new StateProjectionOptions<TEvent, TPosition, TState>().WithStateFactory(stateFactory);
-        var builder = new StateProjectionOptionsBuilder<TEvent, TPosition, TState>(_consumerBuilder, options);
+        var builder = new StateProjectionOptionsBuilder<TEvent, TPosition, TState>(_consumersBuilder, options);
         AddSubscriberBuilder(builder);
 
         return builder;
@@ -62,7 +62,7 @@ public sealed class ProjectionsBuilder<TEvent, TPosition>
         var options = new StateProjectionOptions<TEvent, TPosition, TState>()
             .WithStateFactory(resourceFactory, stateFactory);
 
-        var builder = new StateProjectionOptionsBuilder<TEvent, TPosition, TState>(_consumerBuilder, options);
+        var builder = new StateProjectionOptionsBuilder<TEvent, TPosition, TState>(_consumersBuilder, options);
         AddSubscriberBuilder(builder);
 
         return builder;
@@ -82,7 +82,7 @@ public sealed class ProjectionsBuilder<TEvent, TPosition>
 
     private void AddSubscriberBuilder(IEventStreamConsumerBuilder<TEvent, TPosition> builder)
     {
-        ((IEventStreamConsumerBuilderInfrastructure<TEvent, TPosition>)_consumerBuilder)
+        ((IEventStreamConsumerBuilderInfrastructure<TEvent, TPosition>)_consumersBuilder)
             .AddConsumerBuilder(builder);
     }
 }

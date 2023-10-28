@@ -8,13 +8,13 @@ public sealed class EventHandlerProjectionOptionsBuilder<TRawEvent, TPosition> :
     IEventStreamConsumerBuilder<TRawEvent, TPosition>
     where TPosition : struct, IEquatable<TPosition>, IComparable<TPosition>
 {
-    private readonly EventStreamConsumerBuilder<TRawEvent, TPosition> _consumerBuilder;
+    private readonly EventStreamConsumersBuilder<TRawEvent, TPosition> _consumersBuilder;
     private EventHandlerProjectionOptions<TRawEvent, TPosition> _options = new();
 
     internal EventHandlerProjectionOptionsBuilder(
-        EventStreamConsumerBuilder<TRawEvent, TPosition> consumerBuilder)
+        EventStreamConsumersBuilder<TRawEvent, TPosition> consumersBuilder)
     {
-        _consumerBuilder = consumerBuilder;
+        _consumersBuilder = consumersBuilder;
     }
 
     public EventHandlerProjectionOptionsBuilder<TRawEvent, TPosition> WithCheckpoints(
@@ -124,12 +124,12 @@ public sealed class EventHandlerProjectionOptionsBuilder<TRawEvent, TPosition> :
         return this;
     }
 
-    public EventStreamConsumerBuilder<TRawEvent, TPosition> And()
+    public EventStreamConsumersBuilder<TRawEvent, TPosition> And()
     {
-        return _consumerBuilder;
+        return _consumersBuilder;
     }
 
-    public IEventStreamSubscription Build() => _consumerBuilder.CoreBuilder.Build();
+    public IEventStreamSubscription Build() => _consumersBuilder.CoreBuilder.Build();
 
     IEventStreamConsumer<TRawEvent, TPosition> IEventStreamConsumerBuilder<TRawEvent, TPosition>.Build(
         IReadEventAdapter<TRawEvent> readEventAdapter)

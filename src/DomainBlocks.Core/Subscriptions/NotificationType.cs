@@ -1,6 +1,6 @@
 namespace DomainBlocks.Core.Subscriptions;
 
-public enum NotificationType
+internal enum NotificationType
 {
     CatchingUp,
     Event,

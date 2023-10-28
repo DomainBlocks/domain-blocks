@@ -18,9 +18,9 @@ public sealed class EventStoreSubscriptionBuilder
         _eventStoreOptions = eventStoreOptions;
     }
 
-    public EventStreamConsumerBuilder<ResolvedEvent, Position> FromAllEventsStream()
+    public EventStreamConsumersBuilder<ResolvedEvent, Position> FromAllEventsStream()
     {
-        var subscribersBuilder = new EventStreamConsumerBuilder<ResolvedEvent, Position>(_coreBuilder);
+        var consumersBuilder = new EventStreamConsumersBuilder<ResolvedEvent, Position>(_coreBuilder);
 
         ((IEventStreamSubscriptionBuilderInfrastructure)_coreBuilder).WithSubscriptionFactory(() =>
         {
@@ -28,16 +28,16 @@ public sealed class EventStoreSubscriptionBuilder
             var subscriber = new EventStoreAllEventsStreamSubscriber(eventStoreClient);
             var eventAdapter = new EventStoreEventAdapter(_eventStoreOptions.GetEventDataSerializer());
 
-            var consumers = ((IEventStreamConsumerBuilderInfrastructure<ResolvedEvent, Position>)subscribersBuilder)
+            var consumers = ((IEventStreamConsumerBuilderInfrastructure<ResolvedEvent, Position>)consumersBuilder)
                 .Build(eventAdapter);
 
             return new EventStreamSubscription<ResolvedEvent, Position>(subscriber, consumers);
         });
 
-        return subscribersBuilder;
+        return consumersBuilder;
     }
 
-    public EventStreamConsumerBuilder<ResolvedEvent, StreamPosition> FromEventStream(string streamName)
+    public EventStreamConsumersBuilder<ResolvedEvent, StreamPosition> FromEventStream(string streamName)
     {
         throw new NotImplementedException();
     }

@@ -4,7 +4,7 @@ using System.Threading.Channels;
 
 namespace DomainBlocks.Core.Subscriptions.Concurrency;
 
-public class ArenaQueue<T> where T : class, new()
+internal class ArenaQueue<T> where T : class, new()
 {
     private readonly Channel<int> _emptyChannel;
     private readonly Channel<int> _fullChannel;
@@ -23,14 +23,14 @@ public class ArenaQueue<T> where T : class, new()
         }
     }
 
-    public async Task PutAsync(Action<T> onWrite, CancellationToken cancellationToken = default)
+    public async Task WriteAsync(Action<T> onWriting, CancellationToken cancellationToken = default)
     {
         var index = await _emptyChannel.Reader.ReadAsync(cancellationToken);
-        onWrite(_arena[index]);
+        onWriting(_arena[index]);
         await _fullChannel.Writer.WriteAsync(index, cancellationToken);
     }
 
-    public async IAsyncEnumerable<T> TakeAllAsync(
+    public async IAsyncEnumerable<T> ReadAllAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         while (await _fullChannel.Reader.WaitToReadAsync(cancellationToken))

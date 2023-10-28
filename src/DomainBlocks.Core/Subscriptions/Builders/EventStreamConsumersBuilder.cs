@@ -3,28 +3,28 @@ using DomainBlocks.Core.Subscriptions.Extensions;
 
 namespace DomainBlocks.Core.Subscriptions.Builders;
 
-public class EventStreamConsumerBuilder<TEvent, TPosition> :
+public class EventStreamConsumersBuilder<TEvent, TPosition> :
     IEventStreamConsumerBuilderInfrastructure<TEvent, TPosition>
     where TPosition : struct, IEquatable<TPosition>, IComparable<TPosition>
 {
     private readonly List<IEventStreamConsumerBuilder<TEvent, TPosition>> _consumerBuilders = new();
     private readonly List<IEventStreamInterceptor<TEvent, TPosition>> _interceptors = new();
 
-    public EventStreamConsumerBuilder(EventStreamSubscriptionBuilder coreBuilder)
+    public EventStreamConsumersBuilder(EventStreamSubscriptionBuilder coreBuilder)
     {
         CoreBuilder = coreBuilder;
     }
 
     public EventStreamSubscriptionBuilder CoreBuilder { get; }
 
-    public EventStreamConsumerBuilder<TEvent, TPosition> AddInterceptors(
+    public EventStreamConsumersBuilder<TEvent, TPosition> AddInterceptors(
         IEnumerable<IEventStreamInterceptor<TEvent, TPosition>> interceptors)
     {
         _interceptors.AddRange(interceptors);
         return this;
     }
 
-    public EventStreamConsumerBuilder<TEvent, TPosition> AddInterceptors(
+    public EventStreamConsumersBuilder<TEvent, TPosition> AddInterceptors(
         params IEventStreamInterceptor<TEvent, TPosition>[] interceptors)
     {
         _interceptors.AddRange(interceptors);

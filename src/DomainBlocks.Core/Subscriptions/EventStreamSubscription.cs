@@ -71,7 +71,7 @@ public class EventStreamSubscription<TEvent, TPosition> :
     {
         try
         {
-            await foreach (var notification in _queue.TakeAllAsync(_cancellationTokenSource.Token))
+            await foreach (var notification in _queue.ReadAllAsync(_cancellationTokenSource.Token))
             {
                 await HandleNotification(notification);
             }
@@ -143,7 +143,7 @@ public class EventStreamSubscription<TEvent, TPosition> :
         {
             _consumer = consumer;
             _checkpointTimer =
-                new CheckpointTimer(ct => queue.PutAsync(x => x.SetCheckpointTimerElapsed(consumer), ct));
+                new CheckpointTimer(ct => queue.WriteAsync(x => x.SetCheckpointTimerElapsed(consumer), ct));
         }
 
         public void Dispose()
@@ -342,7 +342,11 @@ public class EventStreamSubscription<TEvent, TPosition> :
 
             _task = Task
                 .Delay(_duration, _cancellationTokenSource.Token)
-                .ContinueWith(_ => _onElapsed(_cancellationTokenSource.Token));
+                .ContinueWith(async t =>
+                {
+                    await t;
+                    await _onElapsed(_cancellationTokenSource.Token);
+                });
         }
 
         public void Dispose()
@@ -355,24 +359,24 @@ public class EventStreamSubscription<TEvent, TPosition> :
     // IEventStreamListener members
     Task IEventStreamListener<TEvent, TPosition>.OnCatchingUp(CancellationToken cancellationToken)
     {
-        return _queue.PutAsync(x => x.SetCatchingUp(), cancellationToken);
+        return _queue.WriteAsync(x => x.SetCatchingUp(), cancellationToken);
     }
 
     async Task<OnEventResult> IEventStreamListener<TEvent, TPosition>.OnEvent(
         TEvent @event, TPosition position, CancellationToken cancellationToken)
     {
-        await _queue.PutAsync(x => x.SetEvent(@event, position), cancellationToken);
+        await _queue.WriteAsync(x => x.SetEvent(@event, position), cancellationToken);
         return OnEventResult.Processed;
     }
 
     Task IEventStreamListener<TEvent, TPosition>.OnLive(CancellationToken cancellationToken)
     {
-        return _queue.PutAsync(x => x.SetLive(), cancellationToken);
+        return _queue.WriteAsync(x => x.SetLive(), cancellationToken);
     }
 
     Task IEventStreamListener<TEvent, TPosition>.OnSubscriptionDropped(
         SubscriptionDroppedReason reason, Exception? exception, CancellationToken cancellationToken)
     {
-        return _queue.PutAsync(x => x.SetSubscriptionDropped(reason, exception), cancellationToken);
+        return _queue.WriteAsync(x => x.SetSubscriptionDropped(reason, exception), cancellationToken);
     }
 }

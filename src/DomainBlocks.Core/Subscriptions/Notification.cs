@@ -1,6 +1,6 @@
 namespace DomainBlocks.Core.Subscriptions;
 
-public sealed class Notification<TEvent, TPosition> where TPosition : struct
+internal sealed class Notification<TEvent, TPosition> where TPosition : struct
 {
     public NotificationType NotificationType { get; private set; }
     public TEvent? Event { get; private set; }
@@ -40,6 +40,7 @@ public sealed class Notification<TEvent, TPosition> where TPosition : struct
     public void SetCheckpointTimerElapsed(IEventStreamConsumer<TEvent, TPosition> consumer)
     {
         Clear();
+        NotificationType = NotificationType.CheckpointTimerElapsed;
         Consumer = consumer;
     }
 

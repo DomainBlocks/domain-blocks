@@ -9,14 +9,14 @@ public sealed class StateProjectionOptionsBuilder<TRawEvent, TPosition, TState> 
     where TPosition : struct, IEquatable<TPosition>, IComparable<TPosition>
     where TState : class
 {
-    private readonly EventStreamConsumerBuilder<TRawEvent, TPosition> _consumerBuilder;
+    private readonly EventStreamConsumersBuilder<TRawEvent, TPosition> _consumersBuilder;
     private StateProjectionOptions<TRawEvent, TPosition, TState> _options;
 
     internal StateProjectionOptionsBuilder(
-        EventStreamConsumerBuilder<TRawEvent, TPosition> consumerBuilder,
+        EventStreamConsumersBuilder<TRawEvent, TPosition> consumersBuilder,
         StateProjectionOptions<TRawEvent, TPosition, TState> options)
     {
-        _consumerBuilder = consumerBuilder;
+        _consumersBuilder = consumersBuilder;
         _options = options;
     }
 
@@ -141,12 +141,12 @@ public sealed class StateProjectionOptionsBuilder<TRawEvent, TPosition, TState> 
         return this;
     }
 
-    public EventStreamConsumerBuilder<TRawEvent, TPosition> And()
+    public EventStreamConsumersBuilder<TRawEvent, TPosition> And()
     {
-        return _consumerBuilder;
+        return _consumersBuilder;
     }
 
-    public IEventStreamSubscription Build() => _consumerBuilder.CoreBuilder.Build();
+    public IEventStreamSubscription Build() => _consumersBuilder.CoreBuilder.Build();
 
     IEventStreamConsumer<TRawEvent, TPosition> IEventStreamConsumerBuilder<TRawEvent, TPosition>.Build(
         IReadEventAdapter<TRawEvent> readEventAdapter)
