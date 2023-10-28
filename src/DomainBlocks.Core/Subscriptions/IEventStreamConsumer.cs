@@ -1,6 +1,6 @@
 namespace DomainBlocks.Core.Subscriptions;
 
-public interface IEventStreamSubscriber<in TEvent, TPosition>
+public interface IEventStreamConsumer<in TEvent, TPosition>
     where TPosition : struct, IEquatable<TPosition>, IComparable<TPosition>
 {
     /// <summary>
@@ -44,7 +44,7 @@ public interface IEventStreamSubscriber<in TEvent, TPosition>
     Task OnLive(CancellationToken cancellationToken);
 
     /// <summary>
-    /// Invoked when an exception is thrown from <see cref="OnEvent"/>, giving the subscriber an opportunity to resolve
+    /// Invoked when an exception is thrown from <see cref="OnEvent"/>, giving the consumer an opportunity to resolve
     /// the error.
     /// </summary>
     /// <returns>

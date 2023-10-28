@@ -3,8 +3,8 @@ using DomainBlocks.Core.Subscriptions;
 
 namespace DomainBlocks.Core.Projections.Experimental;
 
-internal sealed class StateProjectionSubscriber<TRawEvent, TPosition, TState> :
-    IEventStreamSubscriber<TRawEvent, TPosition>
+internal sealed class StateProjection<TRawEvent, TPosition, TState> :
+    IEventStreamConsumer<TRawEvent, TPosition>
     where TPosition : struct, IEquatable<TPosition>, IComparable<TPosition>
     where TState : class
 {
@@ -16,7 +16,7 @@ internal sealed class StateProjectionSubscriber<TRawEvent, TPosition, TState> :
     private object? _currentDeserializedEvent;
     private IReadOnlyDictionary<string, string>? _currentDeserializedMetadata;
 
-    public StateProjectionSubscriber(
+    public StateProjection(
         StateProjectionOptions<TRawEvent, TPosition, TState> options,
         IReadEventAdapter<TRawEvent> readEventAdapter)
     {

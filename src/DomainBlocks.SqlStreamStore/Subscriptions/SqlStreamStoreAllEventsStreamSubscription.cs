@@ -13,7 +13,7 @@ public sealed class SqlStreamStoreAllEventsStreamSubscription : EventStreamSubsc
     private readonly int _readPageSize;
 
     public SqlStreamStoreAllEventsStreamSubscription(
-        IEnumerable<IEventStreamSubscriber<StreamMessage, long>> subscribers,
+        IEnumerable<IEventStreamConsumer<StreamMessage, long>> subscribers,
         IStreamStore streamStore,
         int readPageSize = 600) : base(subscribers)
     {

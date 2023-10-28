@@ -3,8 +3,8 @@ using DomainBlocks.Core.Subscriptions;
 
 namespace DomainBlocks.Core.Projections.Experimental;
 
-internal sealed class EventHandlerProjectionSubscriber<TRawEvent, TPosition> :
-    IEventStreamSubscriber<TRawEvent, TPosition>
+internal sealed class EventHandlerProjection<TRawEvent, TPosition> :
+    IEventStreamConsumer<TRawEvent, TPosition>
     where TPosition : struct, IEquatable<TPosition>, IComparable<TPosition>
 {
     private readonly EventHandlerProjectionOptions<TRawEvent, TPosition> _options;
@@ -12,7 +12,7 @@ internal sealed class EventHandlerProjectionSubscriber<TRawEvent, TPosition> :
     private object? _currentDeserializedEvent;
     private IReadOnlyDictionary<string, string>? _currentDeserializedMetadata;
 
-    public EventHandlerProjectionSubscriber(
+    public EventHandlerProjection(
         EventHandlerProjectionOptions<TRawEvent, TPosition> options,
         IReadEventAdapter<TRawEvent> readEventAdapter)
     {

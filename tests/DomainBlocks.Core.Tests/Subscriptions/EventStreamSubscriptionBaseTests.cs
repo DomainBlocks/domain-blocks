@@ -9,13 +9,13 @@ namespace DomainBlocks.Core.Tests.Subscriptions;
 [Timeout(1000)]
 public class EventStreamSubscriptionBaseTests
 {
-    private Mock<IEventStreamSubscriber<string, int>> _mockSubscriber = null!;
+    private Mock<IEventStreamConsumer<string, int>> _mockSubscriber = null!;
     private TestableEventStreamSubscription _subscription = null!;
 
     [SetUp]
     public async Task SetUp()
     {
-        _mockSubscriber = new Mock<IEventStreamSubscriber<string, int>>();
+        _mockSubscriber = new Mock<IEventStreamConsumer<string, int>>();
         _subscription = new TestableEventStreamSubscription(new[] { _mockSubscriber.Object });
         await _subscription.StartAsync();
     }
@@ -179,8 +179,8 @@ public class EventStreamSubscriptionBaseTests
         const int startPosition1 = 1;
         const int startPosition2 = 2;
 
-        var mockSubscriber1 = new Mock<IEventStreamSubscriber<string, int>>();
-        var mockSubscriber2 = new Mock<IEventStreamSubscriber<string, int>>();
+        var mockSubscriber1 = new Mock<IEventStreamConsumer<string, int>>();
+        var mockSubscriber2 = new Mock<IEventStreamConsumer<string, int>>();
 
         mockSubscriber1.Setup(x => x.OnStarting(It.IsAny<CancellationToken>())).ReturnsAsync(startPosition1);
         mockSubscriber2.Setup(x => x.OnStarting(It.IsAny<CancellationToken>())).ReturnsAsync(startPosition2);

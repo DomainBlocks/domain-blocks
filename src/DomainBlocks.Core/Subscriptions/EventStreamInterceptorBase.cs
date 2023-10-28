@@ -1,7 +1,7 @@
 namespace DomainBlocks.Core.Subscriptions;
 
-public abstract class EventStreamSubscriberInterceptorBase<TEvent, TPosition> :
-    IEventStreamSubscriberInterceptor<TEvent, TPosition>
+public abstract class EventStreamInterceptorBase<TEvent, TPosition> :
+    IEventStreamInterceptor<TEvent, TPosition>
     where TPosition : struct, IEquatable<TPosition>, IComparable<TPosition>
 {
     public virtual Task<TPosition?> OnStarting(

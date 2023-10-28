@@ -11,9 +11,9 @@ public sealed class EventStoreAllEventsStreamSubscription : EventStreamSubscript
     private readonly UserCredentials _userCredentials;
 
     public EventStoreAllEventsStreamSubscription(
-        IEnumerable<IEventStreamSubscriber<ResolvedEvent, Position>> subscribers,
+        IEnumerable<IEventStreamConsumer<ResolvedEvent, Position>> consumers,
         EventStoreClient eventStoreClient,
-        UserCredentials? userCredentials = null) : base(subscribers)
+        UserCredentials? userCredentials = null) : base(consumers)
     {
         _eventStoreClient = eventStoreClient;
         _userCredentials = userCredentials ?? new UserCredentials("admin", "changeit");

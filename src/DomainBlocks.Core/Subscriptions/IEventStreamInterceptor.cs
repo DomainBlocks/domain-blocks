@@ -1,6 +1,6 @@
 namespace DomainBlocks.Core.Subscriptions;
 
-public interface IEventStreamSubscriberInterceptor<in TEvent, TPosition>
+public interface IEventStreamInterceptor<in TEvent, TPosition>
     where TPosition : struct, IEquatable<TPosition>, IComparable<TPosition>
 {
     Task<TPosition?> OnStarting(
