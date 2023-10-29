@@ -7,12 +7,12 @@ using SqlStreamStoreSubscriptionDroppedReason =
 
 namespace DomainBlocks.SqlStreamStore.Subscriptions;
 
-public sealed class SqlStreamStoreAllEventsStreamSubscribable : IEventStreamSubscribable<StreamMessage, long>
+public sealed class SqlStreamStoreAllEventsStream : IEventStream<StreamMessage, long>
 {
     private readonly IStreamStore _streamStore;
     private readonly int _readPageSize;
 
-    public SqlStreamStoreAllEventsStreamSubscribable(IStreamStore streamStore, int readPageSize = 600)
+    public SqlStreamStoreAllEventsStream(IStreamStore streamStore, int readPageSize = 600)
     {
         _streamStore = streamStore;
         _readPageSize = readPageSize;

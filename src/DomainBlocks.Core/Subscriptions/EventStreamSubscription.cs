@@ -8,19 +8,19 @@ public sealed class EventStreamSubscription<TEvent, TPosition> :
     where TPosition : struct, IComparable<TPosition>
 {
     private readonly ArenaQueue<QueueNotification<TEvent, TPosition>> _queue;
-    private readonly IEventStreamSubscribable<TEvent, TPosition> _subscribable;
+    private readonly IEventStream<TEvent, TPosition> _eventStream;
     private readonly IReadOnlyDictionary<Guid, EventStreamConsumerSession<TEvent, TPosition>> _sessions;
     private CancellationTokenSource? _cancellationTokenSource;
     private Task? _eventLoopTask;
     private IDisposable? _subscription;
 
     public EventStreamSubscription(
-        IEventStreamSubscribable<TEvent, TPosition> subscribable,
+        IEventStream<TEvent, TPosition> eventStream,
         IEnumerable<IEventStreamConsumer<TEvent, TPosition>> consumers,
         int queueSize = 1)
     {
         _queue = new ArenaQueue<QueueNotification<TEvent, TPosition>>(queueSize);
-        _subscribable = subscribable;
+        _eventStream = eventStream;
 
         _sessions = consumers
             .Select(x => new EventStreamConsumerSession<TEvent, TPosition>(x, _queue))
@@ -45,7 +45,7 @@ public sealed class EventStreamSubscription<TEvent, TPosition> :
 
         var startPosition = await NotifyStarting(_cancellationTokenSource.Token);
         _eventLoopTask = RunEventLoop(_cancellationTokenSource.Token);
-        var subscribeTask = _subscribable.Subscribe(this, startPosition, _cancellationTokenSource.Token);
+        var subscribeTask = _eventStream.Subscribe(this, startPosition, _cancellationTokenSource.Token);
 
         var task = await Task.WhenAny(_eventLoopTask, subscribeTask);
         await task;

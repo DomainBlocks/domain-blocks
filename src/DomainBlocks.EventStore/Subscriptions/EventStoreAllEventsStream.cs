@@ -5,13 +5,12 @@ using SubscriptionDroppedReason = DomainBlocks.Core.Subscriptions.SubscriptionDr
 
 namespace DomainBlocks.EventStore.Subscriptions;
 
-public sealed class EventStoreAllEventsStreamSubscribable : IEventStreamSubscribable<ResolvedEvent, Position>
+public sealed class EventStoreAllEventsStream : IEventStream<ResolvedEvent, Position>
 {
     private readonly EventStoreClient _eventStoreClient;
     private readonly UserCredentials _userCredentials;
 
-    public EventStoreAllEventsStreamSubscribable(
-        EventStoreClient eventStoreClient, UserCredentials? userCredentials = null)
+    public EventStoreAllEventsStream(EventStoreClient eventStoreClient, UserCredentials? userCredentials = null)
     {
         _eventStoreClient = eventStoreClient;
         _userCredentials = userCredentials ?? new UserCredentials("admin", "changeit");

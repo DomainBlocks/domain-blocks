@@ -25,13 +25,13 @@ public class SqlStreamStoreSubscriptionBuilder
         ((IEventStreamSubscriptionBuilderInfrastructure)_coreBuilder).WithSubscriptionFactory(() =>
         {
             var streamStore = _streamStoreOptions.GetOrCreateStreamStore();
-            var subscribable = new SqlStreamStoreAllEventsStreamSubscribable(streamStore);
+            var eventStream = new SqlStreamStoreAllEventsStream(streamStore);
             var eventAdapter = new SqlStreamStoreEventAdapter(_streamStoreOptions.GetEventDataSerializer());
 
             var consumers = ((IEventStreamConsumerBuilderInfrastructure<StreamMessage, long>)consumersBuilder)
                 .Build(eventAdapter);
 
-            return new EventStreamSubscription<StreamMessage, long>(subscribable, consumers);
+            return new EventStreamSubscription<StreamMessage, long>(eventStream, consumers);
         });
 
         return consumersBuilder;

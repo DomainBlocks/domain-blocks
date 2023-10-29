@@ -8,7 +8,7 @@ namespace DomainBlocks.Core.Tests.Subscriptions;
 [Timeout(1000)]
 public class EventStreamSubscriptionTests
 {
-    private Mock<IEventStreamSubscribable<string, int>> _mockSubscribable = null!;
+    private Mock<IEventStream<string, int>> _mockEventStream = null!;
     private Mock<IEventStreamConsumer<string, int>> _mockConsumer = null!;
     private EventStreamSubscription<string, int> _subscription = null!;
     private IEventStreamSubscriber<string, int> _subscriber = null!;
@@ -17,20 +17,20 @@ public class EventStreamSubscriptionTests
     [SetUp]
     public void SetUp()
     {
-        _mockSubscribable = new Mock<IEventStreamSubscribable<string, int>>();
+        _mockEventStream = new Mock<IEventStream<string, int>>();
 
         _mockConsumer = new Mock<IEventStreamConsumer<string, int>>();
         _mockConsumer.Setup(x => x.CatchUpCheckpointFrequency).Returns(CheckpointFrequency.Default);
         _mockConsumer.Setup(x => x.LiveCheckpointFrequency).Returns(CheckpointFrequency.Default);
 
         _subscription =
-            new EventStreamSubscription<string, int>(_mockSubscribable.Object, new[] { _mockConsumer.Object });
+            new EventStreamSubscription<string, int>(_mockEventStream.Object, new[] { _mockConsumer.Object });
 
         _subscriber = _subscription;
 
         _subscribeTaskCompletionSource = new TaskCompletionSource<IDisposable>();
 
-        _mockSubscribable
+        _mockEventStream
             .Setup(x => x.Subscribe(_subscriber, It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .Returns(_subscribeTaskCompletionSource.Task);
     }
@@ -197,13 +197,13 @@ public class EventStreamSubscriptionTests
         mockConsumer2.Setup(x => x.OnStarting(It.IsAny<CancellationToken>())).ReturnsAsync(startPosition2);
 
         var subscription = new EventStreamSubscription<string, int>(
-            _mockSubscribable.Object, new[] { mockConsumer1.Object, mockConsumer2.Object });
+            _mockEventStream.Object, new[] { mockConsumer1.Object, mockConsumer2.Object });
 
         var startTask = subscription.StartAsync();
         CompleteSubscribing();
         await startTask;
 
-        _mockSubscribable.Verify(x => x.Subscribe(subscription, startPosition1, It.IsAny<CancellationToken>()));
+        _mockEventStream.Verify(x => x.Subscribe(subscription, startPosition1, It.IsAny<CancellationToken>()));
     }
 
     [Test]

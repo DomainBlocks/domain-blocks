@@ -1,6 +1,6 @@
 namespace DomainBlocks.Core.Subscriptions;
 
-public interface IEventStreamSubscribable<out TEvent, TPosition> where TPosition : struct
+public interface IEventStream<out TEvent, TPosition> where TPosition : struct
 {
     Task<IDisposable> Subscribe(
         IEventStreamSubscriber<TEvent, TPosition> subscriber,
