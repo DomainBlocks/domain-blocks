@@ -18,11 +18,14 @@ public sealed class EventStoreAllEventsStreamSubscriber : IEventStreamSubscriber
     }
 
     public async Task<IDisposable> Subscribe(
-        IEventStreamListener<ResolvedEvent, Position> listener,
         Position? fromPositionExclusive,
+        Func<CancellationToken, Task> onCatchingUp,
+        Func<ResolvedEvent, Position, CancellationToken, Task> onEvent,
+        Func<CancellationToken, Task> onLive,
+        Func<SubscriptionDroppedReason, Exception?, CancellationToken, Task> onSubscriptionDropped,
         CancellationToken cancellationToken)
     {
-        await listener.OnCatchingUp(cancellationToken);
+        await onCatchingUp(cancellationToken);
 
         var position = fromPositionExclusive ?? Position.Start;
 
@@ -34,7 +37,7 @@ public sealed class EventStoreAllEventsStreamSubscriber : IEventStreamSubscriber
 
             await foreach (var @event in historicEvents.WithCancellation(cancellationToken))
             {
-                await listener.OnEvent(@event, @event.Event.Position, cancellationToken);
+                await onEvent(@event, @event.Event.Position, cancellationToken);
                 position = @event.Event.Position;
             }
         }
@@ -43,19 +46,19 @@ public sealed class EventStoreAllEventsStreamSubscriber : IEventStreamSubscriber
 
         var subscription = await _eventStoreClient.SubscribeToAllAsync(
             position,
-            (_, e, ct) => listener.OnEvent(e, e.Event.Position, ct),
+            (_, e, ct) => onEvent(e, e.Event.Position, ct),
             subscriptionDropped: (_, r, ex) =>
             {
                 var reason = GetSubscriptionDroppedReason(r);
                 var task = Task.Run(
-                    () => listener.OnSubscriptionDropped(reason, ex, cancellationToken), cancellationToken);
+                    () => onSubscriptionDropped(reason, ex, cancellationToken), cancellationToken);
                 task.Wait(cancellationToken);
             },
             filterOptions: filter,
             userCredentials: _userCredentials,
             cancellationToken: cancellationToken);
 
-        await listener.OnLive(cancellationToken);
+        await onLive(cancellationToken);
 
         return subscription;
     }

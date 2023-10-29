@@ -19,11 +19,14 @@ public sealed class SqlStreamStoreAllEventsStreamSubscriber : IEventStreamSubscr
     }
 
     public async Task<IDisposable> Subscribe(
-        IEventStreamListener<StreamMessage, long> listener,
         long? fromPositionExclusive,
+        Func<CancellationToken, Task> onCatchingUp,
+        Func<StreamMessage, long, CancellationToken, Task> onEvent,
+        Func<CancellationToken, Task> onLive,
+        Func<SubscriptionDroppedReason, Exception?, CancellationToken, Task> onSubscriptionDropped,
         CancellationToken cancellationToken)
     {
-        await listener.OnCatchingUp(cancellationToken);
+        await onCatchingUp(cancellationToken);
 
         var catchUpPosition = fromPositionExclusive ?? Position.Start;
         var subscribePosition = fromPositionExclusive;
@@ -36,24 +39,24 @@ public sealed class SqlStreamStoreAllEventsStreamSubscriber : IEventStreamSubscr
 
             await foreach (var @event in historicEvents.WithCancellation(cancellationToken))
             {
-                await listener.OnEvent(@event, @event.Position, cancellationToken);
+                await onEvent(@event, @event.Position, cancellationToken);
                 subscribePosition = @event.Position;
             }
         }
 
         var subscription = _streamStore.SubscribeToAll(
             subscribePosition,
-            (_, e, ct) => listener.OnEvent(e, e.Position, ct),
+            (_, e, ct) => onEvent(e, e.Position, ct),
             (_, r, ex) =>
             {
                 var reason = GetSubscriptionDroppedReason(r);
                 var task = Task.Run(
-                    () => listener.OnSubscriptionDropped(reason, ex, cancellationToken), cancellationToken);
+                    () => onSubscriptionDropped(reason, ex, cancellationToken), cancellationToken);
                 task.Wait(cancellationToken);
             },
             prefetchJsonData: false);
 
-        await listener.OnLive(cancellationToken);
+        await onLive(cancellationToken);
 
         return subscription;
     }
