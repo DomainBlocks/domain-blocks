@@ -7,13 +7,14 @@ namespace DomainBlocks.EventStore.Subscriptions;
 
 public sealed class EventStoreAllEventsStream : IEventStream<ResolvedEvent, Position>
 {
+    private static readonly UserCredentials DefaultUserCredentials = new("admin", "changeit");
     private readonly EventStoreClient _eventStoreClient;
     private readonly UserCredentials _userCredentials;
 
     public EventStoreAllEventsStream(EventStoreClient eventStoreClient, UserCredentials? userCredentials = null)
     {
         _eventStoreClient = eventStoreClient;
-        _userCredentials = userCredentials ?? new UserCredentials("admin", "changeit");
+        _userCredentials = userCredentials ?? DefaultUserCredentials;
     }
 
     public async Task<IDisposable> Subscribe(
