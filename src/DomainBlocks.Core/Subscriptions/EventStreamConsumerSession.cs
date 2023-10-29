@@ -16,8 +16,7 @@ internal sealed class EventStreamConsumerSession<TEvent, TPosition> : IDisposabl
         IEventStreamConsumer<TEvent, TPosition> consumer, ArenaQueue<QueueNotification<TEvent, TPosition>> queue)
     {
         _consumer = consumer;
-        _checkpointTimer =
-            new CheckpointTimer(ct => queue.WriteAsync(x => x.SetCheckpointTimerElapsed(Id), ct));
+        _checkpointTimer = new CheckpointTimer(ct => queue.WriteAsync(x => x.SetCheckpointTimerElapsed(Id), ct));
     }
 
     public Guid Id { get; } = Guid.NewGuid();

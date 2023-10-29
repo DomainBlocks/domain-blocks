@@ -1,6 +1,6 @@
 namespace DomainBlocks.Core.Subscriptions;
 
-public sealed class InterceptingEventStreamConsumer<TEvent, TPosition> : IEventStreamConsumer<TEvent, TPosition>
+internal sealed class InterceptingEventStreamConsumer<TEvent, TPosition> : IEventStreamConsumer<TEvent, TPosition>
     where TPosition : struct, IEquatable<TPosition>, IComparable<TPosition>
 {
     private readonly IEventStreamConsumer<TEvent, TPosition> _target;
