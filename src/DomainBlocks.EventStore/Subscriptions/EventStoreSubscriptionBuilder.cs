@@ -25,13 +25,13 @@ public sealed class EventStoreSubscriptionBuilder
         ((IEventStreamSubscriptionBuilderInfrastructure)_coreBuilder).WithSubscriptionFactory(() =>
         {
             var eventStoreClient = _eventStoreOptions.GetOrCreateEventStoreClient();
-            var subscriber = new EventStoreAllEventsStreamSubscriber(eventStoreClient);
+            var subscribable = new EventStoreAllEventsStreamSubscribable(eventStoreClient);
             var eventAdapter = new EventStoreEventAdapter(_eventStoreOptions.GetEventDataSerializer());
 
             var consumers = ((IEventStreamConsumerBuilderInfrastructure<ResolvedEvent, Position>)consumersBuilder)
                 .Build(eventAdapter);
 
-            return new EventStreamSubscription<ResolvedEvent, Position>(subscriber, consumers);
+            return new EventStreamSubscription<ResolvedEvent, Position>(subscribable, consumers);
         });
 
         return consumersBuilder;

@@ -7,26 +7,23 @@ using SqlStreamStoreSubscriptionDroppedReason =
 
 namespace DomainBlocks.SqlStreamStore.Subscriptions;
 
-public sealed class SqlStreamStoreAllEventsStreamSubscriber : IEventStreamSubscriber<StreamMessage, long>
+public sealed class SqlStreamStoreAllEventsStreamSubscribable : IEventStreamSubscribable<StreamMessage, long>
 {
     private readonly IStreamStore _streamStore;
     private readonly int _readPageSize;
 
-    public SqlStreamStoreAllEventsStreamSubscriber(IStreamStore streamStore, int readPageSize = 600)
+    public SqlStreamStoreAllEventsStreamSubscribable(IStreamStore streamStore, int readPageSize = 600)
     {
         _streamStore = streamStore;
         _readPageSize = readPageSize;
     }
 
     public async Task<IDisposable> Subscribe(
-        long? fromPositionExclusive,
-        Func<CancellationToken, Task> onCatchingUp,
-        Func<StreamMessage, long, CancellationToken, Task> onEvent,
-        Func<CancellationToken, Task> onLive,
-        Func<SubscriptionDroppedReason, Exception?, CancellationToken, Task> onSubscriptionDropped,
-        CancellationToken cancellationToken)
+        IEventStreamSubscriber<StreamMessage, long> subscriber,
+        long? fromPositionExclusive = null,
+        CancellationToken cancellationToken = default)
     {
-        await onCatchingUp(cancellationToken);
+        await subscriber.OnCatchingUp(cancellationToken);
 
         var catchUpPosition = fromPositionExclusive ?? Position.Start;
         var subscribePosition = fromPositionExclusive;
@@ -39,24 +36,24 @@ public sealed class SqlStreamStoreAllEventsStreamSubscriber : IEventStreamSubscr
 
             await foreach (var @event in historicEvents.WithCancellation(cancellationToken))
             {
-                await onEvent(@event, @event.Position, cancellationToken);
+                await subscriber.OnEvent(@event, @event.Position, cancellationToken);
                 subscribePosition = @event.Position;
             }
         }
 
         var subscription = _streamStore.SubscribeToAll(
             subscribePosition,
-            (_, e, ct) => onEvent(e, e.Position, ct),
+            (_, e, ct) => subscriber.OnEvent(e, e.Position, ct),
             (_, r, ex) =>
             {
                 var reason = GetSubscriptionDroppedReason(r);
                 var task = Task.Run(
-                    () => onSubscriptionDropped(reason, ex, cancellationToken), cancellationToken);
+                    () => subscriber.OnSubscriptionDropped(reason, ex, cancellationToken), cancellationToken);
                 task.Wait(cancellationToken);
             },
             prefetchJsonData: false);
 
-        await onLive(cancellationToken);
+        await subscriber.OnLive(cancellationToken);
 
         return subscription;
     }

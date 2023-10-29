@@ -2,70 +2,54 @@ using DomainBlocks.Core.Subscriptions.Concurrency;
 
 namespace DomainBlocks.Core.Subscriptions;
 
-public partial class EventStreamSubscription<TEvent, TPosition> : IEventStreamSubscription
+public sealed class EventStreamSubscription<TEvent, TPosition> :
+    IEventStreamSubscription,
+    IEventStreamSubscriber<TEvent, TPosition>
     where TPosition : struct, IComparable<TPosition>
 {
-    private const int DefaultNotificationQueueSize = 1;
-
-    private readonly IEventStreamSubscriber<TEvent, TPosition> _subscriber;
-    private readonly ConsumerSessionGroup _sessions;
-    private readonly ArenaQueue<Notification> _queue = new(DefaultNotificationQueueSize);
-
+    private readonly ArenaQueue<QueueNotification<TEvent, TPosition>> _queue;
+    private readonly IEventStreamSubscribable<TEvent, TPosition> _subscribable;
+    private readonly IReadOnlyDictionary<Guid, EventStreamConsumerSession<TEvent, TPosition>> _sessions;
     private CancellationTokenSource? _cancellationTokenSource;
     private Task? _eventLoopTask;
     private IDisposable? _subscription;
 
     public EventStreamSubscription(
-        IEventStreamSubscriber<TEvent, TPosition> subscriber,
-        IEnumerable<IEventStreamConsumer<TEvent, TPosition>> consumers)
+        IEventStreamSubscribable<TEvent, TPosition> subscribable,
+        IEnumerable<IEventStreamConsumer<TEvent, TPosition>> consumers,
+        int queueSize = 1)
     {
-        _subscriber = subscriber;
-        _sessions = new ConsumerSessionGroup(consumers, _queue);
+        _queue = new ArenaQueue<QueueNotification<TEvent, TPosition>>(queueSize);
+        _subscribable = subscribable;
+
+        _sessions = consumers
+            .Select(x => new EventStreamConsumerSession<TEvent, TPosition>(x, _queue))
+            .ToDictionary(x => x.Id);
     }
 
     public void Dispose()
     {
-        if (_cancellationTokenSource is { IsCancellationRequested: false })
+        _cancellationTokenSource?.Cancel();
+
+        foreach (var session in _sessions.Values)
         {
-            _cancellationTokenSource.Cancel();
+            session.Dispose();
         }
 
-        // TODO: Potential race condition here?
         _subscription?.Dispose();
     }
 
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
         _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _cancellationTokenSource.Token.Register(Dispose);
 
-        var startPosition = await _sessions.NotifyStarting(cancellationToken);
+        var startPosition = await NotifyStarting(_cancellationTokenSource.Token);
+        _eventLoopTask = RunEventLoop(_cancellationTokenSource.Token);
+        var subscribeTask = _subscribable.Subscribe(this, startPosition, _cancellationTokenSource.Token);
 
-        _eventLoopTask = RunEventLoop();
-
-        var subscribeTask = _subscriber.Subscribe(
-            startPosition,
-            ct => _queue.WriteAsync(x => x.SetCatchingUp(), ct),
-            (e, pos, ct) => _queue.WriteAsync(x => x.SetEvent(e, pos), ct),
-            ct => _queue.WriteAsync(x => x.SetLive(), ct),
-            (reason, ex, ct) => _queue.WriteAsync(x => x.SetSubscriptionDropped(reason, ex), ct),
-            _cancellationTokenSource.Token);
-
-        // We wait for either the event loop or subscription to complete here, in case there is an error on the event
-        // loop while catching up, causing it to terminate early.
         var task = await Task.WhenAny(_eventLoopTask, subscribeTask);
         await task;
         _subscription = await subscribeTask;
-
-        return;
-
-        async Task RunEventLoop()
-        {
-            await foreach (var notification in _queue.ReadAllAsync(_cancellationTokenSource.Token))
-            {
-                await HandleNotification(notification, _cancellationTokenSource.Token);
-            }
-        }
     }
 
     public Task WaitForCompletedAsync(CancellationToken cancellationToken = default)
@@ -78,33 +62,116 @@ public partial class EventStreamSubscription<TEvent, TPosition> : IEventStreamSu
         return _eventLoopTask.WaitAsync(cancellationToken);
     }
 
-    private async Task HandleNotification(Notification notification, CancellationToken cancellationToken)
+    private async Task<TPosition?> NotifyStarting(CancellationToken cancellationToken)
+    {
+        var tasks = _sessions.Values.Select(x => x.NotifyStarting(cancellationToken));
+        var startPositions = await Task.WhenAll(tasks);
+        return startPositions.Min();
+    }
+
+    private async Task RunEventLoop(CancellationToken cancellationToken)
+    {
+        await foreach (var notification in _queue.ReadAllAsync(cancellationToken))
+        {
+            await HandleNotification(notification, cancellationToken);
+        }
+    }
+
+    private async Task HandleNotification(
+        QueueNotification<TEvent, TPosition> notification, CancellationToken cancellationToken)
     {
         switch (notification.NotificationType)
         {
-            case NotificationType.CatchingUp:
-                await _sessions.NotifyCatchingUp(cancellationToken);
+            case QueueNotificationType.CatchingUp:
+                await NotifyCatchingUp(cancellationToken);
                 break;
-            case NotificationType.Event:
+            case QueueNotificationType.Event:
                 var @event = notification.Event!;
                 var position = notification.Position!.Value;
-                await _sessions.NotifyEvent(@event, position, cancellationToken);
+                await NotifyEvent(@event, position, cancellationToken);
                 break;
-            case NotificationType.Live:
-                await _sessions.NotifyLive(cancellationToken);
+            case QueueNotificationType.Live:
+                await NotifyLive(cancellationToken);
                 break;
-            case NotificationType.SubscriptionDropped:
+            case QueueNotificationType.SubscriptionDropped:
                 var reason = notification.SubscriptionDroppedReason!.Value;
                 var exception = notification.Exception;
-                await _sessions.NotifySubscriptionDropped(reason, exception, cancellationToken);
+                await NotifySubscriptionDropped(reason, exception, cancellationToken);
                 break;
-            case NotificationType.CheckpointTimerElapsed:
+            case QueueNotificationType.CheckpointTimerElapsed:
                 var consumerSessionId = notification.ConsumerSessionId!.Value;
-                await _sessions.NotifyCheckpointTimerElapsed(consumerSessionId, cancellationToken);
+                await NotifyCheckpointTimerElapsed(consumerSessionId, cancellationToken);
                 break;
             default:
                 throw new ArgumentOutOfRangeException(
                     nameof(notification), $"Unknown notification type {notification.NotificationType}");
         }
+    }
+
+    private async Task NotifyCatchingUp(CancellationToken cancellationToken)
+    {
+        var tasks = _sessions.Values.Select(x => x.NotifyCatchingUp(cancellationToken));
+        await Task.WhenAll(tasks);
+
+        foreach (var session in _sessions.Values)
+        {
+            session.ResetCheckpointTimer();
+        }
+    }
+
+    private Task NotifyEvent(TEvent @event, TPosition position, CancellationToken cancellationToken)
+    {
+        var tasks = _sessions.Values.Select(x => x.NotifyEvent(@event, position, cancellationToken));
+        return Task.WhenAll(tasks);
+    }
+
+    private async Task NotifyLive(CancellationToken cancellationToken)
+    {
+        var notifyCheckpointTasks = _sessions.Values.Select(x => x.NotifyCheckpoint(cancellationToken));
+        await Task.WhenAll(notifyCheckpointTasks);
+
+        var notifyLiveTasks = _sessions.Values.Select(x => x.NotifyLive(cancellationToken));
+        await Task.WhenAll(notifyLiveTasks);
+
+        foreach (var session in _sessions.Values)
+        {
+            session.ResetCheckpointTimer();
+        }
+    }
+
+    private Task NotifySubscriptionDropped(
+        SubscriptionDroppedReason reason, Exception? exception, CancellationToken cancellationToken)
+    {
+        var tasks = _sessions.Values.Select(x => x.NotifySubscriptionDropped(reason, exception, cancellationToken));
+        return Task.WhenAll(tasks);
+    }
+
+    private async Task NotifyCheckpointTimerElapsed(Guid sessionId, CancellationToken cancellationToken)
+    {
+        var session = _sessions[sessionId];
+        await session.NotifyCheckpoint(cancellationToken);
+        session.ResetCheckpointTimer();
+    }
+
+    // IEventStreamSubscriber members
+    public Task OnCatchingUp(CancellationToken cancellationToken)
+    {
+        return _queue.WriteAsync(x => x.SetCatchingUp(), cancellationToken);
+    }
+
+    public Task OnEvent(TEvent @event, TPosition position, CancellationToken cancellationToken)
+    {
+        return _queue.WriteAsync(x => x.SetEvent(@event, position), cancellationToken);
+    }
+
+    public Task OnLive(CancellationToken cancellationToken)
+    {
+        return _queue.WriteAsync(x => x.SetLive(), cancellationToken);
+    }
+
+    public Task OnSubscriptionDropped(
+        SubscriptionDroppedReason reason, Exception? exception, CancellationToken cancellationToken)
+    {
+        return _queue.WriteAsync(x => x.SetSubscriptionDropped(reason, exception), cancellationToken);
     }
 }

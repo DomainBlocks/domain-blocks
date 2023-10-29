@@ -8,20 +8,31 @@ namespace DomainBlocks.Core.Tests.Subscriptions;
 [Timeout(1000)]
 public class EventStreamSubscriptionTests
 {
-    private TestableEventStreamSubscriber<string, int> _subscriber = null!;
+    private Mock<IEventStreamSubscribable<string, int>> _mockSubscribable = null!;
     private Mock<IEventStreamConsumer<string, int>> _mockConsumer = null!;
     private EventStreamSubscription<string, int> _subscription = null!;
+    private IEventStreamSubscriber<string, int> _subscriber = null!;
+    private TaskCompletionSource<IDisposable> _subscribeTaskCompletionSource = null!;
 
     [SetUp]
     public void SetUp()
     {
-        _subscriber = new TestableEventStreamSubscriber<string, int>();
+        _mockSubscribable = new Mock<IEventStreamSubscribable<string, int>>();
 
         _mockConsumer = new Mock<IEventStreamConsumer<string, int>>();
         _mockConsumer.Setup(x => x.CatchUpCheckpointFrequency).Returns(CheckpointFrequency.Default);
         _mockConsumer.Setup(x => x.LiveCheckpointFrequency).Returns(CheckpointFrequency.Default);
 
-        _subscription = new EventStreamSubscription<string, int>(_subscriber, new[] { _mockConsumer.Object });
+        _subscription =
+            new EventStreamSubscription<string, int>(_mockSubscribable.Object, new[] { _mockConsumer.Object });
+
+        _subscriber = _subscription;
+
+        _subscribeTaskCompletionSource = new TaskCompletionSource<IDisposable>();
+
+        _mockSubscribable
+            .Setup(x => x.Subscribe(_subscriber, It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .Returns(_subscribeTaskCompletionSource.Task);
     }
 
     [Test]
@@ -34,8 +45,8 @@ public class EventStreamSubscriptionTests
             .Callback(() => signal.SetResult());
 
         var startTask = _subscription.StartAsync();
-        await _subscriber.InvokeOnCatchingUp();
-        _subscriber.CompleteSubscribing();
+        await _subscriber.OnCatchingUp(CancellationToken.None);
+        CompleteSubscribing();
         await startTask;
         await signal.Task;
 
@@ -53,8 +64,8 @@ public class EventStreamSubscriptionTests
             .Callback(() => signal.SetResult());
 
         var startTask = _subscription.StartAsync();
-        await _subscriber.InvokeOnEvent("event1", 0);
-        _subscriber.CompleteSubscribing();
+        await _subscriber.OnEvent("event1", 0, CancellationToken.None);
+        CompleteSubscribing();
         await startTask;
         await signal.Task;
 
@@ -71,8 +82,8 @@ public class EventStreamSubscriptionTests
             .Callback(() => signal.SetResult());
 
         var startTask = _subscription.StartAsync();
-        await _subscriber.InvokeOnLive();
-        _subscriber.CompleteSubscribing();
+        await _subscriber.OnLive(CancellationToken.None);
+        CompleteSubscribing();
         await startTask;
         await signal.Task;
 
@@ -94,7 +105,7 @@ public class EventStreamSubscriptionTests
             .ReturnsAsync(EventErrorResolution.Abort);
 
         var startTask = _subscription.StartAsync();
-        await _subscriber.InvokeOnEvent("event1", 0);
+        await _subscriber.OnEvent("event1", 0, CancellationToken.None);
 
         Assert.ThrowsAsync<Exception>(() => startTask, exception.Message);
     }
@@ -126,12 +137,12 @@ public class EventStreamSubscriptionTests
             .ReturnsAsync(EventErrorResolution.Skip);
 
         var startTask = _subscription.StartAsync();
-        await _subscriber.InvokeOnEvent("event1", 0);
+        await _subscriber.OnEvent("event1", 0, CancellationToken.None);
 
         // Check we can handle a second event after skipping the error.
-        await _subscriber.InvokeOnEvent("event2", 1);
+        await _subscriber.OnEvent("event2", 1, CancellationToken.None);
 
-        _subscriber.CompleteSubscribing();
+        CompleteSubscribing();
         await startTask;
         await signal.Task;
 
@@ -165,8 +176,8 @@ public class EventStreamSubscriptionTests
             .ReturnsAsync(EventErrorResolution.Retry);
 
         var startTask = _subscription.StartAsync();
-        await _subscriber.InvokeOnEvent("event1", 0);
-        _subscriber.CompleteSubscribing();
+        await _subscriber.OnEvent("event1", 0, CancellationToken.None);
+        CompleteSubscribing();
         await startTask;
         await signal.Task;
 
@@ -186,18 +197,23 @@ public class EventStreamSubscriptionTests
         mockConsumer2.Setup(x => x.OnStarting(It.IsAny<CancellationToken>())).ReturnsAsync(startPosition2);
 
         var subscription = new EventStreamSubscription<string, int>(
-            _subscriber, new[] { mockConsumer1.Object, mockConsumer2.Object });
+            _mockSubscribable.Object, new[] { mockConsumer1.Object, mockConsumer2.Object });
 
         var startTask = subscription.StartAsync();
-        _subscriber.CompleteSubscribing();
+        CompleteSubscribing();
         await startTask;
 
-        Assert.That(_subscriber.StartPosition, Is.EqualTo(startPosition1));
+        _mockSubscribable.Verify(x => x.Subscribe(subscription, startPosition1, It.IsAny<CancellationToken>()));
     }
 
     [Test]
     public void EventBeforeSubscriberStartPositionIsIgnored()
     {
         // TODO (DS, CF): fix everything
+    }
+
+    private void CompleteSubscribing()
+    {
+        _subscribeTaskCompletionSource.SetResult(new Mock<IDisposable>().Object);
     }
 }

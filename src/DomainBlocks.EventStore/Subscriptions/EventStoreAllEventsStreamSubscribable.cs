@@ -5,12 +5,12 @@ using SubscriptionDroppedReason = DomainBlocks.Core.Subscriptions.SubscriptionDr
 
 namespace DomainBlocks.EventStore.Subscriptions;
 
-public sealed class EventStoreAllEventsStreamSubscriber : IEventStreamSubscriber<ResolvedEvent, Position>
+public sealed class EventStoreAllEventsStreamSubscribable : IEventStreamSubscribable<ResolvedEvent, Position>
 {
     private readonly EventStoreClient _eventStoreClient;
     private readonly UserCredentials _userCredentials;
 
-    public EventStoreAllEventsStreamSubscriber(
+    public EventStoreAllEventsStreamSubscribable(
         EventStoreClient eventStoreClient, UserCredentials? userCredentials = null)
     {
         _eventStoreClient = eventStoreClient;
@@ -18,14 +18,11 @@ public sealed class EventStoreAllEventsStreamSubscriber : IEventStreamSubscriber
     }
 
     public async Task<IDisposable> Subscribe(
-        Position? fromPositionExclusive,
-        Func<CancellationToken, Task> onCatchingUp,
-        Func<ResolvedEvent, Position, CancellationToken, Task> onEvent,
-        Func<CancellationToken, Task> onLive,
-        Func<SubscriptionDroppedReason, Exception?, CancellationToken, Task> onSubscriptionDropped,
-        CancellationToken cancellationToken)
+        IEventStreamSubscriber<ResolvedEvent, Position> subscriber,
+        Position? fromPositionExclusive = null,
+        CancellationToken cancellationToken = default)
     {
-        await onCatchingUp(cancellationToken);
+        await subscriber.OnCatchingUp(cancellationToken);
 
         var position = fromPositionExclusive ?? Position.Start;
 
@@ -37,7 +34,7 @@ public sealed class EventStoreAllEventsStreamSubscriber : IEventStreamSubscriber
 
             await foreach (var @event in historicEvents.WithCancellation(cancellationToken))
             {
-                await onEvent(@event, @event.Event.Position, cancellationToken);
+                await subscriber.OnEvent(@event, @event.Event.Position, cancellationToken);
                 position = @event.Event.Position;
             }
         }
@@ -46,19 +43,19 @@ public sealed class EventStoreAllEventsStreamSubscriber : IEventStreamSubscriber
 
         var subscription = await _eventStoreClient.SubscribeToAllAsync(
             position,
-            (_, e, ct) => onEvent(e, e.Event.Position, ct),
+            (_, e, ct) => subscriber.OnEvent(e, e.Event.Position, ct),
             subscriptionDropped: (_, r, ex) =>
             {
                 var reason = GetSubscriptionDroppedReason(r);
                 var task = Task.Run(
-                    () => onSubscriptionDropped(reason, ex, cancellationToken), cancellationToken);
+                    () => subscriber.OnSubscriptionDropped(reason, ex, cancellationToken), cancellationToken);
                 task.Wait(cancellationToken);
             },
             filterOptions: filter,
             userCredentials: _userCredentials,
             cancellationToken: cancellationToken);
 
-        await onLive(cancellationToken);
+        await subscriber.OnLive(cancellationToken);
 
         return subscription;
     }
