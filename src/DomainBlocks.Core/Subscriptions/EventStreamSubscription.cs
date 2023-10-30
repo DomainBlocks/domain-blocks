@@ -154,22 +154,23 @@ public sealed class EventStreamSubscription<TEvent, TPosition> :
     }
 
     // IEventStreamSubscriber members
-    public Task OnCatchingUp(CancellationToken cancellationToken)
+    Task IEventStreamSubscriber<TEvent, TPosition>.OnCatchingUp(CancellationToken cancellationToken)
     {
         return _queue.WriteAsync(x => x.SetCatchingUp(), cancellationToken);
     }
 
-    public Task OnEvent(TEvent @event, TPosition position, CancellationToken cancellationToken)
+    Task IEventStreamSubscriber<TEvent, TPosition>.OnEvent(
+        TEvent @event, TPosition position, CancellationToken cancellationToken)
     {
         return _queue.WriteAsync(x => x.SetEvent(@event, position), cancellationToken);
     }
 
-    public Task OnLive(CancellationToken cancellationToken)
+    Task IEventStreamSubscriber<TEvent, TPosition>.OnLive(CancellationToken cancellationToken)
     {
         return _queue.WriteAsync(x => x.SetLive(), cancellationToken);
     }
 
-    public Task OnSubscriptionDropped(
+    Task IEventStreamSubscriber<TEvent, TPosition>.OnSubscriptionDropped(
         SubscriptionDroppedReason reason, Exception? exception, CancellationToken cancellationToken)
     {
         return _queue.WriteAsync(x => x.SetSubscriptionDropped(reason, exception), cancellationToken);
