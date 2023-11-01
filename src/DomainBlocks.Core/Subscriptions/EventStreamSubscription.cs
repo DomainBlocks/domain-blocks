@@ -17,14 +17,23 @@ public sealed class EventStreamSubscription<TEvent, TPosition> :
     public EventStreamSubscription(
         IEventStream<TEvent, TPosition> eventStream,
         IEnumerable<IEventStreamConsumer<TEvent, TPosition>> consumers,
-        int queueSize = 1)
+        int queueSize = 1) :
+        this(eventStream, consumers, new ArenaQueue<QueueNotification<TEvent, TPosition>>(queueSize))
     {
-        _queue = new ArenaQueue<QueueNotification<TEvent, TPosition>>(queueSize);
+    }
+
+    internal EventStreamSubscription(
+        IEventStream<TEvent, TPosition> eventStream,
+        IEnumerable<IEventStreamConsumer<TEvent, TPosition>> consumers,
+        ArenaQueue<QueueNotification<TEvent, TPosition>> queue)
+    {
         _eventStream = eventStream;
 
         _sessions = consumers
-            .Select(x => new EventStreamConsumerSession<TEvent, TPosition>(x, _queue))
+            .Select(x => new EventStreamConsumerSession<TEvent, TPosition>(x, queue))
             .ToDictionary(x => x.Id);
+
+        _queue = queue;
     }
 
     public void Dispose()

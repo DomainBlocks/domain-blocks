@@ -1,4 +1,5 @@
 ﻿using DomainBlocks.Core.Subscriptions;
+using DomainBlocks.Core.Subscriptions.Concurrency;
 using Moq;
 using NUnit.Framework;
 
@@ -10,6 +11,7 @@ public class EventStreamSubscriptionTests
 {
     private Mock<IEventStream<string, int>> _mockEventStream = null!;
     private Mock<IEventStreamConsumer<string, int>> _mockConsumer = null!;
+    private ArenaQueue<QueueNotification<string, int>> _queue = null!;
     private EventStreamSubscription<string, int> _subscription = null!;
     private IEventStreamSubscriber<string, int> _subscriber = null!;
     private TaskCompletionSource<IDisposable> _subscribeTaskCompletionSource = null!;
@@ -23,8 +25,10 @@ public class EventStreamSubscriptionTests
         _mockConsumer.Setup(x => x.CatchUpCheckpointFrequency).Returns(CheckpointFrequency.Default);
         _mockConsumer.Setup(x => x.LiveCheckpointFrequency).Returns(CheckpointFrequency.Default);
 
+        _queue = new ArenaQueue<QueueNotification<string, int>>(1);
+
         _subscription =
-            new EventStreamSubscription<string, int>(_mockEventStream.Object, new[] { _mockConsumer.Object });
+            new EventStreamSubscription<string, int>(_mockEventStream.Object, new[] { _mockConsumer.Object }, _queue);
 
         _subscriber = _subscription;
 
@@ -207,9 +211,29 @@ public class EventStreamSubscriptionTests
     }
 
     [Test]
-    public void EventBeforeSubscriberStartPositionIsIgnored()
+    public async Task EventBeforeSubscriberStartPositionIsIgnored()
     {
-        // TODO (DS, CF): fix everything
+        const int startPosition = 1;
+
+        _mockConsumer.Setup(x => x.OnStarting(It.IsAny<CancellationToken>())).ReturnsAsync(startPosition);
+
+        var startTask = _subscription.StartAsync();
+
+        await _subscriber.OnCatchingUp(CancellationToken.None);
+        await _subscriber.OnEvent("event1", 0, CancellationToken.None);
+        await _subscriber.OnEvent("event2", 1, CancellationToken.None);
+        await _subscriber.OnEvent("event3", 2, CancellationToken.None);
+        await _subscriber.OnLive(CancellationToken.None);
+
+        CompleteSubscribing();
+        await startTask;
+
+        _queue.Complete();
+        await _subscription.WaitForCompletedAsync();
+
+        _mockConsumer.Verify(x => x.OnEvent("event1", 0, It.IsAny<CancellationToken>()), Times.Never);
+        _mockConsumer.Verify(x => x.OnEvent("event2", 1, It.IsAny<CancellationToken>()), Times.Never);
+        _mockConsumer.Verify(x => x.OnEvent("event3", 2, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     private void CompleteSubscribing()

@@ -42,4 +42,9 @@ internal class ArenaQueue<T> where T : class, new()
             }
         }
     }
+
+    public void Complete()
+    {
+        _fullChannel.Writer.Complete();
+    }
 }
