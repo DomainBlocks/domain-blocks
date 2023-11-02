@@ -1,3 +1,4 @@
+using DomainBlocks.Core.Subscriptions;
 using DomainBlocks.Core.Subscriptions.Builders;
 using DomainBlocks.ThirdParty.SqlStreamStore.Streams;
 using DomainBlocks.SqlStreamStore.Serialization;
@@ -17,25 +18,26 @@ public class SqlStreamStoreSubscriptionBuilder
         _streamStoreOptions = streamStoreOptions;
     }
 
-    public EventStreamSubscriberBuilder<StreamMessage, long> FromAllEventsStream()
+    public EventStreamConsumersBuilder<StreamMessage, long> FromAllEventsStream()
     {
-        var subscribersBuilder = new EventStreamSubscriberBuilder<StreamMessage, long>(_coreBuilder);
+        var consumersBuilder = new EventStreamConsumersBuilder<StreamMessage, long>(_coreBuilder);
 
         ((IEventStreamSubscriptionBuilderInfrastructure)_coreBuilder).WithSubscriptionFactory(() =>
         {
             var streamStore = _streamStoreOptions.GetOrCreateStreamStore();
+            var eventStream = new SqlStreamStoreAllEventsStream(streamStore);
             var eventAdapter = new SqlStreamStoreEventAdapter(_streamStoreOptions.GetEventDataSerializer());
 
-            var subscriber = ((IEventStreamSubscriberBuilderInfrastructure<StreamMessage, long>)subscribersBuilder)
+            var consumers = ((IEventStreamConsumerBuilderInfrastructure<StreamMessage, long>)consumersBuilder)
                 .Build(eventAdapter);
 
-            return new SqlStreamStoreAllEventsStreamSubscription(subscriber, streamStore);
+            return new EventStreamSubscription<StreamMessage, long>(eventStream, consumers);
         });
 
-        return subscribersBuilder;
+        return consumersBuilder;
     }
 
-    public EventStreamSubscriberBuilder<StreamMessage, int> FromEventStream(string streamName)
+    public EventStreamConsumersBuilder<StreamMessage, int> FromEventStream(string streamName)
     {
         throw new NotImplementedException();
     }

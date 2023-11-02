@@ -1,7 +1,7 @@
 namespace DomainBlocks.Core.Projections.Experimental;
 
 /// <summary>
-/// Specifies the lifetime of state for a <see cref="StateProjectionSubscriber{TRawEvent,TPosition,TState}"/>.
+/// Specifies the lifetime of state for a <see cref="StateProjection{TRawEvent,TPosition,TState}"/>.
 /// </summary>
 public enum ProjectionStateLifetime
 {

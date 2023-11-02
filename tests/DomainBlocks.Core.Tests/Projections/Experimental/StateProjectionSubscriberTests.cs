@@ -37,13 +37,13 @@ public class StateProjectionSubscriberTests
             .WithOnEvent<Event1>((_, _) => { })
             .MapMissingEventTypesWithDefaultNames();
 
-        var subscriber = new StateProjectionSubscriber<string, int, object>(options, mockEventAdapter.Object);
+        var projection = new StateProjection<string, int, object>(options, mockEventAdapter.Object);
 
-        await subscriber.OnStarting(CancellationToken.None);
-        await subscriber.OnCatchingUp(CancellationToken.None);
-        await subscriber.OnEvent(event1, 0, CancellationToken.None);
-        await subscriber.OnCheckpoint(0, CancellationToken.None);
-        await subscriber.OnLive(CancellationToken.None);
+        await projection.OnStarting(CancellationToken.None);
+        await projection.OnCatchingUp(CancellationToken.None);
+        await projection.OnEvent(event1, 0, CancellationToken.None);
+        await projection.OnCheckpoint(0, CancellationToken.None);
+        await projection.OnLive(CancellationToken.None);
 
         Assert.That(lastPosition, Is.EqualTo(0));
     }

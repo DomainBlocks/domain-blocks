@@ -1,4 +1,5 @@
 ﻿using DomainBlocks.Core.Projections.Experimental.Builders;
+using DomainBlocks.Core.Subscriptions;
 using DomainBlocks.Core.Subscriptions.Builders;
 using DomainBlocks.EventStore.Subscriptions;
 using DomainBlocks.SqlStreamStore.Postgres;
@@ -13,8 +14,8 @@ internal static class Program
     public static async Task Main(string[] args)
     {
         //await TestLogicalReplication(args);
-        await TestSqlStreamStoreAllEventsStreamSubscription();
-        //await TestEventStoreAllEventsStreamSubscription();
+        //await TestSqlStreamStoreAllEventsStreamSubscription();
+        await TestEventStoreAllEventsStreamSubscription();
     }
 
     // See https://github.com/oskardudycz/PostgresOutboxPatternWithCDC.NET
@@ -38,7 +39,7 @@ internal static class Program
             "Server=localhost;Port=5433;Database=shopping;User Id=postgres;Password=postgres;";
 
         var subscription = new EventStreamSubscriptionBuilder()
-            .UseSqlStreamStore(x => x.UsePostgresStreamStore(connectionString))
+            .UseSqlStreamStore(x => x.UsePostgresStreamStore(connectionString, true))
             .FromAllEventsStream()
             .ProjectTo()
             .State(status =>
@@ -89,7 +90,7 @@ internal static class Program
                 Console.WriteLine("State created: {0}", status);
                 return new object();
             })
-            .WithCheckpoints(x => x.PerEventCount(1))
+            .WithCheckpoints(x => x.PerEventCount(2).Or().PerTimeInterval(TimeSpan.FromSeconds(5)))
             .OnStarting((_, _) =>
             {
                 Console.WriteLine("OnStarting");
@@ -109,6 +110,11 @@ internal static class Program
             {
                 Console.WriteLine("OnLive");
                 return Task.CompletedTask;
+            })
+            .OnEventError((error, state, ct) =>
+            {
+                Console.Error.WriteLine($"OnEventError: {error.Exception.Message}");
+                return Task.FromResult(EventErrorResolution.Skip);
             })
             .When<TestEvent>((_, _) => Console.WriteLine("TestEvent"))
             .Build();

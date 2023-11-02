@@ -5,25 +5,24 @@ using SubscriptionDroppedReason = DomainBlocks.Core.Subscriptions.SubscriptionDr
 
 namespace DomainBlocks.EventStore.Subscriptions;
 
-public sealed class EventStoreAllEventsStreamSubscription : EventStreamSubscriptionBase<ResolvedEvent, Position>
+public sealed class EventStoreAllEventsStream : IEventStream<ResolvedEvent, Position>
 {
+    private static readonly UserCredentials DefaultUserCredentials = new("admin", "changeit");
     private readonly EventStoreClient _eventStoreClient;
     private readonly UserCredentials _userCredentials;
 
-    public EventStoreAllEventsStreamSubscription(
-        IEventStreamSubscriber<ResolvedEvent, Position> subscriber,
-        EventStoreClient eventStoreClient,
-        UserCredentials? userCredentials = null) : base(subscriber)
+    public EventStoreAllEventsStream(EventStoreClient eventStoreClient, UserCredentials? userCredentials = null)
     {
         _eventStoreClient = eventStoreClient;
-        _userCredentials = userCredentials ?? new UserCredentials("admin", "changeit");
+        _userCredentials = userCredentials ?? DefaultUserCredentials;
     }
 
-    protected override async Task<IDisposable> Subscribe(
-        Position? fromPositionExclusive,
-        CancellationToken cancellationToken)
+    public async Task<IDisposable> Subscribe(
+        IEventStreamSubscriber<ResolvedEvent, Position> subscriber,
+        Position? fromPositionExclusive = null,
+        CancellationToken cancellationToken = default)
     {
-        await NotifyCatchingUp();
+        await subscriber.OnCatchingUp(cancellationToken);
 
         var position = fromPositionExclusive ?? Position.Start;
 
@@ -35,7 +34,7 @@ public sealed class EventStoreAllEventsStreamSubscription : EventStreamSubscript
 
             await foreach (var @event in historicEvents.WithCancellation(cancellationToken))
             {
-                await NotifyEvent(@event, @event.Event.Position, cancellationToken);
+                await subscriber.OnEvent(@event, @event.Event.Position, cancellationToken);
                 position = @event.Event.Position;
             }
         }
@@ -44,17 +43,19 @@ public sealed class EventStoreAllEventsStreamSubscription : EventStreamSubscript
 
         var subscription = await _eventStoreClient.SubscribeToAllAsync(
             position,
-            (_, e, ct) => NotifyEvent(e, e.Event.Position, ct),
+            (_, e, ct) => subscriber.OnEvent(e, e.Event.Position, ct),
             subscriptionDropped: (_, r, ex) =>
             {
                 var reason = GetSubscriptionDroppedReason(r);
-                NotifySubscriptionDropped(reason, ex);
+                var task = Task.Run(
+                    () => subscriber.OnSubscriptionDropped(reason, ex, cancellationToken), cancellationToken);
+                task.Wait(cancellationToken);
             },
             filterOptions: filter,
             userCredentials: _userCredentials,
             cancellationToken: cancellationToken);
 
-        await NotifyLive();
+        await subscriber.OnLive(cancellationToken);
 
         return subscription;
     }

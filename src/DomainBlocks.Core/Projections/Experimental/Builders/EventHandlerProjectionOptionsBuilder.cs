@@ -5,16 +5,16 @@ using DomainBlocks.Core.Subscriptions.Builders;
 namespace DomainBlocks.Core.Projections.Experimental.Builders;
 
 public sealed class EventHandlerProjectionOptionsBuilder<TRawEvent, TPosition> :
-    IEventStreamSubscriberBuilder<TRawEvent, TPosition>
+    IEventStreamConsumerBuilder<TRawEvent, TPosition>
     where TPosition : struct, IEquatable<TPosition>, IComparable<TPosition>
 {
-    private readonly EventStreamSubscriberBuilder<TRawEvent, TPosition> _subscriberBuilder;
+    private readonly EventStreamConsumersBuilder<TRawEvent, TPosition> _consumersBuilder;
     private EventHandlerProjectionOptions<TRawEvent, TPosition> _options = new();
 
     internal EventHandlerProjectionOptionsBuilder(
-        EventStreamSubscriberBuilder<TRawEvent, TPosition> subscriberBuilder)
+        EventStreamConsumersBuilder<TRawEvent, TPosition> consumersBuilder)
     {
-        _subscriberBuilder = subscriberBuilder;
+        _consumersBuilder = consumersBuilder;
     }
 
     public EventHandlerProjectionOptionsBuilder<TRawEvent, TPosition> WithCheckpoints(
@@ -124,17 +124,17 @@ public sealed class EventHandlerProjectionOptionsBuilder<TRawEvent, TPosition> :
         return this;
     }
 
-    public EventStreamSubscriberBuilder<TRawEvent, TPosition> And()
+    public EventStreamConsumersBuilder<TRawEvent, TPosition> And()
     {
-        return _subscriberBuilder;
+        return _consumersBuilder;
     }
 
-    public IEventStreamSubscription Build() => _subscriberBuilder.CoreBuilder.Build();
+    public IEventStreamSubscription Build() => _consumersBuilder.CoreBuilder.Build();
 
-    IEventStreamSubscriber<TRawEvent, TPosition> IEventStreamSubscriberBuilder<TRawEvent, TPosition>.Build(
+    IEventStreamConsumer<TRawEvent, TPosition> IEventStreamConsumerBuilder<TRawEvent, TPosition>.Build(
         IReadEventAdapter<TRawEvent> readEventAdapter)
     {
         var options = _options.MapMissingEventTypesWithDefaultNames();
-        return new EventHandlerProjectionSubscriber<TRawEvent, TPosition>(options, readEventAdapter);
+        return new EventHandlerProjection<TRawEvent, TPosition>(options, readEventAdapter);
     }
 }

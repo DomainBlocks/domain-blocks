@@ -5,18 +5,18 @@ using DomainBlocks.Core.Subscriptions.Builders;
 namespace DomainBlocks.Core.Projections.Experimental.Builders;
 
 public sealed class StateProjectionOptionsBuilder<TRawEvent, TPosition, TState> :
-    IEventStreamSubscriberBuilder<TRawEvent, TPosition>
+    IEventStreamConsumerBuilder<TRawEvent, TPosition>
     where TPosition : struct, IEquatable<TPosition>, IComparable<TPosition>
     where TState : class
 {
-    private readonly EventStreamSubscriberBuilder<TRawEvent, TPosition> _subscriberBuilder;
+    private readonly EventStreamConsumersBuilder<TRawEvent, TPosition> _consumersBuilder;
     private StateProjectionOptions<TRawEvent, TPosition, TState> _options;
 
     internal StateProjectionOptionsBuilder(
-        EventStreamSubscriberBuilder<TRawEvent, TPosition> subscriberBuilder,
+        EventStreamConsumersBuilder<TRawEvent, TPosition> consumersBuilder,
         StateProjectionOptions<TRawEvent, TPosition, TState> options)
     {
-        _subscriberBuilder = subscriberBuilder;
+        _consumersBuilder = consumersBuilder;
         _options = options;
     }
 
@@ -141,17 +141,17 @@ public sealed class StateProjectionOptionsBuilder<TRawEvent, TPosition, TState> 
         return this;
     }
 
-    public EventStreamSubscriberBuilder<TRawEvent, TPosition> And()
+    public EventStreamConsumersBuilder<TRawEvent, TPosition> And()
     {
-        return _subscriberBuilder;
+        return _consumersBuilder;
     }
 
-    public IEventStreamSubscription Build() => _subscriberBuilder.CoreBuilder.Build();
+    public IEventStreamSubscription Build() => _consumersBuilder.CoreBuilder.Build();
 
-    IEventStreamSubscriber<TRawEvent, TPosition> IEventStreamSubscriberBuilder<TRawEvent, TPosition>.Build(
+    IEventStreamConsumer<TRawEvent, TPosition> IEventStreamConsumerBuilder<TRawEvent, TPosition>.Build(
         IReadEventAdapter<TRawEvent> readEventAdapter)
     {
         var options = _options.MapMissingEventTypesWithDefaultNames();
-        return new StateProjectionSubscriber<TRawEvent, TPosition, TState>(options, readEventAdapter);
+        return new StateProjection<TRawEvent, TPosition, TState>(options, readEventAdapter);
     }
 }
