@@ -31,7 +31,10 @@ public class SqlStreamStoreSubscriptionBuilder
             var consumers = ((IEventStreamConsumerBuilderInfrastructure<StreamMessage, long>)consumersBuilder)
                 .Build(eventAdapter);
 
-            return new EventStreamSubscription<StreamMessage, long>(eventStream, consumers);
+            return new EventStreamSubscription<StreamMessage, long>(
+                eventStream,
+                consumers,
+                new SqlStreamStorePositionComparer());
         });
 
         return consumersBuilder;

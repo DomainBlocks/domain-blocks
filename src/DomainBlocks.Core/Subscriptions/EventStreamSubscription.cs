@@ -10,6 +10,7 @@ public sealed class EventStreamSubscription<TEvent, TPosition> :
     private readonly ArenaQueue<QueueNotification<TEvent, TPosition>> _queue;
     private readonly IEventStream<TEvent, TPosition> _eventStream;
     private readonly IReadOnlyDictionary<Guid, EventStreamConsumerSession<TEvent, TPosition>> _sessions;
+    private readonly IComparer<TPosition?> _positionComparer;
     private CancellationTokenSource? _cancellationTokenSource;
     private Task? _eventLoopTask;
     private IDisposable? _subscription;
@@ -17,15 +18,17 @@ public sealed class EventStreamSubscription<TEvent, TPosition> :
     public EventStreamSubscription(
         IEventStream<TEvent, TPosition> eventStream,
         IEnumerable<IEventStreamConsumer<TEvent, TPosition>> consumers,
+        IComparer<TPosition?> positionComparer,
         int queueSize = 1) :
-        this(eventStream, consumers, new ArenaQueue<QueueNotification<TEvent, TPosition>>(queueSize))
+        this(eventStream, consumers, new ArenaQueue<QueueNotification<TEvent, TPosition>>(queueSize), positionComparer)
     {
     }
 
     internal EventStreamSubscription(
         IEventStream<TEvent, TPosition> eventStream,
         IEnumerable<IEventStreamConsumer<TEvent, TPosition>> consumers,
-        ArenaQueue<QueueNotification<TEvent, TPosition>> queue)
+        ArenaQueue<QueueNotification<TEvent, TPosition>> queue,
+        IComparer<TPosition?> positionComparer)
     {
         _eventStream = eventStream;
 
@@ -34,6 +37,7 @@ public sealed class EventStreamSubscription<TEvent, TPosition> :
             .ToDictionary(x => x.Id);
 
         _queue = queue;
+        _positionComparer = positionComparer;
     }
 
     public void Dispose()
@@ -75,7 +79,7 @@ public sealed class EventStreamSubscription<TEvent, TPosition> :
     {
         var tasks = _sessions.Values.Select(x => x.NotifyStarting(cancellationToken));
         var startPositions = await Task.WhenAll(tasks);
-        return startPositions.Min();
+        return startPositions.Min(_positionComparer);
     }
 
     private async Task RunEventLoop(CancellationToken cancellationToken)

@@ -31,7 +31,10 @@ public sealed class EventStoreSubscriptionBuilder
             var consumers = ((IEventStreamConsumerBuilderInfrastructure<ResolvedEvent, Position>)consumersBuilder)
                 .Build(eventAdapter);
 
-            return new EventStreamSubscription<ResolvedEvent, Position>(eventStream, consumers);
+            return new EventStreamSubscription<ResolvedEvent, Position>(
+                eventStream,
+                consumers,
+                Comparer<Position?>.Default);
         });
 
         return consumersBuilder;
