@@ -18,7 +18,7 @@ public sealed class EventStreamSubscription<TEvent, TPosition> :
     public EventStreamSubscription(
         IEventStream<TEvent, TPosition> eventStream,
         IEnumerable<IEventStreamConsumer<TEvent, TPosition>> consumers,
-        IComparer<TPosition?> positionComparer,
+        IComparer<TPosition?>? positionComparer = null,
         int queueSize = 1) :
         this(eventStream, consumers, new ArenaQueue<QueueNotification<TEvent, TPosition>>(queueSize), positionComparer)
     {
@@ -28,7 +28,7 @@ public sealed class EventStreamSubscription<TEvent, TPosition> :
         IEventStream<TEvent, TPosition> eventStream,
         IEnumerable<IEventStreamConsumer<TEvent, TPosition>> consumers,
         ArenaQueue<QueueNotification<TEvent, TPosition>> queue,
-        IComparer<TPosition?> positionComparer)
+        IComparer<TPosition?>? positionComparer = null)
     {
         _eventStream = eventStream;
 
@@ -37,7 +37,7 @@ public sealed class EventStreamSubscription<TEvent, TPosition> :
             .ToDictionary(x => x.Id);
 
         _queue = queue;
-        _positionComparer = positionComparer;
+        _positionComparer = positionComparer ?? Comparer<TPosition?>.Default;
     }
 
     public void Dispose()
@@ -82,8 +82,7 @@ public sealed class EventStreamSubscription<TEvent, TPosition> :
         return startPositions.Aggregate((acc, next) =>
         {
             var comparisonResult = _positionComparer.Compare(acc, next);
-            if (comparisonResult < 0) return acc;
-            return comparisonResult > 0 ? next : acc;
+            return comparisonResult <= 0 ? acc : next;
         });
     }
 
