@@ -79,7 +79,12 @@ public sealed class EventStreamSubscription<TEvent, TPosition> :
     {
         var tasks = _sessions.Values.Select(x => x.NotifyStarting(cancellationToken));
         var startPositions = await Task.WhenAll(tasks);
-        return startPositions.Min(_positionComparer);
+        return startPositions.Aggregate((acc, next) =>
+        {
+            var comparisonResult = _positionComparer.Compare(acc, next);
+            if (comparisonResult < 0) return acc;
+            return comparisonResult > 0 ? next : acc;
+        });
     }
 
     private async Task RunEventLoop(CancellationToken cancellationToken)

@@ -35,4 +35,20 @@ public class SqlStreamStorePositionComparerTests
         Assert.That(comparer.Compare(9999, 9999), Is.EqualTo(0));
         Assert.That(comparer.Compare(null, null), Is.EqualTo(0));
     }
+
+    [Test]
+    public void ArrayOfPositionsWithNulls_Returns_CorrectMinimumPosition()
+    {
+        var list = new long?[] {null, 1, 2, 3, 4, 5, -1};
+        var comparer = new SqlStreamStorePositionComparer();
+        
+        var result = list.Aggregate((acc, next) =>
+        {
+            var comparisonResult = comparer.Compare(acc, next);
+            if (comparisonResult < 0) return acc;
+            return comparisonResult > 0 ? next : acc;
+        });
+        
+        Assert.That(result, Is.EqualTo(null));
+    }
 }
