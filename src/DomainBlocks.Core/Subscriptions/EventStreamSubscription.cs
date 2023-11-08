@@ -56,6 +56,8 @@ public sealed class EventStreamSubscription<TEvent, TPosition> :
     {
         _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
+        // The event loop needs to start first, as the call to NotifyStarting results in items being enqueued.
+        // Starting it first ensures that queue writes won't block if the buffer is full.
         _eventLoopTask = RunEventLoop(_cancellationTokenSource.Token);
         var startPosition = await NotifyStarting(_cancellationTokenSource.Token);
         var subscribeTask = _eventStream.Subscribe(this, startPosition, _cancellationTokenSource.Token);
