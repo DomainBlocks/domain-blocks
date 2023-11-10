@@ -88,12 +88,21 @@ public sealed class EventStreamSubscription<TEvent, TPosition> :
         });
     }
 
-    private async Task RunEventLoop(CancellationToken cancellationToken)
+    private Task RunEventLoop(CancellationToken cancellationToken)
     {
-        await foreach (var notification in _queue.ReadAllAsync(cancellationToken))
-        {
-            await HandleNotification(notification, cancellationToken);
-        }
+        return Task.Factory
+            .StartNew(
+                async () =>
+                {
+                    await foreach (var notification in _queue.ReadAllAsync(cancellationToken))
+                    {
+                        await HandleNotification(notification, cancellationToken);
+                    }
+                },
+                cancellationToken,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default)
+            .Unwrap();
     }
 
     private async Task HandleNotification(
