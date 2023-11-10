@@ -117,7 +117,8 @@ public class EventStreamSubscriptionTests
         var startTask = _subscription.StartAsync();
         await _subscriber.OnEvent("event1", 0, CancellationToken.None);
 
-        Assert.ThrowsAsync<Exception>(() => startTask, exception.Message);
+        var actualException = Assert.ThrowsAsync<Exception>(() => startTask);
+        Assert.That(actualException, Is.EqualTo(exception));
     }
 
     [Test]

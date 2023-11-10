@@ -90,15 +90,19 @@ public sealed class EventStreamSubscription<TEvent, TPosition> :
 
     private Task RunEventLoop(CancellationToken cancellationToken)
     {
-        return Task.Run(
-            async () =>
-            {
-                await foreach (var notification in _queue.ReadAllAsync(cancellationToken))
+        return Task.Factory
+            .StartNew(
+                async () =>
                 {
-                    await HandleNotification(notification, cancellationToken);
-                }
-            },
-            cancellationToken);
+                    await foreach (var notification in _queue.ReadAllAsync(cancellationToken))
+                    {
+                        await HandleNotification(notification, cancellationToken);
+                    }
+                },
+                cancellationToken,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default)
+            .Unwrap();
     }
 
     private async Task HandleNotification(
