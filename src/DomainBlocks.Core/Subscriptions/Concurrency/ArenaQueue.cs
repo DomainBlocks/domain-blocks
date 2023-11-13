@@ -19,7 +19,8 @@ internal class ArenaQueue<T> where T : class, new()
         for (var i = 0; i < _arena.Length; i++)
         {
             _arena[i] = new T();
-            Debug.Assert(_emptyChannel.Writer.TryWrite(i));
+            var success = _emptyChannel.Writer.TryWrite(i);
+            Debug.Assert(success, "Failed writing index to empty channel");
         }
     }
 
