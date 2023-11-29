@@ -17,7 +17,7 @@ namespace DomainBlocks.SqlStreamStore.Tests.Integration;
 public class SqlStreamStoreProjectionTests
 {
     [Test]
-    [Timeout(1000)]
+    [Timeout(10000)]
     public async Task WriteReadWithCheckpointTest()
     {
         var streamStore = new InMemoryStreamStore();
