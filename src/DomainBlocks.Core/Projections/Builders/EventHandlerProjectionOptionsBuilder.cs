@@ -2,7 +2,7 @@ using DomainBlocks.Core.Serialization;
 using DomainBlocks.Core.Subscriptions;
 using DomainBlocks.Core.Subscriptions.Builders;
 
-namespace DomainBlocks.Core.Projections.Experimental.Builders;
+namespace DomainBlocks.Core.Projections.Builders;
 
 public sealed class EventHandlerProjectionOptionsBuilder<TRawEvent, TPosition> :
     IEventStreamConsumerBuilder<TRawEvent, TPosition>

@@ -1,6 +1,6 @@
 using DomainBlocks.Core.Subscriptions.Builders;
 
-namespace DomainBlocks.Core.Projections.Experimental.Builders;
+namespace DomainBlocks.Core.Projections.Builders;
 
 public static class EventStreamConsumersBuilderExtensions
 {

@@ -1,6 +1,6 @@
 using DomainBlocks.Core.Subscriptions.Builders;
 
-namespace DomainBlocks.Core.Projections.Experimental.Builders;
+namespace DomainBlocks.Core.Projections.Builders;
 
 public sealed class ProjectionsBuilder<TEvent, TPosition>
     where TPosition : struct, IEquatable<TPosition>, IComparable<TPosition>

@@ -1,6 +1,6 @@
 using DomainBlocks.Core.Subscriptions;
 
-namespace DomainBlocks.Core.Projections.Experimental;
+namespace DomainBlocks.Core.Projections;
 
 // TODO (DS): There is some duplication here with StateProjectionOptions. Consider modelling the commonality.
 internal sealed class EventHandlerProjectionOptions<TRawEvent, TPosition>

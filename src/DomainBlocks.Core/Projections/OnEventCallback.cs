@@ -1,4 +1,4 @@
-namespace DomainBlocks.Core.Projections.Experimental;
+namespace DomainBlocks.Core.Projections;
 
 public delegate Task OnEventCallback<in TEvent>(
     TEvent @event,

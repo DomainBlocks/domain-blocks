@@ -1,4 +1,4 @@
-namespace DomainBlocks.Core.Projections.Experimental;
+namespace DomainBlocks.Core.Projections;
 
 /// <summary>
 /// Specifies the lifetime of state for a <see cref="StateProjection{TRawEvent,TPosition,TState}"/>.

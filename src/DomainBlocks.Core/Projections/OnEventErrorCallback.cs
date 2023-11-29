@@ -1,6 +1,6 @@
 using DomainBlocks.Core.Subscriptions;
 
-namespace DomainBlocks.Core.Projections.Experimental;
+namespace DomainBlocks.Core.Projections;
 
 public delegate Task<EventErrorResolution> OnEventErrorCallback<TRawEvent, TPosition>(
     EventError<TRawEvent, TPosition> eventError,

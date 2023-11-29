@@ -1,4 +1,4 @@
-﻿using DomainBlocks.Core.Projections.Experimental;
+﻿using DomainBlocks.Core.Projections;
 using DomainBlocks.Core.Serialization;
 using Moq;
 using NUnit.Framework;

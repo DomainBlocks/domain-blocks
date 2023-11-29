@@ -1,4 +1,4 @@
-namespace DomainBlocks.Core.Projections.Experimental.Builders;
+namespace DomainBlocks.Core.Projections.Builders;
 
 public sealed class EventTypeMapBuilder
 {

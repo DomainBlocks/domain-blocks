@@ -1,5 +1,5 @@
 ﻿using DomainBlocks.Core.Persistence;
-using DomainBlocks.Core.Projections.Experimental.Builders;
+using DomainBlocks.Core.Projections.Builders;
 using DomainBlocks.Core.Subscriptions;
 using DomainBlocks.DependencyInjection;
 using DomainBlocks.SqlStreamStore.Persistence;

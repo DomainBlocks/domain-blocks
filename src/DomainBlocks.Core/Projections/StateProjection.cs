@@ -1,7 +1,7 @@
 using DomainBlocks.Core.Serialization;
 using DomainBlocks.Core.Subscriptions;
 
-namespace DomainBlocks.Core.Projections.Experimental;
+namespace DomainBlocks.Core.Projections;
 
 internal sealed class StateProjection<TRawEvent, TPosition, TState> :
     IEventStreamConsumer<TRawEvent, TPosition>

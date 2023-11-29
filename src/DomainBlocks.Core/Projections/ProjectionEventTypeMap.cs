@@ -1,4 +1,4 @@
-namespace DomainBlocks.Core.Projections.Experimental;
+namespace DomainBlocks.Core.Projections;
 
 public sealed class ProjectionEventTypeMap
 {

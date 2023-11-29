@@ -1,6 +1,6 @@
 using DomainBlocks.Core.Subscriptions;
 
-namespace DomainBlocks.Core.Projections.Experimental;
+namespace DomainBlocks.Core.Projections;
 
 internal sealed class StateProjectionOptions<TRawEvent, TPosition, TState>
     where TPosition : struct, IEquatable<TPosition>, IComparable<TPosition>
