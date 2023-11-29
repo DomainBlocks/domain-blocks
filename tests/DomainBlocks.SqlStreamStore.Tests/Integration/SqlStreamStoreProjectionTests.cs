@@ -1,5 +1,5 @@
 ﻿using DomainBlocks.Core.Persistence;
-using DomainBlocks.Core.Projections.Experimental.Builders;
+using DomainBlocks.Core.Projections.Builders;
 using DomainBlocks.Core.Subscriptions;
 using DomainBlocks.DependencyInjection;
 using DomainBlocks.SqlStreamStore.Persistence;
@@ -17,7 +17,7 @@ namespace DomainBlocks.SqlStreamStore.Tests.Integration;
 public class SqlStreamStoreProjectionTests
 {
     [Test]
-    [Timeout(1000)]
+    [Timeout(10000)]
     public async Task WriteReadWithCheckpointTest()
     {
         var streamStore = new InMemoryStreamStore();

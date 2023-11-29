@@ -1,5 +1,5 @@
 using System;
-using DomainBlocks.Core.Projections.Experimental.Builders;
+using DomainBlocks.Core.Projections.Builders;
 using DomainBlocks.Hosting;
 using DomainBlocks.Logging;
 using DomainBlocks.SqlStreamStore.Postgres;

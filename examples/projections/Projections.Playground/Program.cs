@@ -1,4 +1,4 @@
-﻿using DomainBlocks.Core.Projections.Experimental.Builders;
+﻿using DomainBlocks.Core.Projections.Builders;
 using DomainBlocks.Core.Subscriptions;
 using DomainBlocks.Core.Subscriptions.Builders;
 using DomainBlocks.EventStore.Subscriptions;

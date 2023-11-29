@@ -1,6 +1,5 @@
 using DomainBlocks.Core.Builders;
 using DomainBlocks.Core.Persistence;
-using DomainBlocks.Core.Projections.Builders;
 using DomainBlocks.Core.Subscriptions.Builders;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -29,23 +28,6 @@ public static class ServiceCollectionExtensions
         Action<AggregateRepositoryOptionsBuilder, ModelBuilder> optionsAction)
     {
         return services.AddAggregateRepository((_, options, model) => optionsAction(options, model));
-    }
-
-    public static IServiceCollection AddEventCatchUpSubscription(
-        this IServiceCollection serviceCollection,
-        Action<IServiceProvider, EventCatchUpSubscriptionOptionsBuilder, ProjectionModelBuilder> optionsAction)
-    {
-        serviceCollection.AddSingleton(sp =>
-        {
-            var optionsBuilder = new EventCatchUpSubscriptionOptionsBuilder();
-            var modelBuilder = new ProjectionModelBuilder();
-            optionsAction(sp, optionsBuilder, modelBuilder);
-            var options = optionsBuilder.Options;
-            var model = modelBuilder.Build();
-            return options.CreateEventDispatcher(model);
-        });
-
-        return serviceCollection;
     }
 
     public static IServiceCollection AddEventStreamSubscription(
