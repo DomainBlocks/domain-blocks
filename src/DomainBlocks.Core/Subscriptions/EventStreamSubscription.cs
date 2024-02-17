@@ -56,14 +56,21 @@ public sealed class EventStreamSubscription<TEvent, TPosition> :
     {
         _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-        // The event loop needs to start first, as the call to NotifyStarting results in items being enqueued.
-        // Starting it first ensures that queue writes won't block if the buffer is full.
+        // The event loop needs to start first, as the call to Subscribe results in items being enqueued. Starting it
+        // first ensures that queue writes won't block if the buffer is full.
         _eventLoopTask = RunEventLoop(_cancellationTokenSource.Token);
+
         var startPosition = await NotifyStarting(_cancellationTokenSource.Token);
         var subscribeTask = _eventStream.Subscribe(this, startPosition, _cancellationTokenSource.Token);
 
+        // We wait for either the event loop task or the subscribe task to complete. If the event loop task completes
+        // here, then that means it failed with an error.
         var task = await Task.WhenAny(_eventLoopTask, subscribeTask);
+
+        // We await the task here to propagate any exception that may have occured, in the case that the event loop
+        // task failed.
         await task;
+
         _subscription = await subscribeTask;
     }
 
@@ -81,6 +88,7 @@ public sealed class EventStreamSubscription<TEvent, TPosition> :
     {
         var tasks = _sessions.Values.Select(x => x.NotifyStarting(cancellationToken));
         var startPositions = await Task.WhenAll(tasks);
+
         return startPositions.Aggregate((acc, next) =>
         {
             var comparisonResult = _positionComparer.Compare(acc, next);
@@ -88,21 +96,12 @@ public sealed class EventStreamSubscription<TEvent, TPosition> :
         });
     }
 
-    private Task RunEventLoop(CancellationToken cancellationToken)
+    private async Task RunEventLoop(CancellationToken cancellationToken)
     {
-        return Task.Factory
-            .StartNew(
-                async () =>
-                {
-                    await foreach (var notification in _queue.ReadAllAsync(cancellationToken))
-                    {
-                        await HandleNotification(notification, cancellationToken);
-                    }
-                },
-                cancellationToken,
-                TaskCreationOptions.LongRunning,
-                TaskScheduler.Default)
-            .Unwrap();
+        await foreach (var notification in _queue.ReadAllAsync(cancellationToken))
+        {
+            await HandleNotification(notification, cancellationToken);
+        }
     }
 
     private async Task HandleNotification(
