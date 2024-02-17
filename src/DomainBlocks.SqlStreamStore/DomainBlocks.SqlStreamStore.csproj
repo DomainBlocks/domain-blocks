@@ -13,6 +13,7 @@
     <ItemGroup>
         <ProjectReference Include="..\DomainBlocks.Core\DomainBlocks.Core.csproj" />
         <ProjectReference Include="..\..\third_party\SQLStreamStore\src\DomainBlocks.ThirdParty.SqlStreamStore\DomainBlocks.ThirdParty.SqlStreamStore.csproj" />
+        <ProjectReference Include="..\DomainBlocks.Experimental.EventSourcing.Persistence\DomainBlocks.Experimental.EventSourcing.Persistence.csproj" />
     </ItemGroup>
 
 </Project>

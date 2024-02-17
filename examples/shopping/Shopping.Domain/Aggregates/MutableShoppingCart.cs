@@ -10,10 +10,20 @@ public class MutableShoppingCart
 {
     private readonly List<ShoppingCartItem> _items = new();
     private readonly List<IDomainEvent> _raisedEvents = new();
-    
+
     public Guid? Id { get; private set; }
     public IReadOnlyList<ShoppingCartItem> Items => _items.AsReadOnly();
     public IReadOnlyList<IDomainEvent> RaisedEvents => _raisedEvents;
+
+    public MutableShoppingCart()
+    {
+    }
+
+    public MutableShoppingCart(Guid id, IEnumerable<ShoppingCartItem> items)
+    {
+        Id = id;
+        _items = items as List<ShoppingCartItem> ?? items.ToList();
+    }
 
     public void Execute(AddItemToShoppingCart command)
     {
@@ -22,7 +32,7 @@ public class MutableShoppingCart
         {
             RaiseEvent(new ShoppingCartCreated(command.CartId));
         }
-        
+
         RaiseEvent(new ItemAddedToShoppingCart(command.Id, command.CartId, command.Item));
     }
 
