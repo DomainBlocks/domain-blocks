@@ -7,7 +7,6 @@
 
     <ItemGroup>
       <ProjectReference Include="..\DomainBlocks.Core\DomainBlocks.Core.csproj" />
-      <ProjectReference Include="..\DomainBlocks.Experimental.EventSourcing\DomainBlocks.Experimental.EventSourcing.csproj" />
     </ItemGroup>
 
 </Project>

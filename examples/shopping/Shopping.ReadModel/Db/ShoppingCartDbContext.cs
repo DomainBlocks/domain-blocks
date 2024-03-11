@@ -22,7 +22,6 @@ public class ShoppingCartDbContext : DbContext
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).ValueGeneratedNever();
         });
-
         modelBuilder.Entity<ShoppingCartSummaryItem>()
             .HasKey(i => i.Id);
 
