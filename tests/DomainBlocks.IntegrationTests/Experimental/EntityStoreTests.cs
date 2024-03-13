@@ -38,13 +38,13 @@ public class EntityStoreTests
         SqlStreamStoreEntityStore = new EntityStoreBuilder()
             .UseSqlStreamStore(streamStore)
             .AddEntityAdapterType(typeof(EntityAdapter<,>))
-            .Configure(o => o.MapEventsOfType<IDomainEvent>())
+            .Configure(c => c.MapEventsOfType<IDomainEvent>())
             .Build();
 
         EventStoreDbEntityStore = new EntityStoreBuilder()
             .UseEventStoreDb(EventStoreDbConnectionString, o => o.UseJsonSerialization(jsonOptions))
             .AddEntityAdapterType(typeof(EntityAdapter<,>))
-            .Configure(o => o.MapEventsOfType<IDomainEvent>().FromAssemblyOf<IDomainEvent>())
+            .Configure(c => c.MapEventsOfType<IDomainEvent>().FromAssemblyOf<IDomainEvent>())
             .Build();
     }
 
@@ -126,7 +126,7 @@ public class EntityStoreTests
         var store = new EntityStoreBuilder()
             .UseSqlStreamStore(streamStore)
             .AddEntityAdapterType(typeof(MutableEntityAdapter<>))
-            .Configure(o => o.MapEventsOfType<IDomainEvent>().FromAssemblyOf<IDomainEvent>())
+            .Configure(c => c.MapEventsOfType<IDomainEvent>().FromAssemblyOf<IDomainEvent>())
             .Build();
 
         var entity = new MutableShoppingCart();
@@ -146,12 +146,12 @@ public class EntityStoreTests
         var store = new EntityStoreBuilder()
             .UseEventStoreDb(EventStoreDbConnectionString)
             .AddEntityAdapterType(typeof(FunctionalEntityWrapperAdapter<>))
-            .Configure(options =>
+            .Configure(config =>
             {
-                options.MapEventsOfType<IDomainEvent>().FromAssemblyOf<IDomainEvent>();
+                config.MapEventsOfType<IDomainEvent>().FromAssemblyOf<IDomainEvent>();
 
                 // TODO: Fix default stream prefix for generic types, i.e. "functionalEntityWrapper`1".
-                options
+                config
                     .For<FunctionalEntityWrapper<FunctionalShoppingCart>>()
                     .SetStreamIdPrefix("functionalShoppingCart");
             })
@@ -186,13 +186,13 @@ public class EntityStoreTests
             Enumerable.Empty<IEntityAdapter>(),
             new[] { new GenericEntityAdapterFactory(typeof(MutableEntityAdapter<>)) });
 
-        var options = new EntityStoreOptions(eventTypeMap);
-        var dataOptions = new EntityStoreOptions<string>(new JsonStringEventDataSerializer());
+        var config = new EntityStoreConfig(eventTypeMap);
+        var dataConfig = new EntityStoreConfig<string>(new JsonStringEventDataSerializer());
 
         var eventStore = new SqlStreamStoreEventStore(streamStore);
         var eventAdapter = new SqlStreamStoreEventAdapter();
 
-        var store = EntityStore.Create(eventStore, eventAdapter, entityAdapterProvider, options, dataOptions);
+        var store = EntityStore.Create(eventStore, eventAdapter, entityAdapterProvider, config, dataConfig);
 
         var entity = new MutableShoppingCart();
         entity.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Foo"));
@@ -216,11 +216,11 @@ public class EntityStoreTests
         var v1Repository = new EntityStoreBuilder()
             .UseSqlStreamStore(streamStore)
             .AddEntityAdapterType(typeof(EntityAdapter<,>))
-            .Configure<ShoppingCart>(options =>
+            .Configure<ShoppingCart>(config =>
             {
-                options.SetStreamIdPrefix("shoppingCart");
-                options.MapEventType<ShoppingCartCreated>();
-                options.MapEventType<ItemAddedToShoppingCart>();
+                config.SetStreamIdPrefix("shoppingCart");
+                config.MapEventType<ShoppingCartCreated>();
+                config.MapEventType<ItemAddedToShoppingCart>();
             })
             .Build();
 
@@ -228,24 +228,24 @@ public class EntityStoreTests
         var v2Repository = new EntityStoreBuilder()
             .UseSqlStreamStore(streamStore)
             .AddEntityAdapterType(typeof(EntityAdapter<,>))
-            .Configure<ShoppingCartV2>(options =>
+            .Configure<ShoppingCartV2>(config =>
             {
-                options.SetStreamIdPrefix("shoppingCart");
+                config.SetStreamIdPrefix("shoppingCart");
 
-                options.MapEventType<ShoppingCartCreatedV2>().WithName("ShoppingCartCreated");
+                config.MapEventType<ShoppingCartCreatedV2>().WithName("ShoppingCartCreated");
 
                 // TODO: Upcast
-                options.MapEventType<ShoppingCartCreated>().WithName("ShoppingCartCreated");
+                config.MapEventType<ShoppingCartCreated>().WithName("ShoppingCartCreated");
 
                 // Event name -> conditional deserialize -> transform
 
-                // options
+                // config
                 //     .Upcast<ShoppingCartCreated>()
                 //     .To(e => new ShoppingCartCreatedV2(e.Id, newFieldDefaultValue))
                 //     .Where(meta => !meta.ContainsKey("Version"));
-                options.MapEventType<ItemAddedToShoppingCart>();
+                config.MapEventType<ItemAddedToShoppingCart>();
 
-                // options.EventTypes
+                // config.EventTypes
                 //     .Map<ShoppingCartCreatedV2>()
                 //     .WithName("ShoppingCartCreated")
                 //     .WithMetadata(() => new Dictionary<string, string>
@@ -313,6 +313,29 @@ public class EntityStoreTests
             Assert.That(reloadedState.Items, Has.Count.EqualTo(1));
             Assert.That(reloadedState.Items[0].Name, Is.EqualTo("Item Foo"));
             Assert.That(reloadedState.NewField, Is.EqualTo("New value"));
+        }
+    }
+
+    [Test]
+    public void AutoConfigureTest()
+    {
+        var typeResolvers = AppDomain.CurrentDomain
+            .GetAssemblies()
+            .Where(x => !x.FullName?.StartsWith("System") ?? false)
+            .SelectMany(x => x.GetTypes())
+            .Where(x => x is { IsGenericTypeDefinition: true, IsAbstract: false, IsInterface: false } &&
+                        x.GetInterfaces().Any(i => i.IsGenericType &&
+                                                   i.GetGenericTypeDefinition() == typeof(IEntityAdapter<,>)))
+            .Select(x => new GenericEntityAdapterTypeResolver(x))
+            .ToList();
+
+        foreach (var typeResolver in typeResolvers)
+        {
+            if (typeResolver.EntityGenericArgType is { IsGenericParameter: false, ContainsGenericParameters: true })
+            {
+                // For each generic parameter, we need to find all types that can be a substitution. Then we need to
+                // generate all combinations.
+            }
         }
     }
 

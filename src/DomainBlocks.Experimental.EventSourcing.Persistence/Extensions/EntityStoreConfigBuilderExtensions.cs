@@ -4,17 +4,19 @@ using DomainBlocks.Experimental.EventSourcing.Persistence.Configuration;
 
 namespace DomainBlocks.Experimental.EventSourcing.Persistence.Extensions;
 
-public static class EntityStreamOptionsBuilderExtensions
+public static class EntityStoreConfigBuilderExtensions
 {
-    public static EntityStreamOptionsBuilder<ReadOnlyMemory<byte>> UseJsonSerialization(
-        this EntityStreamOptionsBuilder<ReadOnlyMemory<byte>> builder, JsonSerializerOptions? options = null)
+    public static EntityStoreConfigBuilder<ReadOnlyMemory<byte>> UseJsonSerialization(
+        this EntityStoreConfigBuilder<ReadOnlyMemory<byte>> builder,
+        JsonSerializerOptions? options = null)
     {
         builder.SetEventDataSerializer(new JsonBytesEventDataSerializer(options));
         return builder;
     }
 
-    public static EntityStreamOptionsBuilder<string> UseJsonSerialization(
-        this EntityStreamOptionsBuilder<string> builder, JsonSerializerOptions? options = null)
+    public static EntityStoreConfigBuilder<string> UseJsonSerialization(
+        this EntityStoreConfigBuilder<string> builder,
+        JsonSerializerOptions? options = null)
     {
         builder.SetEventDataSerializer(new JsonStringEventDataSerializer(options));
         return builder;

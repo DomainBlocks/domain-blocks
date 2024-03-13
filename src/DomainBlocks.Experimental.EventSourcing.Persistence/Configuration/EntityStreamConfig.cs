@@ -1,10 +1,10 @@
 using DomainBlocks.Core.Serialization;
 
-namespace DomainBlocks.Experimental.EventSourcing.Persistence;
+namespace DomainBlocks.Experimental.EventSourcing.Persistence.Configuration;
 
-public class EntityStreamOptions<TRawData>
+public class EntityStreamConfig<TRawData>
 {
-    public EntityStreamOptions(Type entityType, IEventDataSerializer<TRawData> eventDataSerializer)
+    public EntityStreamConfig(Type entityType, IEventDataSerializer<TRawData> eventDataSerializer)
     {
         EventDataSerializer = eventDataSerializer;
         EntityType = entityType;
@@ -14,9 +14,9 @@ public class EntityStreamOptions<TRawData>
     public IEventDataSerializer<TRawData> EventDataSerializer { get; }
 }
 
-public class EntityStreamOptions
+public class EntityStreamConfig
 {
-    public EntityStreamOptions(
+    public EntityStreamConfig(
         Type entityType,
         EventTypeMap eventTypeMap,
         int? snapshotEventCount = null,

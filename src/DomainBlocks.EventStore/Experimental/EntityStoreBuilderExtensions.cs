@@ -8,7 +8,7 @@ public static class EntityStoreBuilderExtensions
     public static EntityStoreBuilder UseEventStoreDb(
         this EntityStoreBuilder builder,
         string connectionString,
-        Action<EntityStoreOptionsBuilder<ReadOnlyMemory<byte>>>? builderAction = null)
+        Action<EntityStoreConfigBuilder<ReadOnlyMemory<byte>>>? builderAction = null)
     {
         var settings = EventStoreClientSettings.Create(connectionString);
         return builder.UseEventStoreDb(settings, builderAction);
@@ -17,9 +17,9 @@ public static class EntityStoreBuilderExtensions
     public static EntityStoreBuilder UseEventStoreDb(
         this EntityStoreBuilder builder,
         EventStoreClientSettings settings,
-        Action<EntityStoreOptionsBuilder<ReadOnlyMemory<byte>>>? builderAction = null)
+        Action<EntityStoreConfigBuilder<ReadOnlyMemory<byte>>>? builderAction = null)
     {
-        var optionsBuilder = new EntityStoreOptionsBuilder<ReadOnlyMemory<byte>>();
+        var optionsBuilder = new EntityStoreConfigBuilder<ReadOnlyMemory<byte>>();
         builderAction?.Invoke(optionsBuilder);
         var options = optionsBuilder.Build();
 

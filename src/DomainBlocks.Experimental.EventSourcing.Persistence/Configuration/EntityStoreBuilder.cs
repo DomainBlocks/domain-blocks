@@ -7,17 +7,17 @@ public sealed class EntityStoreBuilder
 {
     private readonly List<GenericEntityAdapterFactory> _genericEntityAdapterFactories = new();
     private readonly List<IEntityAdapter> _entityAdapters = new();
-    private readonly EntityStoreOptionsBuilder _optionsBuilder = new();
+    private readonly EntityStoreConfigBuilder _configBuilder = new();
     private EntityStoreFactory? _factory;
 
     public EntityStoreBuilder SetInfrastructure<TReadEvent, TWriteEvent, TRawData, TStreamVersion>(
         IEventStore<TReadEvent, TWriteEvent, TStreamVersion> eventStore,
         IEventAdapter<TReadEvent, TWriteEvent, TStreamVersion, TRawData> eventAdapter,
-        EntityStoreOptions<TRawData> dataOptions)
+        EntityStoreConfig<TRawData> dataConfig)
         where TStreamVersion : struct
     {
-        _factory = (entityAdapterProvider, options) =>
-            EntityStore.Create(eventStore, eventAdapter, entityAdapterProvider, options, dataOptions);
+        _factory = (entityAdapterProvider, config) =>
+            EntityStore.Create(eventStore, eventAdapter, entityAdapterProvider, config, dataConfig);
 
         return this;
     }
@@ -35,15 +35,15 @@ public sealed class EntityStoreBuilder
         return this;
     }
 
-    public EntityStoreBuilder Configure(Action<EntityStoreOptionsBuilder> builderAction)
+    public EntityStoreBuilder Configure(Action<EntityStoreConfigBuilder> builderAction)
     {
-        builderAction(_optionsBuilder);
+        builderAction(_configBuilder);
         return this;
     }
 
-    public EntityStoreBuilder Configure<TEntity>(Action<EntityStreamOptionsBuilder> builderAction)
+    public EntityStoreBuilder Configure<TEntity>(Action<EntityStreamConfigBuilder> builderAction)
     {
-        var builder = _optionsBuilder.For<TEntity>();
+        var builder = _configBuilder.For<TEntity>();
         builderAction(builder);
         return this;
     }
@@ -52,20 +52,9 @@ public sealed class EntityStoreBuilder
     {
         if (_factory == null) throw new InvalidOperationException();
 
-        // TODO: Consider auto-configuring, e.g.
-        // var genericEntityAdapterFactories = AppDomain.CurrentDomain
-        //     .GetAssemblies()
-        //     .Where(x => !x.FullName?.StartsWith("System") ?? false)
-        //     .SelectMany(x => x.GetTypes())
-        //     .Where(x => x.IsGenericTypeDefinition &&
-        //                 x.GetInterfaces().Any(i => i.IsGenericType &&
-        //                                            i.GetGenericTypeDefinition() == typeof(IEntityAdapter<,>)))
-        //     .Select(x => new GenericEntityAdapterFactory(x))
-        //     .ToList();
-
         var entityAdapterProvider = new EntityAdapterProvider(_entityAdapters, _genericEntityAdapterFactories);
-        var options = _optionsBuilder.Build();
+        var config = _configBuilder.Build();
 
-        return _factory(entityAdapterProvider, options);
+        return _factory(entityAdapterProvider, config);
     }
 }

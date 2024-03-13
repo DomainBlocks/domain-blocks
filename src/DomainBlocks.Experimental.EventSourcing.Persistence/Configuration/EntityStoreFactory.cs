@@ -3,4 +3,4 @@
 namespace DomainBlocks.Experimental.EventSourcing.Persistence.Configuration;
 
 internal delegate IEntityStore EntityStoreFactory(
-    EntityAdapterProvider entityAdapterProvider, EntityStoreOptions options);
+    EntityAdapterProvider entityAdapterProvider, EntityStoreConfig config);

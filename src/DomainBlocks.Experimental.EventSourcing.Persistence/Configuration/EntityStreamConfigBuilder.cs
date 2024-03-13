@@ -3,11 +3,11 @@ using DomainBlocks.Experimental.EventSourcing.Persistence.Extensions;
 
 namespace DomainBlocks.Experimental.EventSourcing.Persistence.Configuration;
 
-public class EntityStreamOptionsBuilder<TRawData>
+public class EntityStreamConfigBuilder<TRawData>
 {
     private readonly Type _entityType;
 
-    public EntityStreamOptionsBuilder(Type entityType)
+    public EntityStreamConfigBuilder(Type entityType)
     {
         _entityType = entityType;
 
@@ -24,32 +24,32 @@ public class EntityStreamOptionsBuilder<TRawData>
 
     private IEventDataSerializer<TRawData>? EventDataSerializer { get; set; }
 
-    public EntityStreamOptionsBuilder<TRawData> SetEventDataSerializer(
+    public EntityStreamConfigBuilder<TRawData> SetEventDataSerializer(
         IEventDataSerializer<TRawData> eventDataSerializer)
     {
         EventDataSerializer = eventDataSerializer;
         return this;
     }
 
-    public EntityStreamOptions<TRawData> Build()
+    public EntityStreamConfig<TRawData> Build()
     {
         if (EventDataSerializer == null)
         {
             throw new InvalidOperationException("Event data serializer not specified.");
         }
 
-        return new EntityStreamOptions<TRawData>(_entityType, EventDataSerializer);
+        return new EntityStreamConfig<TRawData>(_entityType, EventDataSerializer);
     }
 }
 
-public class EntityStreamOptionsBuilder
+public class EntityStreamConfigBuilder
 {
     private readonly Type _entityType;
     private readonly List<IEventTypeMappingBuilder> _eventTypeMappingBuilders = new();
     private int? _snapshotEventCount;
     private string _streamIdPrefix;
 
-    public EntityStreamOptionsBuilder(Type entityType)
+    public EntityStreamConfigBuilder(Type entityType)
     {
         _entityType = entityType;
         _streamIdPrefix = DefaultStreamIdPrefix.CreateFor(entityType);
@@ -69,13 +69,13 @@ public class EntityStreamOptionsBuilder
         return builder;
     }
 
-    public EntityStreamOptionsBuilder SetSnapshotEventCount(int? eventCount)
+    public EntityStreamConfigBuilder SetSnapshotEventCount(int? eventCount)
     {
         _snapshotEventCount = eventCount;
         return this;
     }
 
-    public EntityStreamOptionsBuilder SetStreamIdPrefix(string streamIdPrefix)
+    public EntityStreamConfigBuilder SetStreamIdPrefix(string streamIdPrefix)
     {
         if (string.IsNullOrWhiteSpace(streamIdPrefix))
             throw new ArgumentException("Stream ID prefix cannot be null or whitespace.", nameof(streamIdPrefix));
@@ -84,12 +84,12 @@ public class EntityStreamOptionsBuilder
         return this;
     }
 
-    public EntityStreamOptions Build(IEnumerable<EventTypeMapping>? eventTypeMappings = null)
+    public EntityStreamConfig Build(IEnumerable<EventTypeMapping>? eventTypeMappings = null)
     {
         var eventTypeMap = (eventTypeMappings ?? Enumerable.Empty<EventTypeMapping>())
             .AddOrReplaceWith(_eventTypeMappingBuilders.BuildEventTypeMap())
             .ToEventTypeMap();
 
-        return new EntityStreamOptions(_entityType, eventTypeMap, _snapshotEventCount, _streamIdPrefix);
+        return new EntityStreamConfig(_entityType, eventTypeMap, _snapshotEventCount, _streamIdPrefix);
     }
 }

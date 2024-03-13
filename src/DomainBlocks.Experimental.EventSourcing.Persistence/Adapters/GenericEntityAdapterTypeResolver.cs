@@ -5,7 +5,6 @@ namespace DomainBlocks.Experimental.EventSourcing.Persistence.Adapters;
 public class GenericEntityAdapterTypeResolver
 {
     private readonly Type _adapterType;
-    private readonly Type _entityGenericArg;
 
     public GenericEntityAdapterTypeResolver(Type entityAdapterType)
     {
@@ -41,19 +40,18 @@ public class GenericEntityAdapterTypeResolver
         }
 
         _adapterType = entityAdapterType;
-        _entityGenericArg = entityGenericArg;
+        EntityGenericArgType = entityGenericArg;
     }
 
-    public bool TryResolveFor<TEntity>(out Type? resolvedType)
-    {
-        return TryResolveFor(typeof(TEntity), out resolvedType);
-    }
+    public Type EntityGenericArgType { get; }
+
+    public bool TryResolveFor<TEntity>(out Type? resolvedType) => TryResolveFor(typeof(TEntity), out resolvedType);
 
     public bool TryResolveFor(Type entityType, out Type? resolvedType)
     {
         resolvedType = null;
 
-        if (!_entityGenericArg.TryResolveGenericParametersFrom(entityType, out var resolvedGenericParams))
+        if (!EntityGenericArgType.TryResolveGenericParametersFrom(entityType, out var resolvedGenericParams))
         {
             return false;
         }

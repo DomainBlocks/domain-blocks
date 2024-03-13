@@ -1,4 +1,3 @@
-using DomainBlocks.Experimental.EventSourcing.Persistence;
 using DomainBlocks.Experimental.EventSourcing.Persistence.Adapters;
 using DomainBlocks.IntegrationTests.Experimental.Model;
 

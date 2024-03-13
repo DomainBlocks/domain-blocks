@@ -9,9 +9,9 @@ public static class EventSourcedEntityStoreBuilderExtensions
     public static EntityStoreBuilder UseSqlStreamStore(
         this EntityStoreBuilder builder,
         IStreamStore streamStore,
-        Action<EntityStoreOptionsBuilder<string>>? builderAction = null)
+        Action<EntityStoreConfigBuilder<string>>? builderAction = null)
     {
-        var optionsBuilder = new EntityStoreOptionsBuilder<string>();
+        var optionsBuilder = new EntityStoreConfigBuilder<string>();
         builderAction?.Invoke(optionsBuilder);
         var options = optionsBuilder.Build();
 

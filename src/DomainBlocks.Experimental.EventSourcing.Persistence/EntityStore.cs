@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using DomainBlocks.Core.Serialization;
 using DomainBlocks.Experimental.EventSourcing.Persistence.Adapters;
+using DomainBlocks.Experimental.EventSourcing.Persistence.Configuration;
 
 namespace DomainBlocks.Experimental.EventSourcing.Persistence;
 
@@ -10,10 +11,10 @@ public static class EntityStore
         IEventStore<TReadEvent, TWriteEvent, TStreamVersion> eventStore,
         IEventAdapter<TReadEvent, TWriteEvent, TStreamVersion, TRawData> eventAdapter,
         EntityAdapterProvider entityAdapterProvider,
-        EntityStoreOptions options, EntityStoreOptions<TRawData> dataOptions) where TStreamVersion : struct
+        EntityStoreConfig config, EntityStoreConfig<TRawData> dataConfig) where TStreamVersion : struct
     {
         return new EntityStore<TReadEvent, TWriteEvent, TStreamVersion, TRawData>(
-            eventStore, eventAdapter, entityAdapterProvider, options, dataOptions);
+            eventStore, eventAdapter, entityAdapterProvider, config, dataConfig);
     }
 }
 
@@ -23,22 +24,22 @@ internal sealed class EntityStore<TReadEvent, TWriteEvent, TStreamVersion, TRawD
     private readonly IEventStore<TReadEvent, TWriteEvent, TStreamVersion> _eventStore;
     private readonly IEventAdapter<TReadEvent, TWriteEvent, TStreamVersion, TRawData> _eventAdapter;
     private readonly EntityAdapterProvider _entityAdapterProvider;
-    private readonly EntityStoreOptions _options;
-    private readonly EntityStoreOptions<TRawData> _dataOptions;
+    private readonly EntityStoreConfig _config;
+    private readonly EntityStoreConfig<TRawData> _dataConfig;
     private readonly ConditionalWeakTable<object, TrackedEntityContext> _trackedEntities = new();
 
     public EntityStore(
         IEventStore<TReadEvent, TWriteEvent, TStreamVersion> eventStore,
         IEventAdapter<TReadEvent, TWriteEvent, TStreamVersion, TRawData> eventAdapter,
         EntityAdapterProvider entityAdapterProvider,
-        EntityStoreOptions options,
-        EntityStoreOptions<TRawData> dataOptions)
+        EntityStoreConfig config,
+        EntityStoreConfig<TRawData> dataConfig)
     {
         _eventStore = eventStore;
         _eventAdapter = eventAdapter;
         _entityAdapterProvider = entityAdapterProvider;
-        _options = options;
-        _dataOptions = dataOptions;
+        _config = config;
+        _dataConfig = dataConfig;
     }
 
     public async Task<TEntity> LoadAsync<TEntity>(string entityId, CancellationToken cancellationToken = default)
@@ -83,22 +84,22 @@ internal sealed class EntityStore<TReadEvent, TWriteEvent, TStreamVersion, TRawD
         int? snapshotEventCount;
         string streamIdPrefix;
 
-        if (_options.StreamOptions.TryGetValue(typeof(TEntity), out var streamOptions))
+        if (_config.StreamConfigs.TryGetValue(typeof(TEntity), out var streamConfig))
         {
-            eventTypeMap = streamOptions.EventTypeMap;
-            snapshotEventCount = streamOptions.SnapshotEventCount;
-            streamIdPrefix = streamOptions.StreamIdPrefix ?? DefaultStreamIdPrefix.CreateFor(typeof(TEntity));
+            eventTypeMap = streamConfig.EventTypeMap;
+            snapshotEventCount = streamConfig.SnapshotEventCount;
+            streamIdPrefix = streamConfig.StreamIdPrefix ?? DefaultStreamIdPrefix.CreateFor(typeof(TEntity));
         }
         else
         {
-            eventTypeMap = _options.EventTypeMap;
-            snapshotEventCount = _options.SnapshotEventCount;
+            eventTypeMap = _config.EventTypeMap;
+            snapshotEventCount = _config.SnapshotEventCount;
             streamIdPrefix = DefaultStreamIdPrefix.CreateFor(typeof(TEntity));
         }
 
-        var serializer = _dataOptions.StreamOptions.TryGetValue(typeof(TEntity), out var streamDataOptions)
-            ? streamDataOptions.EventDataSerializer
-            : _dataOptions.EventDataSerializer;
+        var serializer = _dataConfig.StreamConfigs.TryGetValue(typeof(TEntity), out var streamDataConfig)
+            ? streamDataConfig.EventDataSerializer
+            : _dataConfig.EventDataSerializer;
 
         var appendedWriteEvents = new List<TWriteEvent>();
         var eventCountSinceLastSnapshot = loadedEventCount;
@@ -160,20 +161,20 @@ internal sealed class EntityStore<TReadEvent, TWriteEvent, TStreamVersion, TRawD
         EventTypeMap eventTypeMap;
         string streamIdPrefix;
 
-        if (_options.StreamOptions.TryGetValue(typeof(TEntity), out var streamOptions))
+        if (_config.StreamConfigs.TryGetValue(typeof(TEntity), out var streamConfig))
         {
-            eventTypeMap = streamOptions.EventTypeMap;
-            streamIdPrefix = streamOptions.StreamIdPrefix ?? DefaultStreamIdPrefix.CreateFor(typeof(TEntity));
+            eventTypeMap = streamConfig.EventTypeMap;
+            streamIdPrefix = streamConfig.StreamIdPrefix ?? DefaultStreamIdPrefix.CreateFor(typeof(TEntity));
         }
         else
         {
-            eventTypeMap = _options.EventTypeMap;
+            eventTypeMap = _config.EventTypeMap;
             streamIdPrefix = DefaultStreamIdPrefix.CreateFor(typeof(TEntity));
         }
 
-        var serializer = _dataOptions.StreamOptions.TryGetValue(typeof(TEntity), out var streamDataOptions)
-            ? streamDataOptions.EventDataSerializer
-            : _dataOptions.EventDataSerializer;
+        var serializer = _dataConfig.StreamConfigs.TryGetValue(typeof(TEntity), out var streamDataConfig)
+            ? streamDataConfig.EventDataSerializer
+            : _dataConfig.EventDataSerializer;
 
         object initialState;
         object initialStateReplica;

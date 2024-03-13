@@ -3,9 +3,9 @@ using DomainBlocks.Experimental.EventSourcing.Persistence.Extensions;
 
 namespace DomainBlocks.Experimental.EventSourcing.Persistence.Configuration;
 
-public class EntityStoreOptionsBuilder<TRawData>
+public class EntityStoreConfigBuilder<TRawData>
 {
-    public EntityStoreOptionsBuilder()
+    public EntityStoreConfigBuilder()
     {
         // Use JSON serialization by default for known raw data types.
         if (typeof(TRawData) == typeof(ReadOnlyMemory<byte>))
@@ -20,29 +20,29 @@ public class EntityStoreOptionsBuilder<TRawData>
 
     private IEventDataSerializer<TRawData>? EventDataSerializer { get; set; }
 
-    public EntityStoreOptionsBuilder<TRawData> SetEventDataSerializer(
+    public EntityStoreConfigBuilder<TRawData> SetEventDataSerializer(
         IEventDataSerializer<TRawData> eventDataSerializer)
     {
         EventDataSerializer = eventDataSerializer;
         return this;
     }
 
-    public EntityStoreOptions<TRawData> Build()
+    public EntityStoreConfig<TRawData> Build()
     {
         if (EventDataSerializer == null)
         {
             throw new InvalidOperationException("Event data serializer not specified.");
         }
 
-        return new EntityStoreOptions<TRawData>(EventDataSerializer);
+        return new EntityStoreConfig<TRawData>(EventDataSerializer);
     }
 }
 
-public class EntityStoreOptionsBuilder
+public class EntityStoreConfigBuilder
 {
     private readonly Dictionary<Type, IEventTypeMappingBuilder> _eventTypeMappingBuilders = new();
     private int? _snapshotEventCount;
-    private readonly Dictionary<Type, EntityStreamOptionsBuilder> _entityStreamOptionsBuilders = new();
+    private readonly Dictionary<Type, EntityStreamConfigBuilder> _entityStreamConfigBuilders = new();
 
     public EventBaseTypeMappingBuilder<TEventBase> MapEventsOfType<TEventBase>()
     {
@@ -70,31 +70,31 @@ public class EntityStoreOptionsBuilder
         return newBuilder;
     }
 
-    public EntityStoreOptionsBuilder SetSnapshotEventCount(int? snapshotEventCount)
+    public EntityStoreConfigBuilder SetSnapshotEventCount(int? snapshotEventCount)
     {
         _snapshotEventCount = snapshotEventCount;
         return this;
     }
 
-    public EntityStreamOptionsBuilder For<TEntity>()
+    public EntityStreamConfigBuilder For<TEntity>()
     {
-        if (_entityStreamOptionsBuilders.TryGetValue(typeof(TEntity), out var builder)) return builder;
-        builder = new EntityStreamOptionsBuilder(typeof(TEntity));
-        _entityStreamOptionsBuilders.Add(typeof(TEntity), builder);
+        if (_entityStreamConfigBuilders.TryGetValue(typeof(TEntity), out var builder)) return builder;
+        builder = new EntityStreamConfigBuilder(typeof(TEntity));
+        _entityStreamConfigBuilders.Add(typeof(TEntity), builder);
         return builder;
     }
 
-    public EntityStoreOptionsBuilder For<TEntity>(Action<EntityStreamOptionsBuilder> builderAction)
+    public EntityStoreConfigBuilder For<TEntity>(Action<EntityStreamConfigBuilder> builderAction)
     {
         var builder = For<TEntity>();
         builderAction(builder);
         return this;
     }
 
-    public EntityStoreOptions Build()
+    public EntityStoreConfig Build()
     {
         var eventTypeMap = _eventTypeMappingBuilders.Values.BuildEventTypeMap();
-        var entityStreamOptions = _entityStreamOptionsBuilders.Values.Select(x => x.Build(eventTypeMap));
-        return new EntityStoreOptions(eventTypeMap, _snapshotEventCount, entityStreamOptions);
+        var entityStreamConfigs = _entityStreamConfigBuilders.Values.Select(x => x.Build(eventTypeMap));
+        return new EntityStoreConfig(eventTypeMap, _snapshotEventCount, entityStreamConfigs);
     }
 }
