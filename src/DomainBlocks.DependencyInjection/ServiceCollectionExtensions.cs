@@ -1,7 +1,6 @@
 using DomainBlocks.Core.Builders;
 using DomainBlocks.Core.Persistence;
 using DomainBlocks.Core.Subscriptions.Builders;
-using DomainBlocks.Experimental.EventSourcing.Persistence.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DomainBlocks.DependencyInjection;
@@ -48,17 +47,5 @@ public static class ServiceCollectionExtensions
         });
 
         return services;
-    }
-
-    public static IServiceCollection AddEntityStore(
-        this IServiceCollection services,
-        Action<EntityStoreBuilder> builderAction)
-    {
-        return services.AddSingleton(sp =>
-        {
-            var builder = new EntityStoreBuilder();
-            builderAction(builder);
-            return builder.Build();
-        });
     }
 }

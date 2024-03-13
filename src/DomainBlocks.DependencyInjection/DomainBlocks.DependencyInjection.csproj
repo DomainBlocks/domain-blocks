@@ -11,7 +11,6 @@
 
     <ItemGroup>
       <ProjectReference Include="..\DomainBlocks.Core\DomainBlocks.Core.csproj" />
-      <ProjectReference Include="..\DomainBlocks.Experimental.EventSourcing.Persistence\DomainBlocks.Experimental.EventSourcing.Persistence.csproj" />
     </ItemGroup>
 
 </Project>
