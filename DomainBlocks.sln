@@ -105,8 +105,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.IntegrationTes
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Experimental.EventSourcing.Persistence", "src\DomainBlocks.Experimental.EventSourcing.Persistence\DomainBlocks.Experimental.EventSourcing.Persistence.csproj", "{027ED883-DADC-47EB-8935-2F429E717C1A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Experimental.EventSourcing.Persistence.Tests", "tests\DomainBlocks.Experimental.EventSourcing.Persistence.Tests\DomainBlocks.Experimental.EventSourcing.Persistence.Tests.csproj", "{D92790E0-0937-4860-9FC6-DE8ECFE6AB73}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -221,10 +219,6 @@ Global
 		{027ED883-DADC-47EB-8935-2F429E717C1A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{027ED883-DADC-47EB-8935-2F429E717C1A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{027ED883-DADC-47EB-8935-2F429E717C1A}.Release|Any CPU.Build.0 = Release|Any CPU
-		{D92790E0-0937-4860-9FC6-DE8ECFE6AB73}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{D92790E0-0937-4860-9FC6-DE8ECFE6AB73}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{D92790E0-0937-4860-9FC6-DE8ECFE6AB73}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{D92790E0-0937-4860-9FC6-DE8ECFE6AB73}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -262,7 +256,6 @@ Global
 		{279FA99D-967E-4322-82DD-57A8F9FAC85C} = {208DCA1D-1CC6-4827-9429-98CED3B53687}
 		{A4CE3860-2C45-4434-B8FA-55DFBE2C5733} = {108A4B4E-435D-457B-B175-1B9A96D26720}
 		{027ED883-DADC-47EB-8935-2F429E717C1A} = {EC8B7EC4-14F0-46F7-B330-0DDEDB5D28F0}
-		{D92790E0-0937-4860-9FC6-DE8ECFE6AB73} = {108A4B4E-435D-457B-B175-1B9A96D26720}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {BA018103-0F59-4D7F-9119-099BF2CC020F}
