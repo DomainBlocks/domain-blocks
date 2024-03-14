@@ -15,7 +15,12 @@
       <ProjectReference Include="..\..\..\examples\shopping\Shopping.Domain.Events\Shopping.Domain.Events.csproj" />
       <ProjectReference Include="..\..\..\third_party\SQLStreamStore\src\DomainBlocks.ThirdParty.SqlStreamStore.Postgres\DomainBlocks.ThirdParty.SqlStreamStore.Postgres.csproj" />
       <ProjectReference Include="..\..\src\DomainBlocks.Experimental.Persistence.EventStoreDb\DomainBlocks.Experimental.Persistence.EventStoreDb.csproj" />
+      <ProjectReference Include="..\..\src\DomainBlocks.Experimental.Persistence.SourceGenerators\DomainBlocks.Experimental.Persistence.SourceGenerators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false"/>
       <ProjectReference Include="..\..\src\DomainBlocks.Experimental.Persistence.SqlStreamStore\DomainBlocks.Experimental.Persistence.SqlStreamStore.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <AdditionalFiles Include="DDD.UbiquitousLanguageRegistry.txt" />
     </ItemGroup>
 
 </Project>

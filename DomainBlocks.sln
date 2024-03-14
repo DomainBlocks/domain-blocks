@@ -109,6 +109,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{CC60FCC0-E7F
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{FA9F0EE7-9D3A-4E23-9BC2-E6C206B795AC}"
+	ProjectSection(SolutionItems) = preProject
+		experimental\tests\Directory.Build.props = experimental\tests\Directory.Build.props
+	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Experimental.Persistence", "experimental\src\DomainBlocks.Experimental.Persistence\DomainBlocks.Experimental.Persistence.csproj", "{6CCFF6B3-8E18-40C2-821D-4B9914792948}"
 EndProject
@@ -117,6 +120,10 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Experimental.Persistence.EventStoreDb", "experimental\src\DomainBlocks.Experimental.Persistence.EventStoreDb\DomainBlocks.Experimental.Persistence.EventStoreDb.csproj", "{4191035F-33D9-4D3D-A8B2-71E072F6030C}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Experimental.Persistence.SqlStreamStore", "experimental\src\DomainBlocks.Experimental.Persistence.SqlStreamStore\DomainBlocks.Experimental.Persistence.SqlStreamStore.csproj", "{1C62836C-EA85-4EDA-8D21-234561BC1A58}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Experimental.Persistence.SourceGenerators", "experimental\src\DomainBlocks.Experimental.Persistence.SourceGenerators\DomainBlocks.Experimental.Persistence.SourceGenerators.csproj", "{4CE35DC9-DEFA-4CA2-B6C0-486BC5D0F6DA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Experimental.Persistence.SourceGenerators.Tests", "experimental\tests\DomainBlocks.Experimental.Persistence.SourceGenerators.Tests\DomainBlocks.Experimental.Persistence.SourceGenerators.Tests.csproj", "{6A273BCF-0E01-4217-9592-6BFBBB36B55B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -240,6 +247,14 @@ Global
 		{1C62836C-EA85-4EDA-8D21-234561BC1A58}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{1C62836C-EA85-4EDA-8D21-234561BC1A58}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{1C62836C-EA85-4EDA-8D21-234561BC1A58}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4CE35DC9-DEFA-4CA2-B6C0-486BC5D0F6DA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4CE35DC9-DEFA-4CA2-B6C0-486BC5D0F6DA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4CE35DC9-DEFA-4CA2-B6C0-486BC5D0F6DA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4CE35DC9-DEFA-4CA2-B6C0-486BC5D0F6DA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6A273BCF-0E01-4217-9592-6BFBBB36B55B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6A273BCF-0E01-4217-9592-6BFBBB36B55B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6A273BCF-0E01-4217-9592-6BFBBB36B55B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6A273BCF-0E01-4217-9592-6BFBBB36B55B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -281,6 +296,8 @@ Global
 		{2E7FA81A-65F7-428B-8A2E-EBAAA8B5D3F4} = {FA9F0EE7-9D3A-4E23-9BC2-E6C206B795AC}
 		{4191035F-33D9-4D3D-A8B2-71E072F6030C} = {CC60FCC0-E7F9-468E-A2D6-70FFD9EEC9D7}
 		{1C62836C-EA85-4EDA-8D21-234561BC1A58} = {CC60FCC0-E7F9-468E-A2D6-70FFD9EEC9D7}
+		{4CE35DC9-DEFA-4CA2-B6C0-486BC5D0F6DA} = {CC60FCC0-E7F9-468E-A2D6-70FFD9EEC9D7}
+		{6A273BCF-0E01-4217-9592-6BFBBB36B55B} = {FA9F0EE7-9D3A-4E23-9BC2-E6C206B795AC}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {BA018103-0F59-4D7F-9119-099BF2CC020F}

@@ -1,0 +1,6 @@
+Customer
+Product
+Stock
+Shop
+Employee
+ShoppingCart
