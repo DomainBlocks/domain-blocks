@@ -110,13 +110,13 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{CC60FCC0-E7F
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{FA9F0EE7-9D3A-4E23-9BC2-E6C206B795AC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Experimental.EventSourcing.Persistence", "experimental\src\DomainBlocks.Experimental.EventSourcing.Persistence\DomainBlocks.Experimental.EventSourcing.Persistence.csproj", "{6CCFF6B3-8E18-40C2-821D-4B9914792948}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Experimental.Persistence", "experimental\src\DomainBlocks.Experimental.Persistence\DomainBlocks.Experimental.Persistence.csproj", "{6CCFF6B3-8E18-40C2-821D-4B9914792948}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Experimental.EventSourcing.Persistence.Tests.Integration", "experimental\tests\DomainBlocks.Experimental.EventSourcing.Persistence.Tests.Integration\DomainBlocks.Experimental.EventSourcing.Persistence.Tests.Integration.csproj", "{2E7FA81A-65F7-428B-8A2E-EBAAA8B5D3F4}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Experimental.Persistence.Tests.Integration", "experimental\tests\DomainBlocks.Experimental.Persistence.Tests.Integration\DomainBlocks.Experimental.Persistence.Tests.Integration.csproj", "{2E7FA81A-65F7-428B-8A2E-EBAAA8B5D3F4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Experimental.EventSourcing.Persistence.EventStoreDb", "experimental\src\DomainBlocks.Experimental.EventSourcing.Persistence.EventStoreDb\DomainBlocks.Experimental.EventSourcing.Persistence.EventStoreDb.csproj", "{4191035F-33D9-4D3D-A8B2-71E072F6030C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Experimental.Persistence.EventStoreDb", "experimental\src\DomainBlocks.Experimental.Persistence.EventStoreDb\DomainBlocks.Experimental.Persistence.EventStoreDb.csproj", "{4191035F-33D9-4D3D-A8B2-71E072F6030C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Experimental.EventSourcing.Persistence.SqlStreamStore", "experimental\src\DomainBlocks.Experimental.EventSourcing.Persistence.SqlStreamStore\DomainBlocks.Experimental.EventSourcing.Persistence.SqlStreamStore.csproj", "{1C62836C-EA85-4EDA-8D21-234561BC1A58}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Experimental.Persistence.SqlStreamStore", "experimental\src\DomainBlocks.Experimental.Persistence.SqlStreamStore\DomainBlocks.Experimental.Persistence.SqlStreamStore.csproj", "{1C62836C-EA85-4EDA-8D21-234561BC1A58}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
