@@ -1,9 +1,9 @@
 namespace DomainBlocks.Experimental.Persistence.Serialization;
 
-public interface IEventDataSerializer<TRawData>
+public interface IEventDataSerializer
 {
-    string ContentType { get; }
-    TRawData Serialize(object obj);
-    object Deserialize(TRawData data, Type type);
-    T Deserialize<T>(TRawData data);
+    byte[] SerializeToBytes(object value);
+    string SerializeToString(object value);
+    object Deserialize(ReadOnlySpan<byte> data, Type type);
+    object Deserialize(string data, Type type);
 }

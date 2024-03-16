@@ -3,27 +3,32 @@ using System.Text.Json;
 
 namespace DomainBlocks.Experimental.Persistence.Serialization;
 
-public class JsonBytesEventDataSerializer : IEventDataSerializer<ReadOnlyMemory<byte>>
+public class JsonEventDataSerializer : IEventDataSerializer
 {
     private readonly JsonSerializerOptions? _options;
 
-    public JsonBytesEventDataSerializer(JsonSerializerOptions? options = null)
+    public JsonEventDataSerializer(JsonSerializerOptions? options = null)
     {
         _options = options;
     }
 
     public string ContentType => MediaTypeNames.Application.Json;
 
-    public ReadOnlyMemory<byte> Serialize(object @event)
+    public byte[] SerializeToBytes(object value)
     {
-        return JsonSerializer.SerializeToUtf8Bytes(@event, _options);
+        return JsonSerializer.SerializeToUtf8Bytes(value, _options);
     }
 
-    public object Deserialize(ReadOnlyMemory<byte> data, Type type)
+    public string SerializeToString(object value)
+    {
+        return JsonSerializer.Serialize(value, _options);
+    }
+
+    public object Deserialize(ReadOnlySpan<byte> data, Type type)
     {
         try
         {
-            return JsonSerializer.Deserialize(data.Span, type, _options) ??
+            return JsonSerializer.Deserialize(data, type, _options) ??
                    throw new EventDeserializeException("Event deserialize result was null");
         }
         catch (Exception ex)
@@ -32,11 +37,11 @@ public class JsonBytesEventDataSerializer : IEventDataSerializer<ReadOnlyMemory<
         }
     }
 
-    public T Deserialize<T>(ReadOnlyMemory<byte> data)
+    public object Deserialize(string data, Type type)
     {
         try
         {
-            return JsonSerializer.Deserialize<T>(data.Span, _options) ??
+            return JsonSerializer.Deserialize(data, type, _options) ??
                    throw new EventDeserializeException("Event deserialize result was null");
         }
         catch (Exception ex)

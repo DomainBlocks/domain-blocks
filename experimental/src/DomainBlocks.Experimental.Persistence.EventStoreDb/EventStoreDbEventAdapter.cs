@@ -1,39 +1,43 @@
 using DomainBlocks.Experimental.Persistence.Adapters;
+using DomainBlocks.Experimental.Persistence.Serialization;
 using EventStore.Client;
 
 namespace DomainBlocks.Experimental.Persistence.EventStoreDb;
 
-public sealed class EventStoreDbEventAdapter :
-    IEventAdapter<ResolvedEvent, EventData, StreamRevision, ReadOnlyMemory<byte>>
+public sealed class EventStoreDbEventAdapter : IEventAdapter<ResolvedEvent, EventData, StreamRevision>
 {
     public string GetEventName(ResolvedEvent readEvent) => readEvent.Event.EventType;
-    public Task<ReadOnlyMemory<byte>> GetEventData(ResolvedEvent readEvent) => Task.FromResult(readEvent.Event.Data);
 
-    public bool TryGetMetadata(ResolvedEvent readEvent, out ReadOnlyMemory<byte> metadata)
+    public ValueTask<object> Deserialize(ResolvedEvent readEvent, Type type, IEventDataSerializer serializer)
+    {
+        var obj = serializer.Deserialize(readEvent.Event.Data.Span, type);
+        return ValueTask.FromResult(obj);
+    }
+
+    public Dictionary<string, string> DeserializeMetadata(ResolvedEvent readEvent, IEventDataSerializer serializer)
     {
         if (readEvent.Event.Metadata.IsEmpty)
         {
-            metadata = default;
-            return false;
+            return new Dictionary<string, string>();
         }
 
-        metadata = readEvent.Event.Metadata;
-        return true;
+        return (Dictionary<string, string>)serializer.Deserialize(
+            readEvent.Event.Metadata.Span, typeof(Dictionary<string, string>));
     }
 
     public StreamRevision GetStreamVersion(ResolvedEvent readEvent) =>
         StreamRevision.FromStreamPosition(readEvent.OriginalEventNumber);
 
     public EventData CreateWriteEvent(
-        string eventName,
-        ReadOnlyMemory<byte> data,
-        ReadOnlyMemory<byte> metadata = default,
-        string? contentType = null)
+        string eventName, object payload, Dictionary<string, string>? metadata, IEventDataSerializer serializer)
     {
-        ReadOnlyMemory<byte>? nullableMetadata = metadata.Equals(default) ? null : metadata;
+        var data = serializer.SerializeToBytes(payload);
+        ReadOnlyMemory<byte>? rawMetadata = metadata == null ? null : serializer.SerializeToBytes(metadata);
 
-        return contentType == null
-            ? new EventData(Uuid.NewUuid(), eventName, data, nullableMetadata)
-            : new EventData(Uuid.NewUuid(), eventName, data, nullableMetadata, contentType);
+        // return contentType == null
+        //     ? new EventData(Uuid.NewUuid(), eventName, data, rawMetadata)
+        //     : new EventData(Uuid.NewUuid(), eventName, data, rawMetadata, contentType);
+
+        return new EventData(Uuid.NewUuid(), eventName, data, rawMetadata);
     }
 }

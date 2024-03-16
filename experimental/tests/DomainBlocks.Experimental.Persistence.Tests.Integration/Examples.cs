@@ -1,6 +1,6 @@
 using Entities;
 
-namespace DomainBlocks.Experimental.Persistence.SourceGenerators.Sample;
+namespace DomainBlocks.Experimental.Persistence.Tests.Integration;
 
 public class Examples
 {

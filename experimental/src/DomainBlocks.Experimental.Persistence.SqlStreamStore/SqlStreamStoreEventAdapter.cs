@@ -1,30 +1,37 @@
 ﻿using DomainBlocks.Experimental.Persistence.Adapters;
+using DomainBlocks.Experimental.Persistence.Serialization;
 using DomainBlocks.ThirdParty.SqlStreamStore.Streams;
 
 namespace DomainBlocks.Experimental.Persistence.SqlStreamStore;
 
-public sealed class SqlStreamStoreEventAdapter : IEventAdapter<StreamMessage, NewStreamMessage, int, string>
+public sealed class SqlStreamStoreEventAdapter : IEventAdapter<StreamMessage, NewStreamMessage, int>
 {
     public string GetEventName(StreamMessage readEvent) => readEvent.Type;
-    public Task<string> GetEventData(StreamMessage readEvent) => readEvent.GetJsonData();
 
-    public bool TryGetMetadata(StreamMessage readEvent, out string? metadata)
+    public async ValueTask<object> Deserialize(StreamMessage readEvent, Type type, IEventDataSerializer serializer)
+    {
+        var data = await readEvent.GetJsonData();
+        return serializer.Deserialize(data, type);
+    }
+
+    public Dictionary<string, string> DeserializeMetadata(StreamMessage readEvent, IEventDataSerializer serializer)
     {
         if (string.IsNullOrEmpty(readEvent.JsonMetadata))
         {
-            metadata = null;
-            return false;
+            return new Dictionary<string, string>();
         }
 
-        metadata = readEvent.JsonMetadata;
-        return true;
+        return (Dictionary<string, string>)serializer.Deserialize(
+            readEvent.JsonMetadata, typeof(Dictionary<string, string>));
     }
 
     public int GetStreamVersion(StreamMessage readEvent) => readEvent.StreamVersion;
 
     public NewStreamMessage CreateWriteEvent(
-        string eventName, string data, string? metadata = null, string? contentType = null)
+        string eventName, object payload, Dictionary<string, string>? metadata, IEventDataSerializer serializer)
     {
-        return new NewStreamMessage(Guid.NewGuid(), eventName, data, metadata);
+        var serializedData = serializer.SerializeToString(payload);
+        var serializedMetadata = metadata == null ? null : serializer.SerializeToString(metadata);
+        return new NewStreamMessage(Guid.NewGuid(), eventName, serializedData, serializedMetadata);
     }
 }

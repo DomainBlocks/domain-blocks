@@ -1,7 +1,9 @@
+using DomainBlocks.Experimental.Persistence.Serialization;
+
 namespace DomainBlocks.Experimental.Persistence.Adapters;
 
-public interface IWriteEventAdapter<out TWriteEvent, in TRawData>
+public interface IWriteEventAdapter<out TWriteEvent>
 {
     TWriteEvent CreateWriteEvent(
-        string eventName, TRawData data, TRawData? metadata = default, string? contentType = null);
+        string eventName, object payload, Dictionary<string, string>? metadata, IEventDataSerializer serializer);
 }

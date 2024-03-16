@@ -1,6 +1,6 @@
 using Generators;
 
-namespace DomainBlocks.Experimental.Persistence.SourceGenerators.Sample;
+namespace DomainBlocks.Experimental.Persistence.Tests.Integration;
 
 // This code will not compile until you build the project with the Source Generators
 

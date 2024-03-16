@@ -41,9 +41,13 @@ public class EntityStoreTests
             .Build();
 
         EventStoreDbEntityStore = new EntityStoreBuilder()
-            .UseEventStoreDb(EventStoreDbConnectionString, o => o.UseJsonSerialization(jsonOptions))
+            .UseEventStoreDb(EventStoreDbConnectionString)
             .AddEntityAdapterType(typeof(EntityAdapter<,>))
-            .Configure(c => c.MapEventsOfType<IDomainEvent>().FromAssemblyOf<IDomainEvent>())
+            .Configure(c =>
+            {
+                c.UseJsonSerialization(jsonOptions);
+                c.MapEventsOfType<IDomainEvent>().FromAssemblyOf<IDomainEvent>();
+            })
             .Build();
     }
 
@@ -153,6 +157,8 @@ public class EntityStoreTests
                 config
                     .For<FunctionalEntityWrapper<FunctionalShoppingCart>>()
                     .SetStreamIdPrefix("functionalShoppingCart");
+
+                config.For<FunctionalEntityWrapper<FunctionalShoppingCart>>(c => { c.SetStreamIdPrefix("100"); });
             })
             .Build();
 
@@ -185,13 +191,12 @@ public class EntityStoreTests
             Enumerable.Empty<IEntityAdapter>(),
             new[] { new GenericEntityAdapterFactory(typeof(MutableEntityAdapter<>)) });
 
-        var config = new EntityStoreConfig(eventTypeMap);
-        var dataConfig = new EntityStoreConfig<string>(new JsonStringEventDataSerializer());
+        var config = new EntityStoreConfig(eventTypeMap, new JsonEventDataSerializer());
 
         var eventStore = new SqlStreamStoreEventStore(streamStore);
         var eventAdapter = new SqlStreamStoreEventAdapter();
 
-        var store = EntityStore.Create(eventStore, eventAdapter, entityAdapterProvider, config, dataConfig);
+        var store = EntityStore.Create(eventStore, eventAdapter, entityAdapterProvider, config);
 
         var entity = new MutableShoppingCart();
         entity.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Foo"));
@@ -218,8 +223,8 @@ public class EntityStoreTests
             .Configure<ShoppingCart>(config =>
             {
                 config.SetStreamIdPrefix("shoppingCart");
-                config.MapEventType<ShoppingCartCreated>();
-                config.MapEventType<ItemAddedToShoppingCart>();
+                config.MapEvent<ShoppingCartCreated>();
+                config.MapEvent<ItemAddedToShoppingCart>();
             })
             .Build();
 
@@ -229,34 +234,45 @@ public class EntityStoreTests
             .AddEntityAdapterType(typeof(EntityAdapter<,>))
             .Configure<ShoppingCartV2>(config =>
             {
-                config.SetStreamIdPrefix("shoppingCart");
-
-                config.MapEventType<ShoppingCartCreatedV2>().WithName("ShoppingCartCreated");
-
-                // TODO: Upcast
-                config.MapEventType<ShoppingCartCreated>().WithName("ShoppingCartCreated");
-
-                // Event name -> conditional deserialize -> transform
+                // MapEventsOfType => FromAssembly, FromAssemblies, Where (type predicate)
+                // MapEvent => WithName, WithDeprecatedNames
+                // AddEventMetadata
+                // TransformEvent => To, ForName(s), Where (metadata predicate)
+                // SetStreamIdPrefix or SetStreamNamePrefix
 
                 // config
-                //     .Upcast<ShoppingCartCreated>()
-                //     .To(e => new ShoppingCartCreatedV2(e.Id, newFieldDefaultValue))
-                //     .Where(meta => !meta.ContainsKey("Version"));
-                config.MapEventType<ItemAddedToShoppingCart>();
-
-                // config.EventTypes
-                //     .Map<ShoppingCartCreatedV2>()
+                //     .MapEventsOfType<IDomainEvent>()
+                //     .FromAssembly(typeof(IDomainEvent).Assembly);
+                //
+                // config
+                //     .MapEvent<ShoppingCartCreatedV2>()
                 //     .WithName("ShoppingCartCreated")
+                //     .WithDeprecatedNames("Foo", "Bar")
                 //     .WithMetadata(() => new Dictionary<string, string>
                 //     {
                 //         { "Version", "v2" }
                 //     });
-
-                // TODO
-                // stream.EventTypes
-                //     .Map<ShoppingCartCreated>()
+                //
+                // config
+                //     .MapEvent<ShoppingCartCreated>()
+                //     .WithName("ShoppingCartCreated")
                 //     .WithReadCondition(meta => !meta.ContainsKey("Version"))
-                //     .WithUpcastTo(e => new ShoppingCartCreatedV2(e.Id, newFieldDefaultValue));
+                //     .WithReadTransform(e => new ShoppingCartCreatedV2(e.Id, newFieldDefaultValue));
+                //
+                // config
+                //     .MapReadOnlyEvent<ShoppingCartCreated>()
+                //     .WithName("ShoppingCartCreated")
+                //     .WithCondition(meta => !meta.ContainsKey("Version"))
+                //     .WithTransform(e => new ShoppingCartCreatedV2(e.Id, newFieldDefaultValue));
+                //
+                // config.MapEvent<ItemAddedToShoppingCart>();
+                //
+                // config.AddEventMetadata<ShoppingCartCreatedV2>(() => new Dictionary<string, string>
+                // {
+                //     { "Version", "v2" }
+                // });
+                //
+                // config.SetStreamIdPrefix("shoppingCart");
             })
             .Build();
 
