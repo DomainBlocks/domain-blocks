@@ -1,8 +1,9 @@
 using System.Text.Json;
 using DomainBlocks.Experimental.Persistence.EventStoreDb;
 using DomainBlocks.Experimental.Persistence.SqlStreamStore;
-using DomainBlocks.Experimental.Persistence.Adapters;
 using DomainBlocks.Experimental.Persistence.Configuration;
+using DomainBlocks.Experimental.Persistence.Entities;
+using DomainBlocks.Experimental.Persistence.Events;
 using DomainBlocks.Experimental.Persistence.Extensions;
 using DomainBlocks.Experimental.Persistence.Serialization;
 using DomainBlocks.Experimental.Persistence.Tests.Integration.Adapters;
@@ -189,16 +190,15 @@ public class EntityStoreTests
             }
             .ToEventTypeMap();
 
+        var eventStore = new SqlStreamStoreEventStore(streamStore);
+        var writeEventFactory = new StringWriteEventFactory();
+
         var entityAdapterProvider = new EntityAdapterProvider(
             Enumerable.Empty<IEntityAdapter>(),
             new[] { new GenericEntityAdapterFactory(typeof(MutableEntityAdapter<>)) });
 
         var config = new EntityStoreConfig(eventTypeMap, new JsonEventDataSerializer());
-
-        var eventStore = new SqlStreamStoreEventStore(streamStore);
-        var eventAdapter = new SqlStreamStoreEventAdapter();
-
-        var store = EntityStore.Create(eventStore, eventAdapter, entityAdapterProvider, config);
+        var store = new EntityStore(eventStore, writeEventFactory, entityAdapterProvider, config);
 
         var entity = new MutableShoppingCart();
         entity.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Foo"));

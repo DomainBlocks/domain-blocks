@@ -1,4 +1,4 @@
-namespace DomainBlocks.Experimental.Persistence.Adapters;
+namespace DomainBlocks.Experimental.Persistence.Entities;
 
 public interface IEntityAdapter
 {

@@ -1,38 +1,28 @@
 using System.Runtime.CompilerServices;
-using DomainBlocks.Experimental.Persistence.Adapters;
 using DomainBlocks.Experimental.Persistence.Configuration;
+using DomainBlocks.Experimental.Persistence.Entities;
+using DomainBlocks.Experimental.Persistence.Events;
+using DomainBlocks.Experimental.Persistence.Extensions;
 using DomainBlocks.Experimental.Persistence.Serialization;
 
 namespace DomainBlocks.Experimental.Persistence;
 
-public static class EntityStore
+public sealed class EntityStore : IEntityStore
 {
-    public static IEntityStore Create<TReadEvent, TWriteEvent>(
-        IEventStore<TReadEvent, TWriteEvent> eventStore,
-        IEventAdapter<TReadEvent, TWriteEvent> eventAdapter,
-        EntityAdapterProvider entityAdapterProvider,
-        EntityStoreConfig config)
-    {
-        return new EntityStore<TReadEvent, TWriteEvent>(eventStore, eventAdapter, entityAdapterProvider, config);
-    }
-}
-
-internal sealed class EntityStore<TReadEvent, TWriteEvent> : IEntityStore
-{
-    private readonly IEventStore<TReadEvent, TWriteEvent> _eventStore;
-    private readonly IEventAdapter<TReadEvent, TWriteEvent> _eventAdapter;
+    private readonly IEventStore _eventStore;
+    private readonly IWriteEventFactory _writeEventFactory;
     private readonly EntityAdapterProvider _entityAdapterProvider;
     private readonly EntityStoreConfig _config;
     private readonly ConditionalWeakTable<object, TrackedEntityContext> _trackedEntities = new();
 
     public EntityStore(
-        IEventStore<TReadEvent, TWriteEvent> eventStore,
-        IEventAdapter<TReadEvent, TWriteEvent> eventAdapter,
+        IEventStore eventStore,
+        IWriteEventFactory writeEventFactory,
         EntityAdapterProvider entityAdapterProvider,
         EntityStoreConfig config)
     {
         _eventStore = eventStore;
-        _eventAdapter = eventAdapter;
+        _writeEventFactory = writeEventFactory;
         _entityAdapterProvider = entityAdapterProvider;
         _config = config;
     }
@@ -86,7 +76,7 @@ internal sealed class EntityStore<TReadEvent, TWriteEvent> : IEntityStore
             streamIdPrefix = DefaultStreamIdPrefix.CreateFor(typeof(TEntity));
         }
 
-        var appendedWriteEvents = new List<TWriteEvent>();
+        var appendedWriteEvents = new List<WriteEvent>();
         var eventCountSinceLastSnapshot = loadedEventCount;
 
         foreach (var e in raisedEvents)
@@ -114,7 +104,7 @@ internal sealed class EntityStore<TReadEvent, TWriteEvent> : IEntityStore
             // }
 
             //var writeEvent = _eventAdapter.CreateWriteEvent(eventName, rawData, contentType: serializer.ContentType);
-            var writeEvent = _eventAdapter.CreateWriteEvent(eventName, e, null, serializer);
+            var writeEvent = _writeEventFactory.Create(eventName, e, null, serializer);
 
             appendedWriteEvents.Add(writeEvent);
             eventCountSinceLastSnapshot++;
@@ -202,8 +192,8 @@ internal sealed class EntityStore<TReadEvent, TWriteEvent> : IEntityStore
         {
             await foreach (var readEvent in readEvents)
             {
-                loadedVersion = _eventAdapter.GetStreamVersion(readEvent);
-                var eventName = _eventAdapter.GetEventName(readEvent);
+                loadedVersion = readEvent.StreamVersion;
+                var eventName = readEvent.Name;
 
                 // Ignore any snapshot events. A snapshot event would usually be the first event in the case we start
                 // reading from a snapshot event version, and there have been no other writes between reading the
@@ -217,9 +207,9 @@ internal sealed class EntityStore<TReadEvent, TWriteEvent> : IEntityStore
                 if (eventTypeMap.IsEventNameIgnored(eventName)) continue;
 
                 var eventType = eventTypeMap[eventName].EventType;
-                var @event = await _eventAdapter.Deserialize(readEvent, eventType, serializer);
-
-                yield return @event;
+                //var deserializedEvent = readEvent.Deserialize(eventType, serializer);
+                var deserializedEvent = serializer.Deserialize(readEvent, eventType);
+                yield return deserializedEvent;
             }
         }
     }
@@ -236,16 +226,15 @@ internal sealed class EntityStore<TReadEvent, TWriteEvent> : IEntityStore
 
         await foreach (var e in events)
         {
-            var eventName = _eventAdapter.GetEventName(e);
+            var eventName = e.Name;
             var isSnapshotEvent = eventName == SystemEventNames.StateSnapshot;
 
             if (!isSnapshotEvent) continue;
 
-            var state = await _eventAdapter.Deserialize(e, entityAdapter.StateType, serializer);
-            var stateReplica = await _eventAdapter.Deserialize(e, entityAdapter.StateType, serializer);
-            var streamVersion = _eventAdapter.GetStreamVersion(e);
+            var state = serializer.Deserialize(e, entityAdapter.StateType);
+            var stateReplica = serializer.Deserialize(e, entityAdapter.StateType);
 
-            return new LoadSnapshotResult(state, stateReplica, streamVersion);
+            return new LoadSnapshotResult(state, stateReplica, e.StreamVersion);
         }
 
         return null;

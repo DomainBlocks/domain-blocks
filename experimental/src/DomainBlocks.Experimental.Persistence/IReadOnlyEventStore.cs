@@ -1,9 +1,11 @@
+using DomainBlocks.Experimental.Persistence.Events;
+
 namespace DomainBlocks.Experimental.Persistence;
 
 /// <summary>
 /// Exposes read-only operations for a store of events.
 /// </summary>
-public interface IReadOnlyEventStore<out TReadEvent>
+public interface IReadOnlyEventStore
 {
     /// <summary>
     /// Reads an event stream forwards or backwards, optionally from a specific version within the stream.
@@ -15,14 +17,14 @@ public interface IReadOnlyEventStore<out TReadEvent>
     /// start in the forwards direction, or from the end in the backwards direction.
     /// </param>
     /// <param name="cancellationToken">The optional <see cref="System.Threading.CancellationToken" />.</param>
-    /// <returns>An async enumerable of <see cref="TReadEvent" />.</returns>
-    IAsyncEnumerable<TReadEvent> ReadStreamAsync(
+    /// <returns>An async enumerable of <see cref="ReadEvent" />.</returns>
+    IAsyncEnumerable<ReadEvent> ReadStreamAsync(
         string streamId,
         StreamReadDirection direction,
         StreamVersion fromVersion,
         CancellationToken cancellationToken = default);
 
-    IAsyncEnumerable<TReadEvent> ReadStreamAsync(
+    IAsyncEnumerable<ReadEvent> ReadStreamAsync(
         string streamId,
         StreamReadDirection direction,
         StreamReadOrigin readOrigin = StreamReadOrigin.Default,

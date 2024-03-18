@@ -1,4 +1,4 @@
-using DomainBlocks.Experimental.Persistence.Adapters;
+using DomainBlocks.Experimental.Persistence.Entities;
 using DomainBlocks.Experimental.Persistence.Tests.Integration.Model;
 
 namespace DomainBlocks.Experimental.Persistence.Tests.Integration.Adapters;

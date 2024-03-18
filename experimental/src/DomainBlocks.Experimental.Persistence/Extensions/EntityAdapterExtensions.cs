@@ -1,4 +1,4 @@
-using DomainBlocks.Experimental.Persistence.Adapters;
+using DomainBlocks.Experimental.Persistence.Entities;
 
 namespace DomainBlocks.Experimental.Persistence.Extensions;
 

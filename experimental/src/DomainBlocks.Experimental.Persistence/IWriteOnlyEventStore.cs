@@ -1,9 +1,11 @@
+using DomainBlocks.Experimental.Persistence.Events;
+
 namespace DomainBlocks.Experimental.Persistence;
 
 /// <summary>
 /// Exposes write-only operations for a store of events.
 /// </summary>
-public interface IWriteOnlyEventStore<in TWriteEvent>
+public interface IWriteOnlyEventStore
 {
     /// <summary>
     /// Appends a collection of events to a stream, optionally with an expected stream version for an optimistic
@@ -24,13 +26,13 @@ public interface IWriteOnlyEventStore<in TWriteEvent>
     /// </returns>
     Task<StreamVersion?> AppendToStreamAsync(
         string streamId,
-        IEnumerable<TWriteEvent> events,
+        IEnumerable<WriteEvent> events,
         StreamVersion expectedVersion,
         CancellationToken cancellationToken = default);
 
     Task<StreamVersion?> AppendToStreamAsync(
         string streamId,
-        IEnumerable<TWriteEvent> events,
-        ExpectedStreamState expectedState = ExpectedStreamState.Any,
+        IEnumerable<WriteEvent> events,
+        ExpectedStreamState expectedState,
         CancellationToken cancellationToken = default);
 }

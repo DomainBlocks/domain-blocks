@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using DomainBlocks.Experimental.Persistence.Events;
 using DomainBlocks.Logging;
 using DomainBlocks.ThirdParty.SqlStreamStore;
 using DomainBlocks.ThirdParty.SqlStreamStore.Streams;
@@ -8,7 +9,7 @@ using SqlStreamStoreStreamVersion = DomainBlocks.ThirdParty.SqlStreamStore.Strea
 
 namespace DomainBlocks.Experimental.Persistence.SqlStreamStore;
 
-public sealed class SqlStreamStoreEventStore : IEventStore<StreamMessage, NewStreamMessage>
+public sealed class SqlStreamStoreEventStore : IEventStore
 {
     private static readonly ILogger<SqlStreamStoreEventStore> Logger = Log.Create<SqlStreamStoreEventStore>();
     private readonly IStreamStore _streamStore;
@@ -20,7 +21,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore<StreamMessage, NewStr
         _readPageSize = readPageSize;
     }
 
-    public IAsyncEnumerable<StreamMessage> ReadStreamAsync(
+    public IAsyncEnumerable<ReadEvent> ReadStreamAsync(
         string streamId,
         StreamReadDirection direction,
         StreamVersion fromVersion,
@@ -30,7 +31,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore<StreamMessage, NewStr
         return ReadStreamInternalAsync(streamId, direction, fromVersionInternal, cancellationToken);
     }
 
-    public IAsyncEnumerable<StreamMessage> ReadStreamAsync(
+    public IAsyncEnumerable<ReadEvent> ReadStreamAsync(
         string streamId,
         StreamReadDirection direction,
         StreamReadOrigin readOrigin = StreamReadOrigin.Default,
@@ -51,7 +52,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore<StreamMessage, NewStr
 
     public Task<StreamVersion?> AppendToStreamAsync(
         string streamId,
-        IEnumerable<NewStreamMessage> events,
+        IEnumerable<WriteEvent> events,
         StreamVersion expectedVersion,
         CancellationToken cancellationToken = default)
     {
@@ -61,8 +62,8 @@ public sealed class SqlStreamStoreEventStore : IEventStore<StreamMessage, NewStr
 
     public Task<StreamVersion?> AppendToStreamAsync(
         string streamId,
-        IEnumerable<NewStreamMessage> events,
-        ExpectedStreamState expectedState = ExpectedStreamState.Any,
+        IEnumerable<WriteEvent> events,
+        ExpectedStreamState expectedState,
         CancellationToken cancellationToken = default)
     {
         var expectedVersion = expectedState switch
@@ -75,7 +76,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore<StreamMessage, NewStr
         return AppendToStreamInternalAsync(streamId, events, expectedVersion, cancellationToken);
     }
 
-    private async IAsyncEnumerable<StreamMessage> ReadStreamInternalAsync(
+    private async IAsyncEnumerable<ReadEvent> ReadStreamInternalAsync(
         string streamId,
         StreamReadDirection direction,
         int fromVersion,
@@ -106,7 +107,10 @@ public sealed class SqlStreamStoreEventStore : IEventStore<StreamMessage, NewStr
         {
             foreach (var message in page.Messages)
             {
-                yield return message;
+                var streamVersion = StreamVersion.FromUInt64(Convert.ToUInt64(message.StreamVersion));
+                var rawPayload = await message.GetJsonData(cancellationToken);
+                var eventData = new StringEventData(rawPayload, message.JsonMetadata);
+                yield return new ReadEvent(message.Type, eventData, streamVersion);
             }
 
             if (page.IsEnd)
@@ -129,7 +133,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore<StreamMessage, NewStr
 
     private async Task<StreamVersion?> AppendToStreamInternalAsync(
         string streamId,
-        IEnumerable<NewStreamMessage> events,
+        IEnumerable<WriteEvent> events,
         int expectedVersion,
         CancellationToken cancellationToken)
     {
@@ -140,8 +144,12 @@ public sealed class SqlStreamStoreEventStore : IEventStore<StreamMessage, NewStr
             return null;
         }
 
+        var convertedEvents = eventsArray
+            .Select(x => new NewStreamMessage(Guid.NewGuid(), x.Name, x.StringData.Payload, x.StringData.Metadata))
+            .ToArray();
+
         // Use the ID of the first event in the batch as an identifier for the whole write
-        var writeId = eventsArray[0].MessageId;
+        var writeId = convertedEvents[0].MessageId;
 
         Logger.LogDebug(
             "Appending {EventCount} events to stream {StreamName}. Expected stream version {StreamVersion}. " +
@@ -153,7 +161,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore<StreamMessage, NewStr
 
         if (Logger.IsEnabled(LogLevel.Trace))
         {
-            foreach (var eventData in eventsArray)
+            foreach (var eventData in convertedEvents)
             {
                 Logger.LogTrace(
                     "Event to append {EventId}. EventType {EventType}. WriteId {WriteId}. " +
@@ -169,7 +177,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore<StreamMessage, NewStr
         try
         {
             var appendResult =
-                await _streamStore.AppendToStream(streamId, expectedVersion, eventsArray, cancellationToken);
+                await _streamStore.AppendToStream(streamId, expectedVersion, convertedEvents, cancellationToken);
 
             Logger.LogDebug("Written events to stream. WriteId {WriteId}", writeId);
 

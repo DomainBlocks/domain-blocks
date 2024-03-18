@@ -1,9 +1,8 @@
-using System.Net.Mime;
 using System.Text.Json;
 
 namespace DomainBlocks.Experimental.Persistence.Serialization;
 
-public class JsonEventDataSerializer : IEventDataSerializer
+public sealed class JsonEventDataSerializer : IEventDataSerializer
 {
     private readonly JsonSerializerOptions? _options;
 
@@ -12,7 +11,7 @@ public class JsonEventDataSerializer : IEventDataSerializer
         _options = options;
     }
 
-    public string ContentType => MediaTypeNames.Application.Json;
+    //public string ContentType => MediaTypeNames.Application.Json;
 
     public byte[] SerializeToBytes(object value)
     {

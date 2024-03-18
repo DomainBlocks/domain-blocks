@@ -1,9 +1,10 @@
 using DomainBlocks.Experimental.Persistence.Configuration;
+using DomainBlocks.Experimental.Persistence.Events;
 using EventStore.Client;
 
 namespace DomainBlocks.Experimental.Persistence.EventStoreDb;
 
-public static class EntityStoreBuilderExtensions
+public static class EventStoreDbEntityStoreBuilderExtensions
 {
     public static EntityStoreBuilder UseEventStoreDb(this EntityStoreBuilder builder, string connectionString)
     {
@@ -15,8 +16,7 @@ public static class EntityStoreBuilderExtensions
     {
         var client = new EventStoreClient(settings);
         var eventStore = new EventStoreDbEventStore(client);
-        var eventAdapter = new EventStoreDbEventAdapter();
-
-        return builder.SetInfrastructure(eventStore, eventAdapter);
+        var writeEventFactory = new BytesWriteEventFactory();
+        return builder.SetInfrastructure(eventStore, writeEventFactory);
     }
 }
