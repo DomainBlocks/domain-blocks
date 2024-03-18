@@ -7,28 +7,27 @@ namespace DomainBlocks.Experimental.Persistence;
 
 public static class EntityStore
 {
-    public static IEntityStore Create<TReadEvent, TWriteEvent, TStreamVersion>(
-        IEventStore<TReadEvent, TWriteEvent, TStreamVersion> eventStore,
-        IEventAdapter<TReadEvent, TWriteEvent, TStreamVersion> eventAdapter,
+    public static IEntityStore Create<TReadEvent, TWriteEvent>(
+        IEventStore<TReadEvent, TWriteEvent> eventStore,
+        IEventAdapter<TReadEvent, TWriteEvent> eventAdapter,
         EntityAdapterProvider entityAdapterProvider,
-        EntityStoreConfig config) where TStreamVersion : struct
+        EntityStoreConfig config)
     {
-        return new EntityStore<TReadEvent, TWriteEvent, TStreamVersion>(
-            eventStore, eventAdapter, entityAdapterProvider, config);
+        return new EntityStore<TReadEvent, TWriteEvent>(eventStore, eventAdapter, entityAdapterProvider, config);
     }
 }
 
-internal sealed class EntityStore<TReadEvent, TWriteEvent, TStreamVersion> : IEntityStore where TStreamVersion : struct
+internal sealed class EntityStore<TReadEvent, TWriteEvent> : IEntityStore
 {
-    private readonly IEventStore<TReadEvent, TWriteEvent, TStreamVersion> _eventStore;
-    private readonly IEventAdapter<TReadEvent, TWriteEvent, TStreamVersion> _eventAdapter;
+    private readonly IEventStore<TReadEvent, TWriteEvent> _eventStore;
+    private readonly IEventAdapter<TReadEvent, TWriteEvent> _eventAdapter;
     private readonly EntityAdapterProvider _entityAdapterProvider;
     private readonly EntityStoreConfig _config;
     private readonly ConditionalWeakTable<object, TrackedEntityContext> _trackedEntities = new();
 
     public EntityStore(
-        IEventStore<TReadEvent, TWriteEvent, TStreamVersion> eventStore,
-        IEventAdapter<TReadEvent, TWriteEvent, TStreamVersion> eventAdapter,
+        IEventStore<TReadEvent, TWriteEvent> eventStore,
+        IEventAdapter<TReadEvent, TWriteEvent> eventAdapter,
         EntityAdapterProvider entityAdapterProvider,
         EntityStoreConfig config)
     {
@@ -57,22 +56,13 @@ internal sealed class EntityStore<TReadEvent, TWriteEvent, TStreamVersion> : IEn
         var raisedEvents = entityAdapter!.RaisedEventsSelector(entity).ToArray();
         if (raisedEvents.Length == 0) return;
 
-        //object initialStateReplica;
-        TStreamVersion? expectedVersion;
-        int loadedEventCount;
+        StreamVersion? expectedVersion = null;
+        var loadedEventCount = 0;
 
-        if (!_trackedEntities.TryGetValue(entity, out var context))
+        if (_trackedEntities.TryGetValue(entity, out var context))
         {
-            // Assume new
-            //initialStateReplica = binding.StateFactory();
-            expectedVersion = _eventStore.NoStreamVersion;
-            loadedEventCount = 0;
-        }
-        else
-        {
-            //initialStateReplica = context.InitialStateReplica;
-            loadedEventCount = context.LoadedEventCount;
             expectedVersion = context.StreamVersion;
+            loadedEventCount = context.LoadedEventCount;
         }
 
         // TODO: find an abstraction for this
@@ -142,7 +132,17 @@ internal sealed class EntityStore<TReadEvent, TWriteEvent, TStreamVersion> : IEn
         }
 
         var streamId = $"{streamIdPrefix}-{entityAdapter.IdSelector(entity)}";
-        await _eventStore.AppendToStreamAsync(streamId, appendedWriteEvents, expectedVersion, cancellationToken);
+
+        if (expectedVersion == null)
+        {
+            await _eventStore.AppendToStreamAsync(
+                streamId, appendedWriteEvents, ExpectedStreamState.NoStream, cancellationToken);
+        }
+        else
+        {
+            await _eventStore.AppendToStreamAsync(
+                streamId, appendedWriteEvents, expectedVersion.Value, cancellationToken);
+        }
     }
 
     private async Task<(TEntity, TrackedEntityContext)> RestoreAsync<TEntity>(
@@ -173,7 +173,7 @@ internal sealed class EntityStore<TReadEvent, TWriteEvent, TStreamVersion> : IEn
 
         object initialState;
         object initialStateReplica;
-        TStreamVersion? streamVersion = null;
+        var fromVersion = StreamVersion.Zero;
         var streamId = $"{streamIdPrefix}-{entityId}";
 
         var loadSnapshotResult = await TryLoadSnapshotAsync(streamId, entityAdapter!, serializer, cancellationToken);
@@ -181,7 +181,7 @@ internal sealed class EntityStore<TReadEvent, TWriteEvent, TStreamVersion> : IEn
         {
             initialState = loadSnapshotResult.State;
             initialStateReplica = loadSnapshotResult.StateReplica;
-            streamVersion = loadSnapshotResult.StreamVersion;
+            fromVersion = loadSnapshotResult.StreamVersion;
         }
         else
         {
@@ -190,19 +190,20 @@ internal sealed class EntityStore<TReadEvent, TWriteEvent, TStreamVersion> : IEn
         }
 
         var readEvents = _eventStore.ReadStreamAsync(
-            ReadStreamDirection.Forwards, streamId, streamVersion, cancellationToken);
+            streamId, StreamReadDirection.Forwards, fromVersion, cancellationToken);
 
+        StreamVersion? loadedVersion = null;
         var loadedEventCount = 0;
-        var entity = await entityAdapter!.EntityRestorer(initialState, TransformEventsStream(), cancellationToken);
+        var entity = await entityAdapter!.EntityRestorer(initialState, TransformEventStream(), cancellationToken);
 
-        return (entity, new TrackedEntityContext(initialStateReplica, streamVersion, loadedEventCount));
+        return (entity, new TrackedEntityContext(initialStateReplica, loadedVersion, loadedEventCount));
 
-        async IAsyncEnumerable<object> TransformEventsStream()
+        async IAsyncEnumerable<object> TransformEventStream()
         {
             await foreach (var readEvent in readEvents)
             {
+                loadedVersion = _eventAdapter.GetStreamVersion(readEvent);
                 var eventName = _eventAdapter.GetEventName(readEvent);
-                streamVersion = _eventAdapter.GetStreamVersion(readEvent);
 
                 // Ignore any snapshot events. A snapshot event would usually be the first event in the case we start
                 // reading from a snapshot event version, and there have been no other writes between reading the
@@ -231,7 +232,7 @@ internal sealed class EntityStore<TReadEvent, TWriteEvent, TStreamVersion> : IEn
     {
         // Read stream backwards until we find the first StateSnapshot event.
         var events = _eventStore.ReadStreamAsync(
-            ReadStreamDirection.Backwards, streamId, cancellationToken: cancellationToken);
+            streamId, StreamReadDirection.Backwards, cancellationToken: cancellationToken);
 
         await foreach (var e in events)
         {
@@ -254,7 +255,7 @@ internal sealed class EntityStore<TReadEvent, TWriteEvent, TStreamVersion> : IEn
     {
         public TrackedEntityContext(
             object initialStateReplica,
-            TStreamVersion? streamVersion,
+            StreamVersion? streamVersion,
             int loadedEventCount)
         {
             InitialStateReplica = initialStateReplica;
@@ -263,13 +264,13 @@ internal sealed class EntityStore<TReadEvent, TWriteEvent, TStreamVersion> : IEn
         }
 
         public object InitialStateReplica { get; }
-        public TStreamVersion? StreamVersion { get; }
+        public StreamVersion? StreamVersion { get; }
         public int LoadedEventCount { get; }
     }
 
     private class LoadSnapshotResult
     {
-        public LoadSnapshotResult(object state, object stateReplica, TStreamVersion streamVersion)
+        public LoadSnapshotResult(object state, object stateReplica, StreamVersion streamVersion)
         {
             State = state;
             StateReplica = stateReplica;
@@ -278,6 +279,6 @@ internal sealed class EntityStore<TReadEvent, TWriteEvent, TStreamVersion> : IEn
 
         public object State { get; }
         public object StateReplica { get; }
-        public TStreamVersion StreamVersion { get; }
+        public StreamVersion StreamVersion { get; }
     }
 }

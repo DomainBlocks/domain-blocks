@@ -4,7 +4,7 @@ using DomainBlocks.ThirdParty.SqlStreamStore.Streams;
 
 namespace DomainBlocks.Experimental.Persistence.SqlStreamStore;
 
-public sealed class SqlStreamStoreEventAdapter : IEventAdapter<StreamMessage, NewStreamMessage, int>
+public sealed class SqlStreamStoreEventAdapter : IEventAdapter<StreamMessage, NewStreamMessage>
 {
     public string GetEventName(StreamMessage readEvent) => readEvent.Type;
 
@@ -25,7 +25,8 @@ public sealed class SqlStreamStoreEventAdapter : IEventAdapter<StreamMessage, Ne
             readEvent.JsonMetadata, typeof(Dictionary<string, string>));
     }
 
-    public int GetStreamVersion(StreamMessage readEvent) => readEvent.StreamVersion;
+    public StreamVersion GetStreamVersion(StreamMessage readEvent) =>
+        StreamVersion.FromUInt64(Convert.ToUInt64(readEvent.StreamVersion));
 
     public NewStreamMessage CreateWriteEvent(
         string eventName, object payload, Dictionary<string, string>? metadata, IEventDataSerializer serializer)

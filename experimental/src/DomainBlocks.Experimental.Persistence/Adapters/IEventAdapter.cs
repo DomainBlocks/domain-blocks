@@ -1,8 +1,7 @@
 namespace DomainBlocks.Experimental.Persistence.Adapters;
 
-public interface IEventAdapter<in TReadEvent, out TWriteEvent, out TStreamVersion> :
-    IReadEventAdapter<TReadEvent, TStreamVersion>,
+public interface IEventAdapter<in TReadEvent, out TWriteEvent> :
+    IReadEventAdapter<TReadEvent>,
     IWriteEventAdapter<TWriteEvent>
-    where TStreamVersion : struct
 {
 }

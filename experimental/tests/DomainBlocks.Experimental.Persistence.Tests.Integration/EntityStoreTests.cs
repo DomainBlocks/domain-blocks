@@ -96,7 +96,9 @@ public class EntityStoreTests
         entity.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Foo"));
         await store.SaveAsync(entity);
 
-        var reloadedEntity = await store.LoadAsync<ShoppingCart>(id.ToString());
+        // TODO: Because the ID is internally set, we need to use the ID of the entity we just saved.
+        // Adjust the example model so that this isn't confusing.
+        var reloadedEntity = await store.LoadAsync<ShoppingCart>(entity.Id);
 
         Assert.That(reloadedEntity.State.Id, Is.EqualTo(entity.State.Id));
         Assert.That(reloadedEntity.State.Items, Is.EqualTo(entity.State.Items));

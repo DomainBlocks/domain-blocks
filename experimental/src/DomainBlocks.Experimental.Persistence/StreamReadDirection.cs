@@ -1,6 +1,6 @@
 namespace DomainBlocks.Experimental.Persistence;
 
-public enum ReadStreamDirection
+public enum StreamReadDirection
 {
     Forwards,
     Backwards

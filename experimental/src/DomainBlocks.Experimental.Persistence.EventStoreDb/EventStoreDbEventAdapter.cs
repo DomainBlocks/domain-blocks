@@ -4,7 +4,7 @@ using EventStore.Client;
 
 namespace DomainBlocks.Experimental.Persistence.EventStoreDb;
 
-public sealed class EventStoreDbEventAdapter : IEventAdapter<ResolvedEvent, EventData, StreamRevision>
+public sealed class EventStoreDbEventAdapter : IEventAdapter<ResolvedEvent, EventData>
 {
     public string GetEventName(ResolvedEvent readEvent) => readEvent.Event.EventType;
 
@@ -25,8 +25,8 @@ public sealed class EventStoreDbEventAdapter : IEventAdapter<ResolvedEvent, Even
             readEvent.Event.Metadata.Span, typeof(Dictionary<string, string>));
     }
 
-    public StreamRevision GetStreamVersion(ResolvedEvent readEvent) =>
-        StreamRevision.FromStreamPosition(readEvent.OriginalEventNumber);
+    public StreamVersion GetStreamVersion(ResolvedEvent readEvent) =>
+        StreamVersion.FromUInt64(readEvent.OriginalEventNumber);
 
     public EventData CreateWriteEvent(
         string eventName, object payload, Dictionary<string, string>? metadata, IEventDataSerializer serializer)

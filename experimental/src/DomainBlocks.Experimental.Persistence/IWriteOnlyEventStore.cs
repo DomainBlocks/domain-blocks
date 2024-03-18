@@ -3,13 +3,8 @@ namespace DomainBlocks.Experimental.Persistence;
 /// <summary>
 /// Exposes write-only operations for a store of events.
 /// </summary>
-public interface IWriteOnlyEventStore<in TWriteEvent, TStreamVersion> where TStreamVersion : struct
+public interface IWriteOnlyEventStore<in TWriteEvent>
 {
-    /// <summary>
-    /// Gets a value representing the version to use when a stream is expected to not exist.
-    /// </summary>
-    TStreamVersion NoStreamVersion { get; }
-
     /// <summary>
     /// Appends a collection of events to a stream, optionally with an expected stream version for an optimistic
     /// concurrency check.
@@ -27,9 +22,15 @@ public interface IWriteOnlyEventStore<in TWriteEvent, TStreamVersion> where TStr
     /// The new version of the stream after appending the events. Null if no events are written, i.e., if the
     /// <paramref name="events"/> collection is empty.
     /// </returns>
-    Task<TStreamVersion?> AppendToStreamAsync(
+    Task<StreamVersion?> AppendToStreamAsync(
         string streamId,
         IEnumerable<TWriteEvent> events,
-        TStreamVersion? expectedVersion = null,
+        StreamVersion expectedVersion,
+        CancellationToken cancellationToken = default);
+
+    Task<StreamVersion?> AppendToStreamAsync(
+        string streamId,
+        IEnumerable<TWriteEvent> events,
+        ExpectedStreamState expectedState = ExpectedStreamState.Any,
         CancellationToken cancellationToken = default);
 }

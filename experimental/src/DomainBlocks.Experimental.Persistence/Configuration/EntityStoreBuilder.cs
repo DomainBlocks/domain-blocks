@@ -10,10 +10,9 @@ public sealed class EntityStoreBuilder
     private readonly EntityStoreConfigBuilder _configBuilder = new();
     private EntityStoreFactory? _factory;
 
-    public EntityStoreBuilder SetInfrastructure<TReadEvent, TWriteEvent, TStreamVersion>(
-        IEventStore<TReadEvent, TWriteEvent, TStreamVersion> eventStore,
-        IEventAdapter<TReadEvent, TWriteEvent, TStreamVersion> eventAdapter)
-        where TStreamVersion : struct
+    public EntityStoreBuilder SetInfrastructure<TReadEvent, TWriteEvent>(
+        IEventStore<TReadEvent, TWriteEvent> eventStore,
+        IEventAdapter<TReadEvent, TWriteEvent> eventAdapter)
     {
         _factory = (entityAdapterProvider, config) =>
             EntityStore.Create(eventStore, eventAdapter, entityAdapterProvider, config);

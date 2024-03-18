@@ -1,13 +1,14 @@
-﻿using System.Runtime.CompilerServices;
-using DomainBlocks.Experimental.Persistence;
+﻿using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using DomainBlocks.Logging;
 using DomainBlocks.ThirdParty.SqlStreamStore;
 using DomainBlocks.ThirdParty.SqlStreamStore.Streams;
 using Microsoft.Extensions.Logging;
+using SqlStreamStoreStreamVersion = DomainBlocks.ThirdParty.SqlStreamStore.Streams.StreamVersion;
 
 namespace DomainBlocks.Experimental.Persistence.SqlStreamStore;
 
-public sealed class SqlStreamStoreEventStore : IEventStore<StreamMessage, NewStreamMessage, int>
+public sealed class SqlStreamStoreEventStore : IEventStore<StreamMessage, NewStreamMessage>
 {
     private static readonly ILogger<SqlStreamStoreEventStore> Logger = Log.Create<SqlStreamStoreEventStore>();
     private readonly IStreamStore _streamStore;
@@ -19,29 +20,80 @@ public sealed class SqlStreamStoreEventStore : IEventStore<StreamMessage, NewStr
         _readPageSize = readPageSize;
     }
 
-    public int NoStreamVersion => ExpectedVersion.NoStream;
-
-    public async IAsyncEnumerable<StreamMessage> ReadStreamAsync(
-        ReadStreamDirection direction,
+    public IAsyncEnumerable<StreamMessage> ReadStreamAsync(
         string streamId,
-        int? fromVersion = null,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        StreamReadDirection direction,
+        StreamVersion fromVersion,
+        CancellationToken cancellationToken = default)
     {
-        if (streamId == null) throw new ArgumentNullException(nameof(streamId));
+        var fromVersionInternal = Convert.ToInt32(fromVersion.ToUInt64());
+        return ReadStreamInternalAsync(streamId, direction, fromVersionInternal, cancellationToken);
+    }
 
+    public IAsyncEnumerable<StreamMessage> ReadStreamAsync(
+        string streamId,
+        StreamReadDirection direction,
+        StreamReadOrigin readOrigin = StreamReadOrigin.Default,
+        CancellationToken cancellationToken = default)
+    {
+        var fromVersion = readOrigin switch
+        {
+            StreamReadOrigin.Default => direction == StreamReadDirection.Forwards
+                ? SqlStreamStoreStreamVersion.Start
+                : SqlStreamStoreStreamVersion.End,
+            StreamReadOrigin.Start => SqlStreamStoreStreamVersion.Start,
+            StreamReadOrigin.End => SqlStreamStoreStreamVersion.End,
+            _ => throw new ArgumentOutOfRangeException(nameof(readOrigin), readOrigin, null)
+        };
+
+        return ReadStreamInternalAsync(streamId, direction, fromVersion, cancellationToken);
+    }
+
+    public Task<StreamVersion?> AppendToStreamAsync(
+        string streamId,
+        IEnumerable<NewStreamMessage> events,
+        StreamVersion expectedVersion,
+        CancellationToken cancellationToken = default)
+    {
+        var expectedVersionInternal = Convert.ToInt32(expectedVersion.ToUInt64());
+        return AppendToStreamInternalAsync(streamId, events, expectedVersionInternal, cancellationToken);
+    }
+
+    public Task<StreamVersion?> AppendToStreamAsync(
+        string streamId,
+        IEnumerable<NewStreamMessage> events,
+        ExpectedStreamState expectedState = ExpectedStreamState.Any,
+        CancellationToken cancellationToken = default)
+    {
+        var expectedVersion = expectedState switch
+        {
+            ExpectedStreamState.Any => ExpectedVersion.Any,
+            ExpectedStreamState.NoStream => ExpectedVersion.NoStream,
+            _ => throw new ArgumentOutOfRangeException(nameof(expectedState), expectedState, null)
+        };
+
+        return AppendToStreamInternalAsync(streamId, events, expectedVersion, cancellationToken);
+    }
+
+    private async IAsyncEnumerable<StreamMessage> ReadStreamInternalAsync(
+        string streamId,
+        StreamReadDirection direction,
+        int fromVersion,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
         // Get the first page.
         ReadStreamPage page;
         try
         {
-            if (direction == ReadStreamDirection.Forwards)
+            if (direction == StreamReadDirection.Forwards)
             {
                 page = await _streamStore.ReadStreamForwards(
-                    streamId, fromVersion ?? StreamVersion.Start, _readPageSize, cancellationToken: cancellationToken);
+                    streamId, fromVersion, _readPageSize, cancellationToken: cancellationToken);
             }
             else
             {
                 page = await _streamStore.ReadStreamBackwards(
-                    streamId, fromVersion ?? StreamVersion.End, _readPageSize, cancellationToken: cancellationToken);
+                    streamId, fromVersion, _readPageSize, cancellationToken: cancellationToken);
             }
         }
         catch (Exception ex)
@@ -75,15 +127,12 @@ public sealed class SqlStreamStoreEventStore : IEventStore<StreamMessage, NewStr
         }
     }
 
-    public async Task<int?> AppendToStreamAsync(
+    private async Task<StreamVersion?> AppendToStreamInternalAsync(
         string streamId,
         IEnumerable<NewStreamMessage> events,
-        int? expectedVersion = null,
-        CancellationToken cancellationToken = default)
+        int expectedVersion,
+        CancellationToken cancellationToken)
     {
-        if (streamId == null) throw new ArgumentNullException(nameof(streamId));
-        if (events == null) throw new ArgumentNullException(nameof(events));
-
         var eventsArray = events.ToArray();
         if (eventsArray.Length == 0)
         {
@@ -117,21 +166,20 @@ public sealed class SqlStreamStoreEventStore : IEventStore<StreamMessage, NewStr
             }
         }
 
-        AppendResult appendResult;
-
         try
         {
-            appendResult = await _streamStore.AppendToStream(
-                streamId, expectedVersion ?? ExpectedVersion.Any, eventsArray, cancellationToken);
+            var appendResult =
+                await _streamStore.AppendToStream(streamId, expectedVersion, eventsArray, cancellationToken);
 
             Logger.LogDebug("Written events to stream. WriteId {WriteId}", writeId);
+
+            Debug.Assert(appendResult.CurrentVersion >= 0);
+            return StreamVersion.FromUInt64(Convert.ToUInt64(appendResult.CurrentVersion));
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Unable to save events to stream {StreamName}. Write Id {WriteId}", streamId, writeId);
             throw;
         }
-
-        return appendResult.CurrentVersion;
     }
 }
