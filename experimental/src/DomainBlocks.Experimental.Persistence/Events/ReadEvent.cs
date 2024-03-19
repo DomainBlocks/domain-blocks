@@ -1,13 +1,18 @@
 namespace DomainBlocks.Experimental.Persistence.Events;
 
-public sealed class ReadEvent : EventBase
+public static class ReadEvent
 {
-    public ReadEvent(string name, BytesEventData bytesData, StreamVersion streamVersion) : base(name, bytesData)
+    public static ReadEvent<TSerializedData> Create<TSerializedData>(
+        string name, TSerializedData payload, TSerializedData? metadata, StreamVersion streamVersion)
     {
-        StreamVersion = streamVersion;
+        return new ReadEvent<TSerializedData>(name, payload, metadata, streamVersion);
     }
+}
 
-    public ReadEvent(string name, StringEventData stringData, StreamVersion streamVersion) : base(name, stringData)
+public sealed class ReadEvent<TSerializedData> : EventBase<TSerializedData>
+{
+    public ReadEvent(string name, TSerializedData payload, TSerializedData? metadata, StreamVersion streamVersion) :
+        base(name, payload, metadata)
     {
         StreamVersion = streamVersion;
     }

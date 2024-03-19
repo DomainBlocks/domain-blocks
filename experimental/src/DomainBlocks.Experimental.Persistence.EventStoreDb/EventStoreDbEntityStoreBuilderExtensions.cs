@@ -1,22 +1,30 @@
 using DomainBlocks.Experimental.Persistence.Configuration;
-using DomainBlocks.Experimental.Persistence.Events;
 using EventStore.Client;
 
 namespace DomainBlocks.Experimental.Persistence.EventStoreDb;
 
 public static class EventStoreDbEntityStoreBuilderExtensions
 {
-    public static EntityStoreBuilder UseEventStoreDb(this EntityStoreBuilder builder, string connectionString)
+    public static EntityStoreBuilder UseEventStoreDb(
+        this EntityStoreBuilder builder,
+        string connectionString,
+        Action<EntityStoreConfigBuilder<ReadOnlyMemory<byte>>>? builderAction = null)
     {
         var settings = EventStoreClientSettings.Create(connectionString);
-        return builder.UseEventStoreDb(settings);
+        return builder.UseEventStoreDb(settings, builderAction);
     }
 
-    public static EntityStoreBuilder UseEventStoreDb(this EntityStoreBuilder builder, EventStoreClientSettings settings)
+    public static EntityStoreBuilder UseEventStoreDb(
+        this EntityStoreBuilder builder,
+        EventStoreClientSettings settings,
+        Action<EntityStoreConfigBuilder<ReadOnlyMemory<byte>>>? builderAction = null)
     {
+        var dataConfigBuilder = new EntityStoreConfigBuilder<ReadOnlyMemory<byte>>();
+        builderAction?.Invoke(dataConfigBuilder);
+        var dataConfig = dataConfigBuilder.Build();
+
         var client = new EventStoreClient(settings);
         var eventStore = new EventStoreDbEventStore(client);
-        var writeEventFactory = new BytesWriteEventFactory();
-        return builder.SetInfrastructure(eventStore, writeEventFactory);
+        return builder.SetInfrastructure(eventStore, dataConfig);
     }
 }

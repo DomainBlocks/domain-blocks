@@ -1,9 +1,7 @@
 namespace DomainBlocks.Experimental.Persistence.Serialization;
 
-public interface IEventDataSerializer
+public interface IEventDataSerializer<TSerializedData>
 {
-    byte[] SerializeToBytes(object value);
-    string SerializeToString(object value);
-    object Deserialize(ReadOnlySpan<byte> data, Type type);
-    object Deserialize(string data, Type type);
+    TSerializedData Serialize(object value);
+    object Deserialize(TSerializedData data, Type type);
 }

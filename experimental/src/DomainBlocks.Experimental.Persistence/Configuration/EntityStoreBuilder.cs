@@ -1,6 +1,5 @@
 using DomainBlocks.Experimental.Persistence.Entities;
 using DomainBlocks.Experimental.Persistence.Extensions;
-using DomainBlocks.Experimental.Persistence.Events;
 
 namespace DomainBlocks.Experimental.Persistence.Configuration;
 
@@ -9,13 +8,14 @@ public sealed class EntityStoreBuilder
     private readonly List<GenericEntityAdapterFactory> _genericEntityAdapterFactories = new();
     private readonly List<IEntityAdapter> _entityAdapters = new();
     private readonly EntityStoreConfigBuilder _configBuilder = new();
-    private IEventStore? _eventStore;
-    private IWriteEventFactory? _writeEventFactory;
+    private EntityStoreFactory? _factory;
 
-    public EntityStoreBuilder SetInfrastructure(IEventStore eventStore, IWriteEventFactory writeEventFactory)
+    public EntityStoreBuilder SetInfrastructure<TSerializedData>(
+        IEventStore<TSerializedData> eventStore, EntityStoreConfig<TSerializedData> dataConfig)
     {
-        _eventStore = eventStore;
-        _writeEventFactory = writeEventFactory;
+        _factory = (entityAdapterProvider, config) =>
+            new EntityStore<TSerializedData>(eventStore, entityAdapterProvider, config, dataConfig);
+
         return this;
     }
 
@@ -45,14 +45,13 @@ public sealed class EntityStoreBuilder
         return this;
     }
 
-    public EntityStore Build()
+    public IEntityStore Build()
     {
-        if (_eventStore == null) throw new InvalidOperationException();
-        if (_writeEventFactory == null) throw new InvalidOperationException();
+        if (_factory == null) throw new InvalidOperationException();
 
         var entityAdapterProvider = new EntityAdapterProvider(_entityAdapters, _genericEntityAdapterFactories);
         var config = _configBuilder.Build();
 
-        return new EntityStore(_eventStore, _writeEventFactory, entityAdapterProvider, config);
+        return _factory(entityAdapterProvider, config);
     }
 }

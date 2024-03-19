@@ -2,29 +2,28 @@ using System.Runtime.CompilerServices;
 using DomainBlocks.Experimental.Persistence.Configuration;
 using DomainBlocks.Experimental.Persistence.Entities;
 using DomainBlocks.Experimental.Persistence.Events;
-using DomainBlocks.Experimental.Persistence.Extensions;
 using DomainBlocks.Experimental.Persistence.Serialization;
 
 namespace DomainBlocks.Experimental.Persistence;
 
-public sealed class EntityStore : IEntityStore
+public sealed class EntityStore<TSerializedData> : IEntityStore
 {
-    private readonly IEventStore _eventStore;
-    private readonly IWriteEventFactory _writeEventFactory;
+    private readonly IEventStore<TSerializedData> _eventStore;
     private readonly EntityAdapterProvider _entityAdapterProvider;
     private readonly EntityStoreConfig _config;
+    private readonly EntityStoreConfig<TSerializedData> _dataConfig;
     private readonly ConditionalWeakTable<object, TrackedEntityContext> _trackedEntities = new();
 
     public EntityStore(
-        IEventStore eventStore,
-        IWriteEventFactory writeEventFactory,
+        IEventStore<TSerializedData> eventStore,
         EntityAdapterProvider entityAdapterProvider,
-        EntityStoreConfig config)
+        EntityStoreConfig config,
+        EntityStoreConfig<TSerializedData> dataConfig)
     {
         _eventStore = eventStore;
-        _writeEventFactory = writeEventFactory;
         _entityAdapterProvider = entityAdapterProvider;
         _config = config;
+        _dataConfig = dataConfig;
     }
 
     public async Task<TEntity> LoadAsync<TEntity>(string entityId, CancellationToken cancellationToken = default)
@@ -57,26 +56,27 @@ public sealed class EntityStore : IEntityStore
 
         // TODO: find an abstraction for this
         EventTypeMap eventTypeMap;
-        IEventDataSerializer serializer;
         int? snapshotEventCount;
         string streamIdPrefix;
 
         if (_config.StreamConfigs.TryGetValue(typeof(TEntity), out var streamConfig))
         {
             eventTypeMap = streamConfig.EventTypeMap;
-            serializer = streamConfig.EventDataSerializer ?? _config.EventDataSerializer;
             snapshotEventCount = streamConfig.SnapshotEventCount;
             streamIdPrefix = streamConfig.StreamIdPrefix ?? DefaultStreamIdPrefix.CreateFor(typeof(TEntity));
         }
         else
         {
             eventTypeMap = _config.EventTypeMap;
-            serializer = _config.EventDataSerializer;
             snapshotEventCount = _config.SnapshotEventCount;
             streamIdPrefix = DefaultStreamIdPrefix.CreateFor(typeof(TEntity));
         }
 
-        var appendedWriteEvents = new List<WriteEvent>();
+        var serializer = _dataConfig.StreamConfigs.TryGetValue(typeof(TEntity), out var streamDataConfig)
+            ? streamDataConfig.EventDataSerializer ?? _dataConfig.EventDataSerializer
+            : _dataConfig.EventDataSerializer;
+
+        var appendedWriteEvents = new List<WriteEvent<TSerializedData>>();
         var eventCountSinceLastSnapshot = loadedEventCount;
 
         foreach (var e in raisedEvents)
@@ -104,7 +104,9 @@ public sealed class EntityStore : IEntityStore
             // }
 
             //var writeEvent = _eventAdapter.CreateWriteEvent(eventName, rawData, contentType: serializer.ContentType);
-            var writeEvent = _writeEventFactory.Create(eventName, e, null, serializer);
+            // TODO
+            var serializedEvent = serializer.Serialize(e);
+            var writeEvent = WriteEvent.Create(eventName, serializedEvent, default);
 
             appendedWriteEvents.Add(writeEvent);
             eventCountSinceLastSnapshot++;
@@ -145,21 +147,22 @@ public sealed class EntityStore : IEntityStore
 
         // TODO: find an abstraction for this
         EventTypeMap eventTypeMap;
-        IEventDataSerializer serializer;
         string streamIdPrefix;
 
         if (_config.StreamConfigs.TryGetValue(typeof(TEntity), out var streamConfig))
         {
             eventTypeMap = streamConfig.EventTypeMap;
-            serializer = streamConfig.EventDataSerializer ?? _config.EventDataSerializer;
             streamIdPrefix = streamConfig.StreamIdPrefix ?? DefaultStreamIdPrefix.CreateFor(typeof(TEntity));
         }
         else
         {
             eventTypeMap = _config.EventTypeMap;
-            serializer = _config.EventDataSerializer;
             streamIdPrefix = DefaultStreamIdPrefix.CreateFor(typeof(TEntity));
         }
+
+        var serializer = _dataConfig.StreamConfigs.TryGetValue(typeof(TEntity), out var streamDataConfig)
+            ? streamDataConfig.EventDataSerializer ?? _dataConfig.EventDataSerializer
+            : _dataConfig.EventDataSerializer;
 
         object initialState;
         object initialStateReplica;
@@ -207,8 +210,7 @@ public sealed class EntityStore : IEntityStore
                 if (eventTypeMap.IsEventNameIgnored(eventName)) continue;
 
                 var eventType = eventTypeMap[eventName].EventType;
-                //var deserializedEvent = readEvent.Deserialize(eventType, serializer);
-                var deserializedEvent = serializer.Deserialize(readEvent, eventType);
+                var deserializedEvent = serializer.Deserialize(readEvent.Payload, eventType);
                 yield return deserializedEvent;
             }
         }
@@ -217,7 +219,7 @@ public sealed class EntityStore : IEntityStore
     private async Task<LoadSnapshotResult?> TryLoadSnapshotAsync<TEntity>(
         string streamId,
         EntityAdapter<TEntity> entityAdapter,
-        IEventDataSerializer serializer,
+        IEventDataSerializer<TSerializedData> serializer,
         CancellationToken cancellationToken)
     {
         // Read stream backwards until we find the first StateSnapshot event.
@@ -231,8 +233,8 @@ public sealed class EntityStore : IEntityStore
 
             if (!isSnapshotEvent) continue;
 
-            var state = serializer.Deserialize(e, entityAdapter.StateType);
-            var stateReplica = serializer.Deserialize(e, entityAdapter.StateType);
+            var state = serializer.Deserialize(e.Payload, entityAdapter.StateType);
+            var stateReplica = serializer.Deserialize(e.Payload, entityAdapter.StateType);
 
             return new LoadSnapshotResult(state, stateReplica, e.StreamVersion);
         }

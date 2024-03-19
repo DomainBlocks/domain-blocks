@@ -6,7 +6,6 @@ namespace DomainBlocks.Experimental.Persistence.Configuration;
 public class EntityStoreConfigBuilder
 {
     private readonly Dictionary<Type, IEventTypeMappingBuilder> _eventTypeMappingBuilders = new();
-    private IEventDataSerializer _eventDataSerializer = new JsonEventDataSerializer();
     private int? _snapshotEventCount;
     private readonly Dictionary<Type, EntityStreamConfigBuilder> _entityStreamConfigBuilders = new();
 
@@ -36,12 +35,6 @@ public class EntityStoreConfigBuilder
         return newBuilder;
     }
 
-    public EntityStoreConfigBuilder SetEventDataSerializer(IEventDataSerializer eventDataSerializer)
-    {
-        _eventDataSerializer = eventDataSerializer;
-        return this;
-    }
-
     public EntityStoreConfigBuilder SetSnapshotEventCount(int? snapshotEventCount)
     {
         _snapshotEventCount = snapshotEventCount;
@@ -67,6 +60,58 @@ public class EntityStoreConfigBuilder
     {
         var eventTypeMap = _eventTypeMappingBuilders.Values.BuildEventTypeMap();
         var entityStreamConfigs = _entityStreamConfigBuilders.Values.Select(x => x.Build(eventTypeMap));
-        return new EntityStoreConfig(eventTypeMap, _eventDataSerializer, _snapshotEventCount, entityStreamConfigs);
+        return new EntityStoreConfig(eventTypeMap, _snapshotEventCount, entityStreamConfigs);
+    }
+}
+
+public class EntityStoreConfigBuilder<TSerializedData>
+{
+    private IEventDataSerializer<TSerializedData>? _eventDataSerializer;
+    private readonly Dictionary<Type, EntityStreamConfigBuilder<TSerializedData>> _entityStreamConfigBuilders = new();
+
+    public EntityStoreConfigBuilder()
+    {
+        if (typeof(TSerializedData) == typeof(ReadOnlyMemory<byte>))
+        {
+            _eventDataSerializer = (IEventDataSerializer<TSerializedData>)new JsonBytesEventDataSerializer();
+        }
+        else if (typeof(TSerializedData) == typeof(string))
+        {
+            _eventDataSerializer = (IEventDataSerializer<TSerializedData>)new JsonStringEventDataSerializer();
+        }
+    }
+
+    public EntityStoreConfigBuilder<TSerializedData> SetEventDataSerializer(
+        IEventDataSerializer<TSerializedData> eventDataSerializer)
+    {
+        _eventDataSerializer = eventDataSerializer;
+        return this;
+    }
+
+    public EntityStreamConfigBuilder<TSerializedData> For<TEntity>()
+    {
+        if (_entityStreamConfigBuilders.TryGetValue(typeof(TEntity), out var builder)) return builder;
+        builder = new EntityStreamConfigBuilder<TSerializedData>(typeof(TEntity));
+        _entityStreamConfigBuilders.Add(typeof(TEntity), builder);
+        return builder;
+    }
+
+    public EntityStoreConfigBuilder<TSerializedData> For<TEntity>(
+        Action<EntityStreamConfigBuilder<TSerializedData>> builderAction)
+    {
+        var builder = For<TEntity>();
+        builderAction(builder);
+        return this;
+    }
+
+    public EntityStoreConfig<TSerializedData> Build()
+    {
+        if (_eventDataSerializer == null)
+        {
+            throw new InvalidOperationException("Event data serializer not specified.");
+        }
+
+        var entityStreamConfigs = _entityStreamConfigBuilders.Values.Select(x => x.Build());
+        return new EntityStoreConfig<TSerializedData>(_eventDataSerializer, entityStreamConfigs);
     }
 }

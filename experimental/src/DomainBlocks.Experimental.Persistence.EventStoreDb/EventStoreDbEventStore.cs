@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 
 namespace DomainBlocks.Experimental.Persistence.EventStoreDb;
 
-public sealed class EventStoreDbEventStore : IEventStore
+public sealed class EventStoreDbEventStore : IEventStore<ReadOnlyMemory<byte>>
 {
     private static readonly ILogger<EventStoreDbEventStore> Logger = Log.Create<EventStoreDbEventStore>();
     private readonly EventStoreClient _client;
@@ -16,7 +16,7 @@ public sealed class EventStoreDbEventStore : IEventStore
         _client = client ?? throw new ArgumentNullException(nameof(client));
     }
 
-    public IAsyncEnumerable<ReadEvent> ReadStreamAsync(
+    public IAsyncEnumerable<ReadEvent<ReadOnlyMemory<byte>>> ReadStreamAsync(
         string streamId,
         StreamReadDirection direction,
         StreamVersion fromVersion,
@@ -26,7 +26,7 @@ public sealed class EventStoreDbEventStore : IEventStore
         return ReadStreamInternalAsync(streamId, direction, fromVersionInternal, cancellationToken);
     }
 
-    public IAsyncEnumerable<ReadEvent> ReadStreamAsync(
+    public IAsyncEnumerable<ReadEvent<ReadOnlyMemory<byte>>> ReadStreamAsync(
         string streamId,
         StreamReadDirection direction,
         StreamReadOrigin readOrigin = StreamReadOrigin.Default,
@@ -47,7 +47,7 @@ public sealed class EventStoreDbEventStore : IEventStore
 
     public Task<StreamVersion?> AppendToStreamAsync(
         string streamId,
-        IEnumerable<WriteEvent> events,
+        IEnumerable<WriteEvent<ReadOnlyMemory<byte>>> events,
         StreamVersion expectedVersion,
         CancellationToken cancellationToken = default)
     {
@@ -57,7 +57,7 @@ public sealed class EventStoreDbEventStore : IEventStore
 
     public Task<StreamVersion?> AppendToStreamAsync(
         string streamId,
-        IEnumerable<WriteEvent> events,
+        IEnumerable<WriteEvent<ReadOnlyMemory<byte>>> events,
         ExpectedStreamState expectedState,
         CancellationToken cancellationToken = default)
     {
@@ -71,7 +71,7 @@ public sealed class EventStoreDbEventStore : IEventStore
         return AppendToStreamInternalAsync(streamId, events, null, expectedStateInternal, cancellationToken);
     }
 
-    private async IAsyncEnumerable<ReadEvent> ReadStreamInternalAsync(
+    private async IAsyncEnumerable<ReadEvent<ReadOnlyMemory<byte>>> ReadStreamInternalAsync(
         string streamId,
         StreamReadDirection direction,
         StreamPosition fromVersion,
@@ -107,17 +107,14 @@ public sealed class EventStoreDbEventStore : IEventStore
         {
             var streamVersion = StreamVersion.FromUInt64(resolvedEvent.OriginalEventNumber);
 
-            var eventData = new BytesEventData(
-                resolvedEvent.Event.Data,
-                resolvedEvent.Event.Metadata.IsEmpty ? null : resolvedEvent.Event.Metadata);
-
-            yield return new ReadEvent(resolvedEvent.Event.EventType, eventData, streamVersion);
+            yield return ReadEvent.Create(
+                resolvedEvent.Event.EventType, resolvedEvent.Event.Data, resolvedEvent.Event.Metadata, streamVersion);
         }
     }
 
     private async Task<StreamVersion?> AppendToStreamInternalAsync(
         string streamId,
-        IEnumerable<WriteEvent> events,
+        IEnumerable<WriteEvent<ReadOnlyMemory<byte>>> events,
         StreamRevision? expectedVersion,
         StreamState? expectedState,
         CancellationToken cancellationToken)
@@ -130,7 +127,7 @@ public sealed class EventStoreDbEventStore : IEventStore
         }
 
         var convertedEvents = eventsArray
-            .Select(x => new EventData(Uuid.NewUuid(), x.Name, x.BytesData.Payload, x.BytesData.Metadata))
+            .Select(x => new EventData(Uuid.NewUuid(), x.Name, x.Payload, x.Metadata.IsEmpty ? null : x.Metadata))
             .ToArray();
 
         // Use the ID of the first event in the batch as an identifier for the whole write to ES

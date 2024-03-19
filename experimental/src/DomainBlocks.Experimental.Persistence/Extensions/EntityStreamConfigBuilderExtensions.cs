@@ -6,10 +6,17 @@ namespace DomainBlocks.Experimental.Persistence.Extensions;
 
 public static class EntityStreamConfigBuilderExtensions
 {
-    public static EntityStreamConfigBuilder UseJsonSerialization(
-        this EntityStreamConfigBuilder builder, JsonSerializerOptions? options = null)
+    public static EntityStreamConfigBuilder<ReadOnlyMemory<byte>> UseJsonSerialization(
+        this EntityStreamConfigBuilder<ReadOnlyMemory<byte>> builder, JsonSerializerOptions? options = null)
     {
-        builder.SetEventDataSerializer(new JsonEventDataSerializer(options));
+        builder.SetEventDataSerializer(new JsonBytesEventDataSerializer(options));
+        return builder;
+    }
+
+    public static EntityStreamConfigBuilder<string> UseJsonSerialization(
+        this EntityStreamConfigBuilder<string> builder, JsonSerializerOptions? options = null)
+    {
+        builder.SetEventDataSerializer(new JsonStringEventDataSerializer(options));
         return builder;
     }
 }

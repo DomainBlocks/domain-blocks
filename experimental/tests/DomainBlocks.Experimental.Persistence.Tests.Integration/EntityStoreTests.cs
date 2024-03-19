@@ -3,7 +3,6 @@ using DomainBlocks.Experimental.Persistence.EventStoreDb;
 using DomainBlocks.Experimental.Persistence.SqlStreamStore;
 using DomainBlocks.Experimental.Persistence.Configuration;
 using DomainBlocks.Experimental.Persistence.Entities;
-using DomainBlocks.Experimental.Persistence.Events;
 using DomainBlocks.Experimental.Persistence.Extensions;
 using DomainBlocks.Experimental.Persistence.Serialization;
 using DomainBlocks.Experimental.Persistence.Tests.Integration.Adapters;
@@ -42,13 +41,9 @@ public class EntityStoreTests
             .Build();
 
         EventStoreDbEntityStore = new EntityStoreBuilder()
-            .UseEventStoreDb(EventStoreDbConnectionString)
+            .UseEventStoreDb(EventStoreDbConnectionString, c => c.UseJsonSerialization(jsonOptions))
             .AddEntityAdapterType(typeof(EntityAdapter<,>))
-            .Configure(c =>
-            {
-                c.UseJsonSerialization(jsonOptions);
-                c.MapEventsOfType<IDomainEvent>().FromAssemblyOf<IDomainEvent>();
-            })
+            .Configure(c => c.MapEventsOfType<IDomainEvent>().FromAssemblyOf<IDomainEvent>())
             .Build();
     }
 
@@ -191,14 +186,14 @@ public class EntityStoreTests
             .ToEventTypeMap();
 
         var eventStore = new SqlStreamStoreEventStore(streamStore);
-        var writeEventFactory = new StringWriteEventFactory();
 
         var entityAdapterProvider = new EntityAdapterProvider(
             Enumerable.Empty<IEntityAdapter>(),
             new[] { new GenericEntityAdapterFactory(typeof(MutableEntityAdapter<>)) });
 
-        var config = new EntityStoreConfig(eventTypeMap, new JsonEventDataSerializer());
-        var store = new EntityStore(eventStore, writeEventFactory, entityAdapterProvider, config);
+        var config = new EntityStoreConfig(eventTypeMap);
+        var dataConfig = new EntityStoreConfig<string>(new JsonStringEventDataSerializer());
+        var store = new EntityStore<string>(eventStore, entityAdapterProvider, config, dataConfig);
 
         var entity = new MutableShoppingCart();
         entity.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Foo"));

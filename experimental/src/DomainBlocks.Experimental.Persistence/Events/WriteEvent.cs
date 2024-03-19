@@ -1,12 +1,17 @@
 namespace DomainBlocks.Experimental.Persistence.Events;
 
-public sealed class WriteEvent : EventBase
+public static class WriteEvent
 {
-    public WriteEvent(string name, BytesEventData bytesData) : base(name, bytesData)
+    public static WriteEvent<TSerializedData> Create<TSerializedData>(
+        string name, TSerializedData payload, TSerializedData? metadata)
     {
+        return new WriteEvent<TSerializedData>(name, payload, metadata);
     }
+}
 
-    public WriteEvent(string name, StringEventData stringData) : base(name, stringData)
+public sealed class WriteEvent<TSerializedData> : EventBase<TSerializedData>
+{
+    public WriteEvent(string name, TSerializedData payload, TSerializedData? metadata) : base(name, payload, metadata)
     {
     }
 }

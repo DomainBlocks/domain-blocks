@@ -7,7 +7,6 @@ public class EntityStreamConfigBuilder
 {
     private readonly Type _entityType;
     private readonly List<IEventTypeMappingBuilder> _eventTypeMappingBuilders = new();
-    private IEventDataSerializer? _eventDataSerializer;
     private int? _snapshotEventCount;
     private string _streamIdPrefix;
 
@@ -31,12 +30,6 @@ public class EntityStreamConfigBuilder
         return builder;
     }
 
-    public EntityStreamConfigBuilder SetEventDataSerializer(IEventDataSerializer eventDataSerializer)
-    {
-        _eventDataSerializer = eventDataSerializer;
-        return this;
-    }
-
     public EntityStreamConfigBuilder SetSnapshotEventCount(int? eventCount)
     {
         _snapshotEventCount = eventCount;
@@ -58,7 +51,29 @@ public class EntityStreamConfigBuilder
             .AddOrReplaceWith(_eventTypeMappingBuilders.BuildEventTypeMap())
             .ToEventTypeMap();
 
-        return new EntityStreamConfig(
-            _entityType, eventTypeMap, _eventDataSerializer, _snapshotEventCount, _streamIdPrefix);
+        return new EntityStreamConfig(_entityType, eventTypeMap, _snapshotEventCount, _streamIdPrefix);
+    }
+}
+
+public class EntityStreamConfigBuilder<TSerializedData>
+{
+    private readonly Type _entityType;
+    private IEventDataSerializer<TSerializedData>? _eventDataSerializer;
+
+    public EntityStreamConfigBuilder(Type entityType)
+    {
+        _entityType = entityType;
+    }
+
+    public EntityStreamConfigBuilder<TSerializedData> SetEventDataSerializer(
+        IEventDataSerializer<TSerializedData> eventDataSerializer)
+    {
+        _eventDataSerializer = eventDataSerializer;
+        return this;
+    }
+
+    public EntityStreamConfig<TSerializedData> Build()
+    {
+        return new EntityStreamConfig<TSerializedData>(_entityType, _eventDataSerializer);
     }
 }

@@ -9,7 +9,7 @@ using SqlStreamStoreStreamVersion = DomainBlocks.ThirdParty.SqlStreamStore.Strea
 
 namespace DomainBlocks.Experimental.Persistence.SqlStreamStore;
 
-public sealed class SqlStreamStoreEventStore : IEventStore
+public sealed class SqlStreamStoreEventStore : IEventStore<string>
 {
     private static readonly ILogger<SqlStreamStoreEventStore> Logger = Log.Create<SqlStreamStoreEventStore>();
     private readonly IStreamStore _streamStore;
@@ -21,7 +21,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore
         _readPageSize = readPageSize;
     }
 
-    public IAsyncEnumerable<ReadEvent> ReadStreamAsync(
+    public IAsyncEnumerable<ReadEvent<string>> ReadStreamAsync(
         string streamId,
         StreamReadDirection direction,
         StreamVersion fromVersion,
@@ -31,7 +31,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore
         return ReadStreamInternalAsync(streamId, direction, fromVersionInternal, cancellationToken);
     }
 
-    public IAsyncEnumerable<ReadEvent> ReadStreamAsync(
+    public IAsyncEnumerable<ReadEvent<string>> ReadStreamAsync(
         string streamId,
         StreamReadDirection direction,
         StreamReadOrigin readOrigin = StreamReadOrigin.Default,
@@ -52,7 +52,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore
 
     public Task<StreamVersion?> AppendToStreamAsync(
         string streamId,
-        IEnumerable<WriteEvent> events,
+        IEnumerable<WriteEvent<string>> events,
         StreamVersion expectedVersion,
         CancellationToken cancellationToken = default)
     {
@@ -62,7 +62,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore
 
     public Task<StreamVersion?> AppendToStreamAsync(
         string streamId,
-        IEnumerable<WriteEvent> events,
+        IEnumerable<WriteEvent<string>> events,
         ExpectedStreamState expectedState,
         CancellationToken cancellationToken = default)
     {
@@ -76,7 +76,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore
         return AppendToStreamInternalAsync(streamId, events, expectedVersion, cancellationToken);
     }
 
-    private async IAsyncEnumerable<ReadEvent> ReadStreamInternalAsync(
+    private async IAsyncEnumerable<ReadEvent<string>> ReadStreamInternalAsync(
         string streamId,
         StreamReadDirection direction,
         int fromVersion,
@@ -107,10 +107,9 @@ public sealed class SqlStreamStoreEventStore : IEventStore
         {
             foreach (var message in page.Messages)
             {
+                var payload = await message.GetJsonData(cancellationToken);
                 var streamVersion = StreamVersion.FromUInt64(Convert.ToUInt64(message.StreamVersion));
-                var rawPayload = await message.GetJsonData(cancellationToken);
-                var eventData = new StringEventData(rawPayload, message.JsonMetadata);
-                yield return new ReadEvent(message.Type, eventData, streamVersion);
+                yield return ReadEvent.Create(message.Type, payload, message.JsonMetadata, streamVersion);
             }
 
             if (page.IsEnd)
@@ -133,7 +132,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore
 
     private async Task<StreamVersion?> AppendToStreamInternalAsync(
         string streamId,
-        IEnumerable<WriteEvent> events,
+        IEnumerable<WriteEvent<string>> events,
         int expectedVersion,
         CancellationToken cancellationToken)
     {
@@ -145,7 +144,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore
         }
 
         var convertedEvents = eventsArray
-            .Select(x => new NewStreamMessage(Guid.NewGuid(), x.Name, x.StringData.Payload, x.StringData.Metadata))
+            .Select(x => new NewStreamMessage(Guid.NewGuid(), x.Name, x.Payload, x.Metadata))
             .ToArray();
 
         // Use the ID of the first event in the batch as an identifier for the whole write

@@ -1,5 +1,4 @@
 ﻿using DomainBlocks.Experimental.Persistence.Configuration;
-using DomainBlocks.Experimental.Persistence.Events;
 using DomainBlocks.ThirdParty.SqlStreamStore;
 
 namespace DomainBlocks.Experimental.Persistence.SqlStreamStore;
@@ -7,10 +6,16 @@ namespace DomainBlocks.Experimental.Persistence.SqlStreamStore;
 public static class SqlStreamStoreEntityStoreBuilderExtensions
 {
     // TODO: support builder to specify postgres, etc.
-    public static EntityStoreBuilder UseSqlStreamStore(this EntityStoreBuilder builder, IStreamStore streamStore)
+    public static EntityStoreBuilder UseSqlStreamStore(
+        this EntityStoreBuilder builder,
+        IStreamStore streamStore,
+        Action<EntityStoreConfigBuilder<string>>? builderAction = null)
     {
+        var dataConfigBuilder = new EntityStoreConfigBuilder<string>();
+        builderAction?.Invoke(dataConfigBuilder);
+        var dataConfig = dataConfigBuilder.Build();
+
         var eventStore = new SqlStreamStoreEventStore(streamStore);
-        var writeEventFactory = new StringWriteEventFactory();
-        return builder.SetInfrastructure(eventStore, writeEventFactory);
+        return builder.SetInfrastructure(eventStore, dataConfig);
     }
 }
