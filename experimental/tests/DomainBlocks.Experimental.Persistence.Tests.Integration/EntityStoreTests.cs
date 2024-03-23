@@ -1,14 +1,19 @@
+using System.Text;
 using System.Text.Json;
+using DomainBlocks.Experimental.Persistence.Builders;
 using DomainBlocks.Experimental.Persistence.EventStoreDb;
 using DomainBlocks.Experimental.Persistence.SqlStreamStore;
-using DomainBlocks.Experimental.Persistence.Configuration;
 using DomainBlocks.Experimental.Persistence.Entities;
+using DomainBlocks.Experimental.Persistence.Events;
 using DomainBlocks.Experimental.Persistence.Extensions;
 using DomainBlocks.Experimental.Persistence.Serialization;
 using DomainBlocks.Experimental.Persistence.Tests.Integration.Adapters;
 using DomainBlocks.Experimental.Persistence.Tests.Integration.Model;
 using DomainBlocks.ThirdParty.SqlStreamStore.Postgres;
+using Google.Protobuf;
 using Shopping.Domain.Events;
+using Shopping.Domain.Events.Proto;
+using ShoppingCartCreated = Shopping.Domain.Events.ShoppingCartCreated;
 
 namespace DomainBlocks.Experimental.Persistence.Tests.Integration;
 
@@ -34,17 +39,21 @@ public class EntityStoreTests
 
         var jsonOptions = new JsonSerializerOptions();
 
-        SqlStreamStoreEntityStore = new EntityStoreBuilder()
-            .UseSqlStreamStore(streamStore)
-            .AddEntityAdapterType(typeof(EntityAdapter<,>))
-            .Configure(c => c.MapEventsOfType<IDomainEvent>())
+        var eventMapper = new EventMapperBuilder()
+            .MapEventsOfType<IDomainEvent>(x => x.FromAssemblyOf<ShoppingCartCreated>())
+            .UseJsonSerialization(jsonOptions)
             .Build();
 
-        EventStoreDbEntityStore = new EntityStoreBuilder()
-            .UseEventStoreDb(EventStoreDbConnectionString, c => c.UseJsonSerialization(jsonOptions))
+        var configBuilder = new EntityStoreConfigBuilder()
             .AddEntityAdapterType(typeof(EntityAdapter<,>))
-            .Configure(c => c.MapEventsOfType<IDomainEvent>().FromAssemblyOf<IDomainEvent>())
-            .Build();
+            .SetEventMapper(eventMapper)
+            .ForStreamOf<ShoppingCart>(x => x.SetSnapshotEventCount(100));
+
+        var sqlStreamStoreConfig = configBuilder.UseSqlStreamStore(streamStore).Build();
+        var eventStoreDbConfig = configBuilder.UseEventStoreDb(EventStoreDbConnectionString).Build();
+
+        SqlStreamStoreEntityStore = new EntityStore(sqlStreamStoreConfig);
+        EventStoreDbEntityStore = new EntityStore(eventStoreDbConfig);
     }
 
     [Test]
@@ -124,11 +133,13 @@ public class EntityStoreTests
         var streamStoreSettings = new PostgresStreamStoreSettings(PostgresStreamStoreConnectionString);
         var streamStore = new PostgresStreamStore(streamStoreSettings);
 
-        var store = new EntityStoreBuilder()
+        var config = new EntityStoreConfigBuilder()
             .UseSqlStreamStore(streamStore)
             .AddEntityAdapterType(typeof(MutableEntityAdapter<>))
-            .Configure(c => c.MapEventsOfType<IDomainEvent>().FromAssemblyOf<IDomainEvent>())
+            .MapEvents(x => x.MapEventsOfType<IDomainEvent>())
             .Build();
+
+        var store = new EntityStore(config);
 
         var entity = new MutableShoppingCart();
         entity.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Foo"));
@@ -144,21 +155,19 @@ public class EntityStoreTests
     [Test]
     public async Task FunctionalEntityWrapperScenario()
     {
-        var store = new EntityStoreBuilder()
+        var config = new EntityStoreConfigBuilder()
             .UseEventStoreDb(EventStoreDbConnectionString)
             .AddEntityAdapterType(typeof(FunctionalEntityWrapperAdapter<>))
-            .Configure(config =>
+            .MapEvents(x => x.MapEventsOfType<IDomainEvent>())
+            .ForStreamOf<FunctionalEntityWrapper<FunctionalShoppingCart>>(config =>
             {
-                config.MapEventsOfType<IDomainEvent>().FromAssemblyOf<IDomainEvent>();
-
                 // TODO: Fix default stream prefix for generic types, i.e. "functionalEntityWrapper`1".
-                config
-                    .For<FunctionalEntityWrapper<FunctionalShoppingCart>>()
-                    .SetStreamIdPrefix("functionalShoppingCart");
-
-                config.For<FunctionalEntityWrapper<FunctionalShoppingCart>>(c => { c.SetStreamIdPrefix("100"); });
+                config.SetStreamIdPrefix("functionalShoppingCart");
+                config.SetSnapshotEventCount(100);
             })
             .Build();
+
+        var store = new EntityStore(config);
 
         var entity = new FunctionalEntityWrapper<FunctionalShoppingCart>();
         entity.Execute(x => x.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Foo")));
@@ -177,23 +186,23 @@ public class EntityStoreTests
     {
         var streamStoreSettings = new PostgresStreamStoreSettings(PostgresStreamStoreConnectionString);
         var streamStore = new PostgresStreamStore(streamStoreSettings);
-
-        var eventTypeMap = new EventTypeMapping[]
-            {
-                new(typeof(ShoppingCartCreated)),
-                new(typeof(ItemAddedToShoppingCart))
-            }
-            .ToEventTypeMap();
-
         var eventStore = new SqlStreamStoreEventStore(streamStore);
 
         var entityAdapterProvider = new EntityAdapterProvider(
             Enumerable.Empty<IEntityAdapter>(),
             new[] { new GenericEntityAdapterFactory(typeof(MutableEntityAdapter<>)) });
 
-        var config = new EntityStoreConfig(eventTypeMap);
-        var dataConfig = new EntityStoreConfig<string>(new JsonStringEventDataSerializer());
-        var store = new EntityStore<string>(eventStore, entityAdapterProvider, config, dataConfig);
+        var eventTypeMappings = new EventTypeMapping[]
+        {
+            new(typeof(ShoppingCartCreated)),
+            new(typeof(ItemAddedToShoppingCart))
+        };
+
+        var serializer = new JsonEventDataSerializer();
+        var eventMapper = new EventMapper(eventTypeMappings, serializer);
+
+        var config = new EntityStoreConfig(eventStore, entityAdapterProvider, eventMapper);
+        var store = new EntityStore(config);
 
         var entity = new MutableShoppingCart();
         entity.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Foo"));
@@ -214,64 +223,72 @@ public class EntityStoreTests
 
         const string newFieldDefaultValue = "default value";
 
-        var v1Repository = new EntityStoreBuilder()
+        var v1StoreConfig = new EntityStoreConfigBuilder()
             .UseSqlStreamStore(streamStore)
             .AddEntityAdapterType(typeof(EntityAdapter<,>))
-            .Configure<ShoppingCart>(config =>
+            .MapEvents(x =>
             {
-                config.SetStreamIdPrefix("shoppingCart");
-                config.MapEvent<ShoppingCartCreated>();
-                config.MapEvent<ItemAddedToShoppingCart>();
+                x.MapEvent<ShoppingCartCreated>();
+                x.MapEvent<ItemAddedToShoppingCart>();
             })
             .Build();
 
         // Set up a new version of the ShoppingCartCreated event
-        var v2Repository = new EntityStoreBuilder()
+        var v2StoreConfig = new EntityStoreConfigBuilder()
             .UseSqlStreamStore(streamStore)
             .AddEntityAdapterType(typeof(EntityAdapter<,>))
-            .Configure<ShoppingCartV2>(config =>
+            .MapEvents(mapper =>
             {
-                // MapEventsOfType => FromAssembly, FromAssemblies, Where (type predicate)
-                // MapEvent => WithName, WithDeprecatedNames
-                // AddEventMetadata
-                // TransformEvent => To, ForName(s), Where (metadata predicate)
-                // SetStreamIdPrefix or SetStreamNamePrefix
+                // Write scenarios:
+                // One-to-one event type to name - most common use case
+                // One-to-many event type to names - not supported / doesn't make sense
+                // ** Many-to-one event types to name - unusual, but shouldn't necessarily be disallowed. E.g. possible
+                //                                      if all code isn't refactored when introducing a new version.
 
+                // Read scenarios:
+                // One-to-one event name to type - most common use case
+                // ** One-to-many event name to types - Possible with multiple event versions
+                // Many-to-one event names to type - possible with event name changes
+
+                mapper
+                    // One-to-one write
+                    .MapEvent<ShoppingCartCreated>(x =>
+                    {
+                        x.WithName("ShoppingCartCreated");
+                        // Explicitly not supporting writing many names.
+                        x.WithDeprecatedNames("Foo", "Bar", "Baz");
+                    })
+                    // Many-to-one write
+                    // Effectively supporting multiple event versions for the same name in the same version of code. This
+                    // happens anyway over time with event versioning. Just not necessarily in the same version of code.
+                    // Need a way to disambiguate reads.
+                    .MapEvent<ShoppingCartCreatedV2>(x =>
+                    {
+                        x.WithName("ShoppingCartCreated");
+                        x.WithMetadata(() => new Dictionary<string, string> { { "Version", "2" } });
+                    });
+
+                // Disambiguate reads
                 // config
-                //     .MapEventsOfType<IDomainEvent>()
-                //     .FromAssembly(typeof(IDomainEvent).Assembly);
-                //
-                // config
-                //     .MapEvent<ShoppingCartCreatedV2>()
-                //     .WithName("ShoppingCartCreated")
-                //     .WithDeprecatedNames("Foo", "Bar")
-                //     .WithMetadata(() => new Dictionary<string, string>
+                //     .MapEventName("ShoppingCartCreated")
+                //     .WithTypeSelector(m =>
                 //     {
-                //         { "Version", "v2" }
+                //         return m["Version"] == "2" ? typeof(ShoppingCartCreatedV2) : typeof(ShoppingCartCreated);
                 //     });
                 //
                 // config
-                //     .MapEvent<ShoppingCartCreated>()
-                //     .WithName("ShoppingCartCreated")
-                //     .WithReadCondition(meta => !meta.ContainsKey("Version"))
-                //     .WithReadTransform(e => new ShoppingCartCreatedV2(e.Id, newFieldDefaultValue));
+                //     .MapEventsOfType<IDomainEvent>()
+                //     .WithMetadata(() => new Dictionary<string, string> { { "Foo", "Bar" } });
                 //
-                // config
-                //     .MapReadOnlyEvent<ShoppingCartCreated>()
-                //     .WithName("ShoppingCartCreated")
-                //     .WithCondition(meta => !meta.ContainsKey("Version"))
-                //     .WithTransform(e => new ShoppingCartCreatedV2(e.Id, newFieldDefaultValue));
-                //
-                // config.MapEvent<ItemAddedToShoppingCart>();
-                //
-                // config.AddEventMetadata<ShoppingCartCreatedV2>(() => new Dictionary<string, string>
-                // {
-                //     { "Version", "v2" }
-                // });
-                //
-                // config.SetStreamIdPrefix("shoppingCart");
+                // config.TransformEvent<ShoppingCartCreated>(e => new ShoppingCartCreatedV2(e.Id, "foo"));
+
+                // Transform, Split, Join?
             })
+            .ForStreamOf<ShoppingCartV2>(x => x.SetStreamIdPrefix("shoppingCart"))
             .Build();
+
+        var v1Store = new EntityStore(v1StoreConfig);
+        var v2Store = new EntityStore(v2StoreConfig);
 
         Guid cartId1;
 
@@ -279,7 +296,7 @@ public class EntityStoreTests
         {
             var entity = new ShoppingCart();
             entity.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Item Foo"));
-            await v1Repository.SaveAsync(entity);
+            await v1Store.SaveAsync(entity);
 
             Assert.That(entity.State.Id, Is.Not.EqualTo(Guid.Empty));
             Assert.That(entity.State.Items, Has.Count.EqualTo(1));
@@ -291,7 +308,7 @@ public class EntityStoreTests
         // Test restoring and writing to existing stream containing the V1 event, using the repository set up with the
         // refactored code.
         {
-            var entity = await v2Repository.LoadAsync<ShoppingCartV2>(cartId1.ToString());
+            var entity = await v2Store.LoadAsync<ShoppingCartV2>(cartId1.ToString());
             var state = entity.State;
 
             Assert.That(state.Id, Is.EqualTo(cartId1));
@@ -300,9 +317,9 @@ public class EntityStoreTests
             Assert.That(state.NewField, Is.EqualTo(newFieldDefaultValue));
 
             entity.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Item Bar"));
-            await v2Repository.SaveAsync(entity);
+            await v2Store.SaveAsync(entity);
 
-            var reloadedEntity = await v2Repository.LoadAsync<ShoppingCartV2>(cartId1.ToString());
+            var reloadedEntity = await v2Store.LoadAsync<ShoppingCartV2>(cartId1.ToString());
             var reloadedState = reloadedEntity.State;
 
             Assert.That(reloadedState.Id, Is.EqualTo(cartId1));
@@ -316,9 +333,9 @@ public class EntityStoreTests
         {
             var entity = new ShoppingCartV2();
             entity.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Item Foo"), "New value");
-            await v2Repository.SaveAsync(entity);
+            await v2Store.SaveAsync(entity);
 
-            var reloadedEntity = await v2Repository.LoadAsync<ShoppingCartV2>(entity.State.Id.ToString());
+            var reloadedEntity = await v2Store.LoadAsync<ShoppingCartV2>(entity.State.Id.ToString());
             var reloadedState = reloadedEntity.State;
 
             Assert.That(reloadedState.Id, Is.EqualTo(entity.State.Id));
@@ -349,6 +366,33 @@ public class EntityStoreTests
                 // generate all combinations.
             }
         }
+    }
+
+    [Test]
+    public void SerializationTest()
+    {
+        var message1 = new Shopping.Domain.Events.Proto.ShoppingCartCreated
+        {
+            Id = "Test",
+            Foo = 42,
+            Sub = new SubMessage
+            {
+                Id = "AnotherId",
+                Bar = 101
+            }
+        };
+
+        var bytes1 = message1.ToByteArray();
+
+        var asString = Encoding.UTF8.GetString(bytes1);
+
+        var bytes2 = Encoding.UTF8.GetBytes(asString);
+
+        var message2 = new Shopping.Domain.Events.Proto.ShoppingCartCreated();
+
+        message2.MergeFrom(bytes2);
+
+        Assert.That(message2, Is.EqualTo(message1));
     }
 
     private static IEnumerable<TestCaseData> TestCases

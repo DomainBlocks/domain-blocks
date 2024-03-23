@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Text;
 using DomainBlocks.Experimental.Persistence.Events;
 using DomainBlocks.Logging;
 using DomainBlocks.ThirdParty.SqlStreamStore;
@@ -9,7 +10,7 @@ using SqlStreamStoreStreamVersion = DomainBlocks.ThirdParty.SqlStreamStore.Strea
 
 namespace DomainBlocks.Experimental.Persistence.SqlStreamStore;
 
-public sealed class SqlStreamStoreEventStore : IEventStore<string>
+public sealed class SqlStreamStoreEventStore : IEventStore
 {
     private static readonly ILogger<SqlStreamStoreEventStore> Logger = Log.Create<SqlStreamStoreEventStore>();
     private readonly IStreamStore _streamStore;
@@ -21,7 +22,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore<string>
         _readPageSize = readPageSize;
     }
 
-    public IAsyncEnumerable<ReadEvent<string>> ReadStreamAsync(
+    public IAsyncEnumerable<ReadEvent> ReadStreamAsync(
         string streamId,
         StreamReadDirection direction,
         StreamVersion fromVersion,
@@ -31,7 +32,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore<string>
         return ReadStreamInternalAsync(streamId, direction, fromVersionInternal, cancellationToken);
     }
 
-    public IAsyncEnumerable<ReadEvent<string>> ReadStreamAsync(
+    public IAsyncEnumerable<ReadEvent> ReadStreamAsync(
         string streamId,
         StreamReadDirection direction,
         StreamReadOrigin readOrigin = StreamReadOrigin.Default,
@@ -52,7 +53,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore<string>
 
     public Task<StreamVersion?> AppendToStreamAsync(
         string streamId,
-        IEnumerable<WriteEvent<string>> events,
+        IEnumerable<WriteEvent> events,
         StreamVersion expectedVersion,
         CancellationToken cancellationToken = default)
     {
@@ -62,7 +63,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore<string>
 
     public Task<StreamVersion?> AppendToStreamAsync(
         string streamId,
-        IEnumerable<WriteEvent<string>> events,
+        IEnumerable<WriteEvent> events,
         ExpectedStreamState expectedState,
         CancellationToken cancellationToken = default)
     {
@@ -76,7 +77,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore<string>
         return AppendToStreamInternalAsync(streamId, events, expectedVersion, cancellationToken);
     }
 
-    private async IAsyncEnumerable<ReadEvent<string>> ReadStreamInternalAsync(
+    private async IAsyncEnumerable<ReadEvent> ReadStreamInternalAsync(
         string streamId,
         StreamReadDirection direction,
         int fromVersion,
@@ -108,8 +109,11 @@ public sealed class SqlStreamStoreEventStore : IEventStore<string>
             foreach (var message in page.Messages)
             {
                 var payload = await message.GetJsonData(cancellationToken);
+                var payloadAsBytes = Encoding.UTF8.GetBytes(payload);
+                var metadataAsBytes =
+                    message.JsonMetadata == null ? null : Encoding.UTF8.GetBytes(message.JsonMetadata);
                 var streamVersion = StreamVersion.FromUInt64(Convert.ToUInt64(message.StreamVersion));
-                yield return ReadEvent.Create(message.Type, payload, message.JsonMetadata, streamVersion);
+                yield return new ReadEvent(message.Type, payloadAsBytes, metadataAsBytes, streamVersion);
             }
 
             if (page.IsEnd)
@@ -132,7 +136,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore<string>
 
     private async Task<StreamVersion?> AppendToStreamInternalAsync(
         string streamId,
-        IEnumerable<WriteEvent<string>> events,
+        IEnumerable<WriteEvent> events,
         int expectedVersion,
         CancellationToken cancellationToken)
     {
@@ -144,7 +148,11 @@ public sealed class SqlStreamStoreEventStore : IEventStore<string>
         }
 
         var convertedEvents = eventsArray
-            .Select(x => new NewStreamMessage(Guid.NewGuid(), x.Name, x.Payload, x.Metadata))
+            .Select(x => new NewStreamMessage(
+                Guid.NewGuid(),
+                x.Name,
+                Encoding.UTF8.GetString(x.Payload.Span),
+                x.Metadata == null ? null : Encoding.UTF8.GetString(x.Metadata.Value.Span)))
             .ToArray();
 
         // Use the ID of the first event in the batch as an identifier for the whole write

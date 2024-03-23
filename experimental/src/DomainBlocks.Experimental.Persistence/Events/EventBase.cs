@@ -1,8 +1,8 @@
 namespace DomainBlocks.Experimental.Persistence.Events;
 
-public abstract class EventBase<TSerializedData>
+public abstract class EventBase
 {
-    protected EventBase(string name, TSerializedData payload, TSerializedData? metadata)
+    protected EventBase(string name, ReadOnlyMemory<byte> payload, ReadOnlyMemory<byte>? metadata)
     {
         Name = name;
         Payload = payload;
@@ -10,6 +10,6 @@ public abstract class EventBase<TSerializedData>
     }
 
     public string Name { get; }
-    public TSerializedData Payload { get; }
-    public TSerializedData? Metadata { get; }
+    public ReadOnlyMemory<byte> Payload { get; }
+    public ReadOnlyMemory<byte>? Metadata { get; }
 }

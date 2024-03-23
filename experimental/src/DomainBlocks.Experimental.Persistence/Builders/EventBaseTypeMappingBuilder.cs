@@ -1,7 +1,8 @@
 using System.Reflection;
+using DomainBlocks.Experimental.Persistence.Events;
 using DomainBlocks.Experimental.Persistence.Extensions;
 
-namespace DomainBlocks.Experimental.Persistence.Configuration;
+namespace DomainBlocks.Experimental.Persistence.Builders;
 
 public sealed class EventBaseTypeMappingBuilder<TEventBase> : IEventTypeMappingBuilder
 {

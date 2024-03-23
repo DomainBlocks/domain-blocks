@@ -1,10 +1,11 @@
-using DomainBlocks.Experimental.Persistence.Configuration;
+using DomainBlocks.Experimental.Persistence.Builders;
+using DomainBlocks.Experimental.Persistence.Events;
 
 namespace DomainBlocks.Experimental.Persistence.Extensions;
 
 public static class EventTypeMappingBuilderEnumerableExtensions
 {
-    public static EventTypeMap BuildEventTypeMap(this IReadOnlyCollection<IEventTypeMappingBuilder> builders)
+    public static IEnumerable<EventTypeMapping> BuildAll(this IReadOnlyCollection<IEventTypeMappingBuilder> builders)
     {
         // Include mappings from event base type builders first so they can be overriden.
         var eventBaseTypeMappings = builders
@@ -15,6 +16,6 @@ public static class EventTypeMappingBuilderEnumerableExtensions
             .Where(x => x.Kind == EventTypeMappingBuilderKind.SingleEvent)
             .SelectMany(x => x.Build());
 
-        return eventBaseTypeMappings.AddOrReplaceWith(singleEventTypeMappings).ToEventTypeMap();
+        return eventBaseTypeMappings.AddOrReplaceWith(singleEventTypeMappings);
     }
 }

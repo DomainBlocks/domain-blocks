@@ -5,7 +5,7 @@ namespace DomainBlocks.Experimental.Persistence;
 /// <summary>
 /// Exposes write-only operations for a store of events.
 /// </summary>
-public interface IWriteOnlyEventStore<TSerializedData>
+public interface IWriteOnlyEventStore
 {
     /// <summary>
     /// Appends a collection of events to a stream, optionally with an expected stream version for an optimistic
@@ -26,13 +26,13 @@ public interface IWriteOnlyEventStore<TSerializedData>
     /// </returns>
     Task<StreamVersion?> AppendToStreamAsync(
         string streamId,
-        IEnumerable<WriteEvent<TSerializedData>> events,
+        IEnumerable<WriteEvent> events,
         StreamVersion expectedVersion,
         CancellationToken cancellationToken = default);
 
     Task<StreamVersion?> AppendToStreamAsync(
         string streamId,
-        IEnumerable<WriteEvent<TSerializedData>> events,
+        IEnumerable<WriteEvent> events,
         ExpectedStreamState expectedState,
         CancellationToken cancellationToken = default);
 }

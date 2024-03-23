@@ -1,4 +1,4 @@
-namespace DomainBlocks.Experimental.Persistence.Configuration;
+namespace DomainBlocks.Experimental.Persistence.Builders;
 
 public enum EventTypeMappingBuilderKind
 {

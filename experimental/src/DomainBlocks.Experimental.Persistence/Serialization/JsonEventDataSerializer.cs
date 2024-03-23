@@ -2,18 +2,20 @@ using System.Text.Json;
 
 namespace DomainBlocks.Experimental.Persistence.Serialization;
 
-public class JsonStringEventDataSerializer : IEventDataSerializer<string>
+public class JsonEventDataSerializer : IEventDataSerializer
 {
     private readonly JsonSerializerOptions? _options;
 
-    public JsonStringEventDataSerializer(JsonSerializerOptions? options = null)
+    public JsonEventDataSerializer(JsonSerializerOptions? options = null)
     {
         _options = options;
     }
 
-    public string Serialize(object value) => JsonSerializer.Serialize(value, _options);
+    public SerializationFormat Format => SerializationFormat.Json;
 
-    public object Deserialize(string data, Type type)
+    public byte[] Serialize(object value) => JsonSerializer.SerializeToUtf8Bytes(value, _options);
+
+    public object Deserialize(ReadOnlySpan<byte> data, Type type)
     {
         try
         {
