@@ -15,11 +15,11 @@ public class EntityAdapterProvider
         _genericAdapterFactories = genericEntityAdapterFactories.ToArray();
     }
 
-    public bool TryGetFor<TEntity>(out EntityAdapter<TEntity>? adapter)
+    public bool TryGetFor<TEntity>(out IEntityAdapter<TEntity>? adapter)
     {
         if (_adapters.TryGetValue(typeof(TEntity), out var result))
         {
-            adapter = (EntityAdapter<TEntity>)result;
+            adapter = (IEntityAdapter<TEntity>)result;
             return true;
         }
 

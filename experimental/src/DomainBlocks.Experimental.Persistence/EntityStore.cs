@@ -23,27 +23,25 @@ public sealed class EntityStore : IEntityStore
 
     public async Task<TEntity> LoadAsync<TEntity>(string entityId, CancellationToken cancellationToken = default)
     {
-        if (!_entityAdapterProvider.TryGetFor<TEntity>(out var entityAdapter))
-        {
-            throw new ArgumentException(null, nameof(TEntity));
-        }
-
-        var streamNamePrefix = _config.StreamConfigs.TryGetValue(typeof(TEntity), out var streamConfig)
-            ? streamConfig.StreamNamePrefix ?? DefaultStreamNamePrefix.CreateFor(typeof(TEntity))
-            : DefaultStreamNamePrefix.CreateFor(typeof(TEntity));
-
-        var initialState = entityAdapter!.StateFactory();
+        var streamName = GetStreamName<TEntity>(entityId);
         var fromVersion = StreamVersion.Zero;
-        var streamId = $"{streamNamePrefix}-{entityId}";
 
-        var readEvents = _eventStore.ReadStreamAsync(
-            streamId, StreamReadDirection.Forwards, fromVersion, cancellationToken);
+        var readEvents =
+            _eventStore.ReadStreamAsync(streamName, StreamReadDirection.Forwards, fromVersion, cancellationToken);
 
+        var entityAdapter = GetEntityAdapter<TEntity>();
+        var initialState = entityAdapter.CreateState();
+
+        // Used in closure of TransformEventStream, so must be declared before the async enumerable is materialized,
+        // i.e. before RestoreEntity is invoked.
         StreamVersion? loadedVersion = null;
         var loadedEventCount = 0;
-        var entity = await entityAdapter.EntityRestorer(initialState, TransformEventStream(), cancellationToken);
 
-        _trackedEntities.Add(entity!, new TrackedEntityContext(loadedVersion, loadedEventCount));
+        var entity = await entityAdapter.RestoreEntity(initialState, TransformEventStream(), cancellationToken);
+        var trackedEntityContext = new TrackedEntityContext(loadedVersion, loadedEventCount);
+
+        // Track the entity so that the expected version will be known in a future call to SaveAsync.
+        _trackedEntities.Add(entity!, trackedEntityContext);
 
         return entity;
 
@@ -62,12 +60,8 @@ public sealed class EntityStore : IEntityStore
 
                 loadedEventCount++;
 
-                // TODO: Add test case for this scenario, ensuring we handle the version correctly.
-                // TODO: Can hide this behind EventMapper, i.e. it can return zero events if ignored.
-                if (_eventMapper.IsEventNameIgnored(eventName)) continue;
-
-                var deserializedEvents = _eventMapper.FromReadEvent(readEvent);
-                foreach (var deserializedEvent in deserializedEvents)
+                var transformedEvents = _eventMapper.FromReadEvent(readEvent);
+                foreach (var deserializedEvent in transformedEvents)
                 {
                     yield return deserializedEvent;
                 }
@@ -79,43 +73,50 @@ public sealed class EntityStore : IEntityStore
     {
         if (entity == null) throw new ArgumentNullException(nameof(entity));
 
-        if (!_entityAdapterProvider.TryGetFor<TEntity>(out var entityAdapter))
-        {
-            throw new ArgumentException($"Entity adapter for '{entity.GetType()}' not found.", nameof(TEntity));
-        }
+        var entityAdapter = GetEntityAdapter<TEntity>();
 
-        Debug.Assert(entityAdapter != null);
-
-        var raisedEvents = entityAdapter.RaisedEventsSelector(entity).ToArray();
+        var raisedEvents = entityAdapter.GetRaisedEvents(entity).ToArray();
         if (raisedEvents.Length == 0) return;
 
         StreamVersion? expectedVersion = null;
-
         if (_trackedEntities.TryGetValue(entity, out var context))
         {
             expectedVersion = context.StreamVersion;
         }
 
+        var entityId = entityAdapter.GetId(entity);
+        var streamName = GetStreamName<TEntity>(entityId);
+        var writeEvents = raisedEvents.Select(e => _eventMapper.ToWriteEvent(e));
+
+        var appendTask = expectedVersion.HasValue
+            ? _eventStore.AppendToStreamAsync(streamName, writeEvents, expectedVersion.Value, cancellationToken)
+            : _eventStore.AppendToStreamAsync(streamName, writeEvents, ExpectedStreamState.NoStream, cancellationToken);
+
+        await appendTask;
+    }
+
+    private IEntityAdapter<TEntity> GetEntityAdapter<TEntity>()
+    {
+        if (!_entityAdapterProvider.TryGetFor<TEntity>(out var entityAdapter))
+        {
+            throw new ArgumentException(null, nameof(TEntity));
+        }
+
+        Debug.Assert(entityAdapter != null, nameof(entityAdapter) + " != null");
+
+        return entityAdapter;
+    }
+
+    private string GetStreamName<TEntity>(string entityId)
+    {
         var streamNamePrefix = _config.StreamConfigs.TryGetValue(typeof(TEntity), out var streamConfig)
             ? streamConfig.StreamNamePrefix ?? DefaultStreamNamePrefix.CreateFor(typeof(TEntity))
             : DefaultStreamNamePrefix.CreateFor(typeof(TEntity));
 
-        var streamName = $"{streamNamePrefix}-{entityAdapter.IdSelector(entity)}";
-        var writeEvents = raisedEvents.Select(e => _eventMapper.ToWriteEvent(e));
-
-        if (expectedVersion.HasValue)
-        {
-            await _eventStore.AppendToStreamAsync(
-                streamName, writeEvents, expectedVersion.Value, cancellationToken);
-        }
-        else
-        {
-            await _eventStore.AppendToStreamAsync(
-                streamName, writeEvents, ExpectedStreamState.NoStream, cancellationToken);
-        }
+        return $"{streamNamePrefix}-{entityId}";
     }
 
-    private class TrackedEntityContext
+    private sealed class TrackedEntityContext
     {
         public TrackedEntityContext(StreamVersion? streamVersion, int loadedEventCount)
         {

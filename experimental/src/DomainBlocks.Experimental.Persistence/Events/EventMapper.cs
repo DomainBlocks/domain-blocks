@@ -20,18 +20,14 @@ public class EventMapper : IEventMapper
         _serializer = serializer;
     }
 
-    public bool IsEventNameIgnored(string eventName)
-    {
-        // TODO
-        return false;
-    }
-
     public IEnumerable<object> FromReadEvent(ReadEvent readEvent)
     {
         if (!_mappingsByName.TryGetValue(readEvent.Name, out var mapping))
         {
             throw new ArgumentException($"Mapping not found for event name '{readEvent.Name}'.", nameof(readEvent));
         }
+
+        // TODO: consider ignored event names. Can yield zero events in the case a name is ignored.
 
         var @event = _serializer.Deserialize(readEvent.Payload.Span, mapping.EventType);
 

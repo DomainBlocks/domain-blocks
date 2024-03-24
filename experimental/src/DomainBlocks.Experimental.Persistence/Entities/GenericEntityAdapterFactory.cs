@@ -1,5 +1,3 @@
-using DomainBlocks.Experimental.Persistence.Extensions;
-
 namespace DomainBlocks.Experimental.Persistence.Entities;
 
 public class GenericEntityAdapterFactory
@@ -13,7 +11,7 @@ public class GenericEntityAdapterFactory
         _constructorArgs = constructorArgs;
     }
 
-    public bool TryCreateFor<TEntity>(out EntityAdapter<TEntity>? entityAdapter)
+    public bool TryCreateFor<TEntity>(out IEntityAdapter<TEntity>? entityAdapter)
     {
         if (!_typeResolver.TryResolveFor<TEntity>(out var resolvedAdapterType))
         {
@@ -22,18 +20,7 @@ public class GenericEntityAdapterFactory
         }
 
         var instance = Activator.CreateInstance(resolvedAdapterType!, _constructorArgs);
-
-        var resolvedInterfaceType = resolvedAdapterType!
-            .GetInterfaces()
-            .Single(x => x.IsGenericType && x.GetGenericTypeDefinition() == typeof(IEntityAdapter<,>));
-
-        var resolvedStateType = resolvedInterfaceType.GetGenericArguments()[1];
-
-        var createMethod = typeof(EntityAdapterExtensions)
-            .GetMethod(nameof(EntityAdapterExtensions.HideStateType))!
-            .MakeGenericMethod(typeof(TEntity), resolvedStateType);
-
-        entityAdapter = (EntityAdapter<TEntity>)createMethod.Invoke(null, new[] { instance })!;
+        entityAdapter = (IEntityAdapter<TEntity>)instance!;
         return true;
     }
 }

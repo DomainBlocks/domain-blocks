@@ -1,6 +1,6 @@
 namespace DomainBlocks.Experimental.Persistence.Builders;
 
-public enum EventTypeMappingBuilderKind
+internal enum EventTypeMappingBuilderKind
 {
     EventBaseType,
     SingleEvent

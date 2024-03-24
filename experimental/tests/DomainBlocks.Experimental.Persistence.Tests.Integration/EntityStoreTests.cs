@@ -346,7 +346,7 @@ public class EntityStoreTests
             .SelectMany(x => x.GetTypes())
             .Where(x => x is { IsGenericTypeDefinition: true, IsAbstract: false, IsInterface: false } &&
                         x.GetInterfaces().Any(i => i.IsGenericType &&
-                                                   i.GetGenericTypeDefinition() == typeof(IEntityAdapter<,>)))
+                                                   i.GetGenericTypeDefinition() == typeof(EntityAdapterBase<,>)))
             .Select(x => new GenericEntityAdapterTypeResolver(x))
             .ToList();
 

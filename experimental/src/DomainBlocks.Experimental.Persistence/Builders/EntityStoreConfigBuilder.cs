@@ -1,10 +1,9 @@
 using DomainBlocks.Experimental.Persistence.Entities;
 using DomainBlocks.Experimental.Persistence.Events;
-using DomainBlocks.Experimental.Persistence.Extensions;
 
 namespace DomainBlocks.Experimental.Persistence.Builders;
 
-public sealed class EntityStoreConfigBuilder
+public class EntityStoreConfigBuilder
 {
     private readonly List<GenericEntityAdapterFactory> _genericEntityAdapterFactories = new();
     private readonly List<IEntityAdapter> _entityAdapters = new();
@@ -25,9 +24,9 @@ public sealed class EntityStoreConfigBuilder
         return this;
     }
 
-    public EntityStoreConfigBuilder AddEntityAdapter<TEntity, TState>(IEntityAdapter<TEntity, TState> entityAdapter)
+    public EntityStoreConfigBuilder AddEntityAdapter<TEntity, TState>(EntityAdapterBase<TEntity, TState> entityAdapter)
     {
-        _entityAdapters.Add(entityAdapter.HideStateType());
+        _entityAdapters.Add(entityAdapter);
         return this;
     }
 

@@ -2,13 +2,13 @@ using DomainBlocks.Experimental.Persistence.Events;
 
 namespace DomainBlocks.Experimental.Persistence.Builders;
 
-public sealed class SingleEventTypeMappingBuilder<TEvent> : IEventTypeMappingBuilder
+public class SingleEventTypeMappingBuilder<TEvent> : IEventTypeMappingBuilder
 {
     private string _eventName = typeof(TEvent).Name;
     private IEnumerable<string>? _deprecatedEventNames;
     private Func<IReadOnlyDictionary<string, string>>? _metadataFactory;
 
-    public EventTypeMappingBuilderKind Kind => EventTypeMappingBuilderKind.SingleEvent;
+    EventTypeMappingBuilderKind IEventTypeMappingBuilder.Kind => EventTypeMappingBuilderKind.SingleEvent;
 
     public SingleEventTypeMappingBuilder<TEvent> WithName(string eventName)
     {
@@ -28,7 +28,7 @@ public sealed class SingleEventTypeMappingBuilder<TEvent> : IEventTypeMappingBui
         return this;
     }
 
-    public IEnumerable<EventTypeMapping> Build()
+    IEnumerable<EventTypeMapping> IEventTypeMappingBuilder.Build()
     {
         yield return new EventTypeMapping(typeof(TEvent), _eventName, _deprecatedEventNames);
     }

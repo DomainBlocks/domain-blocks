@@ -3,13 +3,13 @@ using DomainBlocks.Experimental.Persistence.Tests.Integration.Model;
 
 namespace DomainBlocks.Experimental.Persistence.Tests.Integration.Adapters;
 
-public class MutableEntityAdapter<TEntity> : IEntityAdapter<TEntity> where TEntity : MutableEntityBase, new()
+public sealed class MutableEntityAdapter<TEntity> : EntityAdapterBase<TEntity> where TEntity : MutableEntityBase, new()
 {
-    public string GetId(TEntity entity) => entity.Id.ToString();
-    public IEnumerable<object> GetRaisedEvents(TEntity entity) => entity.RaisedEvents;
-    public TEntity CreateState() => new();
+    public override string GetId(TEntity entity) => entity.Id.ToString();
+    public override IEnumerable<object> GetRaisedEvents(TEntity entity) => entity.RaisedEvents;
+    public override TEntity CreateState() => new();
 
-    public TEntity Fold(TEntity state, object @event)
+    protected override TEntity Fold(TEntity state, object @event)
     {
         state.Apply(@event);
         return state;

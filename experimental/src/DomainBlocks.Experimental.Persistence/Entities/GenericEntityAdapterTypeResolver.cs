@@ -4,28 +4,40 @@ namespace DomainBlocks.Experimental.Persistence.Entities;
 
 public class GenericEntityAdapterTypeResolver
 {
-    private readonly Type _adapterType;
+    private readonly Type _entityAdapterType;
 
     public GenericEntityAdapterTypeResolver(Type entityAdapterType)
     {
         if (entityAdapterType == null) throw new ArgumentNullException(nameof(entityAdapterType));
 
+        if (!entityAdapterType.IsClass || entityAdapterType.IsAbstract)
+            throw new ArgumentException("Expected a concrete class type.", nameof(entityAdapterType));
+
         if (!entityAdapterType.IsGenericTypeDefinition)
             throw new ArgumentException("Expected a generic type definition.", nameof(entityAdapterType));
 
-        var interfaceType = entityAdapterType
-            .GetInterfaces()
-            .SingleOrDefault(x => x.IsGenericType && x.GetGenericTypeDefinition() == typeof(IEntityAdapter<,>));
+        var currentBaseType = entityAdapterType.BaseType;
+        Type? entityAdapterBaseType = null;
 
-        if (interfaceType == null)
+        while (currentBaseType != null)
+        {
+            if (currentBaseType.IsGenericType &&
+                currentBaseType.GetGenericTypeDefinition() == typeof(EntityAdapterBase<,>))
+            {
+                entityAdapterBaseType = currentBaseType;
+                break;
+            }
+
+            currentBaseType = currentBaseType.BaseType;
+        }
+
+        if (entityAdapterBaseType == null)
             throw new ArgumentException(
-                $"Entity adapter type must implement {typeof(IEntityAdapter<,>).GetPrettyName()}.",
+                $"Entity adapter type must derive from {typeof(EntityAdapterBase<,>).GetPrettyName()}.",
                 nameof(entityAdapterType));
 
-        // TODO: Is the type instantiable?
-
         // Check all generic parameters can be resolved via TEntity.
-        var entityGenericArg = interfaceType.GetGenericArguments()[0];
+        var entityGenericArg = entityAdapterBaseType.GetGenericArguments()[0];
         var reachableEntityParams = entityGenericArg.FindReachableGenericParameters();
         var adapterParams = entityAdapterType.GetGenericArguments().Where(x => x.IsGenericParameter).ToArray();
         var unresolvedParams = adapterParams.Where(x => !reachableEntityParams.Contains(x)).ToArray();
@@ -39,7 +51,7 @@ public class GenericEntityAdapterTypeResolver
                 nameof(entityAdapterType));
         }
 
-        _adapterType = entityAdapterType;
+        _entityAdapterType = entityAdapterType;
         EntityGenericArgType = entityGenericArg;
     }
 
@@ -56,7 +68,7 @@ public class GenericEntityAdapterTypeResolver
             return false;
         }
 
-        var adapterGenericParams = _adapterType.GetGenericArguments().Where(x => x.IsGenericParameter).ToArray();
+        var adapterGenericParams = _entityAdapterType.GetGenericArguments().Where(x => x.IsGenericParameter).ToArray();
         if (!adapterGenericParams.All(x => resolvedGenericParams!.ContainsKey(x)))
         {
             return false;
@@ -69,7 +81,7 @@ public class GenericEntityAdapterTypeResolver
             genericArgs[param.GenericParameterPosition] = resolvedGenericParams![param];
         }
 
-        resolvedType = _adapterType.MakeGenericType(genericArgs);
+        resolvedType = _entityAdapterType.MakeGenericType(genericArgs);
         return true;
     }
 }

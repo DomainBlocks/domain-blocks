@@ -3,23 +3,19 @@ namespace DomainBlocks.Experimental.Persistence.Entities;
 public interface IEntityAdapter
 {
     Type EntityType { get; }
+    Type StateType { get; }
 }
 
-public interface IEntityAdapter<TEntity, TState>
+public interface IEntityAdapter<TEntity> : IEntityAdapter
 {
     // Required for writes
     string GetId(TEntity entity);
-    TState GetCurrentState(TEntity entity);
+    object GetCurrentState(TEntity entity);
     IEnumerable<object> GetRaisedEvents(TEntity entity);
 
     // Required for reads
-    TState CreateState();
-    TState Fold(TState state, object @event);
-    TEntity Create(TState state);
-}
+    object CreateState();
 
-public interface IEntityAdapter<TEntity> : IEntityAdapter<TEntity, TEntity>
-{
-    TEntity IEntityAdapter<TEntity, TEntity>.GetCurrentState(TEntity entity) => entity;
-    TEntity IEntityAdapter<TEntity, TEntity>.Create(TEntity state) => state;
+    Task<TEntity> RestoreEntity(
+        object initialState, IAsyncEnumerable<object> events, CancellationToken cancellationToken);
 }

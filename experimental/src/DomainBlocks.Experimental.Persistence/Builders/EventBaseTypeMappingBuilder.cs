@@ -4,12 +4,12 @@ using DomainBlocks.Experimental.Persistence.Extensions;
 
 namespace DomainBlocks.Experimental.Persistence.Builders;
 
-public sealed class EventBaseTypeMappingBuilder<TEventBase> : IEventTypeMappingBuilder
+public class EventBaseTypeMappingBuilder<TEventBase> : IEventTypeMappingBuilder
 {
     private IEnumerable<Assembly>? _searchAssemblies;
     private Func<Type, bool>? _typeFilter;
 
-    public EventTypeMappingBuilderKind Kind => EventTypeMappingBuilderKind.EventBaseType;
+    EventTypeMappingBuilderKind IEventTypeMappingBuilder.Kind => EventTypeMappingBuilderKind.EventBaseType;
 
     public EventBaseTypeMappingBuilder<TEventBase> FromAssemblies(params Assembly[] searchAssemblies)
     {
@@ -33,7 +33,7 @@ public sealed class EventBaseTypeMappingBuilder<TEventBase> : IEventTypeMappingB
         return this;
     }
 
-    public IEnumerable<EventTypeMapping> Build()
+    IEnumerable<EventTypeMapping> IEventTypeMappingBuilder.Build()
     {
         var eventTypeMappings = (_searchAssemblies ?? AppDomain.CurrentDomain.GetAssemblies())
             .FindConcreteTypesAssignableTo<TEventBase>()

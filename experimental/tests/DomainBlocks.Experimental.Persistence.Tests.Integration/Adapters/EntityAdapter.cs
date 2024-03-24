@@ -3,14 +3,14 @@ using DomainBlocks.Experimental.Persistence.Tests.Integration.Model;
 
 namespace DomainBlocks.Experimental.Persistence.Tests.Integration.Adapters;
 
-public class EntityAdapter<TEntity, TState> : IEntityAdapter<TEntity, TState>
+public sealed class EntityAdapter<TEntity, TState> : EntityAdapterBase<TEntity, TState>
     where TEntity : EntityBase<TState>, new()
     where TState : StateBase<TState>, new()
 {
-    public string GetId(TEntity entity) => entity.Id;
-    public TState GetCurrentState(TEntity entity) => entity.State;
-    public IEnumerable<object> GetRaisedEvents(TEntity entity) => entity.RaisedEvents;
-    public TState CreateState() => new();
-    public TState Fold(TState state, object @event) => state.Apply(@event);
-    public TEntity Create(TState state) => new() { State = state };
+    public override string GetId(TEntity entity) => entity.Id;
+    public override TState GetCurrentState(TEntity entity) => entity.State;
+    public override IEnumerable<object> GetRaisedEvents(TEntity entity) => entity.RaisedEvents;
+    public override TState CreateState() => new();
+    protected override TState Fold(TState state, object @event) => state.Apply(@event);
+    protected override TEntity Create(TState state) => new() { State = state };
 }
