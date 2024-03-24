@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 
@@ -16,11 +15,11 @@ internal class ArenaQueue<T> where T : class, new()
         _fullChannel = Channel.CreateBounded<int>(size);
         _arena = new T[size];
 
-        for (var i = 0; i < _arena.Length; i++)
+        // We initialise the empty channel queue with full capacity.
+        for (var i = 0; i < size; i++)
         {
             _arena[i] = new T();
-            var success = _emptyChannel.Writer.TryWrite(i);
-            Debug.Assert(success, "Failed writing index to empty channel");
+            _emptyChannel.Writer.TryWrite(i);
         }
     }
 
