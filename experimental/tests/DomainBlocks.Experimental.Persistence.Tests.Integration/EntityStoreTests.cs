@@ -45,7 +45,9 @@ public class EntityStoreTests
             .Build();
 
         var storeConfigBuilder = new EntityStoreConfigBuilder()
-            .AddEntityAdapters(x => x.MakeGenericFactory(typeof(EntityAdapter<,>)))
+            .AddEntityAdapters(adapters => adapters
+                .AddGenericFactoryFor(typeof(EntityAdapter<,>))
+                .WithConstructorArgs(123, "ABC"))
             .SetEventMapper(eventMapper);
 
         var sqlStreamStoreConfig = storeConfigBuilder.UseSqlStreamStore(streamStore).Build();
@@ -156,7 +158,7 @@ public class EntityStoreTests
     {
         var config = new EntityStoreConfigBuilder()
             .UseEventStoreDb(EventStoreDbConnectionString)
-            .AddEntityAdapters(x => x.MakeGenericFactory(typeof(FunctionalEntityWrapperAdapter<>)))
+            .AddEntityAdapters(x => x.AddGenericFactoryFor(typeof(FunctionalEntityWrapperAdapter<>)))
             .MapEvents(x => x.MapAll<IDomainEvent>())
             .Configure<FunctionalEntityWrapper<FunctionalShoppingCart>>(config =>
             {
@@ -226,7 +228,7 @@ public class EntityStoreTests
 
         var v1StoreConfig = new EntityStoreConfigBuilder()
             .UseSqlStreamStore(streamStore)
-            .AddEntityAdapters(x => x.MakeGenericFactory(typeof(EntityAdapter<,>)))
+            .AddEntityAdapters(x => x.AddGenericFactoryFor(typeof(EntityAdapter<,>)))
             .MapEvents(x =>
             {
                 x.Map<ShoppingCartCreated>();
@@ -237,7 +239,7 @@ public class EntityStoreTests
         // Set up a new version of the ShoppingCartCreated event
         var v2StoreConfig = new EntityStoreConfigBuilder()
             .UseSqlStreamStore(streamStore)
-            .AddEntityAdapters(x => x.MakeGenericFactory(typeof(EntityAdapter<,>)))
+            .AddEntityAdapters(x => x.AddGenericFactoryFor(typeof(EntityAdapter<,>)))
             .MapEvents(mapper =>
             {
                 // Write scenarios:

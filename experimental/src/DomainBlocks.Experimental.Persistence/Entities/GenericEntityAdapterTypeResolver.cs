@@ -1,46 +1,47 @@
+using System.Diagnostics;
 using DomainBlocks.Experimental.Persistence.Extensions;
 
 namespace DomainBlocks.Experimental.Persistence.Entities;
 
 public class GenericEntityAdapterTypeResolver
 {
-    private readonly Type _entityAdapterType;
+    private readonly Type _genericTypeDefinition;
 
-    public GenericEntityAdapterTypeResolver(Type entityAdapterType)
+    public GenericEntityAdapterTypeResolver(Type genericTypeDefinition)
     {
-        if (entityAdapterType == null) throw new ArgumentNullException(nameof(entityAdapterType));
+        if (genericTypeDefinition == null) throw new ArgumentNullException(nameof(genericTypeDefinition));
 
-        if (!entityAdapterType.IsClass || entityAdapterType.IsAbstract)
-            throw new ArgumentException("Expected a concrete class type.", nameof(entityAdapterType));
+        if (!genericTypeDefinition.IsClass || genericTypeDefinition.IsAbstract)
+            throw new ArgumentException("Expected a concrete class type.", nameof(genericTypeDefinition));
 
-        if (!entityAdapterType.IsGenericTypeDefinition)
-            throw new ArgumentException("Expected a generic type definition.", nameof(entityAdapterType));
+        if (!genericTypeDefinition.IsGenericTypeDefinition)
+            throw new ArgumentException("Expected a generic type definition.", nameof(genericTypeDefinition));
 
-        var entityAdapterInterfaceType = entityAdapterType
+        var entityAdapterInterfaceType = genericTypeDefinition
             .GetInterfaces()
             .SingleOrDefault(x => x.IsGenericType && x.GetGenericTypeDefinition() == typeof(IEntityAdapter<>));
 
         if (entityAdapterInterfaceType == null)
             throw new ArgumentException(
                 $"Entity adapter type must implement {typeof(IEntityAdapter<>).GetPrettyName()}.",
-                nameof(entityAdapterType));
+                nameof(genericTypeDefinition));
 
         // Check all generic parameters can be resolved via TEntity.
         var entityGenericArg = entityAdapterInterfaceType.GetGenericArguments()[0];
         var reachableEntityParams = entityGenericArg.FindReachableGenericParameters();
-        var adapterParams = entityAdapterType.GetGenericArguments().Where(x => x.IsGenericParameter).ToArray();
+        var adapterParams = genericTypeDefinition.GetGenericArguments().Where(x => x.IsGenericParameter).ToArray();
         var unresolvedParams = adapterParams.Where(x => !reachableEntityParams.Contains(x)).ToArray();
 
         if (unresolvedParams.Length > 0)
         {
             throw new ArgumentException(
-                $"Invalid entity adapter type '{entityAdapterType.GetPrettyName()}'. " +
+                $"Invalid entity adapter type '{genericTypeDefinition.GetPrettyName()}'. " +
                 $"The following generic parameters are not reachable from '{entityGenericArg.GetPrettyName()}': " +
                 $"{string.Join<Type>(", ", unresolvedParams)}",
-                nameof(entityAdapterType));
+                nameof(genericTypeDefinition));
         }
 
-        _entityAdapterType = entityAdapterType;
+        _genericTypeDefinition = genericTypeDefinition;
         EntityGenericArgType = entityGenericArg;
     }
 
@@ -57,8 +58,12 @@ public class GenericEntityAdapterTypeResolver
             return false;
         }
 
-        var adapterGenericParams = _entityAdapterType.GetGenericArguments().Where(x => x.IsGenericParameter).ToArray();
-        if (!adapterGenericParams.All(x => resolvedGenericParams!.ContainsKey(x)))
+        Debug.Assert(resolvedGenericParams != null, nameof(resolvedGenericParams) + " != null");
+
+        var adapterGenericParams =
+            _genericTypeDefinition.GetGenericArguments().Where(x => x.IsGenericParameter).ToArray();
+
+        if (!adapterGenericParams.All(x => resolvedGenericParams.ContainsKey(x)))
         {
             return false;
         }
@@ -70,7 +75,7 @@ public class GenericEntityAdapterTypeResolver
             genericArgs[param.GenericParameterPosition] = resolvedGenericParams![param];
         }
 
-        resolvedType = _entityAdapterType.MakeGenericType(genericArgs);
+        resolvedType = _genericTypeDefinition.MakeGenericType(genericArgs);
         return true;
     }
 }

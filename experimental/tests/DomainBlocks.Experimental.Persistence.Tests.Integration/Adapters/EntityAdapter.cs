@@ -7,6 +7,10 @@ public sealed class EntityAdapter<TEntity, TState> : EntityAdapterBase<TEntity, 
     where TEntity : EntityBase<TState>, new()
     where TState : StateBase<TState>, new()
 {
+    public EntityAdapter(int i, string s)
+    {
+    }
+
     public override string GetId(TEntity entity) => entity.Id;
     public override TState GetCurrentState(TEntity entity) => entity.State;
     public override IEnumerable<object> GetRaisedEvents(TEntity entity) => entity.RaisedEvents;

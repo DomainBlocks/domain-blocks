@@ -4,22 +4,25 @@ namespace DomainBlocks.Experimental.Persistence.Builders;
 
 public class EntityAdapterRegistryBuilder
 {
-    private readonly Dictionary<Type, IEntityAdapter> _entityAdapters = new();
-    private readonly List<GenericEntityAdapterFactory> _genericEntityAdapterFactories = new();
+    private readonly Dictionary<Type, IEntityAdapter> _adapters = new();
+    private readonly List<GenericEntityAdapterFactoryBuilder> _factoryBuilders = new();
 
     public EntityAdapterRegistryBuilder Add<TEntity>(IEntityAdapter<TEntity> entityAdapter)
     {
-        _entityAdapters.Add(typeof(TEntity), entityAdapter);
+        _adapters.Add(typeof(TEntity), entityAdapter);
         return this;
     }
 
-    public EntityAdapterRegistryBuilder MakeGenericFactory(Type entityAdapterType, params object?[]? constructorArgs)
+    public GenericEntityAdapterFactoryBuilder AddGenericFactoryFor(Type genericTypeDefinition)
     {
-        var typeResolver = new GenericEntityAdapterTypeResolver(entityAdapterType);
-        var factory = new GenericEntityAdapterFactory(typeResolver, constructorArgs);
-        _genericEntityAdapterFactories.Add(factory);
-        return this;
+        var builder = new GenericEntityAdapterFactoryBuilder(genericTypeDefinition);
+        _factoryBuilders.Add(builder);
+        return builder;
     }
 
-    public EntityAdapterRegistry Build() => new(_entityAdapters, _genericEntityAdapterFactories);
+    public EntityAdapterRegistry Build()
+    {
+        var factories = _factoryBuilders.Select(x => x.Build());
+        return new EntityAdapterRegistry(_adapters, factories);
+    }
 }
