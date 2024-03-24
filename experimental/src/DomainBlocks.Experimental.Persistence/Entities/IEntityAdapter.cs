@@ -8,6 +8,8 @@ public interface IEntityAdapter
 
 public interface IEntityAdapter<TEntity> : IEntityAdapter
 {
+    Type IEntityAdapter.EntityType => typeof(TEntity);
+
     // Required for writes
     string GetId(TEntity entity);
     object GetCurrentState(TEntity entity);

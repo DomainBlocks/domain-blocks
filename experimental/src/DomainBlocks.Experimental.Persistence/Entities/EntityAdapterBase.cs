@@ -2,7 +2,6 @@ namespace DomainBlocks.Experimental.Persistence.Entities;
 
 public abstract class EntityAdapterBase<TEntity, TState> : IEntityAdapter<TEntity>
 {
-    public Type EntityType => typeof(TEntity);
     public Type StateType => typeof(TState);
 
     // Required for writes
@@ -17,15 +16,16 @@ public abstract class EntityAdapterBase<TEntity, TState> : IEntityAdapter<TEntit
 
     object IEntityAdapter<TEntity>.GetCurrentState(TEntity entity)
     {
-        return GetCurrentState(entity) ?? throw new InvalidOperationException();
+        return GetCurrentState(entity) ??
+               throw new InvalidOperationException($"{nameof(GetCurrentState)} returned null.");
     }
 
     object IEntityAdapter<TEntity>.CreateState()
     {
-        return CreateState() ?? throw new InvalidOperationException();
+        return CreateState() ?? throw new InvalidOperationException($"{nameof(CreateState)} returned null.");
     }
 
-    async Task<TEntity> IEntityAdapter<TEntity>.RestoreEntity(
+    public virtual async Task<TEntity> RestoreEntity(
         object initialState, IAsyncEnumerable<object> events, CancellationToken cancellationToken)
     {
         var currentState = (TState)initialState;

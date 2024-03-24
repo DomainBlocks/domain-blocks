@@ -45,7 +45,7 @@ public class EntityStoreTests
             .Build();
 
         var configBuilder = new EntityStoreConfigBuilder()
-            .AddEntityAdapterType(typeof(EntityAdapter<,>))
+            .AddGenericEntityAdapterType(typeof(EntityAdapter<,>))
             .SetEventMapper(eventMapper);
 
         var sqlStreamStoreConfig = configBuilder.UseSqlStreamStore(streamStore).Build();
@@ -134,7 +134,7 @@ public class EntityStoreTests
 
         var config = new EntityStoreConfigBuilder()
             .UseSqlStreamStore(streamStore)
-            .AddEntityAdapterType(typeof(MutableEntityAdapter<>))
+            .AddEntityAdapter(new MutableShoppingCartEntityAdapter())
             .MapEvents(x => x.MapAll<IDomainEvent>())
             .Build();
 
@@ -156,7 +156,7 @@ public class EntityStoreTests
     {
         var config = new EntityStoreConfigBuilder()
             .UseEventStoreDb(EventStoreDbConnectionString)
-            .AddEntityAdapterType(typeof(FunctionalEntityWrapperAdapter<>))
+            .AddGenericEntityAdapterType(typeof(FunctionalEntityWrapperAdapter<>))
             .MapEvents(x => x.MapAll<IDomainEvent>())
             .Configure<FunctionalEntityWrapper<FunctionalShoppingCart>>(config =>
             {
@@ -223,7 +223,7 @@ public class EntityStoreTests
 
         var v1StoreConfig = new EntityStoreConfigBuilder()
             .UseSqlStreamStore(streamStore)
-            .AddEntityAdapterType(typeof(EntityAdapter<,>))
+            .AddGenericEntityAdapterType(typeof(EntityAdapter<,>))
             .MapEvents(x =>
             {
                 x.Map<ShoppingCartCreated>();
@@ -234,7 +234,7 @@ public class EntityStoreTests
         // Set up a new version of the ShoppingCartCreated event
         var v2StoreConfig = new EntityStoreConfigBuilder()
             .UseSqlStreamStore(streamStore)
-            .AddEntityAdapterType(typeof(EntityAdapter<,>))
+            .AddGenericEntityAdapterType(typeof(EntityAdapter<,>))
             .MapEvents(mapper =>
             {
                 // Write scenarios:

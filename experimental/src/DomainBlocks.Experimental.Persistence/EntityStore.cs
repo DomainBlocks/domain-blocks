@@ -24,10 +24,10 @@ public sealed class EntityStore : IEntityStore
     public async Task<TEntity> LoadAsync<TEntity>(string entityId, CancellationToken cancellationToken = default)
     {
         var streamName = GetStreamName<TEntity>(entityId);
-        var fromVersion = StreamVersion.Zero;
+        var readFromVersion = StreamVersion.Zero;
 
         var readEvents =
-            _eventStore.ReadStreamAsync(streamName, StreamReadDirection.Forwards, fromVersion, cancellationToken);
+            _eventStore.ReadStreamAsync(streamName, StreamReadDirection.Forwards, readFromVersion, cancellationToken);
 
         var entityAdapter = GetEntityAdapter<TEntity>();
         var initialState = entityAdapter.CreateState();
@@ -50,13 +50,12 @@ public sealed class EntityStore : IEntityStore
             await foreach (var readEvent in readEvents)
             {
                 loadedVersion = readEvent.StreamVersion;
-                var eventName = readEvent.Name;
 
                 // Ignore any snapshot events. A snapshot event would usually be the first event in the case we start
                 // reading from a snapshot event version, and there have been no other writes between reading the
                 // snapshot and reading the events forward from the snapshot version. Writes could happen between these
                 // two reads, which may result in additional snapshots.
-                if (eventName == SystemEventNames.StateSnapshot) continue;
+                if (readEvent.Name == SystemEventNames.StateSnapshot) continue;
 
                 loadedEventCount++;
 
@@ -74,7 +73,6 @@ public sealed class EntityStore : IEntityStore
         if (entity == null) throw new ArgumentNullException(nameof(entity));
 
         var entityAdapter = GetEntityAdapter<TEntity>();
-
         var raisedEvents = entityAdapter.GetRaisedEvents(entity).ToArray();
         if (raisedEvents.Length == 0) return;
 
@@ -99,7 +97,7 @@ public sealed class EntityStore : IEntityStore
     {
         if (!_entityAdapterProvider.TryGetFor<TEntity>(out var entityAdapter))
         {
-            throw new ArgumentException(null, nameof(TEntity));
+            throw new ArgumentException($"Entity adapter not found for type '{typeof(TEntity)}'.", nameof(TEntity));
         }
 
         Debug.Assert(entityAdapter != null, nameof(entityAdapter) + " != null");

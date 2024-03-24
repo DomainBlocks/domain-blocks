@@ -17,14 +17,15 @@ public class EntityStoreConfigBuilder
         return this;
     }
 
-    public EntityStoreConfigBuilder AddEntityAdapterType(Type entityAdapterType, params object?[]? constructorArgs)
+    public EntityStoreConfigBuilder AddGenericEntityAdapterType(
+        Type entityAdapterType, params object?[]? constructorArgs)
     {
         var factory = new GenericEntityAdapterFactory(entityAdapterType, constructorArgs);
         _genericEntityAdapterFactories.Add(factory);
         return this;
     }
 
-    public EntityStoreConfigBuilder AddEntityAdapter<TEntity, TState>(EntityAdapterBase<TEntity, TState> entityAdapter)
+    public EntityStoreConfigBuilder AddEntityAdapter<TEntity>(IEntityAdapter<TEntity> entityAdapter)
     {
         _entityAdapters.Add(entityAdapter);
         return this;
