@@ -7,18 +7,18 @@ public class EntityStoreConfig
 {
     public EntityStoreConfig(
         IEventStore eventStore,
-        EntityAdapterProvider entityAdapterProvider,
+        EntityAdapterRegistry entityAdapterRegistry,
         EventMapper eventMapper,
-        IEnumerable<EntityStreamConfig>? streamConfigs = null)
+        IReadOnlyDictionary<Type, EntityStreamConfig>? streamConfigs = null)
     {
         EventStore = eventStore;
-        EntityAdapterProvider = entityAdapterProvider;
+        EntityAdapterRegistry = entityAdapterRegistry;
         EventMapper = eventMapper;
-        StreamConfigs = (streamConfigs ?? Enumerable.Empty<EntityStreamConfig>()).ToDictionary(x => x.EntityType);
+        StreamConfigs = streamConfigs ?? new Dictionary<Type, EntityStreamConfig>();
     }
 
     public IEventStore EventStore { get; }
-    public EntityAdapterProvider EntityAdapterProvider { get; }
+    public EntityAdapterRegistry EntityAdapterRegistry { get; }
     public EventMapper EventMapper { get; }
     public IReadOnlyDictionary<Type, EntityStreamConfig> StreamConfigs { get; }
 }

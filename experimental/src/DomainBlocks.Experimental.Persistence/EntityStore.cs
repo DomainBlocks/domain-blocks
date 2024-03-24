@@ -8,7 +8,7 @@ namespace DomainBlocks.Experimental.Persistence;
 public sealed class EntityStore : IEntityStore
 {
     private readonly IEventStore _eventStore;
-    private readonly EntityAdapterProvider _entityAdapterProvider;
+    private readonly EntityAdapterRegistry _entityAdapterRegistry;
     private readonly EventMapper _eventMapper;
     private readonly EntityStoreConfig _config;
     private readonly ConditionalWeakTable<object, TrackedEntityContext> _trackedEntities = new();
@@ -16,7 +16,7 @@ public sealed class EntityStore : IEntityStore
     public EntityStore(EntityStoreConfig config)
     {
         _eventStore = config.EventStore;
-        _entityAdapterProvider = config.EntityAdapterProvider;
+        _entityAdapterRegistry = config.EntityAdapterRegistry;
         _eventMapper = config.EventMapper;
         _config = config;
     }
@@ -95,7 +95,7 @@ public sealed class EntityStore : IEntityStore
 
     private IEntityAdapter<TEntity> GetEntityAdapter<TEntity>()
     {
-        if (!_entityAdapterProvider.TryGetFor<TEntity>(out var entityAdapter))
+        if (!_entityAdapterRegistry.TryGetFor<TEntity>(out var entityAdapter))
         {
             throw new ArgumentException($"Entity adapter not found for type '{typeof(TEntity)}'.", nameof(TEntity));
         }

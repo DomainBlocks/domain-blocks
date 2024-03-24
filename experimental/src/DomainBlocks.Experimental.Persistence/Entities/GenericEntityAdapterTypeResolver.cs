@@ -16,28 +16,17 @@ public class GenericEntityAdapterTypeResolver
         if (!entityAdapterType.IsGenericTypeDefinition)
             throw new ArgumentException("Expected a generic type definition.", nameof(entityAdapterType));
 
-        var currentBaseType = entityAdapterType.BaseType;
-        Type? entityAdapterBaseType = null;
+        var entityAdapterInterfaceType = entityAdapterType
+            .GetInterfaces()
+            .SingleOrDefault(x => x.IsGenericType && x.GetGenericTypeDefinition() == typeof(IEntityAdapter<>));
 
-        while (currentBaseType != null)
-        {
-            if (currentBaseType.IsGenericType &&
-                currentBaseType.GetGenericTypeDefinition() == typeof(EntityAdapterBase<,>))
-            {
-                entityAdapterBaseType = currentBaseType;
-                break;
-            }
-
-            currentBaseType = currentBaseType.BaseType;
-        }
-
-        if (entityAdapterBaseType == null)
+        if (entityAdapterInterfaceType == null)
             throw new ArgumentException(
-                $"Entity adapter type must derive from {typeof(EntityAdapterBase<,>).GetPrettyName()}.",
+                $"Entity adapter type must implement {typeof(IEntityAdapter<>).GetPrettyName()}.",
                 nameof(entityAdapterType));
 
         // Check all generic parameters can be resolved via TEntity.
-        var entityGenericArg = entityAdapterBaseType.GetGenericArguments()[0];
+        var entityGenericArg = entityAdapterInterfaceType.GetGenericArguments()[0];
         var reachableEntityParams = entityGenericArg.FindReachableGenericParameters();
         var adapterParams = entityAdapterType.GetGenericArguments().Where(x => x.IsGenericParameter).ToArray();
         var unresolvedParams = adapterParams.Where(x => !reachableEntityParams.Contains(x)).ToArray();

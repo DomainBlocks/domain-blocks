@@ -1,12 +1,10 @@
-using DomainBlocks.Experimental.Persistence.Entities;
 using DomainBlocks.Experimental.Persistence.Events;
 
 namespace DomainBlocks.Experimental.Persistence.Builders;
 
 public class EntityStoreConfigBuilder
 {
-    private readonly List<GenericEntityAdapterFactory> _genericEntityAdapterFactories = new();
-    private readonly List<IEntityAdapter> _entityAdapters = new();
+    private readonly EntityAdapterRegistryBuilder _entityAdapterRegistryBuilder = new();
     private readonly Dictionary<Type, EntityStreamConfigBuilder> _entityStreamConfigBuilders = new();
     private IEventStore? _eventStore;
     private EventMapper? _eventMapper;
@@ -17,17 +15,9 @@ public class EntityStoreConfigBuilder
         return this;
     }
 
-    public EntityStoreConfigBuilder AddGenericEntityAdapterType(
-        Type entityAdapterType, params object?[]? constructorArgs)
+    public EntityStoreConfigBuilder AddEntityAdapters(Action<EntityAdapterRegistryBuilder> builderAction)
     {
-        var factory = new GenericEntityAdapterFactory(entityAdapterType, constructorArgs);
-        _genericEntityAdapterFactories.Add(factory);
-        return this;
-    }
-
-    public EntityStoreConfigBuilder AddEntityAdapter<TEntity>(IEntityAdapter<TEntity> entityAdapter)
-    {
-        _entityAdapters.Add(entityAdapter);
+        builderAction(_entityAdapterRegistryBuilder);
         return this;
     }
 
@@ -62,9 +52,9 @@ public class EntityStoreConfigBuilder
         if (_eventStore == null) throw new InvalidOperationException();
         if (_eventMapper == null) throw new InvalidOperationException();
 
-        var entityAdapterProvider = new EntityAdapterProvider(_entityAdapters, _genericEntityAdapterFactories);
-        var streamConfigs = _entityStreamConfigBuilders.Values.Select(x => x.Build());
+        var entityAdapterRegistry = _entityAdapterRegistryBuilder.Build();
+        var streamConfigs = _entityStreamConfigBuilders.ToDictionary(x => x.Key, x => x.Value.Build());
 
-        return new EntityStoreConfig(_eventStore, entityAdapterProvider, _eventMapper, streamConfigs);
+        return new EntityStoreConfig(_eventStore, entityAdapterRegistry, _eventMapper, streamConfigs);
     }
 }

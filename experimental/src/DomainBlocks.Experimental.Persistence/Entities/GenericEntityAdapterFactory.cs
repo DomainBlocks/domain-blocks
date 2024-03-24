@@ -5,9 +5,9 @@ public class GenericEntityAdapterFactory
     private readonly GenericEntityAdapterTypeResolver _typeResolver;
     private readonly object?[]? _constructorArgs;
 
-    public GenericEntityAdapterFactory(Type entityAdapterType, object?[]? constructorArgs = null)
+    public GenericEntityAdapterFactory(GenericEntityAdapterTypeResolver typeResolver, object?[]? constructorArgs = null)
     {
-        _typeResolver = new GenericEntityAdapterTypeResolver(entityAdapterType);
+        _typeResolver = typeResolver;
         _constructorArgs = constructorArgs;
     }
 

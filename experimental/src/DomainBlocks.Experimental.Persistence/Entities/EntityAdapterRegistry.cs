@@ -2,16 +2,16 @@ using System.Collections.Concurrent;
 
 namespace DomainBlocks.Experimental.Persistence.Entities;
 
-public class EntityAdapterProvider
+public class EntityAdapterRegistry
 {
     private readonly ConcurrentDictionary<Type, IEntityAdapter> _adapters;
     private readonly IReadOnlyCollection<GenericEntityAdapterFactory> _genericAdapterFactories;
 
-    public EntityAdapterProvider(
-        IEnumerable<IEntityAdapter> entityAdapters,
+    public EntityAdapterRegistry(
+        IReadOnlyDictionary<Type, IEntityAdapter> entityAdapters,
         IEnumerable<GenericEntityAdapterFactory> genericEntityAdapterFactories)
     {
-        _adapters = new ConcurrentDictionary<Type, IEntityAdapter>(entityAdapters.ToDictionary(x => x.EntityType));
+        _adapters = new ConcurrentDictionary<Type, IEntityAdapter>(entityAdapters);
         _genericAdapterFactories = genericEntityAdapterFactories.ToArray();
     }
 
@@ -35,7 +35,7 @@ public class EntityAdapterProvider
 
         if (adapter != null)
         {
-            _adapters.TryAdd(adapter.StateType, adapter);
+            _adapters.TryAdd(adapter.EntityType, adapter);
         }
 
         return adapter != null;
