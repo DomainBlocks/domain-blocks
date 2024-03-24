@@ -38,7 +38,7 @@ public sealed class EventBaseTypeMappingBuilder<TEventBase> : IEventTypeMappingB
         var eventTypeMappings = (_searchAssemblies ?? AppDomain.CurrentDomain.GetAssemblies())
             .FindConcreteTypesAssignableTo<TEventBase>()
             .Where(x => _typeFilter?.Invoke(x) ?? true)
-            .Select(x => new EventTypeMapping(x, x.Name, null));
+            .Select(x => new EventTypeMapping(x, x.Name));
 
         return eventTypeMappings;
     }

@@ -1,6 +1,6 @@
 namespace DomainBlocks.Experimental.Persistence.Serialization;
 
-public interface IEventDataSerializer
+public interface ISerializer
 {
     SerializationFormat Format { get; }
     byte[] Serialize(object value);

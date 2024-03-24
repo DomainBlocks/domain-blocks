@@ -11,7 +11,6 @@ public sealed class EntityStoreConfigBuilder
     private readonly Dictionary<Type, EntityStreamConfigBuilder> _entityStreamConfigBuilders = new();
     private IEventStore? _eventStore;
     private EventMapper? _eventMapper;
-    private int? _snapshotEventCount;
 
     public EntityStoreConfigBuilder SetEventStore(IEventStore eventStore)
     {
@@ -46,13 +45,7 @@ public sealed class EntityStoreConfigBuilder
         return this;
     }
 
-    public EntityStoreConfigBuilder SetSnapshotEventCount(int? snapshotEventCount)
-    {
-        _snapshotEventCount = snapshotEventCount;
-        return this;
-    }
-
-    public EntityStoreConfigBuilder ForStreamOf<TEntity>(Action<EntityStreamConfigBuilder> builderAction)
+    public EntityStoreConfigBuilder Configure<TEntity>(Action<EntityStreamConfigBuilder> builderAction)
     {
         if (!_entityStreamConfigBuilders.TryGetValue(typeof(TEntity), out var builder))
         {
@@ -72,7 +65,6 @@ public sealed class EntityStoreConfigBuilder
         var entityAdapterProvider = new EntityAdapterProvider(_entityAdapters, _genericEntityAdapterFactories);
         var streamConfigs = _entityStreamConfigBuilders.Values.Select(x => x.Build());
 
-        return new EntityStoreConfig(
-            _eventStore, entityAdapterProvider, _eventMapper, _snapshotEventCount, streamConfigs);
+        return new EntityStoreConfig(_eventStore, entityAdapterProvider, _eventMapper, streamConfigs);
     }
 }

@@ -1,6 +1,6 @@
 namespace DomainBlocks.Experimental.Persistence;
 
-public static class DefaultStreamIdPrefix
+public static class DefaultStreamNamePrefix
 {
     public static string CreateFor(Type entityType)
     {

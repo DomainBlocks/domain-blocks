@@ -3,29 +3,22 @@ namespace DomainBlocks.Experimental.Persistence.Builders;
 public class EntityStreamConfigBuilder
 {
     private readonly Type _entityType;
-    private int? _snapshotEventCount;
-    private string _streamIdPrefix;
+    private string _streamNamePrefix;
 
     public EntityStreamConfigBuilder(Type entityType)
     {
         _entityType = entityType;
-        _streamIdPrefix = DefaultStreamIdPrefix.CreateFor(entityType);
+        _streamNamePrefix = DefaultStreamNamePrefix.CreateFor(entityType);
     }
 
-    public EntityStreamConfigBuilder SetSnapshotEventCount(int? eventCount)
+    public EntityStreamConfigBuilder SetStreamNamePrefix(string streamNamePrefix)
     {
-        _snapshotEventCount = eventCount;
+        if (string.IsNullOrWhiteSpace(streamNamePrefix))
+            throw new ArgumentException("Stream name prefix cannot be null or whitespace.", nameof(streamNamePrefix));
+
+        _streamNamePrefix = streamNamePrefix;
         return this;
     }
 
-    public EntityStreamConfigBuilder SetStreamIdPrefix(string streamIdPrefix)
-    {
-        if (string.IsNullOrWhiteSpace(streamIdPrefix))
-            throw new ArgumentException("Stream ID prefix cannot be null or whitespace.", nameof(streamIdPrefix));
-
-        _streamIdPrefix = streamIdPrefix;
-        return this;
-    }
-
-    public EntityStreamConfig Build() => new(_entityType, _snapshotEventCount, _streamIdPrefix);
+    public EntityStreamConfig Build() => new(_entityType, _streamNamePrefix);
 }

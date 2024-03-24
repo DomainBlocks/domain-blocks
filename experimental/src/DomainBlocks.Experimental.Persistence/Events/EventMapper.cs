@@ -6,8 +6,9 @@ public class EventMapper : IEventMapper
 {
     private readonly IReadOnlyDictionary<Type, EventTypeMapping> _mappingsByType;
     private readonly IReadOnlyDictionary<string, EventTypeMapping> _mappingsByName;
+    private readonly ISerializer _serializer;
 
-    public EventMapper(IEnumerable<EventTypeMapping> mappings, IEventDataSerializer serializer)
+    public EventMapper(IEnumerable<EventTypeMapping> mappings, ISerializer serializer)
     {
         _mappingsByType = mappings.ToDictionary(x => x.EventType);
 
@@ -16,10 +17,8 @@ public class EventMapper : IEventMapper
                 (mapping, eventName) => (eventName, mapping))
             .ToDictionary(x => x.eventName, x => x.mapping);
 
-        Serializer = serializer;
+        _serializer = serializer;
     }
-
-    public IEventDataSerializer Serializer { get; }
 
     public bool IsEventNameIgnored(string eventName)
     {
@@ -34,7 +33,7 @@ public class EventMapper : IEventMapper
             throw new ArgumentException($"Mapping not found for event name '{readEvent.Name}'.", nameof(readEvent));
         }
 
-        var @event = Serializer.Deserialize(readEvent.Payload.Span, mapping.EventType);
+        var @event = _serializer.Deserialize(readEvent.Payload.Span, mapping.EventType);
 
         yield return @event;
     }
@@ -46,7 +45,7 @@ public class EventMapper : IEventMapper
             throw new ArgumentException($"Mapping not found for event type '{@event.GetType()}'.", nameof(@event));
         }
 
-        var payload = Serializer.Serialize(@event);
+        var payload = _serializer.Serialize(@event);
 
         return new WriteEvent(mapping.EventName, payload, default);
     }

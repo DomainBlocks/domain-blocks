@@ -1,5 +1,4 @@
 using DomainBlocks.Experimental.Persistence.Events;
-using DomainBlocks.Experimental.Persistence.Extensions;
 using DomainBlocks.Experimental.Persistence.Serialization;
 
 namespace DomainBlocks.Experimental.Persistence.Builders;
@@ -7,45 +6,51 @@ namespace DomainBlocks.Experimental.Persistence.Builders;
 public class EventMapperBuilder
 {
     private readonly Dictionary<Type, IEventTypeMappingBuilder> _eventTypeMappingBuilders = new();
-    private IEventDataSerializer _serializer = new JsonEventDataSerializer();
+    private ISerializer _serializer = new JsonSerializer();
 
-    public EventMapperBuilder MapEventsOfType<TEventBase>(
-        Action<EventBaseTypeMappingBuilder<TEventBase>>? builderAction = null)
+    public EventBaseTypeMappingBuilder<TEventBase> MapAll<TEventBase>()
     {
         if (_eventTypeMappingBuilders.TryGetValue(typeof(TEventBase), out var builder))
         {
             // TODO: error handling
-            builderAction?.Invoke((EventBaseTypeMappingBuilder<TEventBase>)builder);
+            return (EventBaseTypeMappingBuilder<TEventBase>)builder;
         }
 
         var newBuilder = new EventBaseTypeMappingBuilder<TEventBase>();
         _eventTypeMappingBuilders.Add(typeof(TEventBase), newBuilder);
-        builderAction?.Invoke(newBuilder);
 
+        return newBuilder;
+    }
+
+    public EventMapperBuilder MapAll<TEventBase>(Action<EventBaseTypeMappingBuilder<TEventBase>> builderAction)
+    {
+        var builder = MapAll<TEventBase>();
+        builderAction(builder);
         return this;
     }
 
-    public EventMapperBuilder MapEvent<TEvent>(Action<SingleEventTypeMappingBuilder<TEvent>>? builderAction = null)
+    public SingleEventTypeMappingBuilder<TEvent> Map<TEvent>()
     {
         if (_eventTypeMappingBuilders.TryGetValue(typeof(TEvent), out var builder))
         {
             // TODO: error handling
-            builderAction?.Invoke((SingleEventTypeMappingBuilder<TEvent>)builder);
+            return (SingleEventTypeMappingBuilder<TEvent>)builder;
         }
 
         var newBuilder = new SingleEventTypeMappingBuilder<TEvent>();
         _eventTypeMappingBuilders.Add(typeof(TEvent), newBuilder);
-        builderAction?.Invoke(newBuilder);
 
-        return this;
+        return newBuilder;
     }
 
-    public EventMapperBuilder ForStreamOf<TEntity>()
+    public EventMapperBuilder Map<TEvent>(Action<SingleEventTypeMappingBuilder<TEvent>> builderAction)
     {
+        var builder = Map<TEvent>();
+        builderAction(builder);
         return this;
     }
 
-    public EventMapperBuilder SetSerializer(IEventDataSerializer serializer)
+    public EventMapperBuilder SetSerializer(ISerializer serializer)
     {
         _serializer = serializer;
         return this;
@@ -53,7 +58,20 @@ public class EventMapperBuilder
 
     public EventMapper Build()
     {
-        var eventTypeMap = _eventTypeMappingBuilders.Values.BuildAll();
-        return new EventMapper(eventTypeMap, _serializer);
+        // Include mappings from event base type builders first so they can be overriden.
+        var eventBaseTypeMappings = _eventTypeMappingBuilders.Values
+            .Where(x => x.Kind == EventTypeMappingBuilderKind.EventBaseType)
+            .SelectMany(x => x.Build());
+
+        var singleEventTypeMappings = _eventTypeMappingBuilders.Values
+            .Where(x => x.Kind == EventTypeMappingBuilderKind.SingleEvent)
+            .SelectMany(x => x.Build());
+
+        var eventTypeMappings = eventBaseTypeMappings
+            .Concat(singleEventTypeMappings)
+            .GroupBy(x => x.EventType)
+            .Select(x => x.Aggregate((_, next) => next));
+
+        return new EventMapper(eventTypeMappings, _serializer);
     }
 }

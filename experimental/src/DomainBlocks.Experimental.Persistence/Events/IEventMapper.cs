@@ -1,6 +1,5 @@
 namespace DomainBlocks.Experimental.Persistence.Events;
 
-public interface IEventMapper : IReadOnlyEventMapper
+public interface IEventMapper : IReadOnlyEventMapper, IWriteOnlyEventMapper
 {
-    WriteEvent ToWriteEvent(object @event);
 }
