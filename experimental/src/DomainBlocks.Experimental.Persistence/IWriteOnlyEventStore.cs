@@ -11,7 +11,7 @@ public interface IWriteOnlyEventStore
     /// Appends a collection of events to a stream, optionally with an expected stream version for an optimistic
     /// concurrency check.
     /// </summary>
-    /// <param name="streamId">The ID of the stream to append the events to.</param>
+    /// <param name="streamName">The ID of the stream to append the events to.</param>
     /// <param name="events">The events to append.</param>
     /// <param name="expectedVersion">
     /// The optional expected version of the stream. If specified and non-null, and the stream version does not match,
@@ -25,13 +25,13 @@ public interface IWriteOnlyEventStore
     /// <paramref name="events"/> collection is empty.
     /// </returns>
     Task<StreamVersion?> AppendToStreamAsync(
-        string streamId,
+        string streamName,
         IEnumerable<WriteEvent> events,
         StreamVersion expectedVersion,
         CancellationToken cancellationToken = default);
 
     Task<StreamVersion?> AppendToStreamAsync(
-        string streamId,
+        string streamName,
         IEnumerable<WriteEvent> events,
         ExpectedStreamState expectedState,
         CancellationToken cancellationToken = default);

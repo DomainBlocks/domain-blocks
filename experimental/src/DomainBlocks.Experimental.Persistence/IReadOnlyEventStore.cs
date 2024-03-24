@@ -11,7 +11,7 @@ public interface IReadOnlyEventStore
     /// Reads an event stream forwards or backwards, optionally from a specific version within the stream.
     /// </summary>
     /// <param name="direction">The direction to read, i.e., forwards or backwards.</param>
-    /// <param name="streamId">The ID of the stream to read.</param>
+    /// <param name="streamName">The ID of the stream to read.</param>
     /// <param name="fromVersion">
     /// The optional version to start reading from. If not specified or null, then the stream will be read from the
     /// start in the forwards direction, or from the end in the backwards direction.
@@ -19,13 +19,13 @@ public interface IReadOnlyEventStore
     /// <param name="cancellationToken">The optional <see cref="System.Threading.CancellationToken" />.</param>
     /// <returns>An async enumerable of <see cref="ReadEvent" />.</returns>
     IAsyncEnumerable<ReadEvent> ReadStreamAsync(
-        string streamId,
+        string streamName,
         StreamReadDirection direction,
         StreamVersion fromVersion,
         CancellationToken cancellationToken = default);
 
     IAsyncEnumerable<ReadEvent> ReadStreamAsync(
-        string streamId,
+        string streamName,
         StreamReadDirection direction,
         StreamReadOrigin readOrigin = StreamReadOrigin.Default,
         CancellationToken cancellationToken = default);

@@ -23,17 +23,17 @@ public sealed class SqlStreamStoreEventStore : IEventStore
     }
 
     public IAsyncEnumerable<ReadEvent> ReadStreamAsync(
-        string streamId,
+        string streamName,
         StreamReadDirection direction,
         StreamVersion fromVersion,
         CancellationToken cancellationToken = default)
     {
         var fromVersionInternal = Convert.ToInt32(fromVersion.ToUInt64());
-        return ReadStreamInternalAsync(streamId, direction, fromVersionInternal, cancellationToken);
+        return ReadStreamInternalAsync(streamName, direction, fromVersionInternal, cancellationToken);
     }
 
     public IAsyncEnumerable<ReadEvent> ReadStreamAsync(
-        string streamId,
+        string streamName,
         StreamReadDirection direction,
         StreamReadOrigin readOrigin = StreamReadOrigin.Default,
         CancellationToken cancellationToken = default)
@@ -48,21 +48,21 @@ public sealed class SqlStreamStoreEventStore : IEventStore
             _ => throw new ArgumentOutOfRangeException(nameof(readOrigin), readOrigin, null)
         };
 
-        return ReadStreamInternalAsync(streamId, direction, fromVersion, cancellationToken);
+        return ReadStreamInternalAsync(streamName, direction, fromVersion, cancellationToken);
     }
 
     public Task<StreamVersion?> AppendToStreamAsync(
-        string streamId,
+        string streamName,
         IEnumerable<WriteEvent> events,
         StreamVersion expectedVersion,
         CancellationToken cancellationToken = default)
     {
         var expectedVersionInternal = Convert.ToInt32(expectedVersion.ToUInt64());
-        return AppendToStreamInternalAsync(streamId, events, expectedVersionInternal, cancellationToken);
+        return AppendToStreamInternalAsync(streamName, events, expectedVersionInternal, cancellationToken);
     }
 
     public Task<StreamVersion?> AppendToStreamAsync(
-        string streamId,
+        string streamName,
         IEnumerable<WriteEvent> events,
         ExpectedStreamState expectedState,
         CancellationToken cancellationToken = default)
@@ -74,11 +74,11 @@ public sealed class SqlStreamStoreEventStore : IEventStore
             _ => throw new ArgumentOutOfRangeException(nameof(expectedState), expectedState, null)
         };
 
-        return AppendToStreamInternalAsync(streamId, events, expectedVersion, cancellationToken);
+        return AppendToStreamInternalAsync(streamName, events, expectedVersion, cancellationToken);
     }
 
     private async IAsyncEnumerable<ReadEvent> ReadStreamInternalAsync(
-        string streamId,
+        string streamName,
         StreamReadDirection direction,
         int fromVersion,
         [EnumeratorCancellation] CancellationToken cancellationToken)
@@ -90,17 +90,17 @@ public sealed class SqlStreamStoreEventStore : IEventStore
             if (direction == StreamReadDirection.Forwards)
             {
                 page = await _streamStore.ReadStreamForwards(
-                    streamId, fromVersion, _readPageSize, cancellationToken: cancellationToken);
+                    streamName, fromVersion, _readPageSize, cancellationToken: cancellationToken);
             }
             else
             {
                 page = await _streamStore.ReadStreamBackwards(
-                    streamId, fromVersion, _readPageSize, cancellationToken: cancellationToken);
+                    streamName, fromVersion, _readPageSize, cancellationToken: cancellationToken);
             }
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Unable to load events from {StreamName}", streamId);
+            Logger.LogError(ex, "Unable to load events from {StreamName}", streamName);
             throw;
         }
 
@@ -128,14 +128,14 @@ public sealed class SqlStreamStoreEventStore : IEventStore
             }
             catch (Exception ex)
             {
-                Logger.LogError(ex, "Unable to load events from {StreamName}", streamId);
+                Logger.LogError(ex, "Unable to load events from {StreamName}", streamName);
                 throw;
             }
         }
     }
 
     private async Task<StreamVersion?> AppendToStreamInternalAsync(
-        string streamId,
+        string streamName,
         IEnumerable<WriteEvent> events,
         int expectedVersion,
         CancellationToken cancellationToken)
@@ -162,7 +162,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore
             "Appending {EventCount} events to stream {StreamName}. Expected stream version {StreamVersion}. " +
             "Write ID {WriteId}",
             eventsArray.Length,
-            streamId,
+            streamName,
             expectedVersion,
             writeId);
 
@@ -184,7 +184,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore
         try
         {
             var appendResult =
-                await _streamStore.AppendToStream(streamId, expectedVersion, convertedEvents, cancellationToken);
+                await _streamStore.AppendToStream(streamName, expectedVersion, convertedEvents, cancellationToken);
 
             Logger.LogDebug("Written events to stream. WriteId {WriteId}", writeId);
 
@@ -193,7 +193,9 @@ public sealed class SqlStreamStoreEventStore : IEventStore
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Unable to save events to stream {StreamName}. Write Id {WriteId}", streamId, writeId);
+            Logger.LogError(
+                ex, "Unable to save events to stream {StreamName}. Write Id {WriteId}", streamName, writeId);
+
             throw;
         }
     }
