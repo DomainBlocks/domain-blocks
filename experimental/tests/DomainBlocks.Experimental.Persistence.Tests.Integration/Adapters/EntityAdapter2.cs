@@ -13,7 +13,7 @@ public sealed class EntityAdapter2<TEntity, TState> : IEntityAdapter<TEntity>
     public IEnumerable<object> GetRaisedEvents(TEntity entity) => entity.RaisedEvents;
     public object CreateState() => new TState();
 
-    public async Task<TEntity> RestoreEntity(
+    public async Task<TEntity> RestoreEntityAsync(
         object initialState, IAsyncEnumerable<object> events, CancellationToken cancellationToken)
     {
         var state = (TState)initialState;

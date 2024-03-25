@@ -25,7 +25,7 @@ public abstract class EntityAdapterBase<TEntity, TState> : IEntityAdapter<TEntit
         return CreateState() ?? throw new InvalidOperationException($"{nameof(CreateState)} returned null.");
     }
 
-    async Task<TEntity> IEntityAdapter<TEntity>.RestoreEntity(
+    async Task<TEntity> IEntityAdapter<TEntity>.RestoreEntityAsync(
         object initialState, IAsyncEnumerable<object> events, CancellationToken cancellationToken)
     {
         var currentState = (TState)initialState;

@@ -11,7 +11,7 @@ public class MutableShoppingCartEntityAdapter : IEntityAdapter<MutableShoppingCa
     public IEnumerable<object> GetRaisedEvents(MutableShoppingCart entity) => entity.RaisedEvents;
     public object CreateState() => new MutableShoppingCart();
 
-    public async Task<MutableShoppingCart> RestoreEntity(
+    public async Task<MutableShoppingCart> RestoreEntityAsync(
         object initialState, IAsyncEnumerable<object> events, CancellationToken cancellationToken)
     {
         var shoppingCart = (MutableShoppingCart)initialState;

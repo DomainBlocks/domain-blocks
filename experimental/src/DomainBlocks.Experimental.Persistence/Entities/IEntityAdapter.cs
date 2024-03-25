@@ -18,6 +18,6 @@ public interface IEntityAdapter<TEntity> : IEntityAdapter
     // Required for reads
     object CreateState();
 
-    Task<TEntity> RestoreEntity(
+    Task<TEntity> RestoreEntityAsync(
         object initialState, IAsyncEnumerable<object> events, CancellationToken cancellationToken);
 }

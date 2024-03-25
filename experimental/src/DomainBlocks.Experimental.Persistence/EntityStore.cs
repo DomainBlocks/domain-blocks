@@ -37,7 +37,7 @@ public sealed class EntityStore : IEntityStore
         StreamVersion? loadedVersion = null;
         var loadedEventCount = 0;
 
-        var entity = await entityAdapter.RestoreEntity(initialState, TransformEventStream(), cancellationToken);
+        var entity = await entityAdapter.RestoreEntityAsync(initialState, TransformEventStream(), cancellationToken);
         var trackedEntityContext = new TrackedEntityContext(loadedVersion, loadedEventCount);
 
         // Track the entity so that the expected version will be known in a future call to SaveAsync.
