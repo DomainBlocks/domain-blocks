@@ -132,6 +132,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "examples", "examples", "{F3
 		experimental\examples\Directory.Build.props = experimental\examples\Directory.Build.props
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Experimental.Persistence.Tests", "experimental\tests\DomainBlocks.Experimental.Persistence.Tests\DomainBlocks.Experimental.Persistence.Tests.csproj", "{48601704-69B3-4131-85DE-5FE75E823079}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -266,6 +268,10 @@ Global
 		{1155785E-FAC8-477E-A121-DB39AE8F3476}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{1155785E-FAC8-477E-A121-DB39AE8F3476}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{1155785E-FAC8-477E-A121-DB39AE8F3476}.Release|Any CPU.Build.0 = Release|Any CPU
+		{48601704-69B3-4131-85DE-5FE75E823079}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{48601704-69B3-4131-85DE-5FE75E823079}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{48601704-69B3-4131-85DE-5FE75E823079}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{48601704-69B3-4131-85DE-5FE75E823079}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -311,6 +317,7 @@ Global
 		{6A273BCF-0E01-4217-9592-6BFBBB36B55B} = {FA9F0EE7-9D3A-4E23-9BC2-E6C206B795AC}
 		{F33CC2DA-A4C1-436C-8111-2DDED2453269} = {CDF37999-0B33-49A4-B425-2AB0D6C30668}
 		{1155785E-FAC8-477E-A121-DB39AE8F3476} = {F33CC2DA-A4C1-436C-8111-2DDED2453269}
+		{48601704-69B3-4131-85DE-5FE75E823079} = {FA9F0EE7-9D3A-4E23-9BC2-E6C206B795AC}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {BA018103-0F59-4D7F-9119-099BF2CC020F}

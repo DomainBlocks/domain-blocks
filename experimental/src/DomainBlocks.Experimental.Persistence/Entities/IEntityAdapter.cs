@@ -3,12 +3,12 @@ namespace DomainBlocks.Experimental.Persistence.Entities;
 public interface IEntityAdapter
 {
     Type EntityType { get; }
-    Type StateType { get; }
 }
 
 public interface IEntityAdapter<TEntity> : IEntityAdapter
 {
     Type IEntityAdapter.EntityType => typeof(TEntity);
+    Type StateType { get; }
 
     // Required for writes
     string GetId(TEntity entity);

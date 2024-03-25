@@ -18,6 +18,24 @@ public static class TypeExtensions
         return sb.ToString();
     }
 
+    public static bool HasInterface(this Type type, Type interfaceType)
+    {
+        if (type == null) throw new ArgumentNullException(nameof(type));
+        if (interfaceType == null) throw new ArgumentNullException(nameof(interfaceType));
+
+        if (!interfaceType.IsInterface)
+            throw new ArgumentException("Type must be an interface.", nameof(interfaceType));
+
+        if (interfaceType.IsGenericTypeDefinition)
+        {
+            return type
+                .GetInterfaces()
+                .Any(x => x.IsGenericType && x.GetGenericTypeDefinition() == interfaceType);
+        }
+
+        return type.GetInterfaces().Any(x => x == interfaceType);
+    }
+
     public static IReadOnlySet<Type> FindReachableGenericParameters(this Type type)
     {
         if (type == null) throw new ArgumentNullException(nameof(type));

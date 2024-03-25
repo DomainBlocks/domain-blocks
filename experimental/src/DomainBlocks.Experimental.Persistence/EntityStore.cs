@@ -30,7 +30,7 @@ public sealed class EntityStore : IEntityStore
             _eventStore.ReadStreamAsync(streamName, StreamReadDirection.Forwards, readFromVersion, cancellationToken);
 
         var entityAdapter = GetEntityAdapter<TEntity>();
-        var initialState = entityAdapter.CreateState();
+        var initialState = entityAdapter.CreateState(); // May come from a snapshot (in future).
 
         // Used in closure of TransformEventStream, so must be declared before the async enumerable is materialized,
         // i.e. before RestoreEntity is invoked.

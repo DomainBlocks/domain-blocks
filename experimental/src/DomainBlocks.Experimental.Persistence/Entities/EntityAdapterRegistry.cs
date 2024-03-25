@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using DomainBlocks.Experimental.Persistence.Extensions;
 
 namespace DomainBlocks.Experimental.Persistence.Entities;
 
@@ -11,6 +12,12 @@ public class EntityAdapterRegistry
         IReadOnlyDictionary<Type, IEntityAdapter> entityAdapters,
         IEnumerable<GenericEntityAdapterFactory> genericEntityAdapterFactories)
     {
+        if (!entityAdapters.Values.All(x => x.GetType().HasInterface(typeof(IEntityAdapter<>))))
+        {
+            throw new ArgumentException(
+                $"Entity adapters must not implement '{typeof(IEntityAdapter)}' directly.", nameof(entityAdapters));
+        }
+
         _adapters = new ConcurrentDictionary<Type, IEntityAdapter>(entityAdapters);
         _genericAdapterFactories = genericEntityAdapterFactories.ToArray();
     }
