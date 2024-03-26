@@ -101,15 +101,15 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "projections", "projections"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Projections.Playground", "examples\projections\Projections.Playground\Projections.Playground.csproj", "{279FA99D-967E-4322-82DD-57A8F9FAC85C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Experimental.Persistence", "src\DomainBlocks.Experimental.Persistence\DomainBlocks.Experimental.Persistence.csproj", "{3CF709B2-CCDD-4035-8A00-85AFD2E9B2D9}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Persistence", "src\DomainBlocks.Persistence\DomainBlocks.Persistence.csproj", "{3CF709B2-CCDD-4035-8A00-85AFD2E9B2D9}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Experimental.Persistence.EventStoreDb", "src\DomainBlocks.Experimental.Persistence.EventStoreDb\DomainBlocks.Experimental.Persistence.EventStoreDb.csproj", "{35223967-3E3A-4514-8C24-29BB39F7895B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Persistence.EventStoreDb", "src\DomainBlocks.Persistence.EventStoreDb\DomainBlocks.Persistence.EventStoreDb.csproj", "{35223967-3E3A-4514-8C24-29BB39F7895B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Experimental.Persistence.SqlStreamStore", "src\DomainBlocks.Experimental.Persistence.SqlStreamStore\DomainBlocks.Experimental.Persistence.SqlStreamStore.csproj", "{776F8939-0F91-4320-BC80-41568AA0A1A4}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Persistence.SqlStreamStore", "src\DomainBlocks.Persistence.SqlStreamStore\DomainBlocks.Persistence.SqlStreamStore.csproj", "{776F8939-0F91-4320-BC80-41568AA0A1A4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Experimental.Persistence.Tests", "tests\DomainBlocks.Experimental.Persistence.Tests\DomainBlocks.Experimental.Persistence.Tests.csproj", "{CCECA940-E8D7-4FB8-81ED-0176C866FB35}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Persistence.Tests", "tests\DomainBlocks.Persistence.Tests\DomainBlocks.Persistence.Tests.csproj", "{CCECA940-E8D7-4FB8-81ED-0176C866FB35}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Experimental.Persistence.Tests.Integration", "tests\DomainBlocks.Experimental.Persistence.Tests.Integration\DomainBlocks.Experimental.Persistence.Tests.Integration.csproj", "{7505FB44-11D1-4EF7-8C60-583DBA36BD14}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Persistence.Tests.Integration", "tests\DomainBlocks.Persistence.Tests.Integration\DomainBlocks.Persistence.Tests.Integration.csproj", "{7505FB44-11D1-4EF7-8C60-583DBA36BD14}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
