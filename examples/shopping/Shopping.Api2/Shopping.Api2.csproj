@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFramework>net6.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.2.3"/>
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\..\src\DomainBlocks.Persistence.DependencyInjection\DomainBlocks.Persistence.DependencyInjection.csproj" />
+      <ProjectReference Include="..\..\..\src\DomainBlocks.Persistence.EventStoreDb\DomainBlocks.Persistence.EventStoreDb.csproj" />
+      <ProjectReference Include="..\Shopping.Domain.Events\Shopping.Domain.Events.csproj" />
+      <ProjectReference Include="..\Shopping.Domain\Shopping.Domain.csproj" />
+    </ItemGroup>
+
+</Project>
