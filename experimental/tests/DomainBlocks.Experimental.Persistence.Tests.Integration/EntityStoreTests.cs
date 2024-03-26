@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using DomainBlocks.Experimental.Persistence.Builders;
 using DomainBlocks.Experimental.Persistence.EventStoreDb;
@@ -9,9 +8,7 @@ using DomainBlocks.Experimental.Persistence.Extensions;
 using DomainBlocks.Experimental.Persistence.Tests.Integration.Adapters;
 using DomainBlocks.Experimental.Persistence.Tests.Integration.Model;
 using DomainBlocks.ThirdParty.SqlStreamStore.Postgres;
-using Google.Protobuf;
 using Shopping.Domain.Events;
-using Shopping.Domain.Events.Proto;
 using JsonSerializer = DomainBlocks.Experimental.Persistence.Serialization.JsonSerializer;
 using ShoppingCartCreated = Shopping.Domain.Events.ShoppingCartCreated;
 
@@ -340,33 +337,6 @@ public class EntityStoreTests
             Assert.That(reloadedState.Items[0].Name, Is.EqualTo("Item Foo"));
             Assert.That(reloadedState.NewField, Is.EqualTo("New value"));
         }
-    }
-
-    [Test]
-    public void SerializationTest()
-    {
-        var message1 = new Shopping.Domain.Events.Proto.ShoppingCartCreated
-        {
-            Id = "Test",
-            Foo = 42,
-            Sub = new SubMessage
-            {
-                Id = "AnotherId",
-                Bar = 101
-            }
-        };
-
-        var bytes1 = message1.ToByteArray();
-
-        var asString = Encoding.UTF8.GetString(bytes1);
-
-        var bytes2 = Encoding.UTF8.GetBytes(asString);
-
-        var message2 = new Shopping.Domain.Events.Proto.ShoppingCartCreated();
-
-        message2.MergeFrom(bytes2);
-
-        Assert.That(message2, Is.EqualTo(message1));
     }
 
     private static IEnumerable<TestCaseData> TestCases
