@@ -14,7 +14,7 @@ builder.Services.AddSwaggerGen();
 
 // DomainBlocks configuration.
 builder.Services.AddEntityStore(config => config
-    .UseEventStoreDb("esdb://localhost:2113?tls=false")
+    .UseEventStoreDb("esdb://host.docker.internal:2113?tls=false")
     .AddEntityAdapters(x => x.AddGenericFactoryFor(typeof(AggregateAdapter<>)))
     .MapEvents(x => x.MapAll<IDomainEvent>()));
 

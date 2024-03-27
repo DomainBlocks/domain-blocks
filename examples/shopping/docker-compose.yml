@@ -8,7 +8,7 @@ services:
 
   shopping.eventstore:
     container_name: shopping.eventstore
-    image: eventstore/eventstore:21.10.2-buster-slim
+    image: eventstore/eventstore:23.10.1-bookworm-slim
     ports:
       - '2113:2113'
       - '1113:1113'
@@ -21,7 +21,7 @@ services:
       - EVENTSTORE_INSECURE=true
       - EVENTSTORE_ENABLE_EXTERNAL_TCP=true
       - EVENTSTORE_ENABLE_ATOM_PUB_OVER_HTTP=true
-    # ES healthcheck doesnt't work properly. Turn it off in docker compose
+    # ES healthcheck doesn't work properly. Turn it off in docker compose
     healthcheck:
       test: [ "NONE" ]
     volumes:
@@ -38,45 +38,45 @@ services:
     container_name: shopping.api
     build:
       context: ../..
-      dockerfile: examples/shopping/Shopping.Api/Dockerfile
+      dockerfile: examples/shopping/Shopping.Api2/Dockerfile
     image: shopping.api
     ports:
-      - "5000:80"
-      - "5001:443"
+      - "5039:80"
+      - "7025:443"
     depends_on:
-      - database
+      - shopping.eventstore
     networks:
       - shopping-example
 
-  shopping.readmodel:
-    container_name: shopping.readmodel
-    build:
-      context: ../..
-      dockerfile: examples/shopping/Shopping.ReadModel/Dockerfile
-    image: shopping.readmodel
-    ports:
-      - "5010:80"
-      - "5011:443"
-    depends_on:
-      - database
-    networks:
-      - shopping-example
-
-  database:
-    image: postgres:13.3
-    container_name: shopping.db
-    ports:
-      - "5433:5432"
-    environment:
-      - POSTGRES_DB=shopping
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-    networks:
-      - shopping-example
-    command:
-      - "postgres"
-      - "-c"
-      - "wal_level=logical"
+#  shopping.readmodel:
+#    container_name: shopping.readmodel
+#    build:
+#      context: ../..
+#      dockerfile: examples/shopping/Shopping.ReadModel/Dockerfile
+#    image: shopping.readmodel
+#    ports:
+#      - "5010:80"
+#      - "5011:443"
+#    depends_on:
+#      - database
+#    networks:
+#      - shopping-example
+#
+#  database:
+#    image: postgres:13.3
+#    container_name: shopping.db
+#    ports:
+#      - "5433:5432"
+#    environment:
+#      - POSTGRES_DB=shopping
+#      - POSTGRES_USER=postgres
+#      - POSTGRES_PASSWORD=postgres
+#    networks:
+#      - shopping-example
+#    command:
+#      - "postgres"
+#      - "-c"
+#      - "wal_level=logical"
 
 volumes:
   eventstore-volume-data:
