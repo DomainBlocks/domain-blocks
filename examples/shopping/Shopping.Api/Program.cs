@@ -1,18 +1,36 @@
-using System;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Hosting;
+using DomainBlocks.Persistence.DependencyInjection;
+using DomainBlocks.Persistence.EventStoreDb;
+using Shopping.Api;
+using Shopping.Domain.Events;
 
-namespace Shopping.Api;
+var builder = WebApplication.CreateBuilder(args);
 
-public static class Program
+// Add services to the container.
+
+builder.Services.AddControllers();
+// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+// DomainBlocks configuration.
+builder.Services.AddEntityStore(config => config
+    .UseEventStoreDb("esdb://shopping.eventstore:2113?tls=false")
+    .AddEntityAdapters(x => x.AddGenericFactoryFor(typeof(AggregateAdapter<>)))
+    .MapEvents(x => x.MapAll<IDomainEvent>()));
+
+var app = builder.Build();
+
+// Configure the HTTP request pipeline.
+if (app.Environment.IsDevelopment())
 {
-    public static void Main(string[] args)
-    {
-        AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
-        CreateHostBuilder(args).Build().Run();
-    }
-
-    private static IHostBuilder CreateHostBuilder(string[] args) =>
-        Host.CreateDefaultBuilder(args)
-            .ConfigureWebHostDefaults(webBuilder => webBuilder.UseStartup<Startup>());
+    app.UseSwagger();
+    app.UseSwaggerUI();
 }
+
+app.UseHttpsRedirection();
+
+app.UseAuthorization();
+
+app.MapControllers();
+
+app.Run();

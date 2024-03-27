@@ -1,21 +1,22 @@
 using System;
 using System.Collections.Generic;
+using Shopping.Domain.Events;
 
-namespace Shopping.Domain.New;
+namespace Shopping.Domain;
 
 public abstract class AggregateBase
 {
-    private readonly List<object> _raisedEvents = new();
+    private readonly List<IDomainEvent> _raisedEvents = new();
 
     public abstract Guid Id { get; }
-    public IEnumerable<object> RaisedEvents => _raisedEvents.AsReadOnly();
+    public IEnumerable<IDomainEvent> RaisedEvents => _raisedEvents.AsReadOnly();
 
-    public void Apply(object @event)
+    public void Apply(IDomainEvent @event)
     {
         ((dynamic)this).Apply((dynamic)@event);
     }
 
-    protected void Raise<TEvent>(TEvent @event)
+    protected void Raise<TEvent>(TEvent @event) where TEvent : IDomainEvent
     {
         if (@event == null) throw new ArgumentNullException(nameof(@event));
         Apply(@event);

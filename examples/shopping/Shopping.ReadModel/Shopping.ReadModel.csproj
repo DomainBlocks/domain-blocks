@@ -13,13 +13,13 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.10.14" />
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="6.0.8" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="7.0.4" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="5.6.3" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\src\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj" />
     <ProjectReference Include="..\..\..\src\DomainBlocks.Hosting\DomainBlocks.Hosting.csproj" />
-    <ProjectReference Include="..\..\..\src\DomainBlocks.SqlStreamStore.Postgres\DomainBlocks.SqlStreamStore.Postgres.csproj" />
     <ProjectReference Include="..\Shopping.Domain.Events\Shopping.Domain.Events.csproj" />
   </ItemGroup>
 

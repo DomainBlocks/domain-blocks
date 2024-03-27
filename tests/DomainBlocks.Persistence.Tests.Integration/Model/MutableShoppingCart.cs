@@ -4,10 +4,10 @@ namespace DomainBlocks.Persistence.Tests.Integration.Model;
 
 public class MutableShoppingCart : MutableEntityBase
 {
-    private Guid _id = Guid.Empty;
+    private Guid _sessionId = Guid.Empty;
     private readonly List<ShoppingCartItem> _items = new();
 
-    public override Guid Id => _id;
+    public override Guid Id => _sessionId;
 
     public IReadOnlyList<ShoppingCartItem> Items => _items;
 
@@ -15,19 +15,19 @@ public class MutableShoppingCart : MutableEntityBase
     {
         if (Id == Guid.Empty)
         {
-            Raise(new ShoppingCartCreated(Guid.NewGuid()));
+            Raise(new ShoppingSessionStarted(Guid.NewGuid()));
         }
 
-        Raise(new ItemAddedToShoppingCart(item.Id, Id, item.Name));
+        Raise(new ItemAddedToShoppingCart(item.SessionId, item.Name));
     }
 
-    public void Apply(ShoppingCartCreated @event)
+    public void Apply(ShoppingSessionStarted @event)
     {
-        _id = @event.Id;
+        _sessionId = @event.SessionId;
     }
 
     public void Apply(ItemAddedToShoppingCart @event)
     {
-        _items.Add(new ShoppingCartItem(@event.Id, @event.Item));
+        _items.Add(new ShoppingCartItem(@event.SessionId, @event.Item));
     }
 }

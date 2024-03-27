@@ -1,10 +1,9 @@
 using System;
 using DomainBlocks.Core.Projections.Builders;
+using DomainBlocks.EventStore.Subscriptions;
 using DomainBlocks.Hosting;
 using DomainBlocks.Logging;
-using DomainBlocks.SqlStreamStore.Postgres;
-using DomainBlocks.SqlStreamStore.Subscriptions;
-using DomainBlocks.ThirdParty.SqlStreamStore.Postgres;
+using EventStore.Client;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
@@ -46,12 +45,8 @@ public class Startup
         services.AddHostedEventStreamSubscription((sp, options) =>
         {
             options
-                .UseSqlStreamStore(o =>
-                {
-                    var connectionString = Configuration.GetValue<string>("SqlStreamStore:ConnectionString");
-                    var settings = new PostgresStreamStoreSettings(connectionString);
-                    o.UsePostgresStreamStore(settings);
-                })
+                .UseEventStore(o => o.WithSettings(
+                    EventStoreClientSettings.Create("esdb://shopping.eventstore:2113?tls=false")))
                 .FromAllEventsStream()
                 .ProjectTo()
                 .State(_ => sp.GetRequiredService<IDbContextFactory<ShoppingCartDbContext>>().CreateDbContext())
@@ -61,7 +56,7 @@ public class Startup
                 {
                     await s.Database.EnsureCreatedAsync(ct);
                     var bookmark = await s.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, ct);
-                    return bookmark?.Position;
+                    return bookmark == null ? null : new Position(bookmark.CommitPosition, bookmark.PreparePosition);
                 })
                 .OnCheckpoint(async (s, pos, ct) =>
                 {
@@ -72,12 +67,13 @@ public class Startup
                         s.Bookmarks.Add(bookmark);
                     }
 
-                    bookmark.Position = pos;
+                    bookmark.CommitPosition = pos.CommitPosition;
+                    bookmark.PreparePosition = pos.PreparePosition;
                     await s.SaveChangesAsync(ct);
                 })
                 .When<ItemAddedToShoppingCart>(async (e, s, ct) =>
                 {
-                    var item = await s.ShoppingCartSummaryItems.FindAsync(new object[] { e.Id }, ct);
+                    var item = await s.ShoppingCartSummaryItems.FindAsync(new object[] { e.SessionId, e.Item }, ct);
                     if (item != null)
                     {
                         return;
@@ -85,14 +81,13 @@ public class Startup
 
                     s.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem
                     {
-                        CartId = e.CartId,
-                        Id = e.Id,
-                        ItemDescription = e.Item
+                        SessionId = e.SessionId,
+                        Item = e.Item
                     });
                 })
                 .When<ItemRemovedFromShoppingCart>(async (e, s, ct) =>
                 {
-                    var item = await s.ShoppingCartSummaryItems.FindAsync(new object[] { e.Id }, ct);
+                    var item = await s.ShoppingCartSummaryItems.FindAsync(new object[] { e.SessionId, e.Item }, ct);
                     if (item != null)
                     {
                         s.ShoppingCartSummaryItems.Remove(item);

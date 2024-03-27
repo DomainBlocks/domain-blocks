@@ -1,7 +1,8 @@
 using DomainBlocks.Persistence.Entities;
-using Shopping.Domain.New;
+using Shopping.Domain;
+using Shopping.Domain.Events;
 
-namespace Shopping.Api2;
+namespace Shopping.Api;
 
 public sealed class AggregateAdapter<TEntity> : EntityAdapterBase<TEntity> where TEntity : AggregateBase, new()
 {
@@ -11,7 +12,7 @@ public sealed class AggregateAdapter<TEntity> : EntityAdapterBase<TEntity> where
 
     protected override TEntity Fold(TEntity state, object @event)
     {
-        state.Apply(@event);
+        state.Apply((IDomainEvent)@event);
         return state;
     }
 }

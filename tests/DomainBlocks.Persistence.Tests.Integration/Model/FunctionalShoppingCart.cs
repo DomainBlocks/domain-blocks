@@ -14,24 +14,24 @@ public record FunctionalShoppingCart : IIdentifiable
 
         if (Id == Guid.Empty)
         {
-            var shoppingCartCreated = new ShoppingCartCreated(Guid.NewGuid());
-            currentState = currentState.Apply(shoppingCartCreated);
-            yield return shoppingCartCreated;
+            var shoppingSessionStarted = new ShoppingSessionStarted(Guid.NewGuid());
+            currentState = currentState.Apply(shoppingSessionStarted);
+            yield return shoppingSessionStarted;
         }
 
-        yield return new ItemAddedToShoppingCart(item.Id, currentState.Id, item.Name);
+        yield return new ItemAddedToShoppingCart(currentState.Id, item.Name);
     }
 
-    public FunctionalShoppingCart Apply(ShoppingCartCreated @event)
+    public FunctionalShoppingCart Apply(ShoppingSessionStarted @event)
     {
-        return this with { Id = @event.Id };
+        return this with { Id = @event.SessionId };
     }
 
     public FunctionalShoppingCart Apply(ItemAddedToShoppingCart @event)
     {
         return this with
         {
-            Items = Items.Add(new ShoppingCartItem(@event.Id, @event.Item))
+            Items = Items.Add(new ShoppingCartItem(@event.SessionId, @event.Item))
         };
     }
 }

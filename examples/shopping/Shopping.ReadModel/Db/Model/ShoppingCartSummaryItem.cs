@@ -4,7 +4,6 @@ namespace Shopping.ReadModel.Db.Model;
 
 public class ShoppingCartSummaryItem
 {
-    public Guid Id { get; set; }
-    public Guid CartId { get; set; }
-    public string ItemDescription { get; set; }
+    public Guid SessionId { get; set; }
+    public string Item { get; set; }
 }

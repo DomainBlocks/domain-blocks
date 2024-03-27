@@ -7,10 +7,10 @@ public record ShoppingCartState : StateBase<ShoppingCartState>
 {
     static ShoppingCartState()
     {
-        When<ShoppingCartCreated>((s, e) => s with { Id = e.Id });
-        When<ItemAddedToShoppingCart>((s, e) => s with { Items = s.Items.Add(new ShoppingCartItem(e.Id, e.Item)) });
+        When<ShoppingSessionStarted>((s, e) => s with { SessionId = e.SessionId });
+        When<ItemAddedToShoppingCart>((s, e) => s with { Items = s.Items.Add(new ShoppingCartItem(e.SessionId, e.Item)) });
     }
 
-    public Guid Id { get; init; }
+    public Guid SessionId { get; init; }
     public ImmutableList<ShoppingCartItem> Items { get; private init; } = ImmutableList<ShoppingCartItem>.Empty;
 }

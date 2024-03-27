@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using Shopping.Domain.Events.New;
+using Shopping.Domain.Events;
 
-namespace Shopping.Domain.New;
+namespace Shopping.Domain;
 
 public class ShoppingCart : AggregateBase
 {

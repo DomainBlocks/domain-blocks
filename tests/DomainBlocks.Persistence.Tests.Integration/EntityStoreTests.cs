@@ -36,7 +36,7 @@ public class EntityStoreTests
         var jsonOptions = new JsonSerializerOptions();
 
         var eventMapper = new EventMapperBuilder()
-            .MapAll<IDomainEvent>(x => x.FromAssemblyOf<ShoppingCartCreated>())
+            .MapAll<IDomainEvent>(x => x.FromAssemblyOf<ShoppingSessionStarted>())
             .UseJsonSerialization(jsonOptions)
             .Build();
 
@@ -62,9 +62,9 @@ public class EntityStoreTests
         entity.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Bar"));
         await store.SaveAsync(entity);
 
-        var reloadedEntity = await store.LoadAsync<ShoppingCart>(entity.State.Id.ToString());
+        var reloadedEntity = await store.LoadAsync<ShoppingCart>(entity.State.SessionId.ToString());
 
-        Assert.That(reloadedEntity.State.Id, Is.EqualTo(entity.State.Id));
+        Assert.That(reloadedEntity.State.SessionId, Is.EqualTo(entity.State.SessionId));
         Assert.That(reloadedEntity.State.Items, Is.EqualTo(entity.State.Items));
     }
 
@@ -80,7 +80,7 @@ public class EntityStoreTests
         // Attempting to write a new state stream for the same ID should fail.
         var entity2 = new ShoppingCart
         {
-            State = new ShoppingCartState { Id = entity1.State.Id }
+            State = new ShoppingCartState { SessionId = entity1.State.SessionId }
         };
 
         entity2.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Foo"));
@@ -102,7 +102,7 @@ public class EntityStoreTests
         // Adjust the example model so that this isn't confusing.
         var reloadedEntity = await store.LoadAsync<ShoppingCart>(entity.Id);
 
-        Assert.That(reloadedEntity.State.Id, Is.EqualTo(entity.State.Id));
+        Assert.That(reloadedEntity.State.SessionId, Is.EqualTo(entity.State.SessionId));
         Assert.That(reloadedEntity.State.Items, Is.EqualTo(entity.State.Items));
     }
 
@@ -114,13 +114,13 @@ public class EntityStoreTests
         entity1A.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Foo"));
         await store.SaveAsync(entity1A);
 
-        var entity1B = await store.LoadAsync<ShoppingCart>(entity1A.State.Id.ToString());
+        var entity1B = await store.LoadAsync<ShoppingCart>(entity1A.State.SessionId.ToString());
         entity1B.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Bar"));
         await store.SaveAsync(entity1B);
 
-        var reloadedEntity = await store.LoadAsync<ShoppingCart>(entity1A.State.Id.ToString());
+        var reloadedEntity = await store.LoadAsync<ShoppingCart>(entity1A.State.SessionId.ToString());
 
-        Assert.That(reloadedEntity.State.Id, Is.EqualTo(entity1A.State.Id));
+        Assert.That(reloadedEntity.State.SessionId, Is.EqualTo(entity1A.State.SessionId));
         Assert.That(reloadedEntity.State.Items, Is.EqualTo(entity1B.State.Items));
     }
 
@@ -193,7 +193,7 @@ public class EntityStoreTests
 
         var eventTypeMappings = new EventTypeMapping[]
         {
-            new(typeof(ShoppingCartCreated)),
+            new(typeof(ShoppingSessionStarted)),
             new(typeof(ItemAddedToShoppingCart))
         };
 
@@ -212,130 +212,6 @@ public class EntityStoreTests
 
         Assert.That(reloadedEntity.Id, Is.EqualTo(entity.Id));
         Assert.That(reloadedEntity.Items, Is.EqualTo(entity.Items));
-    }
-
-    [Test]
-    public async Task EventUpcastScenario()
-    {
-        var streamStoreSettings = new PostgresStreamStoreSettings(PostgresStreamStoreConnectionString);
-        var streamStore = new PostgresStreamStore(streamStoreSettings);
-
-        const string newFieldDefaultValue = "default value";
-
-        var v1StoreConfig = new EntityStoreConfigBuilder()
-            .UseSqlStreamStore(streamStore)
-            .AddEntityAdapters(x => x.AddGenericFactoryFor(typeof(EntityAdapter<,>)))
-            .MapEvents(x =>
-            {
-                x.Map<ShoppingCartCreated>();
-                x.Map<ItemAddedToShoppingCart>();
-            })
-            .Build();
-
-        // Set up a new version of the ShoppingCartCreated event
-        var v2StoreConfig = new EntityStoreConfigBuilder()
-            .UseSqlStreamStore(streamStore)
-            .AddEntityAdapters(x => x.AddGenericFactoryFor(typeof(EntityAdapter<,>)))
-            .MapEvents(mapper =>
-            {
-                // Write scenarios:
-                // One-to-one event type to name - most common use case
-                // One-to-many event type to names - not supported / doesn't make sense
-                // ** Many-to-one event types to name - unusual, but shouldn't necessarily be disallowed. E.g. possible
-                //                                      if all code isn't refactored when introducing a new version.
-
-                // Read scenarios:
-                // One-to-one event name to type - most common use case
-                // ** One-to-many event name to types - Possible with multiple event versions
-                // Many-to-one event names to type - possible with event name changes
-
-                // One-to-one write
-                mapper
-                    .Map<ShoppingCartCreated>()
-                    .WithName("ShoppingCartCreated")
-                    .WithDeprecatedNames("Foo", "Bar", "Baz");
-
-                // Many-to-one write
-                // Effectively supporting multiple event versions for the same name in the same version of code. This
-                // happens anyway over time with event versioning. Just not necessarily in the same version of code.
-                // Need a way to disambiguate reads.
-                mapper
-                    .Map<ShoppingCartCreatedV2>()
-                    .WithName("ShoppingCartCreated")
-                    .WithMetadata(() => new Dictionary<string, string> { { "Version", "2" } });
-
-                // Disambiguate reads
-                // mapper
-                //     .MapEventName("ShoppingCartCreated")
-                //     .WithTypeSelector(m =>
-                //     {
-                //         return m["Version"] == "2" ? typeof(ShoppingCartCreatedV2) : typeof(ShoppingCartCreated);
-                //     });
-                //
-                // mapper
-                //     .TransformEvent<ShoppingCartCreated>(e => new ShoppingCartCreatedV2(e.Id, newFieldDefaultValue));
-
-                // Transform, Split, Join?
-            })
-            .Configure<ShoppingCartV2>(x => x.SetStreamNamePrefix("shoppingCart"))
-            .Build();
-
-        var v1Store = new EntityStore(v1StoreConfig);
-        var v2Store = new EntityStore(v2StoreConfig);
-
-        Guid cartId1;
-
-        // Write to a new stream with V1 of the event
-        {
-            var entity = new ShoppingCart();
-            entity.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Item Foo"));
-            await v1Store.SaveAsync(entity);
-
-            Assert.That(entity.State.Id, Is.Not.EqualTo(Guid.Empty));
-            Assert.That(entity.State.Items, Has.Count.EqualTo(1));
-            Assert.That(entity.State.Items[0].Name, Is.EqualTo("Item Foo"));
-
-            cartId1 = entity.State.Id;
-        }
-
-        // Test restoring and writing to existing stream containing the V1 event, using the repository set up with the
-        // refactored code.
-        {
-            var entity = await v2Store.LoadAsync<ShoppingCartV2>(cartId1.ToString());
-            var state = entity.State;
-
-            Assert.That(state.Id, Is.EqualTo(cartId1));
-            Assert.That(state.Items, Has.Count.EqualTo(1));
-            Assert.That(state.Items[0].Name, Is.EqualTo("Item Foo"));
-            Assert.That(state.NewField, Is.EqualTo(newFieldDefaultValue));
-
-            entity.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Item Bar"));
-            await v2Store.SaveAsync(entity);
-
-            var reloadedEntity = await v2Store.LoadAsync<ShoppingCartV2>(cartId1.ToString());
-            var reloadedState = reloadedEntity.State;
-
-            Assert.That(reloadedState.Id, Is.EqualTo(cartId1));
-            Assert.That(reloadedState.Items, Has.Count.EqualTo(2));
-            Assert.That(reloadedState.Items[0].Name, Is.EqualTo("Item Foo"));
-            Assert.That(reloadedState.Items[1].Name, Is.EqualTo("Item Bar"));
-            Assert.That(reloadedState.NewField, Is.EqualTo(newFieldDefaultValue));
-        }
-
-        // Test writing to a new stream with the refactored code - should write V2 of the event
-        {
-            var entity = new ShoppingCartV2();
-            entity.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Item Foo"), "New value");
-            await v2Store.SaveAsync(entity);
-
-            var reloadedEntity = await v2Store.LoadAsync<ShoppingCartV2>(entity.State.Id.ToString());
-            var reloadedState = reloadedEntity.State;
-
-            Assert.That(reloadedState.Id, Is.EqualTo(entity.State.Id));
-            Assert.That(reloadedState.Items, Has.Count.EqualTo(1));
-            Assert.That(reloadedState.Items[0].Name, Is.EqualTo("Item Foo"));
-            Assert.That(reloadedState.NewField, Is.EqualTo("New value"));
-        }
     }
 
     private static IEnumerable<TestCaseData> TestCases

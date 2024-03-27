@@ -22,16 +22,19 @@ public class ShoppingCartController : ControllerBase
     [HttpGet("cartIds")]
     public async Task<ActionResult<IEnumerable<Guid>>> GetCartIds()
     {
-        var cartIds = await _dbContext.ShoppingCartSummaryItems.AsNoTracking().Select(i => i.CartId).Distinct()
+        var cartIds = await _dbContext.ShoppingCartSummaryItems.AsNoTracking()
+            .Select(i => i.SessionId).Distinct()
             .ToListAsync();
+
         return Ok(cartIds);
     }
 
     [HttpGet("cartItems/{cartId}")]
     public async Task<ActionResult<IEnumerable<ShoppingCartSummaryItem>>> GetItemsInCart(Guid cartId)
     {
-        var items = await _dbContext.ShoppingCartSummaryItems.AsNoTracking()
-            .Where(c => c.CartId == cartId)
+        var items = await _dbContext.ShoppingCartSummaryItems
+            .AsNoTracking()
+            .Where(c => c.SessionId == cartId)
             .ToListAsync();
 
         return Ok(items);

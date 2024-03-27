@@ -1,8 +1,8 @@
 using DomainBlocks.Persistence;
 using Microsoft.AspNetCore.Mvc;
-using Shopping.Domain.New;
+using Shopping.Domain;
 
-namespace Shopping.Api2.Controllers;
+namespace Shopping.Api.Controllers;
 
 [ApiController]
 [Route("[controller]")]
