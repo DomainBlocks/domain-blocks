@@ -10,6 +10,7 @@ using Shopping.ReadModel.Db.Model;
 namespace Shopping.ReadModel.Controllers;
 
 [ApiController]
+[Route("[controller]")]
 public class ShoppingCartController : ControllerBase
 {
     private readonly ShoppingCartDbContext _dbContext;
@@ -19,7 +20,7 @@ public class ShoppingCartController : ControllerBase
         _dbContext = dbContext;
     }
 
-    [HttpGet("cartIds")]
+    [HttpGet("sessionIds")]
     public async Task<ActionResult<IEnumerable<Guid>>> GetCartIds()
     {
         var cartIds = await _dbContext.ShoppingCartSummaryItems.AsNoTracking()
@@ -29,12 +30,12 @@ public class ShoppingCartController : ControllerBase
         return Ok(cartIds);
     }
 
-    [HttpGet("cartItems/{cartId}")]
-    public async Task<ActionResult<IEnumerable<ShoppingCartSummaryItem>>> GetItemsInCart(Guid cartId)
+    [HttpGet("{sessionId:guid}/items")]
+    public async Task<ActionResult<IEnumerable<ShoppingCartSummaryItem>>> GetItemsInCart(Guid sessionId)
     {
         var items = await _dbContext.ShoppingCartSummaryItems
             .AsNoTracking()
-            .Where(c => c.SessionId == cartId)
+            .Where(c => c.SessionId == sessionId)
             .ToListAsync();
 
         return Ok(items);
