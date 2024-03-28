@@ -10,7 +10,7 @@ public class ShoppingCart : EntityBase<ShoppingCartState>
     {
         if (State.SessionId == Guid.Empty)
         {
-            Raise(new ShoppingSessionStarted(Guid.NewGuid()));
+            Raise(new ShoppingSessionStarted(item.SessionId));
         }
 
         Raise(new ItemAddedToShoppingCart(item.SessionId, item.Name));

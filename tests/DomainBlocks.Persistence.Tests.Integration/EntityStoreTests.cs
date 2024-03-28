@@ -32,6 +32,7 @@ public class EntityStoreTests
 
         var streamStoreSettings = new PostgresStreamStoreSettings(PostgresStreamStoreConnectionString);
         var streamStore = new PostgresStreamStore(streamStoreSettings);
+        streamStore.CreateSchemaIfNotExists().Wait();
 
         var jsonOptions = new JsonSerializerOptions();
 
@@ -83,9 +84,31 @@ public class EntityStoreTests
             State = new ShoppingCartState { SessionId = entity1.State.SessionId }
         };
 
-        entity2.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Foo"));
+        entity2.AddItem(new ShoppingCartItem(entity1.State.SessionId, "Bar"));
 
-        Assert.ThrowsAsync(wrongVersionExceptionType, () => store.SaveAsync(entity2));
+        // TODO: Understand why this doesn't work for EventStoreDB.
+        //Assert.ThrowsAsync(wrongVersionExceptionType, () => store.SaveAsync(entity2));
+
+        Exception? capturedException = null;
+
+        try
+        {
+            await store.SaveAsync(entity2);
+        }
+        catch (Exception ex)
+        {
+            capturedException = ex;
+        }
+
+        if (capturedException == null)
+        {
+            Assert.Fail($"Expected '{wrongVersionExceptionType}' to be thrown.");
+        }
+        else if (capturedException.GetType() != wrongVersionExceptionType)
+        {
+            Assert.Fail($"Expected '{wrongVersionExceptionType}' to be thrown, " +
+                        $"but got '{capturedException.GetType()}'.");
+        }
     }
 
     [Test]
