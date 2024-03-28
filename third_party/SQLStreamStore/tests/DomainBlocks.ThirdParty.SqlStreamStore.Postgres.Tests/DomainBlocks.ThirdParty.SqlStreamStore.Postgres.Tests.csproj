@@ -11,4 +11,7 @@
         <ProjectReference Include="..\DomainBlocks.ThirdParty.SqlStreamStore.TestUtils\DomainBlocks.ThirdParty.SqlStreamStore.TestUtils.csproj"/>
         <ProjectReference Include="..\..\src\DomainBlocks.ThirdParty.SqlStreamStore\DomainBlocks.ThirdParty.SqlStreamStore.csproj"/>
     </ItemGroup>
+    <ItemGroup>
+      <PackageReference Update="Microsoft.NET.Test.Sdk" Version="17.9.0" />
+    </ItemGroup>
 </Project>
