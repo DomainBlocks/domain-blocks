@@ -1,0 +1,47 @@
+version: '3.8'
+
+networks:
+  test-network:
+    name: test-network
+    driver: bridge
+
+services:
+  test-eventstore:
+    image: eventstore/eventstore:23.10.1-bookworm-slim
+    ports:
+      - '2114:2113'
+      - '1114:1113'
+    environment:
+      - EVENTSTORE_HTTP_PORT=2113
+      - EVENTSTORE_EXT_TCP_PORT=1113
+      - EVENTSTORE_RUN_PROJECTIONS=all
+      - EVENTSTORE_START_STANDARD_PROJECTIONS=true
+      - EVENTSTORE_INSECURE=true
+      - EVENTSTORE_ENABLE_ATOM_PUB_OVER_HTTP=true
+    volumes:
+      - type: volume
+        source: test-eventstore-volume-data
+        target: /var/lib/eventstore
+      - type: volume
+        source: test-eventstore-volume-logs
+        target: /var/log/eventstore
+    networks:
+      - test-network
+
+  test-db:
+    image: postgres:latest
+    ports:
+      - "5434:5432"
+    environment:
+      - POSTGRES_DB=test-events
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - test-postgres-volume-data:/var/lib/postgresql/data
+    networks:
+      - test-network
+
+volumes:
+  test-eventstore-volume-data:
+  test-eventstore-volume-logs:
+  test-postgres-volume-data:

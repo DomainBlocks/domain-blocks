@@ -1,9 +1,8 @@
-using System.Reflection;
 using System.Text;
 
 namespace DomainBlocks.Persistence.Extensions;
 
-public static class TypeExtensions
+internal static class TypeExtensions
 {
     public static string GetPrettyName(this Type type)
     {
@@ -76,23 +75,21 @@ public static class TypeExtensions
         results = success ? internalResults : null;
         return success;
 
-        // E.g. EntityBase<TState> is "resolvable" from MyEntity : EntityBase<FooState>
+        // E.g. EntityBase<TState> is "resolvable" from MyEntity : EntityBase<MyState>
         bool TryResolveImpl(Type lhsType, Type rhsType)
         {
             if (lhsType.IsGenericParameter)
             {
-                // Assume RHS is a match for this generic parameter, and disprove below. This also allows us to return
-                // early if it has already been added to the results, avoiding infinite recursion when the Curiously
-                // Recurring Template Pattern (CRTP) is used, e.g.:
+                // Return early if LHS has already been added to the results. This avoids infinite recursion when the
+                // Curiously Recurring Template Pattern (CRTP) is used, e.g.:
                 // class EntityBase<TState> where TState : StateBase<TState>
                 if (!internalResults.TryAdd(lhsType, rhsType))
                 {
                     return true;
                 }
 
-                // Check the LHS is compatible with any RHS constraints.
-                return rhsType.CanSatisfyConstraints(lhsType.GenericParameterAttributes) &&
-                       lhsType.GetGenericParameterConstraints().All(c => TryResolveImpl(c, rhsType));
+                // Check LHS is compatible with any RHS type constraints.
+                return lhsType.GetGenericParameterConstraints().All(c => TryResolveImpl(c, rhsType));
             }
 
             if (lhsType.ContainsGenericParameters)
@@ -140,19 +137,5 @@ public static class TypeExtensions
             // The type to match has no generic parameters. Check directly for assignability.
             return lhsType.IsAssignableFrom(rhsType);
         }
-    }
-
-    // TODO: finish
-    private static bool CanSatisfyConstraints(this Type type, GenericParameterAttributes genericParameterAttributes)
-    {
-        if (genericParameterAttributes.HasFlag(GenericParameterAttributes.DefaultConstructorConstraint))
-        {
-            if (type.IsAbstract || type.IsInterface || type.GetConstructor(Type.EmptyTypes) == null)
-            {
-                return false;
-            }
-        }
-
-        return true;
     }
 }

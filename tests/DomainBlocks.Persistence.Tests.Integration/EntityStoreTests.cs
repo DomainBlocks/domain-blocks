@@ -18,9 +18,9 @@ namespace DomainBlocks.Persistence.Tests.Integration;
 public class EntityStoreTests
 {
     private const string PostgresStreamStoreConnectionString =
-        "Server=localhost;Port=5433;Database=shopping;User Id=postgres;Password=postgres;";
+        "Server=localhost;Port=5434;Database=test-events;User Id=postgres;Password=postgres;";
 
-    private const string EventStoreDbConnectionString = "esdb://localhost:2113?tls=false";
+    private const string EventStoreDbConnectionString = "esdb://localhost:2114?tls=false";
 
     private static readonly IEntityStore SqlStreamStoreEntityStore;
     private static readonly IEntityStore EventStoreDbEntityStore;
@@ -119,12 +119,10 @@ public class EntityStoreTests
         var id = Guid.NewGuid();
 
         var entity = await store.LoadAsync<ShoppingCart>(id.ToString());
-        entity.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Foo"));
+        entity.AddItem(new ShoppingCartItem(id, "Foo"));
         await store.SaveAsync(entity);
 
-        // TODO: Because the ID is internally set, we need to use the ID of the entity we just saved.
-        // Adjust the example model so that this isn't confusing.
-        var reloadedEntity = await store.LoadAsync<ShoppingCart>(entity.Id);
+        var reloadedEntity = await store.LoadAsync<ShoppingCart>(id.ToString());
 
         Assert.That(reloadedEntity.State.SessionId, Is.EqualTo(entity.State.SessionId));
         Assert.That(reloadedEntity.State.Items, Is.EqualTo(entity.State.Items));
@@ -182,7 +180,7 @@ public class EntityStoreTests
             .MapEvents(x => x.MapAll<IDomainEvent>())
             .Configure<FunctionalEntityWrapper<FunctionalShoppingCart>>(config =>
             {
-                // TODO: Fix default stream name prefix for generic types, i.e. "functionalEntityWrapper`1".
+                // Avoid prefix of "functionalEntityWrapper`1". Consider how we deal with this going forward.
                 config.SetStreamNamePrefix("functionalShoppingCart");
             })
             .Build();

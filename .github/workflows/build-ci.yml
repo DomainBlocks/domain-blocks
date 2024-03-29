@@ -37,5 +37,9 @@ jobs:
         working-directory: .
 
       - name: Test
-        run: dotnet test --no-build --verbosity normal
+        run: |
+          pushd ./tests/DomainBlocks.Persistence.Tests.Integration
+          docker compose up -d
+          popd
+          dotnet test --no-build --verbosity normal
         working-directory: .
