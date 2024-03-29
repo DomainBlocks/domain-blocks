@@ -4,12 +4,12 @@ using Microsoft.EntityFrameworkCore;
 namespace Shopping.ReadModel;
 
 [ApiController]
-[Route("[controller]")]
-public class ShoppingReadModelController : ControllerBase
+[Route("ShoppingCart")]
+public class ShoppingCartReadModelController : ControllerBase
 {
     private readonly ShoppingCartDbContext _dbContext;
 
-    public ShoppingReadModelController(ShoppingCartDbContext dbContext)
+    public ShoppingCartReadModelController(ShoppingCartDbContext dbContext)
     {
         _dbContext = dbContext;
     }

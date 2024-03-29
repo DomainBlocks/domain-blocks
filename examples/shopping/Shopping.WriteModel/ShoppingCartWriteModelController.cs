@@ -5,12 +5,12 @@ using Shopping.Domain;
 namespace Shopping.WriteModel;
 
 [ApiController]
-[Route("[controller]")]
-public class ShoppingWriteModelController : ControllerBase
+[Route("ShoppingCart")]
+public class ShoppingCartWriteModelController : ControllerBase
 {
     private readonly IEntityStore _entityStore;
 
-    public ShoppingWriteModelController(IEntityStore entityStore)
+    public ShoppingCartWriteModelController(IEntityStore entityStore)
     {
         _entityStore = entityStore;
     }
