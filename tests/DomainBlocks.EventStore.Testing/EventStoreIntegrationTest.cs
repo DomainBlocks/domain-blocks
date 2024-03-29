@@ -14,7 +14,7 @@ public abstract class EventStoreIntegrationTest : IDisposable
     [OneTimeSetUp]
     public void SetUp()
     {
-        var settings = EventStoreClientSettings.Create("esdb://127.0.0.1:2113?tls=false");
+        var settings = EventStoreClientSettings.Create("esdb://localhost:2114?tls=false");
         EventStoreClient = new EventStoreClient(settings);
         PersistentSubscriptionsClient = new EventStorePersistentSubscriptionsClient(settings);
     }
