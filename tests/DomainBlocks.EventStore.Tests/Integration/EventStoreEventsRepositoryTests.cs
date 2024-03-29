@@ -94,7 +94,7 @@ public class EventStoreEventsRepositoryTests : EventStoreIntegrationTest
         var writeResult = await EventStoreClient.AppendToStreamAsync(
             streamName,
             StreamRevision.FromInt64(version),
-            EnumerableEx.Return(badEventData));
+            new[] { badEventData });
 
         var nextStreamRevision = writeResult.NextExpectedStreamRevision;
 
