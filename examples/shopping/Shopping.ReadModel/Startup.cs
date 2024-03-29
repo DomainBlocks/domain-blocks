@@ -20,12 +20,6 @@ namespace Shopping.ReadModel;
 
 public class Startup
 {
-    static Startup()
-    {
-        var loggerFactory = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Trace).AddConsole());
-        Log.SetLoggerFactory(loggerFactory);
-    }
-
     public Startup(IConfiguration configuration)
     {
         Configuration = configuration;
@@ -116,5 +110,9 @@ public class Startup
         app.UseRouting();
         app.UseAuthorization();
         app.UseEndpoints(endpoints => { endpoints.MapControllers(); });
+        
+        // Configure DomainBlocks logging.
+        var loggerFactory = app.ApplicationServices.GetRequiredService<ILoggerFactory>();
+        LogProvider.SetLoggerFactory(loggerFactory);
     }
 }

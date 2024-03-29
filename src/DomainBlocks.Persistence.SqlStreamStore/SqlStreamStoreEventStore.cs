@@ -12,7 +12,7 @@ namespace DomainBlocks.Persistence.SqlStreamStore;
 
 public sealed class SqlStreamStoreEventStore : IEventStore
 {
-    private static readonly ILogger<SqlStreamStoreEventStore> Logger = Log.Create<SqlStreamStoreEventStore>();
+    private static readonly ILogger<SqlStreamStoreEventStore> Logger = LogProvider.Get<SqlStreamStoreEventStore>();
     private readonly IStreamStore _streamStore;
     private readonly int _readPageSize;
 

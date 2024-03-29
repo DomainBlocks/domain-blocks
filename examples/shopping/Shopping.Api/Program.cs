@@ -1,3 +1,4 @@
+using DomainBlocks.Logging;
 using DomainBlocks.Persistence.DependencyInjection;
 using DomainBlocks.Persistence.EventStoreDb;
 using Shopping.Api;
@@ -19,6 +20,10 @@ builder.Services.AddEntityStore(config => config
     .MapEvents(x => x.MapAll<IDomainEvent>()));
 
 var app = builder.Build();
+
+// Configure DomainBlocks logging.
+var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
+LogProvider.SetLoggerFactory(loggerFactory);
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

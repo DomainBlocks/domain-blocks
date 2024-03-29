@@ -10,7 +10,10 @@ public class EventStoreSnapshotRepository : ISnapshotRepository
 {
     private const string SnapshotVersionMetadataKey = "SnapshotVersion";
     private const string SnapshotEventName = "Snapshot";
-    private static readonly ILogger<EventStoreSnapshotRepository> Logger = Log.Create<EventStoreSnapshotRepository>();
+
+    private static readonly ILogger<EventStoreSnapshotRepository> Logger =
+        LogProvider.Get<EventStoreSnapshotRepository>();
+
     private readonly EventStoreClient _client;
     private readonly IEventConverter<ResolvedEvent, EventData> _eventConverter;
 

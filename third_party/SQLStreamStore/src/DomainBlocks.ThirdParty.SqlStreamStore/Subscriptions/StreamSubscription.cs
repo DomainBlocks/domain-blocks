@@ -15,7 +15,7 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Subscriptions
         ///     The default page size to read.
         /// </summary>
         public const int DefaultPageSize = 10;
-        private static readonly ILogger<StreamSubscription> Logger = Log.Create<StreamSubscription>();
+        private static readonly ILogger<StreamSubscription> Logger = LogProvider.Get<StreamSubscription>();
 
         private int _pageSize = DefaultPageSize;
         private int _nextVersion;

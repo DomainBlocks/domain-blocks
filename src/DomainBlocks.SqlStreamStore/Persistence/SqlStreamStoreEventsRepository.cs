@@ -12,7 +12,7 @@ namespace DomainBlocks.SqlStreamStore.Persistence;
 public class SqlStreamStoreEventsRepository : IEventsRepository
 {
     private static readonly ILogger<SqlStreamStoreEventsRepository> Logger =
-        Log.Create<SqlStreamStoreEventsRepository>();
+        LogProvider.Get<SqlStreamStoreEventsRepository>();
 
     private readonly IStreamStore _streamStore;
     private readonly IEventConverter<StreamMessage, NewStreamMessage> _eventConverter;

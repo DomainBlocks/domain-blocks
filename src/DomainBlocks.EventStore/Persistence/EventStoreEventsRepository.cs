@@ -9,7 +9,7 @@ namespace DomainBlocks.EventStore.Persistence;
 
 public class EventStoreEventsRepository : IEventsRepository
 {
-    private static readonly ILogger<EventStoreEventsRepository> Logger = Log.Create<EventStoreEventsRepository>();
+    private static readonly ILogger<EventStoreEventsRepository> Logger = LogProvider.Get<EventStoreEventsRepository>();
     private readonly EventStoreClient _client;
     private readonly IEventConverter<ResolvedEvent, EventData> _eventConverter;
 

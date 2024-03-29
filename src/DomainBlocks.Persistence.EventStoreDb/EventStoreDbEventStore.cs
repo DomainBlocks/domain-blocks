@@ -8,7 +8,7 @@ namespace DomainBlocks.Persistence.EventStoreDb;
 
 public sealed class EventStoreDbEventStore : IEventStore
 {
-    private static readonly ILogger<EventStoreDbEventStore> Logger = Log.Create<EventStoreDbEventStore>();
+    private static readonly ILogger<EventStoreDbEventStore> Logger = LogProvider.Get<EventStoreDbEventStore>();
     private readonly EventStoreClient _client;
 
     public EventStoreDbEventStore(EventStoreClient client)

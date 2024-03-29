@@ -10,7 +10,7 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Subscriptions
     /// </summary>
     public sealed class PollingStreamStoreNotifier : IStreamStoreNotifier
     {
-        private static readonly ILogger<PollingStreamStoreNotifier> Logger = Log.Create<PollingStreamStoreNotifier>();
+        private static readonly ILogger<PollingStreamStoreNotifier> Logger = LogProvider.Get<PollingStreamStoreNotifier>();
 
         private readonly CancellationTokenSource _disposed = new CancellationTokenSource();
         private readonly Func<CancellationToken, Task<long>> _readHeadPosition;
