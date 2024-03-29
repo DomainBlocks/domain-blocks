@@ -35,7 +35,7 @@ jobs:
       - name: Test
         run: |
           pushd ./tests
-          docker compose up -d
+          docker compose up --quiet-pull -d
           popd
           dotnet test --no-build --verbosity normal
         working-directory: .
