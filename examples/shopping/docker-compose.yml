@@ -1,11 +1,12 @@
-version: '3.7'
+version: '3.8'
 
 networks:
-  shopping-example:
+  shopping-network:
+    name: shopping-network
     driver: bridge
 
 services:
-  shopping.eventstore:
+  shopping-eventstore:
     image: eventstore/eventstore:23.10.1-bookworm-slim
     ports:
       - '2113:2113'
@@ -30,35 +31,35 @@ services:
         source: eventstore-volume-logs
         target: /var/log/eventstore
     networks:
-      - shopping-example
+      - shopping-network
 
-  shopping.api:
+  shopping-api:
     build:
       context: ../..
       dockerfile: examples/shopping/Shopping.Api/Dockerfile
-    image: shopping.api
+    image: shopping-api
     ports:
       - "5039:80"
       - "7025:443"
     depends_on:
-      - shopping.eventstore
+      - shopping-eventstore
     networks:
-      - shopping-example
+      - shopping-network
   
-  shopping.readmodel:
+  shopping-readmodel:
     build:
       context: ../..
       dockerfile: examples/shopping/Shopping.ReadModel/Dockerfile
-    image: shopping.readmodel
+    image: shopping-readmodel
     ports:
       - "5010:80"
       - "5011:443"
     depends_on:
-      - shopping.db
+      - shopping-db
     networks:
-      - shopping-example
+      - shopping-network
 
-  shopping.db:
+  shopping-db:
     image: postgres:13.3
     ports:
       - "5433:5432"
@@ -67,7 +68,7 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
     networks:
-      - shopping-example
+      - shopping-network
     command:
       - "postgres"
       - "-c"
