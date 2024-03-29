@@ -49,8 +49,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "examples", "examples", "{D3
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{108A4B4E-435D-457B-B175-1B9A96D26720}"
 	ProjectSection(SolutionItems) = preProject
-		tests\docker-compose.test.yml = tests\docker-compose.test.yml
 		tests\Directory.Build.props = tests\Directory.Build.props
+		tests\docker-compose.yml = tests\docker-compose.yml
+		tests\docker-compose.arm64.yml = tests\docker-compose.arm64.yml
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainBlocks.Core.Tests", "tests\DomainBlocks.Core.Tests\DomainBlocks.Core.Tests.csproj", "{A55B86B8-CF2F-413C-966F-42341DBC6C7D}"
