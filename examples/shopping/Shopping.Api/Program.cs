@@ -1,8 +1,6 @@
 using DomainBlocks.Logging;
-using DomainBlocks.Persistence.DependencyInjection;
-using DomainBlocks.Persistence.EventStoreDb;
-using Shopping.Api;
-using Shopping.Domain.Events;
+using Shopping.ReadModel;
+using Shopping.WriteModel;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,11 +11,9 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// DomainBlocks configuration.
-builder.Services.AddEntityStore(config => config
-    .UseEventStoreDb("esdb://shopping-eventstore:2113?tls=false")
-    .AddEntityAdapters(x => x.AddGenericFactoryFor(typeof(AggregateAdapter<>)))
-    .MapEvents(x => x.MapAll<IDomainEvent>()));
+// Add write and read models for shopping example.
+builder.Services.AddShoppingWriteModel(builder.Configuration);
+builder.Services.AddShoppingReadModel(builder.Configuration);
 
 var app = builder.Build();
 

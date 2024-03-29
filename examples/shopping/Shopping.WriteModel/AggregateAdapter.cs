@@ -2,7 +2,7 @@ using DomainBlocks.Persistence.Entities;
 using Shopping.Domain;
 using Shopping.Domain.Events;
 
-namespace Shopping.Api;
+namespace Shopping.WriteModel;
 
 public sealed class AggregateAdapter<TEntity> : EntityAdapterBase<TEntity> where TEntity : AggregateBase, new()
 {

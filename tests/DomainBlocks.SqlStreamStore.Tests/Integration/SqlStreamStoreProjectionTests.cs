@@ -7,9 +7,9 @@ using DomainBlocks.Persistence.SqlStreamStore;
 using DomainBlocks.SqlStreamStore.Subscriptions;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
-using Shopping.Api;
 using Shopping.Domain;
 using Shopping.Domain.Events;
+using Shopping.WriteModel;
 using SqlStreamStore;
 
 namespace DomainBlocks.SqlStreamStore.Tests.Integration;

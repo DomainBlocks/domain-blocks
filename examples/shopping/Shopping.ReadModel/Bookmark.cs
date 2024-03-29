@@ -1,4 +1,4 @@
-namespace Shopping.ReadModel.Db.Model;
+namespace Shopping.ReadModel;
 
 public class Bookmark
 {

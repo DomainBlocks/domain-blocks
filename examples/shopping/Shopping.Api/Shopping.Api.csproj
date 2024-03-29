@@ -9,6 +9,8 @@
       <ProjectReference Include="..\..\..\src\DomainBlocks.Persistence.EventStoreDb\DomainBlocks.Persistence.EventStoreDb.csproj" />
       <ProjectReference Include="..\Shopping.Domain.Events\Shopping.Domain.Events.csproj" />
       <ProjectReference Include="..\Shopping.Domain\Shopping.Domain.csproj" />
+      <ProjectReference Include="..\Shopping.ReadModel\Shopping.ReadModel.csproj" />
+      <ProjectReference Include="..\Shopping.WriteModel\Shopping.WriteModel.csproj" />
     </ItemGroup>
 
 </Project>

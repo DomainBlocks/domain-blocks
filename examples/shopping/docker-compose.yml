@@ -45,19 +45,6 @@ services:
       - shopping-eventstore
     networks:
       - shopping-network
-  
-  shopping-readmodel:
-    build:
-      context: ../..
-      dockerfile: examples/shopping/Shopping.ReadModel/Dockerfile
-    image: shopping-readmodel
-    ports:
-      - "5010:80"
-      - "5011:443"
-    depends_on:
-      - shopping-db
-    networks:
-      - shopping-network
 
   shopping-db:
     image: postgres:13.3

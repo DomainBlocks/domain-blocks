@@ -1,39 +1,31 @@
 using DomainBlocks.Core.Projections.Builders;
 using DomainBlocks.EventStore.Subscriptions;
 using DomainBlocks.Hosting;
-using DomainBlocks.Logging;
 using EventStore.Client;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.OpenApi.Models;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Shopping.Domain.Events;
-using Shopping.ReadModel.Db;
-using Shopping.ReadModel.Db.Model;
 
 namespace Shopping.ReadModel;
 
-public class Startup
+public static class ServiceCollectionExtensions
 {
-    public Startup(IConfiguration configuration)
-    {
-        Configuration = configuration;
-    }
-
-    private IConfiguration Configuration { get; }
-
-    // This method gets called by the runtime. Use this method to add services to the container.
-    public void ConfigureServices(IServiceCollection services)
+    public static IServiceCollection AddShoppingReadModel(
+        this IServiceCollection services, IConfiguration configuration)
     {
         services.AddDbContext<ShoppingCartDbContext>(
-            options => options.UseNpgsql(Configuration.GetConnectionString("Default")),
+            options => options.UseNpgsql(configuration.GetConnectionString("Default")),
             optionsLifetime: ServiceLifetime.Singleton);
 
         services.AddDbContextFactory<ShoppingCartDbContext>();
 
         services.AddHostedEventStreamSubscription((sp, options) =>
         {
+            var connectionString = configuration.GetValue<string>("EventStore:ConnectionString")!;
+
             options
-                .UseEventStore(o => o.WithSettings(
-                    EventStoreClientSettings.Create("esdb://shopping-eventstore:2113?tls=false")))
+                .UseEventStore(o => o.WithSettings(EventStoreClientSettings.Create(connectionString)))
                 .FromAllEventsStream()
                 .ProjectTo()
                 .State(_ => sp.GetRequiredService<IDbContextFactory<ShoppingCartDbContext>>().CreateDbContext())
@@ -82,30 +74,6 @@ public class Startup
                 });
         });
 
-        services.AddControllers();
-        services.AddSwaggerGen(c =>
-        {
-            c.SwaggerDoc("v1", new OpenApiInfo { Title = "Shopping.ReadModel", Version = "v1" });
-        });
-    }
-
-    // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-    public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
-    {
-        if (env.IsDevelopment())
-        {
-            app.UseDeveloperExceptionPage();
-            app.UseSwagger();
-            app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Shopping.ReadModel v1"));
-        }
-
-        app.UseHttpsRedirection();
-        app.UseRouting();
-        app.UseAuthorization();
-        app.UseEndpoints(endpoints => { endpoints.MapControllers(); });
-        
-        // Configure DomainBlocks logging.
-        var loggerFactory = app.ApplicationServices.GetRequiredService<ILoggerFactory>();
-        LogProvider.SetLoggerFactory(loggerFactory);
+        return services;
     }
 }

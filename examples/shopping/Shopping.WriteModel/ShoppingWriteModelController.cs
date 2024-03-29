@@ -2,15 +2,15 @@ using DomainBlocks.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Shopping.Domain;
 
-namespace Shopping.Api.Controllers;
+namespace Shopping.WriteModel;
 
 [ApiController]
 [Route("[controller]")]
-public class ShoppingCartController : ControllerBase
+public class ShoppingWriteModelController : ControllerBase
 {
     private readonly IEntityStore _entityStore;
 
-    public ShoppingCartController(IEntityStore entityStore)
+    public ShoppingWriteModelController(IEntityStore entityStore)
     {
         _entityStore = entityStore;
     }

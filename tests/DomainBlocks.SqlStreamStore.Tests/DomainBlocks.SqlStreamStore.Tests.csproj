@@ -13,7 +13,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\examples\shopping\Shopping.Api\Shopping.Api.csproj" />
+      <ProjectReference Include="..\..\examples\shopping\Shopping.WriteModel\Shopping.WriteModel.csproj" />
       <ProjectReference Include="..\..\src\DomainBlocks.DependencyInjection\DomainBlocks.DependencyInjection.csproj" />
       <ProjectReference Include="..\..\src\DomainBlocks.Persistence.DependencyInjection\DomainBlocks.Persistence.DependencyInjection.csproj" />
       <ProjectReference Include="..\..\src\DomainBlocks.Persistence.SqlStreamStore\DomainBlocks.Persistence.SqlStreamStore.csproj" />

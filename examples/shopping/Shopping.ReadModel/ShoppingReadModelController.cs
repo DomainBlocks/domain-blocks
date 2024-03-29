@@ -1,17 +1,15 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Shopping.ReadModel.Db;
-using Shopping.ReadModel.Db.Model;
 
-namespace Shopping.ReadModel.Controllers;
+namespace Shopping.ReadModel;
 
 [ApiController]
 [Route("[controller]")]
-public class ShoppingCartController : ControllerBase
+public class ShoppingReadModelController : ControllerBase
 {
     private readonly ShoppingCartDbContext _dbContext;
 
-    public ShoppingCartController(ShoppingCartDbContext dbContext)
+    public ShoppingReadModelController(ShoppingCartDbContext dbContext)
     {
         _dbContext = dbContext;
     }

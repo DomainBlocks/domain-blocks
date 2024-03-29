@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using Shopping.ReadModel.Db.Model;
 
-namespace Shopping.ReadModel.Db;
+namespace Shopping.ReadModel;
 
 public class ShoppingCartDbContext : DbContext
 {
