@@ -18,11 +18,7 @@ services:
       - EVENTSTORE_START_STANDARD_PROJECTIONS=true
       - PROJECTION_THREADS=8
       - EVENTSTORE_INSECURE=true
-      - EVENTSTORE_ENABLE_EXTERNAL_TCP=true
       - EVENTSTORE_ENABLE_ATOM_PUB_OVER_HTTP=true
-    # ES healthcheck doesn't work properly. Turn it off in docker compose
-    healthcheck:
-      test: [ "NONE" ]
     volumes:
       - type: volume
         source: eventstore-volume-data
@@ -47,13 +43,15 @@ services:
       - shopping-network
 
   shopping-db:
-    image: postgres:13.3
+    image: postgres:latest
     ports:
       - "5433:5432"
     environment:
-      - POSTGRES_DB=shopping
+      - POSTGRES_DB=shopping-events
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
+    volumes:
+      - postgres-volume-data:/var/lib/postgresql/data
     networks:
       - shopping-network
     command:
@@ -64,3 +62,4 @@ services:
 volumes:
   eventstore-volume-data:
   eventstore-volume-logs:
+  postgres-volume-data:
