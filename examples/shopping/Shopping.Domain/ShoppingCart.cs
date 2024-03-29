@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Shopping.Domain.Events;
 
 namespace Shopping.Domain;

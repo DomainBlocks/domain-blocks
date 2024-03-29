@@ -1,16 +1,9 @@
-using System;
 using DomainBlocks.Core.Projections.Builders;
 using DomainBlocks.EventStore.Subscriptions;
 using DomainBlocks.Hosting;
 using DomainBlocks.Logging;
 using EventStore.Client;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi.Models;
 using Shopping.Domain.Events;
 using Shopping.ReadModel.Db;
@@ -40,7 +33,7 @@ public class Startup
         {
             options
                 .UseEventStore(o => o.WithSettings(
-                    EventStoreClientSettings.Create("esdb://shopping.eventstore:2113?tls=false")))
+                    EventStoreClientSettings.Create("esdb://shopping-eventstore:2113?tls=false")))
                 .FromAllEventsStream()
                 .ProjectTo()
                 .State(_ => sp.GetRequiredService<IDbContextFactory<ShoppingCartDbContext>>().CreateDbContext())

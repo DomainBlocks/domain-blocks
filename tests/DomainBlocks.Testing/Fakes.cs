@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using DomainBlocks.Core;
+﻿using DomainBlocks.Core;
 using NSubstitute;
 
 namespace DomainBlocks.Testing;
@@ -20,7 +17,7 @@ public static class Fakes
             .ToList();
     }
 
-    public static IEventNameMap EventNameMap { get; private set; }
+    public static IEventNameMap EventNameMap { get; private set; } = null!;
 
     private static void BuildFakes()
     {

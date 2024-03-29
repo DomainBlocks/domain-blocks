@@ -26,7 +26,7 @@ public class ShoppingCartDbContext : DbContext
         modelBuilder.Entity<ShoppingCartSummaryItem>().HasKey(i => new { i.SessionId, i.Item });
     }
 
-    public DbSet<Bookmark> Bookmarks { get; set; }
+    public DbSet<Bookmark> Bookmarks { get; set; } = null!;
 
-    public DbSet<ShoppingCartSummaryItem> ShoppingCartSummaryItems { get; set; }
+    public DbSet<ShoppingCartSummaryItem> ShoppingCartSummaryItems { get; set; } = null!;
 }

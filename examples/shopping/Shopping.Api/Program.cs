@@ -15,7 +15,7 @@ builder.Services.AddSwaggerGen();
 
 // DomainBlocks configuration.
 builder.Services.AddEntityStore(config => config
-    .UseEventStoreDb("esdb://shopping.eventstore:2113?tls=false")
+    .UseEventStoreDb("esdb://shopping-eventstore:2113?tls=false")
     .AddEntityAdapters(x => x.AddGenericFactoryFor(typeof(AggregateAdapter<>)))
     .MapEvents(x => x.MapAll<IDomainEvent>()));
 

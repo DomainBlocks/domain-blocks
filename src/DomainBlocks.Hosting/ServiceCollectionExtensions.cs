@@ -1,5 +1,4 @@
-﻿using System;
-using DomainBlocks.Core.Subscriptions.Builders;
+﻿using DomainBlocks.Core.Subscriptions.Builders;
 using DomainBlocks.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
 

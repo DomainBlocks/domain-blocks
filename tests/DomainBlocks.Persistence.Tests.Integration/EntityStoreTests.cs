@@ -14,6 +14,7 @@ using JsonSerializer = DomainBlocks.Persistence.Serialization.JsonSerializer;
 namespace DomainBlocks.Persistence.Tests.Integration;
 
 [TestFixture]
+[Explicit]
 public class EntityStoreTests
 {
     private const string PostgresStreamStoreConnectionString =
