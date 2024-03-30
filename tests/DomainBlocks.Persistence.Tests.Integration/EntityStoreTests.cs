@@ -4,6 +4,7 @@ using DomainBlocks.Persistence.SqlStreamStore;
 using DomainBlocks.Persistence.Builders;
 using DomainBlocks.Persistence.Entities;
 using DomainBlocks.Persistence.Events;
+using DomainBlocks.Persistence.Exceptions;
 using DomainBlocks.Persistence.Extensions;
 using DomainBlocks.Persistence.Tests.Integration.Adapters;
 using DomainBlocks.Persistence.Tests.Integration.Model;
@@ -14,7 +15,6 @@ using JsonSerializer = DomainBlocks.Persistence.Serialization.JsonSerializer;
 namespace DomainBlocks.Persistence.Tests.Integration;
 
 [TestFixture]
-[Explicit]
 public class EntityStoreTests
 {
     private const string PostgresStreamStoreConnectionString =
@@ -71,9 +71,8 @@ public class EntityStoreTests
     }
 
     [Test]
-    [TestCaseSource(nameof(WrongVersionTestCases))]
-    public async Task WriteToExpectedNewStream_WhenStreamExists_ThrowsWrongVersionException(
-        IEntityStore store, Type wrongVersionExceptionType)
+    [TestCaseSource(nameof(TestCases))]
+    public async Task WriteToExpectedNewStream_WhenStreamExists_ThrowsWrongVersionException(IEntityStore store)
     {
         var entity1 = new ShoppingCart();
         entity1.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Foo"));
@@ -87,7 +86,7 @@ public class EntityStoreTests
 
         entity2.AddItem(new ShoppingCartItem(entity1.State.SessionId, "Bar"));
 
-        await Assert.ThatAsync(() => store.SaveAsync(entity2), Throws.TypeOf(wrongVersionExceptionType));
+        await Assert.ThatAsync(() => store.SaveAsync(entity2), Throws.TypeOf<WrongExpectedVersionException>());
     }
 
     [Test]
@@ -220,22 +219,6 @@ public class EntityStoreTests
         {
             yield return new TestCaseData(SqlStreamStoreEntityStore).SetName(nameof(SqlStreamStoreEntityStore));
             yield return new TestCaseData(EventStoreDbEntityStore).SetName(nameof(EventStoreDbEntityStore));
-        }
-    }
-
-    private static IEnumerable<TestCaseData> WrongVersionTestCases
-    {
-        get
-        {
-            yield return new TestCaseData(
-                    SqlStreamStoreEntityStore,
-                    typeof(DomainBlocks.ThirdParty.SqlStreamStore.Streams.WrongExpectedVersionException))
-                .SetName(nameof(SqlStreamStoreEntityStore));
-
-            yield return new TestCaseData(
-                    EventStoreDbEntityStore,
-                    typeof(EventStore.Client.WrongExpectedVersionException))
-                .SetName(nameof(EventStoreDbEntityStore));
         }
     }
 }

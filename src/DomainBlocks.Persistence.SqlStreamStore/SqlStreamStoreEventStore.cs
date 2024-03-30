@@ -7,6 +7,8 @@ using DomainBlocks.ThirdParty.SqlStreamStore;
 using DomainBlocks.ThirdParty.SqlStreamStore.Streams;
 using Microsoft.Extensions.Logging;
 using SqlStreamStoreStreamVersion = DomainBlocks.ThirdParty.SqlStreamStore.Streams.StreamVersion;
+using ErrorMessages = DomainBlocks.Persistence.Exceptions.ErrorMessages;
+using WrongExpectedVersionException = DomainBlocks.Persistence.Exceptions.WrongExpectedVersionException;
 
 namespace DomainBlocks.Persistence.SqlStreamStore;
 
@@ -57,8 +59,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore
         StreamVersion expectedVersion,
         CancellationToken cancellationToken = default)
     {
-        var expectedVersionInternal = Convert.ToInt32(expectedVersion.ToUInt64());
-        return AppendToStreamInternalAsync(streamName, events, expectedVersionInternal, cancellationToken);
+        return AppendToStreamInternalAsync(streamName, events, expectedVersion, null, cancellationToken);
     }
 
     public Task<StreamVersion?> AppendToStreamAsync(
@@ -67,14 +68,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore
         ExpectedStreamState expectedState,
         CancellationToken cancellationToken = default)
     {
-        var expectedVersion = expectedState switch
-        {
-            ExpectedStreamState.Any => ExpectedVersion.Any,
-            ExpectedStreamState.NoStream => ExpectedVersion.NoStream,
-            _ => throw new ArgumentOutOfRangeException(nameof(expectedState), expectedState, null)
-        };
-
-        return AppendToStreamInternalAsync(streamName, events, expectedVersion, cancellationToken);
+        return AppendToStreamInternalAsync(streamName, events, null, expectedState, cancellationToken);
     }
 
     private async IAsyncEnumerable<ReadEvent> ReadStreamInternalAsync(
@@ -137,7 +131,8 @@ public sealed class SqlStreamStoreEventStore : IEventStore
     private async Task<StreamVersion?> AppendToStreamInternalAsync(
         string streamName,
         IEnumerable<WriteEvent> events,
-        int expectedVersion,
+        StreamVersion? expectedVersion,
+        ExpectedStreamState? expectedState,
         CancellationToken cancellationToken)
     {
         var eventsArray = events.ToArray();
@@ -163,7 +158,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore
             "Write ID {WriteId}",
             eventsArray.Length,
             streamName,
-            expectedVersion,
+            expectedVersion?.ToString() ?? expectedState.ToString(),
             writeId);
 
         if (Logger.IsEnabled(LogLevel.Trace))
@@ -183,13 +178,26 @@ public sealed class SqlStreamStoreEventStore : IEventStore
 
         try
         {
-            var appendResult =
-                await _streamStore.AppendToStream(streamName, expectedVersion, convertedEvents, cancellationToken);
+            var sqlStreamStoreExpectedVersion = expectedVersion != null
+                ? Convert.ToInt32(expectedVersion.Value.ToUInt64())
+                : expectedState!.Value.ToSqlStreamStoreExpectedVersion();
+
+            var appendResult = await _streamStore.AppendToStream(
+                streamName, sqlStreamStoreExpectedVersion, convertedEvents, cancellationToken);
 
             Logger.LogDebug("Written events to stream. WriteId {WriteId}", writeId);
 
             Debug.Assert(appendResult.CurrentVersion >= 0);
             return StreamVersion.FromUInt64(Convert.ToUInt64(appendResult.CurrentVersion));
+        }
+        catch (DomainBlocks.ThirdParty.SqlStreamStore.Streams.WrongExpectedVersionException ex)
+        {
+            if (expectedVersion.HasValue)
+                throw new WrongExpectedVersionException(
+                    ErrorMessages.WrongExpectedVersion(streamName, expectedVersion.Value), ex);
+
+            throw new WrongExpectedVersionException(
+                ErrorMessages.WrongExpectedVersion(streamName, expectedState!.Value), ex);
         }
         catch (Exception ex)
         {
