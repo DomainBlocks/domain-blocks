@@ -2,7 +2,7 @@ using DomainBlocks.Persistence.Serialization;
 
 namespace DomainBlocks.Persistence.Events;
 
-public class EventMapper : IEventMapper
+public class EventMapper
 {
     private readonly IReadOnlyDictionary<Type, EventTypeMapping> _mappingsByType;
     private readonly IReadOnlyDictionary<string, EventTypeMapping> _mappingsByName;
@@ -27,7 +27,8 @@ public class EventMapper : IEventMapper
             throw new ArgumentException($"Mapping not found for event name '{readEvent.Name}'.", nameof(readEvent));
         }
 
-        // TODO: consider ignored event names. Can yield zero events in the case a name is ignored.
+        // Consider ignored event names. Can yield zero events in the case a name is ignored.
+        // Will be addressed in a future PR.
 
         var @event = _serializer.Deserialize(readEvent.Payload.Span, mapping.EventType);
 

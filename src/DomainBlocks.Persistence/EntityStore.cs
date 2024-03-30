@@ -50,13 +50,6 @@ public sealed class EntityStore : IEntityStore
             await foreach (var readEvent in readEvents)
             {
                 loadedVersion = readEvent.StreamVersion;
-
-                // Ignore any snapshot events. A snapshot event would usually be the first event in the case we start
-                // reading from a snapshot event version, and there have been no other writes between reading the
-                // snapshot and reading the events forward from the snapshot version. Writes could happen between these
-                // two reads, which may result in additional snapshots.
-                if (readEvent.Name == SystemEventNames.StateSnapshot) continue;
-
                 loadedEventCount++;
 
                 var transformedEvents = _eventMapper.FromReadEvent(readEvent);

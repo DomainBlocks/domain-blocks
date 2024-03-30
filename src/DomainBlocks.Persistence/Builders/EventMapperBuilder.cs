@@ -5,19 +5,19 @@ namespace DomainBlocks.Persistence.Builders;
 
 public class EventMapperBuilder
 {
-    private readonly Dictionary<Type, IEventTypeMappingBuilder> _eventTypeMappingBuilders = new();
+    private readonly Dictionary<Type, IEventTypeMappingBuilder> _eventBaseTypeMappingBuilders = new();
+    private readonly Dictionary<Type, IEventTypeMappingBuilder> _singleEventTypeMappingBuilders = new();
     private ISerializer _serializer = new JsonSerializer();
 
     public EventBaseTypeMappingBuilder<TEventBase> MapAll<TEventBase>()
     {
-        if (_eventTypeMappingBuilders.TryGetValue(typeof(TEventBase), out var builder))
+        if (_eventBaseTypeMappingBuilders.TryGetValue(typeof(TEventBase), out var builder))
         {
-            // TODO: error handling
             return (EventBaseTypeMappingBuilder<TEventBase>)builder;
         }
 
         var newBuilder = new EventBaseTypeMappingBuilder<TEventBase>();
-        _eventTypeMappingBuilders.Add(typeof(TEventBase), newBuilder);
+        _eventBaseTypeMappingBuilders.Add(typeof(TEventBase), newBuilder);
 
         return newBuilder;
     }
@@ -31,14 +31,13 @@ public class EventMapperBuilder
 
     public SingleEventTypeMappingBuilder<TEvent> Map<TEvent>()
     {
-        if (_eventTypeMappingBuilders.TryGetValue(typeof(TEvent), out var builder))
+        if (_singleEventTypeMappingBuilders.TryGetValue(typeof(TEvent), out var builder))
         {
-            // TODO: error handling
             return (SingleEventTypeMappingBuilder<TEvent>)builder;
         }
 
         var newBuilder = new SingleEventTypeMappingBuilder<TEvent>();
-        _eventTypeMappingBuilders.Add(typeof(TEvent), newBuilder);
+        _singleEventTypeMappingBuilders.Add(typeof(TEvent), newBuilder);
 
         return newBuilder;
     }
@@ -58,15 +57,10 @@ public class EventMapperBuilder
 
     public EventMapper Build()
     {
+        var eventBaseTypeMappings = _eventBaseTypeMappingBuilders.Values.SelectMany(x => x.Build());
+        var singleEventTypeMappings = _singleEventTypeMappingBuilders.Values.SelectMany(x => x.Build());
+
         // Include mappings from event base type builders first so they can be overriden.
-        var eventBaseTypeMappings = _eventTypeMappingBuilders.Values
-            .Where(x => x.Kind == EventTypeMappingBuilderKind.EventBaseType)
-            .SelectMany(x => x.Build());
-
-        var singleEventTypeMappings = _eventTypeMappingBuilders.Values
-            .Where(x => x.Kind == EventTypeMappingBuilderKind.SingleEvent)
-            .SelectMany(x => x.Build());
-
         var eventTypeMappings = eventBaseTypeMappings
             .Concat(singleEventTypeMappings)
             .GroupBy(x => x.EventType)

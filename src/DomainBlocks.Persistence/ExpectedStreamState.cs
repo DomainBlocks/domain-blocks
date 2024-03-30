@@ -4,6 +4,4 @@ public enum ExpectedStreamState
 {
     Any,
     NoStream
-
-    // TODO: StreamExists
 }

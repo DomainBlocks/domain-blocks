@@ -2,7 +2,7 @@ using System.Diagnostics;
 
 namespace DomainBlocks.Persistence.Events;
 
-[DebuggerDisplay("{EventType} / \"{EventName}\"")]
+[DebuggerDisplay("{EventType} <-> \"{EventName}\"")]
 public class EventTypeMapping
 {
     public EventTypeMapping(Type eventType, string? eventName = null, IEnumerable<string>? deprecatedEventNames = null)

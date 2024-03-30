@@ -6,6 +6,7 @@ namespace DomainBlocks.Persistence.Entities;
 public class GenericEntityAdapterTypeResolver
 {
     private readonly Type _genericTypeDefinition;
+    private readonly Type _entityGenericArgType;
 
     public GenericEntityAdapterTypeResolver(Type genericTypeDefinition)
     {
@@ -42,26 +43,26 @@ public class GenericEntityAdapterTypeResolver
         }
 
         _genericTypeDefinition = genericTypeDefinition;
-        EntityGenericArgType = entityGenericArg;
+        _entityGenericArgType = entityGenericArg;
     }
-
-    public Type EntityGenericArgType { get; }
 
     public bool TryResolveFor<TEntity>(out Type? resolvedType) => TryResolveFor(typeof(TEntity), out resolvedType);
 
-    public bool TryResolveFor(Type entityType, out Type? resolvedType)
+    private bool TryResolveFor(Type entityType, out Type? resolvedType)
     {
         resolvedType = null;
 
-        if (!EntityGenericArgType.TryResolveGenericParametersFrom(entityType, out var resolvedGenericParams))
+        if (!_entityGenericArgType.TryResolveGenericParametersFrom(entityType, out var resolvedGenericParams))
         {
             return false;
         }
 
         Debug.Assert(resolvedGenericParams != null, nameof(resolvedGenericParams) + " != null");
 
-        var adapterGenericParams =
-            _genericTypeDefinition.GetGenericArguments().Where(x => x.IsGenericParameter).ToArray();
+        var adapterGenericParams = _genericTypeDefinition
+            .GetGenericArguments()
+            .Where(x => x.IsGenericParameter)
+            .ToArray();
 
         if (!adapterGenericParams.All(x => resolvedGenericParams.ContainsKey(x)))
         {
@@ -72,7 +73,7 @@ public class GenericEntityAdapterTypeResolver
 
         foreach (var param in adapterGenericParams)
         {
-            genericArgs[param.GenericParameterPosition] = resolvedGenericParams![param];
+            genericArgs[param.GenericParameterPosition] = resolvedGenericParams[param];
         }
 
         resolvedType = _genericTypeDefinition.MakeGenericType(genericArgs);

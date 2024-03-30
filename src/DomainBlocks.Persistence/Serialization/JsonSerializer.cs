@@ -13,8 +13,6 @@ public class JsonSerializer : ISerializer
         _options = options;
     }
 
-    public SerializationFormat Format => SerializationFormat.Json;
-
     public byte[] Serialize(object value) => SystemJsonSerializer.SerializeToUtf8Bytes(value, _options);
 
     public object Deserialize(ReadOnlySpan<byte> data, Type type)

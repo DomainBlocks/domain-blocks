@@ -8,14 +8,17 @@ public interface IEntityAdapter
 public interface IEntityAdapter<TEntity> : IEntityAdapter
 {
     Type IEntityAdapter.EntityType => typeof(TEntity);
+
+    // Not used yet, but will be used for snapshot deserialization.
     Type StateType { get; }
 
-    // Required for writes
     string GetId(TEntity entity);
+
+    // Not used yet, but will be used for snapshot serialization.
     object GetCurrentState(TEntity entity);
+
     IEnumerable<object> GetRaisedEvents(TEntity entity);
 
-    // Required for reads
     object CreateState();
 
     Task<TEntity> RestoreEntityAsync(

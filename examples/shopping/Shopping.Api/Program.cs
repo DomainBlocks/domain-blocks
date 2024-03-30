@@ -17,6 +17,7 @@ if (eventStore == "SqlStreamStore")
     // Still using the pre-Npgsql 6.0 timestamp behaviour.
     // See: https://www.npgsql.org/doc/types/datetime.html#timestamps-and-timezones
     AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
     await EnsureSqlStreamStoreCreatedAsync();
 }
 
@@ -50,10 +51,14 @@ async Task EnsureSqlStreamStoreCreatedAsync()
     var connectionString = builder.Configuration.GetConnectionString("SqlStreamStore");
     var streamStore = new PostgresStreamStore(new PostgresStreamStoreSettings(connectionString));
 
-    await Task.Delay(TimeSpan.FromSeconds(3));
+    const int retryCount = 3;
+    var delay = TimeSpan.FromSeconds(3);
+
+    // Wait before the initial attempt to allow the container some time to start.
+    await Task.Delay(delay);
 
     await Policy
         .Handle<NpgsqlException>()
-        .WaitAndRetryAsync(3, _ => TimeSpan.FromSeconds(3))
+        .WaitAndRetryAsync(retryCount, _ => delay)
         .ExecuteAsync(() => streamStore.CreateSchemaIfNotExists());
 }
