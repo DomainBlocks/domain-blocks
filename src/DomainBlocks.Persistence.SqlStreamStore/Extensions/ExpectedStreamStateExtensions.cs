@@ -1,6 +1,6 @@
 using DomainBlocks.ThirdParty.SqlStreamStore.Streams;
 
-namespace DomainBlocks.Persistence.SqlStreamStore;
+namespace DomainBlocks.Persistence.SqlStreamStore.Extensions;
 
 internal static class ExpectedStreamStateExtensions
 {

@@ -1,6 +1,6 @@
 using EventStore.Client;
 
-namespace DomainBlocks.Persistence.EventStoreDb;
+namespace DomainBlocks.Persistence.EventStoreDb.Extensions;
 
 internal static class ExpectedStreamStateExtensions
 {

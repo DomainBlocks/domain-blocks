@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using DomainBlocks.Persistence.Events;
 using DomainBlocks.Logging;
+using DomainBlocks.Persistence.EventStoreDb.Extensions;
 using DomainBlocks.Persistence.Exceptions;
 using EventStore.Client;
 using Microsoft.Extensions.Logging;
@@ -24,8 +25,7 @@ public sealed class EventStoreDbEventStore : IEventStore
         StreamVersion fromVersion,
         CancellationToken cancellationToken = default)
     {
-        var fromVersionInternal = new StreamPosition(fromVersion.ToUInt64());
-        return ReadStreamInternalAsync(streamName, direction, fromVersionInternal, cancellationToken);
+        return ReadStreamInternalAsync(streamName, direction, fromVersion, null, cancellationToken);
     }
 
     public IAsyncEnumerable<ReadEvent> ReadStreamAsync(
@@ -34,17 +34,7 @@ public sealed class EventStoreDbEventStore : IEventStore
         StreamReadOrigin readOrigin = StreamReadOrigin.Default,
         CancellationToken cancellationToken = default)
     {
-        var fromVersion = readOrigin switch
-        {
-            StreamReadOrigin.Default => direction == StreamReadDirection.Forwards
-                ? StreamPosition.Start
-                : StreamPosition.End,
-            StreamReadOrigin.Start => StreamPosition.Start,
-            StreamReadOrigin.End => StreamPosition.End,
-            _ => throw new ArgumentOutOfRangeException(nameof(readOrigin), readOrigin, null)
-        };
-
-        return ReadStreamInternalAsync(streamName, direction, fromVersion, cancellationToken);
+        return ReadStreamInternalAsync(streamName, direction, null, readOrigin, cancellationToken);
     }
 
     public Task<StreamVersion?> AppendToStreamAsync(
@@ -68,7 +58,8 @@ public sealed class EventStoreDbEventStore : IEventStore
     private async IAsyncEnumerable<ReadEvent> ReadStreamInternalAsync(
         string streamName,
         StreamReadDirection direction,
-        StreamPosition fromVersion,
+        StreamVersion? fromVersion,
+        StreamReadOrigin? readOrigin,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         EventStoreClient.ReadStreamResult readStreamResult;
@@ -78,11 +69,15 @@ public sealed class EventStoreDbEventStore : IEventStore
             var eventStoreDbDirection =
                 direction == StreamReadDirection.Forwards ? Direction.Forwards : Direction.Backwards;
 
+            var eventStoreDbFromVersion = fromVersion != null
+                ? new StreamPosition(fromVersion.Value.ToUInt64())
+                : readOrigin!.Value.ToEventStoreDbStreamPosition(direction);
+
             // Consider reading in batches.
             readStreamResult = _client.ReadStreamAsync(
                 eventStoreDbDirection,
                 streamName,
-                fromVersion,
+                eventStoreDbFromVersion,
                 cancellationToken: cancellationToken);
         }
         catch (Exception ex)

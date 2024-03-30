@@ -1,9 +1,9 @@
 using DomainBlocks.Persistence.Builders;
 using EventStore.Client;
 
-namespace DomainBlocks.Persistence.EventStoreDb;
+namespace DomainBlocks.Persistence.EventStoreDb.Extensions;
 
-public static class EventStoreDbEntityStoreBuilderExtensions
+public static class EntityStoreBuilderExtensions
 {
     public static EntityStoreConfigBuilder UseEventStoreDb(
         this EntityStoreConfigBuilder builder, string connectionString)

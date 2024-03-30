@@ -1,6 +1,6 @@
 using DomainBlocks.Persistence.DependencyInjection;
-using DomainBlocks.Persistence.EventStoreDb;
-using DomainBlocks.Persistence.SqlStreamStore;
+using DomainBlocks.Persistence.EventStoreDb.Extensions;
+using DomainBlocks.Persistence.SqlStreamStore.Extensions;
 using DomainBlocks.ThirdParty.SqlStreamStore.Postgres;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

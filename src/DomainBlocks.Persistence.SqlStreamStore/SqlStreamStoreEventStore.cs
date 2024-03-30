@@ -3,10 +3,10 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using DomainBlocks.Persistence.Events;
 using DomainBlocks.Logging;
+using DomainBlocks.Persistence.SqlStreamStore.Extensions;
 using DomainBlocks.ThirdParty.SqlStreamStore;
 using DomainBlocks.ThirdParty.SqlStreamStore.Streams;
 using Microsoft.Extensions.Logging;
-using SqlStreamStoreStreamVersion = DomainBlocks.ThirdParty.SqlStreamStore.Streams.StreamVersion;
 using ErrorMessages = DomainBlocks.Persistence.Exceptions.ErrorMessages;
 using WrongExpectedVersionException = DomainBlocks.Persistence.Exceptions.WrongExpectedVersionException;
 
@@ -30,8 +30,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore
         StreamVersion fromVersion,
         CancellationToken cancellationToken = default)
     {
-        var fromVersionInternal = Convert.ToInt32(fromVersion.ToUInt64());
-        return ReadStreamInternalAsync(streamName, direction, fromVersionInternal, cancellationToken);
+        return ReadStreamInternalAsync(streamName, direction, fromVersion, null, cancellationToken);
     }
 
     public IAsyncEnumerable<ReadEvent> ReadStreamAsync(
@@ -40,17 +39,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore
         StreamReadOrigin readOrigin = StreamReadOrigin.Default,
         CancellationToken cancellationToken = default)
     {
-        var fromVersion = readOrigin switch
-        {
-            StreamReadOrigin.Default => direction == StreamReadDirection.Forwards
-                ? SqlStreamStoreStreamVersion.Start
-                : SqlStreamStoreStreamVersion.End,
-            StreamReadOrigin.Start => SqlStreamStoreStreamVersion.Start,
-            StreamReadOrigin.End => SqlStreamStoreStreamVersion.End,
-            _ => throw new ArgumentOutOfRangeException(nameof(readOrigin), readOrigin, null)
-        };
-
-        return ReadStreamInternalAsync(streamName, direction, fromVersion, cancellationToken);
+        return ReadStreamInternalAsync(streamName, direction, null, readOrigin, cancellationToken);
     }
 
     public Task<StreamVersion?> AppendToStreamAsync(
@@ -74,22 +63,27 @@ public sealed class SqlStreamStoreEventStore : IEventStore
     private async IAsyncEnumerable<ReadEvent> ReadStreamInternalAsync(
         string streamName,
         StreamReadDirection direction,
-        int fromVersion,
+        StreamVersion? fromVersion,
+        StreamReadOrigin? readOrigin,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         // Get the first page.
         ReadStreamPage page;
         try
         {
+            var sqlStreamStoreFromVersion = fromVersion != null
+                ? Convert.ToInt32(fromVersion.Value.ToUInt64())
+                : readOrigin!.Value.ToSqlStreamStoreStreamVersion(direction);
+
             if (direction == StreamReadDirection.Forwards)
             {
                 page = await _streamStore.ReadStreamForwards(
-                    streamName, fromVersion, _readPageSize, cancellationToken: cancellationToken);
+                    streamName, sqlStreamStoreFromVersion, _readPageSize, cancellationToken: cancellationToken);
             }
             else
             {
                 page = await _streamStore.ReadStreamBackwards(
-                    streamName, fromVersion, _readPageSize, cancellationToken: cancellationToken);
+                    streamName, sqlStreamStoreFromVersion, _readPageSize, cancellationToken: cancellationToken);
             }
         }
         catch (Exception ex)

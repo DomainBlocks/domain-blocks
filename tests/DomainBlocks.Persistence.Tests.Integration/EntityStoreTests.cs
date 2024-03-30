@@ -1,11 +1,12 @@
 using System.Text.Json;
-using DomainBlocks.Persistence.EventStoreDb;
 using DomainBlocks.Persistence.SqlStreamStore;
 using DomainBlocks.Persistence.Builders;
 using DomainBlocks.Persistence.Entities;
 using DomainBlocks.Persistence.Events;
+using DomainBlocks.Persistence.EventStoreDb.Extensions;
 using DomainBlocks.Persistence.Exceptions;
 using DomainBlocks.Persistence.Extensions;
+using DomainBlocks.Persistence.SqlStreamStore.Extensions;
 using DomainBlocks.Persistence.Tests.Integration.Adapters;
 using DomainBlocks.Persistence.Tests.Integration.Model;
 using DomainBlocks.ThirdParty.SqlStreamStore.Postgres;
