@@ -17,7 +17,8 @@ public class ShoppingCartReadModelController : ControllerBase
     [HttpGet("sessionIds")]
     public async Task<ActionResult<IEnumerable<Guid>>> GetCartIds()
     {
-        var cartIds = await _dbContext.ShoppingCartSummaryItems.AsNoTracking()
+        var cartIds = await _dbContext.ShoppingCartSummaryItems
+            .AsNoTracking()
             .Select(i => i.SessionId).Distinct()
             .ToListAsync();
 
