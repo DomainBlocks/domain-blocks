@@ -73,7 +73,6 @@ public sealed class EventStoreDbEventStore : IEventStore
                 ? new StreamPosition(fromVersion.Value.ToUInt64())
                 : readOrigin!.Value.ToEventStoreDbStreamPosition(direction);
 
-            // Consider reading in batches.
             readStreamResult = _client.ReadStreamAsync(
                 eventStoreDbDirection,
                 streamName,

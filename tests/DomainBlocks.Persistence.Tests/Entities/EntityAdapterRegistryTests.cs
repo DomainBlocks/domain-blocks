@@ -17,8 +17,9 @@ public class EntityAdapterRegistryTests
 
         var genericEntityAdapterFactories = Enumerable.Empty<GenericEntityAdapterFactory>();
 
-        Assert.Throws<ArgumentException>(
-            () => _ = new EntityAdapterRegistry(entityAdapters, genericEntityAdapterFactories));
+        Assert.That(
+            () => _ = new EntityAdapterRegistry(entityAdapters, genericEntityAdapterFactories),
+            Throws.TypeOf<ArgumentException>());
     }
 
     private class TestEntityAdapter : IEntityAdapter
