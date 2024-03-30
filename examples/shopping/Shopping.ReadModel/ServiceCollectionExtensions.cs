@@ -158,3 +158,113 @@ public static class ServiceCollectionExtensions
             });
     }
 }
+
+public interface IStateTransition<TState, in TEvent>
+{
+    Task<TState> ApplyAsync(TState state, TEvent @event, CancellationToken cancellationToken);
+}
+
+public interface ICheckpointPolicy
+{
+    bool ShouldCheckpoint(int eventsProcessedSinceLastCheckpoint);
+    bool ShouldCheckpoint(TimeSpan timeSinceLastCheckpoint);
+    bool ShouldCheckpoint(object @event);
+}
+
+public class Checkpoint<TState>
+{
+    public Checkpoint(TState state, long? position = null)
+    {
+        State = state;
+        Position = position;
+    }
+
+    public TState State { get; }
+    public long? Position { get; }
+}
+
+public interface ICheckpointStore<TState>
+{
+    Task<Checkpoint<TState>> LoadAsync(CancellationToken cancellationToken);
+    Task SaveAsync(Checkpoint<TState> checkpoint, CancellationToken cancellationToken);
+}
+
+public class ShoppingCartProjection :
+    IStateTransition<ShoppingCartDbContext, ShoppingSessionStarted>,
+    IStateTransition<ShoppingCartDbContext, ItemAddedToShoppingCart>,
+    IStateTransition<ShoppingCartDbContext, ItemRemovedFromShoppingCart>
+{
+    public Task<ShoppingCartDbContext> ApplyAsync(
+        ShoppingCartDbContext state, ShoppingSessionStarted @event, CancellationToken cancellationToken)
+    {
+        return Task.FromResult(state);
+    }
+
+    public async Task<ShoppingCartDbContext> ApplyAsync(
+        ShoppingCartDbContext state, ItemAddedToShoppingCart @event, CancellationToken cancellationToken)
+    {
+        var item = await state.ShoppingCartSummaryItems.FindAsync(
+            new object[] { @event.SessionId, @event.Item }, cancellationToken);
+
+        if (item != null)
+        {
+            return state;
+        }
+
+        state.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem
+        {
+            SessionId = @event.SessionId,
+            Item = @event.Item
+        });
+
+        return state;
+    }
+
+    public async Task<ShoppingCartDbContext> ApplyAsync(
+        ShoppingCartDbContext state, ItemRemovedFromShoppingCart @event, CancellationToken cancellationToken)
+    {
+        var item = await state.ShoppingCartSummaryItems.FindAsync(
+            new object[] { @event.SessionId, @event.Item }, cancellationToken);
+
+        if (item != null)
+        {
+            state.ShoppingCartSummaryItems.Remove(item);
+        }
+
+        return state;
+    }
+}
+
+public class ShoppingCartCheckpointStore : ICheckpointStore<ShoppingCartDbContext>
+{
+    private readonly IDbContextFactory<ShoppingCartDbContext> _dbContextFactory;
+
+    public ShoppingCartCheckpointStore(IDbContextFactory<ShoppingCartDbContext> dbContextFactory)
+    {
+        _dbContextFactory = dbContextFactory;
+    }
+
+    public async Task<Checkpoint<ShoppingCartDbContext>> LoadAsync(CancellationToken cancellationToken)
+    {
+        var state = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var bookmark = await state.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, cancellationToken);
+        var position = bookmark?.Position;
+        return new Checkpoint<ShoppingCartDbContext>(state, position);
+    }
+
+    public async Task SaveAsync(
+        Checkpoint<ShoppingCartDbContext> checkpoint, CancellationToken cancellationToken)
+    {
+        var bookmark = await checkpoint.State.Bookmarks.FindAsync(
+            new object[] { Bookmark.DefaultId }, cancellationToken);
+
+        if (bookmark == null)
+        {
+            bookmark = new Bookmark();
+            checkpoint.State.Bookmarks.Add(bookmark);
+        }
+
+        bookmark.Position = checkpoint.Position!.Value;
+        await checkpoint.State.SaveChangesAsync(cancellationToken);
+    }
+}
