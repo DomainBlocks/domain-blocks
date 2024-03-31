@@ -1,3 +1,4 @@
+using DomainBlocks.Abstractions;
 using SqlStreamStoreStreamVersion = DomainBlocks.ThirdParty.SqlStreamStore.Streams.StreamVersion;
 
 namespace DomainBlocks.Persistence.SqlStreamStore.Extensions;

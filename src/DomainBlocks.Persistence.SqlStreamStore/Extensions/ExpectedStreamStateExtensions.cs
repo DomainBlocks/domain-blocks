@@ -1,3 +1,4 @@
+using DomainBlocks.Abstractions;
 using DomainBlocks.ThirdParty.SqlStreamStore.Streams;
 
 namespace DomainBlocks.Persistence.SqlStreamStore.Extensions;

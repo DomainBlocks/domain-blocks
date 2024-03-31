@@ -1,14 +1,16 @@
 ﻿using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
-using DomainBlocks.Persistence.Events;
+using DomainBlocks.Abstractions;
 using DomainBlocks.Logging;
 using DomainBlocks.Persistence.SqlStreamStore.Extensions;
 using DomainBlocks.ThirdParty.SqlStreamStore;
 using DomainBlocks.ThirdParty.SqlStreamStore.Streams;
 using Microsoft.Extensions.Logging;
-using ErrorMessages = DomainBlocks.Persistence.Exceptions.ErrorMessages;
-using WrongExpectedVersionException = DomainBlocks.Persistence.Exceptions.WrongExpectedVersionException;
+using ErrorMessages = DomainBlocks.Abstractions.Exceptions.ErrorMessages;
+using IStreamSubscription = DomainBlocks.Abstractions.IStreamSubscription;
+using StreamVersion = DomainBlocks.Abstractions.StreamVersion;
+using WrongExpectedVersionException = DomainBlocks.Abstractions.Exceptions.WrongExpectedVersionException;
 
 namespace DomainBlocks.Persistence.SqlStreamStore;
 
@@ -40,6 +42,11 @@ public sealed class SqlStreamStoreEventStore : IEventStore
         CancellationToken cancellationToken = default)
     {
         return ReadStreamInternalAsync(streamName, direction, null, readOrigin, cancellationToken);
+    }
+
+    public IStreamSubscription SubscribeToAll(GlobalPosition? afterPosition = null)
+    {
+        return new AllStreamSubscription(_streamStore, afterPosition);
     }
 
     public Task<StreamVersion?> AppendToStreamAsync(
@@ -96,12 +103,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore
         {
             foreach (var message in page.Messages)
             {
-                var payload = await message.GetJsonData(cancellationToken);
-                var payloadAsBytes = Encoding.UTF8.GetBytes(payload);
-                var metadataAsBytes =
-                    message.JsonMetadata == null ? null : Encoding.UTF8.GetBytes(message.JsonMetadata);
-                var streamVersion = StreamVersion.FromUInt64(Convert.ToUInt64(message.StreamVersion));
-                yield return new ReadEvent(message.Type, payloadAsBytes, metadataAsBytes, streamVersion);
+                yield return await message.ToReadEvent(cancellationToken);
             }
 
             if (page.IsEnd)
@@ -182,7 +184,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore
             Logger.LogDebug("Written events to stream. WriteId {WriteId}", writeId);
 
             Debug.Assert(appendResult.CurrentVersion >= 0);
-            return StreamVersion.FromUInt64(Convert.ToUInt64(appendResult.CurrentVersion));
+            return StreamVersion.FromInt32(appendResult.CurrentVersion);
         }
         catch (DomainBlocks.ThirdParty.SqlStreamStore.Streams.WrongExpectedVersionException ex)
         {

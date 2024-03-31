@@ -1,5 +1,3 @@
-using DomainBlocks.Persistence.Events;
-
 namespace DomainBlocks.Persistence.Builders;
 
 public class SingleEventTypeMappingBuilder<TEvent> : IEventTypeMappingBuilder

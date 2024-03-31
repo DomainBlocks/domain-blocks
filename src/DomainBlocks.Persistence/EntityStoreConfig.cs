@@ -1,5 +1,5 @@
+using DomainBlocks.Abstractions;
 using DomainBlocks.Persistence.Entities;
-using DomainBlocks.Persistence.Events;
 
 namespace DomainBlocks.Persistence;
 

@@ -1,4 +1,4 @@
-using DomainBlocks.Persistence.Events;
+using DomainBlocks.Abstractions;
 
 namespace DomainBlocks.Persistence.Builders;
 

@@ -1,4 +1,4 @@
-namespace DomainBlocks.Persistence.Events;
+namespace DomainBlocks.Abstractions;
 
 public abstract class EventBase
 {

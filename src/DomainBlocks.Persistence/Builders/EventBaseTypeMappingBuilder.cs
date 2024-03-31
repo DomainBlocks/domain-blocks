@@ -1,5 +1,4 @@
 using System.Reflection;
-using DomainBlocks.Persistence.Events;
 
 namespace DomainBlocks.Persistence.Builders;
 

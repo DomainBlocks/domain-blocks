@@ -1,4 +1,3 @@
-using DomainBlocks.Persistence.Events;
 using DomainBlocks.Persistence.Serialization;
 
 namespace DomainBlocks.Persistence.Builders;

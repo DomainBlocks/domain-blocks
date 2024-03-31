@@ -1,4 +1,4 @@
-namespace DomainBlocks.Persistence;
+namespace DomainBlocks.Abstractions;
 
 /// <summary>
 /// Exposes both read and write operations for a store of events.

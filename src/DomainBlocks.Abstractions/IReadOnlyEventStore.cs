@@ -1,6 +1,4 @@
-using DomainBlocks.Persistence.Events;
-
-namespace DomainBlocks.Persistence;
+namespace DomainBlocks.Abstractions;
 
 /// <summary>
 /// Exposes read-only operations for a store of events.
@@ -18,4 +16,6 @@ public interface IReadOnlyEventStore
         StreamReadDirection direction,
         StreamReadOrigin readOrigin = StreamReadOrigin.Default,
         CancellationToken cancellationToken = default);
+
+    IStreamSubscription SubscribeToAll(GlobalPosition? afterPosition = null);
 }

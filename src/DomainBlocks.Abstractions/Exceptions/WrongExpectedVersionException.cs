@@ -1,4 +1,4 @@
-namespace DomainBlocks.Persistence.Exceptions;
+namespace DomainBlocks.Abstractions.Exceptions;
 
 public class WrongExpectedVersionException : Exception
 {

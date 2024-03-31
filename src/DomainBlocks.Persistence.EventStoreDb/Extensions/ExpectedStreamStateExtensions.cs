@@ -1,3 +1,4 @@
+using DomainBlocks.Abstractions;
 using EventStore.Client;
 
 namespace DomainBlocks.Persistence.EventStoreDb.Extensions;

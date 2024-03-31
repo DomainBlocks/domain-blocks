@@ -1,6 +1,4 @@
-using DomainBlocks.Persistence.Events;
-
-namespace DomainBlocks.Persistence;
+namespace DomainBlocks.Abstractions;
 
 /// <summary>
 /// Exposes write-only operations for a store of events.

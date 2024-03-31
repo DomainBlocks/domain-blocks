@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\src\DomainBlocks.Persistence.SqlStreamStore\DomainBlocks.Persistence.SqlStreamStore.csproj" />
+      <ProjectReference Include="..\..\third_party\SQLStreamStore\src\DomainBlocks.ThirdParty.SqlStreamStore.Postgres\DomainBlocks.ThirdParty.SqlStreamStore.Postgres.csproj" />
+    </ItemGroup>
+
+</Project>

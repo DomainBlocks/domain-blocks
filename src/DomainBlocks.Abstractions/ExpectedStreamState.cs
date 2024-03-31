@@ -1,4 +1,4 @@
-namespace DomainBlocks.Persistence;
+namespace DomainBlocks.Abstractions;
 
 public enum ExpectedStreamState
 {

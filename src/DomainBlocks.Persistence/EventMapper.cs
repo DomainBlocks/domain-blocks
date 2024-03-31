@@ -1,6 +1,7 @@
+using DomainBlocks.Abstractions;
 using DomainBlocks.Persistence.Serialization;
 
-namespace DomainBlocks.Persistence.Events;
+namespace DomainBlocks.Persistence;
 
 public class EventMapper
 {

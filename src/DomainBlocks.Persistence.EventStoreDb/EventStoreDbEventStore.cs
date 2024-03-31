@@ -1,11 +1,11 @@
 using System.Runtime.CompilerServices;
-using DomainBlocks.Persistence.Events;
+using DomainBlocks.Abstractions;
+using DomainBlocks.Abstractions.Exceptions;
 using DomainBlocks.Logging;
 using DomainBlocks.Persistence.EventStoreDb.Extensions;
-using DomainBlocks.Persistence.Exceptions;
 using EventStore.Client;
 using Microsoft.Extensions.Logging;
-using WrongExpectedVersionException = DomainBlocks.Persistence.Exceptions.WrongExpectedVersionException;
+using WrongExpectedVersionException = DomainBlocks.Abstractions.Exceptions.WrongExpectedVersionException;
 
 namespace DomainBlocks.Persistence.EventStoreDb;
 
@@ -35,6 +35,11 @@ public sealed class EventStoreDbEventStore : IEventStore
         CancellationToken cancellationToken = default)
     {
         return ReadStreamInternalAsync(streamName, direction, null, readOrigin, cancellationToken);
+    }
+
+    public IStreamSubscription SubscribeToAll(GlobalPosition? afterPosition = null)
+    {
+        throw new NotImplementedException();
     }
 
     public Task<StreamVersion?> AppendToStreamAsync(
@@ -93,10 +98,15 @@ public sealed class EventStoreDbEventStore : IEventStore
 
         await foreach (var resolvedEvent in readStreamResult)
         {
-            var streamVersion = StreamVersion.FromUInt64(resolvedEvent.OriginalEventNumber);
+            var streamVersion = new StreamVersion(resolvedEvent.OriginalEvent.EventNumber);
+            var globalPosition = new GlobalPosition(resolvedEvent.OriginalEvent.Position.CommitPosition);
 
             yield return new ReadEvent(
-                resolvedEvent.Event.EventType, resolvedEvent.Event.Data, resolvedEvent.Event.Metadata, streamVersion);
+                resolvedEvent.Event.EventType,
+                resolvedEvent.Event.Data,
+                resolvedEvent.Event.Metadata,
+                streamVersion,
+                globalPosition);
         }
     }
 
@@ -168,11 +178,11 @@ public sealed class EventStoreDbEventStore : IEventStore
 
             Logger.LogDebug("Written events to stream. WriteId {WriteId}", writeId);
 
-            return StreamVersion.FromUInt64(writeResult.NextExpectedStreamRevision);
+            return new StreamVersion(writeResult.NextExpectedStreamRevision);
         }
         catch (EventStore.Client.WrongExpectedVersionException ex)
         {
-            var actualVersion = StreamVersion.FromUInt64(ex.ActualStreamRevision);
+            var actualVersion = new StreamVersion(ex.ActualStreamRevision);
 
             if (expectedVersion.HasValue)
                 throw new WrongExpectedVersionException(

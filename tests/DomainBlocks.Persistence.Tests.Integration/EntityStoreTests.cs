@@ -1,10 +1,9 @@
 using System.Text.Json;
+using DomainBlocks.Abstractions.Exceptions;
 using DomainBlocks.Persistence.SqlStreamStore;
 using DomainBlocks.Persistence.Builders;
 using DomainBlocks.Persistence.Entities;
-using DomainBlocks.Persistence.Events;
 using DomainBlocks.Persistence.EventStoreDb.Extensions;
-using DomainBlocks.Persistence.Exceptions;
 using DomainBlocks.Persistence.Extensions;
 using DomainBlocks.Persistence.SqlStreamStore.Extensions;
 using DomainBlocks.Persistence.Tests.Integration.Adapters;
@@ -18,11 +17,6 @@ namespace DomainBlocks.Persistence.Tests.Integration;
 [TestFixture]
 public class EntityStoreTests
 {
-    private const string PostgresStreamStoreConnectionString =
-        "Server=localhost;Port=5434;Database=test-events;User Id=postgres;Password=postgres;";
-
-    private const string EventStoreDbConnectionString = "esdb://localhost:2114?tls=false";
-
     private static readonly IEntityStore SqlStreamStoreEntityStore;
     private static readonly IEntityStore EventStoreDbEntityStore;
 
@@ -32,7 +26,7 @@ public class EntityStoreTests
         // See: https://www.npgsql.org/doc/types/datetime.html#timestamps-and-timezones
         AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
-        var streamStoreSettings = new PostgresStreamStoreSettings(PostgresStreamStoreConnectionString);
+        var streamStoreSettings = new PostgresStreamStoreSettings(ConnectionStrings.PostgresStreamStore);
         var streamStore = new PostgresStreamStore(streamStoreSettings);
         streamStore.CreateSchemaIfNotExists().Wait();
 
@@ -50,7 +44,7 @@ public class EntityStoreTests
             .SetEventMapper(eventMapper);
 
         var sqlStreamStoreConfig = storeConfigBuilder.UseSqlStreamStore(streamStore).Build();
-        var eventStoreDbConfig = storeConfigBuilder.UseEventStoreDb(EventStoreDbConnectionString).Build();
+        var eventStoreDbConfig = storeConfigBuilder.UseEventStoreDb(ConnectionStrings.EventStoreDb).Build();
 
         SqlStreamStoreEntityStore = new EntityStore(sqlStreamStoreConfig);
         EventStoreDbEntityStore = new EntityStore(eventStoreDbConfig);
@@ -127,7 +121,7 @@ public class EntityStoreTests
     [Test]
     public async Task MutableScenario()
     {
-        var streamStoreSettings = new PostgresStreamStoreSettings(PostgresStreamStoreConnectionString);
+        var streamStoreSettings = new PostgresStreamStoreSettings(ConnectionStrings.PostgresStreamStore);
         var streamStore = new PostgresStreamStore(streamStoreSettings);
 
         var config = new EntityStoreConfigBuilder()
@@ -153,7 +147,7 @@ public class EntityStoreTests
     public async Task FunctionalEntityWrapperScenario()
     {
         var config = new EntityStoreConfigBuilder()
-            .UseEventStoreDb(EventStoreDbConnectionString)
+            .UseEventStoreDb(ConnectionStrings.EventStoreDb)
             .AddEntityAdapters(x => x.AddGenericFactoryFor(typeof(FunctionalEntityWrapperAdapter<>)))
             .MapEvents(x => x.MapAll<IDomainEvent>())
             .Configure<FunctionalEntityWrapper<FunctionalShoppingCart>>(config =>
@@ -180,7 +174,7 @@ public class EntityStoreTests
     [Test]
     public async Task WithoutBuilderScenario()
     {
-        var streamStoreSettings = new PostgresStreamStoreSettings(PostgresStreamStoreConnectionString);
+        var streamStoreSettings = new PostgresStreamStoreSettings(ConnectionStrings.PostgresStreamStore);
         var streamStore = new PostgresStreamStore(streamStoreSettings);
         var eventStore = new SqlStreamStoreEventStore(streamStore);
 

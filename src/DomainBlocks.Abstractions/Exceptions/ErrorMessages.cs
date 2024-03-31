@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace DomainBlocks.Persistence.Exceptions;
+namespace DomainBlocks.Abstractions.Exceptions;
 
 public static class ErrorMessages
 {
