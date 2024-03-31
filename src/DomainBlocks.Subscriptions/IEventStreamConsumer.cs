@@ -10,6 +10,6 @@ public interface IEventStreamConsumer
     Task OnCaughtUp(CancellationToken cancellationToken);
     Task OnFellBehind(CancellationToken cancellationToken);
     Task OnEvent(ReadEvent readEvent, CancellationToken cancellationToken);
-    Task<long?> OnLoadCheckpointAsync(CancellationToken cancellationToken);
-    Task OnSaveCheckpointAsync(long position, CancellationToken cancellationToken);
+    Task<GlobalPosition?> OnLoadCheckpointAsync(CancellationToken cancellationToken);
+    Task OnSaveCheckpointAsync(GlobalPosition position, CancellationToken cancellationToken);
 }

@@ -5,7 +5,9 @@
     </PropertyGroup>
 
     <ItemGroup>
+      <ProjectReference Include="..\..\examples\shopping\Shopping.ReadModel\Shopping.ReadModel.csproj" />
       <ProjectReference Include="..\..\src\DomainBlocks.Persistence.SqlStreamStore\DomainBlocks.Persistence.SqlStreamStore.csproj" />
+      <ProjectReference Include="..\..\src\DomainBlocks.Subscriptions\DomainBlocks.Subscriptions.csproj" />
       <ProjectReference Include="..\..\third_party\SQLStreamStore\src\DomainBlocks.ThirdParty.SqlStreamStore.Postgres\DomainBlocks.ThirdParty.SqlStreamStore.Postgres.csproj" />
     </ItemGroup>
 
