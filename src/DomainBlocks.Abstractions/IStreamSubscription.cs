@@ -2,5 +2,5 @@ namespace DomainBlocks.Abstractions;
 
 public interface IStreamSubscription : IDisposable
 {
-    IAsyncEnumerable<IStreamMessage> ReadMessagesAsync(CancellationToken cancellationToken = default);
+    IAsyncEnumerable<IStreamMessage> ConsumeAsync(CancellationToken cancellationToken = default);
 }

@@ -6,7 +6,7 @@ public interface IEventStreamConsumer
 {
     Task OnInitializing(CancellationToken cancellationToken);
     Task OnSubscribing(CancellationToken cancellationToken);
-    Task OnSubscriptionDropped(CancellationToken cancellationToken);
+    Task OnSubscriptionDropped(Exception? exception, CancellationToken cancellationToken);
     Task OnCaughtUp(CancellationToken cancellationToken);
     Task OnFellBehind(CancellationToken cancellationToken);
     Task OnEvent(ReadEvent readEvent, CancellationToken cancellationToken);

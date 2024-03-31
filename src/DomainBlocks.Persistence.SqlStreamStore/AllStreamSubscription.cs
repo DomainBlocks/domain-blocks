@@ -49,6 +49,6 @@ internal class AllStreamSubscription : IStreamSubscription
         _subscription.Dispose();
     }
 
-    public IAsyncEnumerable<IStreamMessage> ReadMessagesAsync(CancellationToken cancellationToken = default) =>
+    public IAsyncEnumerable<IStreamMessage> ConsumeAsync(CancellationToken cancellationToken = default) =>
         _channel.Reader.ReadAllAsync(cancellationToken);
 }

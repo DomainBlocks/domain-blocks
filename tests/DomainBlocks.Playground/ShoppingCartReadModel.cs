@@ -29,7 +29,7 @@ public class ShoppingCartReadModel : IEventStreamConsumer
         _dbContext = await _contextFactory.CreateDbContextAsync(cancellationToken);
     }
 
-    public Task OnSubscriptionDropped(CancellationToken cancellationToken)
+    public Task OnSubscriptionDropped(Exception? exception, CancellationToken cancellationToken)
     {
         return Task.CompletedTask;
     }
