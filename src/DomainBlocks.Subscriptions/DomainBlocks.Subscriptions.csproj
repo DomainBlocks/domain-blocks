@@ -1,5 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <ItemGroup>
-    <ProjectReference Include="..\DomainBlocks.Abstractions\DomainBlocks.Abstractions.csproj" />
-  </ItemGroup>
-</Project>

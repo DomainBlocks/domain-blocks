@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\examples\shopping\Shopping.ReadModel\Shopping.ReadModel.csproj" />
+      <ProjectReference Include="..\..\src\DomainBlocks.V1.DependencyInjection\DomainBlocks.V1.DependencyInjection.csproj" />
+      <ProjectReference Include="..\..\src\DomainBlocks.V1.SqlStreamStore\DomainBlocks.V1.SqlStreamStore.csproj" />
+      <ProjectReference Include="..\..\third_party\SQLStreamStore\src\DomainBlocks.ThirdParty.SqlStreamStore.Postgres\DomainBlocks.ThirdParty.SqlStreamStore.Postgres.csproj" />
+    </ItemGroup>
+
+</Project>

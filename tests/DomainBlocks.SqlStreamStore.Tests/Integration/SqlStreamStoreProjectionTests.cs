@@ -1,11 +1,10 @@
 ﻿using DomainBlocks.Core.Projections.Builders;
 using DomainBlocks.Core.Subscriptions;
 using DomainBlocks.DependencyInjection;
-using DomainBlocks.Persistence;
-using DomainBlocks.Persistence.DependencyInjection;
-using DomainBlocks.Persistence.SqlStreamStore;
-using DomainBlocks.Persistence.SqlStreamStore.Extensions;
+using DomainBlocks.V1.DependencyInjection;
+using DomainBlocks.V1.SqlStreamStore.Extensions;
 using DomainBlocks.SqlStreamStore.Subscriptions;
+using DomainBlocks.V1.Persistence;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 using Shopping.Domain;

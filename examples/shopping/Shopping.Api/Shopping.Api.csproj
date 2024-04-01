@@ -6,8 +6,8 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\..\src\DomainBlocks.Persistence.DependencyInjection\DomainBlocks.Persistence.DependencyInjection.csproj" />
-      <ProjectReference Include="..\..\..\src\DomainBlocks.Persistence.EventStoreDb\DomainBlocks.Persistence.EventStoreDb.csproj" />
+      <ProjectReference Include="..\..\..\src\DomainBlocks.V1.DependencyInjection\DomainBlocks.V1.DependencyInjection.csproj" />
+      <ProjectReference Include="..\..\..\src\DomainBlocks.V1.EventStoreDb\DomainBlocks.V1.EventStoreDb.csproj" />
       <ProjectReference Include="..\Shopping.Domain.Events\Shopping.Domain.Events.csproj" />
       <ProjectReference Include="..\Shopping.Domain\Shopping.Domain.csproj" />
       <ProjectReference Include="..\Shopping.ReadModel\Shopping.ReadModel.csproj" />

@@ -12,7 +12,6 @@
     <ProjectReference Include="..\..\..\src\DomainBlocks.Hosting\DomainBlocks.Hosting.csproj" />
     <ProjectReference Include="..\..\..\src\DomainBlocks.SqlStreamStore.Postgres\DomainBlocks.SqlStreamStore.Postgres.csproj" />
     <ProjectReference Include="..\..\..\src\DomainBlocks.SqlStreamStore\DomainBlocks.SqlStreamStore.csproj" />
-    <ProjectReference Include="..\..\..\src\DomainBlocks.Subscriptions\DomainBlocks.Subscriptions.csproj" />
     <ProjectReference Include="..\..\..\third_party\SQLStreamStore\src\DomainBlocks.ThirdParty.SqlStreamStore.Postgres\DomainBlocks.ThirdParty.SqlStreamStore.Postgres.csproj" />
     <ProjectReference Include="..\Shopping.Domain.Events\Shopping.Domain.Events.csproj" />
   </ItemGroup>
