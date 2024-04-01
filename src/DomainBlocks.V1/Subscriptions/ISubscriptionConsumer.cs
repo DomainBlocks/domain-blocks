@@ -2,14 +2,10 @@ using DomainBlocks.V1.Abstractions;
 
 namespace DomainBlocks.V1.Subscriptions;
 
-public interface IEventStreamConsumer
+public interface ISubscriptionConsumer
 {
     Task OnInitializing(CancellationToken cancellationToken);
     Task OnSubscribing(CancellationToken cancellationToken);
     Task OnSubscriptionDropped(Exception? exception, CancellationToken cancellationToken);
-    Task OnCaughtUp(CancellationToken cancellationToken);
-    Task OnFellBehind(CancellationToken cancellationToken);
     Task OnEvent(ReadEvent readEvent, CancellationToken cancellationToken);
-    Task<GlobalPosition?> OnLoadCheckpointAsync(CancellationToken cancellationToken);
-    Task OnSaveCheckpointAsync(GlobalPosition position, CancellationToken cancellationToken);
 }

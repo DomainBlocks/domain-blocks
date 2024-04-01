@@ -8,6 +8,23 @@ using Microsoft.Extensions.DependencyInjection;
 using Shopping.Domain.Events;
 using Shopping.ReadModel;
 
+// Persistent subscriptions test
+// var eventStoreDbSettings = EventStoreClientSettings.Create("esdb://localhost:2114?tls=false");
+// var client = new EventStorePersistentSubscriptionsClient(eventStoreDbSettings);
+//
+// await client.CreateToAllAsync(
+//     "test-all-group",
+//     EventTypeFilter.ExcludeSystemEvents(),
+//     new PersistentSubscriptionSettings());
+//
+// var result = client.SubscribeToAll("test-all-group");
+//
+// await foreach (var e in result)
+// {
+//     Console.WriteLine(e.Event.EventType);
+//     await result.Ack(e);
+// }
+
 var settings = new PostgresStreamStoreSettings(
     "Server=localhost;Port=5434;Database=test-events;User Id=postgres;Password=postgres;");
 
@@ -16,8 +33,8 @@ await streamStore.CreateSchemaIfNotExists();
 
 var eventStore = new SqlStreamStoreEventStore(streamStore);
 
-// Builder concept
-// var subscriber = new StreamSubscriberBuilder()
+// Builder idea
+// var config = new CatchUpSubscriptionConfigBuilder()
 //     .UseSqlStreamStore(streamStore)
 //     .SubscribeToAll()
 //     .AddConsumer<ShoppingCartReadModel>(config =>
@@ -31,7 +48,7 @@ var services = new ServiceCollection();
 
 services.AddDbContext<ShoppingCartDbContext>(
     options => options.UseNpgsql(
-        "Server=shopping-db;Port=5432;Database=shopping-read;User Id=postgres;Password=postgres;"),
+        "Server=localhost;Port=5434;Database=shopping-read;User Id=postgres;Password=postgres;"),
     optionsLifetime: ServiceLifetime.Singleton);
 
 services.AddDbContextFactory<ShoppingCartDbContext>();
@@ -39,13 +56,13 @@ services.AddDbContextFactory<ShoppingCartDbContext>();
 var serviceProvider = services.BuildServiceProvider();
 
 var dbContextFactory = serviceProvider.GetRequiredService<IDbContextFactory<ShoppingCartDbContext>>();
-
+var projection = new ShoppingCartProjection(dbContextFactory);
 var eventMapper = new EventMapperBuilder().MapAll<IDomainEvent>(_ => { }).Build();
-var readModel = new ShoppingCartReadModel(dbContextFactory, eventMapper);
+var consumer = new ReadModelSubscriptionConsumer<ShoppingCartDbContext>(projection, eventMapper);
 
 var subscriber = new EventStreamSubscriber(
     pos => eventStore.SubscribeToAll(pos),
-    new[] { readModel });
+    new[] { consumer });
 
 subscriber.Start();
 await subscriber.WaitForCompletedAsync();

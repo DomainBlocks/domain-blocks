@@ -5,14 +5,15 @@ namespace DomainBlocks.V1.Subscriptions;
 public class EventStreamSubscriber
 {
     private readonly Func<GlobalPosition?, IStreamSubscription> _subscriptionFactory;
-    private readonly IEventStreamConsumer[] _consumers;
+    private readonly ICatchUpSubscriptionConsumer[] _consumers;
     private Task? _consumeTask;
 
     public EventStreamSubscriber(
-        Func<GlobalPosition?, IStreamSubscription> subscriptionFactory, IEnumerable<IEventStreamConsumer> consumers)
+        Func<GlobalPosition?, IStreamSubscription> subscriptionFactory,
+        IEnumerable<ICatchUpSubscriptionConsumer> consumers)
     {
         _subscriptionFactory = subscriptionFactory;
-        _consumers = consumers as IEventStreamConsumer[] ?? consumers.ToArray();
+        _consumers = consumers as ICatchUpSubscriptionConsumer[] ?? consumers.ToArray();
     }
 
     public void Start()
@@ -24,6 +25,8 @@ public class EventStreamSubscriber
 
     private async Task Run()
     {
+        await _consumers[0].OnInitializing(CancellationToken.None);
+
         // TODO: Get min position
         var continueAfterPosition = await _consumers[0].OnLoadCheckpointAsync(CancellationToken.None);
 
