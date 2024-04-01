@@ -3,6 +3,15 @@ using DomainBlocks.V1.Persistence;
 
 namespace DomainBlocks.V1.Subscriptions;
 
+public static class ReadModelSubscriptionConsumer
+{
+    public static ReadModelSubscriptionConsumer<TView> Create<TView>(
+        IReadModelProjection<TView> projection, EventMapper eventMapper)
+    {
+        return new ReadModelSubscriptionConsumer<TView>(projection, eventMapper);
+    }
+}
+
 public class ReadModelSubscriptionConsumer<TView> : ICatchUpSubscriptionConsumer
 {
     private readonly IReadModelProjection<TView> _projection;

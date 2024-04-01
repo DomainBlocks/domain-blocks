@@ -40,8 +40,21 @@ services:
       - test-postgres-volume-data:/var/lib/postgresql/data
     networks:
       - test-network
+  
+  test-mongodb:
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+    volumes:
+      - test-mongodb-data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+    networks:
+      - test-network
 
 volumes:
   test-eventstore-volume-data:
   test-eventstore-volume-logs:
   test-postgres-volume-data:
+  test-mongodb-data:

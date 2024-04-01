@@ -6,11 +6,11 @@ using Shopping.ReadModel;
 
 namespace DomainBlocks.V1.Playground;
 
-public class ShoppingCartProjection : ReadModelProjectionBase<ShoppingCartDbContext>
+public class PostgresShoppingCartProjection : ReadModelProjectionBase<ShoppingCartDbContext>
 {
     private readonly IDbContextFactory<ShoppingCartDbContext> _dbContextFactory;
 
-    public ShoppingCartProjection(IDbContextFactory<ShoppingCartDbContext> dbContextFactory)
+    public PostgresShoppingCartProjection(IDbContextFactory<ShoppingCartDbContext> dbContextFactory)
     {
         _dbContextFactory = dbContextFactory;
 

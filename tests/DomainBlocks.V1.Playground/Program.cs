@@ -56,9 +56,10 @@ services.AddDbContextFactory<ShoppingCartDbContext>();
 var serviceProvider = services.BuildServiceProvider();
 
 var dbContextFactory = serviceProvider.GetRequiredService<IDbContextFactory<ShoppingCartDbContext>>();
-var projection = new ShoppingCartProjection(dbContextFactory);
+//var projection = new PostgresShoppingCartProjection(dbContextFactory);
+var projection = new MongoShoppingCartProjection();
 var eventMapper = new EventMapperBuilder().MapAll<IDomainEvent>(_ => { }).Build();
-var consumer = new ReadModelSubscriptionConsumer<ShoppingCartDbContext>(projection, eventMapper);
+var consumer = ReadModelSubscriptionConsumer.Create(projection, eventMapper);
 
 var subscriber = new EventStreamSubscriber(
     pos => eventStore.SubscribeToAll(pos),
