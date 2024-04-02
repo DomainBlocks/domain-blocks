@@ -6,68 +6,86 @@ using Shopping.ReadModel;
 
 namespace DomainBlocks.V1.Playground;
 
-public class PostgresShoppingCartProjection : ReadModelProjectionBase<ShoppingCartDbContext>
+public class PostgresShoppingCartProjection : CatchUpSubscriptionConsumerBase
 {
     private readonly IDbContextFactory<ShoppingCartDbContext> _dbContextFactory;
+    private ShoppingCartDbContext? _currentDbContext;
 
     public PostgresShoppingCartProjection(IDbContextFactory<ShoppingCartDbContext> dbContextFactory)
     {
         _dbContextFactory = dbContextFactory;
 
-        When<ItemAddedToShoppingCart>(async (v, e, ct) =>
+        When<ItemAddedToShoppingCart>(async (e, ct) =>
         {
-            var item = await v.ShoppingCartSummaryItems.FindAsync(new object[] { e.SessionId, e.Item }, ct);
-            if (item != null)
+            var cart = await View.ShoppingCarts.FindAsync(new object[] { e.SessionId }, ct);
+            if (cart == null)
             {
-                return;
+                cart = new ShoppingCart
+                {
+                    SessionId = e.SessionId
+                };
+
+                View.ShoppingCarts.Add(cart);
             }
 
-            v.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem
-            {
-                SessionId = e.SessionId,
-                Item = e.Item
-            });
+            cart.Items.Add(new ShoppingCartItem { SessionId = e.SessionId, Name = e.Item });
         });
 
-        When<ItemRemovedFromShoppingCart>(async (v, e, ct) =>
+        When<ItemRemovedFromShoppingCart>(async (e, ct) =>
         {
-            var item = await v.ShoppingCartSummaryItems.FindAsync(new object[] { e.SessionId, e.Item }, ct);
-            if (item != null)
+            var cart = await View.ShoppingCarts.FindAsync(new object[] { e.SessionId }, ct);
+            if (cart != null)
             {
-                v.ShoppingCartSummaryItems.Remove(item);
+                var itemToRemove = cart.Items.SingleOrDefault(x => x.Name == e.Item);
+                if (itemToRemove != null)
+                {
+                    cart.Items.Remove(itemToRemove);
+                }
             }
         });
     }
+
+    private ShoppingCartDbContext View => _currentDbContext ??= _dbContextFactory.CreateDbContext();
 
     public override async Task OnInitializingAsync(CancellationToken cancellationToken)
     {
-        var dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        await using var dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
         await dbContext.Database.EnsureCreatedAsync(cancellationToken);
     }
 
-    public override Task<ShoppingCartDbContext> GetViewAsync(CancellationToken cancellationToken)
+    public override async Task<GlobalPosition?> OnLoadCheckpointAsync(CancellationToken cancellationToken)
     {
-        return _dbContextFactory.CreateDbContextAsync(cancellationToken);
-    }
-
-    public override async Task<GlobalPosition?> OnLoadCheckpointAsync(
-        ShoppingCartDbContext view, CancellationToken cancellationToken)
-    {
-        var bookmark = await view.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, cancellationToken);
+        var bookmark = await View.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, cancellationToken);
         return bookmark?.Position == null ? null : GlobalPosition.FromInt64(bookmark.Position);
     }
 
-    public override async Task OnSaveCheckpointAsync(
-        ShoppingCartDbContext view, GlobalPosition position, CancellationToken cancellationToken)
+    public override async Task OnSaveCheckpointAsync(GlobalPosition position, CancellationToken cancellationToken)
     {
-        var bookmark = await view.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, cancellationToken);
+        if (_currentDbContext == null)
+        {
+            // Nothing to do
+            return;
+        }
+
+        var bookmark = await View.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, cancellationToken);
         if (bookmark == null)
         {
             bookmark = new Bookmark();
-            view.Bookmarks.Add(bookmark);
+            View.Bookmarks.Add(bookmark);
         }
 
         bookmark.Position = position.ToInt64();
-        await view.SaveChangesAsync(cancellationToken);
+
+        await View.SaveChangesAsync(cancellationToken);
+        await DisposeCurrentDbContextAsync();
+    }
+
+    private async ValueTask DisposeCurrentDbContextAsync()
+    {
+        if (_currentDbContext != null)
+        {
+            await _currentDbContext.DisposeAsync();
+            _currentDbContext = null;
+        }
     }
 }

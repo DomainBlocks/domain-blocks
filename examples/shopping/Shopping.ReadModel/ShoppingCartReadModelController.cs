@@ -17,7 +17,7 @@ public class ShoppingCartReadModelController : ControllerBase
     [HttpGet("sessionIds")]
     public async Task<ActionResult<IEnumerable<Guid>>> GetCartIds()
     {
-        var cartIds = await _dbContext.ShoppingCartSummaryItems
+        var cartIds = await _dbContext.ShoppingCarts
             .AsNoTracking()
             .Select(i => i.SessionId).Distinct()
             .ToListAsync();
@@ -26,11 +26,12 @@ public class ShoppingCartReadModelController : ControllerBase
     }
 
     [HttpGet("{sessionId:guid}/items")]
-    public async Task<ActionResult<IEnumerable<ShoppingCartSummaryItem>>> GetItemsInCart(Guid sessionId)
+    public async Task<ActionResult<IEnumerable<ShoppingCartItem>>> GetItemsInCart(Guid sessionId)
     {
-        var items = await _dbContext.ShoppingCartSummaryItems
+        var items = await _dbContext.ShoppingCarts
             .AsNoTracking()
             .Where(c => c.SessionId == sessionId)
+            .SelectMany(c => c.Items)
             .ToListAsync();
 
         return Ok(items);

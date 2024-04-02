@@ -4,50 +4,37 @@ namespace DomainBlocks.V1.Subscriptions;
 
 public abstract class CatchUpSubscriptionConsumerBase : ICatchUpSubscriptionConsumer
 {
-    private static readonly Dictionary<Type, Func<object, CancellationToken, Task>> EventHandlers = new();
+    private readonly Dictionary<Type, Func<object, CancellationToken, Task>> _eventHandlers = new();
 
-    public virtual Task OnInitializing(CancellationToken cancellationToken)
+    public virtual Task OnInitializingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public virtual Task OnSubscribingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public virtual Task OnSubscriptionDroppedAsync(Exception? exception, CancellationToken cancellationToken) =>
+        Task.CompletedTask;
+
+    public virtual async Task OnEventAsync(object @event, CancellationToken cancellationToken)
     {
-        return Task.CompletedTask;
+        var eventType = @event.GetType();
+
+        if (_eventHandlers.TryGetValue(eventType, out var eventApplier))
+        {
+            await eventApplier(@event, cancellationToken);
+        }
     }
 
-    public virtual Task OnSubscribing(CancellationToken cancellationToken)
-    {
-        return Task.CompletedTask;
-    }
+    public virtual Task OnCaughtUpAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
-    public virtual Task OnSubscriptionDropped(Exception? exception, CancellationToken cancellationToken)
-    {
-        return Task.CompletedTask;
-    }
+    public virtual Task OnFellBehindAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
-    Task ISubscriptionConsumer.OnEvent(ReadEvent readEvent, CancellationToken cancellationToken)
-    {
-        return Task.CompletedTask;
-    }
+    public virtual Task<GlobalPosition?> OnLoadCheckpointAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(new GlobalPosition?());
 
-    public virtual Task OnCaughtUp(CancellationToken cancellationToken)
-    {
-        return Task.CompletedTask;
-    }
-
-    public virtual Task OnFellBehind(CancellationToken cancellationToken)
-    {
-        return Task.CompletedTask;
-    }
-
-    public virtual Task<GlobalPosition?> OnLoadCheckpointAsync(CancellationToken cancellationToken)
-    {
-        return Task.FromResult(new GlobalPosition?());
-    }
-
-    public virtual Task OnSaveCheckpointAsync(GlobalPosition position, CancellationToken cancellationToken)
-    {
-        return Task.CompletedTask;
-    }
+    public virtual Task OnSaveCheckpointAsync(GlobalPosition position, CancellationToken cancellationToken) =>
+        Task.CompletedTask;
 
     protected void When<TEvent>(Func<TEvent, CancellationToken, Task> eventApplier)
     {
-        EventHandlers.Add(typeof(TEvent), (e, ct) => eventApplier((TEvent)e, ct));
+        _eventHandlers.Add(typeof(TEvent), (e, ct) => eventApplier((TEvent)e, ct));
     }
 }

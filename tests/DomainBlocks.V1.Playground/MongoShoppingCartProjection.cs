@@ -4,40 +4,21 @@ using Shopping.Domain.Events;
 
 namespace DomainBlocks.V1.Playground;
 
-public class MongoShoppingCartProjection : ReadModelProjectionBase<IMongoCollection<MongoShoppingCartSummaryItem>>
+public class MongoShoppingCartProjection : CatchUpSubscriptionConsumerBase
 {
-    private readonly IMongoCollection<MongoShoppingCartSummaryItem> _collection;
-
     public MongoShoppingCartProjection()
     {
         var client = new MongoClient("mongodb://admin:password@localhost:27017");
         var database = client.GetDatabase("test");
-        _collection = database.GetCollection<MongoShoppingCartSummaryItem>("users");
+        var collection = database.GetCollection<MongoShoppingCart>("users");
 
-        When<ItemAddedToShoppingCart>(async (v, e, ct) =>
+        When<ItemAddedToShoppingCart>(async (e, ct) =>
         {
-            var result = await _collection
+            var cart = await collection
                 .Find(x => x.SessionId == e.SessionId)
                 .FirstOrDefaultAsync(cancellationToken: ct);
 
-            if (result != null)
-            {
-                return;
-            }
-
-            await v.InsertOneAsync(
-                new MongoShoppingCartSummaryItem
-                {
-                    SessionId = e.SessionId,
-                    Item = e.Item
-                },
-                cancellationToken: ct);
+            // TODO
         });
-    }
-
-    public override Task<IMongoCollection<MongoShoppingCartSummaryItem>> GetViewAsync(
-        CancellationToken cancellationToken)
-    {
-        return Task.FromResult(_collection);
     }
 }

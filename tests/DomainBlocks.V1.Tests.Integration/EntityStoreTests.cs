@@ -134,8 +134,9 @@ public class EntityStoreTests
         var store = new EntityStore(config);
 
         var entity = new MutableShoppingCart();
-        entity.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Foo"));
-        entity.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Bar"));
+        var sessionId = Guid.NewGuid();
+        entity.AddItem(new ShoppingCartItem(sessionId, "Foo"));
+        entity.AddItem(new ShoppingCartItem(sessionId, "Bar"));
         await store.SaveAsync(entity);
 
         var reloadedEntity = await store.LoadAsync<MutableShoppingCart>(entity.Id.ToString());

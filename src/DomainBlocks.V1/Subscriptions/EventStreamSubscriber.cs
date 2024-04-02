@@ -1,4 +1,5 @@
 using DomainBlocks.V1.Abstractions;
+using DomainBlocks.V1.Persistence;
 
 namespace DomainBlocks.V1.Subscriptions;
 
@@ -6,14 +7,17 @@ public class EventStreamSubscriber
 {
     private readonly Func<GlobalPosition?, IStreamSubscription> _subscriptionFactory;
     private readonly ICatchUpSubscriptionConsumer[] _consumers;
+    private readonly EventMapper _eventMapper;
     private Task? _consumeTask;
 
     public EventStreamSubscriber(
         Func<GlobalPosition?, IStreamSubscription> subscriptionFactory,
-        IEnumerable<ICatchUpSubscriptionConsumer> consumers)
+        IEnumerable<ICatchUpSubscriptionConsumer> consumers,
+        EventMapper eventMapper)
     {
         _subscriptionFactory = subscriptionFactory;
         _consumers = consumers as ICatchUpSubscriptionConsumer[] ?? consumers.ToArray();
+        _eventMapper = eventMapper;
     }
 
     public void Start()
@@ -25,7 +29,7 @@ public class EventStreamSubscriber
 
     private async Task Run()
     {
-        await _consumers[0].OnInitializing(CancellationToken.None);
+        await _consumers[0].OnInitializingAsync(CancellationToken.None);
 
         // TODO: Get min position
         var continueAfterPosition = await _consumers[0].OnLoadCheckpointAsync(CancellationToken.None);
@@ -35,6 +39,8 @@ public class EventStreamSubscriber
 
         var nextMessageTask = messageEnumerator.MoveNextAsync().AsTask();
         var tickTask = Task.Delay(TimeSpan.FromSeconds(1));
+
+        var currentPosition = continueAfterPosition;
 
         while (true)
         {
@@ -49,30 +55,37 @@ public class EventStreamSubscriber
                     switch (message)
                     {
                         case StreamMessage.Event e:
+                            currentPosition = e.ReadEvent.GlobalPosition;
+
                             foreach (var consumer in _consumers)
                             {
-                                await consumer.OnEvent(e.ReadEvent, CancellationToken.None);
+                                var events = _eventMapper.FromReadEvent(e.ReadEvent);
+
+                                foreach (var @event in events)
+                                {
+                                    await consumer.OnEventAsync(@event, CancellationToken.None);
+                                }
                             }
 
                             break;
                         case StreamMessage.CaughtUp:
                             foreach (var consumer in _consumers)
                             {
-                                await consumer.OnCaughtUp(CancellationToken.None);
+                                await consumer.OnCaughtUpAsync(CancellationToken.None);
                             }
 
                             break;
                         case StreamMessage.FellBehind:
                             foreach (var consumer in _consumers)
                             {
-                                await consumer.OnFellBehind(CancellationToken.None);
+                                await consumer.OnFellBehindAsync(CancellationToken.None);
                             }
 
                             break;
                         case StreamMessage.SubscriptionDropped dropped:
                             foreach (var consumer in _consumers)
                             {
-                                await consumer.OnSubscriptionDropped(dropped.Exception, CancellationToken.None);
+                                await consumer.OnSubscriptionDroppedAsync(dropped.Exception, CancellationToken.None);
                             }
 
                             break;
@@ -85,6 +98,9 @@ public class EventStreamSubscriber
             {
                 Console.WriteLine("Tick");
                 tickTask = Task.Delay(TimeSpan.FromSeconds(1));
+
+                if (currentPosition.HasValue)
+                    await _consumers[0].OnSaveCheckpointAsync(currentPosition.Value, CancellationToken.None);
             }
         }
     }

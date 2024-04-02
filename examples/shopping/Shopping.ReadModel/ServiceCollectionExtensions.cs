@@ -136,24 +136,29 @@ public static class ServiceCollectionExtensions
         builder
             .When<ItemAddedToShoppingCart>(async (e, s, ct) =>
             {
-                var item = await s.ShoppingCartSummaryItems.FindAsync(new object[] { e.SessionId, e.Item }, ct);
-                if (item != null)
+                var cart = await s.ShoppingCarts.FindAsync(new object[] { e.SessionId }, ct);
+                if (cart == null)
                 {
-                    return;
+                    cart = new ShoppingCart
+                    {
+                        SessionId = e.SessionId
+                    };
+
+                    s.ShoppingCarts.Add(cart);
                 }
 
-                s.ShoppingCartSummaryItems.Add(new ShoppingCartSummaryItem
-                {
-                    SessionId = e.SessionId,
-                    Item = e.Item
-                });
+                cart.Items.Add(new ShoppingCartItem { SessionId = e.SessionId, Name = e.Item });
             })
             .When<ItemRemovedFromShoppingCart>(async (e, s, ct) =>
             {
-                var item = await s.ShoppingCartSummaryItems.FindAsync(new object[] { e.SessionId, e.Item }, ct);
-                if (item != null)
+                var cart = await s.ShoppingCarts.FindAsync(new object[] { e.SessionId }, ct);
+                if (cart != null)
                 {
-                    s.ShoppingCartSummaryItems.Remove(item);
+                    var itemToRemove = cart.Items.SingleOrDefault(x => x.Name == e.Item);
+                    if (itemToRemove != null)
+                    {
+                        cart.Items.Remove(itemToRemove);
+                    }
                 }
             });
     }

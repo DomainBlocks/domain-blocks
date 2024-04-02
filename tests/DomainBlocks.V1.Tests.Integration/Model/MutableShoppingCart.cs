@@ -15,7 +15,7 @@ public class MutableShoppingCart : MutableEntityBase
     {
         if (Id == Guid.Empty)
         {
-            Raise(new ShoppingSessionStarted(Guid.NewGuid()));
+            Raise(new ShoppingSessionStarted(item.SessionId));
         }
 
         Raise(new ItemAddedToShoppingCart(item.SessionId, item.Name));

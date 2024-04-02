@@ -16,16 +16,20 @@ public class ShoppingCartDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
+        modelBuilder.Entity<ShoppingCart>(e =>
+        {
+            e.HasKey(x => x.SessionId);
+            e.HasMany(x => x.Items).WithOne().HasForeignKey(x => x.SessionId);
+        });
+
         modelBuilder.Entity<Bookmark>(e =>
         {
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).ValueGeneratedNever();
         });
-
-        modelBuilder.Entity<ShoppingCartSummaryItem>().HasKey(i => new { i.SessionId, i.Item });
     }
 
-    public DbSet<Bookmark> Bookmarks { get; set; } = null!;
+    public DbSet<ShoppingCart> ShoppingCarts { get; set; } = null!;
 
-    public DbSet<ShoppingCartSummaryItem> ShoppingCartSummaryItems { get; set; } = null!;
+    public DbSet<Bookmark> Bookmarks { get; set; } = null!;
 }
