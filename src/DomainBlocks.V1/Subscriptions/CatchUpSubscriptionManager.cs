@@ -3,14 +3,14 @@ using DomainBlocks.V1.Persistence;
 
 namespace DomainBlocks.V1.Subscriptions;
 
-public class EventStreamSubscriber
+public class CatchUpSubscriptionManager
 {
     private readonly Func<GlobalPosition?, IStreamSubscription> _subscriptionFactory;
     private readonly ICatchUpSubscriptionConsumer[] _consumers;
     private readonly EventMapper _eventMapper;
     private Task? _consumeTask;
 
-    public EventStreamSubscriber(
+    public CatchUpSubscriptionManager(
         Func<GlobalPosition?, IStreamSubscription> subscriptionFactory,
         IEnumerable<ICatchUpSubscriptionConsumer> consumers,
         EventMapper eventMapper)

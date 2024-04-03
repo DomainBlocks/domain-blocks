@@ -134,31 +134,29 @@ public static class ServiceCollectionExtensions
         where TPosition : struct, IEquatable<TPosition>, IComparable<TPosition>
     {
         builder
-            .When<ItemAddedToShoppingCart>(async (e, s, ct) =>
+            .When<ShoppingSessionStarted>(async (e, s, ct) =>
             {
-                var cart = await s.ShoppingCarts.FindAsync(new object[] { e.SessionId }, ct);
+                var cart = await s.ShoppingCarts.FindAsync(new object?[] { e.SessionId }, cancellationToken: ct);
                 if (cart == null)
                 {
-                    cart = new ShoppingCart
-                    {
-                        SessionId = e.SessionId
-                    };
-
+                    cart = new ShoppingCart { SessionId = e.SessionId };
                     s.ShoppingCarts.Add(cart);
                 }
-
-                cart.Items.Add(new ShoppingCartItem { SessionId = e.SessionId, Name = e.Item });
+            })
+            .When<ItemAddedToShoppingCart>(async (e, s, ct) =>
+            {
+                var item = await s.ShoppingCartItems.FindAsync(new object[] { e.SessionId, e.Item }, ct);
+                if (item == null)
+                {
+                    s.ShoppingCartItems.Add(new ShoppingCartItem { SessionId = e.SessionId, Name = e.Item });
+                }
             })
             .When<ItemRemovedFromShoppingCart>(async (e, s, ct) =>
             {
-                var cart = await s.ShoppingCarts.FindAsync(new object[] { e.SessionId }, ct);
-                if (cart != null)
+                var itemToRemove = await s.ShoppingCartItems.FindAsync(new object[] { e.SessionId, e.Item }, ct);
+                if (itemToRemove != null)
                 {
-                    var itemToRemove = cart.Items.SingleOrDefault(x => x.Name == e.Item);
-                    if (itemToRemove != null)
-                    {
-                        cart.Items.Remove(itemToRemove);
-                    }
+                    s.ShoppingCartItems.Remove(itemToRemove);
                 }
             });
     }

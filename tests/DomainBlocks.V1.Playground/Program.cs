@@ -60,10 +60,10 @@ var consumer = new PostgresShoppingCartProjection(dbContextFactory);
 //var consumer = new MongoShoppingCartProjection();
 var eventMapper = new EventMapperBuilder().MapAll<IDomainEvent>(_ => { }).Build();
 
-var subscriber = new EventStreamSubscriber(
+var subscriptionManager = new CatchUpSubscriptionManager(
     pos => eventStore.SubscribeToAll(pos),
     new[] { consumer },
     eventMapper);
 
-subscriber.Start();
-await subscriber.WaitForCompletedAsync();
+subscriptionManager.Start();
+await subscriptionManager.WaitForCompletedAsync();

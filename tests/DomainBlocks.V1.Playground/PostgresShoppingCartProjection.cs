@@ -15,32 +15,31 @@ public class PostgresShoppingCartProjection : CatchUpSubscriptionConsumerBase
     {
         _dbContextFactory = dbContextFactory;
 
-        When<ItemAddedToShoppingCart>(async (e, ct) =>
+        When<ShoppingSessionStarted>(async (e, ct) =>
         {
-            var cart = await View.ShoppingCarts.FindAsync(new object[] { e.SessionId }, ct);
+            var cart = await View.ShoppingCarts.FindAsync(new object?[] { e.SessionId }, cancellationToken: ct);
             if (cart == null)
             {
-                cart = new ShoppingCart
-                {
-                    SessionId = e.SessionId
-                };
-
+                cart = new ShoppingCart { SessionId = e.SessionId };
                 View.ShoppingCarts.Add(cart);
             }
+        });
 
-            cart.Items.Add(new ShoppingCartItem { SessionId = e.SessionId, Name = e.Item });
+        When<ItemAddedToShoppingCart>(async (e, ct) =>
+        {
+            var item = await View.ShoppingCartItems.FindAsync(new object[] { e.SessionId, e.Item }, ct);
+            if (item == null)
+            {
+                View.ShoppingCartItems.Add(new ShoppingCartItem { SessionId = e.SessionId, Name = e.Item });
+            }
         });
 
         When<ItemRemovedFromShoppingCart>(async (e, ct) =>
         {
-            var cart = await View.ShoppingCarts.FindAsync(new object[] { e.SessionId }, ct);
-            if (cart != null)
+            var itemToRemove = await View.ShoppingCartItems.FindAsync(new object[] { e.SessionId, e.Item }, ct);
+            if (itemToRemove != null)
             {
-                var itemToRemove = cart.Items.SingleOrDefault(x => x.Name == e.Item);
-                if (itemToRemove != null)
-                {
-                    cart.Items.Remove(itemToRemove);
-                }
+                View.ShoppingCartItems.Remove(itemToRemove);
             }
         });
     }
@@ -63,7 +62,7 @@ public class PostgresShoppingCartProjection : CatchUpSubscriptionConsumerBase
     {
         if (_currentDbContext == null)
         {
-            // Nothing to do
+            // No activity since last checkpoint. Nothing to do.
             return;
         }
 

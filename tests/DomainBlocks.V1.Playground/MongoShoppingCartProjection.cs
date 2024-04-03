@@ -16,9 +16,21 @@ public class MongoShoppingCartProjection : CatchUpSubscriptionConsumerBase
         {
             var cart = await collection
                 .Find(x => x.SessionId == e.SessionId)
-                .FirstOrDefaultAsync(cancellationToken: ct);
+                .FirstOrDefaultAsync(cancellationToken: ct) ?? new MongoShoppingCart
+            {
+                SessionId = e.SessionId
+            };
 
-            // TODO
+            if (!cart.Items.Contains(e.Item))
+            {
+                cart.Items.Add(e.Item);
+            }
+
+            await collection.ReplaceOneAsync(
+                filter: x => x.SessionId == e.SessionId,
+                options: new ReplaceOptions { IsUpsert = true },
+                replacement: cart,
+                cancellationToken: ct);
         });
     }
 }

@@ -22,6 +22,8 @@ public class ShoppingCartDbContext : DbContext
             e.HasMany(x => x.Items).WithOne().HasForeignKey(x => x.SessionId);
         });
 
+        modelBuilder.Entity<ShoppingCartItem>().HasKey(x => new { x.SessionId, x.Name });
+
         modelBuilder.Entity<Bookmark>(e =>
         {
             e.HasKey(x => x.Id);
@@ -30,6 +32,6 @@ public class ShoppingCartDbContext : DbContext
     }
 
     public DbSet<ShoppingCart> ShoppingCarts { get; set; } = null!;
-
+    public DbSet<ShoppingCartItem> ShoppingCartItems { get; set; } = null!;
     public DbSet<Bookmark> Bookmarks { get; set; } = null!;
 }
