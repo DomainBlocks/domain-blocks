@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace DomainBlocks.V1.Persistence;
+namespace DomainBlocks.V1;
 
 [DebuggerDisplay("{EventType} <-> \"{EventName}\"")]
 public class EventTypeMapping

@@ -1,18 +1,18 @@
 namespace DomainBlocks.V1.Abstractions;
 
-public sealed class ReadEvent : EventBase
+public sealed class ReadEventRecord : EventRecordBase
 {
-    public ReadEvent(
+    public ReadEventRecord(
         string name,
         ReadOnlyMemory<byte> payload,
         ReadOnlyMemory<byte>? metadata,
-        StreamVersion streamVersion,
+        StreamPosition streamPosition,
         GlobalPosition globalPosition) : base(name, payload, metadata)
     {
-        StreamVersion = streamVersion;
+        StreamPosition = streamPosition;
         GlobalPosition = globalPosition;
     }
 
-    public StreamVersion StreamVersion { get; }
+    public StreamPosition StreamPosition { get; }
     public GlobalPosition GlobalPosition { get; }
 }

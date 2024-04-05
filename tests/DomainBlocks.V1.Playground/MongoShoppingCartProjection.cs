@@ -4,33 +4,35 @@ using Shopping.Domain.Events;
 
 namespace DomainBlocks.V1.Playground;
 
-public class MongoShoppingCartProjection : CatchUpSubscriptionConsumerBase
+public class MongoShoppingCartProjection : IEventStreamConsumer, IEventHandler<ItemAddedToShoppingCart>
 {
+    private readonly IMongoCollection<MongoShoppingCart> _collection;
+
     public MongoShoppingCartProjection()
     {
         var client = new MongoClient("mongodb://admin:password@localhost:27017");
         var database = client.GetDatabase("test");
-        var collection = database.GetCollection<MongoShoppingCart>("users");
+        _collection = database.GetCollection<MongoShoppingCart>("shopping-carts");
+    }
 
-        When<ItemAddedToShoppingCart>(async (e, ct) =>
+    public async Task OnEventAsync(EventHandlerContext<ItemAddedToShoppingCart> context)
+    {
+        var cart = await _collection
+            .Find(x => x.SessionId == context.Event.SessionId)
+            .FirstOrDefaultAsync(context.CancellationToken) ?? new MongoShoppingCart
         {
-            var cart = await collection
-                .Find(x => x.SessionId == e.SessionId)
-                .FirstOrDefaultAsync(cancellationToken: ct) ?? new MongoShoppingCart
-            {
-                SessionId = e.SessionId
-            };
+            SessionId = context.Event.SessionId
+        };
 
-            if (!cart.Items.Contains(e.Item))
-            {
-                cart.Items.Add(e.Item);
-            }
+        if (!cart.Items.Contains(context.Event.Item))
+        {
+            cart.Items.Add(context.Event.Item);
+        }
 
-            await collection.ReplaceOneAsync(
-                filter: x => x.SessionId == e.SessionId,
-                options: new ReplaceOptions { IsUpsert = true },
-                replacement: cart,
-                cancellationToken: ct);
-        });
+        await _collection.ReplaceOneAsync(
+            filter: x => x.SessionId == context.Event.SessionId,
+            replacement: cart,
+            options: new ReplaceOptions { IsUpsert = true },
+            cancellationToken: context.CancellationToken);
     }
 }

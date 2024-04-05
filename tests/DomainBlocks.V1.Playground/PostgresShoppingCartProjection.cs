@@ -1,4 +1,3 @@
-using DomainBlocks.V1.Abstractions;
 using DomainBlocks.V1.Subscriptions;
 using Microsoft.EntityFrameworkCore;
 using Shopping.Domain.Events;
@@ -6,7 +5,11 @@ using Shopping.ReadModel;
 
 namespace DomainBlocks.V1.Playground;
 
-public class PostgresShoppingCartProjection : CatchUpSubscriptionConsumerBase
+public class PostgresShoppingCartProjection :
+    IEventStreamConsumer,
+    IEventHandler<ShoppingSessionStarted>,
+    IEventHandler<ItemAddedToShoppingCart>,
+    IEventHandler<ItemRemovedFromShoppingCart>
 {
     private readonly IDbContextFactory<ShoppingCartDbContext> _dbContextFactory;
     private ShoppingCartDbContext? _currentDbContext;
@@ -14,51 +17,61 @@ public class PostgresShoppingCartProjection : CatchUpSubscriptionConsumerBase
     public PostgresShoppingCartProjection(IDbContextFactory<ShoppingCartDbContext> dbContextFactory)
     {
         _dbContextFactory = dbContextFactory;
-
-        When<ShoppingSessionStarted>(async (e, ct) =>
-        {
-            var cart = await View.ShoppingCarts.FindAsync(new object?[] { e.SessionId }, cancellationToken: ct);
-            if (cart == null)
-            {
-                cart = new ShoppingCart { SessionId = e.SessionId };
-                View.ShoppingCarts.Add(cart);
-            }
-        });
-
-        When<ItemAddedToShoppingCart>(async (e, ct) =>
-        {
-            var item = await View.ShoppingCartItems.FindAsync(new object[] { e.SessionId, e.Item }, ct);
-            if (item == null)
-            {
-                View.ShoppingCartItems.Add(new ShoppingCartItem { SessionId = e.SessionId, Name = e.Item });
-            }
-        });
-
-        When<ItemRemovedFromShoppingCart>(async (e, ct) =>
-        {
-            var itemToRemove = await View.ShoppingCartItems.FindAsync(new object[] { e.SessionId, e.Item }, ct);
-            if (itemToRemove != null)
-            {
-                View.ShoppingCartItems.Remove(itemToRemove);
-            }
-        });
     }
 
-    private ShoppingCartDbContext View => _currentDbContext ??= _dbContextFactory.CreateDbContext();
+    private ShoppingCartDbContext DbContext => _currentDbContext ??= _dbContextFactory.CreateDbContext();
 
-    public override async Task OnInitializingAsync(CancellationToken cancellationToken)
+    public async Task OnEventAsync(EventHandlerContext<ShoppingSessionStarted> context)
     {
-        await using var dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var cart = await DbContext.ShoppingCarts.FindAsync(
+            new object?[] { context.Event.SessionId }, cancellationToken: context.CancellationToken);
+
+        if (cart == null)
+        {
+            cart = new ShoppingCart { SessionId = context.Event.SessionId };
+            DbContext.ShoppingCarts.Add(cart);
+        }
+    }
+
+    public async Task OnEventAsync(EventHandlerContext<ItemAddedToShoppingCart> context)
+    {
+        var item = await DbContext.ShoppingCartItems.FindAsync(
+            new object[] { context.Event.SessionId, context.Event.Item }, context.CancellationToken);
+
+        if (item == null)
+        {
+            DbContext.ShoppingCartItems.Add(new ShoppingCartItem
+            {
+                SessionId = context.Event.SessionId,
+                Name = context.Event.Item
+            });
+        }
+    }
+
+    public async Task OnEventAsync(EventHandlerContext<ItemRemovedFromShoppingCart> context)
+    {
+        var itemToRemove = await DbContext.ShoppingCartItems.FindAsync(
+            new object[] { context.Event.SessionId, context.Event.Item }, context.CancellationToken);
+
+        if (itemToRemove != null)
+        {
+            DbContext.ShoppingCartItems.Remove(itemToRemove);
+        }
+    }
+
+    public async Task OnInitializingAsync(CancellationToken cancellationToken)
+    {
+        var dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
         await dbContext.Database.EnsureCreatedAsync(cancellationToken);
     }
 
-    public override async Task<GlobalPosition?> OnLoadCheckpointAsync(CancellationToken cancellationToken)
+    public async Task<SubscriptionPosition?> OnRestoreAsync(CancellationToken cancellationToken)
     {
-        var bookmark = await View.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, cancellationToken);
-        return bookmark?.Position == null ? null : GlobalPosition.FromInt64(bookmark.Position);
+        var bookmark = await DbContext.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, cancellationToken);
+        return bookmark == null ? null : new SubscriptionPosition(bookmark.Position);
     }
 
-    public override async Task OnSaveCheckpointAsync(GlobalPosition position, CancellationToken cancellationToken)
+    public async Task OnCheckpointAsync(SubscriptionPosition position, CancellationToken cancellationToken)
     {
         if (_currentDbContext == null)
         {
@@ -66,16 +79,16 @@ public class PostgresShoppingCartProjection : CatchUpSubscriptionConsumerBase
             return;
         }
 
-        var bookmark = await View.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, cancellationToken);
+        var bookmark = await DbContext.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, cancellationToken);
         if (bookmark == null)
         {
             bookmark = new Bookmark();
-            View.Bookmarks.Add(bookmark);
+            DbContext.Bookmarks.Add(bookmark);
         }
 
-        bookmark.Position = position.ToInt64();
+        bookmark.Position = position.Value;
 
-        await View.SaveChangesAsync(cancellationToken);
+        await DbContext.SaveChangesAsync(cancellationToken);
         await DisposeCurrentDbContextAsync();
     }
 

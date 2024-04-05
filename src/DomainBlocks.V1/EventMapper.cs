@@ -1,6 +1,6 @@
 using DomainBlocks.V1.Abstractions;
 
-namespace DomainBlocks.V1.Persistence;
+namespace DomainBlocks.V1;
 
 public class EventMapper
 {
@@ -20,22 +20,22 @@ public class EventMapper
         _serializer = serializer;
     }
 
-    public IEnumerable<object> FromReadEvent(ReadEvent readEvent)
+    public IEnumerable<object> FromReadEvent(ReadEventRecord readEventRecord)
     {
-        if (!_mappingsByName.TryGetValue(readEvent.Name, out var mapping))
+        if (!_mappingsByName.TryGetValue(readEventRecord.Name, out var mapping))
         {
-            throw new ArgumentException($"Mapping not found for event name '{readEvent.Name}'.", nameof(readEvent));
+            throw new ArgumentException($"Mapping not found for event name '{readEventRecord.Name}'.", nameof(readEventRecord));
         }
 
         // Consider ignored event names. Can yield zero events in the case a name is ignored.
         // Will be addressed in a future PR.
 
-        var @event = _serializer.Deserialize(readEvent.Payload.Span, mapping.EventType);
+        var @event = _serializer.Deserialize(readEventRecord.Payload.Span, mapping.EventType);
 
         yield return @event;
     }
 
-    public WriteEvent ToWriteEvent(object @event)
+    public WriteEventRecord ToWriteEvent(object @event)
     {
         if (!_mappingsByType.TryGetValue(@event.GetType(), out var mapping))
         {
@@ -44,6 +44,6 @@ public class EventMapper
 
         var payload = _serializer.Serialize(@event);
 
-        return new WriteEvent(mapping.EventName, payload, default);
+        return new WriteEventRecord(mapping.EventName, payload, default);
     }
 }

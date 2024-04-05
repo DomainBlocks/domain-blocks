@@ -5,15 +5,15 @@ namespace DomainBlocks.V1.Abstractions;
 /// </summary>
 public interface IWriteOnlyEventStore
 {
-    Task<StreamVersion?> AppendToStreamAsync(
+    Task<StreamPosition?> AppendToStreamAsync(
         string streamName,
-        IEnumerable<WriteEvent> events,
-        StreamVersion expectedVersion,
+        IEnumerable<WriteEventRecord> events,
+        StreamPosition expectedVersion,
         CancellationToken cancellationToken = default);
 
-    Task<StreamVersion?> AppendToStreamAsync(
+    Task<StreamPosition?> AppendToStreamAsync(
         string streamName,
-        IEnumerable<WriteEvent> events,
+        IEnumerable<WriteEventRecord> events,
         ExpectedStreamState expectedState,
         CancellationToken cancellationToken = default);
 }

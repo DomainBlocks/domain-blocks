@@ -65,7 +65,7 @@ public static class ServiceCollectionExtensions
             {
                 await s.Database.EnsureCreatedAsync(ct);
                 var bookmark = await s.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, ct);
-                return bookmark == null ? null : new Position(bookmark.CommitPosition, bookmark.PreparePosition);
+                return bookmark == null ? null : new Position(bookmark.Position, bookmark.Position);
             })
             .OnCheckpoint(async (s, pos, ct) =>
             {
@@ -76,8 +76,7 @@ public static class ServiceCollectionExtensions
                     s.Bookmarks.Add(bookmark);
                 }
 
-                bookmark.CommitPosition = pos.CommitPosition;
-                bookmark.PreparePosition = pos.PreparePosition;
+                bookmark.Position = pos.CommitPosition;
                 await s.SaveChangesAsync(ct);
             });
     }
@@ -98,7 +97,7 @@ public static class ServiceCollectionExtensions
             {
                 await s.Database.EnsureCreatedAsync(ct);
                 var bookmark = await s.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, ct);
-                return bookmark?.Position;
+                return bookmark == null ? null : Convert.ToInt64(bookmark.Position);
             })
             .OnCheckpoint(async (s, pos, ct) =>
             {
@@ -109,7 +108,7 @@ public static class ServiceCollectionExtensions
                     s.Bookmarks.Add(bookmark);
                 }
 
-                bookmark.Position = pos;
+                bookmark.Position = Convert.ToUInt64(pos);
                 await s.SaveChangesAsync(ct);
             });
     }

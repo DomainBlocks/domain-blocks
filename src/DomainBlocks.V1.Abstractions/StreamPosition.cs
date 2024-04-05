@@ -1,22 +1,22 @@
 namespace DomainBlocks.V1.Abstractions;
 
-public readonly struct StreamVersion
+public readonly struct StreamPosition
 {
-    public static readonly StreamVersion Zero = new(0UL);
+    public static readonly StreamPosition Start = new(0UL);
 
     private readonly ulong _value;
 
-    public StreamVersion(ulong value)
+    public StreamPosition(ulong value)
     {
         _value = value;
     }
 
-    public static StreamVersion FromInt32(int value)
+    public static StreamPosition FromInt32(int value)
     {
         if (value < 0)
             throw new ArgumentOutOfRangeException(nameof(value), value, "Value must be greater than or equal to zero.");
 
-        return new StreamVersion(Convert.ToUInt64(value));
+        return new StreamPosition(Convert.ToUInt64(value));
     }
 
     public ulong ToUInt64() => _value;

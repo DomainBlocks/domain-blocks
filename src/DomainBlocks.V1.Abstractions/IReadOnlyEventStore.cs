@@ -1,3 +1,5 @@
+using DomainBlocks.V1.Abstractions.Subscriptions;
+
 namespace DomainBlocks.V1.Abstractions;
 
 /// <summary>
@@ -5,17 +7,19 @@ namespace DomainBlocks.V1.Abstractions;
 /// </summary>
 public interface IReadOnlyEventStore
 {
-    IAsyncEnumerable<ReadEvent> ReadStreamAsync(
+    IAsyncEnumerable<ReadEventRecord> ReadStreamAsync(
         string streamName,
         StreamReadDirection direction,
-        StreamVersion fromVersion,
+        StreamPosition fromPosition,
         CancellationToken cancellationToken = default);
 
-    IAsyncEnumerable<ReadEvent> ReadStreamAsync(
+    IAsyncEnumerable<ReadEventRecord> ReadStreamAsync(
         string streamName,
         StreamReadDirection direction,
         StreamReadOrigin readOrigin = StreamReadOrigin.Default,
         CancellationToken cancellationToken = default);
 
-    IStreamSubscription SubscribeToAll(GlobalPosition? afterPosition = null);
+    IEventStreamSubscription SubscribeToAll(GlobalPosition? afterPosition = null);
+
+    IEventStreamSubscription SubscribeToStream(string streamName, StreamPosition? afterPosition = null);
 }

@@ -1,5 +1,5 @@
 using DomainBlocks.V1.Abstractions;
-using EventStore.Client;
+using StreamPosition = EventStore.Client.StreamPosition;
 
 namespace DomainBlocks.V1.EventStoreDb.Extensions;
 

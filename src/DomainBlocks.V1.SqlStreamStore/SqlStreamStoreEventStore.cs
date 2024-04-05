@@ -6,10 +6,9 @@ using DomainBlocks.V1.SqlStreamStore.Extensions;
 using DomainBlocks.ThirdParty.SqlStreamStore;
 using DomainBlocks.ThirdParty.SqlStreamStore.Streams;
 using DomainBlocks.V1.Abstractions;
+using DomainBlocks.V1.Abstractions.Subscriptions;
 using Microsoft.Extensions.Logging;
 using ErrorMessages = DomainBlocks.V1.Abstractions.Exceptions.ErrorMessages;
-using IStreamSubscription = DomainBlocks.V1.Abstractions.IStreamSubscription;
-using StreamVersion = DomainBlocks.V1.Abstractions.StreamVersion;
 using WrongExpectedVersionException = DomainBlocks.V1.Abstractions.Exceptions.WrongExpectedVersionException;
 
 namespace DomainBlocks.V1.SqlStreamStore;
@@ -26,16 +25,16 @@ public sealed class SqlStreamStoreEventStore : IEventStore
         _readPageSize = readPageSize;
     }
 
-    public IAsyncEnumerable<ReadEvent> ReadStreamAsync(
+    public IAsyncEnumerable<ReadEventRecord> ReadStreamAsync(
         string streamName,
         StreamReadDirection direction,
-        StreamVersion fromVersion,
+        StreamPosition fromPosition,
         CancellationToken cancellationToken = default)
     {
-        return ReadStreamInternalAsync(streamName, direction, fromVersion, null, cancellationToken);
+        return ReadStreamInternalAsync(streamName, direction, fromPosition, null, cancellationToken);
     }
 
-    public IAsyncEnumerable<ReadEvent> ReadStreamAsync(
+    public IAsyncEnumerable<ReadEventRecord> ReadStreamAsync(
         string streamName,
         StreamReadDirection direction,
         StreamReadOrigin readOrigin = StreamReadOrigin.Default,
@@ -44,33 +43,38 @@ public sealed class SqlStreamStoreEventStore : IEventStore
         return ReadStreamInternalAsync(streamName, direction, null, readOrigin, cancellationToken);
     }
 
-    public IStreamSubscription SubscribeToAll(GlobalPosition? afterPosition = null)
+    public IEventStreamSubscription SubscribeToAll(GlobalPosition? afterPosition = null)
     {
-        return new AllStreamSubscription(_streamStore, afterPosition);
+        return new AllEventStreamSubscription(_streamStore, afterPosition);
     }
 
-    public Task<StreamVersion?> AppendToStreamAsync(
+    public IEventStreamSubscription SubscribeToStream(string streamName, StreamPosition? afterPosition = null)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<StreamPosition?> AppendToStreamAsync(
         string streamName,
-        IEnumerable<WriteEvent> events,
-        StreamVersion expectedVersion,
+        IEnumerable<WriteEventRecord> events,
+        StreamPosition expectedVersion,
         CancellationToken cancellationToken = default)
     {
         return AppendToStreamInternalAsync(streamName, events, expectedVersion, null, cancellationToken);
     }
 
-    public Task<StreamVersion?> AppendToStreamAsync(
+    public Task<StreamPosition?> AppendToStreamAsync(
         string streamName,
-        IEnumerable<WriteEvent> events,
+        IEnumerable<WriteEventRecord> events,
         ExpectedStreamState expectedState,
         CancellationToken cancellationToken = default)
     {
         return AppendToStreamInternalAsync(streamName, events, null, expectedState, cancellationToken);
     }
 
-    private async IAsyncEnumerable<ReadEvent> ReadStreamInternalAsync(
+    private async IAsyncEnumerable<ReadEventRecord> ReadStreamInternalAsync(
         string streamName,
         StreamReadDirection direction,
-        StreamVersion? fromVersion,
+        StreamPosition? fromVersion,
         StreamReadOrigin? readOrigin,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
@@ -124,10 +128,10 @@ public sealed class SqlStreamStoreEventStore : IEventStore
         }
     }
 
-    private async Task<StreamVersion?> AppendToStreamInternalAsync(
+    private async Task<StreamPosition?> AppendToStreamInternalAsync(
         string streamName,
-        IEnumerable<WriteEvent> events,
-        StreamVersion? expectedVersion,
+        IEnumerable<WriteEventRecord> events,
+        StreamPosition? expectedVersion,
         ExpectedStreamState? expectedState,
         CancellationToken cancellationToken)
     {
@@ -184,7 +188,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore
             Logger.LogDebug("Written events to stream. WriteId {WriteId}", writeId);
 
             Debug.Assert(appendResult.CurrentVersion >= 0);
-            return StreamVersion.FromInt32(appendResult.CurrentVersion);
+            return StreamPosition.FromInt32(appendResult.CurrentVersion);
         }
         catch (DomainBlocks.ThirdParty.SqlStreamStore.Streams.WrongExpectedVersionException ex)
         {

@@ -2,9 +2,11 @@ using System.Runtime.CompilerServices;
 using DomainBlocks.V1.Abstractions;
 using DomainBlocks.V1.Abstractions.Exceptions;
 using DomainBlocks.Logging;
+using DomainBlocks.V1.Abstractions.Subscriptions;
 using DomainBlocks.V1.EventStoreDb.Extensions;
 using EventStore.Client;
 using Microsoft.Extensions.Logging;
+using StreamPosition = DomainBlocks.V1.Abstractions.StreamPosition;
 using WrongExpectedVersionException = DomainBlocks.V1.Abstractions.Exceptions.WrongExpectedVersionException;
 
 namespace DomainBlocks.V1.EventStoreDb;
@@ -19,16 +21,16 @@ public sealed class EventStoreDbEventStore : IEventStore
         _client = client ?? throw new ArgumentNullException(nameof(client));
     }
 
-    public IAsyncEnumerable<ReadEvent> ReadStreamAsync(
+    public IAsyncEnumerable<ReadEventRecord> ReadStreamAsync(
         string streamName,
         StreamReadDirection direction,
-        StreamVersion fromVersion,
+        StreamPosition fromPosition,
         CancellationToken cancellationToken = default)
     {
-        return ReadStreamInternalAsync(streamName, direction, fromVersion, null, cancellationToken);
+        return ReadStreamInternalAsync(streamName, direction, fromPosition, null, cancellationToken);
     }
 
-    public IAsyncEnumerable<ReadEvent> ReadStreamAsync(
+    public IAsyncEnumerable<ReadEventRecord> ReadStreamAsync(
         string streamName,
         StreamReadDirection direction,
         StreamReadOrigin readOrigin = StreamReadOrigin.Default,
@@ -37,33 +39,38 @@ public sealed class EventStoreDbEventStore : IEventStore
         return ReadStreamInternalAsync(streamName, direction, null, readOrigin, cancellationToken);
     }
 
-    public IStreamSubscription SubscribeToAll(GlobalPosition? afterPosition = null)
+    public IEventStreamSubscription SubscribeToAll(GlobalPosition? afterPosition = null)
     {
         throw new NotImplementedException();
     }
 
-    public Task<StreamVersion?> AppendToStreamAsync(
+    public IEventStreamSubscription SubscribeToStream(string streamName, StreamPosition? afterPosition = null)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<StreamPosition?> AppendToStreamAsync(
         string streamName,
-        IEnumerable<WriteEvent> events,
-        StreamVersion expectedVersion,
+        IEnumerable<WriteEventRecord> events,
+        StreamPosition expectedVersion,
         CancellationToken cancellationToken = default)
     {
         return AppendToStreamInternalAsync(streamName, events, expectedVersion, null, cancellationToken);
     }
 
-    public Task<StreamVersion?> AppendToStreamAsync(
+    public Task<StreamPosition?> AppendToStreamAsync(
         string streamName,
-        IEnumerable<WriteEvent> events,
+        IEnumerable<WriteEventRecord> events,
         ExpectedStreamState expectedState,
         CancellationToken cancellationToken = default)
     {
         return AppendToStreamInternalAsync(streamName, events, null, expectedState, cancellationToken);
     }
 
-    private async IAsyncEnumerable<ReadEvent> ReadStreamInternalAsync(
+    private async IAsyncEnumerable<ReadEventRecord> ReadStreamInternalAsync(
         string streamName,
         StreamReadDirection direction,
-        StreamVersion? fromVersion,
+        StreamPosition? fromVersion,
         StreamReadOrigin? readOrigin,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
@@ -75,7 +82,7 @@ public sealed class EventStoreDbEventStore : IEventStore
                 direction == StreamReadDirection.Forwards ? Direction.Forwards : Direction.Backwards;
 
             var eventStoreDbFromVersion = fromVersion != null
-                ? new StreamPosition(fromVersion.Value.ToUInt64())
+                ? new EventStore.Client.StreamPosition(fromVersion.Value.ToUInt64())
                 : readOrigin!.Value.ToEventStoreDbStreamPosition(direction);
 
             readStreamResult = _client.ReadStreamAsync(
@@ -98,22 +105,22 @@ public sealed class EventStoreDbEventStore : IEventStore
 
         await foreach (var resolvedEvent in readStreamResult)
         {
-            var streamVersion = new StreamVersion(resolvedEvent.OriginalEvent.EventNumber);
+            var streamPosition = new StreamPosition(resolvedEvent.OriginalEvent.EventNumber);
             var globalPosition = new GlobalPosition(resolvedEvent.OriginalEvent.Position.CommitPosition);
 
-            yield return new ReadEvent(
+            yield return new ReadEventRecord(
                 resolvedEvent.Event.EventType,
                 resolvedEvent.Event.Data,
                 resolvedEvent.Event.Metadata,
-                streamVersion,
+                streamPosition,
                 globalPosition);
         }
     }
 
-    private async Task<StreamVersion?> AppendToStreamInternalAsync(
+    private async Task<StreamPosition?> AppendToStreamInternalAsync(
         string streamName,
-        IEnumerable<WriteEvent> events,
-        StreamVersion? expectedVersion,
+        IEnumerable<WriteEventRecord> events,
+        StreamPosition? expectedVersion,
         ExpectedStreamState? expectedState,
         CancellationToken cancellationToken)
     {
@@ -178,11 +185,11 @@ public sealed class EventStoreDbEventStore : IEventStore
 
             Logger.LogDebug("Written events to stream. WriteId {WriteId}", writeId);
 
-            return new StreamVersion(writeResult.NextExpectedStreamRevision);
+            return new StreamPosition(writeResult.NextExpectedStreamRevision);
         }
         catch (EventStore.Client.WrongExpectedVersionException ex)
         {
-            var actualVersion = new StreamVersion(ex.ActualStreamRevision);
+            var actualVersion = new StreamPosition(ex.ActualStreamRevision);
 
             if (expectedVersion.HasValue)
                 throw new WrongExpectedVersionException(

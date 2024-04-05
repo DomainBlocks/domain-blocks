@@ -25,17 +25,17 @@ public sealed class EntityStore : IEntityStore
         where TEntity : notnull
     {
         var streamName = GetStreamName<TEntity>(entityId);
-        var readFromVersion = StreamVersion.Zero;
+        var readFromPosition = StreamPosition.Start;
 
         var readEvents =
-            _eventStore.ReadStreamAsync(streamName, StreamReadDirection.Forwards, readFromVersion, cancellationToken);
+            _eventStore.ReadStreamAsync(streamName, StreamReadDirection.Forwards, readFromPosition, cancellationToken);
 
         var entityAdapter = GetEntityAdapter<TEntity>();
         var initialState = entityAdapter.CreateState(); // May come from a snapshot (in future).
 
         // Used in closure of TransformEventStream, so must be declared before the async enumerable is materialized,
         // i.e. before RestoreEntity is invoked.
-        StreamVersion? loadedVersion = null;
+        StreamPosition? loadedVersion = null;
         var loadedEventCount = 0;
 
         var entity = await entityAdapter.RestoreEntityAsync(initialState, TransformEventStream(), cancellationToken);
@@ -50,7 +50,7 @@ public sealed class EntityStore : IEntityStore
         {
             await foreach (var readEvent in readEvents)
             {
-                loadedVersion = readEvent.StreamVersion;
+                loadedVersion = readEvent.StreamPosition;
                 loadedEventCount++;
 
                 var transformedEvents = _eventMapper.FromReadEvent(readEvent);
@@ -71,7 +71,7 @@ public sealed class EntityStore : IEntityStore
         var raisedEvents = entityAdapter.GetRaisedEvents(entity).ToArray();
         if (raisedEvents.Length == 0) return;
 
-        StreamVersion? expectedVersion = null;
+        StreamPosition? expectedVersion = null;
         if (_trackedEntities.TryGetValue(entity, out var context))
         {
             expectedVersion = context.StreamVersion;
@@ -111,13 +111,13 @@ public sealed class EntityStore : IEntityStore
 
     private sealed class TrackedEntityContext
     {
-        public TrackedEntityContext(StreamVersion? streamVersion, int loadedEventCount)
+        public TrackedEntityContext(StreamPosition? streamVersion, int loadedEventCount)
         {
             StreamVersion = streamVersion;
             LoadedEventCount = loadedEventCount;
         }
 
-        public StreamVersion? StreamVersion { get; }
+        public StreamPosition? StreamVersion { get; }
         public int LoadedEventCount { get; }
     }
 }
