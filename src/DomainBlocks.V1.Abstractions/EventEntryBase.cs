@@ -1,8 +1,8 @@
 namespace DomainBlocks.V1.Abstractions;
 
-public abstract class EventRecordBase
+public abstract class EventEntryBase
 {
-    protected EventRecordBase(string name, ReadOnlyMemory<byte> payload, ReadOnlyMemory<byte>? metadata)
+    protected EventEntryBase(string name, ReadOnlyMemory<byte> payload, ReadOnlyMemory<byte>? metadata)
     {
         Name = name;
         Payload = payload;

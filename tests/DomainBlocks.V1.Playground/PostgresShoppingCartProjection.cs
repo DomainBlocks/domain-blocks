@@ -1,3 +1,4 @@
+using DomainBlocks.V1.Abstractions;
 using DomainBlocks.V1.Subscriptions;
 using Microsoft.EntityFrameworkCore;
 using Shopping.Domain.Events;

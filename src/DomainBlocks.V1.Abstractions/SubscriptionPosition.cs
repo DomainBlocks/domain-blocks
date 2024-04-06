@@ -1,3 +1,3 @@
-namespace DomainBlocks.V1.Subscriptions;
+namespace DomainBlocks.V1.Abstractions;
 
 public readonly record struct SubscriptionPosition(ulong Value);

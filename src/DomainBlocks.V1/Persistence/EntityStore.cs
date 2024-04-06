@@ -27,18 +27,18 @@ public sealed class EntityStore : IEntityStore
         var streamName = GetStreamName<TEntity>(entityId);
         var readFromPosition = StreamPosition.Start;
 
-        var readEvents =
+        var eventRecords =
             _eventStore.ReadStreamAsync(streamName, StreamReadDirection.Forwards, readFromPosition, cancellationToken);
 
         var entityAdapter = GetEntityAdapter<TEntity>();
         var initialState = entityAdapter.CreateState(); // May come from a snapshot (in future).
 
-        // Used in closure of TransformEventStream, so must be declared before the async enumerable is materialized,
-        // i.e. before RestoreEntity is invoked.
+        // Used in closure of MapEventStream, so must be declared before the async enumerable is materialized, i.e.
+        // before RestoreEntityAsync is invoked.
         StreamPosition? loadedVersion = null;
         var loadedEventCount = 0;
 
-        var entity = await entityAdapter.RestoreEntityAsync(initialState, TransformEventStream(), cancellationToken);
+        var entity = await entityAdapter.RestoreEntityAsync(initialState, MapEventStream(), cancellationToken);
         var trackedEntityContext = new TrackedEntityContext(loadedVersion, loadedEventCount);
 
         // Track the entity so that the expected version will be known in a future call to SaveAsync.
@@ -46,17 +46,17 @@ public sealed class EntityStore : IEntityStore
 
         return entity;
 
-        async IAsyncEnumerable<object> TransformEventStream()
+        async IAsyncEnumerable<object> MapEventStream()
         {
-            await foreach (var readEvent in readEvents)
+            await foreach (var eventRecord in eventRecords)
             {
-                loadedVersion = readEvent.StreamPosition;
+                loadedVersion = eventRecord.StreamPosition;
                 loadedEventCount++;
 
-                var transformedEvents = _eventMapper.FromReadEvent(readEvent);
-                foreach (var deserializedEvent in transformedEvents)
+                var mappedEvents = _eventMapper.ToEventObjects(eventRecord);
+                foreach (var e in mappedEvents)
                 {
-                    yield return deserializedEvent;
+                    yield return e;
                 }
             }
         }
@@ -79,11 +79,11 @@ public sealed class EntityStore : IEntityStore
 
         var entityId = entityAdapter.GetId(entity);
         var streamName = GetStreamName<TEntity>(entityId);
-        var writeEvents = raisedEvents.Select(e => _eventMapper.ToWriteEvent(e));
+        var entries = raisedEvents.Select(e => _eventMapper.ToWritableEventEntry(e));
 
         var appendTask = expectedVersion.HasValue
-            ? _eventStore.AppendToStreamAsync(streamName, writeEvents, expectedVersion.Value, cancellationToken)
-            : _eventStore.AppendToStreamAsync(streamName, writeEvents, ExpectedStreamState.NoStream, cancellationToken);
+            ? _eventStore.AppendToStreamAsync(streamName, entries, expectedVersion.Value, cancellationToken)
+            : _eventStore.AppendToStreamAsync(streamName, entries, ExpectedStreamState.NoStream, cancellationToken);
 
         await appendTask;
     }

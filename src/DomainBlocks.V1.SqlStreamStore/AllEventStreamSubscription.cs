@@ -19,20 +19,20 @@ internal class AllEventStreamSubscription : IEventStreamSubscription
             continueAfterPosition: afterPosition?.ToInt64() ?? null,
             streamMessageReceived: async (_, message, ct) =>
             {
-                var readEvent = await message.ToReadEvent(ct);
-                await _channel.Writer.WriteAsync(new SubscriptionMessage.Event(readEvent), ct);
+                var eventEntry = await message.ToStoredEventEntry(ct);
+                var position = new SubscriptionPosition(Convert.ToUInt64(message.Position));
+                await _channel.Writer.WriteAsync(new SubscriptionMessage.EventReceived(eventEntry, position), ct);
             },
             subscriptionDropped: (_, _, exception) =>
             {
                 var message = new SubscriptionMessage.SubscriptionDropped(exception);
 
-                var task = Task.Run(async () =>
-                {
-                    await _channel.Writer.WriteAsync(message);
-                    _channel.Writer.Complete(exception);
-                });
-
-                task.Wait();
+                Task.Run(async () =>
+                    {
+                        await _channel.Writer.WriteAsync(message);
+                        _channel.Writer.Complete(exception);
+                    })
+                    .Wait();
             },
             hasCaughtUp: hasCaughtUp =>
             {
@@ -40,7 +40,7 @@ internal class AllEventStreamSubscription : IEventStreamSubscription
                     ? SubscriptionMessage.CaughtUp.Instance
                     : SubscriptionMessage.FellBehind.Instance;
 
-                _channel.Writer.TryWrite(message);
+                Task.Run(async () => await _channel.Writer.WriteAsync(message)).Wait();
             },
             prefetchJsonData: true);
     }

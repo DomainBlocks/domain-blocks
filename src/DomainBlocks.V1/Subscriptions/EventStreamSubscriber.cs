@@ -1,5 +1,4 @@
-using System.Diagnostics;
-using System.Linq.Expressions;
+using DomainBlocks.V1.Abstractions;
 using DomainBlocks.V1.Abstractions.Subscriptions;
 
 namespace DomainBlocks.V1.Subscriptions;
@@ -7,140 +6,141 @@ namespace DomainBlocks.V1.Subscriptions;
 public class EventStreamSubscriber
 {
     private readonly Func<SubscriptionPosition?, IEventStreamSubscription> _subscriptionFactory;
-    private readonly bool _isAllEventStream;
-    private readonly IEventStreamConsumer _consumer;
+    private readonly EventStreamConsumerSession[] _sessions;
     private readonly EventMapper _eventMapper;
-    private readonly Dictionary<Type, Func<EventHandlerContext, Task>> _eventHandlers;
+    private CancellationTokenSource? _cancellationTokenSource;
     private Task? _consumeTask;
 
     internal EventStreamSubscriber(
         Func<SubscriptionPosition?, IEventStreamSubscription> subscriptionFactory,
-        bool isAllEventStream,
-        IEventStreamConsumer consumer,
+        IEnumerable<IEventStreamConsumer> consumers,
         EventMapper eventMapper)
     {
         _subscriptionFactory = subscriptionFactory;
-        _isAllEventStream = isAllEventStream;
-        _consumer = consumer;
+        _sessions = consumers.Select(x => new EventStreamConsumerSession(x)).ToArray();
         _eventMapper = eventMapper;
-        _eventHandlers = CreateEventHandlers(consumer);
     }
 
     public void Start()
     {
-        _consumeTask = Run();
+        _cancellationTokenSource = new CancellationTokenSource();
+        _consumeTask = ConsumeAllMessagesAsync(_cancellationTokenSource.Token);
     }
 
-    public Task WaitForCompletedAsync() => _consumeTask!;
-
-    private static Dictionary<Type, Func<EventHandlerContext, Task>> CreateEventHandlers(IEventStreamConsumer consumer)
+    public Task WaitForCompletedAsync(CancellationToken cancellationToken = default)
     {
-        return consumer
-            .GetType()
-            .GetInterfaces()
-            .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEventHandler<>))
-            .Select(i =>
-            {
-                var eventType = i.GetGenericArguments()[0];
-                var onEventAsyncMethod = i.GetMethod(nameof(IEventHandler<object>.OnEventAsync));
-                Debug.Assert(onEventAsyncMethod != null, nameof(onEventAsyncMethod) + " != null");
+        if (_consumeTask == null)
+        {
+            throw new InvalidOperationException("Subscription is not started.");
+        }
 
-                var eventContextParam = Expression.Parameter(typeof(EventHandlerContext), "context");
-                var eventProperty = Expression.Property(eventContextParam, nameof(EventHandlerContext.Event));
-                var positionProperty = Expression.Property(eventContextParam, nameof(EventHandlerContext.Position));
-                var cancellationTokenProperty =
-                    Expression.Property(eventContextParam, nameof(EventHandlerContext.CancellationToken));
-
-                var castEventParameter = Expression.Convert(eventProperty, eventType);
-
-                var genericEventContextType = typeof(EventHandlerContext<>).MakeGenericType(eventType);
-
-                var genericEventContextConstructor = genericEventContextType.GetConstructor(
-                    new[] { eventType, typeof(SubscriptionPosition), typeof(CancellationToken) })!;
-
-                var genericEventContextInstance = Expression.New(genericEventContextConstructor, castEventParameter,
-                    positionProperty, cancellationTokenProperty);
-
-                var consumerInstance = Expression.Constant(consumer);
-                var onEventAsyncCall =
-                    Expression.Call(consumerInstance, onEventAsyncMethod, genericEventContextInstance);
-                var lambda = Expression.Lambda<Func<EventHandlerContext, Task>>(onEventAsyncCall, eventContextParam);
-                var compiledLambda = lambda.Compile();
-
-                return (eventType, compiledLambda);
-            })
-            .ToDictionary(x => x.eventType, x => x.compiledLambda);
+        return _consumeTask.WaitAsync(cancellationToken);
     }
 
-    private async Task Run()
+    private async Task ConsumeAllMessagesAsync(CancellationToken cancellationToken)
     {
-        await _consumer.OnInitializingAsync(CancellationToken.None);
+        var initializingTasks = _sessions.Select(x => x.InitializeAsync(cancellationToken));
+        await Task.WhenAll(initializingTasks);
 
-        // TODO: Get min position
-        var continueAfterPosition = await _consumer.OnRestoreAsync(CancellationToken.None);
+        var restoreTasks = _sessions.Select(x => x.RestoreAsync(cancellationToken)).ToArray();
+        await Task.WhenAll(restoreTasks);
+        var allRestoredPositions = restoreTasks.Select(x => x.Result).ToArray();
+        var minPosition = restoreTasks[0].Result; // TODO
+        var currentPosition = minPosition;
 
-        var subscription = _subscriptionFactory(continueAfterPosition);
-        await using var messageEnumerator = subscription.ConsumeAsync().GetAsyncEnumerator();
+        foreach (var session in _sessions)
+        {
+            session.Start();
+        }
+
+        var subscription = _subscriptionFactory(currentPosition);
+        var messages = subscription.ConsumeAsync(cancellationToken);
+        await using var messageEnumerator = messages.GetAsyncEnumerator(cancellationToken);
 
         var nextMessageTask = messageEnumerator.MoveNextAsync().AsTask();
-        var tickTask = Task.Delay(TimeSpan.FromSeconds(1));
+        var tickTask = Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
 
-        var currentPosition = continueAfterPosition;
-
-        while (true)
+        while (!cancellationToken.IsCancellationRequested)
         {
             var completedTask = await Task.WhenAny(nextMessageTask, tickTask);
 
             if (completedTask == nextMessageTask)
             {
-                if (nextMessageTask.Result)
-                {
-                    var message = messageEnumerator.Current;
+                if (!nextMessageTask.Result) continue; // TODO
 
-                    switch (message)
-                    {
-                        case SubscriptionMessage.Event e:
-                            var readEvent = e.ReadEventRecord;
-
-                            currentPosition = _isAllEventStream
-                                ? new SubscriptionPosition(readEvent.GlobalPosition.ToUInt64())
-                                : new SubscriptionPosition(readEvent.StreamPosition.ToUInt64());
-
-                            var events = _eventMapper.FromReadEvent(readEvent);
-                            foreach (var @event in events)
-                            {
-                                if (_eventHandlers.TryGetValue(@event.GetType(), out var handler))
-                                {
-                                    var context = new EventHandlerContext(
-                                        @event, currentPosition.Value, CancellationToken.None);
-
-                                    await handler(context);
-                                }
-                            }
-
-                            break;
-                        case SubscriptionMessage.CaughtUp:
-                            await _consumer.OnCaughtUpAsync(CancellationToken.None);
-                            break;
-                        case SubscriptionMessage.FellBehind:
-                            await _consumer.OnFellBehindAsync(CancellationToken.None);
-                            break;
-                        case SubscriptionMessage.SubscriptionDropped dropped:
-                            await _consumer.OnSubscriptionDroppedAsync(dropped.Exception, CancellationToken.None);
-                            break;
-                    }
-
-                    nextMessageTask = messageEnumerator.MoveNextAsync().AsTask();
-                }
+                var message = messageEnumerator.Current;
+                await HandleMessageAsync(message, cancellationToken);
+                nextMessageTask = messageEnumerator.MoveNextAsync().AsTask();
             }
             else
             {
                 Console.WriteLine("Tick");
-                tickTask = Task.Delay(TimeSpan.FromSeconds(1));
-
-                if (currentPosition.HasValue)
-                    await _consumer.OnCheckpointAsync(currentPosition.Value, CancellationToken.None);
+                tickTask = Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
             }
         }
+    }
+
+    private async Task HandleMessageAsync(SubscriptionMessage message, CancellationToken cancellationToken)
+    {
+        switch (message)
+        {
+            case SubscriptionMessage.EventReceived eventReceived:
+                await HandleEventReceivedMessageAsync(eventReceived, cancellationToken);
+                break;
+            case SubscriptionMessage.CaughtUp caughtUp:
+                await HandleCaughtUpMessageAsync(caughtUp, cancellationToken);
+                break;
+            case SubscriptionMessage.FellBehind fellBehind:
+                await HandleFellBehindMessageAsync(fellBehind, cancellationToken);
+                break;
+            case SubscriptionMessage.SubscriptionDropped subscriptionDropped:
+                await HandleSubscriptionDroppedMessageAsync(subscriptionDropped, cancellationToken);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(message));
+        }
+    }
+
+    private async ValueTask HandleEventReceivedMessageAsync(
+        SubscriptionMessage.EventReceived message, CancellationToken cancellationToken)
+    {
+        var mappedEventTypes = _eventMapper.GetMappedEventTypes(message.EventEntry).ToArray();
+
+        // Find sessions that can handle the mapped event types.
+        var sessions = _sessions.Where(x => mappedEventTypes.Any(x.CanHandle)).ToArray();
+
+        // No sessions can handle the mapped event types. Ignore.
+        if (sessions.Length == 0) return;
+
+        var mappedEvents = _eventMapper.ToEventObjects(message.EventEntry);
+
+        var eventHandlerContexts = mappedEvents
+            .Select(x => new EventHandlerContext(x, message.Position, cancellationToken));
+
+        foreach (var context in eventHandlerContexts)
+        {
+            foreach (var session in sessions)
+            {
+                await session.NotifyEventReceivedAsync(context, cancellationToken);
+            }
+        }
+    }
+
+    private async Task HandleCaughtUpMessageAsync(
+        SubscriptionMessage.CaughtUp message, CancellationToken cancellationToken)
+    {
+        await Task.CompletedTask;
+    }
+
+    private async Task HandleFellBehindMessageAsync(
+        SubscriptionMessage.FellBehind message, CancellationToken cancellationToken)
+    {
+        await Task.CompletedTask;
+    }
+
+    private async Task HandleSubscriptionDroppedMessageAsync(
+        SubscriptionMessage.SubscriptionDropped message, CancellationToken cancellationToken)
+    {
+        await Task.CompletedTask;
     }
 }

@@ -1,3 +1,5 @@
+using DomainBlocks.V1.Abstractions;
+
 namespace DomainBlocks.V1.Subscriptions;
 
 public interface IEventStreamConsumer

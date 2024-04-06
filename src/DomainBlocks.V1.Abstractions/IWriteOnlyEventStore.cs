@@ -7,13 +7,13 @@ public interface IWriteOnlyEventStore
 {
     Task<StreamPosition?> AppendToStreamAsync(
         string streamName,
-        IEnumerable<WriteEventRecord> events,
+        IEnumerable<WritableEventEntry> events,
         StreamPosition expectedVersion,
         CancellationToken cancellationToken = default);
 
     Task<StreamPosition?> AppendToStreamAsync(
         string streamName,
-        IEnumerable<WriteEventRecord> events,
+        IEnumerable<WritableEventEntry> events,
         ExpectedStreamState expectedState,
         CancellationToken cancellationToken = default);
 }

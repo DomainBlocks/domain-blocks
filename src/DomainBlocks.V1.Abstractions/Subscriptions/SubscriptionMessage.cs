@@ -2,14 +2,16 @@ namespace DomainBlocks.V1.Abstractions.Subscriptions;
 
 public abstract class SubscriptionMessage
 {
-    public class Event : SubscriptionMessage
+    public class EventReceived : SubscriptionMessage
     {
-        public Event(ReadEventRecord readEventRecord)
+        public EventReceived(StoredEventEntry eventEntry, SubscriptionPosition position)
         {
-            ReadEventRecord = readEventRecord;
+            EventEntry = eventEntry;
+            Position = position;
         }
 
-        public ReadEventRecord ReadEventRecord { get; }
+        public StoredEventEntry EventEntry { get; }
+        public SubscriptionPosition Position { get; }
     }
 
     public class CaughtUp : SubscriptionMessage

@@ -9,8 +9,7 @@ public static class ReadOnlyEventStoreExtensions
     {
         return new EventStreamSubscriber(
             pos => eventStore.SubscribeToAll(pos == null ? null : new GlobalPosition(pos.Value.Value)),
-            true,
-            consumer,
+            new[] { consumer },
             eventMapper);
     }
 
@@ -22,8 +21,7 @@ public static class ReadOnlyEventStoreExtensions
     {
         return new EventStreamSubscriber(
             pos => eventStore.SubscribeToStream(streamName, pos == null ? null : new StreamPosition(pos.Value.Value)),
-            false,
-            consumer,
+            new[] { consumer },
             eventMapper);
     }
 }

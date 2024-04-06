@@ -1,8 +1,8 @@
 namespace DomainBlocks.V1.Abstractions;
 
-public sealed class ReadEventRecord : EventRecordBase
+public sealed class StoredEventEntry : EventEntryBase
 {
-    public ReadEventRecord(
+    public StoredEventEntry(
         string name,
         ReadOnlyMemory<byte> payload,
         ReadOnlyMemory<byte>? metadata,

@@ -21,7 +21,7 @@ public sealed class EventStoreDbEventStore : IEventStore
         _client = client ?? throw new ArgumentNullException(nameof(client));
     }
 
-    public IAsyncEnumerable<ReadEventRecord> ReadStreamAsync(
+    public IAsyncEnumerable<StoredEventEntry> ReadStreamAsync(
         string streamName,
         StreamReadDirection direction,
         StreamPosition fromPosition,
@@ -30,7 +30,7 @@ public sealed class EventStoreDbEventStore : IEventStore
         return ReadStreamInternalAsync(streamName, direction, fromPosition, null, cancellationToken);
     }
 
-    public IAsyncEnumerable<ReadEventRecord> ReadStreamAsync(
+    public IAsyncEnumerable<StoredEventEntry> ReadStreamAsync(
         string streamName,
         StreamReadDirection direction,
         StreamReadOrigin readOrigin = StreamReadOrigin.Default,
@@ -51,7 +51,7 @@ public sealed class EventStoreDbEventStore : IEventStore
 
     public Task<StreamPosition?> AppendToStreamAsync(
         string streamName,
-        IEnumerable<WriteEventRecord> events,
+        IEnumerable<WritableEventEntry> events,
         StreamPosition expectedVersion,
         CancellationToken cancellationToken = default)
     {
@@ -60,14 +60,14 @@ public sealed class EventStoreDbEventStore : IEventStore
 
     public Task<StreamPosition?> AppendToStreamAsync(
         string streamName,
-        IEnumerable<WriteEventRecord> events,
+        IEnumerable<WritableEventEntry> events,
         ExpectedStreamState expectedState,
         CancellationToken cancellationToken = default)
     {
         return AppendToStreamInternalAsync(streamName, events, null, expectedState, cancellationToken);
     }
 
-    private async IAsyncEnumerable<ReadEventRecord> ReadStreamInternalAsync(
+    private async IAsyncEnumerable<StoredEventEntry> ReadStreamInternalAsync(
         string streamName,
         StreamReadDirection direction,
         StreamPosition? fromVersion,
@@ -108,7 +108,7 @@ public sealed class EventStoreDbEventStore : IEventStore
             var streamPosition = new StreamPosition(resolvedEvent.OriginalEvent.EventNumber);
             var globalPosition = new GlobalPosition(resolvedEvent.OriginalEvent.Position.CommitPosition);
 
-            yield return new ReadEventRecord(
+            yield return new StoredEventEntry(
                 resolvedEvent.Event.EventType,
                 resolvedEvent.Event.Data,
                 resolvedEvent.Event.Metadata,
@@ -119,7 +119,7 @@ public sealed class EventStoreDbEventStore : IEventStore
 
     private async Task<StreamPosition?> AppendToStreamInternalAsync(
         string streamName,
-        IEnumerable<WriteEventRecord> events,
+        IEnumerable<WritableEventEntry> events,
         StreamPosition? expectedVersion,
         ExpectedStreamState? expectedState,
         CancellationToken cancellationToken)

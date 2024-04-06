@@ -35,14 +35,10 @@ await streamStore.CreateSchemaIfNotExists();
 var eventStore = new SqlStreamStoreEventStore(streamStore);
 
 // Builder idea
-// var config = new CatchUpSubscriptionConfigBuilder()
+// var config = new EventStreamSubscriptionConfigBuilder()
 //     .UseSqlStreamStore(streamStore)
 //     .SubscribeToAll()
-//     .AddConsumer<ShoppingCartReadModel>(config =>
-//     {
-//         config.UseCheckpointPolicy<MyCheckpointPolicy>();
-//         config.UseRetryPolicy<MyRetryPolicy>();
-//     })
+//     .WithConsumer<PostgresShoppingCartProjection>()
 //     .Build();
 
 var services = new ServiceCollection();
