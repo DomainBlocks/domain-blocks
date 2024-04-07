@@ -35,29 +35,82 @@ public class EventStreamConsumerSessionTests
     }
 
     [Test]
-    public async Task RestoreAsync_ReturnsPositionFromConsumerOnRestoreAsync()
+    public async Task StartAsync_ReturnsPositionFromConsumerOnRestoreAsync()
     {
         var position = new SubscriptionPosition(42);
         _mockConsumer.Setup(x => x.OnRestoreAsync(CancellationToken.None)).ReturnsAsync(new SubscriptionPosition(42));
 
-        var result = await _session.RestoreAsync(CancellationToken.None);
+        await _session.InitializeAsync();
+        var result = await _session.StartAsync(CancellationToken.None);
 
         Assert.That(result, Is.EqualTo(position));
     }
 
     [Test]
-    public async Task Start_StartsReadingMessages()
+    public async Task StartAsync_StartsReadingMessages()
     {
-        _session.Start();
+        await _session.InitializeAsync();
+        await _session.StartAsync();
         await _session.FlushAsync();
     }
 
     [Test]
-    public async Task StopAsync_StopsProcessingMessages()
+    public async Task StartAsync_AfterEventHandlerError_ResumesFromFaultedMessage()
     {
-        _session.Start();
-        await _session.FlushAsync();
-        await _session.StopAsync(CancellationToken.None);
-        await _session.WaitForCompletedAsync();
+        var consumer = new RandomlyFailingConsumer();
+        var session = new EventStreamConsumerSession(consumer);
+
+        await session.InitializeAsync();
+        await session.StartAsync();
+
+        var contexts = Enumerable
+            .Range(0, 1000)
+            .Select(i =>
+            {
+                var position = new SubscriptionPosition((ulong)i);
+                return new EventHandlerContext(new TestEvent(), position, CancellationToken.None);
+            })
+            .ToArray();
+
+        foreach (var context in contexts)
+        {
+            await session.NotifyEventReceivedAsync(context, CancellationToken.None);
+        }
+
+        while (consumer.HandledEvents.Count < contexts.Length)
+        {
+            await session.WaitForCompletedAsync();
+
+            Assert.That(session.Error, Is.Not.Null);
+
+            await session.StartAsync();
+        }
+
+        Assert.That(consumer.HandledEvents, Has.Count.EqualTo(contexts.Length));
+        Assert.That(consumer.ErrorCount, Is.GreaterThan(1));
     }
+
+    private class RandomlyFailingConsumer : IEventStreamConsumer, IEventHandler<TestEvent>
+    {
+        private readonly Random _random = new();
+        private readonly List<TestEvent> _handledEvents = new();
+
+        public Task OnEventAsync(EventHandlerContext<TestEvent> context)
+        {
+            var isError = _random.Next(2) == 1;
+            if (isError)
+            {
+                ErrorCount++;
+                throw new Exception("Random error.");
+            }
+
+            _handledEvents.Add(context.Event);
+            return Task.CompletedTask;
+        }
+
+        public IReadOnlyCollection<TestEvent> HandledEvents => _handledEvents;
+        public int ErrorCount { get; private set; }
+    }
+
+    private record TestEvent;
 }

@@ -42,16 +42,11 @@ public class EventStreamSubscriber
         var initializingTasks = _sessions.Select(x => x.InitializeAsync(cancellationToken));
         await Task.WhenAll(initializingTasks);
 
-        var restoreTasks = _sessions.Select(x => x.RestoreAsync(cancellationToken)).ToArray();
-        await Task.WhenAll(restoreTasks);
-        var allRestoredPositions = restoreTasks.Select(x => x.Result).ToArray();
-        var minPosition = restoreTasks[0].Result; // TODO
+        var startTasks = _sessions.Select(x => x.StartAsync(cancellationToken)).ToArray();
+        await Task.WhenAll(startTasks);
+        var allRestoredPositions = startTasks.Select(x => x.Result).ToArray();
+        var minPosition = startTasks[0].Result; // TODO
         var currentPosition = minPosition;
-
-        foreach (var session in _sessions)
-        {
-            session.Start();
-        }
 
         var subscription = _subscriptionFactory(currentPosition);
         var messages = subscription.ConsumeAsync(cancellationToken);

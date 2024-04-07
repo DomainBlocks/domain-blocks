@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Threading.Channels;
 using DomainBlocks.V1.Abstractions;
 using DomainBlocks.V1.Abstractions.Subscriptions;
@@ -8,10 +9,10 @@ public class EventStreamConsumerSession
 {
     private readonly IEventStreamConsumer _consumer;
     private readonly Dictionary<Type, Func<EventHandlerContext, Task>> _eventHandlers;
-    private int _isInitialized;
+    private volatile EventStreamConsumerSessionStatus _status;
     private Channel<SubscriptionMessage>? _messageChannel;
     private CancellationTokenSource? _cancellationTokenSource;
-    private Task? _consumeTask;
+    private Task? _messageLoopTask;
     private SubscriptionPosition? _startPosition;
 
     public EventStreamConsumerSession(IEventStreamConsumer consumer)
@@ -20,46 +21,41 @@ public class EventStreamConsumerSession
         _eventHandlers = consumer.GetEventHandlers();
     }
 
+    public EventStreamConsumerSessionStatus Status => _status;
+    public bool IsFaulted => _status == EventStreamConsumerSessionStatus.Faulted;
+    public Exception? Error { get; private set; }
+    public SubscriptionMessage? FaultedMessage { get; private set; }
+
     private Channel<SubscriptionMessage> MessageChannel => _messageChannel ?? throw new InvalidOperationException();
 
-    public Task InitializeAsync(CancellationToken cancellationToken)
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        if (Interlocked.Exchange(ref _isInitialized, 1) == 1)
-        {
-            throw new InvalidOperationException("Session can only be initialized once.");
-        }
-
-        return _consumer.OnInitializingAsync(cancellationToken);
+        EnsureStatus(EventStreamConsumerSessionStatus.Uninitialized);
+        await _consumer.OnInitializingAsync(cancellationToken);
+        _status = EventStreamConsumerSessionStatus.Stopped;
     }
 
-    public async Task<SubscriptionPosition?> RestoreAsync(CancellationToken cancellationToken)
+    public async Task<SubscriptionPosition?> StartAsync(CancellationToken cancellationToken = default)
     {
+        EnsureStatusIsOneOf(EventStreamConsumerSessionStatus.Stopped, EventStreamConsumerSessionStatus.Faulted);
+        _status = EventStreamConsumerSessionStatus.Started;
+
+        // Clear any error
+        Error = null;
+        FaultedMessage = null;
+
         _startPosition = await _consumer.OnRestoreAsync(cancellationToken);
-        return _startPosition;
-    }
 
-    public void Start()
-    {
-        _messageChannel = Channel.CreateUnbounded<SubscriptionMessage>();
+        _messageChannel ??= Channel.CreateUnbounded<SubscriptionMessage>();
         _cancellationTokenSource = new CancellationTokenSource();
-        _consumeTask = ConsumeAllMessagesAsync(_cancellationTokenSource.Token);
-    }
+        _messageLoopTask = ConsumeAllMessagesAsync(_cancellationTokenSource.Token);
 
-    public async Task StopAsync(CancellationToken cancellationToken)
-    {
-        _cancellationTokenSource?.Cancel();
-        await (_consumeTask?.WaitAsync(cancellationToken) ?? Task.CompletedTask);
-
-        _cancellationTokenSource?.Dispose();
-
-        _messageChannel = null;
-        _cancellationTokenSource = null;
-        _consumeTask = null;
+        return _startPosition;
     }
 
     public Task WaitForCompletedAsync(CancellationToken cancellationToken = default)
     {
-        return (_consumeTask ?? Task.CompletedTask).WaitAsync(cancellationToken);
+        return (_messageLoopTask ?? Task.CompletedTask).WaitAsync(cancellationToken);
     }
 
     public bool CanHandle(Type eventType) => _eventHandlers.ContainsKey(eventType);
@@ -97,48 +93,59 @@ public class EventStreamConsumerSession
 
     private async Task ConsumeAllMessagesAsync(CancellationToken cancellationToken)
     {
-        var nextMessageTask = MessageChannel.Reader.ReadAsync(cancellationToken).AsTask();
+        var nextMessageReadyTask = MessageChannel.Reader.WaitToReadAsync(cancellationToken).AsTask();
 
         while (!cancellationToken.IsCancellationRequested)
         {
-            var completedTask = await Task.WhenAny(nextMessageTask);
+            var completedTask = await Task.WhenAny(nextMessageReadyTask);
 
-            if (completedTask == nextMessageTask)
+            if (completedTask == nextMessageReadyTask)
             {
-                await HandleMessageAsync(completedTask.Result, cancellationToken);
-                nextMessageTask = MessageChannel.Reader.ReadAsync(cancellationToken).AsTask();
+                await HandleNextMessageAsync(cancellationToken);
+                nextMessageReadyTask = MessageChannel.Reader.WaitToReadAsync(cancellationToken).AsTask();
             }
         }
     }
 
-    private async Task HandleMessageAsync(SubscriptionMessage message, CancellationToken cancellationToken)
+    private async Task HandleNextMessageAsync(CancellationToken cancellationToken)
     {
-        switch (message)
+        MessageChannel.Reader.TryPeek(out var message);
+        Debug.Assert(message != null, "Expected TryPeek to succeed.");
+
+        try
         {
-            case ConsumerMessage.EventReceived @event:
-                await HandleEventReceivedMessageAsync(@event, cancellationToken);
-                break;
-            case SubscriptionMessage.CaughtUp caughtUp:
-                await HandleCaughtUpMessageAsync(caughtUp, cancellationToken);
-                break;
-            case SubscriptionMessage.FellBehind fellBehind:
-                await HandleFellBehindMessageAsync(fellBehind, cancellationToken);
-                break;
-            case SubscriptionMessage.SubscriptionDropped subscriptionDropped:
-                await HandleSubscriptionDroppedMessageAsync(subscriptionDropped, cancellationToken);
-                break;
-            case ConsumerMessage.FlushRequested flushRequested:
-                flushRequested.NotifyReceived();
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(message));
+            switch (message)
+            {
+                case ConsumerMessage.EventReceived @event:
+                    await HandleEventReceivedMessageAsync(@event, cancellationToken);
+                    break;
+                case SubscriptionMessage.CaughtUp caughtUp:
+                    await HandleCaughtUpMessageAsync(caughtUp, cancellationToken);
+                    break;
+                case SubscriptionMessage.FellBehind fellBehind:
+                    await HandleFellBehindMessageAsync(fellBehind, cancellationToken);
+                    break;
+                case SubscriptionMessage.SubscriptionDropped subscriptionDropped:
+                    await HandleSubscriptionDroppedMessageAsync(subscriptionDropped, cancellationToken);
+                    break;
+                case ConsumerMessage.FlushRequested flushRequested:
+                    flushRequested.NotifyReceived();
+                    break;
+            }
+
+            var success = MessageChannel.Reader.TryRead(out _);
+            Debug.Assert(success, "Expected TryRead to succeed.");
+        }
+        catch (Exception ex)
+        {
+            await SetFaultedAsync(ex, message);
         }
     }
 
     private async Task HandleEventReceivedMessageAsync(
         ConsumerMessage.EventReceived message, CancellationToken cancellationToken)
     {
-        // TODO: How to deal CT here?
+        // TODO: How to deal with CT here?
         var context = message.EventHandlerContext;
 
         if (!_eventHandlers.TryGetValue(context.Event.GetType(), out var handler))
@@ -173,5 +180,40 @@ public class EventStreamConsumerSession
         SubscriptionMessage.SubscriptionDropped message, CancellationToken cancellationToken)
     {
         await Task.CompletedTask;
+    }
+
+    private async Task SetFaultedAsync(Exception exception, SubscriptionMessage faultedMessage)
+    {
+        EnsureStatus(EventStreamConsumerSessionStatus.Started);
+        _status = EventStreamConsumerSessionStatus.Faulted;
+
+        Error = exception;
+        FaultedMessage = faultedMessage;
+
+        _cancellationTokenSource?.Cancel();
+        _cancellationTokenSource?.Dispose();
+        _cancellationTokenSource = null;
+        _messageLoopTask = null;
+
+        await Task.CompletedTask;
+    }
+
+    private void EnsureStatus(EventStreamConsumerSessionStatus expectedStatus)
+    {
+        if (_status != expectedStatus)
+        {
+            throw new InvalidOperationException($"Expected status {expectedStatus}, but got {_status}.");
+        }
+    }
+
+    private void EnsureStatusIsOneOf(params EventStreamConsumerSessionStatus[] expectedStatuses)
+    {
+        if (!expectedStatuses.Contains(_status))
+        {
+            var expectedStatusesText = string.Join(", ", expectedStatuses);
+
+            throw new InvalidOperationException(
+                $"Expected status to be one of [{expectedStatusesText}], but got {_status}.");
+        }
     }
 }
