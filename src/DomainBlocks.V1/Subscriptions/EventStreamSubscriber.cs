@@ -8,8 +8,8 @@ public class EventStreamSubscriber
     private readonly Func<SubscriptionPosition?, IEventStreamSubscription> _subscriptionFactory;
     private readonly EventStreamConsumerSession[] _sessions;
     private readonly EventMapper _eventMapper;
-    private CancellationTokenSource? _cancellationTokenSource;
-    private Task? _consumeTask;
+    private readonly CancellationTokenSource _cancellationTokenSource = new();
+    private Task _consumeTask = Task.CompletedTask;
 
     internal EventStreamSubscriber(
         Func<SubscriptionPosition?, IEventStreamSubscription> subscriptionFactory,
@@ -23,17 +23,11 @@ public class EventStreamSubscriber
 
     public void Start()
     {
-        _cancellationTokenSource = new CancellationTokenSource();
         _consumeTask = ConsumeAllMessagesAsync(_cancellationTokenSource.Token);
     }
 
     public Task WaitForCompletedAsync(CancellationToken cancellationToken = default)
     {
-        if (_consumeTask == null)
-        {
-            throw new InvalidOperationException("Subscription is not started.");
-        }
-
         return _consumeTask.WaitAsync(cancellationToken);
     }
 
@@ -80,62 +74,37 @@ public class EventStreamSubscriber
         switch (message)
         {
             case SubscriptionMessage.EventReceived eventReceived:
-                await HandleEventReceivedMessageAsync(eventReceived, cancellationToken);
-                break;
-            case SubscriptionMessage.CaughtUp caughtUp:
-                await HandleCaughtUpMessageAsync(caughtUp, cancellationToken);
-                break;
-            case SubscriptionMessage.FellBehind fellBehind:
-                await HandleFellBehindMessageAsync(fellBehind, cancellationToken);
-                break;
-            case SubscriptionMessage.SubscriptionDropped subscriptionDropped:
-                await HandleSubscriptionDroppedMessageAsync(subscriptionDropped, cancellationToken);
+                await HandleEventReceivedAsync(eventReceived, cancellationToken);
                 break;
             default:
-                throw new ArgumentOutOfRangeException(nameof(message));
+                foreach (var session in _sessions)
+                {
+                    await session.NotifyMessageAsync(message, cancellationToken);
+                }
+
+                break;
         }
     }
 
-    private async ValueTask HandleEventReceivedMessageAsync(
+    private async ValueTask HandleEventReceivedAsync(
         SubscriptionMessage.EventReceived message, CancellationToken cancellationToken)
     {
         var mappedEventTypes = _eventMapper.GetMappedEventTypes(message.EventEntry).ToArray();
 
         // Find sessions that can handle the mapped event types.
-        var sessions = _sessions.Where(x => mappedEventTypes.Any(x.CanHandle)).ToArray();
+        var sessions = _sessions.Where(x => mappedEventTypes.Any(x.CanHandleEventType)).ToArray();
 
         // No sessions can handle the mapped event types. Ignore.
         if (sessions.Length == 0) return;
 
         var mappedEvents = _eventMapper.ToEventObjects(message.EventEntry);
 
-        var eventHandlerContexts = mappedEvents
-            .Select(x => new EventHandlerContext(x, message.Position, cancellationToken));
-
-        foreach (var context in eventHandlerContexts)
+        foreach (var @event in mappedEvents)
         {
             foreach (var session in sessions)
             {
-                await session.NotifyEventReceivedAsync(context, cancellationToken);
+                await session.NotifyEventReceivedAsync(@event, message.Position, cancellationToken);
             }
         }
-    }
-
-    private async Task HandleCaughtUpMessageAsync(
-        SubscriptionMessage.CaughtUp message, CancellationToken cancellationToken)
-    {
-        await Task.CompletedTask;
-    }
-
-    private async Task HandleFellBehindMessageAsync(
-        SubscriptionMessage.FellBehind message, CancellationToken cancellationToken)
-    {
-        await Task.CompletedTask;
-    }
-
-    private async Task HandleSubscriptionDroppedMessageAsync(
-        SubscriptionMessage.SubscriptionDropped message, CancellationToken cancellationToken)
-    {
-        await Task.CompletedTask;
     }
 }

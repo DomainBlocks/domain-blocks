@@ -55,7 +55,7 @@ public class EventStreamConsumerSessionTests
     }
 
     [Test]
-    public async Task StartAsync_AfterEventHandlerError_ResumesFromFaultedMessage()
+    public async Task Resume_WhenHasError_ResumesFromFaultedMessage()
     {
         var consumer = new RandomlyFailingConsumer();
         var session = new EventStreamConsumerSession(consumer);
@@ -63,30 +63,44 @@ public class EventStreamConsumerSessionTests
         await session.InitializeAsync();
         await session.StartAsync();
 
-        var contexts = Enumerable
+        var events = Enumerable
             .Range(0, 1000)
             .Select(i =>
             {
                 var position = new SubscriptionPosition((ulong)i);
-                return new EventHandlerContext(new TestEvent(), position, CancellationToken.None);
+                return (new TestEvent(), position);
             })
             .ToArray();
 
-        foreach (var context in contexts)
+        foreach (var (e, pos) in events)
         {
-            await session.NotifyEventReceivedAsync(context, CancellationToken.None);
+            await session.NotifyEventReceivedAsync(e, pos);
         }
 
-        while (consumer.HandledEvents.Count < contexts.Length)
+        var flushTask = session.FlushAsync().AsTask();
+
+        while (consumer.HandledEvents.Count < events.Length)
         {
-            await session.WaitForCompletedAsync();
+            var messageLoopTask = session.WaitForCompletedAsync();
+            var completedTask = await Task.WhenAny(messageLoopTask, flushTask);
 
-            Assert.That(session.Error, Is.Not.Null);
+            if (completedTask == messageLoopTask)
+            {
+                Assert.That(session.Status, Is.EqualTo(EventStreamConsumerSessionStatus.Suspended));
+                Assert.That(session.HasError, Is.True);
+                Assert.That(session.Error, Is.Not.Null);
+                Assert.That(session.FaultedMessage, Is.Not.Null);
 
-            await session.StartAsync();
+                session.Resume();
+            }
+            else
+            {
+                // The flush task completed. We're done.
+                break;
+            }
         }
 
-        Assert.That(consumer.HandledEvents, Has.Count.EqualTo(contexts.Length));
+        Assert.That(consumer.HandledEvents, Has.Count.EqualTo(events.Length));
         Assert.That(consumer.ErrorCount, Is.GreaterThan(1));
     }
 
@@ -95,8 +109,11 @@ public class EventStreamConsumerSessionTests
         private readonly Random _random = new();
         private readonly List<TestEvent> _handledEvents = new();
 
-        public Task OnEventAsync(EventHandlerContext<TestEvent> context)
+        public async Task OnEventAsync(EventHandlerContext<TestEvent> context)
         {
+            // Enforce asynchronicity so we properly test the async behaviour.
+            await Task.Yield();
+
             var isError = _random.Next(2) == 1;
             if (isError)
             {
@@ -105,7 +122,6 @@ public class EventStreamConsumerSessionTests
             }
 
             _handledEvents.Add(context.Event);
-            return Task.CompletedTask;
         }
 
         public IReadOnlyCollection<TestEvent> HandledEvents => _handledEvents;

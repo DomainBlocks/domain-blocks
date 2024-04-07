@@ -4,6 +4,6 @@ public enum EventStreamConsumerSessionStatus
 {
     Uninitialized,
     Stopped,
-    Started,
-    Faulted
+    Running,
+    Suspended
 }
