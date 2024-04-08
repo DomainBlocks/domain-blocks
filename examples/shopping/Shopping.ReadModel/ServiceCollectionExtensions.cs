@@ -49,7 +49,7 @@ public static class ServiceCollectionExtensions
             var eventMapper = new EventMapperBuilder().MapAll<IDomainEvent>(_ => { }).Build();
 
             return new EventStreamSubscriptionService(
-                "all-events-subscription",
+                "all-events",
                 pos => eventStore.SubscribeToAll(pos == null ? null : new GlobalPosition(pos.Value.Value)),
                 consumers,
                 eventMapper);

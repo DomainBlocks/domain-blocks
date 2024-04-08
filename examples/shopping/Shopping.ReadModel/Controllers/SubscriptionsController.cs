@@ -1,7 +1,7 @@
 using DomainBlocks.V1.Subscriptions;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Shopping.ReadModel;
+namespace Shopping.ReadModel.Controllers;
 
 [ApiController]
 [Route("Subscriptions")]
@@ -33,7 +33,17 @@ public class SubscriptionsController : ControllerBase
 
         return Ok(results);
     }
-    
+
+    [HttpPost("{subscriptionName}/consumers/{consumerName}/resume")]
+    public async Task<ActionResult> Resume(
+        string subscriptionName, string consumerName, CancellationToken cancellationToken)
+    {
+        var subscription = _subscriptions[subscriptionName];
+        var consumer = subscription.ConsumerSessions.Single(x => x.ConsumerName == consumerName);
+        await consumer.ResumeAsync(cancellationToken);
+        return Ok();
+    }
+
     public class SubscriptionDto
     {
         public string Name { get; set; } = null!;

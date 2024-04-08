@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-namespace Shopping.ReadModel;
+namespace Shopping.ReadModel.Controllers;
 
 [ApiController]
 [Route("ShoppingCart")]
