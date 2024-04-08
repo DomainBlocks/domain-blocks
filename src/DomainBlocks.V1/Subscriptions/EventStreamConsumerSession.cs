@@ -19,6 +19,7 @@ public class EventStreamConsumerSession
     private Task _messageLoopTask = Task.CompletedTask;
     private TaskCompletionSource _suspendedSignal = new();
     private SubscriptionPosition? _startPosition;
+    private EventStreamConsumerSessionStatus _status;
 
     public EventStreamConsumerSession(IEventStreamConsumer consumer)
     {
@@ -29,7 +30,31 @@ public class EventStreamConsumerSession
     }
 
     public string ConsumerName => _consumer.Name;
-    public EventStreamConsumerSessionStatus Status { get; private set; }
+
+    public EventStreamConsumerSessionStatus Status
+    {
+        get => _status;
+
+        private set
+        {
+            if (_status == value) return;
+
+            var prevStatus = _status;
+            _status = value;
+
+            var logLevel = _status == EventStreamConsumerSessionStatus.Suspended
+                ? LogLevel.Warning
+                : LogLevel.Information;
+
+            Logger.Log(
+                logLevel,
+                "{ConsumerName} status changed from {PrevStatus} to {Status}.",
+                ConsumerName,
+                prevStatus,
+                _status);
+        }
+    }
+
     public bool IsSuspended => Status == EventStreamConsumerSessionStatus.Suspended;
     public bool IsFaulted => Error != null;
     public Exception? Error { get; private set; }
@@ -145,9 +170,6 @@ public class EventStreamConsumerSession
             }
             catch (Exception ex)
             {
-                // TODO: Better logging
-                Logger.LogError(ex, "Error processing message.");
-
                 Error = ex;
                 FaultedMessage = message;
                 Status = EventStreamConsumerSessionStatus.Suspended;
@@ -207,21 +229,34 @@ public class EventStreamConsumerSession
     private async Task HandleEventMappedAsync(EventMapped message)
     {
         var context = message.EventHandlerContext;
+        var eventType = context.Event.GetType();
 
-        if (!_eventHandlers.TryGetValue(context.Event.GetType(), out var handler))
+        try
         {
-            return;
-        }
+            if (!_eventHandlers.TryGetValue(eventType, out var handler))
+            {
+                return;
+            }
 
-        if (_startPosition?.Value >= context.Position.Value)
+            if (_startPosition?.Value >= context.Position.Value)
+            {
+                return;
+            }
+
+            await handler(context);
+
+            // TODO: Get rid of this
+            await _consumer.OnCheckpointAsync(message.EventHandlerContext.Position, _messageLoopCts.Token);
+        }
+        catch (Exception ex)
         {
-            return;
+            Logger.LogError(
+                ex, "Error handling event. EventType: '{EventType}', Consumer Name: {ConsumerName}",
+                eventType,
+                ConsumerName);
+
+            throw;
         }
-
-        await handler(context);
-
-        // TODO: Get rid of this
-        await _consumer.OnCheckpointAsync(message.EventHandlerContext.Position, _messageLoopCts.Token);
     }
 
     private async Task HandleCaughtUpAsync(CaughtUp message)
