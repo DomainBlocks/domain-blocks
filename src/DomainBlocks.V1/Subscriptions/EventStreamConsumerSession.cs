@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Threading.Channels;
 using DomainBlocks.Logging;
-using DomainBlocks.V1.Abstractions;
+using DomainBlocks.V1.Abstractions.Subscriptions;
 using DomainBlocks.V1.Abstractions.Subscriptions.Messages;
 using DomainBlocks.V1.Subscriptions.Messages;
 using Microsoft.Extensions.Logging;

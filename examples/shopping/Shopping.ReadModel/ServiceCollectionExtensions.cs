@@ -50,7 +50,7 @@ public static class ServiceCollectionExtensions
 
             return new EventStreamSubscriptionService(
                 "all-events",
-                pos => eventStore.SubscribeToAll(pos == null ? null : new GlobalPosition(pos.Value.Value)),
+                pos => eventStore.SubscribeToAll(pos?.AsGlobalPosition()),
                 consumers,
                 eventMapper);
         });
