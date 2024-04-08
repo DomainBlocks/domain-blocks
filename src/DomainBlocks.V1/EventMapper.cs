@@ -20,35 +20,35 @@ public class EventMapper
         _serializer = serializer;
     }
 
-    public IEnumerable<Type> GetMappedEventTypes(StoredEventEntry storedEventEntry)
+    public IEnumerable<Type> GetMappedEventTypes(StoredEventRecord storedEventRecord)
     {
         // TODO: Remove duplication
-        if (!_mappingsByName.TryGetValue(storedEventEntry.Name, out var mapping))
+        if (!_mappingsByName.TryGetValue(storedEventRecord.Name, out var mapping))
         {
             throw new ArgumentException(
-                $"Mapping not found for event name '{storedEventEntry.Name}'.", nameof(storedEventEntry));
+                $"Mapping not found for event name '{storedEventRecord.Name}'.", nameof(storedEventRecord));
         }
 
         yield return mapping.EventType;
     }
 
-    public IEnumerable<object> ToEventObjects(StoredEventEntry storedEventEntry)
+    public IEnumerable<object> ToEventObjects(StoredEventRecord storedEventRecord)
     {
-        if (!_mappingsByName.TryGetValue(storedEventEntry.Name, out var mapping))
+        if (!_mappingsByName.TryGetValue(storedEventRecord.Name, out var mapping))
         {
             throw new ArgumentException(
-                $"Mapping not found for event name '{storedEventEntry.Name}'.", nameof(storedEventEntry));
+                $"Mapping not found for event name '{storedEventRecord.Name}'.", nameof(storedEventRecord));
         }
 
         // Consider ignored event names. Can yield zero events in the case a name is ignored.
         // Will be addressed in a future PR.
 
-        var @event = _serializer.Deserialize(storedEventEntry.Payload.Span, mapping.EventType);
+        var @event = _serializer.Deserialize(storedEventRecord.Payload.Span, mapping.EventType);
 
         yield return @event;
     }
 
-    public WritableEventEntry ToWritableEventEntry(object @event)
+    public WritableEventRecord ToWritableEventRecord(object @event)
     {
         if (!_mappingsByType.TryGetValue(@event.GetType(), out var mapping))
         {
@@ -57,6 +57,6 @@ public class EventMapper
 
         var payload = _serializer.Serialize(@event);
 
-        return new WritableEventEntry(mapping.EventName, payload, default);
+        return new WritableEventRecord(mapping.EventName, payload, default);
     }
 }

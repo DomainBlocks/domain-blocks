@@ -11,7 +11,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-var eventStore = builder.Configuration.GetValue<string>("EventStore");
+var eventStore = builder.Configuration.GetValue<string>("EventStoreType");
 if (eventStore == "SqlStreamStore")
 {
     // Still using the pre-Npgsql 6.0 timestamp behaviour.

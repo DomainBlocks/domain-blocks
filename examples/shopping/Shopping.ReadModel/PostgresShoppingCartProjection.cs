@@ -2,11 +2,10 @@ using DomainBlocks.V1.Abstractions;
 using DomainBlocks.V1.Subscriptions;
 using Microsoft.EntityFrameworkCore;
 using Shopping.Domain.Events;
-using Shopping.ReadModel;
 
-namespace DomainBlocks.V1.Playground;
+namespace Shopping.ReadModel;
 
-public class PostgresShoppingCartProjection2 :
+public class PostgresShoppingCartProjection :
     IEventStreamConsumer,
     IEventHandler<ShoppingSessionStarted>,
     IEventHandler<ItemAddedToShoppingCart>,
@@ -14,8 +13,9 @@ public class PostgresShoppingCartProjection2 :
 {
     private readonly IDbContextFactory<ShoppingCartDbContext> _dbContextFactory;
     private ShoppingCartDbContext? _currentDbContext;
+    private readonly Random _random = new();
 
-    public PostgresShoppingCartProjection2(IDbContextFactory<ShoppingCartDbContext> dbContextFactory)
+    public PostgresShoppingCartProjection(IDbContextFactory<ShoppingCartDbContext> dbContextFactory)
     {
         _dbContextFactory = dbContextFactory;
     }
@@ -36,6 +36,12 @@ public class PostgresShoppingCartProjection2 :
 
     public async Task OnEventAsync(EventHandlerContext<ItemAddedToShoppingCart> context)
     {
+        var isError = _random.Next(2) == 1;
+        if (isError)
+        {
+            throw new Exception("Random error.");
+        }
+
         var item = await DbContext.ShoppingCartItems.FindAsync(
             new object[] { context.Event.SessionId, context.Event.Item }, context.CancellationToken);
 

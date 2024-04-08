@@ -2,6 +2,7 @@
 using DomainBlocks.V1.Playground;
 using DomainBlocks.V1.Subscriptions;
 using DomainBlocks.ThirdParty.SqlStreamStore.Postgres;
+using DomainBlocks.V1.Abstractions;
 using DomainBlocks.V1.Persistence.Builders;
 using EventStore.Client;
 using Microsoft.EntityFrameworkCore;
@@ -53,10 +54,15 @@ services.AddDbContextFactory<ShoppingCartDbContext>();
 var serviceProvider = services.BuildServiceProvider();
 
 var dbContextFactory = serviceProvider.GetRequiredService<IDbContextFactory<ShoppingCartDbContext>>();
-var consumer = new PostgresShoppingCartProjection(dbContextFactory);
+var consumer = new PostgresShoppingCartProjection2(dbContextFactory);
 //var consumer = new MongoShoppingCartProjection();
 var eventMapper = new EventMapperBuilder().MapAll<IDomainEvent>(_ => { }).Build();
 
-var subscriber = eventStore.CreateSubscriber(consumer, eventMapper);
+var subscriber = new EventStreamSubscriptionService(
+    "all-events-subscription",
+    pos => eventStore.SubscribeToAll(pos == null ? null : new GlobalPosition(pos.Value.Value)),
+    new[] { consumer },
+    eventMapper);
+
 subscriber.Start();
 await subscriber.WaitForCompletedAsync();

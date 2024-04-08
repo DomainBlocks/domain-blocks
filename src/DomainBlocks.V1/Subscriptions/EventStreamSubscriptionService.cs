@@ -1,9 +1,10 @@
 using DomainBlocks.V1.Abstractions;
 using DomainBlocks.V1.Abstractions.Subscriptions;
+using DomainBlocks.V1.Abstractions.Subscriptions.Messages;
 
 namespace DomainBlocks.V1.Subscriptions;
 
-public class EventStreamSubscriber
+public class EventStreamSubscriptionService
 {
     private readonly Func<SubscriptionPosition?, IEventStreamSubscription> _subscriptionFactory;
     private readonly EventStreamConsumerSession[] _sessions;
@@ -11,15 +12,21 @@ public class EventStreamSubscriber
     private readonly CancellationTokenSource _cancellationTokenSource = new();
     private Task _consumeTask = Task.CompletedTask;
 
-    internal EventStreamSubscriber(
+    public EventStreamSubscriptionService(
+        string name,
         Func<SubscriptionPosition?, IEventStreamSubscription> subscriptionFactory,
         IEnumerable<IEventStreamConsumer> consumers,
         EventMapper eventMapper)
     {
+        Name = name;
         _subscriptionFactory = subscriptionFactory;
         _sessions = consumers.Select(x => new EventStreamConsumerSession(x)).ToArray();
         _eventMapper = eventMapper;
     }
+
+    public string Name { get; }
+
+    public IReadOnlyCollection<EventStreamConsumerSession> ConsumerSessions => _sessions;
 
     public void Start()
     {
@@ -63,33 +70,32 @@ public class EventStreamSubscriber
             }
             else
             {
-                Console.WriteLine("Tick");
+                //Console.WriteLine("Tick");
                 tickTask = Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
             }
         }
     }
 
-    private async Task HandleMessageAsync(SubscriptionMessage message, CancellationToken cancellationToken)
+    private async ValueTask HandleMessageAsync(ISubscriptionMessage message, CancellationToken cancellationToken)
     {
         switch (message)
         {
-            case SubscriptionMessage.EventReceived eventReceived:
+            case EventReceived eventReceived:
                 await HandleEventReceivedAsync(eventReceived, cancellationToken);
                 break;
-            default:
+            case ISubscriptionStatusMessage statusMessage:
                 foreach (var session in _sessions)
                 {
-                    await session.NotifyMessageAsync(message, cancellationToken);
+                    await session.NotifySubscriptionStatusAsync(statusMessage, cancellationToken);
                 }
 
                 break;
         }
     }
 
-    private async ValueTask HandleEventReceivedAsync(
-        SubscriptionMessage.EventReceived message, CancellationToken cancellationToken)
+    private async ValueTask HandleEventReceivedAsync(EventReceived message, CancellationToken cancellationToken)
     {
-        var mappedEventTypes = _eventMapper.GetMappedEventTypes(message.EventEntry).ToArray();
+        var mappedEventTypes = _eventMapper.GetMappedEventTypes(message.EventRecord).ToArray();
 
         // Find sessions that can handle the mapped event types.
         var sessions = _sessions.Where(x => mappedEventTypes.Any(x.CanHandleEventType)).ToArray();
@@ -97,7 +103,7 @@ public class EventStreamSubscriber
         // No sessions can handle the mapped event types. Ignore.
         if (sessions.Length == 0) return;
 
-        var mappedEvents = _eventMapper.ToEventObjects(message.EventEntry);
+        var mappedEvents = _eventMapper.ToEventObjects(message.EventRecord);
 
         foreach (var @event in mappedEvents)
         {

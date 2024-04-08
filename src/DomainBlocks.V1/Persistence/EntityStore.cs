@@ -79,11 +79,11 @@ public sealed class EntityStore : IEntityStore
 
         var entityId = entityAdapter.GetId(entity);
         var streamName = GetStreamName<TEntity>(entityId);
-        var entries = raisedEvents.Select(e => _eventMapper.ToWritableEventEntry(e));
+        var records = raisedEvents.Select(e => _eventMapper.ToWritableEventRecord(e));
 
         var appendTask = expectedVersion.HasValue
-            ? _eventStore.AppendToStreamAsync(streamName, entries, expectedVersion.Value, cancellationToken)
-            : _eventStore.AppendToStreamAsync(streamName, entries, ExpectedStreamState.NoStream, cancellationToken);
+            ? _eventStore.AppendToStreamAsync(streamName, records, expectedVersion.Value, cancellationToken)
+            : _eventStore.AppendToStreamAsync(streamName, records, ExpectedStreamState.NoStream, cancellationToken);
 
         await appendTask;
     }

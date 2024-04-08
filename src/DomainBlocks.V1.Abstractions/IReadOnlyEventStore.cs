@@ -7,13 +7,13 @@ namespace DomainBlocks.V1.Abstractions;
 /// </summary>
 public interface IReadOnlyEventStore
 {
-    IAsyncEnumerable<StoredEventEntry> ReadStreamAsync(
+    IAsyncEnumerable<StoredEventRecord> ReadStreamAsync(
         string streamName,
         StreamReadDirection direction,
         StreamPosition fromPosition,
         CancellationToken cancellationToken = default);
 
-    IAsyncEnumerable<StoredEventEntry> ReadStreamAsync(
+    IAsyncEnumerable<StoredEventRecord> ReadStreamAsync(
         string streamName,
         StreamReadDirection direction,
         StreamReadOrigin readOrigin = StreamReadOrigin.Default,

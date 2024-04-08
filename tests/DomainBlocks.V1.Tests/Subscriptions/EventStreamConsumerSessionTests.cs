@@ -55,7 +55,7 @@ public class EventStreamConsumerSessionTests
     }
 
     [Test]
-    public async Task Resume_WhenHasError_ResumesFromFaultedMessage()
+    public async Task Resume_WhenIsFaulted_ResumesFromFaultedMessage()
     {
         var consumer = new RandomlyFailingConsumer();
         var session = new EventStreamConsumerSession(consumer);
@@ -77,21 +77,21 @@ public class EventStreamConsumerSessionTests
             await session.NotifyEventReceivedAsync(e, pos);
         }
 
-        var flushTask = session.FlushAsync().AsTask();
+        var flushTask = session.FlushAsync();
 
         while (consumer.HandledEvents.Count < events.Length)
         {
-            var messageLoopTask = session.WaitForCompletedAsync();
-            var completedTask = await Task.WhenAny(messageLoopTask, flushTask);
+            var suspendedTask = session.WaitForSuspendedAsync();
+            var completedTask = await Task.WhenAny(suspendedTask, flushTask);
 
-            if (completedTask == messageLoopTask)
+            if (completedTask == suspendedTask)
             {
                 Assert.That(session.Status, Is.EqualTo(EventStreamConsumerSessionStatus.Suspended));
-                Assert.That(session.HasError, Is.True);
+                Assert.That(session.IsFaulted, Is.True);
                 Assert.That(session.Error, Is.Not.Null);
                 Assert.That(session.FaultedMessage, Is.Not.Null);
 
-                session.Resume();
+                await session.ResumeAsync();
             }
             else
             {

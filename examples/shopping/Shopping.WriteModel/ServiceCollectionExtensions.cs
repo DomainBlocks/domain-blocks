@@ -13,8 +13,8 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddShoppingWriteModel(
         this IServiceCollection services, IConfiguration configuration)
     {
-        var eventStore = configuration.GetValue<string>("EventStore");
-        var connectionString = configuration.GetConnectionString(eventStore);
+        var eventStoreType = configuration.GetValue<string>("EventStoreType");
+        var connectionString = configuration.GetConnectionString(eventStoreType);
 
         services.AddEntityStore(config =>
         {
@@ -22,7 +22,7 @@ public static class ServiceCollectionExtensions
                 .AddEntityAdapters(x => x.AddGenericFactoryFor(typeof(AggregateAdapter<>)))
                 .MapEvents(x => x.MapAll<IDomainEvent>());
 
-            switch (eventStore)
+            switch (eventStoreType)
             {
                 case "EventStoreDb":
                     config.UseEventStoreDb(connectionString);

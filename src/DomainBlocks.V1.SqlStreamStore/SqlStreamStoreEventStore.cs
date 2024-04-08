@@ -25,7 +25,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore
         _readPageSize = readPageSize;
     }
 
-    public IAsyncEnumerable<StoredEventEntry> ReadStreamAsync(
+    public IAsyncEnumerable<StoredEventRecord> ReadStreamAsync(
         string streamName,
         StreamReadDirection direction,
         StreamPosition fromPosition,
@@ -34,7 +34,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore
         return ReadStreamInternalAsync(streamName, direction, fromPosition, null, cancellationToken);
     }
 
-    public IAsyncEnumerable<StoredEventEntry> ReadStreamAsync(
+    public IAsyncEnumerable<StoredEventRecord> ReadStreamAsync(
         string streamName,
         StreamReadDirection direction,
         StreamReadOrigin readOrigin = StreamReadOrigin.Default,
@@ -55,7 +55,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore
 
     public Task<StreamPosition?> AppendToStreamAsync(
         string streamName,
-        IEnumerable<WritableEventEntry> events,
+        IEnumerable<WritableEventRecord> events,
         StreamPosition expectedVersion,
         CancellationToken cancellationToken = default)
     {
@@ -64,14 +64,14 @@ public sealed class SqlStreamStoreEventStore : IEventStore
 
     public Task<StreamPosition?> AppendToStreamAsync(
         string streamName,
-        IEnumerable<WritableEventEntry> events,
+        IEnumerable<WritableEventRecord> events,
         ExpectedStreamState expectedState,
         CancellationToken cancellationToken = default)
     {
         return AppendToStreamInternalAsync(streamName, events, null, expectedState, cancellationToken);
     }
 
-    private async IAsyncEnumerable<StoredEventEntry> ReadStreamInternalAsync(
+    private async IAsyncEnumerable<StoredEventRecord> ReadStreamInternalAsync(
         string streamName,
         StreamReadDirection direction,
         StreamPosition? fromVersion,
@@ -107,7 +107,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore
         {
             foreach (var message in page.Messages)
             {
-                yield return await message.ToStoredEventEntry(cancellationToken);
+                yield return await message.ToStoredEventRecord(cancellationToken);
             }
 
             if (page.IsEnd)
@@ -130,7 +130,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore
 
     private async Task<StreamPosition?> AppendToStreamInternalAsync(
         string streamName,
-        IEnumerable<WritableEventEntry> events,
+        IEnumerable<WritableEventRecord> events,
         StreamPosition? expectedVersion,
         ExpectedStreamState? expectedState,
         CancellationToken cancellationToken)

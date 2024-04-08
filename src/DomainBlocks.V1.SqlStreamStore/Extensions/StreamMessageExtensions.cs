@@ -6,7 +6,7 @@ namespace DomainBlocks.V1.SqlStreamStore.Extensions;
 
 internal static class StreamMessageExtensions
 {
-    public static async Task<StoredEventEntry> ToStoredEventEntry(
+    public static async Task<StoredEventRecord> ToStoredEventRecord(
         this SqlStreamStoreStreamMessage message, CancellationToken cancellationToken)
     {
         var payload = await message.GetJsonData(cancellationToken);
@@ -16,6 +16,6 @@ internal static class StreamMessageExtensions
         var streamVersion = StreamPosition.FromInt32(message.StreamVersion);
         var globalPosition = GlobalPosition.FromInt64(message.Position);
 
-        return new StoredEventEntry(message.Type, payloadAsBytes, metadataAsBytes, streamVersion, globalPosition);
+        return new StoredEventRecord(message.Type, payloadAsBytes, metadataAsBytes, streamVersion, globalPosition);
     }
 }
