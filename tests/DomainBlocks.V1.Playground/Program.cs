@@ -61,8 +61,8 @@ var eventMapper = new EventMapperBuilder().MapAll<IDomainEvent>(_ => { }).Build(
 var subscriber = new EventStreamSubscriptionService(
     "all-events",
     pos => eventStore.SubscribeToAll(pos?.AsGlobalPosition()),
-    new[] { consumer },
-    eventMapper);
+    eventMapper,
+    new[] { consumer });
 
 subscriber.Start();
 await subscriber.WaitForCompletedAsync();

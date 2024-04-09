@@ -14,8 +14,8 @@ public class EventStreamSubscriptionService
     public EventStreamSubscriptionService(
         string name,
         Func<SubscriptionPosition?, IEventStreamSubscription> subscriptionFactory,
-        IEnumerable<IEventStreamConsumer> consumers,
-        EventMapper eventMapper)
+        EventMapper eventMapper,
+        IEnumerable<IEventStreamConsumer> consumers)
     {
         Name = name;
         _subscriptionFactory = subscriptionFactory;
@@ -45,7 +45,11 @@ public class EventStreamSubscriptionService
         var startTasks = _sessions.Select(x => x.StartAsync(cancellationToken)).ToArray();
         await Task.WhenAll(startTasks);
         var allRestoredPositions = startTasks.Select(x => x.Result).ToArray();
-        var minPosition = startTasks[0].Result; // TODO
+
+        var minPosition = allRestoredPositions.All(x => x == null)
+            ? new SubscriptionPosition?()
+            : allRestoredPositions.Select(x => x!.Value).MinBy(x => x.Value);
+
         var currentPosition = minPosition;
 
         var subscription = _subscriptionFactory(currentPosition);

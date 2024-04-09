@@ -54,8 +54,8 @@ public static class ServiceCollectionExtensions
             return new EventStreamSubscriptionService(
                 "all-events",
                 pos => eventStore.SubscribeToAll(pos?.AsGlobalPosition()),
-                consumers,
-                eventMapper);
+                eventMapper,
+                consumers);
         });
 
         services.AddHostedService<EventStreamSubscriptionHostedService>();
