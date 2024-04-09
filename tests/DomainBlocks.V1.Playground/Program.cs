@@ -64,5 +64,5 @@ var subscriber = new EventStreamSubscriptionService(
     eventMapper,
     new[] { consumer });
 
-subscriber.Start();
+await subscriber.StartAsync();
 await subscriber.WaitForCompletedAsync();

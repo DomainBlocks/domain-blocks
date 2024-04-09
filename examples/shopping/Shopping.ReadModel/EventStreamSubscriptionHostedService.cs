@@ -14,10 +14,8 @@ public class EventStreamSubscriptionHostedService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        foreach (var service in _services)
-        {
-            service.Start();
-        }
+        var startTasks = _services.Select(x => x.StartAsync(stoppingToken));
+        await Task.WhenAll(startTasks);
 
         var completedTasks = _services.Select(x => x.WaitForCompletedAsync(stoppingToken));
         await Task.WhenAll(completedTasks);

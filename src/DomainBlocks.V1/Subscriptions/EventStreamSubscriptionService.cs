@@ -27,8 +27,10 @@ public class EventStreamSubscriptionService
 
     public IReadOnlyCollection<EventStreamConsumerSession> ConsumerSessions => _sessions;
 
-    public void Start()
+    public async Task StartAsync(CancellationToken cancellationToken = default)
     {
+        var initializingTasks = _sessions.Select(x => x.InitializeAsync(cancellationToken));
+        await Task.WhenAll(initializingTasks);
         _consumeTask = ConsumeAllMessagesAsync(_cancellationTokenSource.Token);
     }
 
@@ -39,9 +41,6 @@ public class EventStreamSubscriptionService
 
     private async Task ConsumeAllMessagesAsync(CancellationToken cancellationToken)
     {
-        var initializingTasks = _sessions.Select(x => x.InitializeAsync(cancellationToken));
-        await Task.WhenAll(initializingTasks);
-
         var startTasks = _sessions.Select(x => x.StartAsync(cancellationToken)).ToArray();
         await Task.WhenAll(startTasks);
         var allRestoredPositions = startTasks.Select(x => x.Result).ToArray();
@@ -65,10 +64,13 @@ public class EventStreamSubscriptionService
 
             if (completedTask == nextMessageTask)
             {
-                if (!nextMessageTask.Result) continue; // TODO
+                var moveNextResult = await nextMessageTask;
+
+                // TODO: Figure out when this scenario will occur, and how to deal with it.
+                if (!moveNextResult) throw new Exception("No more messages!");
 
                 var message = messageEnumerator.Current;
-                await HandleMessageAsync(message, cancellationToken);
+                await HandleMessageAsync(message);
                 nextMessageTask = messageEnumerator.MoveNextAsync().AsTask();
             }
             else
@@ -77,22 +79,25 @@ public class EventStreamSubscriptionService
                 tickTask = Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
             }
         }
-    }
 
-    private async ValueTask HandleMessageAsync(ISubscriptionMessage message, CancellationToken cancellationToken)
-    {
-        switch (message)
+        return;
+
+        async ValueTask HandleMessageAsync(ISubscriptionMessage message)
         {
-            case EventReceived eventReceived:
-                await HandleEventReceivedAsync(eventReceived, cancellationToken);
-                break;
-            case ISubscriptionStatusMessage statusMessage:
-                foreach (var session in _sessions)
-                {
-                    await session.NotifySubscriptionStatusAsync(statusMessage, cancellationToken);
-                }
+            switch (message)
+            {
+                case EventReceived eventReceived:
+                    await HandleEventReceivedAsync(eventReceived, cancellationToken);
+                    currentPosition = eventReceived.Position;
+                    break;
+                case ISubscriptionStatusMessage statusMessage:
+                    foreach (var session in _sessions)
+                    {
+                        await session.NotifySubscriptionStatusAsync(statusMessage, cancellationToken);
+                    }
 
-                break;
+                    break;
+            }
         }
     }
 
