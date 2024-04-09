@@ -41,7 +41,7 @@ public sealed class EventStoreDbEventStore : IEventStore
 
     public IEventStreamSubscription SubscribeToAll(GlobalPosition? afterPosition = null)
     {
-        throw new NotImplementedException();
+        return new AllEventStreamSubscription(_client, afterPosition);
     }
 
     public IEventStreamSubscription SubscribeToStream(string streamName, StreamPosition? afterPosition = null)
@@ -105,15 +105,7 @@ public sealed class EventStoreDbEventStore : IEventStore
 
         await foreach (var resolvedEvent in readStreamResult)
         {
-            var streamPosition = new StreamPosition(resolvedEvent.OriginalEvent.EventNumber);
-            var globalPosition = new GlobalPosition(resolvedEvent.OriginalEvent.Position.CommitPosition);
-
-            yield return new StoredEventRecord(
-                resolvedEvent.Event.EventType,
-                resolvedEvent.Event.Data,
-                resolvedEvent.Event.Metadata,
-                streamPosition,
-                globalPosition);
+            yield return resolvedEvent.ToStoredEventRecord();
         }
     }
 
