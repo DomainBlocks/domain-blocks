@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Shopping.ReadModel.Db;
+using Shopping.ReadModel.Model;
 
 namespace Shopping.ReadModel.Controllers;
 
@@ -35,5 +37,16 @@ public class ShoppingCartReadModelController : ControllerBase
             .ToListAsync();
 
         return Ok(items);
+    }
+
+    [HttpGet("summaries")]
+    public async Task<ActionResult<IEnumerable<Guid>>> GetSummaries()
+    {
+        var cartIds = await _dbContext.ShoppingCartSummaries
+            .AsNoTracking()
+            .Select(x => new { x.SessionId, x.ItemCount })
+            .ToListAsync();
+
+        return Ok(cartIds);
     }
 }

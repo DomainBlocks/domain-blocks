@@ -2,20 +2,23 @@ using DomainBlocks.V1.Abstractions.Subscriptions;
 using DomainBlocks.V1.Subscriptions;
 using Microsoft.EntityFrameworkCore;
 using Shopping.Domain.Events;
+using Shopping.ReadModel.Db;
+using Shopping.ReadModel.Model;
 
-namespace Shopping.ReadModel;
+namespace Shopping.ReadModel.Projections;
 
-public class PostgresShoppingCartProjection :
+public class ShoppingCartProjection :
     IEventStreamConsumer,
     IEventHandler<ShoppingSessionStarted>,
     IEventHandler<ItemAddedToShoppingCart>,
     IEventHandler<ItemRemovedFromShoppingCart>
 {
+    private const string CheckpointName = nameof(ShoppingCartProjection);
     private readonly IDbContextFactory<ShoppingCartDbContext> _dbContextFactory;
     private ShoppingCartDbContext? _currentDbContext;
     private readonly Random _random = new();
 
-    public PostgresShoppingCartProjection(IDbContextFactory<ShoppingCartDbContext> dbContextFactory)
+    public ShoppingCartProjection(IDbContextFactory<ShoppingCartDbContext> dbContextFactory)
     {
         _dbContextFactory = dbContextFactory;
     }
@@ -39,7 +42,7 @@ public class PostgresShoppingCartProjection :
         var isError = _random.Next(2) == 1;
         if (isError)
         {
-            throw new Exception("Random error.");
+            throw new Exception("Something bad happened.");
         }
 
         var item = await DbContext.ShoppingCartItems.FindAsync(
@@ -74,7 +77,7 @@ public class PostgresShoppingCartProjection :
 
     public async Task<SubscriptionPosition?> OnRestoreAsync(CancellationToken cancellationToken)
     {
-        var bookmark = await DbContext.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, cancellationToken);
+        var bookmark = await DbContext.Checkpoints.FindAsync(new object[] { CheckpointName }, cancellationToken);
         return bookmark == null ? null : new SubscriptionPosition(bookmark.Position);
     }
 
@@ -86,14 +89,14 @@ public class PostgresShoppingCartProjection :
             return;
         }
 
-        var bookmark = await DbContext.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, cancellationToken);
-        if (bookmark == null)
+        var checkpoint = await DbContext.Checkpoints.FindAsync(new object[] { CheckpointName }, cancellationToken);
+        if (checkpoint == null)
         {
-            bookmark = new Bookmark();
-            DbContext.Bookmarks.Add(bookmark);
+            checkpoint = new Checkpoint { Name = CheckpointName };
+            DbContext.Checkpoints.Add(checkpoint);
         }
 
-        bookmark.Position = position.Value;
+        checkpoint.Position = position.Value;
 
         await DbContext.SaveChangesAsync(cancellationToken);
         await DisposeCurrentDbContextAsync();

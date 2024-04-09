@@ -9,6 +9,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Shopping.Domain.Events;
+using Shopping.ReadModel.Db;
+using Shopping.ReadModel.Projections;
 
 namespace Shopping.ReadModel;
 
@@ -23,7 +25,8 @@ public static class ServiceCollectionExtensions
 
         services.AddDbContextFactory<ShoppingCartDbContext>();
 
-        services.AddSingleton<IEventStreamConsumer, PostgresShoppingCartProjection>();
+        services.AddSingleton<IEventStreamConsumer, ShoppingCartProjection>();
+        services.AddSingleton<IEventStreamConsumer, ShoppingCartSummaryProjection>();
 
         var eventStoreType = configuration.GetValue<string>("EventStoreType")!;
         var connectionString = configuration.GetConnectionString(eventStoreType)!;

@@ -7,6 +7,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Shopping.Domain.Events;
 using Shopping.ReadModel;
+using Shopping.ReadModel.Db;
+using Shopping.ReadModel.Projections;
 
 // Persistent subscriptions test
 // var eventStoreDbSettings = EventStoreClientSettings.Create("esdb://localhost:2114?tls=false");
@@ -52,7 +54,7 @@ services.AddDbContextFactory<ShoppingCartDbContext>();
 var serviceProvider = services.BuildServiceProvider();
 
 var dbContextFactory = serviceProvider.GetRequiredService<IDbContextFactory<ShoppingCartDbContext>>();
-var consumer = new PostgresShoppingCartProjection2(dbContextFactory);
+var consumer = new ShoppingCartProjection(dbContextFactory);
 //var consumer = new MongoShoppingCartProjection();
 var eventMapper = new EventMapperBuilder().MapAll<IDomainEvent>(_ => { }).Build();
 

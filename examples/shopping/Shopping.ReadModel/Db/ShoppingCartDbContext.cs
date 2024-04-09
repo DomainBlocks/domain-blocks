@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Shopping.ReadModel.Model;
 
-namespace Shopping.ReadModel;
+namespace Shopping.ReadModel.Db;
 
 public class ShoppingCartDbContext : DbContext
 {
@@ -23,15 +24,12 @@ public class ShoppingCartDbContext : DbContext
         });
 
         modelBuilder.Entity<ShoppingCartItem>().HasKey(x => new { x.SessionId, x.Name });
-
-        modelBuilder.Entity<Bookmark>(e =>
-        {
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Id).ValueGeneratedNever();
-        });
+        modelBuilder.Entity<ShoppingCartSummary>().HasKey(x => x.SessionId);
+        modelBuilder.Entity<Checkpoint>().HasKey(x => x.Name);
     }
 
     public DbSet<ShoppingCart> ShoppingCarts { get; set; } = null!;
     public DbSet<ShoppingCartItem> ShoppingCartItems { get; set; } = null!;
-    public DbSet<Bookmark> Bookmarks { get; set; } = null!;
+    public DbSet<ShoppingCartSummary> ShoppingCartSummaries { get; set; } = null!;
+    public DbSet<Checkpoint> Checkpoints { get; set; } = null!;
 }

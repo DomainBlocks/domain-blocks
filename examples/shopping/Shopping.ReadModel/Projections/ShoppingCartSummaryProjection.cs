@@ -2,20 +2,22 @@ using DomainBlocks.V1.Abstractions.Subscriptions;
 using DomainBlocks.V1.Subscriptions;
 using Microsoft.EntityFrameworkCore;
 using Shopping.Domain.Events;
-using Shopping.ReadModel;
+using Shopping.ReadModel.Db;
+using Shopping.ReadModel.Model;
 
-namespace DomainBlocks.V1.Playground;
+namespace Shopping.ReadModel.Projections;
 
-public class PostgresShoppingCartProjection2 :
+public class ShoppingCartSummaryProjection :
     IEventStreamConsumer,
     IEventHandler<ShoppingSessionStarted>,
     IEventHandler<ItemAddedToShoppingCart>,
     IEventHandler<ItemRemovedFromShoppingCart>
 {
+    private const string CheckpointName = nameof(ShoppingCartSummaryProjection);
     private readonly IDbContextFactory<ShoppingCartDbContext> _dbContextFactory;
     private ShoppingCartDbContext? _currentDbContext;
 
-    public PostgresShoppingCartProjection2(IDbContextFactory<ShoppingCartDbContext> dbContextFactory)
+    public ShoppingCartSummaryProjection(IDbContextFactory<ShoppingCartDbContext> dbContextFactory)
     {
         _dbContextFactory = dbContextFactory;
     }
@@ -24,39 +26,35 @@ public class PostgresShoppingCartProjection2 :
 
     public async Task OnEventAsync(EventHandlerContext<ShoppingSessionStarted> context)
     {
-        var cart = await DbContext.ShoppingCarts.FindAsync(
+        var cart = await DbContext.ShoppingCartSummaries.FindAsync(
             new object?[] { context.Event.SessionId }, cancellationToken: context.CancellationToken);
 
         if (cart == null)
         {
-            cart = new ShoppingCart { SessionId = context.Event.SessionId };
-            DbContext.ShoppingCarts.Add(cart);
+            cart = new ShoppingCartSummary { SessionId = context.Event.SessionId };
+            DbContext.ShoppingCartSummaries.Add(cart);
         }
     }
 
     public async Task OnEventAsync(EventHandlerContext<ItemAddedToShoppingCart> context)
     {
-        var item = await DbContext.ShoppingCartItems.FindAsync(
-            new object[] { context.Event.SessionId, context.Event.Item }, context.CancellationToken);
+        var summary = await DbContext.ShoppingCartSummaries.FindAsync(
+            new object[] { context.Event.SessionId }, context.CancellationToken);
 
-        if (item == null)
+        if (summary != null)
         {
-            DbContext.ShoppingCartItems.Add(new ShoppingCartItem
-            {
-                SessionId = context.Event.SessionId,
-                Name = context.Event.Item
-            });
+            summary.ItemCount++;
         }
     }
 
     public async Task OnEventAsync(EventHandlerContext<ItemRemovedFromShoppingCart> context)
     {
-        var itemToRemove = await DbContext.ShoppingCartItems.FindAsync(
-            new object[] { context.Event.SessionId, context.Event.Item }, context.CancellationToken);
+        var summary = await DbContext.ShoppingCartSummaries.FindAsync(
+            new object[] { context.Event.SessionId }, context.CancellationToken);
 
-        if (itemToRemove != null)
+        if (summary != null)
         {
-            DbContext.ShoppingCartItems.Remove(itemToRemove);
+            summary.ItemCount--;
         }
     }
 
@@ -68,7 +66,7 @@ public class PostgresShoppingCartProjection2 :
 
     public async Task<SubscriptionPosition?> OnRestoreAsync(CancellationToken cancellationToken)
     {
-        var bookmark = await DbContext.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, cancellationToken);
+        var bookmark = await DbContext.Checkpoints.FindAsync(new object[] { CheckpointName }, cancellationToken);
         return bookmark == null ? null : new SubscriptionPosition(bookmark.Position);
     }
 
@@ -80,14 +78,14 @@ public class PostgresShoppingCartProjection2 :
             return;
         }
 
-        var bookmark = await DbContext.Bookmarks.FindAsync(new object[] { Bookmark.DefaultId }, cancellationToken);
-        if (bookmark == null)
+        var checkpoint = await DbContext.Checkpoints.FindAsync(new object[] { CheckpointName }, cancellationToken);
+        if (checkpoint == null)
         {
-            bookmark = new Bookmark();
-            DbContext.Bookmarks.Add(bookmark);
+            checkpoint = new Checkpoint { Name = CheckpointName };
+            DbContext.Checkpoints.Add(checkpoint);
         }
 
-        bookmark.Position = position.Value;
+        checkpoint.Position = position.Value;
 
         await DbContext.SaveChangesAsync(cancellationToken);
         await DisposeCurrentDbContextAsync();

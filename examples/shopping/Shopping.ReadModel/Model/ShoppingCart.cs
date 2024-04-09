@@ -1,4 +1,4 @@
-namespace Shopping.ReadModel;
+namespace Shopping.ReadModel.Model;
 
 public class ShoppingCart
 {
