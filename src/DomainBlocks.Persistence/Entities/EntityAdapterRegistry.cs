@@ -22,7 +22,7 @@ public class EntityAdapterRegistry
         _genericAdapterFactories = genericEntityAdapterFactories.ToArray();
     }
 
-    public bool TryGetFor<TEntity>(out IEntityAdapter<TEntity>? adapter) where TEntity : class
+    public bool TryGetFor<TEntity>(out IEntityAdapter<TEntity>? adapter) where TEntity : notnull
     {
         if (_adapters.TryGetValue(typeof(TEntity), out var result))
         {

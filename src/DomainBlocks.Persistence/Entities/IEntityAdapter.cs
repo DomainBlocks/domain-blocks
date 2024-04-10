@@ -5,7 +5,7 @@ public interface IEntityAdapter
     Type EntityType { get; }
 }
 
-public interface IEntityAdapter<TEntity> : IEntityAdapter where TEntity : class
+public interface IEntityAdapter<TEntity> : IEntityAdapter where TEntity : notnull
 {
     Type IEntityAdapter.EntityType => typeof(TEntity);
 

@@ -46,7 +46,7 @@ public class GenericEntityAdapterTypeResolver
         _entityGenericArgType = entityGenericArg;
     }
 
-    public bool TryResolveFor<TEntity>(out Type? resolvedType) where TEntity : class
+    public bool TryResolveFor<TEntity>(out Type? resolvedType) where TEntity : notnull
     {
         return TryResolveFor(typeof(TEntity), out resolvedType);
     }

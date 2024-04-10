@@ -1,6 +1,8 @@
 namespace DomainBlocks.Persistence.Entities;
 
-public abstract class EntityAdapterBase<TEntity, TState> : IEntityAdapter<TEntity> where TEntity : class
+public abstract class EntityAdapterBase<TEntity, TState> : IEntityAdapter<TEntity>
+    where TEntity : notnull
+    where TState : notnull
 {
     public Type StateType => typeof(TState);
 
@@ -14,16 +16,8 @@ public abstract class EntityAdapterBase<TEntity, TState> : IEntityAdapter<TEntit
     protected abstract TState Fold(TState state, object @event);
     protected abstract TEntity Create(TState state);
 
-    object IEntityAdapter<TEntity>.GetCurrentState(TEntity entity)
-    {
-        return GetCurrentState(entity) ??
-               throw new InvalidOperationException($"{nameof(GetCurrentState)} returned null.");
-    }
-
-    object IEntityAdapter<TEntity>.CreateState()
-    {
-        return CreateState() ?? throw new InvalidOperationException($"{nameof(CreateState)} returned null.");
-    }
+    object IEntityAdapter<TEntity>.GetCurrentState(TEntity entity) => GetCurrentState(entity);
+    object IEntityAdapter<TEntity>.CreateState() => CreateState();
 
     async Task<TEntity> IEntityAdapter<TEntity>.RestoreEntityAsync(
         object initialState, IAsyncEnumerable<object> events, CancellationToken cancellationToken)
@@ -39,7 +33,7 @@ public abstract class EntityAdapterBase<TEntity, TState> : IEntityAdapter<TEntit
     }
 }
 
-public abstract class EntityAdapterBase<TEntity> : EntityAdapterBase<TEntity, TEntity> where TEntity : class
+public abstract class EntityAdapterBase<TEntity> : EntityAdapterBase<TEntity, TEntity> where TEntity : notnull
 {
     public override TEntity GetCurrentState(TEntity entity) => entity;
     protected override TEntity Create(TEntity state) => state;

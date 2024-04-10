@@ -22,7 +22,7 @@ public sealed class EntityStore : IEntityStore
     }
 
     public async Task<TEntity> LoadAsync<TEntity>(string entityId, CancellationToken cancellationToken = default)
-        where TEntity : class
+        where TEntity : notnull
     {
         var streamName = GetStreamName<TEntity>(entityId);
         var readFromVersion = StreamVersion.Zero;
@@ -63,7 +63,7 @@ public sealed class EntityStore : IEntityStore
     }
 
     public async Task SaveAsync<TEntity>(TEntity entity, CancellationToken cancellationToken = default)
-        where TEntity : class
+        where TEntity : notnull
     {
         if (entity == null) throw new ArgumentNullException(nameof(entity));
 
@@ -88,7 +88,7 @@ public sealed class EntityStore : IEntityStore
         await appendTask;
     }
 
-    private IEntityAdapter<TEntity> GetEntityAdapter<TEntity>() where TEntity : class
+    private IEntityAdapter<TEntity> GetEntityAdapter<TEntity>() where TEntity : notnull
     {
         if (!_entityAdapterRegistry.TryGetFor<TEntity>(out var entityAdapter))
         {

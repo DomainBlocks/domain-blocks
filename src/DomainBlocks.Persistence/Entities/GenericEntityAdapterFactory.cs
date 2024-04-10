@@ -11,7 +11,7 @@ public class GenericEntityAdapterFactory
         _constructorArgs = constructorArgs;
     }
 
-    public bool TryCreateFor<TEntity>(out IEntityAdapter<TEntity>? entityAdapter) where TEntity : class
+    public bool TryCreateFor<TEntity>(out IEntityAdapter<TEntity>? entityAdapter) where TEntity : notnull
     {
         if (!_typeResolver.TryResolveFor<TEntity>(out var resolvedAdapterType))
         {
