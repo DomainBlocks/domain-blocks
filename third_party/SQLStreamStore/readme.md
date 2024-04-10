@@ -11,6 +11,6 @@ The projects have been slightly modified for the purposes of DomainBlocks. Namel
 * Now targeting .NET 6
 * Removal of LibLog, in favour of .NET logging (via `DomainBlocks.Logging`)
 * Namespaces changed to `DomainBlocks.ThirdParty.SqlStreamStore.*`
-* Upgrade Npgsql from 4.1.5 to 6.0.8
+* Upgrade Npgsql from 4.1.5 to 7.0.4
 
 Licence: https://github.com/SQLStreamStore/SQLStreamStore/blob/master/LICENSE

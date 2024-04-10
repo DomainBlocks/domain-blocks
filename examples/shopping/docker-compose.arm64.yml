@@ -1,5 +1,5 @@
-version: '3.7'
+version: '3.8'
 
 services:
-  shopping.eventstore:
-    image: ghcr.io/eventstore/eventstore:21.10.2-alpha-arm64v8
+  shopping-eventstore:
+    image: eventstore/eventstore:23.10.1-alpha-arm64v8

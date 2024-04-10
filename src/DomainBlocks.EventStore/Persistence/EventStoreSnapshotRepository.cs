@@ -10,7 +10,10 @@ public class EventStoreSnapshotRepository : ISnapshotRepository
 {
     private const string SnapshotVersionMetadataKey = "SnapshotVersion";
     private const string SnapshotEventName = "Snapshot";
-    private static readonly ILogger<EventStoreSnapshotRepository> Logger = Log.Create<EventStoreSnapshotRepository>();
+
+    private static readonly ILogger<EventStoreSnapshotRepository> Logger =
+        LogProvider.Get<EventStoreSnapshotRepository>();
+
     private readonly EventStoreClient _client;
     private readonly IEventConverter<ResolvedEvent, EventData> _eventConverter;
 
@@ -73,13 +76,14 @@ public class EventStoreSnapshotRepository : ISnapshotRepository
                 cancellationToken: cancellationToken);
 
             var readState = await readStreamResult.ReadState;
+            await using var asyncEnumerator = readStreamResult.GetAsyncEnumerator(cancellationToken);
 
-            if (readState == ReadState.StreamNotFound || !await readStreamResult.MoveNextAsync())
+            if (readState == ReadState.StreamNotFound || !await asyncEnumerator.MoveNextAsync())
             {
                 return (false, null);
             }
 
-            var eventRecord = readStreamResult.Current;
+            var eventRecord = asyncEnumerator.Current;
             var snapshotState =
                 (TState)await _eventConverter.DeserializeEvent(eventRecord, typeof(TState), cancellationToken);
             var metadata = _eventConverter.DeserializeMetadata(eventRecord);

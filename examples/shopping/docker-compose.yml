@@ -1,14 +1,13 @@
-version: '3.7'
+version: '3.8'
 
 networks:
-  shopping-example:
+  shopping-network:
+    name: shopping-network
     driver: bridge
 
 services:
-
-  shopping.eventstore:
-    container_name: shopping.eventstore
-    image: eventstore/eventstore:21.10.2-buster-slim
+  shopping-eventstore:
+    image: eventstore/eventstore:23.10.1-bookworm-slim
     ports:
       - '2113:2113'
       - '1113:1113'
@@ -17,13 +16,8 @@ services:
       - EVENTSTORE_EXT_TCP_PORT=1113
       - EVENTSTORE_RUN_PROJECTIONS=all
       - EVENTSTORE_START_STANDARD_PROJECTIONS=true
-      - PROJECTION_THREADS=8
       - EVENTSTORE_INSECURE=true
-      - EVENTSTORE_ENABLE_EXTERNAL_TCP=true
       - EVENTSTORE_ENABLE_ATOM_PUB_OVER_HTTP=true
-    # ES healthcheck doesnt't work properly. Turn it off in docker compose
-    healthcheck:
-      test: [ "NONE" ]
     volumes:
       - type: volume
         source: eventstore-volume-data
@@ -32,47 +26,33 @@ services:
         source: eventstore-volume-logs
         target: /var/log/eventstore
     networks:
-      - shopping-example
+      - shopping-network
 
-  shopping.api:
-    container_name: shopping.api
+  shopping-api:
     build:
       context: ../..
       dockerfile: examples/shopping/Shopping.Api/Dockerfile
-    image: shopping.api
+    image: shopping-api
     ports:
-      - "5000:80"
-      - "5001:443"
+      - "5039:80"
+      - "7025:443"
     depends_on:
-      - database
+      - shopping-eventstore
     networks:
-      - shopping-example
+      - shopping-network
 
-  shopping.readmodel:
-    container_name: shopping.readmodel
-    build:
-      context: ../..
-      dockerfile: examples/shopping/Shopping.ReadModel/Dockerfile
-    image: shopping.readmodel
-    ports:
-      - "5010:80"
-      - "5011:443"
-    depends_on:
-      - database
-    networks:
-      - shopping-example
-
-  database:
-    image: postgres:13.3
-    container_name: shopping.db
+  shopping-db:
+    image: postgres:latest
     ports:
       - "5433:5432"
     environment:
-      - POSTGRES_DB=shopping
+      - POSTGRES_DB=shopping-events
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
+    volumes:
+      - postgres-volume-data:/var/lib/postgresql/data
     networks:
-      - shopping-example
+      - shopping-network
     command:
       - "postgres"
       - "-c"
@@ -81,3 +61,4 @@ services:
 volumes:
   eventstore-volume-data:
   eventstore-volume-logs:
+  postgres-volume-data:

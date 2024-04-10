@@ -13,7 +13,7 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Subscriptions
     public sealed class AllStreamSubscription : IAllStreamSubscription
     {
         public const int DefaultPageSize = 10;
-        private static readonly ILogger<AllStreamSubscription> Logger = Log.Create<AllStreamSubscription>();
+        private static readonly ILogger<AllStreamSubscription> Logger = LogProvider.Get<AllStreamSubscription>();
         private int _pageSize = DefaultPageSize;
         private long _nextPosition;
         private readonly IReadonlyStreamStore _readonlyStreamStore;

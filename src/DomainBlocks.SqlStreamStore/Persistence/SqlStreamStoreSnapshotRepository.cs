@@ -14,7 +14,7 @@ public class SqlStreamStoreSnapshotRepository : ISnapshotRepository
     private const string SnapshotEventName = "Snapshot";
 
     private static readonly ILogger<SqlStreamStoreSnapshotRepository> Logger =
-        Log.Create<SqlStreamStoreSnapshotRepository>();
+        LogProvider.Get<SqlStreamStoreSnapshotRepository>();
 
     private readonly IStreamStore _streamStore;
     private readonly IEventConverter<StreamMessage, NewStreamMessage> _eventAdapter;

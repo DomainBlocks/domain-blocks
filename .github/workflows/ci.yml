@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # for nbgv
 
@@ -21,12 +21,8 @@ jobs:
           setAllVars: true
           path: .
 
-      - name: Set up EventStoreDB
-        run: docker-compose -f ./tests/docker-compose.test.yml up -d
-        working-directory: .
-
       - name: Setup .NET
-        uses: actions/setup-dotnet@v3
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 6.0.300
 
@@ -39,7 +35,11 @@ jobs:
         working-directory: .
 
       - name: Test
-        run: dotnet test --no-build --verbosity normal
+        run: |
+          pushd ./tests
+          docker compose up --quiet-pull -d
+          popd
+          dotnet test --no-build --verbosity normal
         working-directory: .
 
       - name: Pack and Publish

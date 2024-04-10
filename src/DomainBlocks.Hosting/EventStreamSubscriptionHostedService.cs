@@ -1,5 +1,3 @@
-using System.Threading;
-using System.Threading.Tasks;
 using DomainBlocks.Core.Subscriptions;
 using Microsoft.Extensions.Hosting;
 

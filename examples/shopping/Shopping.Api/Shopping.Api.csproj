@@ -1,36 +1,17 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
-  <PropertyGroup>
-    <UserSecretsId>e0d276a8-e2b3-4674-9d5f-f1b7a79402ca</UserSecretsId>
-    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
-    <DockerfileContext>..\..</DockerfileContext>
-    <DockerComposeProjectPath>..\..\Shopping.Api.DockerCompose.dcproj</DockerComposeProjectPath>
-    <IsPackable>false</IsPackable>
-  </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Polly" Version="8.3.1" />
+        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+    </ItemGroup>
 
-  <ItemGroup>
-    <Protobuf Include="Protos\shoppingApi.proto" GrpcServices="Both" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Grpc.AspNetCore" Version="2.46.0" />
-    <PackageReference Include="Grpc.Tools" Version="2.46.3">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-    <PackageReference Include="MediatR.Extensions.Microsoft.DependencyInjection" Version="9.0.0" />
-    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.10.14" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\..\src\DomainBlocks.DependencyInjection\DomainBlocks.DependencyInjection.csproj" />
-    <ProjectReference Include="..\..\..\src\DomainBlocks.SqlStreamStore.Postgres\DomainBlocks.SqlStreamStore.Postgres.csproj" />
-    <ProjectReference Include="..\..\..\third_party\SQLStreamStore\src\DomainBlocks.ThirdParty.SqlStreamStore.Postgres\DomainBlocks.ThirdParty.SqlStreamStore.Postgres.csproj" />
-    <ProjectReference Include="..\Shopping.Domain\Shopping.Domain.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="Developer Scripts\" />
-  </ItemGroup>
+    <ItemGroup>
+      <ProjectReference Include="..\..\..\src\DomainBlocks.Persistence.DependencyInjection\DomainBlocks.Persistence.DependencyInjection.csproj" />
+      <ProjectReference Include="..\..\..\src\DomainBlocks.Persistence.EventStoreDb\DomainBlocks.Persistence.EventStoreDb.csproj" />
+      <ProjectReference Include="..\Shopping.Domain.Events\Shopping.Domain.Events.csproj" />
+      <ProjectReference Include="..\Shopping.Domain\Shopping.Domain.csproj" />
+      <ProjectReference Include="..\Shopping.ReadModel\Shopping.ReadModel.csproj" />
+      <ProjectReference Include="..\Shopping.WriteModel\Shopping.WriteModel.csproj" />
+    </ItemGroup>
 
 </Project>

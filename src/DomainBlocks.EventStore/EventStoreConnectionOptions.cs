@@ -7,5 +7,5 @@ public class EventStoreConnectionOptions
     public const string ConfigSection = "EventStore";
 
     [Required]
-    public string? ConnectionString { get; set; }
+    public string ConnectionString { get; set; } = null!;
 }

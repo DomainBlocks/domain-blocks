@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <ItemGroup>
+      <ProjectReference Include="..\DomainBlocks.Persistence\DomainBlocks.Persistence.csproj" />
+      <ProjectReference Include="..\DomainBlocks.Logging\DomainBlocks.Logging.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="EventStore.Client.Grpc.Streams" Version="23.2.1" />
+    </ItemGroup>
+
+</Project>

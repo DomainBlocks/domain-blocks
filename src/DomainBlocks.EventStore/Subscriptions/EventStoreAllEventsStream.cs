@@ -41,8 +41,11 @@ public sealed class EventStoreAllEventsStream : IEventStream<ResolvedEvent, Posi
 
         var filter = new SubscriptionFilterOptions(EventTypeFilter.ExcludeSystemEvents());
 
+#pragma warning disable CS0618 // Type or member is obsolete
+
+        // TODO: Upgrade to new method
         var subscription = await _eventStoreClient.SubscribeToAllAsync(
-            position,
+            FromAll.After(position),
             (_, e, ct) => subscriber.OnEvent(e, e.Event.Position, ct),
             subscriptionDropped: (_, r, ex) =>
             {
@@ -54,6 +57,8 @@ public sealed class EventStoreAllEventsStream : IEventStream<ResolvedEvent, Posi
             filterOptions: filter,
             userCredentials: _userCredentials,
             cancellationToken: cancellationToken);
+
+#pragma warning restore CS0618 // Type or member is obsolete
 
         await subscriber.OnLive(cancellationToken);
 
