@@ -3,7 +3,7 @@ using BenchmarkDotNet.Attributes;
 namespace DomainBlocks.Core.Benchmarks;
 
 [MemoryDiagnoser]
-public class EntityIdSelectorBenchmark
+public class EntityIdSelectorBenchmarks
 {
     private const int Iterations = 1000;
     private EventSourcedEntityTypeBase<MyAggregate> _typeWithExplicitIdSelector;

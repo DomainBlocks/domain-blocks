@@ -43,11 +43,11 @@ public class EventStreamSubscriptionService
     {
         var startTasks = _sessions.Select(x => x.StartAsync(cancellationToken)).ToArray();
         await Task.WhenAll(startTasks);
-        var allRestoredPositions = startTasks.Select(x => x.Result).ToArray();
+        var allStartPositions = startTasks.Select(x => x.Result).ToArray();
 
-        var minPosition = allRestoredPositions.All(x => x == null)
+        var minPosition = allStartPositions.All(x => x == null)
             ? new SubscriptionPosition?()
-            : allRestoredPositions.Select(x => x!.Value).MinBy(x => x.Value);
+            : allStartPositions.Select(x => x!.Value).MinBy(x => x.Value);
 
         var currentPosition = minPosition;
 

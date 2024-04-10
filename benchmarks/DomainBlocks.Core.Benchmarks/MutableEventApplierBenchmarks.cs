@@ -4,7 +4,7 @@ using DomainBlocks.Core.Builders;
 namespace DomainBlocks.Core.Benchmarks;
 
 [MemoryDiagnoser]
-public class MutableEventApplierBenchmark
+public class MutableEventApplierBenchmarks
 {
     private const int EventCount = 1000;
     private static readonly TestEvents.IEvent[] Events = TestEvents.Generate(EventCount).ToArray();

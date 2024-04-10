@@ -25,8 +25,15 @@ public class EventStreamConsumerSession
     {
         _consumer = consumer;
         _eventHandlers = consumer.GetEventHandlers();
-        _eventChannel = Channel.CreateUnbounded<ISubscriptionMessage>();
-        _priorityChannel = Channel.CreateUnbounded<ISubscriptionMessage>();
+
+        var channelOptions = new UnboundedChannelOptions
+        {
+            SingleWriter = false,
+            SingleReader = false
+        };
+
+        _eventChannel = Channel.CreateUnbounded<ISubscriptionMessage>(channelOptions);
+        _priorityChannel = Channel.CreateUnbounded<ISubscriptionMessage>(channelOptions);
     }
 
     public string ConsumerName => _consumer.Name;
@@ -104,6 +111,13 @@ public class EventStreamConsumerSession
         var context = new EventHandlerContext(@event, position, _messageLoopCts.Token);
         var message = new EventMapped(context);
         await _eventChannel.Writer.WriteAsync(message, cancellationToken);
+    }
+
+    public bool TryNotifyEventReceived(object @event, SubscriptionPosition position)
+    {
+        var context = new EventHandlerContext(@event, position, _messageLoopCts.Token);
+        var message = new EventMapped(context);
+        return _eventChannel.Writer.TryWrite(message);
     }
 
     public ValueTask NotifySubscriptionStatusAsync(
