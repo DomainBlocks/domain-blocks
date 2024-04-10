@@ -81,7 +81,7 @@ public class EventStreamConsumerSessionTests
 
         while (consumer.HandledEvents.Count < events.Length)
         {
-            var suspendedTask = session.WaitForSuspendedAsync();
+            var suspendedTask = session.WaitForCompletedAsync();
             var completedTask = await Task.WhenAny(suspendedTask, flushTask);
 
             if (completedTask == suspendedTask)
@@ -91,7 +91,7 @@ public class EventStreamConsumerSessionTests
                 Assert.That(session.Error, Is.Not.Null);
                 Assert.That(session.FaultedMessage, Is.Not.Null);
 
-                await session.ResumeAsync();
+                session.Resume();
             }
             else
             {

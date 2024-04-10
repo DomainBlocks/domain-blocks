@@ -13,11 +13,9 @@ public class EventStreamConsumerSession
     private static readonly ILogger<EventStreamConsumerSession> Logger = LogProvider.Get<EventStreamConsumerSession>();
     private readonly IEventStreamConsumer _consumer;
     private readonly Dictionary<Type, Func<EventHandlerContext, Task>> _eventHandlers;
-    private readonly Channel<ISubscriptionMessage> _eventChannel;
-    private readonly Channel<ISubscriptionMessage> _priorityChannel;
+    private readonly Channel<ISubscriptionMessage> _channel;
     private readonly CancellationTokenSource _messageLoopCts = new();
     private Task _messageLoopTask = Task.CompletedTask;
-    private TaskCompletionSource _suspendedSignal = new();
     private SubscriptionPosition? _startPosition;
     private EventStreamConsumerSessionStatus _status;
 
@@ -28,12 +26,11 @@ public class EventStreamConsumerSession
 
         var channelOptions = new UnboundedChannelOptions
         {
-            SingleWriter = false,
-            SingleReader = false
+            SingleWriter = true,
+            SingleReader = true
         };
 
-        _eventChannel = Channel.CreateUnbounded<ISubscriptionMessage>(channelOptions);
-        _priorityChannel = Channel.CreateUnbounded<ISubscriptionMessage>(channelOptions);
+        _channel = Channel.CreateUnbounded<ISubscriptionMessage>(channelOptions);
     }
 
     public string ConsumerName => _consumer.Name;
@@ -86,21 +83,16 @@ public class EventStreamConsumerSession
         return _startPosition;
     }
 
-    public async Task ResumeAsync(CancellationToken cancellationToken = default)
+    public void Resume()
     {
         EnsureStatus(EventStreamConsumerSessionStatus.Suspended);
-        await _priorityChannel.Writer.WriteAsync(ResumeRequested.Instance, cancellationToken);
-        await FlushAsync(_priorityChannel.Writer, cancellationToken);
+        Status = EventStreamConsumerSessionStatus.Running;
+        _messageLoopTask = RunMessageLoopAsync();
     }
 
     public Task WaitForCompletedAsync(CancellationToken cancellationToken = default)
     {
         return _messageLoopTask.WaitAsync(cancellationToken);
-    }
-
-    public Task WaitForSuspendedAsync(CancellationToken cancellationToken = default)
-    {
-        return _suspendedSignal.Task.WaitAsync(cancellationToken);
     }
 
     public bool CanHandleEventType(Type eventType) => _eventHandlers.ContainsKey(eventType);
@@ -110,34 +102,26 @@ public class EventStreamConsumerSession
     {
         var context = new EventHandlerContext(@event, position, _messageLoopCts.Token);
         var message = new EventMapped(context);
-        await _eventChannel.Writer.WriteAsync(message, cancellationToken);
+        await _channel.Writer.WriteAsync(message, cancellationToken);
     }
 
     public bool TryNotifyEventReceived(object @event, SubscriptionPosition position)
     {
         var context = new EventHandlerContext(@event, position, _messageLoopCts.Token);
         var message = new EventMapped(context);
-        return _eventChannel.Writer.TryWrite(message);
+        return _channel.Writer.TryWrite(message);
     }
 
     public ValueTask NotifySubscriptionStatusAsync(
         ISubscriptionStatusMessage message, CancellationToken cancellationToken = default)
     {
-        return _priorityChannel.Writer.WriteAsync(message, cancellationToken);
+        return _channel.Writer.WriteAsync(message, cancellationToken);
     }
 
     public async Task FlushAsync(CancellationToken cancellationToken = default)
     {
-        await Task.WhenAll(
-            FlushAsync(_priorityChannel.Writer, cancellationToken),
-            FlushAsync(_eventChannel.Writer, cancellationToken));
-    }
-
-    private static async Task FlushAsync(
-        ChannelWriter<ISubscriptionMessage> channelWriter, CancellationToken cancellationToken)
-    {
         var message = new FlushRequested();
-        await channelWriter.WriteAsync(message, cancellationToken);
+        await _channel.Writer.WriteAsync(message, cancellationToken);
         await message.WaitForReceiptAsync(cancellationToken);
     }
 
@@ -145,35 +129,16 @@ public class EventStreamConsumerSession
     {
         while (!_messageLoopCts.IsCancellationRequested)
         {
-            var task = IsSuspended ? RunSuspendedMessageLoopAsync() : RunEventMessageLoopAsync();
-            await task;
-        }
-    }
+            await _channel.Reader.WaitToReadAsync(_messageLoopCts.Token);
 
-    private async Task RunEventMessageLoopAsync()
-    {
-        while (!_messageLoopCts.IsCancellationRequested && !IsSuspended)
-        {
-            // Process any priority messages first.
-            while (_priorityChannel.Reader.TryRead(out var priorityMessage))
-            {
-                await HandleMessageAsync(priorityMessage);
-            }
-
-            // Process priority or event messages, which ever comes first.
-            var eventMessageReadyTask = _eventChannel.Reader.WaitToReadAsync(_messageLoopCts.Token).AsTask();
-            var priorityMessageReadyTask = _priorityChannel.Reader.WaitToReadAsync(_messageLoopCts.Token).AsTask();
-
-            var completedTask = await Task.WhenAny(eventMessageReadyTask, priorityMessageReadyTask);
-
-            var readyChannel = completedTask == eventMessageReadyTask ? _eventChannel : _priorityChannel;
-            readyChannel.Reader.TryPeek(out var message);
+            _channel.Reader.TryPeek(out var message);
             Debug.Assert(message != null, "Expected TryPeek to succeed.");
 
             try
             {
                 await HandleMessageAsync(message);
-                var success = readyChannel.Reader.TryRead(out _);
+
+                var success = _channel.Reader.TryRead(out _);
                 Debug.Assert(success, "Expected TryRead to succeed.");
             }
             catch (Exception ex)
@@ -181,7 +146,7 @@ public class EventStreamConsumerSession
                 Error = ex;
                 FaultedMessage = message;
                 Status = EventStreamConsumerSessionStatus.Suspended;
-                _suspendedSignal.SetResult();
+                break;
             }
         }
 
@@ -205,32 +170,6 @@ public class EventStreamConsumerSession
                     break;
                 case FlushRequested flushRequested:
                     flushRequested.NotifyReceived();
-                    break;
-            }
-        }
-    }
-
-    private async Task RunSuspendedMessageLoopAsync()
-    {
-        while (!_messageLoopCts.IsCancellationRequested && IsSuspended)
-        {
-            var message = await _priorityChannel.Reader.ReadAsync(_messageLoopCts.Token);
-
-            switch (message)
-            {
-                case CaughtUp:
-                case FellBehind:
-                case SubscriptionDropped:
-                    // Ignore for now
-                    break;
-                case FlushRequested flushRequested:
-                    flushRequested.NotifyReceived();
-                    break;
-                case ResumeRequested:
-                    Error = null;
-                    FaultedMessage = null;
-                    Status = EventStreamConsumerSessionStatus.Running;
-                    _suspendedSignal = new TaskCompletionSource();
                     break;
             }
         }

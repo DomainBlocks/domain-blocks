@@ -35,12 +35,11 @@ public class SubscriptionsController : ControllerBase
     }
 
     [HttpPost("{subscriptionName}/consumers/{consumerName}/resume")]
-    public async Task<ActionResult> Resume(
-        string subscriptionName, string consumerName, CancellationToken cancellationToken)
+    public ActionResult Resume(string subscriptionName, string consumerName)
     {
         var subscription = _subscriptions[subscriptionName];
         var consumer = subscription.ConsumerSessions.Single(x => x.ConsumerName == consumerName);
-        await consumer.ResumeAsync(cancellationToken);
+        consumer.Resume();
         return Ok();
     }
 
