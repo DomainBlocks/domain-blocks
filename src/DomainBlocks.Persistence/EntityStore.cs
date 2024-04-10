@@ -22,6 +22,7 @@ public sealed class EntityStore : IEntityStore
     }
 
     public async Task<TEntity> LoadAsync<TEntity>(string entityId, CancellationToken cancellationToken = default)
+        where TEntity : class
     {
         var streamName = GetStreamName<TEntity>(entityId);
         var readFromVersion = StreamVersion.Zero;
@@ -41,7 +42,7 @@ public sealed class EntityStore : IEntityStore
         var trackedEntityContext = new TrackedEntityContext(loadedVersion, loadedEventCount);
 
         // Track the entity so that the expected version will be known in a future call to SaveAsync.
-        _trackedEntities.Add(entity!, trackedEntityContext);
+        _trackedEntities.Add(entity, trackedEntityContext);
 
         return entity;
 
@@ -62,6 +63,7 @@ public sealed class EntityStore : IEntityStore
     }
 
     public async Task SaveAsync<TEntity>(TEntity entity, CancellationToken cancellationToken = default)
+        where TEntity : class
     {
         if (entity == null) throw new ArgumentNullException(nameof(entity));
 
@@ -86,7 +88,7 @@ public sealed class EntityStore : IEntityStore
         await appendTask;
     }
 
-    private IEntityAdapter<TEntity> GetEntityAdapter<TEntity>()
+    private IEntityAdapter<TEntity> GetEntityAdapter<TEntity>() where TEntity : class
     {
         if (!_entityAdapterRegistry.TryGetFor<TEntity>(out var entityAdapter))
         {

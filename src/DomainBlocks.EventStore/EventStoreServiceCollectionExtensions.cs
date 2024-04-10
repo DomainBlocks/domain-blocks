@@ -26,7 +26,7 @@ public static class EventStoreServiceCollectionExtensions
                     {
                         var options = provider.GetRequiredService<IOptions<EventStoreConnectionOptions>>();
 
-                        var settings = EventStoreClientSettings.Create(options.Value.ConnectionString!);
+                        var settings = EventStoreClientSettings.Create(options.Value.ConnectionString);
                         _eventStoreClient = new EventStoreClient(settings);
                     }
                 }

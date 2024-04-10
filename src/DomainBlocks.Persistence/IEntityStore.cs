@@ -2,7 +2,8 @@
 
 public interface IEntityStore
 {
-    Task<TEntity> LoadAsync<TEntity>(string entityId, CancellationToken cancellationToken = default);
+    Task<TEntity> LoadAsync<TEntity>(string entityId, CancellationToken cancellationToken = default)
+        where TEntity : class;
 
-    Task SaveAsync<TEntity>(TEntity entity, CancellationToken cancellationToken = default);
+    Task SaveAsync<TEntity>(TEntity entity, CancellationToken cancellationToken = default) where TEntity : class;
 }

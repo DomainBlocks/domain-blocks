@@ -22,7 +22,7 @@ public class EntityAdapterRegistry
         _genericAdapterFactories = genericEntityAdapterFactories.ToArray();
     }
 
-    public bool TryGetFor<TEntity>(out IEntityAdapter<TEntity>? adapter)
+    public bool TryGetFor<TEntity>(out IEntityAdapter<TEntity>? adapter) where TEntity : class
     {
         if (_adapters.TryGetValue(typeof(TEntity), out var result))
         {
@@ -33,11 +33,11 @@ public class EntityAdapterRegistry
         adapter = _genericAdapterFactories
             .Select(x =>
             {
-                var success = x.TryCreateFor<TEntity>(out var instance);
-                return (success, instance);
+                x.TryCreateFor<TEntity>(out var instance);
+                return instance;
             })
-            .Where(x => x.success)
-            .Select(x => x.instance)
+            .Where(x => x != null)
+            .Select(x => x)
             .FirstOrDefault();
 
         if (adapter != null)

@@ -1,6 +1,6 @@
 namespace DomainBlocks.Persistence.Entities;
 
-public abstract class EntityAdapterBase<TEntity, TState> : IEntityAdapter<TEntity>
+public abstract class EntityAdapterBase<TEntity, TState> : IEntityAdapter<TEntity> where TEntity : class
 {
     public Type StateType => typeof(TState);
 
@@ -39,7 +39,7 @@ public abstract class EntityAdapterBase<TEntity, TState> : IEntityAdapter<TEntit
     }
 }
 
-public abstract class EntityAdapterBase<TEntity> : EntityAdapterBase<TEntity, TEntity>
+public abstract class EntityAdapterBase<TEntity> : EntityAdapterBase<TEntity, TEntity> where TEntity : class
 {
     public override TEntity GetCurrentState(TEntity entity) => entity;
     protected override TEntity Create(TEntity state) => state;

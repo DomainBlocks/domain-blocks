@@ -7,7 +7,7 @@ public class EntityAdapterRegistryBuilder
     private readonly Dictionary<Type, IEntityAdapter> _adapters = new();
     private readonly List<GenericEntityAdapterFactoryBuilder> _factoryBuilders = new();
 
-    public EntityAdapterRegistryBuilder Add<TEntity>(IEntityAdapter<TEntity> entityAdapter)
+    public EntityAdapterRegistryBuilder Add<TEntity>(IEntityAdapter<TEntity> entityAdapter) where TEntity : class
     {
         _adapters.Add(typeof(TEntity), entityAdapter);
         return this;
