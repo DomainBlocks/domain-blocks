@@ -86,7 +86,11 @@ public class EventStreamConsumerSession
     public void Resume()
     {
         EnsureStatus(EventStreamConsumerSessionStatus.Suspended);
+        
+        Error = null;
+        FaultedMessage = null;
         Status = EventStreamConsumerSessionStatus.Running;
+        
         _messageLoopTask = RunMessageLoopAsync();
     }
 

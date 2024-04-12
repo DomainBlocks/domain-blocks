@@ -64,12 +64,12 @@ public class EventStreamConsumerSessionBenchmarks
         await _session.FlushAsync();
     }
 
-    public record TestEvent
+    private record TestEvent
     {
         public static readonly TestEvent Instance = new();
     }
 
-    public class TestEventStreamConsumer : IEventStreamConsumer, IEventHandler<TestEvent>
+    private class TestEventStreamConsumer : IEventStreamConsumer, IEventHandler<TestEvent>
     {
         public Task OnEventAsync(EventHandlerContext<TestEvent> context)
         {
