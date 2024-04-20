@@ -15,6 +15,7 @@ public class EventStreamConsumerSession
     private readonly Dictionary<Type, Func<EventHandlerContext, Task>> _eventHandlers;
     private readonly Channel<ISubscriptionMessage> _channel;
     private readonly CancellationTokenSource _messageLoopCts = new();
+    private readonly Timer _timer;
     private Task _messageLoopTask = Task.CompletedTask;
     private SubscriptionPosition? _startPosition;
     private EventStreamConsumerSessionStatus _status;
@@ -26,11 +27,13 @@ public class EventStreamConsumerSession
 
         var channelOptions = new UnboundedChannelOptions
         {
-            SingleWriter = true,
+            SingleWriter = false,
             SingleReader = true
         };
 
         _channel = Channel.CreateUnbounded<ISubscriptionMessage>(channelOptions);
+
+        _timer = new Timer(OnTimer, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
 
     public string ConsumerName => _consumer.Name;
@@ -86,11 +89,11 @@ public class EventStreamConsumerSession
     public void Resume()
     {
         EnsureStatus(EventStreamConsumerSessionStatus.Suspended);
-        
+
         Error = null;
         FaultedMessage = null;
         Status = EventStreamConsumerSessionStatus.Running;
-        
+
         _messageLoopTask = RunMessageLoopAsync();
     }
 
@@ -107,13 +110,6 @@ public class EventStreamConsumerSession
         var context = new EventHandlerContext(@event, position, _messageLoopCts.Token);
         var message = new EventMapped(context);
         await _channel.Writer.WriteAsync(message, cancellationToken);
-    }
-
-    public bool TryNotifyEventReceived(object @event, SubscriptionPosition position)
-    {
-        var context = new EventHandlerContext(@event, position, _messageLoopCts.Token);
-        var message = new EventMapped(context);
-        return _channel.Writer.TryWrite(message);
     }
 
     public ValueTask NotifySubscriptionStatusAsync(
@@ -175,6 +171,9 @@ public class EventStreamConsumerSession
                 case FlushRequested flushRequested:
                     flushRequested.NotifyReceived();
                     break;
+                case TimerTicked timerTicked:
+                    Logger.LogInformation("Tick");
+                    break;
             }
         }
     }
@@ -233,5 +232,10 @@ public class EventStreamConsumerSession
         {
             throw new InvalidOperationException($"Expected status {expectedStatus}, but got {Status}.");
         }
+    }
+
+    private void OnTimer(object? _)
+    {
+        _channel.Writer.TryWrite(TimerTicked.Instance);
     }
 }

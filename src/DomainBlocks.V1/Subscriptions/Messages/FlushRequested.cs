@@ -2,7 +2,7 @@ using DomainBlocks.V1.Abstractions.Subscriptions.Messages;
 
 namespace DomainBlocks.V1.Subscriptions.Messages;
 
-public class FlushRequested : ISubscriptionMessage
+public sealed class FlushRequested : ISubscriptionMessage
 {
     private readonly TaskCompletionSource _taskCompletionSource = new();
 

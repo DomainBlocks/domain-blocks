@@ -1,6 +1,6 @@
 namespace DomainBlocks.V1.Abstractions.Subscriptions.Messages;
 
-public class SubscriptionDropped : ISubscriptionStatusMessage
+public sealed class SubscriptionDropped : ISubscriptionStatusMessage
 {
     public SubscriptionDropped(Exception? exception)
     {

@@ -1,6 +1,6 @@
 namespace DomainBlocks.V1.Abstractions.Subscriptions.Messages;
 
-public class EventReceived : ISubscriptionMessage
+public sealed class EventReceived : ISubscriptionMessage
 {
     public EventReceived(StoredEventRecord eventRecord, SubscriptionPosition position)
     {

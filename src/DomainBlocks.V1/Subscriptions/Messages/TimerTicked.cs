@@ -2,7 +2,7 @@ using DomainBlocks.V1.Abstractions.Subscriptions.Messages;
 
 namespace DomainBlocks.V1.Subscriptions.Messages;
 
-public class ResumeRequested : ISubscriptionMessage
+public sealed class TimerTicked : ISubscriptionMessage
 {
-    public static readonly ResumeRequested Instance = new();
+    public static readonly TimerTicked Instance = new();
 }

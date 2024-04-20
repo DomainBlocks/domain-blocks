@@ -2,7 +2,7 @@ using DomainBlocks.V1.Abstractions.Subscriptions;
 
 namespace DomainBlocks.V1.Subscriptions;
 
-public class EventHandlerContext
+public sealed class EventHandlerContext
 {
     public EventHandlerContext(object @event, SubscriptionPosition position, CancellationToken cancellationToken)
     {
@@ -21,7 +21,7 @@ public class EventHandlerContext
     }
 }
 
-public class EventHandlerContext<TEvent>
+public sealed class EventHandlerContext<TEvent>
 {
     public EventHandlerContext(TEvent @event, SubscriptionPosition position, CancellationToken cancellationToken)
     {

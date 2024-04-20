@@ -41,11 +41,7 @@ public class EventStreamConsumerSessionBenchmarks
 
         foreach (var (e, pos) in _events)
         {
-            var success = _session.TryNotifyEventReceived(e, pos);
-            if (!success)
-            {
-                throw new Exception("Failed to write event.");
-            }
+            _session.NotifyEventReceivedAsync(e, pos).AsTask().Wait();
         }
     }
 

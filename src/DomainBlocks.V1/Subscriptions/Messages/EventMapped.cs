@@ -2,7 +2,7 @@ using DomainBlocks.V1.Abstractions.Subscriptions.Messages;
 
 namespace DomainBlocks.V1.Subscriptions.Messages;
 
-public class EventMapped : ISubscriptionMessage
+public sealed class EventMapped : ISubscriptionMessage
 {
     public EventMapped(EventHandlerContext eventHandlerContext)
     {
