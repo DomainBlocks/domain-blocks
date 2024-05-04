@@ -8,13 +8,15 @@ namespace DomainBlocks.V1.Tests.Subscriptions;
 public class EventStreamConsumerSessionTests
 {
     private Mock<IEventStreamConsumer> _mockConsumer = null!;
+    private Mock<IEventStreamSubscriptionStatusSource> _mockSubscriptionStatusSource = null!;
     private EventStreamConsumerSession _session = null!;
 
     [SetUp]
     public void SetUp()
     {
         _mockConsumer = new Mock<IEventStreamConsumer>();
-        _session = new EventStreamConsumerSession(_mockConsumer.Object);
+        _mockSubscriptionStatusSource = new Mock<IEventStreamSubscriptionStatusSource>();
+        _session = new EventStreamConsumerSession(_mockConsumer.Object, _mockSubscriptionStatusSource.Object);
     }
 
     [Test]
@@ -58,7 +60,7 @@ public class EventStreamConsumerSessionTests
     public async Task Resume_WhenIsFaulted_ResumesFromFaultedMessage()
     {
         var consumer = new RandomlyFailingConsumer();
-        var session = new EventStreamConsumerSession(consumer);
+        var session = new EventStreamConsumerSession(consumer, _mockSubscriptionStatusSource.Object);
 
         await session.InitializeAsync();
         await session.StartAsync();

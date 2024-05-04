@@ -8,6 +8,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\..\examples\shopping\Shopping.Domain.Events\Shopping.Domain.Events.csproj" />
+      <ProjectReference Include="..\..\examples\shopping\Shopping.WriteModel\Shopping.WriteModel.csproj" />
       <ProjectReference Include="..\..\src\DomainBlocks.V1.EventStoreDb\DomainBlocks.V1.EventStoreDb.csproj" />
       <ProjectReference Include="..\..\src\DomainBlocks.V1.SqlStreamStore\DomainBlocks.V1.SqlStreamStore.csproj" />
       <ProjectReference Include="..\..\src\DomainBlocks.V1\DomainBlocks.V1.csproj" />

@@ -3,13 +3,14 @@ using DomainBlocks.V1.Abstractions.Subscriptions.Messages;
 
 namespace DomainBlocks.V1.Subscriptions;
 
-public class EventStreamSubscriptionService
+public class EventStreamSubscriptionService : IEventStreamSubscriptionStatusSource
 {
     private readonly Func<SubscriptionPosition?, IEventStreamSubscription> _subscriptionFactory;
     private readonly EventStreamConsumerSession[] _sessions;
     private readonly EventMapper _eventMapper;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
     private Task _consumeTask = Task.CompletedTask;
+    private volatile EventStreamSubscriptionStatus _subscriptionStatus = EventStreamSubscriptionStatus.Unsubscribed;
 
     public EventStreamSubscriptionService(
         string name,
@@ -19,13 +20,15 @@ public class EventStreamSubscriptionService
     {
         Name = name;
         _subscriptionFactory = subscriptionFactory;
-        _sessions = consumers.Select(x => new EventStreamConsumerSession(x)).ToArray();
+        _sessions = consumers.Select(x => new EventStreamConsumerSession(x, this)).ToArray();
         _eventMapper = eventMapper;
     }
 
     public string Name { get; }
 
     public IReadOnlyCollection<EventStreamConsumerSession> ConsumerSessions => _sessions;
+
+    public EventStreamSubscriptionStatus SubscriptionStatus => _subscriptionStatus;
 
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
@@ -52,32 +55,12 @@ public class EventStreamSubscriptionService
         var currentPosition = minPosition;
 
         var subscription = _subscriptionFactory(currentPosition);
-        var messages = subscription.ConsumeAsync(cancellationToken);
-        await using var messageEnumerator = messages.GetAsyncEnumerator(cancellationToken);
 
-        var nextMessageTask = messageEnumerator.MoveNextAsync().AsTask();
-        var tickTask = Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+        _subscriptionStatus = EventStreamSubscriptionStatus.CatchingUp;
 
-        while (!cancellationToken.IsCancellationRequested)
+        await foreach (var message in subscription.ConsumeAsync(cancellationToken))
         {
-            var completedTask = await Task.WhenAny(nextMessageTask, tickTask);
-
-            if (completedTask == nextMessageTask)
-            {
-                var moveNextResult = await nextMessageTask;
-
-                // TODO: Figure out when this scenario will occur, and how to deal with it.
-                if (!moveNextResult) throw new Exception("No more messages!");
-
-                var message = messageEnumerator.Current;
-                await HandleMessageAsync(message);
-                nextMessageTask = messageEnumerator.MoveNextAsync().AsTask();
-            }
-            else
-            {
-                //Console.WriteLine("Tick");
-                tickTask = Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
-            }
+            await HandleMessageAsync(message);
         }
 
         return;
@@ -91,11 +74,7 @@ public class EventStreamSubscriptionService
                     currentPosition = eventReceived.Position;
                     break;
                 case ISubscriptionStatusMessage statusMessage:
-                    foreach (var session in _sessions)
-                    {
-                        await session.NotifySubscriptionStatusAsync(statusMessage, cancellationToken);
-                    }
-
+                    await HandleSubscriptionStatusMessageAsync(statusMessage, cancellationToken);
                     break;
             }
         }
@@ -119,6 +98,23 @@ public class EventStreamSubscriptionService
             {
                 await session.NotifyEventReceivedAsync(@event, message.Position, cancellationToken);
             }
+        }
+    }
+
+    private async ValueTask HandleSubscriptionStatusMessageAsync(
+        ISubscriptionStatusMessage statusMessage, CancellationToken cancellationToken)
+    {
+        _subscriptionStatus = statusMessage switch
+        {
+            CaughtUp => EventStreamSubscriptionStatus.Live,
+            FellBehind => EventStreamSubscriptionStatus.CatchingUp,
+            SubscriptionDropped => EventStreamSubscriptionStatus.Unsubscribed,
+            _ => _subscriptionStatus
+        };
+
+        foreach (var session in _sessions)
+        {
+            await session.NotifySubscriptionStatusAsync(statusMessage, cancellationToken);
         }
     }
 }

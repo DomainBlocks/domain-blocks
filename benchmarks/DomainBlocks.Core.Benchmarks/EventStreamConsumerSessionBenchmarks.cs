@@ -26,7 +26,8 @@ public class EventStreamConsumerSessionBenchmarks
     public void ProduceIterationSetup()
     {
         var consumer = new TestEventStreamConsumer();
-        _session = new EventStreamConsumerSession(consumer);
+        var statusSource = new TestEventStreamSubscriptionStatusSource();
+        _session = new EventStreamConsumerSession(consumer, statusSource);
         _session.InitializeAsync().Wait();
         _session.StartAsync().Wait();
     }
@@ -35,7 +36,8 @@ public class EventStreamConsumerSessionBenchmarks
     public void ConsumeIterationSetup()
     {
         var consumer = new TestEventStreamConsumer();
-        _session = new EventStreamConsumerSession(consumer);
+        var statusSource = new TestEventStreamSubscriptionStatusSource();
+        _session = new EventStreamConsumerSession(consumer, statusSource);
         _session.InitializeAsync().Wait();
         _session.StartAsync().Wait();
 
@@ -71,5 +73,10 @@ public class EventStreamConsumerSessionBenchmarks
         {
             return Task.CompletedTask;
         }
+    }
+
+    public class TestEventStreamSubscriptionStatusSource : IEventStreamSubscriptionStatusSource
+    {
+        public EventStreamSubscriptionStatus SubscriptionStatus => EventStreamSubscriptionStatus.Live;
     }
 }

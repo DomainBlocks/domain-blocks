@@ -4,6 +4,5 @@ public enum EventStreamSubscriptionStatus
 {
     Unsubscribed,
     CatchingUp,
-    Live,
-    SubscriptionDropped
+    Live
 }

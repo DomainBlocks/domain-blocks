@@ -13,25 +13,28 @@ public class EventStreamConsumerSession
     private static readonly ILogger<EventStreamConsumerSession> Logger = LogProvider.Get<EventStreamConsumerSession>();
     private readonly IEventStreamConsumer _consumer;
     private readonly Dictionary<Type, Func<EventHandlerContext, Task>> _eventHandlers;
+    private readonly IEventStreamSubscriptionStatusSource _subscriptionStatusSource;
     private readonly Channel<ISubscriptionMessage> _channel;
-    private readonly CancellationTokenSource _messageLoopCts = new();
+    private readonly CancellationTokenSource _messageLoopCtSource = new();
     private readonly Timer _timer;
     private Task _messageLoopTask = Task.CompletedTask;
     private SubscriptionPosition? _startPosition;
     private EventStreamConsumerSessionStatus _status;
 
-    public EventStreamConsumerSession(IEventStreamConsumer consumer)
+    public EventStreamConsumerSession(
+        IEventStreamConsumer consumer, IEventStreamSubscriptionStatusSource subscriptionStatusSource)
     {
         _consumer = consumer;
         _eventHandlers = consumer.GetEventHandlers();
+        _subscriptionStatusSource = subscriptionStatusSource;
 
-        var channelOptions = new UnboundedChannelOptions
+        var channelOptions = new BoundedChannelOptions(100)
         {
             SingleWriter = false,
             SingleReader = true
         };
 
-        _channel = Channel.CreateUnbounded<ISubscriptionMessage>(channelOptions);
+        _channel = Channel.CreateBounded<ISubscriptionMessage>(channelOptions);
 
         _timer = new Timer(OnTimer, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
@@ -107,7 +110,7 @@ public class EventStreamConsumerSession
     public async ValueTask NotifyEventReceivedAsync(
         object @event, SubscriptionPosition position, CancellationToken cancellationToken = default)
     {
-        var context = new EventHandlerContext(@event, position, _messageLoopCts.Token);
+        var context = new EventHandlerContext(@event, position, _messageLoopCtSource.Token);
         var message = new EventMapped(context);
         await _channel.Writer.WriteAsync(message, cancellationToken);
     }
@@ -127,9 +130,9 @@ public class EventStreamConsumerSession
 
     private async Task RunMessageLoopAsync()
     {
-        while (!_messageLoopCts.IsCancellationRequested)
+        while (!_messageLoopCtSource.IsCancellationRequested)
         {
-            await _channel.Reader.WaitToReadAsync(_messageLoopCts.Token);
+            await _channel.Reader.WaitToReadAsync(_messageLoopCtSource.Token);
 
             _channel.Reader.TryPeek(out var message);
             Debug.Assert(message != null, "Expected TryPeek to succeed.");
@@ -140,9 +143,14 @@ public class EventStreamConsumerSession
 
                 var success = _channel.Reader.TryRead(out _);
                 Debug.Assert(success, "Expected TryRead to succeed.");
+                
+                if (_channel.Reader.CanCount)
+                    Logger.LogInformation("Queue size: {Count}", _channel.Reader.Count);
             }
             catch (Exception ex)
             {
+                Logger.LogError(ex, "Error handling message.");
+
                 Error = ex;
                 FaultedMessage = message;
                 Status = EventStreamConsumerSessionStatus.Suspended;
@@ -171,8 +179,7 @@ public class EventStreamConsumerSession
                 case FlushRequested flushRequested:
                     flushRequested.NotifyReceived();
                     break;
-                case TimerTicked timerTicked:
-                    Logger.LogInformation("Tick");
+                case TimerTicked:
                     break;
             }
         }
@@ -198,7 +205,8 @@ public class EventStreamConsumerSession
             await handler(context);
 
             // TODO: Get rid of this
-            await _consumer.OnCheckpointAsync(message.EventHandlerContext.Position, _messageLoopCts.Token);
+            await _consumer.OnCheckpointAsync(
+                message.EventHandlerContext.Position, message.EventHandlerContext.CancellationToken);
         }
         catch (Exception ex)
         {
