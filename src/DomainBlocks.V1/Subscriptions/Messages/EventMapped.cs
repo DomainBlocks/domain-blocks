@@ -1,3 +1,4 @@
+using DomainBlocks.V1.Abstractions.Subscriptions;
 using DomainBlocks.V1.Abstractions.Subscriptions.Messages;
 
 namespace DomainBlocks.V1.Subscriptions.Messages;

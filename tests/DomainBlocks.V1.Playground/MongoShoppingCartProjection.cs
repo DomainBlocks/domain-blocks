@@ -1,3 +1,4 @@
+using DomainBlocks.V1.Abstractions.Subscriptions;
 using DomainBlocks.V1.Subscriptions;
 using MongoDB.Driver;
 using Shopping.Domain.Events;

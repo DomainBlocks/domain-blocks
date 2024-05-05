@@ -60,6 +60,8 @@ public static class ServiceCollectionExtensions
 
         services.AddHostedService<EventStreamSubscriptionHostedService>();
 
+        services.AddMediatR(config => { config.RegisterServicesFromAssemblyContaining<ShoppingCartProjection>(); });
+
         return services;
     }
 }

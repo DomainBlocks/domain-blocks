@@ -20,6 +20,8 @@ public class EventMapper
         _serializer = serializer;
     }
 
+    public IEnumerable<Type> EventTypes => _mappingsByType.Keys;
+
     public IEnumerable<Type> GetMappedEventTypes(StoredEventRecord storedEventRecord)
     {
         // TODO: Remove duplication

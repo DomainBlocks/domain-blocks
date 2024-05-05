@@ -1,6 +1,4 @@
-using DomainBlocks.V1.Abstractions.Subscriptions;
-
-namespace DomainBlocks.V1.Subscriptions;
+namespace DomainBlocks.V1.Abstractions.Subscriptions;
 
 public sealed class EventHandlerContext
 {
