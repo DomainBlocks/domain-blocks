@@ -7,7 +7,10 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="System.Linq.Async" Version="5.0.0" />
+        <PackageReference Include="System.Linq.Async" Version="6.0.1" />
+        <PackageReference Update="Nerdbank.GitVersioning">
+          <Version>3.6.133</Version>
+        </PackageReference>
     </ItemGroup>
 
     <ItemGroup>

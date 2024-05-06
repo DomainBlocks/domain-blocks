@@ -11,4 +11,10 @@
       <ProjectReference Include="..\DomainBlocks.SqlStreamStore\DomainBlocks.SqlStreamStore.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <PackageReference Update="Nerdbank.GitVersioning">
+        <Version>3.6.133</Version>
+      </PackageReference>
+    </ItemGroup>
+
 </Project>
