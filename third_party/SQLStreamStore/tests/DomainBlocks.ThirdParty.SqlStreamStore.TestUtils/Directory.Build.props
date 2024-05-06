@@ -1,7 +1,7 @@
 <!-- Exists so that the props one level above do not apply to this project. -->
 <Project>
     <PropertyGroup>
-        <TargetFramework>net6.0</TargetFramework>
+        <TargetFramework>net8.0</TargetFramework>
         <LangVersion>10.0</LangVersion>
         <IsTestProject>true</IsTestProject>
     </PropertyGroup>

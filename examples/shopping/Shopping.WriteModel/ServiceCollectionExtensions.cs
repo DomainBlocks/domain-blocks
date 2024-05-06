@@ -14,8 +14,19 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services, IConfiguration configuration)
     {
         var eventStore = configuration.GetValue<string>("EventStore");
+        if (eventStore == null)
+        {
+            throw new ArgumentNullException(nameof(eventStore),"Could not find EventStore configuration value.");
+        }
+        
         var connectionString = configuration.GetConnectionString(eventStore);
 
+        if (string.IsNullOrEmpty(connectionString))
+        {
+            throw new ArgumentNullException(nameof(connectionString),
+                "Could not find connection string for EventStore.");
+        }
+        
         services.AddEntityStore(config =>
         {
             config
