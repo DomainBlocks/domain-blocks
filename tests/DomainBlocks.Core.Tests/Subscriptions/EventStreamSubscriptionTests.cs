@@ -6,7 +6,7 @@ using NUnit.Framework;
 namespace DomainBlocks.Core.Tests.Subscriptions;
 
 [TestFixture]
-[Timeout(1000)]
+[CancelAfter(1000)]
 public class EventStreamSubscriptionTests
 {
     private Mock<IEventStream<string, int>> _mockEventStream = null!;

@@ -73,13 +73,14 @@ public class EventStoreSnapshotRepository : ISnapshotRepository
                 cancellationToken: cancellationToken);
 
             var readState = await readStreamResult.ReadState;
+            await using var asyncEnumerator = readStreamResult.GetAsyncEnumerator(cancellationToken);
 
-            if (readState == ReadState.StreamNotFound || !await readStreamResult.MoveNextAsync())
+            if (readState == ReadState.StreamNotFound || !await asyncEnumerator.MoveNextAsync())
             {
                 return (false, null);
             }
 
-            var eventRecord = readStreamResult.Current;
+            var eventRecord = asyncEnumerator.Current;
             var snapshotState =
                 (TState)await _eventConverter.DeserializeEvent(eventRecord, typeof(TState), cancellationToken);
             var metadata = _eventConverter.DeserializeMetadata(eventRecord);

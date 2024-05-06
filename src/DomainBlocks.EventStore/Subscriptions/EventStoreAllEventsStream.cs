@@ -40,9 +40,9 @@ public sealed class EventStoreAllEventsStream : IEventStream<ResolvedEvent, Posi
         }
 
         var filter = new SubscriptionFilterOptions(EventTypeFilter.ExcludeSystemEvents());
-
+#pragma warning disable CS0618
         var subscription = await _eventStoreClient.SubscribeToAllAsync(
-            position,
+            FromAll.After(position), 
             (_, e, ct) => subscriber.OnEvent(e, e.Event.Position, ct),
             subscriptionDropped: (_, r, ex) =>
             {
@@ -54,7 +54,7 @@ public sealed class EventStoreAllEventsStream : IEventStream<ResolvedEvent, Posi
             filterOptions: filter,
             userCredentials: _userCredentials,
             cancellationToken: cancellationToken);
-
+#pragma warning restore CS0618
         await subscriber.OnLive(cancellationToken);
 
         return subscription;

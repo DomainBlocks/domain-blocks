@@ -6,4 +6,9 @@
   <ItemGroup>
     <ProjectReference Include="..\DomainBlocks.Logging\DomainBlocks.Logging.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Update="Nerdbank.GitVersioning">
+      <Version>3.6.133</Version>
+    </PackageReference>
+  </ItemGroup>
 </Project>
