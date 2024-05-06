@@ -185,9 +185,8 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Postgres
             return command;
         }
 
-        private static NpgsqlCommand BuildCommand(
-            string commandText,
-            NpgsqlTransaction transaction) => new NpgsqlCommand(commandText, transaction.Connection, transaction);
+        private static NpgsqlCommand BuildCommand(string commandText, NpgsqlTransaction transaction) =>
+            new(commandText, transaction.Connection, transaction);
 
         internal async Task<int> TryScavenge(
             StreamIdInfo streamIdInfo,
