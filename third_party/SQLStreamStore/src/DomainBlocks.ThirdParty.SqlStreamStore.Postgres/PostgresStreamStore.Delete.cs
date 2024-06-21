@@ -73,13 +73,11 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Postgres
         {
             var streamIdInfo = new StreamIdInfo(streamId);
 
-            using(var connection = await OpenConnection(cancellationToken))
-            using(var transaction = connection.BeginTransaction())
-            {
-                await DeleteEventsInternal(streamIdInfo, new[] { eventId }, transaction, cancellationToken);
+            await using var connection = await OpenConnection(cancellationToken);
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await DeleteEventsInternal(streamIdInfo, new[] { eventId }, transaction, cancellationToken);
 
-                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-            }
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
 
         private async Task DeleteEventsInternal(
@@ -88,7 +86,7 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Postgres
             NpgsqlTransaction transaction,
             CancellationToken cancellationToken)
         {
-            using(var command = BuildFunctionCommand(
+            await using var command = BuildFunctionCommand(
                 _schema.DeleteStreamMessages,
                 transaction,
                 Parameters.StreamId(streamIdInfo.PostgresqlStreamId),
@@ -99,10 +97,8 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Postgres
                 Parameters.CreatedUtc(_settings.GetUtcNow?.Invoke()),
                 _settings.DisableDeletionTracking
                     ? Parameters.Empty()
-                    : Parameters.DeletedMessages(streamIdInfo.PostgresqlStreamId, eventIds)))
-            {
-                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-            }
+                    : Parameters.DeletedMessages(streamIdInfo.PostgresqlStreamId, eventIds));
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 }

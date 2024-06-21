@@ -13,8 +13,12 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddShoppingWriteModel(
         this IServiceCollection services, IConfiguration configuration)
     {
-        var eventStoreType = configuration.GetValue<string>("EventStoreType");
-        var connectionString = configuration.GetConnectionString(eventStoreType);
+        var eventStoreType = configuration.GetValue<string>("EventStoreType") ?? 
+                             throw new InvalidOperationException("Unable to find EventStoreType in configuration.");
+        
+        var connectionString = configuration.GetConnectionString(eventStoreType) ??
+                                 throw new InvalidOperationException($"Unable to find connection string " +
+                                                                     $"for {eventStoreType}.");
 
         services.AddEntityStore(config =>
         {
