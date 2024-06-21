@@ -28,13 +28,13 @@ public class EventStreamConsumerSession
         _eventHandlers = consumer.GetEventHandlers();
         _subscriptionStatusSource = subscriptionStatusSource;
 
-        var channelOptions = new BoundedChannelOptions(100)
+        var channelOptions = new UnboundedChannelOptions()
         {
             SingleWriter = false,
             SingleReader = true
         };
 
-        _channel = Channel.CreateBounded<ISubscriptionMessage>(channelOptions);
+        _channel = Channel.CreateUnbounded<ISubscriptionMessage>(channelOptions);
 
         _timer = new Timer(OnTimer, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
@@ -100,6 +100,7 @@ public class EventStreamConsumerSession
         _messageLoopTask = RunMessageLoopAsync();
     }
 
+    // TODO (DS): Think of a better name for this method. Magic Jon will do it.
     public Task WaitForCompletedAsync(CancellationToken cancellationToken = default)
     {
         return _messageLoopTask.WaitAsync(cancellationToken);

@@ -1,6 +1,3 @@
-using System.Diagnostics;
-using System.Linq.Expressions;
-using System.Reflection;
 using DomainBlocks.V1.Abstractions.Subscriptions;
 using DomainBlocks.V1.Abstractions.Subscriptions.Messages;
 
@@ -11,7 +8,6 @@ public class EventStreamSubscriptionService : IEventStreamSubscriptionStatusSour
     private readonly Func<SubscriptionPosition?, IEventStreamSubscription> _subscriptionFactory;
     private readonly EventStreamConsumerSession[] _sessions;
     private readonly EventMapper _eventMapper;
-    private readonly IReadOnlyDictionary<Type, EventWrapperFactory> _eventWrapperFactories;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
     private Task _consumeTask = Task.CompletedTask;
     private volatile EventStreamSubscriptionStatus _subscriptionStatus = EventStreamSubscriptionStatus.Unsubscribed;
@@ -26,7 +22,6 @@ public class EventStreamSubscriptionService : IEventStreamSubscriptionStatusSour
         _subscriptionFactory = subscriptionFactory;
         _sessions = consumers.Select(x => new EventStreamConsumerSession(x, this)).ToArray();
         _eventMapper = eventMapper;
-        _eventWrapperFactories = eventMapper.EventTypes.ToDictionary(x => x, CreateEventWrapperFactory);
     }
 
     public string Name { get; }
@@ -45,24 +40,6 @@ public class EventStreamSubscriptionService : IEventStreamSubscriptionStatusSour
     public Task WaitForCompletedAsync(CancellationToken cancellationToken = default)
     {
         return _consumeTask.WaitAsync(cancellationToken);
-    }
-
-    private static EventWrapperFactory CreateEventWrapperFactory(Type eventType)
-    {
-        var eventWrapperType = typeof(EventWrapper<>).MakeGenericType(eventType);
-
-        var eventWrapperConstructor = eventWrapperType.GetConstructor(
-            BindingFlags.Instance | BindingFlags.Public, new[] { eventType, typeof(SubscriptionPosition) });
-
-        Debug.Assert(eventWrapperConstructor != null, nameof(eventWrapperConstructor) + " != null");
-
-        var eventParam = Expression.Parameter(typeof(object), "event");
-        var eventCastParam = Expression.Convert(eventParam, eventType);
-        var positionParam = Expression.Parameter(typeof(SubscriptionPosition), "position");
-        var newExpression = Expression.New(eventWrapperConstructor, eventCastParam, positionParam);
-        var lambdaExpression = Expression.Lambda<EventWrapperFactory>(newExpression, eventParam, positionParam);
-
-        return lambdaExpression.Compile();
     }
 
     private async Task ConsumeAllMessagesAsync(CancellationToken cancellationToken)
@@ -114,7 +91,6 @@ public class EventStreamSubscriptionService : IEventStreamSubscriptionStatusSour
         if (sessions.Length == 0) return;
 
         var mappedEvents = _eventMapper.ToEventObjects(message.EventRecord);
-        var wrappedEvents = mappedEvents.Select(x => _eventWrapperFactories[x.GetType()](x, message.Position));
 
         foreach (var @event in mappedEvents)
         {
