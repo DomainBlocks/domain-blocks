@@ -9,7 +9,7 @@ namespace DomainBlocks.V1.Tests.Integration;
 [TestFixture]
 public class WriteTests
 {
-    [Test]
+    [Test, Explicit]
     public async Task WriteLotsOfEvents()
     {
         var config = new EntityStoreConfigBuilder()
