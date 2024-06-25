@@ -25,22 +25,22 @@ public sealed class SqlStreamStoreEventStore : IEventStore
         _readPageSize = readPageSize;
     }
 
-    public IAsyncEnumerable<StoredEventRecord> ReadStreamAsync(
+    public async Task<StreamLoadResult> ReadStreamAsync(
         string streamName,
         StreamReadDirection direction,
         StreamPosition fromPosition,
         CancellationToken cancellationToken = default)
     {
-        return ReadStreamInternalAsync(streamName, direction, fromPosition, null, cancellationToken);
+        return await ReadStreamInternalAsync(streamName, direction, fromPosition, null, cancellationToken);
     }
 
-    public IAsyncEnumerable<StoredEventRecord> ReadStreamAsync(
+    public async Task<StreamLoadResult> ReadStreamAsync(
         string streamName,
         StreamReadDirection direction,
         StreamReadOrigin readOrigin = StreamReadOrigin.Default,
         CancellationToken cancellationToken = default)
     {
-        return ReadStreamInternalAsync(streamName, direction, null, readOrigin, cancellationToken);
+        return await ReadStreamInternalAsync(streamName, direction, null, readOrigin, cancellationToken);
     }
 
     public IEventStreamSubscription SubscribeToAll(GlobalPosition? afterPosition = null)
@@ -71,12 +71,12 @@ public sealed class SqlStreamStoreEventStore : IEventStore
         return AppendToStreamInternalAsync(streamName, events, null, expectedState, cancellationToken);
     }
 
-    private async IAsyncEnumerable<StoredEventRecord> ReadStreamInternalAsync(
+    private async Task<StreamLoadResult> ReadStreamInternalAsync(
         string streamName,
         StreamReadDirection direction,
         StreamPosition? fromVersion,
         StreamReadOrigin? readOrigin,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        CancellationToken cancellationToken)
     {
         // Get the first page.
         ReadStreamPage page;
@@ -102,7 +102,19 @@ public sealed class SqlStreamStoreEventStore : IEventStore
             Logger.LogError(ex, "Unable to load events from {StreamName}", streamName);
             throw;
         }
+        
+        if (page.Status == PageReadStatus.StreamNotFound)
+        {
+            return StreamLoadResult.NotFound();
+        }
+        
+        return StreamLoadResult.Success(ReadStreamMessages(streamName, page, cancellationToken));
+    }
 
+    private static async IAsyncEnumerable<StoredEventRecord> ReadStreamMessages(string streamName, 
+        ReadStreamPage page,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
         while (true)
         {
             foreach (var message in page.Messages)

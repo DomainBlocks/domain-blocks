@@ -91,7 +91,7 @@ public class EntityStoreTests
     {
         var id = Guid.NewGuid();
 
-        var entity = await store.LoadAsync<ShoppingCart>(id.ToString());
+        var entity = await store.CreateOrLoadAsync<ShoppingCart>(id.ToString());
         entity.AddItem(new ShoppingCartItem(id, "Foo"));
         await store.SaveAsync(entity);
 
@@ -117,6 +117,37 @@ public class EntityStoreTests
 
         Assert.That(reloadedEntity.State.SessionId, Is.EqualTo(entity1A.State.SessionId));
         Assert.That(reloadedEntity.State.Items, Is.EqualTo(entity1B.State.Items));
+    }
+    
+    [Test]
+    [TestCaseSource(nameof(TestCases))]
+    public void LoadAsync_WhenStreamDoesNotExist_ThrowsStreamNotFoundException(IEntityStore store)
+    {
+        const string id = "cart-1";
+        
+        var exception = Assert.ThrowsAsync<StreamNotFoundException>(() => store.LoadAsync<ShoppingCart>(id));
+        Assert.That(exception?.Message, Is.EqualTo("Stream 'shoppingCart-cart-1' could not be found."));
+    }
+    
+    [Test]
+    [TestCaseSource(nameof(TestCases))]
+    public async Task LoadAsync_WhenStreamExists_Succeeds(IEntityStore store)
+    {
+        var shoppingCart = new ShoppingCart();
+        shoppingCart.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Item 1"));
+        await store.SaveAsync(shoppingCart);
+
+        var entity = store.LoadAsync<ShoppingCart>(shoppingCart.Id);
+        Assert.That(entity, Is.Not.Null);
+    }
+    
+    [Test]
+    [TestCaseSource(nameof(TestCases))]
+    public async Task CreateOrLoadAsync_WhenStreamDoesNotExist_Succeeds(IEntityStore store)
+    {
+        var entity = await store.CreateOrLoadAsync<ShoppingCart>("cart-1");
+        
+        Assert.That(entity, Is.Not.Null);
     }
 
     [Test]

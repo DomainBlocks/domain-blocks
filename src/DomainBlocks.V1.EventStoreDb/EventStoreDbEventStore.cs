@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using DomainBlocks.V1.Abstractions;
 using DomainBlocks.V1.Abstractions.Exceptions;
 using DomainBlocks.Logging;
@@ -21,22 +20,22 @@ public sealed class EventStoreDbEventStore : IEventStore
         _client = client ?? throw new ArgumentNullException(nameof(client));
     }
 
-    public IAsyncEnumerable<StoredEventRecord> ReadStreamAsync(
+    public async Task<StreamLoadResult>  ReadStreamAsync(
         string streamName,
         StreamReadDirection direction,
         StreamPosition fromPosition,
         CancellationToken cancellationToken = default)
     {
-        return ReadStreamInternalAsync(streamName, direction, fromPosition, null, cancellationToken);
+        return await ReadStreamInternalAsync(streamName, direction, fromPosition, null, cancellationToken);
     }
 
-    public IAsyncEnumerable<StoredEventRecord> ReadStreamAsync(
+    public async Task<StreamLoadResult>  ReadStreamAsync(
         string streamName,
         StreamReadDirection direction,
         StreamReadOrigin readOrigin = StreamReadOrigin.Default,
         CancellationToken cancellationToken = default)
     {
-        return ReadStreamInternalAsync(streamName, direction, null, readOrigin, cancellationToken);
+        return await ReadStreamInternalAsync(streamName, direction, null, readOrigin, cancellationToken);
     }
 
     public IEventStreamSubscription SubscribeToAll(GlobalPosition? afterPosition = null)
@@ -67,12 +66,12 @@ public sealed class EventStoreDbEventStore : IEventStore
         return AppendToStreamInternalAsync(streamName, events, null, expectedState, cancellationToken);
     }
 
-    private async IAsyncEnumerable<StoredEventRecord> ReadStreamInternalAsync(
+    private async Task<StreamLoadResult> ReadStreamInternalAsync(
         string streamName,
         StreamReadDirection direction,
         StreamPosition? fromVersion,
         StreamReadOrigin? readOrigin,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        CancellationToken cancellationToken)
     {
         EventStoreClient.ReadStreamResult readStreamResult;
 
@@ -100,12 +99,17 @@ public sealed class EventStoreDbEventStore : IEventStore
         var readState = await readStreamResult.ReadState;
         if (readState == ReadState.StreamNotFound)
         {
-            yield break;
+            return StreamLoadResult.NotFound();
         }
+        
+        return StreamLoadResult.Success(MapEventStream(readStreamResult));
 
-        await foreach (var resolvedEvent in readStreamResult)
+        async IAsyncEnumerable<StoredEventRecord> MapEventStream(IAsyncEnumerable<ResolvedEvent> readStreamResult)
         {
-            yield return resolvedEvent.ToStoredEventRecord();
+            await foreach (var resolvedEvent in readStreamResult.WithCancellation(cancellationToken))
+            {
+                yield return resolvedEvent.ToStoredEventRecord();
+            }
         }
     }
 
