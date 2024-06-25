@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\third_party\SQLStreamStore\src\DomainBlocks.ThirdParty.SqlStreamStore\DomainBlocks.ThirdParty.SqlStreamStore.csproj" />
+      <ProjectReference Include="..\DomainBlocks.V1\DomainBlocks.V1.csproj" />
+    </ItemGroup>
+
+</Project>

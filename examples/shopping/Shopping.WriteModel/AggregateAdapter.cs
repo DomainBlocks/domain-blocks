@@ -1,4 +1,4 @@
-using DomainBlocks.Persistence.Entities;
+using DomainBlocks.V1.Persistence.Entities;
 using Shopping.Domain;
 using Shopping.Domain.Events;
 

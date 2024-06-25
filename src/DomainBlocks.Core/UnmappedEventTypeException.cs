@@ -1,8 +1,5 @@
-using System.Runtime.Serialization;
-
 namespace DomainBlocks.Core;
 
-[Serializable]
 public class UnmappedEventTypeException : Exception
 {
     public UnmappedEventTypeException(string eventTypeFullName) :
@@ -21,16 +18,5 @@ public class UnmappedEventTypeException : Exception
         EventTypeFullName = eventTypeFullName;
     }
 
-    protected UnmappedEventTypeException(SerializationInfo info, StreamingContext context) : base(info, context)
-    {
-        EventTypeFullName = info.GetValue(nameof(EventTypeFullName), typeof(string)) as string;
-    }
-
     public string? EventTypeFullName { get; }
-
-    public override void GetObjectData(SerializationInfo info, StreamingContext context)
-    {
-        base.GetObjectData(info, context);
-        info.AddValue(nameof(EventTypeFullName), EventTypeFullName);
-    }
 }

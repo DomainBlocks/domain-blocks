@@ -4,9 +4,9 @@
   </ItemGroup>
   
   <ItemGroup>
-    <ProjectReference Include="..\..\..\src\DomainBlocks.Persistence.DependencyInjection\DomainBlocks.Persistence.DependencyInjection.csproj" />
-    <ProjectReference Include="..\..\..\src\DomainBlocks.Persistence.EventStoreDb\DomainBlocks.Persistence.EventStoreDb.csproj" />
-    <ProjectReference Include="..\..\..\src\DomainBlocks.Persistence.SqlStreamStore\DomainBlocks.Persistence.SqlStreamStore.csproj" />
+    <ProjectReference Include="..\..\..\src\DomainBlocks.V1.DependencyInjection\DomainBlocks.V1.DependencyInjection.csproj" />
+    <ProjectReference Include="..\..\..\src\DomainBlocks.V1.EventStoreDb\DomainBlocks.V1.EventStoreDb.csproj" />
+    <ProjectReference Include="..\..\..\src\DomainBlocks.V1.SqlStreamStore\DomainBlocks.V1.SqlStreamStore.csproj" />
     <ProjectReference Include="..\..\..\third_party\SQLStreamStore\src\DomainBlocks.ThirdParty.SqlStreamStore.Postgres\DomainBlocks.ThirdParty.SqlStreamStore.Postgres.csproj" />
     <ProjectReference Include="..\Shopping.Domain.Events\Shopping.Domain.Events.csproj" />
     <ProjectReference Include="..\Shopping.Domain\Shopping.Domain.csproj" />

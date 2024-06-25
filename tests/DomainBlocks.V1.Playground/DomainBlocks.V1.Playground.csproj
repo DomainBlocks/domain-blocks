@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\examples\shopping\Shopping.ReadModel\Shopping.ReadModel.csproj" />
+      <ProjectReference Include="..\..\src\DomainBlocks.V1.DependencyInjection\DomainBlocks.V1.DependencyInjection.csproj" />
+      <ProjectReference Include="..\..\src\DomainBlocks.V1.SqlStreamStore\DomainBlocks.V1.SqlStreamStore.csproj" />
+      <ProjectReference Include="..\..\third_party\SQLStreamStore\src\DomainBlocks.ThirdParty.SqlStreamStore.Postgres\DomainBlocks.ThirdParty.SqlStreamStore.Postgres.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="EventStore.Client.Grpc.PersistentSubscriptions" Version="23.2.1" />
+      <PackageReference Include="MongoDB.Driver" Version="2.24.0" />
+    </ItemGroup>
+
+</Project>

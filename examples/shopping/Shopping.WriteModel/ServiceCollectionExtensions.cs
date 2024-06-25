@@ -1,6 +1,6 @@
-using DomainBlocks.Persistence.DependencyInjection;
-using DomainBlocks.Persistence.EventStoreDb.Extensions;
-using DomainBlocks.Persistence.SqlStreamStore.Extensions;
+using DomainBlocks.V1.DependencyInjection;
+using DomainBlocks.V1.EventStoreDb.Extensions;
+using DomainBlocks.V1.SqlStreamStore.Extensions;
 using DomainBlocks.ThirdParty.SqlStreamStore.Postgres;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,8 +13,12 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddShoppingWriteModel(
         this IServiceCollection services, IConfiguration configuration)
     {
-        var eventStore = configuration.GetValue<string>("EventStore");
-        var connectionString = configuration.GetConnectionString(eventStore);
+        var eventStoreType = configuration.GetValue<string>("EventStoreType") ?? 
+                             throw new InvalidOperationException("Unable to find EventStoreType in configuration.");
+        
+        var connectionString = configuration.GetConnectionString(eventStoreType) ??
+                                 throw new InvalidOperationException($"Unable to find connection string " +
+                                                                     $"for {eventStoreType}.");
 
         services.AddEntityStore(config =>
         {
@@ -22,7 +26,7 @@ public static class ServiceCollectionExtensions
                 .AddEntityAdapters(x => x.AddGenericFactoryFor(typeof(AggregateAdapter<>)))
                 .MapEvents(x => x.MapAll<IDomainEvent>());
 
-            switch (eventStore)
+            switch (eventStoreType)
             {
                 case "EventStoreDb":
                     config.UseEventStoreDb(connectionString);

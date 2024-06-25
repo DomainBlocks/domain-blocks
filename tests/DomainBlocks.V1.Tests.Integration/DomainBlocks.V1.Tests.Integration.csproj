@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
+        <PackageReference Include="NUnit" Version="4.1.0" />
+        <PackageReference Include="NUnit3TestAdapter" Version="4.5.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\examples\shopping\Shopping.Domain.Events\Shopping.Domain.Events.csproj" />
+      <ProjectReference Include="..\..\examples\shopping\Shopping.WriteModel\Shopping.WriteModel.csproj" />
+      <ProjectReference Include="..\..\src\DomainBlocks.V1.EventStoreDb\DomainBlocks.V1.EventStoreDb.csproj" />
+      <ProjectReference Include="..\..\src\DomainBlocks.V1.SqlStreamStore\DomainBlocks.V1.SqlStreamStore.csproj" />
+      <ProjectReference Include="..\..\src\DomainBlocks.V1\DomainBlocks.V1.csproj" />
+      <ProjectReference Include="..\..\third_party\SQLStreamStore\src\DomainBlocks.ThirdParty.SqlStreamStore.Postgres\DomainBlocks.ThirdParty.SqlStreamStore.Postgres.csproj" />
+    </ItemGroup>
+
+</Project>

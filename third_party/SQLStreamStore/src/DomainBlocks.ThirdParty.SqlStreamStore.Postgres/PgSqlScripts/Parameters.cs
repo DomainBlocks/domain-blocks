@@ -96,17 +96,11 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Postgres.PgSqlScripts
 
         public static NpgsqlParameter CreatedUtc(DateTime? value)
         {
-            return value.HasValue
-                ? (NpgsqlParameter) new NpgsqlParameter<DateTime>
-                {
-                    TypedValue = value.Value,
-                    NpgsqlDbType = NpgsqlDbType.Timestamp
-                }
-                : new NpgsqlParameter<DBNull>
-                {
-                    TypedValue = DBNull.Value,
-                    NpgsqlDbType = NpgsqlDbType.Timestamp
-                };
+            return new NpgsqlParameter<DateTime?>
+            {
+                TypedValue = value,
+                NpgsqlDbType = NpgsqlDbType.Timestamp
+            };
         }
 
         public static NpgsqlParameter NewStreamMessages(NewStreamMessage[] value)
@@ -188,19 +182,19 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Postgres.PgSqlScripts
 
         public static NpgsqlParameter OptionalMaxAge(int? value)
         {
-            return new NpgsqlParameter
+            return new NpgsqlParameter<int?>
             {
                 NpgsqlDbType = NpgsqlDbType.Integer,
-                NpgsqlValue = value.HasValue ? (object) value.Value : DBNull.Value
+                NpgsqlValue = value
             };
         }
 
         public static NpgsqlParameter OptionalMaxCount(int? value)
         {
-            return new NpgsqlParameter
+            return new NpgsqlParameter<int?>
             {
                 NpgsqlDbType = NpgsqlDbType.Integer,
-                NpgsqlValue = value.HasValue ? (object) value.Value : DBNull.Value
+                TypedValue = value
             };
         }
 
@@ -215,30 +209,20 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Postgres.PgSqlScripts
 
         public static NpgsqlParameter OptionalStartingAt(int? value)
         {
-            return value.HasValue
-                ? (NpgsqlParameter) new NpgsqlParameter<int>
-                {
-                    NpgsqlDbType = NpgsqlDbType.Integer,
-                    TypedValue = value.Value
-                }
-                : new NpgsqlParameter<DBNull>
-                {
-                    TypedValue = DBNull.Value
-                };
+            return new NpgsqlParameter<int?>
+            {
+                NpgsqlDbType = NpgsqlDbType.Integer,
+                TypedValue = value
+            };
         }
 
         public static NpgsqlParameter OptionalAfterIdInternal(int? value)
         {
-            return value.HasValue
-                ? (NpgsqlParameter) new NpgsqlParameter<int>
-                {
-                    NpgsqlDbType = NpgsqlDbType.Integer,
-                    TypedValue = value.Value
-                }
-                : new NpgsqlParameter<DBNull>
-                {
-                    TypedValue = DBNull.Value
-                };
+            return new NpgsqlParameter<int?>
+            {
+                NpgsqlDbType = NpgsqlDbType.Integer,
+                TypedValue = value
+            };
         }
 
         public static NpgsqlParameter Pattern(string value)
@@ -261,9 +245,9 @@ namespace DomainBlocks.ThirdParty.SqlStreamStore.Postgres.PgSqlScripts
 
         public static NpgsqlParameter Empty()
         {
-            return new NpgsqlParameter<DBNull>
+            return new NpgsqlParameter
             {
-                TypedValue = DBNull.Value
+                Value= DBNull.Value
             };
         }
     }

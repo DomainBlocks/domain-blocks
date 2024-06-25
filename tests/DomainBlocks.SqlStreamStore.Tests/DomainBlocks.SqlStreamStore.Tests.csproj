@@ -10,8 +10,8 @@
     <ItemGroup>
       <ProjectReference Include="..\..\examples\shopping\Shopping.WriteModel\Shopping.WriteModel.csproj" />
       <ProjectReference Include="..\..\src\DomainBlocks.DependencyInjection\DomainBlocks.DependencyInjection.csproj" />
-      <ProjectReference Include="..\..\src\DomainBlocks.Persistence.DependencyInjection\DomainBlocks.Persistence.DependencyInjection.csproj" />
-      <ProjectReference Include="..\..\src\DomainBlocks.Persistence.SqlStreamStore\DomainBlocks.Persistence.SqlStreamStore.csproj" />
+      <ProjectReference Include="..\..\src\DomainBlocks.V1.DependencyInjection\DomainBlocks.V1.DependencyInjection.csproj" />
+      <ProjectReference Include="..\..\src\DomainBlocks.V1.SqlStreamStore\DomainBlocks.V1.SqlStreamStore.csproj" />
       <ProjectReference Include="..\..\src\DomainBlocks.SqlStreamStore\DomainBlocks.SqlStreamStore.csproj" />
       <ProjectReference Include="..\..\examples\shopping\Shopping.Domain\Shopping.Domain.csproj" />
     </ItemGroup>

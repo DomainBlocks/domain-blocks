@@ -1,4 +1,4 @@
-using DomainBlocks.Persistence;
+using DomainBlocks.V1.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Shopping.Domain;
 
