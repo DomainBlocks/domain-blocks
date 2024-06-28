@@ -7,13 +7,13 @@ namespace DomainBlocks.V1.Abstractions;
 /// </summary>
 public interface IReadOnlyEventStore
 {
-    Task<StreamLoadResult> ReadStreamAsync(
+    Task<ReadStreamResult> ReadStreamAsync(
         string streamName,
         StreamReadDirection direction,
         StreamPosition fromPosition,
         CancellationToken cancellationToken = default);
 
-    Task<StreamLoadResult> ReadStreamAsync(
+    Task<ReadStreamResult> ReadStreamAsync(
         string streamName,
         StreamReadDirection direction,
         StreamReadOrigin readOrigin = StreamReadOrigin.Default,

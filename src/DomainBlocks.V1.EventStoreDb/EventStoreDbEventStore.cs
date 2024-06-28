@@ -20,7 +20,7 @@ public sealed class EventStoreDbEventStore : IEventStore
         _client = client ?? throw new ArgumentNullException(nameof(client));
     }
 
-    public async Task<StreamLoadResult>  ReadStreamAsync(
+    public async Task<ReadStreamResult>  ReadStreamAsync(
         string streamName,
         StreamReadDirection direction,
         StreamPosition fromPosition,
@@ -29,7 +29,7 @@ public sealed class EventStoreDbEventStore : IEventStore
         return await ReadStreamInternalAsync(streamName, direction, fromPosition, null, cancellationToken);
     }
 
-    public async Task<StreamLoadResult>  ReadStreamAsync(
+    public async Task<ReadStreamResult>  ReadStreamAsync(
         string streamName,
         StreamReadDirection direction,
         StreamReadOrigin readOrigin = StreamReadOrigin.Default,
@@ -66,7 +66,7 @@ public sealed class EventStoreDbEventStore : IEventStore
         return AppendToStreamInternalAsync(streamName, events, null, expectedState, cancellationToken);
     }
 
-    private async Task<StreamLoadResult> ReadStreamInternalAsync(
+    private async Task<ReadStreamResult> ReadStreamInternalAsync(
         string streamName,
         StreamReadDirection direction,
         StreamPosition? fromVersion,
@@ -99,10 +99,10 @@ public sealed class EventStoreDbEventStore : IEventStore
         var readState = await readStreamResult.ReadState;
         if (readState == ReadState.StreamNotFound)
         {
-            return StreamLoadResult.NotFound();
+            return ReadStreamResult.NotFound();
         }
         
-        return StreamLoadResult.Success(MapEventStream(readStreamResult));
+        return ReadStreamResult.Success(MapEventStream(readStreamResult));
 
         async IAsyncEnumerable<StoredEventRecord> MapEventStream(IAsyncEnumerable<ResolvedEvent> readStreamResult)
         {

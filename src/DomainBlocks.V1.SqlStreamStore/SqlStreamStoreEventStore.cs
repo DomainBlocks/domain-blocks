@@ -25,7 +25,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore
         _readPageSize = readPageSize;
     }
 
-    public async Task<StreamLoadResult> ReadStreamAsync(
+    public async Task<ReadStreamResult> ReadStreamAsync(
         string streamName,
         StreamReadDirection direction,
         StreamPosition fromPosition,
@@ -34,7 +34,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore
         return await ReadStreamInternalAsync(streamName, direction, fromPosition, null, cancellationToken);
     }
 
-    public async Task<StreamLoadResult> ReadStreamAsync(
+    public async Task<ReadStreamResult> ReadStreamAsync(
         string streamName,
         StreamReadDirection direction,
         StreamReadOrigin readOrigin = StreamReadOrigin.Default,
@@ -71,7 +71,7 @@ public sealed class SqlStreamStoreEventStore : IEventStore
         return AppendToStreamInternalAsync(streamName, events, null, expectedState, cancellationToken);
     }
 
-    private async Task<StreamLoadResult> ReadStreamInternalAsync(
+    private async Task<ReadStreamResult> ReadStreamInternalAsync(
         string streamName,
         StreamReadDirection direction,
         StreamPosition? fromVersion,
@@ -105,10 +105,10 @@ public sealed class SqlStreamStoreEventStore : IEventStore
         
         if (page.Status == PageReadStatus.StreamNotFound)
         {
-            return StreamLoadResult.NotFound();
+            return ReadStreamResult.NotFound();
         }
         
-        return StreamLoadResult.Success(ReadStreamMessages(streamName, page, cancellationToken));
+        return ReadStreamResult.Success(ReadStreamMessages(streamName, page, cancellationToken));
     }
 
     private static async IAsyncEnumerable<StoredEventRecord> ReadStreamMessages(string streamName, 

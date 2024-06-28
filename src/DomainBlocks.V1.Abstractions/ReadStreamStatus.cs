@@ -1,6 +1,6 @@
 ﻿namespace DomainBlocks.V1.Abstractions;
 
-public enum StreamLoadStatus
+public enum ReadStreamStatus
 {
     Success,
     StreamNotFound

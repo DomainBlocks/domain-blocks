@@ -21,7 +21,7 @@ public interface IEntityStore
     /// <param name="cancellationToken">A cancellation token</param>
     /// <typeparam name="TEntity">The type of the entity</typeparam>
     /// <returns>An typed entity instance</returns>
-    Task<TEntity> CreateOrLoadAsync<TEntity>(string entityId,
+    Task<TEntity> LoadOrCreateAsync<TEntity>(string entityId,
         CancellationToken cancellationToken = default)
         where TEntity : notnull;
 

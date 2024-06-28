@@ -91,7 +91,7 @@ public class EntityStoreTests
     {
         var id = Guid.NewGuid();
 
-        var entity = await store.CreateOrLoadAsync<ShoppingCart>(id.ToString());
+        var entity = await store.LoadOrCreateAsync<ShoppingCart>(id.ToString());
         entity.AddItem(new ShoppingCartItem(id, "Foo"));
         await store.SaveAsync(entity);
 
@@ -145,7 +145,7 @@ public class EntityStoreTests
     [TestCaseSource(nameof(TestCases))]
     public async Task CreateOrLoadAsync_WhenStreamDoesNotExist_Succeeds(IEntityStore store)
     {
-        var entity = await store.CreateOrLoadAsync<ShoppingCart>("cart-1");
+        var entity = await store.LoadOrCreateAsync<ShoppingCart>("cart-1");
         
         Assert.That(entity, Is.Not.Null);
     }

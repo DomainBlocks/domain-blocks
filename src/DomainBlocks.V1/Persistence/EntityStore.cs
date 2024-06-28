@@ -28,7 +28,7 @@ public sealed class EntityStore : IEntityStore
         return await LoadInternalAsync<TEntity>(entityId, throwIfStreamNotFound: true, cancellationToken);
     }
     
-    public async Task<TEntity> CreateOrLoadAsync<TEntity>(string entityId,
+    public async Task<TEntity> LoadOrCreateAsync<TEntity>(string entityId,
         CancellationToken cancellationToken = default)
         where TEntity : notnull
     {
@@ -45,7 +45,7 @@ public sealed class EntityStore : IEntityStore
         var loadResult = await
             _eventStore.ReadStreamAsync(streamName, StreamReadDirection.Forwards, readFromPosition, cancellationToken);
         
-        if (throwIfStreamNotFound && loadResult.LoadStatus == StreamLoadStatus.StreamNotFound)
+        if (throwIfStreamNotFound && loadResult.Status == ReadStreamStatus.StreamNotFound)
         {
             throw new StreamNotFoundException($"Stream '{streamName}' could not be found.");
         }
@@ -66,7 +66,7 @@ public sealed class EntityStore : IEntityStore
 
         return entity;
 
-        async IAsyncEnumerable<object> MapEventStream()
+        async  IAsyncEnumerable<object> MapEventStream()
         {
             await foreach (var eventRecord in loadResult.EventRecords.WithCancellation(cancellationToken))
             {
