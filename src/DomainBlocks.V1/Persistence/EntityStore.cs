@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using DomainBlocks.V1.Abstractions;
+using DomainBlocks.V1.Abstractions.Exceptions;
 using DomainBlocks.V1.Persistence.Entities;
 
 namespace DomainBlocks.V1.Persistence;
@@ -24,11 +25,30 @@ public sealed class EntityStore : IEntityStore
     public async Task<TEntity> LoadAsync<TEntity>(string entityId, CancellationToken cancellationToken = default)
         where TEntity : notnull
     {
+        return await LoadInternalAsync<TEntity>(entityId, throwIfStreamNotFound: true, cancellationToken);
+    }
+    
+    public async Task<TEntity> LoadOrCreateAsync<TEntity>(string entityId,
+        CancellationToken cancellationToken = default)
+        where TEntity : notnull
+    {
+        return await LoadInternalAsync<TEntity>(entityId, throwIfStreamNotFound: false, cancellationToken);
+    }
+
+    private async Task<TEntity> LoadInternalAsync<TEntity>(string entityId, bool throwIfStreamNotFound = false,
+    CancellationToken cancellationToken = default)
+        where TEntity : notnull
+    {
         var streamName = GetStreamName<TEntity>(entityId);
         var readFromPosition = StreamPosition.Start;
 
-        var eventRecords =
+        var loadResult = await
             _eventStore.ReadStreamAsync(streamName, StreamReadDirection.Forwards, readFromPosition, cancellationToken);
+        
+        if (throwIfStreamNotFound && loadResult.Status == ReadStreamStatus.StreamNotFound)
+        {
+            throw new StreamNotFoundException($"Stream '{streamName}' could not be found.");
+        }
 
         var entityAdapter = GetEntityAdapter<TEntity>();
         var initialState = entityAdapter.CreateState(); // May come from a snapshot (in future).
@@ -46,9 +66,9 @@ public sealed class EntityStore : IEntityStore
 
         return entity;
 
-        async IAsyncEnumerable<object> MapEventStream()
+        async  IAsyncEnumerable<object> MapEventStream()
         {
-            await foreach (var eventRecord in eventRecords)
+            await foreach (var eventRecord in loadResult.EventRecords.WithCancellation(cancellationToken))
             {
                 loadedVersion = eventRecord.StreamPosition;
                 loadedEventCount++;

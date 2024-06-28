@@ -7,9 +7,13 @@
     </ItemGroup>
 
     <ItemGroup>
+      <ProjectReference Include="..\..\examples\shopping\Shopping.WriteModel\Shopping.WriteModel.csproj" />
+      <ProjectReference Include="..\..\src\DomainBlocks.V1.DependencyInjection\DomainBlocks.V1.DependencyInjection.csproj" />
+      <ProjectReference Include="..\..\src\DomainBlocks.V1.EventStoreDb\DomainBlocks.V1.EventStoreDb.csproj" />
       <ProjectReference Include="..\DomainBlocks.EventStore.Testing\DomainBlocks.EventStore.Testing.csproj" />
       <ProjectReference Include="..\..\src\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj" />
       <ProjectReference Include="..\DomainBlocks.Testing\DomainBlocks.Testing.csproj" />
+      <ProjectReference Include="..\..\examples\shopping\Shopping.Domain\Shopping.Domain.csproj" />
     </ItemGroup>
 
 </Project>
