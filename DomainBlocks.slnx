@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DomainBlocks.Storage.Events.Abstractions/DomainBlocks.Storage.Events.Abstractions.csproj" />
+  </Folder>
+  <Folder Name="/tests/" />
+</Solution>
