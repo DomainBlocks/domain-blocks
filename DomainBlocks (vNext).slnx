@@ -1,6 +1,8 @@
 <Solution>
   <Folder Name="/benchmarks/" />
-  <Folder Name="/docs/" />
+  <Folder Name="/docs/">
+    <File Path="docs\vision.md" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src\DomainBlocks.Persistence.Events.Abstractions\DomainBlocks.Persistence.Events.Abstractions.csproj" />
     <Project Path="src\DomainBlocks.Persistence.Events.MongoDB\DomainBlocks.Persistence.Events.MongoDB.csproj" Type="Classic C#" />
