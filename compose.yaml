@@ -1,0 +1,19 @@
+﻿version: "3.8"
+
+services:
+  mongo:
+    image: mongo:6.0
+    container_name: domain-blocks-mongo-rs
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    command: [ "--replSet", "rs0" ]
+    healthcheck:
+      test: [ "CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  mongo-data:

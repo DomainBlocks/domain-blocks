@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/benchmarks/" />
+  <Folder Name="/docs/" />
+  <Folder Name="/src/">
+    <Project Path="src\DomainBlocks.Persistence.Events.Abstractions\DomainBlocks.Persistence.Events.Abstractions.csproj" />
+    <Project Path="src\DomainBlocks.Persistence.Events.MongoDB\DomainBlocks.Persistence.Events.MongoDB.csproj" Type="Classic C#" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests\DomainBlocks.Persistence.Events.MongoDB.Tests.Integration\DomainBlocks.Persistence.Events.MongoDB.Tests.Integration.csproj" Type="Classic C#" />
+  </Folder>
+  <Folder Name="/_Solution Items/">
+    <File Path="compose.yaml" />
+  </Folder>
+</Solution>
