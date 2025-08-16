@@ -6,4 +6,9 @@
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
+    <ItemGroup>
+      <ProjectReference Include="..\DomainBlocks.Persistence.Abstractions\DomainBlocks.Persistence.Abstractions.csproj" />
+      <ProjectReference Include="..\DomainBlocks.Serialization\DomainBlocks.Serialization.csproj" />
+    </ItemGroup>
+
 </Project>

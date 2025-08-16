@@ -4,13 +4,15 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.Persistence.Mongo.Events;
 
-public class MongoEventDataStore(IMongoCollection<BsonDocument> collection) : IEventDataStore<BsonDocument>
+public class MongoEventDataStore<TPayload>(
+    IMongoCollection<BsonDocument> collection,
+    Func<TPayload, BsonValue> toBsonValue,
+    Func<BsonValue, TPayload> toPayload) :
+    IEventDataStore<TPayload>
 {
-    private static readonly InsertManyOptions InsertManyOptions = new() { IsOrdered = true };
-
     public async Task AppendToStreamAsync(
         string streamId,
-        IEnumerable<EventData<BsonDocument>> events,
+        IEnumerable<EventData<TPayload>> events,
         long? expectedVersion = null,
         CancellationToken cancellationToken = default)
     {
@@ -30,7 +32,8 @@ public class MongoEventDataStore(IMongoCollection<BsonDocument> collection) : IE
 
         try
         {
-            await collection.InsertManyAsync(documents, InsertManyOptions, cancellationToken);
+            var insertManyOptions = new InsertManyOptions { IsOrdered = true };
+            await collection.InsertManyAsync(documents, insertManyOptions, cancellationToken);
         }
         catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
         {
@@ -38,13 +41,13 @@ public class MongoEventDataStore(IMongoCollection<BsonDocument> collection) : IE
         }
     }
 
-    public async Task<ReadStreamResult<BsonDocument>> ReadStreamAsync(
-        string streamName,
+    public async Task<ReadStreamResult<StoredEventData<TPayload>>> ReadStreamAsync(
+        string streamId,
         StreamReadDirection direction = StreamReadDirection.Forward,
         long? fromVersion = null,
         CancellationToken cancellationToken = default)
     {
-        var filter = Builders<BsonDocument>.Filter.Eq("header.streamId", streamName);
+        var filter = Builders<BsonDocument>.Filter.Eq("header.streamId", streamId);
 
         if (fromVersion.HasValue)
         {
@@ -65,49 +68,49 @@ public class MongoEventDataStore(IMongoCollection<BsonDocument> collection) : IE
             .ToCursorAsync(cancellationToken);
 
         if (!await cursor.MoveNextAsync(cancellationToken) || !cursor.Current.Any())
-            return ReadStreamResult<BsonDocument>.NotFound();
+            return ReadStreamResult<StoredEventData<TPayload>>.NotFound();
 
-        return ReadStreamResult<BsonDocument>.Success(Enumerate());
+        return ReadStreamResult<StoredEventData<TPayload>>.Success(Enumerate());
 
-        async IAsyncEnumerable<StoredEventData<BsonDocument>> Enumerate()
+        async IAsyncEnumerable<StoredEventData<TPayload>> Enumerate()
         {
-            do
+            using (cursor)
             {
-                foreach (var doc in cursor.Current)
+                do
                 {
-                    var metadata = doc
-                        .GetValueByPath("header.metadata")
-                        .AsBsonDocument
-                        .ToDictionary(x => x.Name, x => x.Value.AsString);
+                    foreach (var doc in cursor.Current)
+                    {
+                        var metadata = doc
+                            .GetValueByPath("header.metadata")
+                            .AsBsonDocument
+                            .ToDictionary(x => x.Name, x => x.Value.AsString);
 
-                    var @event = new StoredEventData<BsonDocument>(
-                        doc.GetValueByPath("header.streamId").AsString,
-                        doc.GetValueByPath("header.streamVersion").AsInt64,
-                        doc.GetValueByPath("header.eventName").AsString,
-                        doc.GetValueByPath("payload").AsBsonDocument,
-                        metadata,
-                        doc.GetValueByPath("header.committedAt").AsUniversalTime);
+                        var @event = new StoredEventData<TPayload>(
+                            doc.GetValueByPath("header.streamId").AsString,
+                            doc.GetValueByPath("header.streamVersion").AsInt64,
+                            doc.GetValueByPath("header.eventName").AsString,
+                            toPayload(doc.GetValueByPath("payload")),
+                            metadata,
+                            doc.GetValueByPath("header.committedAt").AsUniversalTime);
 
-                    yield return @event;
-                }
-            } while (await cursor.MoveNextAsync(cancellationToken));
-
-            // TODO: Improve this to guarantee dispose is called.
-            cursor.Dispose();
+                        yield return @event;
+                    }
+                } while (await cursor.MoveNextAsync(cancellationToken));
+            }
         }
     }
 
-    private static BsonDocument ToDocument(
+    private BsonDocument ToDocument(
         string streamId,
         long streamVersion,
-        EventData<BsonDocument> @event,
+        EventData<TPayload> @event,
         DateTime committedAt)
     {
         var doc = new BsonDocument();
         doc.SetValueByPath("header.streamId", streamId);
         doc.SetValueByPath("header.streamVersion", streamVersion);
         doc.SetValueByPath("header.eventName", @event.EventName);
-        doc.SetValueByPath("payload", @event.Payload);
+        doc.SetValueByPath("payload", toBsonValue(@event.Payload));
         doc.SetValueByPath("header.metadata", @event.Metadata.ToBsonDocument());
         doc.SetValueByPath("header.committedAt", committedAt);
 

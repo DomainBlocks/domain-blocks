@@ -8,7 +8,7 @@ public class MongoBsonDocumentSerializer : ISerializer<BsonDocument>
 {
     public BsonDocument Serialize(object value)
     {
-        return value.ToBsonDocument();
+        return value.ToBsonDocument(value.GetType());
     }
 
     public object? Deserialize(BsonDocument payload, Type type)

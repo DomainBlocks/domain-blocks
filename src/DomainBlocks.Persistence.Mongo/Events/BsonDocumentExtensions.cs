@@ -2,7 +2,7 @@ using MongoDB.Bson;
 
 namespace DomainBlocks.Persistence.Mongo.Events;
 
-public static class BsonDocumentExtensions
+internal static class BsonDocumentExtensions
 {
     public static void SetValueByPath(this BsonDocument root, string dottedPath, BsonValue value)
     {

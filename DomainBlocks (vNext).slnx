@@ -16,6 +16,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests\DomainBlocks.Persistence.MongoDB.Tests.Integration\DomainBlocks.Persistence.MongoDB.Tests.Integration.csproj" Type="Classic C#" />
+    <Project Path="tests\DomainBlocks.Persistence.Tests.Integration\DomainBlocks.Persistence.Tests.Integration.csproj" Type="Classic C#" />
     <Project Path="tests\DomainBlocks.Serialization.GoogleProtobuf.Tests\DomainBlocks.Serialization.GoogleProtobuf.Tests.csproj" Type="Classic C#" />
   </Folder>
   <Folder Name="/_Solution Items/">

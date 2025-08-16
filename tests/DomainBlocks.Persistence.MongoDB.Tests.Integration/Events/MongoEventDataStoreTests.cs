@@ -14,7 +14,11 @@ public class MongoEventDataStoreTests
         var client = new MongoClient("mongodb://localhost:27017");
         var database = client.GetDatabase("test");
         var collection = database.GetCollection<BsonDocument>("events");
-        var eventDataStore = new MongoEventDataStore(collection);
+
+        var eventDataStore = new MongoEventDataStore<BsonDocument>(
+            collection,
+            x => x,
+            x => x.AsBsonDocument);
 
         EventData<BsonDocument>[] events =
         [

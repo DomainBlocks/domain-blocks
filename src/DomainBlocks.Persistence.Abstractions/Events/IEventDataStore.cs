@@ -11,9 +11,9 @@ public interface IEventDataStore<TPayload>
         long? expectedVersion = null,
         CancellationToken cancellationToken = default);
 
-    Task<ReadStreamResult<TPayload>> ReadStreamAsync(
-        string streamName,
-        StreamReadDirection direction,
+    Task<ReadStreamResult<StoredEventData<TPayload>>> ReadStreamAsync(
+        string streamId,
+        StreamReadDirection direction = StreamReadDirection.Forward,
         long? fromVersion = null,
         CancellationToken cancellationToken = default);
 }
