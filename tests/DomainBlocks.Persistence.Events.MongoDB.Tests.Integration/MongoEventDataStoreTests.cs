@@ -5,7 +5,7 @@ using NUnit.Framework;
 
 namespace DomainBlocks.Persistence.Events.MongoDB.Tests.Integration;
 
-public class MongoEventStoreTests
+public class MongoEventDataStoreTests
 {
     [Test]
     public async Task Test()
@@ -13,7 +13,7 @@ public class MongoEventStoreTests
         var client = new MongoClient("mongodb://localhost:27017");
         var database = client.GetDatabase("test");
         var collection = database.GetCollection<BsonDocument>("events");
-        var eventStore = new MongoEventStore(collection);
+        var eventDataStore = new MongoEventDataStore(collection);
 
         EventData<BsonDocument>[] events =
         [
@@ -43,10 +43,10 @@ public class MongoEventStoreTests
         ];
 
         long? expectedVersion = null;
-        await eventStore.AppendToStreamAsync("test-stream", events, expectedVersion);
-        await eventStore.AppendToStreamAsync("test-stream", events, expectedVersion + events.Length);
+        await eventDataStore.AppendToStreamAsync("test-stream", events, expectedVersion);
+        await eventDataStore.AppendToStreamAsync("test-stream", events, expectedVersion + events.Length);
 
-        var result = await eventStore.ReadStreamAsync("test-stream");
+        var result = await eventDataStore.ReadStreamAsync("test-stream");
 
         var readEvents = await result.Events.ToListAsync();
     }

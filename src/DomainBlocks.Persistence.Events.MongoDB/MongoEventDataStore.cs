@@ -5,7 +5,7 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.Persistence.Events.MongoDB;
 
-public class MongoEventStore(IMongoCollection<BsonDocument> collection) : IEventStore<BsonDocument>
+public class MongoEventDataStore(IMongoCollection<BsonDocument> collection) : IEventDataStore<BsonDocument>
 {
     private static readonly InsertManyOptions InsertManyOptions = new() { IsOrdered = true };
 
@@ -70,7 +70,7 @@ public class MongoEventStore(IMongoCollection<BsonDocument> collection) : IEvent
 
         return ReadStreamResult<BsonDocument>.Success(Enumerate());
 
-        async IAsyncEnumerable<EventRecord<BsonDocument>> Enumerate()
+        async IAsyncEnumerable<StoredEventData<BsonDocument>> Enumerate()
         {
             do
             {
@@ -81,7 +81,7 @@ public class MongoEventStore(IMongoCollection<BsonDocument> collection) : IEvent
                         .AsBsonDocument
                         .ToDictionary(x => x.Name, x => x.Value.AsString);
 
-                    var @event = new EventRecord<BsonDocument>(
+                    var @event = new StoredEventData<BsonDocument>(
                         doc.GetValueByPath("header.streamId").AsString,
                         doc.GetValueByPath("header.streamVersion").AsInt64,
                         doc.GetValueByPath("header.eventName").AsString,

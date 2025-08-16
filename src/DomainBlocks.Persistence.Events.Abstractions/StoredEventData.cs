@@ -1,6 +1,6 @@
 namespace DomainBlocks.Persistence.Events.Abstractions;
 
-public sealed class EventRecord<TPayload>(
+public sealed class StoredEventData<TPayload>(
     string streamId,
     long streamVersion,
     string eventName,
