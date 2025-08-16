@@ -31,7 +31,9 @@ public class EventStore<TEventBase, TPayload>(
     {
         var result = await eventDataStore.ReadStreamAsync(streamId, direction, fromVersion, cancellationToken);
 
-        return new ReadStreamResult<TEventBase>(result.Status, GetDeserializedEvents());
+        return result.Status == ReadStreamStatus.Success
+            ? ReadStreamResult<TEventBase>.Success(GetDeserializedEvents())
+            : ReadStreamResult<TEventBase>.NotFound();
 
         async IAsyncEnumerable<TEventBase> GetDeserializedEvents()
         {

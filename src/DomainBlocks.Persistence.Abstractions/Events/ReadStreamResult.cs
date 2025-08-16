@@ -1,9 +1,15 @@
 namespace DomainBlocks.Persistence.Abstractions.Events;
 
-public sealed class ReadStreamResult<TEvent>(ReadStreamStatus status, IAsyncEnumerable<TEvent> events)
+public sealed class ReadStreamResult<TEvent>
 {
-    public ReadStreamStatus Status { get; } = status;
-    public IAsyncEnumerable<TEvent> Events { get; } = events;
+    private ReadStreamResult(ReadStreamStatus status, IAsyncEnumerable<TEvent> events)
+    {
+        Status = status;
+        Events = events;
+    }
+
+    public ReadStreamStatus Status { get; }
+    public IAsyncEnumerable<TEvent> Events { get; }
 
     public static ReadStreamResult<TEvent> NotFound() =>
         new(ReadStreamStatus.StreamNotFound, AsyncEnumerableEx.Empty<TEvent>());
