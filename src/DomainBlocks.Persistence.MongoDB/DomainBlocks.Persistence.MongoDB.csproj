@@ -7,7 +7,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\DomainBlocks.Persistence.Events.Abstractions\DomainBlocks.Persistence.Events.Abstractions.csproj" />
+      <ProjectReference Include="..\DomainBlocks.Persistence.Abstractions\DomainBlocks.Persistence.Abstractions.csproj" />
     </ItemGroup>
 
     <ItemGroup>

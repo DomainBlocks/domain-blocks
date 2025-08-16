@@ -2,13 +2,14 @@
   <Folder Name="/benchmarks/" />
   <Folder Name="/docs/">
     <File Path="docs\vision.md" />
+    <File Path="docs\architecture.md" />
   </Folder>
   <Folder Name="/src/">
-    <Project Path="src\DomainBlocks.Persistence.Events.Abstractions\DomainBlocks.Persistence.Events.Abstractions.csproj" />
-    <Project Path="src\DomainBlocks.Persistence.Events.MongoDB\DomainBlocks.Persistence.Events.MongoDB.csproj" Type="Classic C#" />
+    <Project Path="src\DomainBlocks.Persistence.Abstractions\DomainBlocks.Persistence.Abstractions.csproj" />
+    <Project Path="src\DomainBlocks.Persistence.MongoDB\DomainBlocks.Persistence.MongoDB.csproj" Type="Classic C#" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests\DomainBlocks.Persistence.Events.MongoDB.Tests.Integration\DomainBlocks.Persistence.Events.MongoDB.Tests.Integration.csproj" Type="Classic C#" />
+    <Project Path="tests\DomainBlocks.Persistence.MongoDB.Tests.Integration\DomainBlocks.Persistence.MongoDB.Tests.Integration.csproj" Type="Classic C#" />
   </Folder>
   <Folder Name="/_Solution Items/">
     <File Path="compose.yaml" />

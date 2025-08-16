@@ -1,4 +1,4 @@
-namespace DomainBlocks.Persistence.Events.Abstractions;
+namespace DomainBlocks.Persistence.Abstractions.Events;
 
 public sealed class EventData<TPayload>
 {

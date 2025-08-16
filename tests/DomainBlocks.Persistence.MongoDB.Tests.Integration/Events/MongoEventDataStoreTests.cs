@@ -1,9 +1,10 @@
-﻿using DomainBlocks.Persistence.Events.Abstractions;
+﻿using DomainBlocks.Persistence.Abstractions.Events;
+using DomainBlocks.Persistence.MongoDB.Events;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using NUnit.Framework;
 
-namespace DomainBlocks.Persistence.Events.MongoDB.Tests.Integration;
+namespace DomainBlocks.Persistence.MongoDB.Tests.Integration.Events;
 
 public class MongoEventDataStoreTests
 {

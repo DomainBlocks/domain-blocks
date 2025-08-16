@@ -1,4 +1,4 @@
-namespace DomainBlocks.Persistence.Events.Abstractions.Exceptions;
+namespace DomainBlocks.Persistence.Abstractions.Events.Exceptions;
 
 public class StreamConcurrencyException(
     string streamId,

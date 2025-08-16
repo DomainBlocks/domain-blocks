@@ -1,9 +1,9 @@
-using DomainBlocks.Persistence.Events.Abstractions;
-using DomainBlocks.Persistence.Events.Abstractions.Exceptions;
+using DomainBlocks.Persistence.Abstractions.Events;
+using DomainBlocks.Persistence.Abstractions.Events.Exceptions;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
-namespace DomainBlocks.Persistence.Events.MongoDB;
+namespace DomainBlocks.Persistence.MongoDB.Events;
 
 public class MongoEventDataStore(IMongoCollection<BsonDocument> collection) : IEventDataStore<BsonDocument>
 {
