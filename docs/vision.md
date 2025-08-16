@@ -41,4 +41,3 @@ Design philosophy or architectural values
   dependencies.
 * Idiomatic - following best practice, but also defining new best practices where appropriate.
 * Shared abstractions, e.g. mapping events to/from CLR types should be reusable across both the write and read side.
-  Event mapping is a layer above the event store abstraction (something like a "TypedEventStore"?).

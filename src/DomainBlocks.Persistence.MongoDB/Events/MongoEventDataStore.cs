@@ -1,5 +1,4 @@
 using DomainBlocks.Persistence.Abstractions.Events;
-using DomainBlocks.Persistence.Abstractions.Events.Exceptions;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
@@ -19,7 +18,7 @@ public class MongoEventDataStore(IMongoCollection<BsonDocument> collection) : IE
         expectedVersion ??= currentStreamVersion;
 
         if (expectedVersion.Value != currentStreamVersion)
-            throw new StreamConcurrencyException(streamId, expectedVersion.Value, currentStreamVersion);
+            throw new WrongExpectedVersionException(streamId, expectedVersion.Value, currentStreamVersion);
 
         var committedAt = DateTime.UtcNow;
 
@@ -35,7 +34,7 @@ public class MongoEventDataStore(IMongoCollection<BsonDocument> collection) : IE
         }
         catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
         {
-            throw new StreamConcurrencyException(streamId, expectedVersion.Value, currentStreamVersion, ex);
+            throw new WrongExpectedVersionException(streamId, expectedVersion.Value, currentStreamVersion, ex);
         }
     }
 

@@ -1,11 +1,13 @@
-namespace DomainBlocks.Persistence.Abstractions.Events.Exceptions;
+using DomainBlocks.Core.Exceptions;
 
-public class StreamConcurrencyException(
+namespace DomainBlocks.Persistence.Abstractions.Events;
+
+public class WrongExpectedVersionException(
     string streamId,
     long expectedVersion,
     long actualVersion,
     Exception? innerException = null) :
-    Exception(GetMessage(streamId, expectedVersion, actualVersion), innerException)
+    DomainBlocksException(GetMessage(streamId, expectedVersion, actualVersion), innerException)
 {
     public string StreamId { get; } = streamId;
     public long ExpectedVersion { get; } = expectedVersion;
