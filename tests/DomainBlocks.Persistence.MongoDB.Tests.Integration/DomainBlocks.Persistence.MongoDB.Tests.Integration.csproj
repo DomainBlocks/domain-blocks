@@ -14,7 +14,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\src\DomainBlocks.Persistence.MongoDB\DomainBlocks.Persistence.MongoDB.csproj" />
+      <ProjectReference Include="..\..\src\DomainBlocks.Persistence.Mongo\DomainBlocks.Persistence.Mongo.csproj" />
     </ItemGroup>
 
 </Project>
