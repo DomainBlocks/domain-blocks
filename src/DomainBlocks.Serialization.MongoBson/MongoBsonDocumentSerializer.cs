@@ -4,7 +4,7 @@ using MongoDB.Bson.Serialization;
 
 namespace DomainBlocks.Serialization.MongoBson;
 
-public class MongoBsonSerializer : ISerializer<BsonDocument>
+public class MongoBsonDocumentSerializer : ISerializer<BsonDocument>
 {
     public BsonDocument Serialize(object value)
     {
