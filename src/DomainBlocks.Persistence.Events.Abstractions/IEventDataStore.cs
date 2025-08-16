@@ -1,5 +1,8 @@
 namespace DomainBlocks.Persistence.Events.Abstractions;
 
+// This is the "raw" version of an event store. IEventStore will expose CLR-typed objects. Previously, we coupled type
+// mapping to the "entity store", which doesn't separate concerns, and also means that event mapping can't be reused for
+// both write-side and read-side concerns.
 public interface IEventDataStore<TPayload>
 {
     Task AppendToStreamAsync(
