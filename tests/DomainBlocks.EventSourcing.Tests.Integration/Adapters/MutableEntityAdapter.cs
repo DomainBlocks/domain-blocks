@@ -2,7 +2,7 @@ using DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 
 namespace DomainBlocks.EventSourcing.Tests.Integration.Adapters;
 
-public sealed class MutableEntityAdapter<TEntity> : EntityAdapterBase<TEntity> where TEntity : MutableEntityBase, new()
+public sealed class MutableEntityAdapter<TEntity> : EntityAdapter<TEntity> where TEntity : MutableEntityBase, new()
 {
     public override string GetId(TEntity entity) => entity.Id.ToString();
     public override IEnumerable<object> GetUncommittedEvents(TEntity entity) => entity.RaisedEvents;

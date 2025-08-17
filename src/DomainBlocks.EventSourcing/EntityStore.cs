@@ -6,7 +6,7 @@ namespace DomainBlocks.EventSourcing;
 
 public sealed class EntityStore(
     IEventStore<object> eventStore,
-    EntityAdapterProvider entityAdapterProvider) : IEntityStore
+    IEntityAdapterProvider entityAdapterProvider) : IEntityStore
 {
     private readonly ConditionalWeakTable<object, TrackedEntityContext> _trackedEntities = new();
 

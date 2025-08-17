@@ -2,7 +2,7 @@ using DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 
 namespace DomainBlocks.EventSourcing.Tests.Integration.Adapters;
 
-public sealed class FunctionalEntityWrapperAdapter<TEntity> : EntityAdapterBase<FunctionalEntityWrapper<TEntity>>
+public sealed class FunctionalEntityWrapperAdapter<TEntity> : EntityAdapter<FunctionalEntityWrapper<TEntity>>
     where TEntity : IIdentifiable, new()
 {
     public override string GetId(FunctionalEntityWrapper<TEntity> entity) => entity.Id.ToString();

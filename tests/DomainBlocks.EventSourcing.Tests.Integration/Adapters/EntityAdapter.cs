@@ -4,7 +4,7 @@ using DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 
 namespace DomainBlocks.EventSourcing.Tests.Integration.Adapters;
 
-public sealed class EntityAdapter<TEntity, TState> : EntityAdapterBase<TEntity, TState>
+public sealed class EntityAdapter<TEntity, TState> : EventSourcing.EntityAdapter<TEntity, TState>
     where TEntity : EntityBase<TState>, new()
     where TState : StateBase<TState>, new()
 {

@@ -2,12 +2,13 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace DomainBlocks.EventSourcing;
 
-public class GenericEntityAdapterTypeResolver
+public class GenericEntityAdapterProvider : IEntityAdapterProvider
 {
     private readonly Type _genericTypeDefinition;
     private readonly Type _entityGenericArgType;
+    private readonly object?[]? _constructorArgs;
 
-    public GenericEntityAdapterTypeResolver(Type genericTypeDefinition)
+    public GenericEntityAdapterProvider(Type genericTypeDefinition, object?[]? constructorArgs = null)
     {
         ArgumentNullException.ThrowIfNull(genericTypeDefinition);
 
@@ -43,19 +44,28 @@ public class GenericEntityAdapterTypeResolver
 
         _genericTypeDefinition = genericTypeDefinition;
         _entityGenericArgType = entityGenericArg;
+        _constructorArgs = constructorArgs;
     }
 
-    public bool TryResolveFor<TEntity>([NotNullWhen(true)] out Type? resolvedType) where TEntity : notnull
+    public bool TryGetFor<TEntity>([NotNullWhen(true)] out IEntityAdapter<TEntity>? entityAdapter)
+        where TEntity : notnull
     {
-        return TryResolveFor(typeof(TEntity), out resolvedType);
+        if (!TryResolveAdapterType(typeof(TEntity), out var adapterType))
+        {
+            entityAdapter = null;
+            return false;
+        }
+
+        var instance = Activator.CreateInstance(adapterType, _constructorArgs);
+        entityAdapter = (IEntityAdapter<TEntity>)instance!;
+        return true;
     }
 
-    private bool TryResolveFor(Type entityType, [NotNullWhen(true)] out Type? resolvedType)
+    private bool TryResolveAdapterType(Type entityType, [NotNullWhen(true)] out Type? adapterType)
     {
-        resolvedType = null;
-
         if (!_entityGenericArgType.TryResolveGenericParametersFrom(entityType, out var resolvedGenericParams))
         {
+            adapterType = null;
             return false;
         }
 
@@ -66,6 +76,7 @@ public class GenericEntityAdapterTypeResolver
 
         if (!adapterGenericParams.All(x => resolvedGenericParams.ContainsKey(x)))
         {
+            adapterType = null;
             return false;
         }
 
@@ -76,7 +87,7 @@ public class GenericEntityAdapterTypeResolver
             genericArgs[param.GenericParameterPosition] = resolvedGenericParams[param];
         }
 
-        resolvedType = _genericTypeDefinition.MakeGenericType(genericArgs);
+        adapterType = _genericTypeDefinition.MakeGenericType(genericArgs);
         return true;
     }
 }

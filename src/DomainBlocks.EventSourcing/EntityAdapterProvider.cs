@@ -1,18 +1,15 @@
-using System.Collections.Concurrent;
+using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 
 namespace DomainBlocks.EventSourcing;
 
-public class EntityAdapterProvider
+public class EntityAdapterProvider : IEntityAdapterProvider
 {
-    private readonly ConcurrentDictionary<Type, IEntityAdapter> _adapters;
-    private readonly IReadOnlyCollection<GenericEntityAdapterFactory> _genericAdapterFactories;
+    private readonly FrozenDictionary<Type, IEntityAdapter> _adapters;
 
-    public EntityAdapterProvider(
-        IEnumerable<IEntityAdapter> entityAdapters,
-        IEnumerable<GenericEntityAdapterFactory> genericEntityAdapterFactories)
+    public EntityAdapterProvider(IEnumerable<IEntityAdapter> entityAdapters)
     {
-        var adapters = entityAdapters.ToDictionary(x => x.EntityType);
+        var adapters = entityAdapters.ToFrozenDictionary(x => x.EntityType);
 
         if (!adapters.Values.All(x => x.GetType().HasInterface(typeof(IEntityAdapter<>))))
         {
@@ -20,8 +17,7 @@ public class EntityAdapterProvider
                 $"Entity adapters must not implement '{typeof(IEntityAdapter)}' directly.", nameof(entityAdapters));
         }
 
-        _adapters = new ConcurrentDictionary<Type, IEntityAdapter>(adapters);
-        _genericAdapterFactories = genericEntityAdapterFactories.ToArray();
+        _adapters = adapters;
     }
 
     public bool TryGetFor<TEntity>([NotNullWhen(true)] out IEntityAdapter<TEntity>? adapter) where TEntity : notnull
@@ -32,21 +28,7 @@ public class EntityAdapterProvider
             return true;
         }
 
-        adapter = _genericAdapterFactories
-            .Select(x =>
-            {
-                x.TryCreateFor<TEntity>(out var instance);
-                return instance;
-            })
-            .Where(x => x != null)
-            .Select(x => x)
-            .FirstOrDefault();
-
-        if (adapter != null)
-        {
-            _adapters.TryAdd(adapter.EntityType, adapter);
-        }
-
-        return adapter != null;
+        adapter = null;
+        return false;
     }
 }

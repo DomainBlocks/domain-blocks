@@ -1,6 +1,6 @@
 namespace DomainBlocks.EventSourcing;
 
-public abstract class EntityAdapterBase<TEntity, TState> : IEntityAdapter<TEntity>
+public abstract class EntityAdapter<TEntity, TState> : IEntityAdapter<TEntity>
     where TEntity : notnull
     where TState : notnull
 {
@@ -35,7 +35,7 @@ public abstract class EntityAdapterBase<TEntity, TState> : IEntityAdapter<TEntit
     }
 }
 
-public abstract class EntityAdapterBase<TEntity> : EntityAdapterBase<TEntity, TEntity> where TEntity : notnull
+public abstract class EntityAdapter<TEntity> : EntityAdapter<TEntity, TEntity> where TEntity : notnull
 {
     public override TEntity GetCurrentState(TEntity entity) => entity;
     protected override TEntity Create(TEntity state) => state;

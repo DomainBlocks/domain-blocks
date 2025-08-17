@@ -48,17 +48,12 @@ public class EntityStoreTests
         var eventSerializer = new EventSerializer<BsonDocument>(mappings, serializer);
         var eventStore = new EventStore<object, BsonDocument>(eventDataStore, eventSerializer);
 
-        var entityAdapterProvider = new EntityAdapterProvider(
-            [],
-            [
-                new GenericEntityAdapterFactory(
-                    new GenericEntityAdapterTypeResolver(typeof(EntityAdapter<,>)), [123, "ABC"]),
-
-                new GenericEntityAdapterFactory(new GenericEntityAdapterTypeResolver(typeof(MutableEntityAdapter<>))),
-
-                new GenericEntityAdapterFactory(
-                    new GenericEntityAdapterTypeResolver(typeof(FunctionalEntityWrapperAdapter<>)))
-            ]);
+        var entityAdapterProvider = new CompositeEntityAdapterProvider(
+        [
+            new GenericEntityAdapterProvider(typeof(Adapters.EntityAdapter<,>), [123, "ABC"]),
+            new GenericEntityAdapterProvider(typeof(MutableEntityAdapter<>)),
+            new GenericEntityAdapterProvider(typeof(FunctionalEntityWrapperAdapter<>))
+        ]);
 
         _entityStore = new EntityStore(eventStore, entityAdapterProvider);
     }

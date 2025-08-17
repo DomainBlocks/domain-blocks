@@ -61,7 +61,7 @@ public class KurrentDBEventDataStore(KurrentDBClient client) : IEventDataStore<R
                     resolvedEvent.OriginalEvent.EventNumber.ToInt64(),
                     resolvedEvent.Event.EventType,
                     resolvedEvent.Event.Data,
-                    [],
+                    new Dictionary<string, string>(),
                     resolvedEvent.Event.Created.Date,
                     Convert.ToInt64(resolvedEvent.OriginalEvent.Position.CommitPosition));
             }
