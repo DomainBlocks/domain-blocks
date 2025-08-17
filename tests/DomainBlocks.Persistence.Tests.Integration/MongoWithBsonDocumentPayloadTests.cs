@@ -3,7 +3,6 @@ using DomainBlocks.Persistence.Mongo.Events;
 using DomainBlocks.Serialization.Events;
 using DomainBlocks.Serialization.MongoBson;
 using MongoDB.Bson;
-using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 using NUnit.Framework;
 using Shouldly;
@@ -12,15 +11,6 @@ namespace DomainBlocks.Persistence.Tests.Integration;
 
 public class MongoWithBsonDocumentPayloadTests
 {
-    static MongoWithBsonDocumentPayloadTests()
-    {
-        BsonClassMap.RegisterClassMap<UserCreated>(cm =>
-        {
-            cm.AutoMap();
-            cm.SetIgnoreExtraElements(true);
-        });
-    }
-
     [Test]
     public async Task Should_write_and_read_event()
     {

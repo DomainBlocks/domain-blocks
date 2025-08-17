@@ -13,18 +13,15 @@ public class GoogleProtobufSerializerTest
     [Test]
     public void Should_serialize_and_deserialize()
     {
-        // Arrange
         var original = new UserCreated
         {
             UserId = "user-123",
             Name = "Alice"
         };
 
-        // Act
         var bytes = _serializer.Serialize(original);
         var deserialized = (UserCreated?)_serializer.Deserialize(bytes, typeof(UserCreated));
 
-        // Assert
         deserialized.ShouldNotBeNull();
         deserialized.UserId.ShouldBe(original.UserId);
         deserialized.Name.ShouldBe(original.Name);

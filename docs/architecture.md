@@ -20,7 +20,9 @@ TBD
 * We handle deprecated event names.
 * We handle in-memory CLR-typed transforms and splits (i.e. post-deserialisation). Implies old versions of event POCOs
   must be kept in the consumer's codebase.
-* We DO NOT support splits at the deserialisation level.
-* We support event upcasts and splits as durable stream transforms - i.e. write out a new stream version with the
-  transformed events. Can use the same code as in-memory transforms.
-* Concept of durable and in-memory transforms. Both should be very easy.
+* We DO NOT support skips or splits at the deserialisation level (both inherently change stream version).
+* We support durable stream transforms - i.e. write out a new stream version with the transformed events. Can use the 
+  same logic as in-memory transforms.
+* Concept of durable and in-memory stream transforms. Both should be very easy.
+* Skips and splits require a durable stream transform.
+* Upcasts can be in-memory or durable.
