@@ -6,9 +6,9 @@ using Shouldly;
 
 namespace DomainBlocks.Serialization.Google.Protobuf.Tests;
 
-public class GoogleProtobufSerializerTest
+public class GoogleProtobufBytesSerializerTest
 {
-    private readonly GoogleProtobufSerializer _serializer = new();
+    private readonly GoogleProtobufBytesSerializer _bytesSerializer = new();
 
     [Test]
     public void Should_serialize_and_deserialize()
@@ -19,8 +19,8 @@ public class GoogleProtobufSerializerTest
             Name = "Alice"
         };
 
-        var bytes = _serializer.Serialize(original);
-        var deserialized = (UserCreated?)_serializer.Deserialize(bytes, typeof(UserCreated));
+        var bytes = _bytesSerializer.Serialize(original);
+        var deserialized = (UserCreated?)_bytesSerializer.Deserialize(bytes, typeof(UserCreated));
 
         deserialized.ShouldNotBeNull();
         deserialized.UserId.ShouldBe(original.UserId);
@@ -32,7 +32,7 @@ public class GoogleProtobufSerializerTest
     {
         var nonMessage = new { Id = 1 };
 
-        Should.Throw<ArgumentException>(() => _serializer.Serialize(nonMessage));
+        Should.Throw<ArgumentException>(() => _bytesSerializer.Serialize(nonMessage));
     }
 
     [Test]
@@ -40,7 +40,7 @@ public class GoogleProtobufSerializerTest
     {
         var bytes = "junk"u8.ToArray();
 
-        Should.Throw<ArgumentException>(() => _serializer.Deserialize(bytes, typeof(string)));
+        Should.Throw<ArgumentException>(() => _bytesSerializer.Deserialize(bytes, typeof(string)));
     }
 
     [Test]
@@ -48,13 +48,13 @@ public class GoogleProtobufSerializerTest
     {
         var bytes = "junk"u8.ToArray();
 
-        Should.Throw<ArgumentException>(() => _serializer.Deserialize(bytes, typeof(FakeWithoutParser)));
+        Should.Throw<ArgumentException>(() => _bytesSerializer.Deserialize(bytes, typeof(FakeWithoutParser)));
     }
 
     [Test]
     public void Serialize_should_throw_when_value_is_null()
     {
-        Should.Throw<ArgumentNullException>(() => _serializer.Serialize(null!));
+        Should.Throw<ArgumentNullException>(() => _bytesSerializer.Serialize(null!));
     }
 
     [Test]
@@ -62,7 +62,7 @@ public class GoogleProtobufSerializerTest
     {
         var bytes = new byte[] { 0x01, 0x02 };
 
-        Should.Throw<ArgumentNullException>(() => _serializer.Deserialize(bytes, null!));
+        Should.Throw<ArgumentNullException>(() => _bytesSerializer.Deserialize(bytes, null!));
     }
 
     // Dummy type without a Parser property to simulate error

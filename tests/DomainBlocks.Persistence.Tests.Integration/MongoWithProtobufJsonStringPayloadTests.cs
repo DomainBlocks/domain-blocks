@@ -1,4 +1,4 @@
-﻿using DomainBlocks.Persistence.Events;
+using DomainBlocks.Persistence.Events;
 using DomainBlocks.Persistence.MongoDB.Events;
 using DomainBlocks.Persistence.Tests.Integration.Generated;
 using DomainBlocks.Serialization.Events;
@@ -11,7 +11,7 @@ using Shouldly;
 
 namespace DomainBlocks.Persistence.Tests.Integration;
 
-public class MongoWithProtobufPayloadTests
+public class MongoWithProtobufJsonStringPayloadTests
 {
     [Test]
     public async Task Should_write_and_read_event()
@@ -20,19 +20,19 @@ public class MongoWithProtobufPayloadTests
         var database = client.GetDatabase("test");
         var collection = database.GetCollection<BsonDocument>("events");
 
-        var eventDataStore = new MongoEventDataStore<ReadOnlyMemory<byte>>(
+        var eventDataStore = new MongoEventDataStore<string>(
             collection,
-            x => x.ToArray(),
-            x => x.AsByteArray);
+            x => new BsonString(x),
+            x => x.AsString);
 
         EventTypeMapping[] mappings =
         [
             new(typeof(UserCreated))
         ];
 
-        var serializer = new GoogleProtobufSerializer();
-        var eventSerializer = new EventSerializer<ReadOnlyMemory<byte>>(mappings, serializer);
-        var eventStore = new EventStore<IMessage, ReadOnlyMemory<byte>>(eventDataStore, eventSerializer);
+        var serializer = new GoogleProtobufJsonStringSerializer();
+        var eventSerializer = new EventSerializer<string>(mappings, serializer);
+        var eventStore = new EventStore<IMessage, string>(eventDataStore, eventSerializer);
 
         var originalEvent = new UserCreated
         {
