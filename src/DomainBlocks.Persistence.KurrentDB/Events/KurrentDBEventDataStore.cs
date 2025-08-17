@@ -1,8 +1,6 @@
 using DomainBlocks.Persistence.Abstractions.Events;
 using KurrentDB.Client;
 
-// DomainBlocks.Serialization.MongoDB.Bson
-
 namespace DomainBlocks.Persistence.KurrentDB.Events;
 
 public class KurrentDBEventDataStore(KurrentDBClient client) : IEventDataStore<ReadOnlyMemory<byte>>

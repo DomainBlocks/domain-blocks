@@ -132,7 +132,7 @@ public class EntityStoreTests
     {
         const string id = "cart-1";
 
-        var exception = await Should.ThrowAsync<InvalidOperationException>(() =>
+        var exception = await Should.ThrowAsync<StreamNotFoundException>(() =>
             _entityStore.LoadAsync<ShoppingCart>(id));
 
         exception.Message.ShouldBe("Stream 'shoppingCart-cart-1' could not be found.");

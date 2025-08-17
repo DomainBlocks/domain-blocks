@@ -34,8 +34,7 @@ public sealed class EntityStore(
 
         if (throwIfStreamNotFound && result.Status == ReadStreamStatus.StreamNotFound)
         {
-            //throw new StreamNotFoundException($"Stream '{streamName}' could not be found.");
-            throw new InvalidOperationException($"Stream '{streamName}' could not be found.");
+            throw new StreamNotFoundException($"Stream '{streamName}' could not be found.");
         }
 
         var entityAdapter = GetEntityAdapter<TEntity>();
