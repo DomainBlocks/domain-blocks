@@ -50,9 +50,10 @@ public class EntityStoreTests
 
         var entityAdapterProvider = new CompositeEntityAdapterProvider(
         [
-            new GenericEntityAdapterProvider(typeof(Adapters.EntityAdapter<,>), [123, "ABC"]),
-            new GenericEntityAdapterProvider(typeof(MutableEntityAdapter<>)),
-            new GenericEntityAdapterProvider(typeof(FunctionalEntityWrapperAdapter<>))
+            //new GenericEntityAdapterProvider(typeof(AggregateAdapter<,>), [123, "ABC"]),
+            new GenericEntityAdapterProvider(typeof(AggregateAdapter2<,>)),
+            new GenericEntityAdapterProvider(typeof(MutableAggregateAdapter<>)),
+            new GenericEntityAdapterProvider(typeof(FunctionalAggregateWrapperAdapter<>))
         ]);
 
         _entityStore = new EntityStore(eventStore, entityAdapterProvider);
@@ -167,13 +168,13 @@ public class EntityStoreTests
     [Test]
     public async Task FunctionalEntityWrapperScenario()
     {
-        var entity = new FunctionalEntityWrapper<FunctionalShoppingCart>();
+        var entity = new FunctionalAggregateWrapper<FunctionalShoppingCart>();
         entity.Execute(x => x.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Foo")));
         entity.Execute(x => x.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Bar")));
         await _entityStore.SaveAsync(entity);
 
         var reloadedEntity =
-            await _entityStore.LoadAsync<FunctionalEntityWrapper<FunctionalShoppingCart>>(entity.Id.ToString());
+            await _entityStore.LoadAsync<FunctionalAggregateWrapper<FunctionalShoppingCart>>(entity.Id.ToString());
 
         reloadedEntity.Id.ShouldBe(entity.Id);
         reloadedEntity.Entity.Items.ShouldBe(entity.Entity.Items);

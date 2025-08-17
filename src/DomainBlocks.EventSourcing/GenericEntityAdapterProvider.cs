@@ -47,18 +47,13 @@ public class GenericEntityAdapterProvider : IEntityAdapterProvider
         _constructorArgs = constructorArgs;
     }
 
-    public bool TryGetFor<TEntity>([NotNullWhen(true)] out IEntityAdapter<TEntity>? entityAdapter)
-        where TEntity : notnull
+    public IEntityAdapter<TEntity>? GetFor<TEntity>() where TEntity : notnull
     {
         if (!TryResolveAdapterType(typeof(TEntity), out var adapterType))
-        {
-            entityAdapter = null;
-            return false;
-        }
+            return null;
 
         var instance = Activator.CreateInstance(adapterType, _constructorArgs);
-        entityAdapter = (IEntityAdapter<TEntity>)instance!;
-        return true;
+        return (IEntityAdapter<TEntity>)instance!;
     }
 
     private bool TryResolveAdapterType(Type entityType, [NotNullWhen(true)] out Type? adapterType)
@@ -83,9 +78,7 @@ public class GenericEntityAdapterProvider : IEntityAdapterProvider
         var genericArgs = new Type[adapterGenericParams.Length];
 
         foreach (var param in adapterGenericParams)
-        {
             genericArgs[param.GenericParameterPosition] = resolvedGenericParams[param];
-        }
 
         adapterType = _genericTypeDefinition.MakeGenericType(genericArgs);
         return true;

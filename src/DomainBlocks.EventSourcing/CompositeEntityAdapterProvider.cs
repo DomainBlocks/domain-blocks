@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Diagnostics.CodeAnalysis;
 
 namespace DomainBlocks.EventSourcing;
 
@@ -8,16 +7,13 @@ public class CompositeEntityAdapterProvider(IEnumerable<IEntityAdapterProvider> 
     private readonly ConcurrentDictionary<Type, IEntityAdapter> _adapters = new();
     private readonly IEntityAdapterProvider[] _providers = providers.ToArray();
 
-    public bool TryGetFor<TEntity>([NotNullWhen(true)] out IEntityAdapter<TEntity>? adapter) where TEntity : notnull
+    public IEntityAdapter<TEntity>? GetFor<TEntity>() where TEntity : notnull
     {
         if (_adapters.TryGetValue(typeof(TEntity), out var result))
-        {
-            adapter = (IEntityAdapter<TEntity>)result;
-            return true;
-        }
+            return (IEntityAdapter<TEntity>)result;
 
-        adapter = _providers
-            .Select(x => x.TryGetFor<TEntity>(out var instance) ? instance : null)
+        var adapter = _providers
+            .Select(x => x.GetFor<TEntity>())
             .Where(x => x != null)
             .Select(x => x)
             .FirstOrDefault();
@@ -25,6 +21,6 @@ public class CompositeEntityAdapterProvider(IEnumerable<IEntityAdapterProvider> 
         if (adapter != null)
             _adapters.TryAdd(adapter.EntityType, adapter);
 
-        return adapter != null;
+        return adapter;
     }
 }

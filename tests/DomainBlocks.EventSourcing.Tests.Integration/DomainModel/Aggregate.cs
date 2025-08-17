@@ -2,7 +2,7 @@ using DomainBlocks.EventSourcing.Tests.Integration.DomainEvents;
 
 namespace DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 
-public abstract class EntityBase<TState> where TState : StateBase<TState>, new()
+public abstract class Aggregate<TState> where TState : StateBase<TState>, new()
 {
     private readonly List<IDomainEvent> _uncommittedEvents = [];
     private TState _state = new();

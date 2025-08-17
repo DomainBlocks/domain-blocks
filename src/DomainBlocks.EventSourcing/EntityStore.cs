@@ -82,11 +82,9 @@ public sealed class EntityStore(
 
     private IEntityAdapter<TEntity> GetEntityAdapter<TEntity>() where TEntity : notnull
     {
-        return entityAdapterProvider.TryGetFor<TEntity>(out var entityAdapter)
-            ? entityAdapter
-            : throw new ArgumentException(
-                $"Entity adapter not found for type '{typeof(TEntity).GetPrettyName()}'.",
-                nameof(TEntity));
+        return entityAdapterProvider.GetFor<TEntity>() ?? throw new ArgumentException(
+            $"Entity adapter not found for type '{typeof(TEntity).GetPrettyName()}'.",
+            nameof(TEntity));
     }
 
     private static string GetStreamName<TEntity>(string entityId)

@@ -2,7 +2,7 @@ using DomainBlocks.EventSourcing.Tests.Integration.DomainEvents;
 
 namespace DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 
-public class ShoppingCart : EntityBase<ShoppingCartState>
+public class ShoppingCart : Aggregate<ShoppingCartState>
 {
     public override string Id => State.SessionId.ToString();
 

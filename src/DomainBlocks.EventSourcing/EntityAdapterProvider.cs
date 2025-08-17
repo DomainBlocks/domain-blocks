@@ -1,5 +1,4 @@
 using System.Collections.Frozen;
-using System.Diagnostics.CodeAnalysis;
 
 namespace DomainBlocks.EventSourcing;
 
@@ -20,15 +19,8 @@ public class EntityAdapterProvider : IEntityAdapterProvider
         _adapters = adapters;
     }
 
-    public bool TryGetFor<TEntity>([NotNullWhen(true)] out IEntityAdapter<TEntity>? adapter) where TEntity : notnull
+    public IEntityAdapter<TEntity>? GetFor<TEntity>() where TEntity : notnull
     {
-        if (_adapters.TryGetValue(typeof(TEntity), out var result))
-        {
-            adapter = (IEntityAdapter<TEntity>)result;
-            return true;
-        }
-
-        adapter = null;
-        return false;
+        return (IEntityAdapter<TEntity>?)_adapters.GetValueOrDefault(typeof(TEntity));
     }
 }

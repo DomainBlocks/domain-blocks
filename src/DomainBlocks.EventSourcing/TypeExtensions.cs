@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 
@@ -76,7 +77,7 @@ internal static class TypeExtensions
 
         var internalResults = new Dictionary<Type, Type>();
         var success = TryResolveImpl(type, other);
-        results = success ? internalResults : null;
+        results = success ? internalResults.ToFrozenDictionary() : null;
         return success;
 
         // E.g. EntityBase<TState> is "resolvable" from MyEntity : EntityBase<MyState>

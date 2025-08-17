@@ -1,6 +1,6 @@
 namespace DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 
-public class FunctionalEntityWrapper<TEntity> where TEntity : IIdentifiable, new()
+public class FunctionalAggregateWrapper<TEntity> where TEntity : IIdentifiable, new()
 {
     private readonly List<object> _raisedEvents = [];
 

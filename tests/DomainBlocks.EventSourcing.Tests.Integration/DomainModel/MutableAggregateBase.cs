@@ -1,6 +1,6 @@
 namespace DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 
-public abstract class MutableEntityBase
+public abstract class MutableAggregateBase
 {
     private readonly List<object> _raisedEvents = [];
 

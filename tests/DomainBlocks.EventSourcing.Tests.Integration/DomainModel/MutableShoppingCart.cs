@@ -2,7 +2,7 @@ using DomainBlocks.EventSourcing.Tests.Integration.DomainEvents;
 
 namespace DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 
-public class MutableShoppingCart : MutableEntityBase
+public class MutableShoppingCart : MutableAggregateBase
 {
     private Guid _sessionId = Guid.Empty;
     private readonly List<ShoppingCartItem> _items = [];

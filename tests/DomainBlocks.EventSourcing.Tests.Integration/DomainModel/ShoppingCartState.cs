@@ -8,7 +8,11 @@ public record ShoppingCartState : StateBase<ShoppingCartState>
     static ShoppingCartState()
     {
         When<ShoppingSessionStarted>((s, e) => s with { SessionId = e.SessionId });
-        When<ItemAddedToShoppingCart>((s, e) => s with { Items = s.Items.Add(new ShoppingCartItem(e.SessionId, e.Item)) });
+
+        When<ItemAddedToShoppingCart>((s, e) => s with
+        {
+            Items = s.Items.Add(new ShoppingCartItem(e.SessionId, e.Item))
+        });
     }
 
     public Guid SessionId { get; init; }
