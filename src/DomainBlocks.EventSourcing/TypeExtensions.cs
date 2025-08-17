@@ -22,9 +22,6 @@ internal static class TypeExtensions
 
     public static bool HasInterface(this Type type, Type interfaceType)
     {
-        ArgumentNullException.ThrowIfNull(type);
-        ArgumentNullException.ThrowIfNull(interfaceType);
-
         if (!interfaceType.IsInterface)
             throw new ArgumentException("Type must be an interface.", nameof(interfaceType));
 
@@ -40,11 +37,9 @@ internal static class TypeExtensions
 
     public static IReadOnlySet<Type> FindReachableGenericParameters(this Type type)
     {
-        ArgumentNullException.ThrowIfNull(type);
-
         var results = new HashSet<Type>();
         FindImpl(type);
-        return results;
+        return results.ToFrozenSet();
 
         void FindImpl(Type currentType)
         {
@@ -53,16 +48,12 @@ internal static class TypeExtensions
                 if (!results.Add(currentType)) return;
 
                 foreach (var constraint in currentType.GetGenericParameterConstraints())
-                {
                     FindImpl(constraint);
-                }
             }
             else if (currentType.ContainsGenericParameters)
             {
                 foreach (var arg in currentType.GetGenericArguments())
-                {
                     FindImpl(arg);
-                }
             }
         }
     }
@@ -72,9 +63,6 @@ internal static class TypeExtensions
         Type other,
         [NotNullWhen(true)] out IReadOnlyDictionary<Type, Type>? results)
     {
-        ArgumentNullException.ThrowIfNull(type);
-        ArgumentNullException.ThrowIfNull(other);
-
         var internalResults = new Dictionary<Type, Type>();
         var success = TryResolveImpl(type, other);
         results = success ? internalResults.ToFrozenDictionary() : null;
@@ -89,58 +77,44 @@ internal static class TypeExtensions
                 // Curiously Recurring Template Pattern (CRTP) is used, e.g.:
                 // class EntityBase<TState> where TState : StateBase<TState>
                 if (!internalResults.TryAdd(lhsType, rhsType))
-                {
                     return true;
-                }
 
                 // Check LHS is compatible with any RHS type constraints.
                 return lhsType.GetGenericParameterConstraints().All(c => TryResolveImpl(c, rhsType));
             }
 
-            if (lhsType.ContainsGenericParameters)
+            if (!lhsType.ContainsGenericParameters)
+                // The type to match has no generic parameters. Check directly for assignability.
+                return lhsType.IsAssignableFrom(rhsType);
+
+            // LHS still has generic parameters. Recursively resolve.
+            var lhsGenericTypeDef = lhsType.GetGenericTypeDefinition();
+            var matchingRhsType = rhsType;
+
+            while (matchingRhsType != null)
             {
-                // LHS still has generic parameters. Recursively resolve.
-                var lhsGenericTypeDef = lhsType.GetGenericTypeDefinition();
-                var matchingRhsType = rhsType;
+                if (matchingRhsType.IsGenericType &&
+                    matchingRhsType.GetGenericTypeDefinition() == lhsGenericTypeDef)
+                    break;
 
-                while (matchingRhsType != null)
-                {
-                    if (matchingRhsType.IsGenericType &&
-                        matchingRhsType.GetGenericTypeDefinition() == lhsGenericTypeDef)
-                    {
-                        break;
-                    }
-
-                    matchingRhsType = matchingRhsType.BaseType;
-                }
-
-                // If no matching class found in the inheritance hierarchy, check interfaces.
-                matchingRhsType ??= rhsType
-                    .GetInterfaces()
-                    .FirstOrDefault(x => x.IsGenericType && x.GetGenericTypeDefinition() == lhsGenericTypeDef);
-
-                if (matchingRhsType == null)
-                {
-                    // RHS has no matching generic type definition.
-                    return false;
-                }
-
-                var lhsArgs = lhsType.GetGenericArguments();
-                var rhsArgs = matchingRhsType.GetGenericArguments();
-
-                for (var i = 0; i < lhsArgs.Length; i++)
-                {
-                    if (!TryResolveImpl(lhsArgs[i], rhsArgs[i]))
-                    {
-                        return false;
-                    }
-                }
-
-                return true;
+                matchingRhsType = matchingRhsType.BaseType;
             }
 
-            // The type to match has no generic parameters. Check directly for assignability.
-            return lhsType.IsAssignableFrom(rhsType);
+            // If no matching class found in the inheritance hierarchy, check interfaces.
+            matchingRhsType ??= rhsType
+                .GetInterfaces()
+                .FirstOrDefault(x => x.IsGenericType && x.GetGenericTypeDefinition() == lhsGenericTypeDef);
+
+            if (matchingRhsType == null)
+                // RHS has no matching generic type definition.
+                return false;
+
+            var lhsArgs = lhsType.GetGenericArguments();
+            var rhsArgs = matchingRhsType.GetGenericArguments();
+
+            return Enumerable
+                .Range(0, lhsArgs.Length)
+                .All(i => TryResolveImpl(lhsArgs[i], rhsArgs[i]));
         }
     }
 }

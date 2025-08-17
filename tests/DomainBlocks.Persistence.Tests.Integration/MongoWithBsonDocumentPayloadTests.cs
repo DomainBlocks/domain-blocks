@@ -30,7 +30,7 @@ public class MongoWithBsonDocumentPayloadTests
 
         var serializer = new MongoBsonDocumentSerializer();
         var eventSerializer = new EventSerializer<BsonDocument>(mappings, serializer);
-        var eventStore = new EventStore<object, BsonDocument>(eventDataStore, eventSerializer);
+        var eventStore = new EventStore<BsonDocument>(eventDataStore, eventSerializer);
 
         var originalEvent = new UserCreated
         {

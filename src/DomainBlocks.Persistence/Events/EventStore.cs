@@ -3,13 +3,13 @@ using DomainBlocks.Serialization.Events;
 
 namespace DomainBlocks.Persistence.Events;
 
-public class EventStore<TEventBase, TPayload>(
+public class EventStore<TPayload>(
     IEventDataStore<TPayload> eventDataStore,
-    EventSerializer<TPayload> eventSerializer) : IEventStore<TEventBase> where TEventBase : notnull
+    EventSerializer<TPayload> eventSerializer) : IEventStore
 {
     public async Task AppendToStreamAsync(
         string streamId,
-        IEnumerable<TEventBase> events,
+        IEnumerable<object> events,
         long? expectedVersion = null,
         CancellationToken cancellationToken = default)
     {
@@ -23,7 +23,7 @@ public class EventStore<TEventBase, TPayload>(
         await eventDataStore.AppendToStreamAsync(streamId, eventData, expectedVersion, cancellationToken);
     }
 
-    public async Task<ReadStreamResult<TEventBase>> ReadStreamAsync(
+    public async Task<ReadStreamResult<object>> ReadStreamAsync(
         string streamId,
         StreamReadDirection direction = StreamReadDirection.Forward,
         long? fromVersion = null,
@@ -32,14 +32,14 @@ public class EventStore<TEventBase, TPayload>(
         var result = await eventDataStore.ReadStreamAsync(streamId, direction, fromVersion, cancellationToken);
 
         return result.Status == ReadStreamStatus.Success
-            ? ReadStreamResult<TEventBase>.Success(GetDeserializedEvents())
-            : ReadStreamResult<TEventBase>.NotFound();
+            ? ReadStreamResult<object>.Success(GetDeserializedEvents())
+            : ReadStreamResult<object>.NotFound();
 
-        async IAsyncEnumerable<TEventBase> GetDeserializedEvents()
+        async IAsyncEnumerable<object> GetDeserializedEvents()
         {
             await foreach (var eventData in result.Events.WithCancellation(cancellationToken))
             {
-                yield return (TEventBase)eventSerializer.Deserialize(eventData.EventName, eventData.Payload);
+                yield return eventSerializer.Deserialize(eventData.EventName, eventData.Payload);
             }
         }
     }

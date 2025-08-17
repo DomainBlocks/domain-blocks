@@ -4,9 +4,7 @@ using DomainBlocks.Persistence.Events;
 
 namespace DomainBlocks.EventSourcing;
 
-public sealed class EntityStore(
-    IEventStore<object> eventStore,
-    IEntityAdapterProvider entityAdapterProvider) : IEntityStore
+public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider entityAdapterProvider) : IEntityStore
 {
     private readonly ConditionalWeakTable<object, TrackedEntityContext> _trackedEntities = new();
 
@@ -83,7 +81,7 @@ public sealed class EntityStore(
     private IEntityAdapter<TEntity> GetEntityAdapter<TEntity>() where TEntity : notnull
     {
         return entityAdapterProvider.GetFor<TEntity>() ?? throw new ArgumentException(
-            $"Entity adapter not found for type '{typeof(TEntity).GetPrettyName()}'.",
+            $"Entity adapter not found for type '{typeof(TEntity)}'.",
             nameof(TEntity));
     }
 

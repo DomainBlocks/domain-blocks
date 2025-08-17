@@ -3,7 +3,6 @@ using DomainBlocks.Persistence.MongoDB.Events;
 using DomainBlocks.Persistence.Tests.Integration.Generated;
 using DomainBlocks.Serialization.Events;
 using DomainBlocks.Serialization.Google.Protobuf;
-using Google.Protobuf;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using NUnit.Framework;
@@ -32,7 +31,7 @@ public class MongoWithProtobufBytesPayloadTests
 
         var serializer = new GoogleProtobufBytesSerializer();
         var eventSerializer = new EventSerializer<ReadOnlyMemory<byte>>(mappings, serializer);
-        var eventStore = new EventStore<IMessage, ReadOnlyMemory<byte>>(eventDataStore, eventSerializer);
+        var eventStore = new EventStore<ReadOnlyMemory<byte>>(eventDataStore, eventSerializer);
 
         var originalEvent = new UserCreated
         {
