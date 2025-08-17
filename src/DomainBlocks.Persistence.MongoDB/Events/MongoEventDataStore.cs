@@ -2,7 +2,7 @@ using DomainBlocks.Persistence.Abstractions.Events;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
-namespace DomainBlocks.Persistence.Mongo.Events;
+namespace DomainBlocks.Persistence.MongoDB.Events;
 
 public class MongoEventDataStore<TPayload>(
     IMongoCollection<BsonDocument> collection,

@@ -3,7 +3,7 @@ using System.Reflection;
 using DomainBlocks.Serialization.Abstractions;
 using Google.Protobuf;
 
-namespace DomainBlocks.Serialization.GoogleProtobuf;
+namespace DomainBlocks.Serialization.Google.Protobuf;
 
 public class GoogleProtobufSerializer : ISerializer<ReadOnlyMemory<byte>>
 {

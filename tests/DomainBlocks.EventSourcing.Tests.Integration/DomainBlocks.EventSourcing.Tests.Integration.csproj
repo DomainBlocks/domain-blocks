@@ -8,8 +8,8 @@
 
     <ItemGroup>
         <ProjectReference Include="..\..\src\DomainBlocks.EventSourcing\DomainBlocks.EventSourcing.csproj"/>
-        <ProjectReference Include="..\..\src\DomainBlocks.Persistence.Mongo\DomainBlocks.Persistence.Mongo.csproj"/>
-        <ProjectReference Include="..\..\src\DomainBlocks.Serialization.MongoBson\DomainBlocks.Serialization.MongoBson.csproj"/>
+        <ProjectReference Include="..\..\src\DomainBlocks.Persistence.MongoDB\DomainBlocks.Persistence.MongoDB.csproj" />
+        <ProjectReference Include="..\..\src\DomainBlocks.Serialization.MongoDB.Bson\DomainBlocks.Serialization.MongoDB.Bson.csproj" />
     </ItemGroup>
 
     <ItemGroup>

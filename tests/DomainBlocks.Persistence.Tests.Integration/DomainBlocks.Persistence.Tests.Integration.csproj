@@ -30,10 +30,10 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\src\DomainBlocks.Persistence.Mongo\DomainBlocks.Persistence.Mongo.csproj" />
+      <ProjectReference Include="..\..\src\DomainBlocks.Persistence.MongoDB\DomainBlocks.Persistence.MongoDB.csproj" />
       <ProjectReference Include="..\..\src\DomainBlocks.Persistence\DomainBlocks.Persistence.csproj" />
-      <ProjectReference Include="..\..\src\DomainBlocks.Serialization.GoogleProtobuf\DomainBlocks.Serialization.GoogleProtobuf.csproj" />
-      <ProjectReference Include="..\..\src\DomainBlocks.Serialization.MongoBson\DomainBlocks.Serialization.MongoBson.csproj" />
+      <ProjectReference Include="..\..\src\DomainBlocks.Serialization.Google.Protobuf\DomainBlocks.Serialization.Google.Protobuf.csproj" />
+      <ProjectReference Include="..\..\src\DomainBlocks.Serialization.MongoDB.Bson\DomainBlocks.Serialization.MongoDB.Bson.csproj" />
       <ProjectReference Include="..\..\src\DomainBlocks.Serialization\DomainBlocks.Serialization.csproj" />
     </ItemGroup>
 

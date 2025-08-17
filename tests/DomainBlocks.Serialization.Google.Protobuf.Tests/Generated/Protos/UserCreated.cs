@@ -9,7 +9,7 @@ using pb = global::Google.Protobuf;
 using pbc = global::Google.Protobuf.Collections;
 using pbr = global::Google.Protobuf.Reflection;
 using scg = global::System.Collections.Generic;
-namespace DomainBlocks.Serialization.GoogleProtobuf.Tests.Generated {
+namespace DomainBlocks.Serialization.Google.Protobuf.Tests.Generated {
 
   /// <summary>Holder for reflection information generated from Protos/UserCreated.proto</summary>
   public static partial class UserCreatedReflection {
@@ -25,13 +25,13 @@ namespace DomainBlocks.Serialization.GoogleProtobuf.Tests.Generated {
       byte[] descriptorData = global::System.Convert.FromBase64String(
           string.Concat(
             "ChhQcm90b3MvVXNlckNyZWF0ZWQucHJvdG8iLAoLVXNlckNyZWF0ZWQSDwoH",
-            "dXNlcl9pZBgBIAEoCRIMCgRuYW1lGAIgASgJQjyqAjlEb21haW5CbG9ja3Mu",
-            "U2VyaWFsaXphdGlvbi5Hb29nbGVQcm90b2J1Zi5UZXN0cy5HZW5lcmF0ZWRi",
-            "BnByb3RvMw=="));
+            "dXNlcl9pZBgBIAEoCRIMCgRuYW1lGAIgASgJQj2qAjpEb21haW5CbG9ja3Mu",
+            "U2VyaWFsaXphdGlvbi5Hb29nbGUuUHJvdG9idWYuVGVzdHMuR2VuZXJhdGVk",
+            "YgZwcm90bzM="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { },
           new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
-            new pbr::GeneratedClrTypeInfo(typeof(global::DomainBlocks.Serialization.GoogleProtobuf.Tests.Generated.UserCreated), global::DomainBlocks.Serialization.GoogleProtobuf.Tests.Generated.UserCreated.Parser, new[]{ "UserId", "Name" }, null, null, null, null)
+            new pbr::GeneratedClrTypeInfo(typeof(global::DomainBlocks.Serialization.Google.Protobuf.Tests.Generated.UserCreated), global::DomainBlocks.Serialization.Google.Protobuf.Tests.Generated.UserCreated.Parser, new[]{ "UserId", "Name" }, null, null, null, null)
           }));
     }
     #endregion
@@ -53,7 +53,7 @@ namespace DomainBlocks.Serialization.GoogleProtobuf.Tests.Generated {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::DomainBlocks.Serialization.GoogleProtobuf.Tests.Generated.UserCreatedReflection.Descriptor.MessageTypes[0]; }
+      get { return global::DomainBlocks.Serialization.Google.Protobuf.Tests.Generated.UserCreatedReflection.Descriptor.MessageTypes[0]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]

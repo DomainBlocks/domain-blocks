@@ -2,7 +2,7 @@ using DomainBlocks.Serialization.Abstractions;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 
-namespace DomainBlocks.Serialization.MongoBson;
+namespace DomainBlocks.Serialization.MongoDB.Bson;
 
 public class MongoBsonDocumentSerializer : ISerializer<BsonDocument>
 {

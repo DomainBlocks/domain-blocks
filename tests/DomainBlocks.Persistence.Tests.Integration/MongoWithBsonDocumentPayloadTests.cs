@@ -1,7 +1,7 @@
 using DomainBlocks.Persistence.Events;
-using DomainBlocks.Persistence.Mongo.Events;
+using DomainBlocks.Persistence.MongoDB.Events;
 using DomainBlocks.Serialization.Events;
-using DomainBlocks.Serialization.MongoBson;
+using DomainBlocks.Serialization.MongoDB.Bson;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using NUnit.Framework;

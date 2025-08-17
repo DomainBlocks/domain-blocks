@@ -1,10 +1,10 @@
-﻿using DomainBlocks.Serialization.GoogleProtobuf.Tests.Generated;
+﻿using DomainBlocks.Serialization.Google.Protobuf.Tests.Generated;
 using Google.Protobuf;
 using Google.Protobuf.Reflection;
 using NUnit.Framework;
 using Shouldly;
 
-namespace DomainBlocks.Serialization.GoogleProtobuf.Tests;
+namespace DomainBlocks.Serialization.Google.Protobuf.Tests;
 
 public class GoogleProtobufSerializerTest
 {

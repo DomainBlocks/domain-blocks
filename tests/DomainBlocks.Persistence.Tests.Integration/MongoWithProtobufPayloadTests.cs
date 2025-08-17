@@ -1,8 +1,8 @@
 ﻿using DomainBlocks.Persistence.Events;
-using DomainBlocks.Persistence.Mongo.Events;
+using DomainBlocks.Persistence.MongoDB.Events;
 using DomainBlocks.Persistence.Tests.Integration.Generated;
 using DomainBlocks.Serialization.Events;
-using DomainBlocks.Serialization.GoogleProtobuf;
+using DomainBlocks.Serialization.Google.Protobuf;
 using Google.Protobuf;
 using MongoDB.Bson;
 using MongoDB.Driver;

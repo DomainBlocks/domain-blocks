@@ -1,6 +1,6 @@
 using MongoDB.Bson;
 
-namespace DomainBlocks.Persistence.Mongo.Events;
+namespace DomainBlocks.Persistence.MongoDB.Events;
 
 internal static class BsonDocumentExtensions
 {

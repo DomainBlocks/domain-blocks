@@ -1,5 +1,5 @@
 ﻿using DomainBlocks.Persistence.Abstractions.Events;
-using DomainBlocks.Persistence.Mongo.Events;
+using DomainBlocks.Persistence.MongoDB.Events;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using NUnit.Framework;

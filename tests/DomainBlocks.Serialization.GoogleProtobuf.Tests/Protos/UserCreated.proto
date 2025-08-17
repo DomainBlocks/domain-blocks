@@ -1,8 +1,0 @@
-syntax = "proto3";
-
-option csharp_namespace = "DomainBlocks.Serialization.GoogleProtobuf.Tests.Generated";
-
-message UserCreated {
-  string user_id = 1;
-  string name = 2;
-}

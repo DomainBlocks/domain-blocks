@@ -9,18 +9,18 @@
     <Project Path="src\DomainBlocks.EventSourcing\DomainBlocks.EventSourcing.csproj" Type="Classic C#" />
     <Project Path="src\DomainBlocks.Persistence.Abstractions\DomainBlocks.Persistence.Abstractions.csproj" />
     <Project Path="src\DomainBlocks.Persistence.KurrentDB\DomainBlocks.Persistence.KurrentDB.csproj" Type="Classic C#" />
-    <Project Path="src\DomainBlocks.Persistence.Mongo\DomainBlocks.Persistence.Mongo.csproj" Type="Classic C#" />
+    <Project Path="src\DomainBlocks.Persistence.MongoDB\DomainBlocks.Persistence.MongoDB.csproj" Type="Classic C#" />
     <Project Path="src\DomainBlocks.Persistence\DomainBlocks.Persistence.csproj" Type="Classic C#" />
     <Project Path="src\DomainBlocks.Serialization.Abstractions\DomainBlocks.Serialization.Abstractions.csproj" Type="Classic C#" />
-    <Project Path="src\DomainBlocks.Serialization.GoogleProtobuf\DomainBlocks.Serialization.GoogleProtobuf.csproj" Type="Classic C#" />
-    <Project Path="src\DomainBlocks.Serialization.MongoBson\DomainBlocks.Serialization.MongoBson.csproj" Type="Classic C#" />
+    <Project Path="src\DomainBlocks.Serialization.Google.Protobuf\DomainBlocks.Serialization.Google.Protobuf.csproj" Type="Classic C#" />
+    <Project Path="src\DomainBlocks.Serialization.MongoDB.Bson\DomainBlocks.Serialization.MongoDB.Bson.csproj" Type="Classic C#" />
     <Project Path="src\DomainBlocks.Serialization\DomainBlocks.Serialization.csproj" Type="Classic C#" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests\DomainBlocks.EventSourcing.Tests.Integration\DomainBlocks.EventSourcing.Tests.Integration.csproj" Type="Classic C#" />
     <Project Path="tests\DomainBlocks.Persistence.MongoDB.Tests.Integration\DomainBlocks.Persistence.MongoDB.Tests.Integration.csproj" Type="Classic C#" />
     <Project Path="tests\DomainBlocks.Persistence.Tests.Integration\DomainBlocks.Persistence.Tests.Integration.csproj" Type="Classic C#" />
-    <Project Path="tests\DomainBlocks.Serialization.GoogleProtobuf.Tests\DomainBlocks.Serialization.GoogleProtobuf.Tests.csproj" Type="Classic C#" />
+    <Project Path="tests\DomainBlocks.Serialization.Google.Protobuf.Tests\DomainBlocks.Serialization.Google.Protobuf.Tests.csproj" Type="Classic C#" />
   </Folder>
   <Folder Name="/_Solution Items/">
     <File Path="compose.yaml" />
