@@ -8,6 +8,7 @@
     <Project Path="src\DomainBlocks.Core\DomainBlocks.Core.csproj" Type="Classic C#" />
     <Project Path="src\DomainBlocks.EventSourcing\DomainBlocks.EventSourcing.csproj" Type="Classic C#" />
     <Project Path="src\DomainBlocks.Persistence.Abstractions\DomainBlocks.Persistence.Abstractions.csproj" />
+    <Project Path="src\DomainBlocks.Persistence.KurrentDB\DomainBlocks.Persistence.KurrentDB.csproj" Type="Classic C#" />
     <Project Path="src\DomainBlocks.Persistence.Mongo\DomainBlocks.Persistence.Mongo.csproj" Type="Classic C#" />
     <Project Path="src\DomainBlocks.Persistence\DomainBlocks.Persistence.csproj" Type="Classic C#" />
     <Project Path="src\DomainBlocks.Serialization.Abstractions\DomainBlocks.Serialization.Abstractions.csproj" Type="Classic C#" />
