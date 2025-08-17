@@ -91,5 +91,5 @@ public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider e
         return $"{streamNamePrefix}-{entityId}";
     }
 
-    public record TrackedEntityContext(long? StreamVersion);
+    public record TrackedEntityContext(long StreamVersion);
 }

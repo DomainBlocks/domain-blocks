@@ -1,9 +1,11 @@
+using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 
 namespace DomainBlocks.EventSourcing;
 
 public class GenericEntityAdapterProvider : IEntityAdapterProvider
 {
+    private readonly ConcurrentDictionary<Type, IEntityAdapter> _adapters = new();
     private readonly Type _genericTypeDefinition;
     private readonly Type _entityGenericArgType;
     private readonly object?[]? _constructorArgs;
@@ -49,11 +51,16 @@ public class GenericEntityAdapterProvider : IEntityAdapterProvider
 
     public IEntityAdapter<TEntity>? GetFor<TEntity>() where TEntity : notnull
     {
+        if (_adapters.TryGetValue(typeof(TEntity), out var adapter))
+            return (IEntityAdapter<TEntity>)adapter;
+
         if (!TryResolveAdapterType(typeof(TEntity), out var adapterType))
             return null;
 
-        var instance = Activator.CreateInstance(adapterType, _constructorArgs);
-        return (IEntityAdapter<TEntity>)instance!;
+        var newAdapter = (IEntityAdapter<TEntity>)Activator.CreateInstance(adapterType, _constructorArgs)!;
+        _adapters.TryAdd(typeof(TEntity), newAdapter);
+
+        return newAdapter;
     }
 
     private bool TryResolveAdapterType(Type entityType, [NotNullWhen(true)] out Type? adapterType)
