@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using DomainBlocks.Persistence.Abstractions.Events;
 using DomainBlocks.Persistence.Events;
 
@@ -6,22 +5,21 @@ namespace DomainBlocks.EventSourcing;
 
 public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider entityAdapterProvider) : IEntityStore
 {
-    private readonly ConditionalWeakTable<object, TrackedEntityContext> _trackedEntities = new();
-
-    public async Task<TEntity> LoadAsync<TEntity>(string entityId, CancellationToken cancellationToken = default)
-        where TEntity : notnull
+    public async Task<Versioned<TEntity>> LoadAsync<TEntity>(
+        string entityId,
+        CancellationToken cancellationToken = default) where TEntity : notnull
     {
         return await LoadInternalAsync<TEntity>(entityId, throwIfStreamNotFound: true, cancellationToken);
     }
 
-    public async Task<TEntity> LoadOrCreateAsync<TEntity>(
+    public async Task<Versioned<TEntity>> LoadOrCreateAsync<TEntity>(
         string entityId,
         CancellationToken cancellationToken = default) where TEntity : notnull
     {
         return await LoadInternalAsync<TEntity>(entityId, throwIfStreamNotFound: false, cancellationToken);
     }
 
-    private async Task<TEntity> LoadInternalAsync<TEntity>(
+    private async Task<Versioned<TEntity>> LoadInternalAsync<TEntity>(
         string entityId,
         bool throwIfStreamNotFound = false,
         CancellationToken cancellationToken = default)
@@ -43,12 +41,8 @@ public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider e
         long loadedVersion = -1;
 
         var entity = await entityAdapter.RestoreAsync(initialState, EnumerateEvents(), cancellationToken);
-        var trackedEntityContext = new TrackedEntityContext(loadedVersion);
 
-        // Track the entity so that the expected version will be known in a future call to SaveAsync.
-        _trackedEntities.Add(entity, trackedEntityContext);
-
-        return entity;
+        return Versioned.From(entity, loadedVersion);
 
         async IAsyncEnumerable<object> EnumerateEvents()
         {
@@ -60,22 +54,21 @@ public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider e
         }
     }
 
-    public async Task SaveAsync<TEntity>(TEntity entity, CancellationToken cancellationToken = default)
+    public async Task SaveAsync<TEntity>(Versioned<TEntity> entity, CancellationToken cancellationToken = default)
         where TEntity : notnull
     {
         ArgumentNullException.ThrowIfNull(entity);
 
         var entityAdapter = GetEntityAdapter<TEntity>();
 
-        var uncommittedEvents = entityAdapter.GetUncommittedEvents(entity).ToArray();
+        var uncommittedEvents = entityAdapter.GetUncommittedEvents(entity.Entity).ToArray();
         if (uncommittedEvents.Length == 0)
             return;
 
-        var expectedVersion = _trackedEntities.TryGetValue(entity, out var context) ? context.StreamVersion : -1;
-        var entityId = entityAdapter.GetId(entity);
+        var entityId = entityAdapter.GetId(entity.Entity);
         var streamName = GetStreamName<TEntity>(entityId);
 
-        await eventStore.AppendToStreamAsync(streamName, uncommittedEvents, expectedVersion, cancellationToken);
+        await eventStore.AppendToStreamAsync(streamName, uncommittedEvents, entity.ExpectedVersion, cancellationToken);
     }
 
     private IEntityAdapter<TEntity> GetEntityAdapter<TEntity>() where TEntity : notnull
@@ -90,6 +83,4 @@ public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider e
         var streamNamePrefix = DefaultStreamNamePrefix.CreateFor(typeof(TEntity));
         return $"{streamNamePrefix}-{entityId}";
     }
-
-    public record TrackedEntityContext(long StreamVersion);
 }

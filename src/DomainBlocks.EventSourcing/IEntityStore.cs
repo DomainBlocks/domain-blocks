@@ -10,7 +10,7 @@ public interface IEntityStore
     /// <param name="cancellationToken">A cancellation token</param>
     /// <typeparam name="TEntity">The type of the entity</typeparam>
     /// <returns>A typed entity instance</returns>
-    Task<TEntity> LoadAsync<TEntity>(string entityId, CancellationToken cancellationToken = default)
+    Task<Versioned<TEntity>> LoadAsync<TEntity>(string entityId, CancellationToken cancellationToken = default)
         where TEntity : notnull;
 
     /// <summary>
@@ -21,10 +21,11 @@ public interface IEntityStore
     /// <param name="cancellationToken">A cancellation token</param>
     /// <typeparam name="TEntity">The type of the entity</typeparam>
     /// <returns>A typed entity instance</returns>
-    Task<TEntity> LoadOrCreateAsync<TEntity>(
+    Task<Versioned<TEntity>> LoadOrCreateAsync<TEntity>(
         string entityId,
         CancellationToken cancellationToken = default)
         where TEntity : notnull;
 
-    Task SaveAsync<TEntity>(TEntity entity, CancellationToken cancellationToken = default) where TEntity : notnull;
+    Task SaveAsync<TEntity>(Versioned<TEntity> entity, CancellationToken cancellationToken = default)
+        where TEntity : notnull;
 }
