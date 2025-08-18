@@ -46,10 +46,10 @@ public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider e
 
         async IAsyncEnumerable<object> EnumerateEvents()
         {
-            await foreach (var eventRecord in result.Events.WithCancellation(cancellationToken))
+            await foreach (var @event in result.Events.WithCancellation(cancellationToken))
             {
                 loadedVersion++;
-                yield return eventRecord;
+                yield return @event;
             }
         }
     }
