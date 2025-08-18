@@ -10,6 +10,8 @@
 | DomainBlocks.Persistence.Abstractions   | Defines low-level contracts for storing and retrieving event, snapshot, and bookmark data - agnostic of storage or serialization.        |
 | DomainBlocks.Serialization              | Maps between string event names and CLR types, and delegates payload (de)serialization to a serializer implementation.                   |
 | DomainBlocks.Serialization.Abstractions | Defines contracts for serializing and deserializing CLR objects to/from payloads.                                                        |
+| DomainBlocks.Subscriptions              |                                                                                                                                          |
+| DomainBlocks.Subscriptions.Abstractions |                                                                                                                                          |
 
 ## Dependencies
 
