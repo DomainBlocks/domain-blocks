@@ -5,7 +5,6 @@ namespace DomainBlocks.EventSourcing;
 
 public class GenericEntityAdapterProvider : IEntityAdapterProvider
 {
-    private readonly ConcurrentDictionary<Type, IEntityAdapter> _adapters = new();
     private readonly Type _genericTypeDefinition;
     private readonly Type _entityGenericArgType;
     private readonly object?[]? _constructorArgs;
@@ -51,16 +50,12 @@ public class GenericEntityAdapterProvider : IEntityAdapterProvider
 
     public IEntityAdapter<TEntity>? GetAdapter<TEntity>() where TEntity : notnull
     {
-        if (_adapters.TryGetValue(typeof(TEntity), out var adapter))
-            return (IEntityAdapter<TEntity>)adapter;
-
         if (!TryResolveAdapterType(typeof(TEntity), out var adapterType))
             return null;
 
-        var newAdapter = (IEntityAdapter<TEntity>)Activator.CreateInstance(adapterType, _constructorArgs)!;
-        _adapters.TryAdd(typeof(TEntity), newAdapter);
+        var adapter = (IEntityAdapter<TEntity>)Activator.CreateInstance(adapterType, _constructorArgs)!;
 
-        return newAdapter;
+        return adapter;
     }
 
     private bool TryResolveAdapterType(Type entityType, [NotNullWhen(true)] out Type? adapterType)
