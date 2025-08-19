@@ -4,8 +4,8 @@ public class CompositeEntityAdapterProvider(IEnumerable<IEntityAdapterProvider> 
 {
     private readonly IEntityAdapterProvider[] _providers = providers.ToArray();
 
-    public IEntityAdapter<TEntity>? GetFor<TEntity>() where TEntity : notnull
+    public IEntityAdapter<TEntity>? GetAdapter<TEntity>() where TEntity : notnull
     {
-        return _providers.Select(x => x.GetFor<TEntity>()).FirstOrDefault(x => x != null);
+        return _providers.Select(x => x.GetAdapter<TEntity>()).FirstOrDefault(x => x != null);
     }
 }

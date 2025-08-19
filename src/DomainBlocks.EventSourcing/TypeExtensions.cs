@@ -4,7 +4,7 @@ using System.Text;
 
 namespace DomainBlocks.EventSourcing;
 
-internal static class TypeExtensions
+public static class TypeExtensions
 {
     public static string GetPrettyName(this Type type)
     {
@@ -35,86 +35,105 @@ internal static class TypeExtensions
         return type.GetInterfaces().Any(x => x == interfaceType);
     }
 
-    public static IReadOnlySet<Type> FindReachableGenericParameters(this Type type)
+    public static IReadOnlySet<Type> GetReachableGenericParameters(this Type type)
     {
         var results = new HashSet<Type>();
-        FindImpl(type);
+        Find(type);
         return results.ToFrozenSet();
 
-        void FindImpl(Type currentType)
+        void Find(Type currentType)
         {
             if (currentType.IsGenericParameter)
             {
-                if (!results.Add(currentType)) return;
+                if (!results.Add(currentType))
+                    return;
 
                 foreach (var constraint in currentType.GetGenericParameterConstraints())
-                    FindImpl(constraint);
+                    Find(constraint);
             }
             else if (currentType.ContainsGenericParameters)
             {
                 foreach (var arg in currentType.GetGenericArguments())
-                    FindImpl(arg);
+                    Find(arg);
             }
         }
     }
 
-    public static bool TryResolveGenericParametersFrom(
-        this Type type,
-        Type other,
-        [NotNullWhen(true)] out IReadOnlyDictionary<Type, Type>? results)
+    /// <summary>
+    /// Attempts to bind the generic parameters of an open generic type to the corresponding type arguments of an
+    /// assignable closed type.
+    /// </summary>
+    /// <param name="openType">The open generic type to bind.</param>
+    /// <param name="closedType">The closed type to infer bindings from.</param>
+    /// <param name="bindings">
+    /// When this method returns <c>true</c>, contains a mapping from each generic parameter to its inferred type
+    /// binding.
+    /// </param>
+    /// <returns>
+    /// <c>true</c> if the generic parameters of <paramref name="openType"/> can be bound based on
+    /// <paramref name="closedType"/> such that, when substituted with those bindings, the resulting type is assignable
+    /// from <paramref name="closedType"/>.
+    /// </returns>
+    public static bool TryBindGenericParameters(
+        this Type openType,
+        Type closedType,
+        [NotNullWhen(true)] out IReadOnlyDictionary<Type, Type>? bindings)
     {
-        var internalResults = new Dictionary<Type, Type>();
-        var success = TryResolveImpl(type, other);
-        results = success ? internalResults.ToFrozenDictionary() : null;
+        if (closedType.ContainsGenericParameters)
+        {
+            bindings = null;
+            return false;
+        }
+
+        var internalBindings = new Dictionary<Type, Type>();
+        var success = Bind(openType, closedType);
+
+        bindings = success ? internalBindings.ToFrozenDictionary() : null;
         return success;
 
-        // E.g. EntityBase<TState> is "resolvable" from MyEntity : EntityBase<MyState>
-        bool TryResolveImpl(Type lhsType, Type rhsType)
+        // E.g. LHS = EntityBase<TState>, RHS = MyEntity : EntityBase<MyState>, binding = TState -> MyState.
+        bool Bind(Type lhsType, Type rhsType)
         {
-            if (lhsType.IsGenericParameter)
-            {
-                // Return early if LHS has already been added to the results. This avoids infinite recursion when the
-                // Curiously Recurring Template Pattern (CRTP) is used, e.g.:
-                // class EntityBase<TState> where TState : StateBase<TState>
-                if (!internalResults.TryAdd(lhsType, rhsType))
-                    return true;
-
-                // Check LHS is compatible with any RHS type constraints.
-                return lhsType.GetGenericParameterConstraints().All(c => TryResolveImpl(c, rhsType));
-            }
-
+            // Case 1: LHS is a closed type - check assignability.
             if (!lhsType.ContainsGenericParameters)
-                // The type to match has no generic parameters. Check directly for assignability.
                 return lhsType.IsAssignableFrom(rhsType);
 
-            // LHS still has generic parameters. Recursively resolve.
-            var lhsGenericTypeDef = lhsType.GetGenericTypeDefinition();
-            var matchingRhsType = rhsType;
-
-            while (matchingRhsType != null)
+            // Case 2: LHS is a generic parameter - check constraints.
+            if (lhsType.IsGenericParameter)
             {
-                if (matchingRhsType.IsGenericType &&
-                    matchingRhsType.GetGenericTypeDefinition() == lhsGenericTypeDef)
-                    break;
+                // Prevent infinite recursion when generic parameters are self-referential, e.g. CRTP.
+                if (!internalBindings.TryAdd(lhsType, rhsType))
+                    return true;
 
-                matchingRhsType = matchingRhsType.BaseType;
+                return lhsType.GetGenericParameterConstraints().All(c => Bind(c, rhsType));
             }
 
-            // If no matching class found in the inheritance hierarchy, check interfaces.
-            matchingRhsType ??= rhsType
-                .GetInterfaces()
-                .FirstOrDefault(x => x.IsGenericType && x.GetGenericTypeDefinition() == lhsGenericTypeDef);
-
-            if (matchingRhsType == null)
-                // RHS has no matching generic type definition.
+            // Case 3: LHS has generic parameters. Recursively bind.
+            var rhsMatchingType = GetMatchingGenericType(lhsType, rhsType);
+            if (rhsMatchingType == null)
                 return false;
 
             var lhsArgs = lhsType.GetGenericArguments();
-            var rhsArgs = matchingRhsType.GetGenericArguments();
+            var rhsArgs = rhsMatchingType.GetGenericArguments();
 
-            return Enumerable
-                .Range(0, lhsArgs.Length)
-                .All(i => TryResolveImpl(lhsArgs[i], rhsArgs[i]));
+            return !lhsArgs.Where((t, i) => !Bind(t, rhsArgs[i])).Any();
+        }
+
+        static Type? GetMatchingGenericType(Type lhsType, Type rhsType)
+        {
+            var lhsGenericDef = lhsType.GetGenericTypeDefinition();
+
+            // Walk base types
+            for (var t = rhsType; t != null; t = t.BaseType)
+            {
+                if (t.IsGenericType && t.GetGenericTypeDefinition() == lhsGenericDef)
+                    return t;
+            }
+
+            // Check interfaces
+            return rhsType
+                .GetInterfaces()
+                .FirstOrDefault(x => x.IsGenericType && x.GetGenericTypeDefinition() == lhsGenericDef);
         }
     }
 }

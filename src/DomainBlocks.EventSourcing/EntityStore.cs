@@ -73,7 +73,7 @@ public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider e
 
     private IEntityAdapter<TEntity> GetEntityAdapter<TEntity>() where TEntity : notnull
     {
-        return entityAdapterProvider.GetFor<TEntity>() ?? throw new ArgumentException(
+        return entityAdapterProvider.GetAdapter<TEntity>() ?? throw new ArgumentException(
             $"Entity adapter not found for type '{typeof(TEntity)}'.",
             nameof(TEntity));
     }

@@ -19,7 +19,7 @@ public class EntityAdapterProvider : IEntityAdapterProvider
         _adapters = adapters;
     }
 
-    public IEntityAdapter<TEntity>? GetFor<TEntity>() where TEntity : notnull
+    public IEntityAdapter<TEntity>? GetAdapter<TEntity>() where TEntity : notnull
     {
         return (IEntityAdapter<TEntity>?)_adapters.GetValueOrDefault(typeof(TEntity));
     }

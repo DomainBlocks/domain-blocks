@@ -20,6 +20,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests\DomainBlocks.EventSourcing.Tests.Integration\DomainBlocks.EventSourcing.Tests.Integration.csproj" Type="Classic C#" />
+    <Project Path="tests\DomainBlocks.EventSourcing.Tests.Unit\DomainBlocks.EventSourcing.Tests.Unit.csproj" Type="Classic C#" />
     <Project Path="tests\DomainBlocks.Persistence.MongoDB.Tests.Integration\DomainBlocks.Persistence.MongoDB.Tests.Integration.csproj" Type="Classic C#" />
     <Project Path="tests\DomainBlocks.Persistence.Tests.Integration\DomainBlocks.Persistence.Tests.Integration.csproj" Type="Classic C#" />
     <Project Path="tests\DomainBlocks.Serialization.Google.Protobuf.Tests\DomainBlocks.Serialization.Google.Protobuf.Tests.csproj" Type="Classic C#" />

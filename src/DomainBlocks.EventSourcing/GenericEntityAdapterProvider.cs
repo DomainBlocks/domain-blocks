@@ -31,16 +31,16 @@ public class GenericEntityAdapterProvider : IEntityAdapterProvider
 
         // Check all generic parameters can be resolved via TEntity.
         var entityGenericArg = entityAdapterInterfaceType.GetGenericArguments()[0];
-        var reachableEntityParams = entityGenericArg.FindReachableGenericParameters();
+        var reachableEntityParams = entityGenericArg.GetReachableGenericParameters();
         var adapterParams = genericTypeDefinition.GetGenericArguments().Where(x => x.IsGenericParameter).ToArray();
-        var unresolvedParams = adapterParams.Where(x => !reachableEntityParams.Contains(x)).ToArray();
+        var missingParams = adapterParams.Where(x => !reachableEntityParams.Contains(x)).ToArray();
 
-        if (unresolvedParams.Length > 0)
+        if (missingParams.Length > 0)
         {
             throw new ArgumentException(
                 $"Invalid entity adapter type '{genericTypeDefinition.GetPrettyName()}'. " +
                 $"The following generic parameters are not reachable from '{entityGenericArg.GetPrettyName()}': " +
-                $"{string.Join<Type>(", ", unresolvedParams)}",
+                $"{string.Join<Type>(", ", missingParams)}",
                 nameof(genericTypeDefinition));
         }
 
@@ -49,7 +49,7 @@ public class GenericEntityAdapterProvider : IEntityAdapterProvider
         _constructorArgs = constructorArgs;
     }
 
-    public IEntityAdapter<TEntity>? GetFor<TEntity>() where TEntity : notnull
+    public IEntityAdapter<TEntity>? GetAdapter<TEntity>() where TEntity : notnull
     {
         if (_adapters.TryGetValue(typeof(TEntity), out var adapter))
             return (IEntityAdapter<TEntity>)adapter;
@@ -65,7 +65,7 @@ public class GenericEntityAdapterProvider : IEntityAdapterProvider
 
     private bool TryResolveAdapterType(Type entityType, [NotNullWhen(true)] out Type? adapterType)
     {
-        if (!_entityGenericArgType.TryResolveGenericParametersFrom(entityType, out var resolvedGenericParams))
+        if (!_entityGenericArgType.TryBindGenericParameters(entityType, out var bindings))
         {
             adapterType = null;
             return false;
@@ -76,7 +76,7 @@ public class GenericEntityAdapterProvider : IEntityAdapterProvider
             .Where(x => x.IsGenericParameter)
             .ToArray();
 
-        if (!adapterGenericParams.All(x => resolvedGenericParams.ContainsKey(x)))
+        if (!adapterGenericParams.All(x => bindings.ContainsKey(x)))
         {
             adapterType = null;
             return false;
@@ -85,7 +85,7 @@ public class GenericEntityAdapterProvider : IEntityAdapterProvider
         var genericArgs = new Type[adapterGenericParams.Length];
 
         foreach (var param in adapterGenericParams)
-            genericArgs[param.GenericParameterPosition] = resolvedGenericParams[param];
+            genericArgs[param.GenericParameterPosition] = bindings[param];
 
         adapterType = _genericTypeDefinition.MakeGenericType(genericArgs);
         return true;
