@@ -4,6 +4,9 @@
     <File Path="docs\vision.md" />
     <File Path="docs\architecture.md" />
   </Folder>
+  <Folder Name="/examples/">
+    <Project Path="examples\DomainBlocks.Examples.TodoList.Domain\DomainBlocks.Examples.TodoList.Domain.csproj" Type="Classic C#" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src\DomainBlocks.Core\DomainBlocks.Core.csproj" Type="Classic C#" />
     <Project Path="src\DomainBlocks.EventSourcing\DomainBlocks.EventSourcing.csproj" Type="Classic C#" />
