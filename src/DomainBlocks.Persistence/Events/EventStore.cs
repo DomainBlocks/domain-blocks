@@ -3,6 +3,20 @@ using DomainBlocks.Serialization.Events;
 
 namespace DomainBlocks.Persistence.Events;
 
+// Skips, splits, 1:1 mapping (e.g. upcasts, contract to domain)
+public interface IEventReadTransform
+{
+    Type FromType { get; }
+    IEnumerable<object> Apply(object @event);
+}
+
+// 1:1 mapping (e.g. domain to contract)
+public interface IEventWriteTransform
+{
+    Type FromType { get; }
+    object Apply(object @event);
+}
+
 public class EventStore<TPayload>(
     IEventDataStore<TPayload> eventDataStore,
     EventSerializer<TPayload> eventSerializer) : IEventStore
@@ -13,6 +27,9 @@ public class EventStore<TPayload>(
         long? expectedVersion = null,
         CancellationToken cancellationToken = default)
     {
+        // Pass events through write pipeline first. End of the line is serialisation.
+        // Object -> pipeline -> EventData
+
         var eventData = events
             .Select(x =>
             {
@@ -29,6 +46,9 @@ public class EventStore<TPayload>(
         long? fromVersion = null,
         CancellationToken cancellationToken = default)
     {
+        // Deserialize then pass events through read pipeline.
+        // StoredEventData -> pipeline -> object(s)
+
         var result = await eventDataStore.ReadStreamAsync(streamId, direction, fromVersion, cancellationToken);
 
         return result.Status == ReadStreamStatus.Success
