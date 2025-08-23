@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.Serialization.Abstractions;
 
@@ -8,6 +9,10 @@ public class EventStore<TPayload>(EventStoreOptions<TPayload> options) : IEventS
     private readonly IEventStoreBackend<TPayload> _backend = options.Backend;
     private readonly EventTypeMapper _eventTypeMapper = new(options.TypeMappings);
     private readonly ISerializer<TPayload> _serializer = options.Serializer;
+
+    private readonly FrozenDictionary<Type, IEventReadTransform> _readTransforms =
+        options.ReadTransforms?.ToFrozenDictionary(x => x.FromType) ??
+        FrozenDictionary<Type, IEventReadTransform>.Empty;
 
     public async Task AppendToStreamAsync(
         string streamId,
@@ -41,11 +46,13 @@ public class EventStore<TPayload>(EventStoreOptions<TPayload> options) : IEventS
         var result = await _backend.ReadStreamAsync(streamId, direction, fromPosition, cancellationToken);
 
         return result.Status == ReadStreamStatus.Success
-            ? ReadStreamResult<EventRecord<object>>.Success(GetDeserializedEvents())
+            ? ReadStreamResult<EventRecord<object>>.Success(TransformEvents())
             : ReadStreamResult<EventRecord<object>>.NotFound();
 
-        async IAsyncEnumerable<EventRecord<object>> GetDeserializedEvents()
+        async IAsyncEnumerable<EventRecord<object>> TransformEvents()
         {
+            var queue = _readTransforms.Count > 0 ? new Queue<object>() : null;
+
             await foreach (var record in result.Events.WithCancellation(cancellationToken))
             {
                 var eventType = _eventTypeMapper.GetEventType(record.Header.EventName);
@@ -54,7 +61,28 @@ public class EventStore<TPayload>(EventStoreOptions<TPayload> options) : IEventS
                 if (deserializedEvent == null)
                     throw new Exception("TODO (DS): Deserialize event is null.");
 
-                yield return new EventRecord<object>(record.Header, deserializedEvent);
+                if (queue == null)
+                {
+                    yield return new EventRecord<object>(record.Header, deserializedEvent);
+                    continue;
+                }
+
+                queue.Enqueue(deserializedEvent);
+
+                while (queue.TryDequeue(out var @event))
+                {
+                    if (_readTransforms.TryGetValue(@event.GetType(), out var transform))
+                    {
+                        var transformedEvents = transform.Apply(@event, record.Header);
+
+                        foreach (var transformedEvent in transformedEvents)
+                            queue.Enqueue(transformedEvent);
+                    }
+                    else
+                    {
+                        yield return new EventRecord<object>(record.Header, @event);
+                    }
+                }
             }
         }
     }

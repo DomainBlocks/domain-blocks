@@ -11,7 +11,7 @@ namespace DomainBlocks.EventStore.Tests.Integration;
 public class MongoWithBsonDocumentPayloadTests
 {
     [Test]
-    public async Task Should_write_and_read_event()
+    public async Task Should_write_and_read_event_with_transform()
     {
         var client = new MongoClient("mongodb://localhost:27017");
         var database = client.GetDatabase("test");
@@ -31,7 +31,8 @@ public class MongoWithBsonDocumentPayloadTests
             [
                 new EventTypeMapping(typeof(UserCreated))
             ],
-            Serializer = new MongoBsonDocumentSerializer()
+            Serializer = new MongoBsonDocumentSerializer(),
+            ReadTransforms = [new UserCreatedV2Upcaster()]
         };
 
         var eventStore = EventStoreFactory.Create(eventStoreOptions);
@@ -49,11 +50,14 @@ public class MongoWithBsonDocumentPayloadTests
         var result = await eventStore.ReadStreamAsync(streamId);
         var readEvents = await result.Events.ToArrayAsync();
 
-        readEvents
+        var readEvent = readEvents
             .ShouldHaveSingleItem()
             .Payload
-            .ShouldBeOfType<UserCreated>()
-            .ShouldBe(originalEvent);
+            .ShouldBeOfType<UserCreatedV2>();
+
+        readEvent.UserId.ShouldBe(originalEvent.UserId);
+        readEvent.Name.ShouldBe(originalEvent.Name);
+        readEvent.Surname.ShouldBeNull();
     }
 
     public record UserCreated
