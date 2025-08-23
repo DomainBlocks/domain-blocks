@@ -1,5 +1,5 @@
-using DomainBlocks.Persistence.Abstractions.Events;
-using DomainBlocks.Persistence.Events;
+using DomainBlocks.EventStore;
+using DomainBlocks.EventStore.Abstractions;
 
 namespace DomainBlocks.EventSourcing;
 

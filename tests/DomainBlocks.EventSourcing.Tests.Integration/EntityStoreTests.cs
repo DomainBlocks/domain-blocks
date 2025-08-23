@@ -1,10 +1,9 @@
 using DomainBlocks.EventSourcing.Tests.Integration.Adapters;
 using DomainBlocks.EventSourcing.Tests.Integration.DomainEvents;
 using DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
-using DomainBlocks.Persistence.Abstractions.Events;
-using DomainBlocks.Persistence.Events;
-using DomainBlocks.Persistence.MongoDB.Events;
-using DomainBlocks.Serialization.Events;
+using DomainBlocks.EventStore;
+using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.MongoDB;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
@@ -32,24 +31,26 @@ public class EntityStoreTests
         var database = client.GetDatabase("test");
         var collection = database.GetCollection<EventDocument<BsonDocument>>("events");
 
-        var options = new MongoEventStoreOptions<EventDocument<BsonDocument>, BsonDocument>
+        var mongoOptions = new MongoEventStoreOptions<EventDocument<BsonDocument>, BsonDocument>
         {
             DocumentMapper = new EventDocumentMapper<BsonDocument>(),
             StreamIdSelector = doc => doc.StreamId,
             StreamVersionSelector = doc => doc.StreamVersion
         };
 
-        var eventStoreBackend = MongoEventStore.Create(collection, options);
+        var eventStoreOptions = new EventStoreOptions<BsonDocument>
+        {
+            Backend = MongoEventStore.Create(collection, mongoOptions),
+            TypeMappings =
+            [
+                new EventTypeMapping(typeof(ShoppingSessionStarted)),
+                new EventTypeMapping(typeof(ItemAddedToShoppingCart)),
+                new EventTypeMapping(typeof(ItemRemovedFromShoppingCart))
+            ],
+            Serializer = new MongoBsonDocumentSerializer()
+        };
 
-        EventTypeMapping[] eventTypeMappings =
-        [
-            new(typeof(ShoppingSessionStarted)),
-            new(typeof(ItemAddedToShoppingCart)),
-            new(typeof(ItemRemovedFromShoppingCart))
-        ];
-
-        var serializer = new MongoBsonDocumentSerializer();
-        var eventStore = EventStore.Create(eventStoreBackend, eventTypeMappings, serializer);
+        var eventStore = EventStoreFactory.Create(eventStoreOptions);
 
         var entityAdapterProvider = new CompositeEntityAdapterProvider(
         [

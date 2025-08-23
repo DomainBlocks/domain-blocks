@@ -7,7 +7,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj" />
+      <ProjectReference Include="..\DomainBlocks.EventStore.Abstractions\DomainBlocks.EventStore.Abstractions.csproj" />
+      <ProjectReference Include="..\DomainBlocks.Serialization\DomainBlocks.Serialization.csproj" />
     </ItemGroup>
 
 </Project>

@@ -1,0 +1,21 @@
+using DomainBlocks.Core.Exceptions;
+
+namespace DomainBlocks.EventStore.Abstractions;
+
+public class WrongExpectedVersionException(
+    string streamId,
+    long expectedVersion,
+    long actualVersion,
+    Exception? innerException = null) :
+    DomainBlocksException(GetMessage(streamId, expectedVersion, actualVersion), innerException)
+{
+    public string StreamId { get; } = streamId;
+    public long ExpectedVersion { get; } = expectedVersion;
+    public long ActualVersion { get; } = actualVersion;
+
+    private static string GetMessage(string streamId, long expectedVersion, long actualVersion)
+    {
+        return $"Append to stream '{streamId}' failed due to a concurrency conflict. " +
+               $"Expected version {expectedVersion}, but found {actualVersion}.";
+    }
+}
