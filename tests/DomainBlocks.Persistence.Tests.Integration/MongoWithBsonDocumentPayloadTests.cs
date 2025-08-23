@@ -16,21 +16,24 @@ public class MongoWithBsonDocumentPayloadTests
     {
         var client = new MongoClient("mongodb://localhost:27017");
         var database = client.GetDatabase("test");
-        var collection = database.GetCollection<BsonDocument>("events");
+        var collection = database.GetCollection<EventDocument<BsonDocument>>("events");
 
-        var eventDataStore = new MongoEventDataStore<BsonDocument>(
-            collection,
-            x => x,
-            x => x.AsBsonDocument);
+        var options = new MongoEventStoreOptions<EventDocument<BsonDocument>, BsonDocument>
+        {
+            DocumentMapper = new EventDocumentMapper<BsonDocument>(),
+            StreamIdSelector = doc => doc.StreamId,
+            StreamVersionSelector = doc => doc.StreamVersion
+        };
 
-        EventTypeMapping[] mappings =
+        var eventStoreBackend = MongoEventStore.Create(collection, options);
+
+        EventTypeMapping[] eventTypeMappings =
         [
             new(typeof(UserCreated))
         ];
 
         var serializer = new MongoBsonDocumentSerializer();
-        var eventSerializer = new EventSerializer<BsonDocument>(mappings, serializer);
-        var eventStore = new EventStore<BsonDocument>(eventDataStore, eventSerializer);
+        var eventStore = EventStore.Create(eventStoreBackend, eventTypeMappings, serializer);
 
         var originalEvent = new UserCreated
         {
@@ -43,10 +46,11 @@ public class MongoWithBsonDocumentPayloadTests
         await eventStore.AppendToStreamAsync(streamId, [originalEvent]);
 
         var result = await eventStore.ReadStreamAsync(streamId);
-        var readEvent = await result.Events.ToArrayAsync();
+        var readEvents = await result.Events.ToArrayAsync();
 
-        readEvent
+        readEvents
             .ShouldHaveSingleItem()
+            .Payload
             .ShouldBeOfType<UserCreated>()
             .ShouldBe(originalEvent);
     }

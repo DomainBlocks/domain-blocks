@@ -1,41 +1,43 @@
 using DomainBlocks.Persistence.Abstractions.Events;
 using KurrentDB.Client;
+using KurrentStreamPosition = KurrentDB.Client.StreamPosition;
+using StreamPosition = DomainBlocks.Persistence.Abstractions.Events.StreamPosition;
 
 namespace DomainBlocks.Persistence.KurrentDB.Events;
 
-public class KurrentDBEventDataStore(KurrentDBClient client) : IEventDataStore<ReadOnlyMemory<byte>>
+public class KurrentDBEventDataStore(KurrentDBClient client) : IEventStoreBackend<ReadOnlyMemory<byte>>
 {
     public Task AppendToStreamAsync(
         string streamId,
-        IEnumerable<EventData<ReadOnlyMemory<byte>>> events,
-        long? expectedVersion = null,
+        IEnumerable<NewEventRecord<ReadOnlyMemory<byte>>> events,
+        ExpectedStreamVersion? expectedVersion = null,
         CancellationToken cancellationToken = default)
     {
         throw new NotImplementedException();
     }
 
-    public async Task<ReadStreamResult<StoredEventData<ReadOnlyMemory<byte>>>> ReadStreamAsync(
+    public async Task<ReadStreamResult<EventRecord<ReadOnlyMemory<byte>>>> ReadStreamAsync(
         string streamId,
         StreamReadDirection direction = StreamReadDirection.Forward,
-        long? fromVersion = null,
+        StreamPosition? fromPosition = null,
         CancellationToken cancellationToken = default)
     {
         KurrentDBClient.ReadStreamResult readStreamResult;
 
         try
         {
-            var kurrentDbDirection = direction == StreamReadDirection.Forward
+            var kurrentDirection = direction == StreamReadDirection.Forward
                 ? Direction.Forwards
                 : Direction.Backwards;
 
-            var kurrentDbFromVersion = fromVersion != null
-                ? StreamPosition.FromInt64(fromVersion.Value)
-                : StreamPosition.Start;
+            var kurrentFromVersion = fromPosition != null
+                ? KurrentStreamPosition.FromInt64(fromPosition.Value.ToInt64())
+                : KurrentStreamPosition.Start;
 
             readStreamResult = client.ReadStreamAsync(
-                kurrentDbDirection,
+                kurrentDirection,
                 streamId,
-                kurrentDbFromVersion,
+                kurrentFromVersion,
                 cancellationToken: cancellationToken);
         }
         catch (Exception ex)
@@ -47,23 +49,26 @@ public class KurrentDBEventDataStore(KurrentDBClient client) : IEventDataStore<R
         var readState = await readStreamResult.ReadState;
         if (readState == ReadState.StreamNotFound)
         {
-            return ReadStreamResult<StoredEventData<ReadOnlyMemory<byte>>>.NotFound();
+            return ReadStreamResult<EventRecord<ReadOnlyMemory<byte>>>.NotFound();
         }
 
-        return ReadStreamResult<StoredEventData<ReadOnlyMemory<byte>>>.Success(MapEventStream());
+        return ReadStreamResult<EventRecord<ReadOnlyMemory<byte>>>.Success(MapEventStream());
 
-        async IAsyncEnumerable<StoredEventData<ReadOnlyMemory<byte>>> MapEventStream()
+        async IAsyncEnumerable<EventRecord<ReadOnlyMemory<byte>>> MapEventStream()
         {
             await foreach (var resolvedEvent in readStreamResult.WithCancellation(cancellationToken))
             {
-                yield return new StoredEventData<ReadOnlyMemory<byte>>(
+                var header = new EventHeader(
                     streamId,
-                    resolvedEvent.OriginalEvent.EventNumber.ToInt64(),
+                    StreamVersion.FromInt64(resolvedEvent.OriginalEvent.EventNumber.ToInt64()),
                     resolvedEvent.Event.EventType,
-                    resolvedEvent.Event.Data,
                     new Dictionary<string, string>(),
                     resolvedEvent.Event.Created.Date,
-                    Convert.ToInt64(resolvedEvent.OriginalEvent.Position.CommitPosition));
+                    GlobalPosition.FromUInt64(resolvedEvent.OriginalEvent.Position.CommitPosition));
+
+                yield return new EventRecord<ReadOnlyMemory<byte>>(
+                    header,
+                    resolvedEvent.Event.Data);
             }
         }
     }

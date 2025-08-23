@@ -42,14 +42,14 @@ public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider e
 
         var entity = await entityAdapter.RestoreAsync(initialState, EnumerateEvents(), cancellationToken);
 
-        return Versioned.From(entity, loadedVersion);
+        return Versioned.From(entity, ExpectedStreamVersion.At(loadedVersion));
 
         async IAsyncEnumerable<object> EnumerateEvents()
         {
             await foreach (var @event in result.Events.WithCancellation(cancellationToken))
             {
                 loadedVersion++;
-                yield return @event;
+                yield return @event.Payload;
             }
         }
     }

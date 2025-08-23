@@ -1,16 +1,14 @@
-using DomainBlocks.Persistence.Abstractions.Events;
+namespace DomainBlocks.Persistence.Abstractions.Events;
 
-namespace DomainBlocks.Persistence.Events;
-
-public interface IEventStore
+public interface IEventStoreBackend<TPayload>
 {
     Task AppendToStreamAsync(
         string streamId,
-        IEnumerable<object> events,
+        IEnumerable<NewEventRecord<TPayload>> events,
         ExpectedStreamVersion? expectedVersion = null,
         CancellationToken cancellationToken = default);
 
-    Task<ReadStreamResult<EventRecord<object>>> ReadStreamAsync(
+    Task<ReadStreamResult<EventRecord<TPayload>>> ReadStreamAsync(
         string streamId,
         StreamReadDirection direction = StreamReadDirection.Forward,
         StreamPosition? fromPosition = null,

@@ -1,65 +1,74 @@
 using DomainBlocks.Persistence.Abstractions.Events;
+using DomainBlocks.Serialization.Abstractions;
 using DomainBlocks.Serialization.Events;
 
 namespace DomainBlocks.Persistence.Events;
 
-// Skips, splits, 1:1 mapping (e.g. upcasts, contract to domain)
-public interface IEventReadTransform
+public static class EventStore
 {
-    Type FromType { get; }
-    IEnumerable<object> Apply(object @event);
-}
-
-// 1:1 mapping (e.g. domain to contract)
-public interface IEventWriteTransform
-{
-    Type FromType { get; }
-    object Apply(object @event);
+    public static EventStore<TPayload> Create<TPayload>(
+        IEventStoreBackend<TPayload> backend,
+        IEnumerable<EventTypeMapping> eventTypeMappings,
+        ISerializer<TPayload> serializer)
+    {
+        return new EventStore<TPayload>(backend, eventTypeMappings, serializer);
+    }
 }
 
 public class EventStore<TPayload>(
-    IEventDataStore<TPayload> eventDataStore,
-    EventSerializer<TPayload> eventSerializer) : IEventStore
+    IEventStoreBackend<TPayload> backend,
+    IEnumerable<EventTypeMapping> eventTypeMappings,
+    ISerializer<TPayload> serializer) :
+    IEventStore
 {
+    private readonly EventTypeMapper _eventTypeMapper = new(eventTypeMappings);
+
     public async Task AppendToStreamAsync(
         string streamId,
         IEnumerable<object> events,
-        long? expectedVersion = null,
+        ExpectedStreamVersion? expectedVersion = null,
         CancellationToken cancellationToken = default)
     {
         // Pass events through write pipeline first. End of the line is serialisation.
         // Object -> pipeline -> EventData
 
-        var eventData = events
+        var records = events
             .Select(x =>
             {
-                var (eventName, payload) = eventSerializer.Serialize(x);
-                return new EventData<TPayload>(eventName, payload);
+                var eventName = _eventTypeMapper.GetEventName(x);
+                var payload = serializer.Serialize(x);
+                return new NewEventRecord<TPayload>(new NewEventHeader(eventName), payload);
             });
 
-        await eventDataStore.AppendToStreamAsync(streamId, eventData, expectedVersion, cancellationToken);
+        await backend.AppendToStreamAsync(streamId, records, expectedVersion, cancellationToken);
     }
 
-    public async Task<ReadStreamResult<object>> ReadStreamAsync(
+    public async Task<ReadStreamResult<EventRecord<object>>> ReadStreamAsync(
         string streamId,
         StreamReadDirection direction = StreamReadDirection.Forward,
-        long? fromVersion = null,
+        StreamPosition? fromPosition = null,
         CancellationToken cancellationToken = default)
     {
         // Deserialize then pass events through read pipeline.
         // StoredEventData -> pipeline -> object(s)
 
-        var result = await eventDataStore.ReadStreamAsync(streamId, direction, fromVersion, cancellationToken);
+        var result = await backend.ReadStreamAsync(streamId, direction, fromPosition, cancellationToken);
 
         return result.Status == ReadStreamStatus.Success
-            ? ReadStreamResult<object>.Success(GetDeserializedEvents())
-            : ReadStreamResult<object>.NotFound();
+            ? ReadStreamResult<EventRecord<object>>.Success(GetDeserializedEvents())
+            : ReadStreamResult<EventRecord<object>>.NotFound();
 
-        async IAsyncEnumerable<object> GetDeserializedEvents()
+        async IAsyncEnumerable<EventRecord<object>> GetDeserializedEvents()
         {
-            await foreach (var eventData in result.Events.WithCancellation(cancellationToken))
+            await foreach (var record in result.Events.WithCancellation(cancellationToken))
             {
-                yield return eventSerializer.Deserialize(eventData.EventName, eventData.Payload);
+                var eventType = _eventTypeMapper.GetEventType(record.Header.EventName);
+                var deserializedEvent = serializer.Deserialize(record.Payload, eventType);
+
+                if (deserializedEvent == null)
+                    throw new Exception("TODO (DS): Deserialize event is null.");
+
+                yield return new EventRecord<object>(record.Header, deserializedEvent);
             }
         }
     }

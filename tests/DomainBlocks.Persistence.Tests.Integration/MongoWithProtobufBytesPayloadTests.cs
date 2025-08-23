@@ -3,7 +3,6 @@ using DomainBlocks.Persistence.MongoDB.Events;
 using DomainBlocks.Persistence.Tests.Integration.Generated;
 using DomainBlocks.Serialization.Events;
 using DomainBlocks.Serialization.Google.Protobuf;
-using MongoDB.Bson;
 using MongoDB.Driver;
 using NUnit.Framework;
 using Shouldly;
@@ -17,21 +16,24 @@ public class MongoWithProtobufBytesPayloadTests
     {
         var client = new MongoClient("mongodb://localhost:27017");
         var database = client.GetDatabase("test");
-        var collection = database.GetCollection<BsonDocument>("events");
+        var collection = database.GetCollection<EventDocument<byte[]>>("events");
 
-        var eventDataStore = new MongoEventDataStore<ReadOnlyMemory<byte>>(
-            collection,
-            x => x.ToArray(),
-            x => x.AsByteArray);
+        var options = new MongoEventStoreOptions<EventDocument<byte[]>, byte[]>
+        {
+            DocumentMapper = new EventDocumentMapper<byte[]>(),
+            StreamIdSelector = doc => doc.StreamId,
+            StreamVersionSelector = doc => doc.StreamVersion
+        };
 
-        EventTypeMapping[] mappings =
+        var mongoEventStore = MongoEventStore.Create(collection, options);
+
+        EventTypeMapping[] eventTypeMappings =
         [
             new(typeof(UserCreated))
         ];
 
         var serializer = new GoogleProtobufBytesSerializer();
-        var eventSerializer = new EventSerializer<ReadOnlyMemory<byte>>(mappings, serializer);
-        var eventStore = new EventStore<ReadOnlyMemory<byte>>(eventDataStore, eventSerializer);
+        var eventStore = EventStore.Create(mongoEventStore, eventTypeMappings, serializer);
 
         var originalEvent = new UserCreated
         {
@@ -39,15 +41,16 @@ public class MongoWithProtobufBytesPayloadTests
             Name = "Alice"
         };
 
-        var streamId = $"test-proto-stream-{Guid.NewGuid()}";
+        var streamId = $"test-bson-stream-{Guid.NewGuid()}";
 
         await eventStore.AppendToStreamAsync(streamId, [originalEvent]);
 
         var result = await eventStore.ReadStreamAsync(streamId);
-        var readEvent = await result.Events.ToArrayAsync();
+        var readEvents = await result.Events.ToArrayAsync();
 
-        readEvent
+        readEvents
             .ShouldHaveSingleItem()
+            .Payload
             .ShouldBeOfType<UserCreated>()
             .ShouldBe(originalEvent);
     }

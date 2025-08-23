@@ -30,14 +30,18 @@ public class EntityStoreTests
     {
         var client = new MongoClient("mongodb://localhost:27017");
         var database = client.GetDatabase("test");
-        var collection = database.GetCollection<BsonDocument>("events");
+        var collection = database.GetCollection<EventDocument<BsonDocument>>("events");
 
-        var eventDataStore = new MongoEventDataStore<BsonDocument>(
-            collection,
-            x => x,
-            x => x.AsBsonDocument);
+        var options = new MongoEventStoreOptions<EventDocument<BsonDocument>, BsonDocument>
+        {
+            DocumentMapper = new EventDocumentMapper<BsonDocument>(),
+            StreamIdSelector = doc => doc.StreamId,
+            StreamVersionSelector = doc => doc.StreamVersion
+        };
 
-        EventTypeMapping[] mappings =
+        var eventStoreBackend = MongoEventStore.Create(collection, options);
+
+        EventTypeMapping[] eventTypeMappings =
         [
             new(typeof(ShoppingSessionStarted)),
             new(typeof(ItemAddedToShoppingCart)),
@@ -45,13 +49,12 @@ public class EntityStoreTests
         ];
 
         var serializer = new MongoBsonDocumentSerializer();
-        var eventSerializer = new EventSerializer<BsonDocument>(mappings, serializer);
-        var eventStore = new EventStore<BsonDocument>(eventDataStore, eventSerializer);
+        var eventStore = EventStore.Create(eventStoreBackend, eventTypeMappings, serializer);
 
         var entityAdapterProvider = new CompositeEntityAdapterProvider(
         [
-            //new GenericEntityAdapterProvider(typeof(AggregateAdapter<,>), [123, "ABC"]),
-            new GenericEntityAdapterProvider(typeof(AggregateAdapter2<,>)),
+            new GenericEntityAdapterProvider(typeof(AggregateAdapter<,>), [123, "ABC"]),
+            //new GenericEntityAdapterProvider(typeof(AggregateAdapter2<,>)),
             new GenericEntityAdapterProvider(typeof(MutableAggregateAdapter<>)),
             new GenericEntityAdapterProvider(typeof(FunctionalAggregateWrapperAdapter<>))
         ]);

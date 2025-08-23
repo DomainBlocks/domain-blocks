@@ -3,7 +3,7 @@ using Google.Protobuf;
 
 namespace DomainBlocks.Serialization.Google.Protobuf;
 
-public class GoogleProtobufBytesSerializer : ISerializer<ReadOnlyMemory<byte>>
+public class GoogleProtobufBytesSerializer : ISerializer<ReadOnlyMemory<byte>>, ISerializer<byte[]>
 {
     public ReadOnlyMemory<byte> Serialize(object value)
     {
@@ -28,4 +28,8 @@ public class GoogleProtobufBytesSerializer : ISerializer<ReadOnlyMemory<byte>>
 
         return parser.ParseFrom(payload.ToArray());
     }
+
+    byte[] ISerializer<byte[]>.Serialize(object value) => Serialize(value).ToArray();
+
+    object? ISerializer<byte[]>.Deserialize(byte[] payload, Type type) => Deserialize(payload, type);
 }
