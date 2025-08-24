@@ -40,7 +40,7 @@ public class EventReadTransformTests
             Name = "Alice"
         };
 
-        var streamId = $"test-read-transform-stream-{Guid.NewGuid()}";
+        var streamId = $"test-read-transform-{Guid.NewGuid()}";
 
         await eventStore.AppendToStreamAsync(streamId, [originalEvent]);
 

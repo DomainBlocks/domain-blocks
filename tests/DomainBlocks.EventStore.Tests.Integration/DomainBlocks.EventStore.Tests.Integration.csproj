@@ -19,23 +19,16 @@
     </ItemGroup>
 
     <ItemGroup>
-        <Protobuf Include="Protos\UserCreated.proto">
-            <GrpcServices>None</GrpcServices>
-            <Access>Public</Access>
-            <ProtoCompile>True</ProtoCompile>
-            <CompileOutputs>true</CompileOutputs>
-            <OutputDir>Generated</OutputDir>
-            <Generator>MSBuild:Compile</Generator>
-        </Protobuf>
+        <Protobuf Include="Proto\UserCreated.proto" GrpcServices="None" OutputDir="Generated" CompileOutputs="true"/>
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\src\DomainBlocks.EventStore.MongoDB\DomainBlocks.EventStore.MongoDB.csproj" />
-      <ProjectReference Include="..\..\src\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj" />
-      <ProjectReference Include="..\..\src\DomainBlocks.Serialization.Google.Protobuf\DomainBlocks.Serialization.Google.Protobuf.csproj" />
-      <ProjectReference Include="..\..\src\DomainBlocks.Serialization.MongoDB.Bson\DomainBlocks.Serialization.MongoDB.Bson.csproj" />
-      <ProjectReference Include="..\..\src\DomainBlocks.Serialization\DomainBlocks.Serialization.csproj" />
-      <ProjectReference Include="..\DomainBlocks.Serialization.Google.Protobuf.Tests\DomainBlocks.Serialization.Google.Protobuf.Tests.csproj" />
+        <ProjectReference Include="..\..\src\DomainBlocks.EventStore.MongoDB\DomainBlocks.EventStore.MongoDB.csproj"/>
+        <ProjectReference Include="..\..\src\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj"/>
+        <ProjectReference Include="..\..\src\DomainBlocks.Serialization.Google.Protobuf\DomainBlocks.Serialization.Google.Protobuf.csproj"/>
+        <ProjectReference Include="..\..\src\DomainBlocks.Serialization.MongoDB.Bson\DomainBlocks.Serialization.MongoDB.Bson.csproj"/>
+        <ProjectReference Include="..\..\src\DomainBlocks.Serialization\DomainBlocks.Serialization.csproj"/>
+        <ProjectReference Include="..\DomainBlocks.Serialization.Google.Protobuf.Tests\DomainBlocks.Serialization.Google.Protobuf.Tests.csproj"/>
     </ItemGroup>
 
 </Project>
