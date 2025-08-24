@@ -3,9 +3,9 @@ using Google.Protobuf;
 
 namespace DomainBlocks.Serialization.Google.Protobuf;
 
-public class GoogleProtobufBytesSerializer : ISerializer<ReadOnlyMemory<byte>>, ISerializer<byte[]>
+public sealed class GoogleProtobufBytesSerializer : ISerializer<byte[]>, ISerializer<ReadOnlyMemory<byte>>
 {
-    public ReadOnlyMemory<byte> Serialize(object value)
+    public byte[] Serialize(object value)
     {
         ArgumentNullException.ThrowIfNull(value);
 
@@ -17,7 +17,7 @@ public class GoogleProtobufBytesSerializer : ISerializer<ReadOnlyMemory<byte>>, 
         return ms.ToArray();
     }
 
-    public object? Deserialize(ReadOnlyMemory<byte> payload, Type type)
+    public object? Deserialize(byte[] payload, Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
 
@@ -26,10 +26,16 @@ public class GoogleProtobufBytesSerializer : ISerializer<ReadOnlyMemory<byte>>, 
 
         var parser = MessageParserCache.Get(type);
 
-        return parser.ParseFrom(payload.ToArray());
+        return parser.ParseFrom(payload);
     }
 
-    byte[] ISerializer<byte[]>.Serialize(object value) => Serialize(value).ToArray();
+    ReadOnlyMemory<byte> ISerializer<ReadOnlyMemory<byte>>.Serialize(object value)
+    {
+        return Serialize(value);
+    }
 
-    object? ISerializer<byte[]>.Deserialize(byte[] payload, Type type) => Deserialize(payload, type);
+    object? ISerializer<ReadOnlyMemory<byte>>.Deserialize(ReadOnlyMemory<byte> payload, Type type)
+    {
+        return Deserialize(payload.ToArray(), type);
+    }
 }

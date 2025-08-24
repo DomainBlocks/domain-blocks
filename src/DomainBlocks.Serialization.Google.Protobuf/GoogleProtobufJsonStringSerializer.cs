@@ -3,7 +3,7 @@ using Google.Protobuf;
 
 namespace DomainBlocks.Serialization.Google.Protobuf;
 
-public class GoogleProtobufJsonStringSerializer(JsonFormatter.Settings? settings = null) : ISerializer<string>
+public sealed class GoogleProtobufJsonStringSerializer(JsonFormatter.Settings? settings = null) : ISerializer<string>
 {
     private readonly JsonFormatter _formatter = new(settings ?? JsonFormatter.Settings.Default);
 
