@@ -25,22 +25,16 @@ public class EntityStoreTests
     }
 
     [SetUp]
-    public void SetUp()
+    public async Task SetUp()
     {
         var client = new MongoClient("mongodb://localhost:27017");
-        var database = client.GetDatabase("test");
-        var collection = database.GetCollection<EventDocument<BsonDocument>>("events");
-
-        var mongoOptions = new MongoEventStoreOptions<EventDocument<BsonDocument>, BsonDocument>
-        {
-            DocumentMapper = new EventDocumentMapper<BsonDocument>(),
-            StreamIdSelector = doc => doc.StreamId,
-            StreamVersionSelector = doc => doc.StreamVersion
-        };
+        var mongoDb = client.GetDatabase("test");
+        var mongoOptions = MongoEventStoreOptions.CreateDefault();
+        await MongoEventStore.EnsureIndexesAsync(mongoDb, mongoOptions);
 
         var eventStoreOptions = new EventStoreOptions<BsonDocument>
         {
-            Backend = MongoEventStore.Create(collection, mongoOptions),
+            Backend = MongoEventStore.Create(mongoDb, mongoOptions),
             TypeMappings =
             [
                 new EventTypeMapping(typeof(ShoppingSessionStarted)),

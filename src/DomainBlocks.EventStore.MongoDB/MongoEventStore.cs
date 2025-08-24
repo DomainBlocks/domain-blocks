@@ -5,24 +5,41 @@ namespace DomainBlocks.EventStore.MongoDB;
 
 public static class MongoEventStore
 {
-    public static MongoEventStore<TEventDocument, TPayload> Create<TEventDocument, TPayload>(
-        IMongoCollection<TEventDocument> collection,
+    public static IMongoEventStore<TPayload> Create<TEventDocument, TPayload>(
+        IMongoDatabase database,
         MongoEventStoreOptions<TEventDocument, TPayload> options)
     {
+        var collection = database.GetCollection<TEventDocument>(options.CollectionName);
         return new MongoEventStore<TEventDocument, TPayload>(collection, options);
+    }
+
+    public static Task EnsureIndexesAsync<TEventDocument, TPayload>(
+        IMongoDatabase database,
+        MongoEventStoreOptions<TEventDocument, TPayload> options,
+        CancellationToken cancellationToken = default)
+    {
+        var collection = database.GetCollection<TEventDocument>(options.CollectionName);
+
+        CreateIndexModel<TEventDocument>[] indexModels =
+        [
+            new(Builders<TEventDocument>.IndexKeys
+                    .Ascending(options.StreamIdField)
+                    .Ascending(options.StreamVersionField),
+                new CreateIndexOptions { Unique = true }),
+
+            new(Builders<TEventDocument>.IndexKeys.Ascending(options.CommittedAtField))
+        ];
+
+        return collection.Indexes.CreateManyAsync(indexModels, cancellationToken);
     }
 }
 
 public class MongoEventStore<TEventDocument, TPayload>(
     IMongoCollection<TEventDocument> collection,
-    MongoEventStoreOptions<TEventDocument, TPayload> options) : IEventStoreBackend<TPayload>
+    MongoEventStoreOptions<TEventDocument, TPayload> options) : IMongoEventStore<TPayload>
 {
-    private readonly FieldDefinition<TEventDocument, string> _streamIdField =
-        new ExpressionFieldDefinition<TEventDocument, string>(options.StreamIdSelector);
-
-    private readonly FieldDefinition<TEventDocument, long> _streamVersionField =
-        new ExpressionFieldDefinition<TEventDocument, long>(options.StreamVersionSelector);
-
+    private readonly FieldDefinition<TEventDocument, string> _streamIdField = options.StreamIdField;
+    private readonly FieldDefinition<TEventDocument, long> _streamVersionField = options.StreamVersionField;
     private readonly Func<TEventDocument, long> _streamVersionSelector = options.StreamVersionSelector.Compile();
 
     public async Task AppendToStreamAsync(

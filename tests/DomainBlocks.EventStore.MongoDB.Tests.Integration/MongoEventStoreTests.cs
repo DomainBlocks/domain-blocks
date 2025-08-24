@@ -11,17 +11,10 @@ public class MongoEventStoreTests
     public async Task Test()
     {
         var client = new MongoClient("mongodb://localhost:27017");
-        var database = client.GetDatabase("test");
-        var collection = database.GetCollection<EventDocument<BsonDocument>>("events");
-
-        var options = new MongoEventStoreOptions<EventDocument<BsonDocument>, BsonDocument>
-        {
-            DocumentMapper = new EventDocumentMapper<BsonDocument>(),
-            StreamIdSelector = doc => doc.StreamId,
-            StreamVersionSelector = doc => doc.StreamVersion
-        };
-
-        var eventStore = MongoEventStore.Create(collection, options);
+        var mongoDb = client.GetDatabase("test");
+        var mongoOptions = MongoEventStoreOptions.CreateDefault();
+        await MongoEventStore.EnsureIndexesAsync(mongoDb, mongoOptions);
+        var eventStore = MongoEventStore.Create(mongoDb, mongoOptions);
 
         NewEventRecord<BsonDocument>[] events =
         [

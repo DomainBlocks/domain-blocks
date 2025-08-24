@@ -13,19 +13,13 @@ public class MongoWithProtobufBytesPayloadTests
     public async Task Should_write_and_read_event()
     {
         var client = new MongoClient("mongodb://localhost:27017");
-        var database = client.GetDatabase("test");
-        var collection = database.GetCollection<EventDocument<byte[]>>("events");
-
-        var mongoOptions = new MongoEventStoreOptions<EventDocument<byte[]>, byte[]>
-        {
-            DocumentMapper = new EventDocumentMapper<byte[]>(),
-            StreamIdSelector = doc => doc.StreamId,
-            StreamVersionSelector = doc => doc.StreamVersion
-        };
+        var mongoDb = client.GetDatabase("test");
+        var mongoOptions = MongoEventStoreOptions.CreateDefault<byte[]>();
+        await MongoEventStore.EnsureIndexesAsync(mongoDb, mongoOptions);
 
         var eventStoreOptions = new EventStoreOptions<byte[]>
         {
-            Backend = MongoEventStore.Create(collection, mongoOptions),
+            Backend = MongoEventStore.Create(mongoDb, mongoOptions),
             TypeMappings =
             [
                 new EventTypeMapping(typeof(UserCreated))
