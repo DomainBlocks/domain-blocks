@@ -4,15 +4,24 @@ using DomainBlocks.Serialization.Abstractions;
 
 namespace DomainBlocks.EventStore;
 
-public class EventStore<TPayload>(EventStoreOptions<TPayload> options) : IEventStore
+public class EventStore<TPayload> : IEventStore
 {
-    private readonly IEventStoreBackend<TPayload> _backend = options.Backend;
-    private readonly EventTypeMapper _eventTypeMapper = new(options.TypeMappings);
-    private readonly ISerializer<TPayload> _serializer = options.Serializer;
+    private readonly IEventStoreBackend<TPayload> _backend;
+    private readonly EventTypeMapper _eventTypeMapper;
+    private readonly ISerializer<TPayload> _serializer;
+    private readonly FrozenDictionary<Type, IEventContractMapper> _contractMappersByEventType;
+    private readonly FrozenDictionary<Type, IEventContractMapper> _contractMappersByContractType;
+    private readonly FrozenDictionary<Type, IEventReadTransform> _readTransforms;
 
-    private readonly FrozenDictionary<Type, IEventReadTransform> _readTransforms =
-        options.ReadTransforms?.ToFrozenDictionary(x => x.FromType) ??
-        FrozenDictionary<Type, IEventReadTransform>.Empty;
+    public EventStore(EventStoreOptions<TPayload> options)
+    {
+        _backend = options.Backend;
+        _eventTypeMapper = new EventTypeMapper(options.TypeMappings);
+        _serializer = options.Serializer;
+        _contractMappersByEventType = options.ContractMappers.ToFrozenDictionary(x => x.EventType);
+        _contractMappersByContractType = options.ContractMappers.ToFrozenDictionary(x => x.ContractType);
+        _readTransforms = options.ReadTransforms.ToFrozenDictionary(x => x.FromType);
+    }
 
     public async Task AppendToStreamAsync(
         string streamId,
@@ -24,10 +33,21 @@ public class EventStore<TPayload>(EventStoreOptions<TPayload> options) : IEventS
         // Object -> pipeline -> EventData
 
         var records = events
-            .Select(x =>
+            .Select(@event =>
             {
-                var eventName = _eventTypeMapper.GetEventName(x);
-                var payload = _serializer.Serialize(x);
+                string eventName;
+
+                if (_contractMappersByEventType.TryGetValue(@event.GetType(), out var mapper))
+                {
+                    eventName = _eventTypeMapper.GetEventName(mapper.ContractType);
+                    @event = mapper.ToContract(@event);
+                }
+                else
+                {
+                    eventName = _eventTypeMapper.GetEventName(@event.GetType());
+                }
+
+                var payload = _serializer.Serialize(@event);
                 return new NewEventRecord<TPayload>(new NewEventHeader(eventName), payload);
             });
 
@@ -56,18 +76,21 @@ public class EventStore<TPayload>(EventStoreOptions<TPayload> options) : IEventS
             await foreach (var record in result.Events.WithCancellation(cancellationToken))
             {
                 var eventType = _eventTypeMapper.GetEventType(record.Header.EventName);
-                var deserializedEvent = _serializer.Deserialize(record.Payload, eventType);
+                var sourceEvent = _serializer.Deserialize(record.Payload, eventType);
 
-                if (deserializedEvent == null)
+                if (sourceEvent == null)
                     throw new Exception("TODO (DS): Deserialize event is null.");
+
+                if (_contractMappersByContractType.TryGetValue(sourceEvent.GetType(), out var mapper))
+                    sourceEvent = mapper.FromContract(sourceEvent);
 
                 if (queue == null)
                 {
-                    yield return new EventRecord<object>(record.Header, deserializedEvent);
+                    yield return new EventRecord<object>(record.Header, sourceEvent);
                     continue;
                 }
 
-                queue.Enqueue(deserializedEvent);
+                queue.Enqueue(sourceEvent);
 
                 while (queue.TryDequeue(out var @event))
                 {

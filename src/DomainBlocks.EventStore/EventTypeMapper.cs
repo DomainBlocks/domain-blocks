@@ -12,11 +12,9 @@ public class EventTypeMapper
         _mappingsByType = mappings.ToFrozenDictionary(x => x.EventType);
         _mappingsByName = _mappingsByType.Values.ToFrozenDictionary(x => x.EventName);
     }
-    
-    public string GetEventName(object value)
-    {
-        var eventType = value.GetType();
 
+    public string GetEventName(Type eventType)
+    {
         return !_mappingsByType.TryGetValue(eventType, out var mapping)
             ? throw new EventTypeMappingNotFoundException(eventType)
             : mapping.EventName;

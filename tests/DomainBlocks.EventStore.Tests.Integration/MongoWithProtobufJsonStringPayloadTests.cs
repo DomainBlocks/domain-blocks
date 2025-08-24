@@ -1,5 +1,5 @@
 using DomainBlocks.EventStore.MongoDB;
-using DomainBlocks.EventStore.Tests.Integration.Generated;
+using DomainBlocks.EventStore.Tests.Integration.Proto;
 using DomainBlocks.Serialization.Google.Protobuf;
 using MongoDB.Driver;
 using NUnit.Framework;

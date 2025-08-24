@@ -9,7 +9,7 @@ using pb = global::Google.Protobuf;
 using pbc = global::Google.Protobuf.Collections;
 using pbr = global::Google.Protobuf.Reflection;
 using scg = global::System.Collections.Generic;
-namespace DomainBlocks.EventStore.Tests.Integration.Generated {
+namespace DomainBlocks.EventStore.Tests.Integration.Proto {
 
   /// <summary>Holder for reflection information generated from Protos/UserCreated.proto</summary>
   public static partial class UserCreatedReflection {
@@ -25,13 +25,12 @@ namespace DomainBlocks.EventStore.Tests.Integration.Generated {
       byte[] descriptorData = global::System.Convert.FromBase64String(
           string.Concat(
             "ChhQcm90b3MvVXNlckNyZWF0ZWQucHJvdG8iLAoLVXNlckNyZWF0ZWQSDwoH",
-            "dXNlcl9pZBgBIAEoCRIMCgRuYW1lGAIgASgJQjaqAjNEb21haW5CbG9ja3Mu",
-            "RXZlbnRTdG9yZS5UZXN0cy5JbnRlZ3JhdGlvbi5HZW5lcmF0ZWRiBnByb3Rv",
-            "Mw=="));
+            "dXNlcl9pZBgBIAEoCRIMCgRuYW1lGAIgASgJQjKqAi9Eb21haW5CbG9ja3Mu",
+            "RXZlbnRTdG9yZS5UZXN0cy5JbnRlZ3JhdGlvbi5Qcm90b2IGcHJvdG8z"));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { },
           new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
-            new pbr::GeneratedClrTypeInfo(typeof(global::DomainBlocks.EventStore.Tests.Integration.Generated.UserCreated), global::DomainBlocks.EventStore.Tests.Integration.Generated.UserCreated.Parser, new[]{ "UserId", "Name" }, null, null, null, null)
+            new pbr::GeneratedClrTypeInfo(typeof(global::DomainBlocks.EventStore.Tests.Integration.Proto.UserCreated), global::DomainBlocks.EventStore.Tests.Integration.Proto.UserCreated.Parser, new[]{ "UserId", "Name" }, null, null, null, null)
           }));
     }
     #endregion
@@ -53,7 +52,7 @@ namespace DomainBlocks.EventStore.Tests.Integration.Generated {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::DomainBlocks.EventStore.Tests.Integration.Generated.UserCreatedReflection.Descriptor.MessageTypes[0]; }
+      get { return global::DomainBlocks.EventStore.Tests.Integration.Proto.UserCreatedReflection.Descriptor.MessageTypes[0]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]

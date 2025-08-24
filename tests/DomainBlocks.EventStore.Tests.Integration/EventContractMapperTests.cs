@@ -1,5 +1,4 @@
-﻿using DomainBlocks.EventStore.MongoDB;
-using DomainBlocks.EventStore.Tests.Integration.Proto;
+using DomainBlocks.EventStore.MongoDB;
 using DomainBlocks.Serialization.Google.Protobuf;
 using MongoDB.Driver;
 using NUnit.Framework;
@@ -7,10 +6,10 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.Tests.Integration;
 
-public class MongoWithProtobufBytesPayloadTests
+public class EventContractMapperTests
 {
     [Test]
-    public async Task Should_write_and_read_event()
+    public async Task Should_map_to_and_from_contract()
     {
         var client = new MongoClient("mongodb://localhost:27017");
         var mongoDb = client.GetDatabase("test");
@@ -22,9 +21,13 @@ public class MongoWithProtobufBytesPayloadTests
             Backend = MongoEventStore.Create(mongoDb, mongoOptions),
             TypeMappings =
             [
-                new EventTypeMapping(typeof(UserCreated))
+                new EventTypeMapping(typeof(Proto.UserCreated))
             ],
-            Serializer = new GoogleProtobufBytesSerializer()
+            Serializer = new GoogleProtobufBytesSerializer(),
+            ContractMappers =
+            [
+                new UserCreatedProtoMapper()
+            ]
         };
 
         var eventStore = EventStoreFactory.Create(eventStoreOptions);
@@ -47,5 +50,32 @@ public class MongoWithProtobufBytesPayloadTests
             .Payload
             .ShouldBeOfType<UserCreated>()
             .ShouldBe(originalEvent);
+    }
+
+    private record UserCreated
+    {
+        public required string UserId { get; init; }
+        public required string Name { get; init; }
+    }
+
+    private class UserCreatedProtoMapper : EventContractMapper<UserCreated, Proto.UserCreated>
+    {
+        protected override Proto.UserCreated ToContract(UserCreated @event)
+        {
+            return new Proto.UserCreated
+            {
+                UserId = @event.UserId,
+                Name = @event.Name
+            };
+        }
+
+        protected override UserCreated FromContract(Proto.UserCreated contract)
+        {
+            return new UserCreated
+            {
+                UserId = contract.UserId,
+                Name = contract.Name
+            };
+        }
     }
 }
