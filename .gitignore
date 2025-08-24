@@ -56,3 +56,6 @@ nunit-*.xml
 # JetBrains Rider
 .idea
 *.user
+
+# Generated code
+**/[Gg]enerated/

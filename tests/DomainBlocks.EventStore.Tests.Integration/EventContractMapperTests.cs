@@ -38,7 +38,7 @@ public class EventContractMapperTests
             Name = "Alice"
         };
 
-        var streamId = $"test-bson-stream-{Guid.NewGuid()}";
+        var streamId = $"test-contract-mapper-stream-{Guid.NewGuid()}";
 
         await eventStore.AppendToStreamAsync(streamId, [originalEvent]);
 

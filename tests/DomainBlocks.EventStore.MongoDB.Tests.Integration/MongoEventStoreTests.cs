@@ -27,7 +27,7 @@ public class MongoEventStoreTests
         ];
 
         var expectedVersion = ExpectedStreamVersion.Any;
-        await eventStore.AppendToStreamAsync("test-stream", events, expectedVersion);
+        await eventStore.AppendToStreamAsync("test-mongo-stream", events, expectedVersion);
         //await eventStore.AppendToStreamAsync("test-stream", events2, expectedVersion + events.Length);
 
         var result = await eventStore.ReadStreamAsync("test-stream");

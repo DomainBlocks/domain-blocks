@@ -1,5 +1,4 @@
 using DomainBlocks.EventStore.MongoDB;
-using DomainBlocks.EventStore.Tests.Integration.Proto;
 using DomainBlocks.Serialization.Google.Protobuf;
 using MongoDB.Driver;
 using NUnit.Framework;
@@ -22,20 +21,20 @@ public class MongoWithProtobufJsonStringPayloadTests
             Backend = MongoEventStore.Create(mongoDb, mongoOptions),
             TypeMappings =
             [
-                new EventTypeMapping(typeof(UserCreated))
+                new EventTypeMapping(typeof(Proto.UserCreated))
             ],
             Serializer = new GoogleProtobufJsonStringSerializer()
         };
 
         var eventStore = EventStoreFactory.Create(eventStoreOptions);
 
-        var originalEvent = new UserCreated
+        var originalEvent = new Proto.UserCreated
         {
             UserId = "user-123",
             Name = "Alice"
         };
 
-        var streamId = $"test-bson-stream-{Guid.NewGuid()}";
+        var streamId = $"test-mongo-proto-json-stream-{Guid.NewGuid()}";
 
         await eventStore.AppendToStreamAsync(streamId, [originalEvent]);
 
@@ -45,7 +44,7 @@ public class MongoWithProtobufJsonStringPayloadTests
         readEvents
             .ShouldHaveSingleItem()
             .Payload
-            .ShouldBeOfType<UserCreated>()
+            .ShouldBeOfType<Proto.UserCreated>()
             .ShouldBe(originalEvent);
     }
 }

@@ -30,5 +30,6 @@
   </Folder>
   <Folder Name="/_Solution Items/">
     <File Path="compose.yaml" />
+    <File Path=".gitignore" />
   </Folder>
 </Solution>

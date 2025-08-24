@@ -35,7 +35,7 @@ public class MongoWithBsonDocumentPayloadTests
             Name = "Alice"
         };
 
-        var streamId = $"test-bson-stream-{Guid.NewGuid()}";
+        var streamId = $"test-mongo-bson-stream-{Guid.NewGuid()}";
 
         await eventStore.AppendToStreamAsync(streamId, [originalEvent]);
 
