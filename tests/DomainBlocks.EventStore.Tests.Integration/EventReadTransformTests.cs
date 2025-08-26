@@ -2,6 +2,8 @@ using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using MongoDB.Bson;
+using MongoDB.Bson.Serialization;
+using MongoDB.Bson.Serialization.Serializers;
 using MongoDB.Driver;
 using NUnit.Framework;
 using Shouldly;
@@ -10,9 +12,52 @@ namespace DomainBlocks.EventStore.Tests.Integration;
 
 public class EventReadTransformTests
 {
+    static EventReadTransformTests()
+    {
+        BsonSerializer.RegisterSerializer(new GuidSerializer(GuidRepresentation.Standard));
+    }
+
     [Test]
     public async Task Should_transform_read_event()
     {
+        var shipmentId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+        var dispatchedAt = new DateTime(2025, 08, 25, 14, 30, 0, DateTimeKind.Utc);
+
+        var legacyEvent = new ShipmentDispatched(
+            ShipmentId: shipmentId,
+            DispatchedAt: dispatchedAt,
+            Packages: new List<PackageInfo>
+            {
+                new("TRACK-001", 2.5, "Lisbon, PT"),
+                new("TRACK-002", 1.2, "Porto, PT"),
+                new("TRACK-003", 5.0, "Madrid, ES")
+            });
+
+        var expectedEvents = new object[]
+        {
+            new ShipmentDispatchedV2(
+                ShipmentId: shipmentId,
+                DispatchedAt: dispatchedAt),
+
+            new PackageShipped(
+                ShipmentId: shipmentId,
+                TrackingNumber: "TRACK-001",
+                WeightKg: 2.5,
+                Destination: "Lisbon, PT"),
+
+            new PackageShipped(
+                ShipmentId: shipmentId,
+                TrackingNumber: "TRACK-002",
+                WeightKg: 1.2,
+                Destination: "Porto, PT"),
+
+            new PackageShipped(
+                ShipmentId: shipmentId,
+                TrackingNumber: "TRACK-003",
+                WeightKg: 5.0,
+                Destination: "Madrid, ES")
+        };
+
         var client = new MongoClient("mongodb://localhost:27017");
         var mongoDb = client.GetDatabase("test");
         var mongoOptions = MongoEventStoreOptions.CreateDefault();
@@ -23,62 +68,57 @@ public class EventReadTransformTests
             Backend = MongoEventStore.Create(mongoDb, mongoOptions),
             TypeMappings =
             [
-                new EventTypeMapping(typeof(UserCreated))
+                new EventTypeMapping(typeof(ShipmentDispatched))
             ],
             Serializer = new MongoBsonDocumentSerializer(),
             ReadTransforms =
             [
-                new UserCreatedV2Upcaster()
+                new ShipmentDispatchedTransform()
             ]
         };
 
         var eventStore = new EventStore<BsonDocument>(eventStoreOptions);
-
-        var originalEvent = new UserCreated
-        {
-            UserId = "user-123",
-            Name = "Alice"
-        };
-
         var streamId = $"test-read-transform-{Guid.NewGuid()}";
-
-        await eventStore.AppendToStreamAsync(streamId, [originalEvent]);
-
+        await eventStore.AppendToStreamAsync(streamId, [legacyEvent]);
         var result = await eventStore.ReadStreamAsync(streamId);
-        var readEvents = await result.Events.ToArrayAsync();
+        var readEvents = (await result.Events.ToArrayAsync()).Select(x => x.Payload);
 
-        var readEvent = readEvents
-            .ShouldHaveSingleItem()
-            .Payload
-            .ShouldBeOfType<UserCreatedV2>();
-
-        readEvent.UserId.ShouldBe(originalEvent.UserId);
-        readEvent.Name.ShouldBe(originalEvent.Name);
-        readEvent.Surname.ShouldBeNull();
+        readEvents.ShouldBe(expectedEvents);
     }
 
-    private record UserCreated
-    {
-        public required string UserId { get; init; }
-        public required string Name { get; init; }
-    }
+    private record ShipmentDispatched(
+        Guid ShipmentId,
+        DateTime DispatchedAt,
+        IReadOnlyList<PackageInfo> Packages);
 
-    private record UserCreatedV2
-    {
-        public required string UserId { get; init; }
-        public required string Name { get; init; }
-        public string? Surname { get; init; }
-    }
+    private record PackageInfo(string TrackingNumber, double WeightKg, string Destination);
 
-    private class UserCreatedV2Upcaster : EventReadTransform<UserCreated>
+    private record ShipmentDispatchedV2(
+        Guid ShipmentId,
+        DateTime DispatchedAt);
+
+    private record PackageShipped(
+        Guid ShipmentId,
+        string TrackingNumber,
+        double WeightKg,
+        string Destination);
+
+    private class ShipmentDispatchedTransform : EventReadTransform<ShipmentDispatched>
     {
-        protected override IEnumerable<object> Apply(UserCreated @event, EventHeader header)
+        protected override IEnumerable<object> Apply(ShipmentDispatched @event, EventHeader header)
         {
-            yield return new UserCreatedV2
+            yield return new ShipmentDispatchedV2(
+                @event.ShipmentId,
+                @event.DispatchedAt);
+
+            foreach (var pkg in @event.Packages)
             {
-                UserId = @event.UserId,
-                Name = @event.Name,
-            };
+                yield return new PackageShipped(
+                    @event.ShipmentId,
+                    pkg.TrackingNumber,
+                    pkg.WeightKg,
+                    pkg.Destination);
+            }
         }
     }
 }
