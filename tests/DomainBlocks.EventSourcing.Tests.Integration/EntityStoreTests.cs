@@ -44,7 +44,7 @@ public class EntityStoreTests
             Serializer = new MongoBsonDocumentSerializer()
         };
 
-        var eventStore = EventStoreFactory.Create(eventStoreOptions);
+        var eventStore = new EventStore<BsonDocument>(eventStoreOptions);
 
         var entityAdapterProvider = new CompositeEntityAdapterProvider(
         [

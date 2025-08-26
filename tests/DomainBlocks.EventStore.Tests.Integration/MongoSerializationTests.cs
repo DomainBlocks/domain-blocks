@@ -97,7 +97,7 @@ public class MongoSerializationTests
             Serializer = serializer
         };
 
-        var eventStore = EventStoreFactory.Create(eventStoreOptions);
+        var eventStore = new EventStore<TPayload>(eventStoreOptions);
 
         return eventStore;
     }

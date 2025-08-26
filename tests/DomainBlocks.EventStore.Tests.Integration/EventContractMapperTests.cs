@@ -30,7 +30,7 @@ public class EventContractMapperTests
             ]
         };
 
-        var eventStore = EventStoreFactory.Create(eventStoreOptions);
+        var eventStore = new EventStore<byte[]>(eventStoreOptions);
 
         var originalEvent = new UserCreated
         {

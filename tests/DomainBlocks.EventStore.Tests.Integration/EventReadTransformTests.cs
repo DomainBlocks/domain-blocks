@@ -32,7 +32,7 @@ public class EventReadTransformTests
             ]
         };
 
-        var eventStore = EventStoreFactory.Create(eventStoreOptions);
+        var eventStore = new EventStore<BsonDocument>(eventStoreOptions);
 
         var originalEvent = new UserCreated
         {
