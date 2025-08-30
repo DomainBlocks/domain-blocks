@@ -81,7 +81,7 @@ public class EventReadTransformTests
         var streamId = $"test-read-transform-{Guid.NewGuid()}";
         await eventStore.AppendToStreamAsync(streamId, [legacyEvent]);
         var result = await eventStore.ReadStreamAsync(streamId);
-        var readEvents = (await result.Events.ToArrayAsync()).Select(x => x.Payload);
+        var readEvents = await result.Events.Select(x => x.Payload).ToArrayAsync();
 
         readEvents.ShouldBe(expectedEvents);
     }
