@@ -1,8 +1,7 @@
 namespace DomainBlocks.Examples.TodoList.Domain;
 
-public class TotoItemAdded(string listName, Guid itemId, string description)
+public class TodoItemCompleted(string listName, Guid itemId)
 {
     public string ListName { get; } = listName;
     public Guid ItemId { get; } = itemId;
-    public string Description { get; } = description;
 }
