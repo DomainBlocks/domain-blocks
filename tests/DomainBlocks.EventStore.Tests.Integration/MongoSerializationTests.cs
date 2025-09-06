@@ -63,7 +63,7 @@ public class MongoSerializationTests
 
     private static async Task Should_write_and_read_event<TEvent, TPayload>(
         TEvent @event,
-        ISerializer<TPayload> serializer)
+        IPayloadSerializer<TPayload> serializer)
         where TEvent : notnull
     {
         var eventStore = await CreateEventStore(serializer);
@@ -79,7 +79,7 @@ public class MongoSerializationTests
             .ShouldBe(@event);
     }
 
-    private static async Task<EventStore<TPayload>> CreateEventStore<TPayload>(ISerializer<TPayload> serializer)
+    private static async Task<EventStore<TPayload>> CreateEventStore<TPayload>(IPayloadSerializer<TPayload> serializer)
     {
         var client = new MongoClient("mongodb://localhost:27017");
         var mongoDb = client.GetDatabase("test");

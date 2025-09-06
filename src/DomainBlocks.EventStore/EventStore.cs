@@ -8,7 +8,7 @@ public class EventStore<TPayload> : IEventStore
 {
     private readonly IEventStoreBackend<TPayload> _backend;
     private readonly EventTypeMapper _eventTypeMapper;
-    private readonly ISerializer<TPayload> _serializer;
+    private readonly IPayloadSerializer<TPayload> _serializer;
     private readonly FrozenDictionary<Type, IEventContractMapper> _contractMappersByEventType;
     private readonly FrozenDictionary<Type, IEventContractMapper> _contractMappersByContractType;
     private readonly FrozenDictionary<Type, IEventReadTransform> _readTransforms;
@@ -71,9 +71,6 @@ public class EventStore<TPayload> : IEventStore
             {
                 var eventType = _eventTypeMapper.GetEventType(record.Header.EventName);
                 var sourceEvent = _serializer.Deserialize(record.Payload, eventType);
-
-                if (sourceEvent == null)
-                    throw new Exception("TODO (DS): Deserialize event is null.");
 
                 if (_contractMappersByContractType.TryGetValue(sourceEvent.GetType(), out var mapper))
                     sourceEvent = mapper.FromContract(sourceEvent);

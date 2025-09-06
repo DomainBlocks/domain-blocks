@@ -4,9 +4,9 @@ using MongoDB.Bson.Serialization;
 
 namespace DomainBlocks.Serialization.MongoDB.Bson;
 
-public sealed class MongoBsonDocumentSerializer : ISerializer<BsonDocument>
+public sealed class MongoBsonDocumentSerializer : IPayloadSerializer<BsonDocument>
 {
     public BsonDocument Serialize(object value) => value.ToBsonDocument(value.GetType());
 
-    public object? Deserialize(BsonDocument payload, Type type) => BsonSerializer.Deserialize(payload, type);
+    public object Deserialize(BsonDocument payload, Type type) => BsonSerializer.Deserialize(payload, type);
 }

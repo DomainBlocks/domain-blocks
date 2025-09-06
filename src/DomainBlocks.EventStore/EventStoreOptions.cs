@@ -7,7 +7,7 @@ public class EventStoreOptions<TPayload>
 {
     public required IEventStoreBackend<TPayload> Backend { get; init; }
     public required IEnumerable<EventTypeMapping> TypeMappings { get; init; }
-    public required ISerializer<TPayload> Serializer { get; init; }
+    public required IPayloadSerializer<TPayload> Serializer { get; init; }
     public IEnumerable<IEventContractMapper> ContractMappers { get; init; } = [];
     public IEnumerable<IEventReadTransform> ReadTransforms { get; init; } = [];
 }
