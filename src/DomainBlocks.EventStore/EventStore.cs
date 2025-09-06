@@ -29,9 +29,6 @@ public class EventStore<TPayload> : IEventStore
         ExpectedStreamVersion? expectedVersion = null,
         CancellationToken cancellationToken = default)
     {
-        // Pass events through write pipeline first. End of the line is serialisation.
-        // Object -> pipeline -> EventData
-
         var records = events
             .Select(@event =>
             {
@@ -60,9 +57,6 @@ public class EventStore<TPayload> : IEventStore
         StreamPosition? fromPosition = null,
         CancellationToken cancellationToken = default)
     {
-        // Deserialize then pass events through read pipeline.
-        // StoredEventData -> pipeline -> object(s)
-
         var result = await _backend.ReadStreamAsync(streamId, direction, fromPosition, cancellationToken);
 
         return result.Status == ReadStreamStatus.Success
