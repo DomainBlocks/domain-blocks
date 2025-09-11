@@ -13,17 +13,17 @@ public readonly struct ExpectedStreamVersion : IEquatable<ExpectedStreamVersion>
         _value = value;
     }
 
-    public static ExpectedStreamVersion At(long version)
-    {
-        return new ExpectedStreamVersion(version);
-    }
-
-    public static ExpectedStreamVersion At(StreamVersion version)
-    {
-        throw new NotImplementedException("TODO");
-    }
+    public static ExpectedStreamVersion FromInt64(long version) => new(version);
 
     public long ToInt64() => _value;
+
+    public override string ToString()
+    {
+        if (this == None) return nameof(None);
+        if (this == Exists) return nameof(Exists);
+        if (this == Any) return nameof(Any);
+        return _value.ToString();
+    }
 
     public bool Equals(ExpectedStreamVersion other)
     {

@@ -30,9 +30,17 @@ public class KurrentDBEventDataStore(KurrentDBClient client) : IEventStoreBacken
                 ? Direction.Forwards
                 : Direction.Backwards;
 
-            var kurrentFromVersion = fromPosition != null
-                ? KurrentStreamPosition.FromInt64(fromPosition.Value.ToInt64())
-                : KurrentStreamPosition.Start;
+            var kurrentFromVersion = KurrentStreamPosition.Start;
+
+            if (fromPosition.HasValue)
+            {
+                if (fromPosition.Value.IsStart)
+                    kurrentFromVersion = KurrentStreamPosition.Start;
+                else if (fromPosition.Value.IsEnd)
+                    kurrentFromVersion = KurrentStreamPosition.End;
+                else
+                    kurrentFromVersion = KurrentStreamPosition.FromInt64(fromPosition.Value.ToInt64());
+            }
 
             readStreamResult = client.ReadStreamAsync(
                 kurrentDirection,

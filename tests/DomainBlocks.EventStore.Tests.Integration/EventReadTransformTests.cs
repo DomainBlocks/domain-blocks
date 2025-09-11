@@ -24,9 +24,9 @@ public class EventReadTransformTests
         var dispatchedAt = new DateTime(2025, 08, 25, 14, 30, 0, DateTimeKind.Utc);
 
         var legacyEvent = new ShipmentDispatched(
-            ShipmentId: shipmentId,
-            DispatchedAt: dispatchedAt,
-            Packages: new List<PackageInfo>
+            shipmentId,
+            dispatchedAt,
+            new List<PackageInfo>
             {
                 new("TRACK-001", 2.5, "Lisbon, PT"),
                 new("TRACK-002", 1.2, "Porto, PT"),
@@ -36,23 +36,23 @@ public class EventReadTransformTests
         var expectedEvents = new object[]
         {
             new ShipmentDispatchedV2(
-                ShipmentId: shipmentId,
-                DispatchedAt: dispatchedAt),
+                shipmentId,
+                dispatchedAt),
 
             new PackageShipped(
-                ShipmentId: shipmentId,
+                shipmentId,
                 TrackingNumber: "TRACK-001",
                 WeightKg: 2.5,
                 Destination: "Lisbon, PT"),
 
             new PackageShipped(
-                ShipmentId: shipmentId,
+                shipmentId,
                 TrackingNumber: "TRACK-002",
                 WeightKg: 1.2,
                 Destination: "Porto, PT"),
 
             new PackageShipped(
-                ShipmentId: shipmentId,
+                shipmentId,
                 TrackingNumber: "TRACK-003",
                 WeightKg: 5.0,
                 Destination: "Madrid, ES")

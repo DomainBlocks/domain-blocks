@@ -19,6 +19,23 @@ public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider e
         return await LoadInternalAsync<TEntity>(entityId, throwIfStreamNotFound: false, cancellationToken);
     }
 
+    public async Task SaveAsync<TEntity>(Versioned<TEntity> entity, CancellationToken cancellationToken = default)
+        where TEntity : notnull
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        var entityAdapter = GetEntityAdapter<TEntity>();
+
+        var uncommittedEvents = entityAdapter.GetUncommittedEvents(entity.Entity).ToArray();
+        if (uncommittedEvents.Length == 0)
+            return;
+
+        var entityId = entityAdapter.GetId(entity.Entity);
+        var streamName = GetStreamName<TEntity>(entityId);
+
+        await eventStore.AppendToStreamAsync(streamName, uncommittedEvents, entity.ExpectedVersion, cancellationToken);
+    }
+
     private async Task<Versioned<TEntity>> LoadInternalAsync<TEntity>(
         string entityId,
         bool throwIfStreamNotFound = false,
@@ -42,7 +59,8 @@ public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider e
 
         var entity = await entityAdapter.RestoreAsync(initialState, EnumerateEvents(), cancellationToken);
 
-        return Versioned.From(entity, ExpectedStreamVersion.At(loadedVersion));
+        // TODO (DS): Consider having a LoadedStreamVersion, as Exists and Any doesn't make sense here (?)
+        return Versioned.From(entity, ExpectedStreamVersion.FromInt64(loadedVersion));
 
         async IAsyncEnumerable<object> EnumerateEvents()
         {
@@ -52,23 +70,6 @@ public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider e
                 yield return @event.Payload;
             }
         }
-    }
-
-    public async Task SaveAsync<TEntity>(Versioned<TEntity> entity, CancellationToken cancellationToken = default)
-        where TEntity : notnull
-    {
-        ArgumentNullException.ThrowIfNull(entity);
-
-        var entityAdapter = GetEntityAdapter<TEntity>();
-
-        var uncommittedEvents = entityAdapter.GetUncommittedEvents(entity.Entity).ToArray();
-        if (uncommittedEvents.Length == 0)
-            return;
-
-        var entityId = entityAdapter.GetId(entity.Entity);
-        var streamName = GetStreamName<TEntity>(entityId);
-
-        await eventStore.AppendToStreamAsync(streamName, uncommittedEvents, entity.ExpectedVersion, cancellationToken);
     }
 
     private IEntityAdapter<TEntity> GetEntityAdapter<TEntity>() where TEntity : notnull

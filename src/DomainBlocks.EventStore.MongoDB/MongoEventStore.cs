@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using DomainBlocks.EventStore.Abstractions;
 using MongoDB.Driver;
 
@@ -40,7 +41,9 @@ public class MongoEventStore<TEventDocument, TPayload>(
 {
     private readonly FieldDefinition<TEventDocument, string> _streamIdField = options.StreamIdField;
     private readonly FieldDefinition<TEventDocument, long> _streamVersionField = options.StreamVersionField;
-    private readonly Func<TEventDocument, long> _streamVersionSelector = options.StreamVersionSelector.Compile();
+
+    private readonly Expression<Func<TEventDocument, long?>> _streamVersionProjection =
+        ToNullable(options.StreamVersionSelector);
 
     public async Task AppendToStreamAsync(
         string streamId,
@@ -91,6 +94,7 @@ public class MongoEventStore<TEventDocument, TPayload>(
 
         fromPosition ??= direction == StreamReadDirection.Forward ? StreamPosition.Start : StreamPosition.End;
 
+        // TODO (DS): Logic isn't quite right for corner cases, e.g. read forward from end or backward from start.
         if (fromPosition.Value > StreamPosition.Start && fromPosition.Value < StreamPosition.End)
         {
             var versionFilter = direction == StreamReadDirection.Forward
@@ -109,6 +113,7 @@ public class MongoEventStore<TEventDocument, TPayload>(
             .Sort(sort)
             .ToCursorAsync(cancellationToken);
 
+        // TODO (DS): Is the additional !cursor.Current.Any() check needed?
         if (!await cursor.MoveNextAsync(cancellationToken) || !cursor.Current.Any())
             return ReadStreamResult<EventRecord<TPayload>>.NotFound();
 
@@ -129,14 +134,21 @@ public class MongoEventStore<TEventDocument, TPayload>(
         }
     }
 
+    private static Expression<Func<TEventDocument, long?>> ToNullable(Expression<Func<TEventDocument, long>> expr)
+    {
+        var body = Expression.Convert(expr.Body, typeof(long?));
+        return Expression.Lambda<Func<TEventDocument, long?>>(body, expr.Parameters[0]);
+    }
+
     private async Task<long> GetCurrentStreamVersionAsync(string streamId, CancellationToken cancellationToken)
     {
-        var first = await collection
+        var latestVersion = await collection
             .Find(Builders<TEventDocument>.Filter.Eq(_streamIdField, streamId))
             .Sort(Builders<TEventDocument>.Sort.Descending(_streamVersionField))
             .Limit(1)
+            .Project(_streamVersionProjection)
             .FirstOrDefaultAsync(cancellationToken);
 
-        return first == null ? -1 : _streamVersionSelector(first);
+        return latestVersion ?? -1;
     }
 }
