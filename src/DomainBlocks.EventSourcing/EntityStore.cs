@@ -9,14 +9,14 @@ public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider e
         string entityId,
         CancellationToken cancellationToken = default) where TEntity : notnull
     {
-        return await LoadInternalAsync<TEntity>(entityId, throwIfStreamNotFound: true, cancellationToken);
+        return await LoadInternalAsync<TEntity>(entityId, StreamNotFoundBehavior.Throw, cancellationToken);
     }
 
     public async Task<Versioned<TEntity>> LoadOrCreateAsync<TEntity>(
         string entityId,
         CancellationToken cancellationToken = default) where TEntity : notnull
     {
-        return await LoadInternalAsync<TEntity>(entityId, throwIfStreamNotFound: false, cancellationToken);
+        return await LoadInternalAsync<TEntity>(entityId, StreamNotFoundBehavior.CreateEntity, cancellationToken);
     }
 
     public async Task SaveAsync<TEntity>(Versioned<TEntity> entity, CancellationToken cancellationToken = default)
@@ -32,20 +32,21 @@ public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider e
 
         var entityId = entityAdapter.GetId(entity.Entity);
         var streamName = GetStreamName<TEntity>(entityId);
+        var expectedVersion = ExpectedStreamVersion.FromVersion(entity.Version);
 
-        await eventStore.AppendToStreamAsync(streamName, uncommittedEvents, entity.ExpectedVersion, cancellationToken);
+        await eventStore.AppendToStreamAsync(streamName, uncommittedEvents, expectedVersion, cancellationToken);
     }
 
     private async Task<Versioned<TEntity>> LoadInternalAsync<TEntity>(
         string entityId,
-        bool throwIfStreamNotFound = false,
+        StreamNotFoundBehavior streamNotFoundBehavior = StreamNotFoundBehavior.CreateEntity,
         CancellationToken cancellationToken = default)
         where TEntity : notnull
     {
         var streamName = GetStreamName<TEntity>(entityId);
         var result = await eventStore.ReadStreamAsync(streamName, cancellationToken: cancellationToken);
 
-        if (throwIfStreamNotFound && result.Status == ReadStreamStatus.StreamNotFound)
+        if (streamNotFoundBehavior == StreamNotFoundBehavior.Throw && result.Status == ReadStreamStatus.StreamNotFound)
         {
             throw new StreamNotFoundException($"Stream '{streamName}' could not be found.");
         }
@@ -55,18 +56,17 @@ public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider e
 
         // Used in closure of EnumerateEvents, so must be declared before the async enumerable is materialized, i.e.
         // before RestoreEntityAsync is invoked.
-        long loadedVersion = -1;
+        var loadedVersion = StreamVersion.None;
 
         var entity = await entityAdapter.RestoreAsync(initialState, EnumerateEvents(), cancellationToken);
 
-        // TODO (DS): Consider having a LoadedStreamVersion, as Exists and Any doesn't make sense here (?)
-        return Versioned.From(entity, ExpectedStreamVersion.FromInt64(loadedVersion));
+        return Versioned.From(entity, loadedVersion);
 
         async IAsyncEnumerable<object> EnumerateEvents()
         {
             await foreach (var @event in result.Events.WithCancellation(cancellationToken))
             {
-                loadedVersion++;
+                loadedVersion = loadedVersion.Next();
                 yield return @event.Payload;
             }
         }
@@ -83,5 +83,11 @@ public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider e
     {
         var streamNamePrefix = DefaultStreamNamePrefix.CreateFor(typeof(TEntity));
         return $"{streamNamePrefix}-{entityId}";
+    }
+
+    private enum StreamNotFoundBehavior
+    {
+        CreateEntity,
+        Throw
     }
 }

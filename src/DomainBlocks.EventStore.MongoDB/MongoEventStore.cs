@@ -20,15 +20,14 @@ public static class MongoEventStore
         CancellationToken cancellationToken = default)
     {
         var collection = database.GetCollection<TEventDocument>(options.CollectionName);
+        var indexBuilder = Builders<TEventDocument>.IndexKeys;
+        var uniqueKey = indexBuilder.Ascending(options.StreamIdField).Ascending(options.StreamVersionField);
+        var committedAt = indexBuilder.Ascending(options.CommittedAtField);
 
         CreateIndexModel<TEventDocument>[] indexModels =
         [
-            new(Builders<TEventDocument>.IndexKeys
-                    .Ascending(options.StreamIdField)
-                    .Ascending(options.StreamVersionField),
-                new CreateIndexOptions { Unique = true }),
-
-            new(Builders<TEventDocument>.IndexKeys.Ascending(options.CommittedAtField))
+            new(uniqueKey, new CreateIndexOptions { Unique = true }),
+            new(committedAt)
         ];
 
         return collection.Indexes.CreateManyAsync(indexModels, cancellationToken);
@@ -42,36 +41,30 @@ public class MongoEventStore<TEventDocument, TPayload>(
     private readonly FieldDefinition<TEventDocument, string> _streamIdField = options.StreamIdField;
     private readonly FieldDefinition<TEventDocument, long> _streamVersionField = options.StreamVersionField;
 
-    private readonly Expression<Func<TEventDocument, long?>> _streamVersionProjection =
-        ToNullable(options.StreamVersionSelector);
+    private readonly Expression<Func<TEventDocument, long?>> _streamVersionAsNullableExpression =
+        AsNullable(options.StreamVersionExpression);
+
+    private readonly Func<TEventDocument, long> _streamVersionFunc = options.StreamVersionExpression.Compile();
 
     public async Task AppendToStreamAsync(
         string streamId,
         IEnumerable<NewEventRecord<TPayload>> events,
-        ExpectedStreamVersion? expectedVersion = null,
+        ExpectedStreamVersion expectedVersion = default,
         CancellationToken cancellationToken = default)
     {
-        expectedVersion ??= ExpectedStreamVersion.Any;
-
         var currentStreamVersion = await GetCurrentStreamVersionAsync(streamId, cancellationToken);
 
-        if (expectedVersion == ExpectedStreamVersion.Exists && currentStreamVersion == -1)
-            throw new Exception("TODO");
+        if (expectedVersion == ExpectedStreamVersion.Exists && currentStreamVersion == StreamVersion.None)
+            throw new WrongExpectedVersionException(streamId, expectedVersion, currentStreamVersion);
 
-        var expectedVersionValue = expectedVersion == ExpectedStreamVersion.Any
-            ? currentStreamVersion
-            : expectedVersion.Value.ToInt64();
+        expectedVersion = expectedVersion == ExpectedStreamVersion.Any
+            ? ExpectedStreamVersion.FromVersion(currentStreamVersion)
+            : expectedVersion;
 
-        if (expectedVersionValue != currentStreamVersion)
-            throw new WrongExpectedVersionException(streamId, expectedVersionValue, currentStreamVersion);
+        if (expectedVersion.ToVersion() != currentStreamVersion)
+            throw new WrongExpectedVersionException(streamId, expectedVersion, currentStreamVersion);
 
-        var committedAt = DateTime.UtcNow;
-
-        var documents = events.Select((@event, index) =>
-        {
-            var streamVersion = currentStreamVersion + 1 + index;
-            return options.DocumentMapper.ToEventDocument(streamId, streamVersion, @event, committedAt);
-        });
+        var documents = ToEventDocuments(streamId, events, currentStreamVersion);
 
         try
         {
@@ -80,7 +73,7 @@ public class MongoEventStore<TEventDocument, TPayload>(
         }
         catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
         {
-            throw new WrongExpectedVersionException(streamId, expectedVersionValue, currentStreamVersion, ex);
+            throw new WrongExpectedVersionException(streamId, expectedVersion, currentStreamVersion, ex);
         }
     }
 
@@ -134,21 +127,42 @@ public class MongoEventStore<TEventDocument, TPayload>(
         }
     }
 
-    private static Expression<Func<TEventDocument, long?>> ToNullable(Expression<Func<TEventDocument, long>> expr)
+    private static Expression<Func<TEventDocument, long?>> AsNullable(Expression<Func<TEventDocument, long>> expr)
     {
         var body = Expression.Convert(expr.Body, typeof(long?));
         return Expression.Lambda<Func<TEventDocument, long?>>(body, expr.Parameters[0]);
     }
 
-    private async Task<long> GetCurrentStreamVersionAsync(string streamId, CancellationToken cancellationToken)
+    private async Task<StreamVersion> GetCurrentStreamVersionAsync(string streamId, CancellationToken cancellationToken)
     {
         var latestVersion = await collection
             .Find(Builders<TEventDocument>.Filter.Eq(_streamIdField, streamId))
             .Sort(Builders<TEventDocument>.Sort.Descending(_streamVersionField))
             .Limit(1)
-            .Project(_streamVersionProjection)
+            .Project(_streamVersionAsNullableExpression)
             .FirstOrDefaultAsync(cancellationToken);
 
-        return latestVersion ?? -1;
+        return latestVersion == null ? StreamVersion.None : StreamVersion.FromInt64(latestVersion.Value);
+    }
+
+    private IEnumerable<TEventDocument> ToEventDocuments(
+        string streamId,
+        IEnumerable<NewEventRecord<TPayload>> events,
+        StreamVersion currentStreamVersion)
+    {
+        var committedAt = DateTime.UtcNow;
+
+        return events.Select((@event, index) =>
+        {
+            var streamVersion = currentStreamVersion.Add(index + 1);
+            var doc = options.DocumentMapper.ToEventDocument(streamId, streamVersion, @event, committedAt);
+
+            if (_streamVersionFunc(doc) != streamVersion.ToInt64())
+                throw new InvalidOperationException(
+                    $"Event document mapper produced an invalid stream version. " +
+                    $"Expected={streamVersion.ToInt64()}, Actual={_streamVersionFunc(doc)}.");
+
+            return doc;
+        });
     }
 }

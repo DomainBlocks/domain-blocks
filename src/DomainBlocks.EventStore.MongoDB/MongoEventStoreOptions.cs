@@ -9,7 +9,7 @@ public static class MongoEventStoreOptions
     public static MongoEventStoreOptions<EventDocument<BsonDocument>, BsonDocument> CreateDefault(
         string collectionName = "events")
     {
-        return CreateDefault<BsonDocument>();
+        return CreateDefault<BsonDocument>(collectionName);
     }
 
     public static MongoEventStoreOptions<EventDocument<TPayload>, TPayload> CreateDefault<TPayload>(
@@ -19,9 +19,9 @@ public static class MongoEventStoreOptions
         {
             CollectionName = collectionName,
             DocumentMapper = new EventDocumentMapper<TPayload>(),
-            StreamIdSelector = doc => doc.StreamId,
-            StreamVersionSelector = doc => doc.StreamVersion,
-            CommittedAtSelector = doc => doc.CommittedAt
+            StreamIdExpression = doc => doc.StreamId,
+            StreamVersionExpression = doc => doc.StreamVersion,
+            CommittedAtExpression = doc => doc.CommittedAt
         };
     }
 }
@@ -30,16 +30,16 @@ public class MongoEventStoreOptions<TEventDocument, TPayload>
 {
     public required string CollectionName { get; init; }
     public required IEventDocumentMapper<TEventDocument, TPayload> DocumentMapper { get; init; }
-    public required Expression<Func<TEventDocument, string>> StreamIdSelector { get; init; }
-    public required Expression<Func<TEventDocument, long>> StreamVersionSelector { get; init; }
-    public required Expression<Func<TEventDocument, DateTime>> CommittedAtSelector { get; init; }
+    public required Expression<Func<TEventDocument, string>> StreamIdExpression { get; init; }
+    public required Expression<Func<TEventDocument, long>> StreamVersionExpression { get; init; }
+    public required Expression<Func<TEventDocument, DateTime>> CommittedAtExpression { get; init; }
 
     internal FieldDefinition<TEventDocument, string> StreamIdField =>
-        new ExpressionFieldDefinition<TEventDocument, string>(StreamIdSelector);
+        new ExpressionFieldDefinition<TEventDocument, string>(StreamIdExpression);
 
     internal FieldDefinition<TEventDocument, long> StreamVersionField =>
-        new ExpressionFieldDefinition<TEventDocument, long>(StreamVersionSelector);
+        new ExpressionFieldDefinition<TEventDocument, long>(StreamVersionExpression);
 
     internal FieldDefinition<TEventDocument, DateTime> CommittedAtField =>
-        new ExpressionFieldDefinition<TEventDocument, DateTime>(CommittedAtSelector);
+        new ExpressionFieldDefinition<TEventDocument, DateTime>(CommittedAtExpression);
 }

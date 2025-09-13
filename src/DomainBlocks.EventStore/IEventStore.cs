@@ -7,7 +7,7 @@ public interface IEventStore
     Task AppendToStreamAsync(
         string streamId,
         IEnumerable<object> events,
-        ExpectedStreamVersion? expectedVersion = null,
+        ExpectedStreamVersion expectedVersion = default,
         CancellationToken cancellationToken = default);
 
     Task<ReadStreamResult<EventRecord<object>>> ReadStreamAsync(

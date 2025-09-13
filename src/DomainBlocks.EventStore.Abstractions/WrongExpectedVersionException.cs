@@ -4,16 +4,19 @@ namespace DomainBlocks.EventStore.Abstractions;
 
 public class WrongExpectedVersionException(
     string streamId,
-    long expectedVersion,
-    long actualVersion,
+    ExpectedStreamVersion expectedVersion,
+    StreamVersion actualVersion,
     Exception? innerException = null) :
     DomainBlocksException(GetMessage(streamId, expectedVersion, actualVersion), innerException)
 {
     public string StreamId { get; } = streamId;
-    public long ExpectedVersion { get; } = expectedVersion;
-    public long ActualVersion { get; } = actualVersion;
+    public ExpectedStreamVersion ExpectedVersion { get; } = expectedVersion;
+    public StreamVersion ActualVersion { get; } = actualVersion;
 
-    private static string GetMessage(string streamId, long expectedVersion, long actualVersion)
+    private static string GetMessage(
+        string streamId,
+        ExpectedStreamVersion expectedVersion,
+        StreamVersion actualVersion)
     {
         return $"Append to stream '{streamId}' failed due to a concurrency conflict. " +
                $"Expected version {expectedVersion}, but found {actualVersion}.";

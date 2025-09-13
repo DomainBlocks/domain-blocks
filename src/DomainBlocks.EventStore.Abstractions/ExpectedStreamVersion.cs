@@ -2,20 +2,35 @@ namespace DomainBlocks.EventStore.Abstractions;
 
 public readonly struct ExpectedStreamVersion : IEquatable<ExpectedStreamVersion>
 {
-    public static readonly ExpectedStreamVersion None = new(-1);
-    public static readonly ExpectedStreamVersion Exists = new(-2);
-    public static readonly ExpectedStreamVersion Any = new(-3);
+    public static readonly ExpectedStreamVersion Any = new(0, ExpectedStreamVersionKind.Any);
+    public static readonly ExpectedStreamVersion Exists = new(0, ExpectedStreamVersionKind.Exists);
+    public static readonly ExpectedStreamVersion None = new(0, ExpectedStreamVersionKind.None);
 
-    private readonly long _value;
+    private readonly long _value; // Only meaningful when Kind == Specific
 
-    private ExpectedStreamVersion(long value)
+    private ExpectedStreamVersion(long value, ExpectedStreamVersionKind kind)
     {
         _value = value;
+        Kind = kind;
     }
 
-    public static ExpectedStreamVersion FromInt64(long version) => new(version);
+    public ExpectedStreamVersionKind Kind { get; }
 
-    public long ToInt64() => _value;
+    public static ExpectedStreamVersion FromVersion(StreamVersion version)
+    {
+        return version == StreamVersion.None
+            ? None
+            : new ExpectedStreamVersion(version.ToInt64(), ExpectedStreamVersionKind.Specific);
+    }
+
+    public StreamVersion ToVersion()
+    {
+        if (this == Any || this == Exists)
+            throw new InvalidOperationException(
+                $"Cannot convert ExpectedStreamVersion of kind '{Kind}' to a StreamVersion.");
+
+        return this == None ? StreamVersion.None : StreamVersion.FromInt64(_value);
+    }
 
     public override string ToString()
     {
@@ -27,7 +42,7 @@ public readonly struct ExpectedStreamVersion : IEquatable<ExpectedStreamVersion>
 
     public bool Equals(ExpectedStreamVersion other)
     {
-        return _value == other._value;
+        return _value == other._value && Kind == other.Kind;
     }
 
     public override bool Equals(object? obj)
@@ -37,7 +52,7 @@ public readonly struct ExpectedStreamVersion : IEquatable<ExpectedStreamVersion>
 
     public override int GetHashCode()
     {
-        return _value.GetHashCode();
+        return HashCode.Combine(_value, (int)Kind);
     }
 
     public static bool operator ==(ExpectedStreamVersion left, ExpectedStreamVersion right)

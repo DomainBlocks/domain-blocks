@@ -6,7 +6,7 @@ public interface IEventDocumentMapper<TEventDocument, TPayload>
 {
     TEventDocument ToEventDocument(
         string streamId,
-        long streamVersion,
+        StreamVersion streamVersion,
         NewEventRecord<TPayload> @event,
         DateTime committedAt);
 

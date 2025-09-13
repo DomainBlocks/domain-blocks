@@ -10,7 +10,7 @@ public class KurrentDBEventDataStore(KurrentDBClient client) : IEventStoreBacken
     public Task AppendToStreamAsync(
         string streamId,
         IEnumerable<NewEventRecord<ReadOnlyMemory<byte>>> events,
-        ExpectedStreamVersion? expectedVersion = null,
+        ExpectedStreamVersion expectedVersion = default,
         CancellationToken cancellationToken = default)
     {
         throw new NotImplementedException();

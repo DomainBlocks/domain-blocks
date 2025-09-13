@@ -3,24 +3,27 @@ namespace DomainBlocks.EventStore.Abstractions;
 public readonly struct StreamVersion : IEquatable<StreamVersion>, IComparable<StreamVersion>, IComparable
 {
     public static readonly StreamVersion Zero = new(0);
+    public static readonly StreamVersion None = new(-1);
 
     private readonly long _value;
 
     private StreamVersion(long value)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThan(value, 0);
+        ArgumentOutOfRangeException.ThrowIfLessThan(value, -1);
         _value = value;
     }
 
-    public static StreamVersion FromInt64(long value) => new(value);
+    public bool HasValue => this != None;
 
-    public static StreamVersion FromUInt64(ulong value) => new(Convert.ToInt64(value));
+    public static StreamVersion FromInt64(long value) => new(value);
 
     public long ToInt64() => _value;
 
-    public ulong ToUInt64() => Convert.ToUInt64(_value);
+    public StreamVersion Next() => Add(1);
 
-    public override string ToString() => _value.ToString();
+    public StreamVersion Add(long value) => FromInt64(checked(_value + value));
+
+    public override string ToString() => this == None ? nameof(None) : _value.ToString();
 
     public bool Equals(StreamVersion other)
     {

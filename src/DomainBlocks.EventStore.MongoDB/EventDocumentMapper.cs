@@ -7,14 +7,14 @@ public sealed class EventDocumentMapper<TPayload> : IEventDocumentMapper<EventDo
 {
     public EventDocument<TPayload> ToEventDocument(
         string streamId,
-        long streamVersion,
+        StreamVersion streamVersion,
         NewEventRecord<TPayload> @event,
         DateTime committedAt)
     {
         return new EventDocument<TPayload>
         {
             StreamId = streamId,
-            StreamVersion = streamVersion,
+            StreamVersion = streamVersion.ToInt64(),
             EventName = @event.Header.EventName,
             Metadata = @event.Header.Metadata,
             CommittedAt = committedAt,

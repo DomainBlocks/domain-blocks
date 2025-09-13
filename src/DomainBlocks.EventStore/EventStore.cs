@@ -26,7 +26,7 @@ public class EventStore<TPayload> : IEventStore
     public async Task AppendToStreamAsync(
         string streamId,
         IEnumerable<object> events,
-        ExpectedStreamVersion? expectedVersion = null,
+        ExpectedStreamVersion expectedVersion = default,
         CancellationToken cancellationToken = default)
     {
         var records = events
