@@ -15,8 +15,8 @@ public sealed class EventDocumentMapper<TPayload> : IEventDocumentMapper<EventDo
         {
             StreamId = streamId,
             StreamVersion = streamVersion.ToInt64(),
-            EventName = @event.Header.EventName,
-            Metadata = @event.Header.Metadata,
+            EventName = @event.Header.GetEventNameOrThrow(),
+            Metadata = @event.Header.Metadata.ToDictionary(),
             CommittedAt = committedAt,
             Payload = @event.Payload
         };

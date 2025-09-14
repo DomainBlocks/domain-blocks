@@ -10,6 +10,12 @@ public interface IEventStore
         ExpectedStreamState expectedState = default,
         CancellationToken cancellationToken = default);
 
+    Task AppendToStreamAsync(
+        string streamId,
+        IEnumerable<NewEventRecord<object>> events,
+        ExpectedStreamState expectedState = default,
+        CancellationToken cancellationToken = default);
+
     Task<ReadStreamResult<EventRecord<object>>> ReadStreamAsync(
         string streamId,
         StreamReadDirection direction = StreamReadDirection.Forward,

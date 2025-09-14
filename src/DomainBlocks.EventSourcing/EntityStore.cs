@@ -25,12 +25,23 @@ public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider e
         ArgumentNullException.ThrowIfNull(entity);
 
         var entityAdapter = GetEntityAdapter<TEntity>();
+        var entityId = entityAdapter.GetId(entity.Entity);
 
-        var uncommittedEvents = entityAdapter.GetUncommittedEvents(entity.Entity).ToArray();
+        // PoC for stamping out metadata for entities.
+        KeyValuePair<string, string>[] metadata =
+        [
+            KeyValuePair.Create("EntityClrType", entity.Entity.GetType().Name)
+        ];
+
+        var header = new NewEventHeader(metadata: metadata);
+
+        var uncommittedEvents = entityAdapter.GetUncommittedEvents(entity.Entity)
+            .Select(e => NewEventRecord.Create(header, e))
+            .ToArray();
+
         if (uncommittedEvents.Length == 0)
             return;
 
-        var entityId = entityAdapter.GetId(entity.Entity);
         var streamName = GetStreamName<TEntity>(entityId);
         var expectedState = ExpectedStreamState.FromVersion(entity.Version);
 

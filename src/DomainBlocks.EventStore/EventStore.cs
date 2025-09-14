@@ -24,16 +24,27 @@ public class EventStore<TPayload> : IEventStore
         _readTransforms = options.ReadTransforms.ToFrozenDictionary(x => x.FromType);
     }
 
-    public async Task AppendToStreamAsync(
+    public Task AppendToStreamAsync(
         string streamId,
         IEnumerable<object> events,
         ExpectedStreamState expectedState = default,
         CancellationToken cancellationToken = default)
     {
+        var records = events.Select(e => NewEventRecord.Create(new NewEventHeader(), e));
+        return AppendToStreamAsync(streamId, records, expectedState, cancellationToken);
+    }
+
+    public async Task AppendToStreamAsync(
+        string streamId,
+        IEnumerable<NewEventRecord<object>> events,
+        ExpectedStreamState expectedState = default,
+        CancellationToken cancellationToken = default)
+    {
         var records = events
-            .Select(@event =>
+            .Select(e =>
             {
                 string eventName;
+                var @event = e.Payload;
 
                 if (_contractMappersByEventType.TryGetValue(@event.GetType(), out var mapper))
                 {
@@ -45,8 +56,13 @@ public class EventStore<TPayload> : IEventStore
                     eventName = _eventTypeMapper.GetEventName(@event.GetType());
                 }
 
+                var header = e.Header
+                    .WithEventName(eventName)
+                    .WithMetadata("EventClrType", @event.GetType().Name);
+
                 var payload = _serializer.Serialize(@event);
-                return NewEventRecord.Create(new NewEventHeader(eventName), payload);
+
+                return NewEventRecord.Create(header, payload);
             });
 
         await _backend.AppendToStreamAsync(streamId, records, expectedState, cancellationToken);
