@@ -60,8 +60,8 @@ public class EventStore<TPayload> : IEventStore
         var result = await _backend.ReadStreamAsync(streamId, direction, fromPosition, cancellationToken);
 
         return result.Status == ReadStreamStatus.Success
-            ? ReadStreamResult<EventRecord<object>>.Success(TransformEvents())
-            : ReadStreamResult<EventRecord<object>>.NotFound();
+            ? ReadStreamResult.Success(TransformEvents())
+            : ReadStreamResult.NotFound<EventRecord<object>>();
 
         async IAsyncEnumerable<EventRecord<object>> TransformEvents()
         {

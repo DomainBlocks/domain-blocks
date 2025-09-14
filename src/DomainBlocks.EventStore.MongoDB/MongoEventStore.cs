@@ -52,19 +52,20 @@ public class MongoEventStore<TEventDocument, TPayload>(
         ExpectedStreamVersion expectedVersion = default,
         CancellationToken cancellationToken = default)
     {
-        var currentStreamVersion = await GetCurrentStreamVersionAsync(streamId, cancellationToken);
+        var currentVersion = await GetCurrentStreamVersionAsync(streamId, cancellationToken);
 
-        if (expectedVersion == ExpectedStreamVersion.Exists && currentStreamVersion == StreamVersion.None)
-            throw new WrongExpectedVersionException(streamId, expectedVersion, currentStreamVersion);
+        if (expectedVersion == ExpectedStreamVersion.Exists && currentVersion == StreamVersion.None)
+            throw new WrongExpectedVersionException(streamId, expectedVersion, currentVersion);
 
         expectedVersion = expectedVersion == ExpectedStreamVersion.Any
-            ? ExpectedStreamVersion.FromVersion(currentStreamVersion)
+            ? ExpectedStreamVersion.FromVersion(currentVersion)
             : expectedVersion;
 
-        if (expectedVersion.ToVersion() != currentStreamVersion)
-            throw new WrongExpectedVersionException(streamId, expectedVersion, currentStreamVersion);
+        if (expectedVersion.ToVersion() != currentVersion)
+            // Consider retrying N times here for expected version 'Any'.
+            throw new WrongExpectedVersionException(streamId, expectedVersion, currentVersion);
 
-        var documents = ToEventDocuments(streamId, events, currentStreamVersion);
+        var documents = ToEventDocuments(streamId, events, currentVersion);
 
         try
         {
@@ -73,7 +74,7 @@ public class MongoEventStore<TEventDocument, TPayload>(
         }
         catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
         {
-            throw new WrongExpectedVersionException(streamId, expectedVersion, currentStreamVersion, ex);
+            throw new WrongExpectedVersionException(streamId, expectedVersion, currentVersion, ex);
         }
     }
 
@@ -83,16 +84,22 @@ public class MongoEventStore<TEventDocument, TPayload>(
         StreamPosition? fromPosition = null,
         CancellationToken cancellationToken = default)
     {
-        var filter = Builders<TEventDocument>.Filter.Eq(_streamIdField, streamId);
-
         fromPosition ??= direction == StreamReadDirection.Forward ? StreamPosition.Start : StreamPosition.End;
 
-        // TODO (DS): Logic isn't quite right for corner cases, e.g. read forward from end or backward from start.
-        if (fromPosition.Value > StreamPosition.Start && fromPosition.Value < StreamPosition.End)
+        // Edge cases: empty range
+        if (fromPosition.Value.IsStart && direction == StreamReadDirection.Backward ||
+            fromPosition.Value.IsEnd && direction == StreamReadDirection.Forward)
+            return ReadStreamResult.RangeEmpty<EventRecord<TPayload>>();
+
+        var filter = Builders<TEventDocument>.Filter.Eq(_streamIdField, streamId);
+
+        if (fromPosition.Value.IsSpecific)
         {
+            var streamVersion = fromPosition.Value.Version.ToInt64();
+
             var versionFilter = direction == StreamReadDirection.Forward
-                ? Builders<TEventDocument>.Filter.Gte(_streamVersionField, fromPosition.Value.ToInt64())
-                : Builders<TEventDocument>.Filter.Lte(_streamVersionField, fromPosition.Value.ToInt64());
+                ? Builders<TEventDocument>.Filter.Gte(_streamVersionField, streamVersion)
+                : Builders<TEventDocument>.Filter.Lte(_streamVersionField, streamVersion);
 
             filter = Builders<TEventDocument>.Filter.And(filter, versionFilter);
         }
@@ -106,11 +113,10 @@ public class MongoEventStore<TEventDocument, TPayload>(
             .Sort(sort)
             .ToCursorAsync(cancellationToken);
 
-        // TODO (DS): Is the additional !cursor.Current.Any() check needed?
         if (!await cursor.MoveNextAsync(cancellationToken) || !cursor.Current.Any())
-            return ReadStreamResult<EventRecord<TPayload>>.NotFound();
+            return ReadStreamResult.NotFound<EventRecord<TPayload>>();
 
-        return ReadStreamResult<EventRecord<TPayload>>.Success(Enumerate());
+        return ReadStreamResult.Success(Enumerate());
 
         async IAsyncEnumerable<EventRecord<TPayload>> Enumerate()
         {
@@ -119,9 +125,7 @@ public class MongoEventStore<TEventDocument, TPayload>(
                 do
                 {
                     foreach (var doc in cursor.Current)
-                    {
                         yield return options.DocumentMapper.FromEventDocument(doc);
-                    }
                 } while (await cursor.MoveNextAsync(cancellationToken));
             }
         }
@@ -142,7 +146,7 @@ public class MongoEventStore<TEventDocument, TPayload>(
             .Project(_streamVersionAsNullableExpression)
             .FirstOrDefaultAsync(cancellationToken);
 
-        return latestVersion == null ? StreamVersion.None : StreamVersion.FromInt64(latestVersion.Value);
+        return StreamVersion.FromInt64(latestVersion ?? -1);
     }
 
     private IEnumerable<TEventDocument> ToEventDocuments(
@@ -157,6 +161,7 @@ public class MongoEventStore<TEventDocument, TPayload>(
             var streamVersion = currentStreamVersion.Add(index + 1);
             var doc = options.DocumentMapper.ToEventDocument(streamId, streamVersion, @event, committedAt);
 
+            // Ensure the mapped document has the expected version.
             if (_streamVersionFunc(doc) != streamVersion.ToInt64())
                 throw new InvalidOperationException(
                     $"Event document mapper produced an invalid stream version. " +

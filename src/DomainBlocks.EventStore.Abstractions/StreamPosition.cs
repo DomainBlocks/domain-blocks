@@ -1,94 +1,35 @@
 namespace DomainBlocks.EventStore.Abstractions;
 
-public readonly struct StreamPosition : IEquatable<StreamPosition>, IComparable<StreamPosition>, IComparable
+public readonly struct StreamPosition
 {
-    public static readonly StreamPosition Start = new(0);
-    public static readonly StreamPosition End = new(long.MaxValue);
+    public static readonly StreamPosition Start = new(StreamVersion.None, StreamPositionKind.Start);
+    public static readonly StreamPosition End = new(StreamVersion.None, StreamPositionKind.End);
 
-    private readonly long _value;
-
-    private StreamPosition(long value)
+    private StreamPosition(StreamVersion version, StreamPositionKind kind)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThan(value, 0);
-        _value = value;
+        Version = version;
+        Kind = kind;
     }
 
-    public bool IsStart => this == Start;
+    public StreamVersion Version { get; }
 
-    public bool IsEnd => this == End;
+    public StreamPositionKind Kind { get; }
 
-    public static StreamPosition At(StreamVersion version) => new(version.ToInt64());
+    public bool IsStart => Kind == StreamPositionKind.Start;
 
-    public static StreamPosition FromInt64(long value) => new(value);
+    public bool IsEnd => Kind == StreamPositionKind.End;
 
-    public static StreamPosition FromUInt64(ulong value) => new(Convert.ToInt64(value));
+    public bool IsSpecific => Kind == StreamPositionKind.Specific;
 
-    public long ToInt64() => _value;
-
-    public ulong ToUInt64() => Convert.ToUInt64(_value);
+    public static StreamPosition At(StreamVersion version)
+    {
+        return version == StreamVersion.None ? Start : new StreamPosition(version, StreamPositionKind.Specific);
+    }
 
     public override string ToString()
     {
-        if (this == Start) return nameof(Start);
-        if (this == End) return nameof(End);
-        return _value.ToString();
-    }
-
-    public bool Equals(StreamPosition other)
-    {
-        return _value == other._value;
-    }
-
-    public override bool Equals(object? obj)
-    {
-        return obj is StreamPosition other && Equals(other);
-    }
-
-    public override int GetHashCode()
-    {
-        return _value.GetHashCode();
-    }
-
-    public int CompareTo(StreamPosition other)
-    {
-        return _value.CompareTo(other._value);
-    }
-
-    public int CompareTo(object? obj)
-    {
-        if (obj is null) return 1;
-        return obj is StreamPosition other
-            ? CompareTo(other)
-            : throw new ArgumentException($"Object must be of type {nameof(StreamPosition)}");
-    }
-
-    public static bool operator ==(StreamPosition left, StreamPosition right)
-    {
-        return left.Equals(right);
-    }
-
-    public static bool operator !=(StreamPosition left, StreamPosition right)
-    {
-        return !left.Equals(right);
-    }
-
-    public static bool operator <(StreamPosition left, StreamPosition right)
-    {
-        return left.CompareTo(right) < 0;
-    }
-
-    public static bool operator >(StreamPosition left, StreamPosition right)
-    {
-        return left.CompareTo(right) > 0;
-    }
-
-    public static bool operator <=(StreamPosition left, StreamPosition right)
-    {
-        return left.CompareTo(right) <= 0;
-    }
-
-    public static bool operator >=(StreamPosition left, StreamPosition right)
-    {
-        return left.CompareTo(right) >= 0;
+        if (IsStart) return nameof(Start);
+        if (IsEnd) return nameof(End);
+        return Version.ToString();
     }
 }

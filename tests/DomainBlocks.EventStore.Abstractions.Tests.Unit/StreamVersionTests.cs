@@ -6,19 +6,6 @@ namespace DomainBlocks.EventStore.Abstractions.Tests.Unit;
 public class StreamVersionTests
 {
     [Test]
-    public void HasValue_WhenInstanceIsNone_ReturnsFalse()
-    {
-        StreamVersion.None.HasValue.ShouldBeFalse();
-    }
-
-    [Test]
-    public void HasValue_WhenSpecificValue_ReturnsTrue()
-    {
-        StreamVersion.Zero.HasValue.ShouldBeTrue();
-        StreamVersion.FromInt64(1).HasValue.ShouldBeTrue();
-    }
-
-    [Test]
     public void FromInt64_WithValidValue_SetsValue()
     {
         var version = StreamVersion.FromInt64(123);

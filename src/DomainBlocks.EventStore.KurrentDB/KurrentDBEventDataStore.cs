@@ -39,7 +39,7 @@ public class KurrentDBEventDataStore(KurrentDBClient client) : IEventStoreBacken
                 else if (fromPosition.Value.IsEnd)
                     kurrentFromVersion = KurrentStreamPosition.End;
                 else
-                    kurrentFromVersion = KurrentStreamPosition.FromInt64(fromPosition.Value.ToInt64());
+                    kurrentFromVersion = KurrentStreamPosition.FromInt64(fromPosition.Value.Version.ToInt64());
             }
 
             readStreamResult = client.ReadStreamAsync(
@@ -55,12 +55,10 @@ public class KurrentDBEventDataStore(KurrentDBClient client) : IEventStoreBacken
         }
 
         var readState = await readStreamResult.ReadState;
-        if (readState == ReadState.StreamNotFound)
-        {
-            return ReadStreamResult<EventRecord<ReadOnlyMemory<byte>>>.NotFound();
-        }
 
-        return ReadStreamResult<EventRecord<ReadOnlyMemory<byte>>>.Success(MapEventStream());
+        return readState == ReadState.StreamNotFound
+            ? ReadStreamResult.NotFound<EventRecord<ReadOnlyMemory<byte>>>()
+            : ReadStreamResult.Success(MapEventStream());
 
         async IAsyncEnumerable<EventRecord<ReadOnlyMemory<byte>>> MapEventStream()
         {
