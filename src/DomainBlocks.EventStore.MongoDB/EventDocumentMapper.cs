@@ -24,7 +24,7 @@ public sealed class EventDocumentMapper<TPayload> : IEventDocumentMapper<EventDo
 
     public EventRecord<TPayload> FromEventDocument(EventDocument<TPayload> document)
     {
-        return new EventRecord<TPayload>(
+        return EventRecord.Create(
             new EventHeader(
                 document.StreamId,
                 StreamVersion.FromInt64(document.StreamVersion),

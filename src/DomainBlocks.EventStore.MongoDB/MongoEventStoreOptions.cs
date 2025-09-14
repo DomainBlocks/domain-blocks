@@ -6,19 +6,21 @@ namespace DomainBlocks.EventStore.MongoDB;
 
 public static class MongoEventStoreOptions
 {
+    private const string DefaultEventCollectionName = "domainblocks.events";
+
     public static MongoEventStoreOptions<EventDocument<BsonDocument>, BsonDocument> CreateDefault(
-        string collectionName = "events")
+        string eventCollectionName = DefaultEventCollectionName)
     {
-        return CreateDefault<BsonDocument>(collectionName);
+        return CreateDefault<BsonDocument>(eventCollectionName);
     }
 
     public static MongoEventStoreOptions<EventDocument<TPayload>, TPayload> CreateDefault<TPayload>(
-        string collectionName = "events")
+        string eventCollectionName = DefaultEventCollectionName)
     {
         return new MongoEventStoreOptions<EventDocument<TPayload>, TPayload>
         {
-            CollectionName = collectionName,
-            DocumentMapper = new EventDocumentMapper<TPayload>(),
+            EventCollectionName = eventCollectionName,
+            EventDocumentMapper = new EventDocumentMapper<TPayload>(),
             StreamIdExpression = doc => doc.StreamId,
             StreamVersionExpression = doc => doc.StreamVersion,
             CommittedAtExpression = doc => doc.CommittedAt
@@ -28,8 +30,8 @@ public static class MongoEventStoreOptions
 
 public class MongoEventStoreOptions<TEventDocument, TPayload>
 {
-    public required string CollectionName { get; init; }
-    public required IEventDocumentMapper<TEventDocument, TPayload> DocumentMapper { get; init; }
+    public required string EventCollectionName { get; init; }
+    public required IEventDocumentMapper<TEventDocument, TPayload> EventDocumentMapper { get; init; }
     public required Expression<Func<TEventDocument, string>> StreamIdExpression { get; init; }
     public required Expression<Func<TEventDocument, long>> StreamVersionExpression { get; init; }
     public required Expression<Func<TEventDocument, DateTime>> CommittedAtExpression { get; init; }

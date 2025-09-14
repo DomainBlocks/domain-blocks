@@ -49,7 +49,7 @@ public sealed class WrongExpectedStreamStateException : DomainBlocksException
     {
         return new WrongExpectedStreamStateException(
             streamId,
-            WrongExpectedStreamStateReason.ExpectedStreamToExist,
+            WrongExpectedStreamStateReason.VersionConflict,
             expectedState,
             actualVersion);
     }

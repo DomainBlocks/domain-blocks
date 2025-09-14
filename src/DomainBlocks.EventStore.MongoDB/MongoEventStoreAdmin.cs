@@ -9,7 +9,7 @@ public static class MongoEventStoreAdmin
         MongoEventStoreOptions<TEventDocument, TPayload> options,
         CancellationToken cancellationToken = default)
     {
-        var collection = database.GetCollection<TEventDocument>(options.CollectionName);
+        var collection = database.GetCollection<TEventDocument>(options.EventCollectionName);
         var indexBuilder = Builders<TEventDocument>.IndexKeys;
         var uniqueKey = indexBuilder.Ascending(options.StreamIdField).Ascending(options.StreamVersionField);
         var committedAt = indexBuilder.Ascending(options.CommittedAtField);

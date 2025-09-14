@@ -1,5 +1,6 @@
 using DomainBlocks.EventStore.Abstractions;
 using KurrentDB.Client;
+using EventRecord = DomainBlocks.EventStore.Abstractions.EventRecord;
 using KurrentStreamPosition = KurrentDB.Client.StreamPosition;
 using StreamPosition = DomainBlocks.EventStore.Abstractions.StreamPosition;
 
@@ -72,9 +73,7 @@ public class KurrentDBEventDataStore(KurrentDBClient client) : IEventStoreBacken
                     resolvedEvent.Event.Created.Date,
                     GlobalPosition.FromUInt64(resolvedEvent.OriginalEvent.Position.CommitPosition));
 
-                yield return new EventRecord<ReadOnlyMemory<byte>>(
-                    header,
-                    resolvedEvent.Event.Data);
+                yield return EventRecord.Create(header, resolvedEvent.Event.Data);
             }
         }
     }

@@ -46,7 +46,7 @@ public class EventStore<TPayload> : IEventStore
                 }
 
                 var payload = _serializer.Serialize(@event);
-                return new NewEventRecord<TPayload>(new NewEventHeader(eventName), payload);
+                return NewEventRecord.Create(new NewEventHeader(eventName), payload);
             });
 
         await _backend.AppendToStreamAsync(streamId, records, expectedState, cancellationToken);
@@ -82,7 +82,7 @@ public class EventStore<TPayload> : IEventStore
 
                 if (queue == null)
                 {
-                    yield return new EventRecord<object>(record.Header, sourceEvent);
+                    yield return EventRecord.Create(record.Header, sourceEvent);
                     continue;
                 }
 
@@ -99,7 +99,7 @@ public class EventStore<TPayload> : IEventStore
                     }
                     else
                     {
-                        yield return new EventRecord<object>(record.Header, @event);
+                        yield return EventRecord.Create(record.Header, @event);
                     }
                 }
             }

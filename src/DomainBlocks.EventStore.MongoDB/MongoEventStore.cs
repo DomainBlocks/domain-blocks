@@ -10,7 +10,7 @@ public static class MongoEventStore
         IMongoDatabase database,
         MongoEventStoreOptions<TEventDocument, TPayload> options)
     {
-        var collection = database.GetCollection<TEventDocument>(options.CollectionName);
+        var collection = database.GetCollection<TEventDocument>(options.EventCollectionName);
         return new MongoEventStore<TEventDocument, TPayload>(collection, options);
     }
 }
@@ -22,7 +22,7 @@ public class MongoEventStore<TEventDocument, TPayload>(
     private readonly FieldDefinition<TEventDocument, string> _streamIdField = options.StreamIdField;
     private readonly FieldDefinition<TEventDocument, long> _streamVersionField = options.StreamVersionField;
 
-    private readonly Expression<Func<TEventDocument, long?>> _streamVersionAsNullableExpression =
+    private readonly Expression<Func<TEventDocument, long?>> _nullableStreamVersionExpression =
         AsNullable(options.StreamVersionExpression);
 
     private readonly Func<TEventDocument, long> _streamVersionFunc = options.StreamVersionExpression.Compile();
@@ -109,7 +109,7 @@ public class MongoEventStore<TEventDocument, TPayload>(
                 do
                 {
                     foreach (var doc in cursor.Current)
-                        yield return options.DocumentMapper.FromEventDocument(doc);
+                        yield return options.EventDocumentMapper.FromEventDocument(doc);
                 } while (await cursor.MoveNextAsync(cancellationToken));
             }
         }
@@ -127,7 +127,7 @@ public class MongoEventStore<TEventDocument, TPayload>(
             .Find(Builders<TEventDocument>.Filter.Eq(_streamIdField, streamId))
             .Sort(Builders<TEventDocument>.Sort.Descending(_streamVersionField))
             .Limit(1)
-            .Project(_streamVersionAsNullableExpression)
+            .Project(_nullableStreamVersionExpression)
             .FirstOrDefaultAsync(cancellationToken);
 
         return StreamVersion.FromInt64(latestVersion ?? -1);
@@ -143,7 +143,7 @@ public class MongoEventStore<TEventDocument, TPayload>(
         return events.Select((@event, index) =>
         {
             var streamVersion = currentStreamVersion.Add(index + 1);
-            var doc = options.DocumentMapper.ToEventDocument(streamId, streamVersion, @event, committedAt);
+            var doc = options.EventDocumentMapper.ToEventDocument(streamId, streamVersion, @event, committedAt);
 
             // Ensure the mapped document has the expected version.
             if (_streamVersionFunc(doc) != streamVersion.ToInt64())
