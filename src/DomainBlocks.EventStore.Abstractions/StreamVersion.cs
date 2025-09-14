@@ -13,6 +13,8 @@ public readonly struct StreamVersion : IEquatable<StreamVersion>, IComparable<St
         _value = value;
     }
 
+    public bool IsNone => this == None;
+
     public static StreamVersion FromInt64(long value) => new(value);
 
     public long ToInt64() => _value;

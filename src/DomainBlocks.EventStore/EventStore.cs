@@ -27,7 +27,7 @@ public class EventStore<TPayload> : IEventStore
     public async Task AppendToStreamAsync(
         string streamId,
         IEnumerable<object> events,
-        ExpectedStreamVersion expectedVersion = default,
+        ExpectedStreamState expectedState = default,
         CancellationToken cancellationToken = default)
     {
         var records = events
@@ -49,7 +49,7 @@ public class EventStore<TPayload> : IEventStore
                 return new NewEventRecord<TPayload>(new NewEventHeader(eventName), payload);
             });
 
-        await _backend.AppendToStreamAsync(streamId, records, expectedVersion, cancellationToken);
+        await _backend.AppendToStreamAsync(streamId, records, expectedState, cancellationToken);
     }
 
     public async Task<ReadStreamResult<EventRecord<object>>> ReadStreamAsync(

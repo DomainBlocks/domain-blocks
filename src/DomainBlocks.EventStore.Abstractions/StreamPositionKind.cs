@@ -16,7 +16,7 @@ public enum StreamPositionKind
     End,
 
     /// <summary>
-    /// The position at a specific version in the stream.
+    /// A position at a specific version in the stream.
     /// </summary>
-    Specific
+    SpecificVersion
 }

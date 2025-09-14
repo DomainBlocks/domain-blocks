@@ -58,7 +58,7 @@ public class EntityStoreTests
     }
 
     [Test]
-    public async Task WriteToExpectedNewStream_WhenNoStream_Succeeds()
+    public async Task WriteToExpectedNewStream_WhenStreamDoesNotExist_Succeeds()
     {
         var entity = new ShoppingCart();
         entity.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Foo"));
@@ -72,7 +72,7 @@ public class EntityStoreTests
     }
 
     [Test]
-    public async Task WriteToExpectedNewStream_WhenStreamExists_ThrowsWrongVersionException()
+    public async Task WriteToExpectedNewStream_WhenStreamExists_ThrowsWrongExpectedStreamStateException()
     {
         var entity1 = new ShoppingCart();
         entity1.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Foo"));
@@ -86,7 +86,8 @@ public class EntityStoreTests
 
         entity2.AddItem(new ShoppingCartItem(entity1.State.SessionId, "Bar"));
 
-        await Should.ThrowAsync<WrongExpectedVersionException>(() => _entityStore.SaveAsync(Versioned.New(entity2)));
+        await Should.ThrowAsync<WrongExpectedStreamStateException>(() =>
+            _entityStore.SaveAsync(Versioned.New(entity2)));
     }
 
     [Test]

@@ -30,21 +30,24 @@ public class MongoEventStore<TEventDocument, TPayload>(
     public async Task AppendToStreamAsync(
         string streamId,
         IEnumerable<NewEventRecord<TPayload>> events,
-        ExpectedStreamVersion expectedVersion = default,
+        ExpectedStreamState expectedState = default,
         CancellationToken cancellationToken = default)
     {
         var currentVersion = await GetCurrentStreamVersionAsync(streamId, cancellationToken);
 
-        if (expectedVersion == ExpectedStreamVersion.Exists && currentVersion == StreamVersion.None)
-            throw new WrongExpectedVersionException(streamId, expectedVersion, currentVersion);
+        if (expectedState.IsStreamExists && currentVersion.IsNone)
+            throw WrongExpectedStreamStateException.ExpectedStreamToExist(streamId);
 
-        expectedVersion = expectedVersion == ExpectedStreamVersion.Any
-            ? ExpectedStreamVersion.FromVersion(currentVersion)
-            : expectedVersion;
+        if (expectedState.IsStreamDoesNotExist && !currentVersion.IsNone)
+            throw WrongExpectedStreamStateException.ExpectedStreamToNotExist(streamId, currentVersion);
 
-        if (expectedVersion.ToVersion() != currentVersion)
-            // Consider retrying N times here for expected version 'Any'.
-            throw new WrongExpectedVersionException(streamId, expectedVersion, currentVersion);
+        expectedState = expectedState.IsAny || expectedState.IsStreamExists
+            ? ExpectedStreamState.FromVersion(currentVersion)
+            : expectedState;
+
+        if (expectedState.Version != currentVersion)
+            // Consider retrying N times here for expected state Any or Exists.
+            throw WrongExpectedStreamStateException.VersionConflict(streamId, expectedState, currentVersion);
 
         var documents = ToEventDocuments(streamId, events, currentVersion);
 
@@ -55,7 +58,7 @@ public class MongoEventStore<TEventDocument, TPayload>(
         }
         catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
         {
-            throw new WrongExpectedVersionException(streamId, expectedVersion, currentVersion, ex);
+            throw WrongExpectedStreamStateException.VersionConflict(streamId, expectedState, currentVersion);
         }
     }
 
@@ -74,9 +77,9 @@ public class MongoEventStore<TEventDocument, TPayload>(
 
         var filter = Builders<TEventDocument>.Filter.Eq(_streamIdField, streamId);
 
-        if (fromPosition.Value.IsSpecific)
+        if (fromPosition.Value.IsSpecificVersion)
         {
-            var streamVersion = fromPosition.Value.Version.ToInt64();
+            var streamVersion = fromPosition.Value.Version.Value.ToInt64();
 
             var versionFilter = direction == StreamReadDirection.Forward
                 ? Builders<TEventDocument>.Filter.Gte(_streamVersionField, streamVersion)

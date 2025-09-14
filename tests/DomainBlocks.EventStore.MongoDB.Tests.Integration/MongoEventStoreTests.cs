@@ -26,11 +26,22 @@ public class MongoEventStoreTests
                 })
         ];
 
-        var expectedVersion = ExpectedStreamVersion.Any;
-        await eventStore.AppendToStreamAsync("test-mongo-stream", events, expectedVersion);
-        //await eventStore.AppendToStreamAsync("test-stream", events2, expectedVersion + events.Length);
+        const string streamId = "test-mongo-stream1";
+        var expectedVersion = ExpectedStreamState.StreamExists;
 
-        var result = await eventStore.ReadStreamAsync("test-stream");
+        try
+        {
+            await eventStore.AppendToStreamAsync(streamId, events, expectedVersion);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e);
+            throw;
+        }
+
+        await eventStore.AppendToStreamAsync(streamId, events, ExpectedStreamState.Any);
+
+        var result = await eventStore.ReadStreamAsync(streamId);
 
         var readEvents = await result.Events.ToListAsync();
     }

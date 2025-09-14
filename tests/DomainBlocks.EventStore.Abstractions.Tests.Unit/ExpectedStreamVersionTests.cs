@@ -3,89 +3,88 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.Abstractions.Tests.Unit;
 
-public class ExpectedStreamVersionTests
+public class ExpectedStreamStateTests
 {
     [Test]
     public void Instance_WhenDefaultConstructed_EqualsAny()
     {
-        default(ExpectedStreamVersion).ShouldBe(ExpectedStreamVersion.Any);
+        default(ExpectedStreamState).ShouldBe(ExpectedStreamState.Any);
     }
 
     [Test]
-    public void Kind_WhenInstanceIsAny_ReturnsAny()
+    public void Kind_WhenInstanceIsAny_IsAny()
     {
-        ExpectedStreamVersion.Any.Kind.ShouldBe(ExpectedStreamVersionKind.Any);
+        ExpectedStreamState.Any.Kind.ShouldBe(ExpectedStreamStateKind.Any);
     }
 
     [Test]
-    public void Kind_WhenInstanceIsExists_ReturnsExits()
+    public void Kind_WhenInstanceIsStreamExists_IsStreamExists()
     {
-        ExpectedStreamVersion.Exists.Kind.ShouldBe(ExpectedStreamVersionKind.Exists);
+        ExpectedStreamState.StreamExists.Kind.ShouldBe(ExpectedStreamStateKind.StreamExists);
     }
 
     [Test]
-    public void Kind_WhenInstanceIsNone_ReturnsNone()
+    public void Kind_WhenInstanceIsStreamDoesNotExist_IsStreamDoesNotExist()
     {
-        ExpectedStreamVersion.None.Kind.ShouldBe(ExpectedStreamVersionKind.None);
+        ExpectedStreamState.StreamDoesNotExist.Kind.ShouldBe(ExpectedStreamStateKind.StreamDoesNotExist);
     }
 
     [Test]
-    public void FromVersion_WithNone_ReturnsNone()
+    public void FromVersion_WithNone_ReturnsStreamDoesNotExist()
     {
-        var result = ExpectedStreamVersion.FromVersion(StreamVersion.None);
-        result.ShouldBe(ExpectedStreamVersion.None);
+        var result = ExpectedStreamState.FromVersion(StreamVersion.None);
+        result.ShouldBe(ExpectedStreamState.StreamDoesNotExist);
     }
 
     [Test]
-    public void FromVersion_WithSpecificVersion_ReturnsSpecific()
+    public void FromVersion_WithSpecificVersion_ReturnsSpecificVersion()
     {
         var version = StreamVersion.FromInt64(42);
-        var result = ExpectedStreamVersion.FromVersion(version);
-        result.Kind.ShouldBe(ExpectedStreamVersionKind.Specific);
+        var result = ExpectedStreamState.FromVersion(version);
+        result.Kind.ShouldBe(ExpectedStreamStateKind.SpecificVersion);
     }
 
     [Test]
-    public void ToVersion_WhenAnyOrExists_ThrowsInvalidOperationException()
+    public void Version_WhenAnyOrStreamExists_IsNull()
     {
-        Should.Throw<InvalidOperationException>(() => ExpectedStreamVersion.Any.ToVersion());
-        Should.Throw<InvalidOperationException>(() => ExpectedStreamVersion.Exists.ToVersion());
+        ExpectedStreamState.Any.Version.ShouldBeNull();
+        ExpectedStreamState.StreamExists.Version.ShouldBeNull();
     }
 
     [Test]
-    public void ToVersion_WhenNone_ReturnsNone()
+    public void Version_WhenStreamDoesNotExist_IsNone()
     {
-        var result = ExpectedStreamVersion.None.ToVersion();
-        result.ShouldBe(StreamVersion.None);
+        ExpectedStreamState.StreamDoesNotExist.Version.ShouldBe(StreamVersion.None);
     }
 
     [Test]
-    public void ToVersion_WhenSpecificVersion_ReturnsCorrectVersion()
+    public void Version_WhenSpecificVersion_IsSpecificVersion()
     {
         var version = StreamVersion.FromInt64(123);
-        var expected = ExpectedStreamVersion.FromVersion(version);
-        expected.ToVersion().ShouldBe(version);
+        var expected = ExpectedStreamState.FromVersion(version);
+        expected.Version.ShouldBe(version);
     }
 
     [Test]
-    public void ToString_ForNonSpecificKinds_ReturnsName()
+    public void ToString_WhenNonSpecificVersion_ReturnsName()
     {
-        ExpectedStreamVersion.None.ToString().ShouldBe("None");
-        ExpectedStreamVersion.Exists.ToString().ShouldBe("Exists");
-        ExpectedStreamVersion.Any.ToString().ShouldBe("Any");
+        ExpectedStreamState.Any.ToString().ShouldBe("Any");
+        ExpectedStreamState.StreamExists.ToString().ShouldBe("StreamExists");
+        ExpectedStreamState.StreamDoesNotExist.ToString().ShouldBe("StreamDoesNotExist");
     }
 
     [Test]
-    public void ToString_ForSpecificKind_ReturnsNumericValue()
+    public void ToString_ForSpecificVersion_ReturnsNumericValue()
     {
-        var specific = ExpectedStreamVersion.FromVersion(StreamVersion.FromInt64(99));
-        specific.ToString().ShouldBe("99");
+        var specific = ExpectedStreamState.FromVersion(StreamVersion.FromInt64(99));
+        specific.ToString().ShouldBe("Version=99");
     }
 
     [Test]
     public void Equals_WhenValuesAreSame_ReturnsTrue()
     {
-        var a = ExpectedStreamVersion.FromVersion(StreamVersion.FromInt64(1));
-        var b = ExpectedStreamVersion.FromVersion(StreamVersion.FromInt64(1));
+        var a = ExpectedStreamState.FromVersion(StreamVersion.FromInt64(1));
+        var b = ExpectedStreamState.FromVersion(StreamVersion.FromInt64(1));
 
         a.Equals(b).ShouldBeTrue();
     }
@@ -93,8 +92,8 @@ public class ExpectedStreamVersionTests
     [Test]
     public void Equals_WhenValuesDiffer_ReturnsFalse()
     {
-        var a = ExpectedStreamVersion.FromVersion(StreamVersion.FromInt64(1));
-        var b = ExpectedStreamVersion.FromVersion(StreamVersion.FromInt64(2));
+        var a = ExpectedStreamState.FromVersion(StreamVersion.FromInt64(1));
+        var b = ExpectedStreamState.FromVersion(StreamVersion.FromInt64(2));
 
         a.Equals(b).ShouldBeFalse();
     }

@@ -10,7 +10,7 @@ public class KurrentDBEventDataStore(KurrentDBClient client) : IEventStoreBacken
     public Task AppendToStreamAsync(
         string streamId,
         IEnumerable<NewEventRecord<ReadOnlyMemory<byte>>> events,
-        ExpectedStreamVersion expectedVersion = default,
+        ExpectedStreamState expectedState = default,
         CancellationToken cancellationToken = default)
     {
         throw new NotImplementedException();
@@ -38,8 +38,8 @@ public class KurrentDBEventDataStore(KurrentDBClient client) : IEventStoreBacken
                     kurrentFromVersion = KurrentStreamPosition.Start;
                 else if (fromPosition.Value.IsEnd)
                     kurrentFromVersion = KurrentStreamPosition.End;
-                else
-                    kurrentFromVersion = KurrentStreamPosition.FromInt64(fromPosition.Value.Version.ToInt64());
+                else if (fromPosition.Value.IsSpecificVersion)
+                    kurrentFromVersion = KurrentStreamPosition.FromInt64(fromPosition.Value.Version.Value.ToInt64());
             }
 
             readStreamResult = client.ReadStreamAsync(

@@ -32,9 +32,9 @@ public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider e
 
         var entityId = entityAdapter.GetId(entity.Entity);
         var streamName = GetStreamName<TEntity>(entityId);
-        var expectedVersion = ExpectedStreamVersion.FromVersion(entity.Version);
+        var expectedState = ExpectedStreamState.FromVersion(entity.Version);
 
-        await eventStore.AppendToStreamAsync(streamName, uncommittedEvents, expectedVersion, cancellationToken);
+        await eventStore.AppendToStreamAsync(streamName, uncommittedEvents, expectedState, cancellationToken);
     }
 
     private async Task<Versioned<TEntity>> LoadInternalAsync<TEntity>(
