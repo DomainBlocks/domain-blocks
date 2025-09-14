@@ -30,7 +30,7 @@ public class EntityStoreTests
         var client = new MongoClient("mongodb://localhost:27017");
         var mongoDb = client.GetDatabase("test");
         var mongoOptions = MongoEventStoreOptions.CreateDefault();
-        await MongoEventStore.EnsureIndexesAsync(mongoDb, mongoOptions);
+        await MongoEventStoreAdmin.EnsureIndexesAsync(mongoDb, mongoOptions);
 
         var eventStoreOptions = new EventStoreOptions<BsonDocument>
         {

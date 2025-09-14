@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using System.Diagnostics;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.Serialization.Abstractions;
 
@@ -59,9 +60,13 @@ public class EventStore<TPayload> : IEventStore
     {
         var result = await _backend.ReadStreamAsync(streamId, direction, fromPosition, cancellationToken);
 
-        return result.Status == ReadStreamStatus.Success
-            ? ReadStreamResult.Success(TransformEvents())
-            : ReadStreamResult.NotFound<EventRecord<object>>();
+        return result.Status switch
+        {
+            ReadStreamStatus.Success => ReadStreamResult.Success(TransformEvents()),
+            ReadStreamStatus.StreamNotFound => ReadStreamResult.NotFound<EventRecord<object>>(),
+            ReadStreamStatus.RangeEmpty => ReadStreamResult.RangeEmpty<EventRecord<object>>(),
+            _ => throw new UnreachableException($"Unexpected {nameof(ReadStreamStatus)}: {result.Status}")
+        };
 
         async IAsyncEnumerable<EventRecord<object>> TransformEvents()
         {
