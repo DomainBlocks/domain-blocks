@@ -71,10 +71,10 @@ public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider e
 
         async IAsyncEnumerable<object> EnumerateEvents()
         {
-            await foreach (var @event in result.Events.WithCancellation(cancellationToken))
+            await foreach (var e in result.Events.WithCancellation(cancellationToken))
             {
-                loadedVersion = loadedVersion.Next();
-                yield return @event.Payload;
+                loadedVersion = e.Header.StreamVersion;
+                yield return e.Payload;
             }
         }
     }
