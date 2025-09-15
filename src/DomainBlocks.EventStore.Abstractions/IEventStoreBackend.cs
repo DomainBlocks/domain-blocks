@@ -5,7 +5,7 @@ public interface IEventStoreBackend<TPayload>
     Task AppendToStreamAsync(
         string streamId,
         IEnumerable<NewEventRecord<TPayload>> events,
-        ExpectedStreamVersion? expectedVersion = null,
+        ExpectedStreamState expectedState = default,
         CancellationToken cancellationToken = default);
 
     Task<ReadStreamResult<EventRecord<TPayload>>> ReadStreamAsync(

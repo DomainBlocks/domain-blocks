@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using System.Diagnostics;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.Serialization.Abstractions;
 
@@ -23,16 +24,26 @@ public class EventStore<TPayload> : IEventStore
         _readTransforms = options.ReadTransforms.ToFrozenDictionary(x => x.FromType);
     }
 
-    public async Task AppendToStreamAsync(
+    public Task AppendToStreamAsync(
         string streamId,
         IEnumerable<object> events,
-        ExpectedStreamVersion? expectedVersion = null,
+        ExpectedStreamState expectedState = default,
+        CancellationToken cancellationToken = default)
+    {
+        return AppendToStreamAsync(streamId, events.Select(NewEventRecord.Create), expectedState, cancellationToken);
+    }
+
+    public async Task AppendToStreamAsync(
+        string streamId,
+        IEnumerable<NewEventRecord<object>> events,
+        ExpectedStreamState expectedState = default,
         CancellationToken cancellationToken = default)
     {
         var records = events
-            .Select(@event =>
+            .Select(e =>
             {
                 string eventName;
+                var @event = e.Payload;
 
                 if (_contractMappersByEventType.TryGetValue(@event.GetType(), out var mapper))
                 {
@@ -44,11 +55,17 @@ public class EventStore<TPayload> : IEventStore
                     eventName = _eventTypeMapper.GetEventName(@event.GetType());
                 }
 
+                // PoC for adding metadata.
+                var header = e.Header
+                    .WithEventName(eventName)
+                    .WithMetadata("EventClrType", @event.GetType().Name);
+
                 var payload = _serializer.Serialize(@event);
-                return new NewEventRecord<TPayload>(new NewEventHeader(eventName), payload);
+
+                return NewEventRecord.Create(header, payload);
             });
 
-        await _backend.AppendToStreamAsync(streamId, records, expectedVersion, cancellationToken);
+        await _backend.AppendToStreamAsync(streamId, records, expectedState, cancellationToken);
     }
 
     public async Task<ReadStreamResult<EventRecord<object>>> ReadStreamAsync(
@@ -59,9 +76,13 @@ public class EventStore<TPayload> : IEventStore
     {
         var result = await _backend.ReadStreamAsync(streamId, direction, fromPosition, cancellationToken);
 
-        return result.Status == ReadStreamStatus.Success
-            ? ReadStreamResult<EventRecord<object>>.Success(TransformEvents())
-            : ReadStreamResult<EventRecord<object>>.NotFound();
+        return result.Status switch
+        {
+            ReadStreamStatus.Success => ReadStreamResult.Success(TransformEvents()),
+            ReadStreamStatus.StreamNotFound => ReadStreamResult.NotFound<EventRecord<object>>(),
+            ReadStreamStatus.RangeEmpty => ReadStreamResult.RangeEmpty<EventRecord<object>>(),
+            _ => throw new UnreachableException($"Unexpected {nameof(ReadStreamStatus)}: {result.Status}")
+        };
 
         async IAsyncEnumerable<EventRecord<object>> TransformEvents()
         {
@@ -77,7 +98,7 @@ public class EventStore<TPayload> : IEventStore
 
                 if (queue == null)
                 {
-                    yield return new EventRecord<object>(record.Header, sourceEvent);
+                    yield return EventRecord.Create(record.Header, sourceEvent);
                     continue;
                 }
 
@@ -94,7 +115,7 @@ public class EventStore<TPayload> : IEventStore
                     }
                     else
                     {
-                        yield return new EventRecord<object>(record.Header, @event);
+                        yield return EventRecord.Create(record.Header, @event);
                     }
                 }
             }

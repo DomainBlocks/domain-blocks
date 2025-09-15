@@ -1,5 +1,6 @@
 using DomainBlocks.EventStore.Abstractions;
 using KurrentDB.Client;
+using EventRecord = DomainBlocks.EventStore.Abstractions.EventRecord;
 using KurrentStreamPosition = KurrentDB.Client.StreamPosition;
 using StreamPosition = DomainBlocks.EventStore.Abstractions.StreamPosition;
 
@@ -10,7 +11,7 @@ public class KurrentDBEventDataStore(KurrentDBClient client) : IEventStoreBacken
     public Task AppendToStreamAsync(
         string streamId,
         IEnumerable<NewEventRecord<ReadOnlyMemory<byte>>> events,
-        ExpectedStreamVersion? expectedVersion = null,
+        ExpectedStreamState expectedState = default,
         CancellationToken cancellationToken = default)
     {
         throw new NotImplementedException();
@@ -30,9 +31,17 @@ public class KurrentDBEventDataStore(KurrentDBClient client) : IEventStoreBacken
                 ? Direction.Forwards
                 : Direction.Backwards;
 
-            var kurrentFromVersion = fromPosition != null
-                ? KurrentStreamPosition.FromInt64(fromPosition.Value.ToInt64())
-                : KurrentStreamPosition.Start;
+            var kurrentFromVersion = KurrentStreamPosition.Start;
+
+            if (fromPosition.HasValue)
+            {
+                if (fromPosition.Value.IsStart)
+                    kurrentFromVersion = KurrentStreamPosition.Start;
+                else if (fromPosition.Value.IsEnd)
+                    kurrentFromVersion = KurrentStreamPosition.End;
+                else if (fromPosition.Value.IsSpecificVersion)
+                    kurrentFromVersion = KurrentStreamPosition.FromInt64(fromPosition.Value.Version.Value.ToInt64());
+            }
 
             readStreamResult = client.ReadStreamAsync(
                 kurrentDirection,
@@ -47,12 +56,10 @@ public class KurrentDBEventDataStore(KurrentDBClient client) : IEventStoreBacken
         }
 
         var readState = await readStreamResult.ReadState;
-        if (readState == ReadState.StreamNotFound)
-        {
-            return ReadStreamResult<EventRecord<ReadOnlyMemory<byte>>>.NotFound();
-        }
 
-        return ReadStreamResult<EventRecord<ReadOnlyMemory<byte>>>.Success(MapEventStream());
+        return readState == ReadState.StreamNotFound
+            ? ReadStreamResult.NotFound<EventRecord<ReadOnlyMemory<byte>>>()
+            : ReadStreamResult.Success(MapEventStream());
 
         async IAsyncEnumerable<EventRecord<ReadOnlyMemory<byte>>> MapEventStream()
         {
@@ -66,9 +73,7 @@ public class KurrentDBEventDataStore(KurrentDBClient client) : IEventStoreBacken
                     resolvedEvent.Event.Created.Date,
                     GlobalPosition.FromUInt64(resolvedEvent.OriginalEvent.Position.CommitPosition));
 
-                yield return new EventRecord<ReadOnlyMemory<byte>>(
-                    header,
-                    resolvedEvent.Event.Data);
+                yield return EventRecord.Create(header, resolvedEvent.Event.Data);
             }
         }
     }

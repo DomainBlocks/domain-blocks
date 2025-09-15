@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using DomainBlocks.EventStore.Abstractions;
 using MongoDB.Driver;
 
@@ -9,28 +10,8 @@ public static class MongoEventStore
         IMongoDatabase database,
         MongoEventStoreOptions<TEventDocument, TPayload> options)
     {
-        var collection = database.GetCollection<TEventDocument>(options.CollectionName);
+        var collection = database.GetCollection<TEventDocument>(options.EventCollectionName);
         return new MongoEventStore<TEventDocument, TPayload>(collection, options);
-    }
-
-    public static Task EnsureIndexesAsync<TEventDocument, TPayload>(
-        IMongoDatabase database,
-        MongoEventStoreOptions<TEventDocument, TPayload> options,
-        CancellationToken cancellationToken = default)
-    {
-        var collection = database.GetCollection<TEventDocument>(options.CollectionName);
-
-        CreateIndexModel<TEventDocument>[] indexModels =
-        [
-            new(Builders<TEventDocument>.IndexKeys
-                    .Ascending(options.StreamIdField)
-                    .Ascending(options.StreamVersionField),
-                new CreateIndexOptions { Unique = true }),
-
-            new(Builders<TEventDocument>.IndexKeys.Ascending(options.CommittedAtField))
-        ];
-
-        return collection.Indexes.CreateManyAsync(indexModels, cancellationToken);
     }
 }
 
@@ -40,35 +21,35 @@ public class MongoEventStore<TEventDocument, TPayload>(
 {
     private readonly FieldDefinition<TEventDocument, string> _streamIdField = options.StreamIdField;
     private readonly FieldDefinition<TEventDocument, long> _streamVersionField = options.StreamVersionField;
-    private readonly Func<TEventDocument, long> _streamVersionSelector = options.StreamVersionSelector.Compile();
+
+    private readonly Expression<Func<TEventDocument, long?>> _nullableStreamVersionExpression =
+        AsNullable(options.StreamVersionExpression);
+
+    private readonly Func<TEventDocument, long> _streamVersionFunc = options.StreamVersionExpression.Compile();
 
     public async Task AppendToStreamAsync(
         string streamId,
         IEnumerable<NewEventRecord<TPayload>> events,
-        ExpectedStreamVersion? expectedVersion = null,
+        ExpectedStreamState expectedState = default,
         CancellationToken cancellationToken = default)
     {
-        expectedVersion ??= ExpectedStreamVersion.Any;
+        var currentVersion = await GetCurrentStreamVersionAsync(streamId, cancellationToken);
 
-        var currentStreamVersion = await GetCurrentStreamVersionAsync(streamId, cancellationToken);
+        if (expectedState.IsStreamExists && currentVersion.IsNone)
+            throw WrongExpectedStreamStateException.ExpectedStreamToExist(streamId);
 
-        if (expectedVersion == ExpectedStreamVersion.Exists && currentStreamVersion == -1)
-            throw new Exception("TODO");
+        if (expectedState.IsStreamDoesNotExist && !currentVersion.IsNone)
+            throw WrongExpectedStreamStateException.ExpectedStreamToNotExist(streamId, currentVersion);
 
-        var expectedVersionValue = expectedVersion == ExpectedStreamVersion.Any
-            ? currentStreamVersion
-            : expectedVersion.Value.ToInt64();
+        expectedState = expectedState.IsAny || expectedState.IsStreamExists
+            ? ExpectedStreamState.FromVersion(currentVersion)
+            : expectedState;
 
-        if (expectedVersionValue != currentStreamVersion)
-            throw new WrongExpectedVersionException(streamId, expectedVersionValue, currentStreamVersion);
+        if (expectedState.Version != currentVersion)
+            // Consider retrying N times here for expected state Any or Exists.
+            throw WrongExpectedStreamStateException.VersionConflict(streamId, expectedState, currentVersion);
 
-        var committedAt = DateTime.UtcNow;
-
-        var documents = events.Select((@event, index) =>
-        {
-            var streamVersion = currentStreamVersion + 1 + index;
-            return options.DocumentMapper.ToEventDocument(streamId, streamVersion, @event, committedAt);
-        });
+        var documents = ToEventDocuments(streamId, events, currentVersion);
 
         try
         {
@@ -77,7 +58,7 @@ public class MongoEventStore<TEventDocument, TPayload>(
         }
         catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
         {
-            throw new WrongExpectedVersionException(streamId, expectedVersionValue, currentStreamVersion, ex);
+            throw WrongExpectedStreamStateException.VersionConflict(streamId, expectedState, currentVersion);
         }
     }
 
@@ -87,15 +68,22 @@ public class MongoEventStore<TEventDocument, TPayload>(
         StreamPosition? fromPosition = null,
         CancellationToken cancellationToken = default)
     {
-        var filter = Builders<TEventDocument>.Filter.Eq(_streamIdField, streamId);
-
         fromPosition ??= direction == StreamReadDirection.Forward ? StreamPosition.Start : StreamPosition.End;
 
-        if (fromPosition.Value > StreamPosition.Start && fromPosition.Value < StreamPosition.End)
+        // Edge cases: empty range
+        if (fromPosition.Value.IsStart && direction == StreamReadDirection.Backward ||
+            fromPosition.Value.IsEnd && direction == StreamReadDirection.Forward)
+            return ReadStreamResult.RangeEmpty<EventRecord<TPayload>>();
+
+        var filter = Builders<TEventDocument>.Filter.Eq(_streamIdField, streamId);
+
+        if (fromPosition.Value.IsSpecificVersion)
         {
+            var streamVersion = fromPosition.Value.Version.Value.ToInt64();
+
             var versionFilter = direction == StreamReadDirection.Forward
-                ? Builders<TEventDocument>.Filter.Gte(_streamVersionField, fromPosition.Value.ToInt64())
-                : Builders<TEventDocument>.Filter.Lte(_streamVersionField, fromPosition.Value.ToInt64());
+                ? Builders<TEventDocument>.Filter.Gte(_streamVersionField, streamVersion)
+                : Builders<TEventDocument>.Filter.Lte(_streamVersionField, streamVersion);
 
             filter = Builders<TEventDocument>.Filter.And(filter, versionFilter);
         }
@@ -110,9 +98,9 @@ public class MongoEventStore<TEventDocument, TPayload>(
             .ToCursorAsync(cancellationToken);
 
         if (!await cursor.MoveNextAsync(cancellationToken) || !cursor.Current.Any())
-            return ReadStreamResult<EventRecord<TPayload>>.NotFound();
+            return ReadStreamResult.NotFound<EventRecord<TPayload>>();
 
-        return ReadStreamResult<EventRecord<TPayload>>.Success(Enumerate());
+        return ReadStreamResult.Success(Enumerate());
 
         async IAsyncEnumerable<EventRecord<TPayload>> Enumerate()
         {
@@ -121,22 +109,51 @@ public class MongoEventStore<TEventDocument, TPayload>(
                 do
                 {
                     foreach (var doc in cursor.Current)
-                    {
-                        yield return options.DocumentMapper.FromEventDocument(doc);
-                    }
+                        yield return options.EventDocumentMapper.FromEventDocument(doc);
                 } while (await cursor.MoveNextAsync(cancellationToken));
             }
         }
     }
 
-    private async Task<long> GetCurrentStreamVersionAsync(string streamId, CancellationToken cancellationToken)
+    private static Expression<Func<TEventDocument, long?>> AsNullable(Expression<Func<TEventDocument, long>> expr)
     {
-        var first = await collection
+        var body = Expression.Convert(expr.Body, typeof(long?));
+        return Expression.Lambda<Func<TEventDocument, long?>>(body, expr.Parameters[0]);
+    }
+
+    private async Task<StreamVersion> GetCurrentStreamVersionAsync(string streamId, CancellationToken cancellationToken)
+    {
+        var latestVersion = await collection
             .Find(Builders<TEventDocument>.Filter.Eq(_streamIdField, streamId))
             .Sort(Builders<TEventDocument>.Sort.Descending(_streamVersionField))
             .Limit(1)
+            .Project(_nullableStreamVersionExpression)
             .FirstOrDefaultAsync(cancellationToken);
 
-        return first == null ? -1 : _streamVersionSelector(first);
+        return StreamVersion.FromInt64(latestVersion ?? -1);
+    }
+
+    private IEnumerable<TEventDocument> ToEventDocuments(
+        string streamId,
+        IEnumerable<NewEventRecord<TPayload>> events,
+        StreamVersion currentStreamVersion)
+    {
+        var committedAt = DateTime.UtcNow;
+
+        return events.Select((@event, index) =>
+        {
+            var streamVersion = currentStreamVersion.Add(index + 1);
+            var doc = options.EventDocumentMapper.ToEventDocument(streamId, streamVersion, @event, committedAt);
+
+            // Ensure the mapped document has the expected version.
+            // Consider if this test is necessary, of if a unit test is enough. Also consider if something similar
+            // should be done when reading and converting to EventRecord.
+            if (_streamVersionFunc(doc) != streamVersion.ToInt64())
+                throw new InvalidOperationException(
+                    $"Event document mapper produced an invalid stream version. " +
+                    $"Expected={streamVersion.ToInt64()}, Actual={_streamVersionFunc(doc)}.");
+
+            return doc;
+        });
     }
 }

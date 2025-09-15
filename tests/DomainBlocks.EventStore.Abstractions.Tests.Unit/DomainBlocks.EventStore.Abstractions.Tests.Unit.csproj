@@ -8,14 +8,12 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1"/>
-        <PackageReference Include="MongoDB.Driver" Version="3.4.2"/>
         <PackageReference Include="NUnit" Version="4.4.0"/>
         <PackageReference Include="Shouldly" Version="4.3.0"/>
-        <PackageReference Include="System.Linq.Async" Version="6.0.3"/>
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\DomainBlocks.EventStore.MongoDB\DomainBlocks.EventStore.MongoDB.csproj"/>
+        <ProjectReference Include="..\..\src\DomainBlocks.EventStore.Abstractions\DomainBlocks.EventStore.Abstractions.csproj"/>
     </ItemGroup>
 
 </Project>

@@ -7,16 +7,16 @@ public sealed class EventDocumentMapper<TPayload> : IEventDocumentMapper<EventDo
 {
     public EventDocument<TPayload> ToEventDocument(
         string streamId,
-        long streamVersion,
+        StreamVersion streamVersion,
         NewEventRecord<TPayload> @event,
         DateTime committedAt)
     {
         return new EventDocument<TPayload>
         {
             StreamId = streamId,
-            StreamVersion = streamVersion,
-            EventName = @event.Header.EventName,
-            Metadata = @event.Header.Metadata,
+            StreamVersion = streamVersion.ToInt64(),
+            EventName = @event.Header.GetEventNameOrThrow(),
+            Metadata = @event.Header.Metadata.ToDictionary(),
             CommittedAt = committedAt,
             Payload = @event.Payload
         };
@@ -24,7 +24,7 @@ public sealed class EventDocumentMapper<TPayload> : IEventDocumentMapper<EventDo
 
     public EventRecord<TPayload> FromEventDocument(EventDocument<TPayload> document)
     {
-        return new EventRecord<TPayload>(
+        return EventRecord.Create(
             new EventHeader(
                 document.StreamId,
                 StreamVersion.FromInt64(document.StreamVersion),

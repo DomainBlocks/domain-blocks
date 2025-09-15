@@ -1,37 +1,44 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace DomainBlocks.EventStore.Abstractions;
 
-public readonly struct StreamPosition : IEquatable<StreamPosition>, IComparable<StreamPosition>, IComparable
+public readonly struct StreamPosition : IEquatable<StreamPosition>
 {
-    public static readonly StreamPosition Start = new(-1);
-    public static readonly StreamPosition End = new(long.MaxValue);
+    public static readonly StreamPosition Start = new(StreamPositionKind.Start);
+    public static readonly StreamPosition End = new(StreamPositionKind.End);
 
-    private readonly long _value;
-
-    private StreamPosition(long value)
+    private StreamPosition(StreamPositionKind kind, StreamVersion? version = null)
     {
-        _value = value;
+        Kind = kind;
+        Version = version;
     }
+
+    public StreamPositionKind Kind { get; }
+
+    public StreamVersion? Version { get; }
+
+    public bool IsStart => Kind == StreamPositionKind.Start;
+
+    public bool IsEnd => Kind == StreamPositionKind.End;
+
+    [MemberNotNullWhen(true, nameof(Version))]
+    public bool IsSpecificVersion => Kind == StreamPositionKind.SpecificVersion;
 
     public static StreamPosition At(StreamVersion version)
     {
-        throw new NotImplementedException("TODO");
+        return version == StreamVersion.None ? Start : new StreamPosition(StreamPositionKind.SpecificVersion, version);
     }
 
-    public static StreamPosition Before(StreamVersion version)
+    public override string ToString() => Kind switch
     {
-        throw new NotImplementedException("TODO");
-    }
-
-    public static StreamPosition After(StreamVersion version)
-    {
-        throw new NotImplementedException("TODO");
-    }
-
-    public long ToInt64() => _value;
+        StreamPositionKind.Start => nameof(Start),
+        StreamPositionKind.End => nameof(End),
+        _ => $"Version={Version?.ToString()}"
+    };
 
     public bool Equals(StreamPosition other)
     {
-        return _value == other._value;
+        return Kind == other.Kind && Nullable.Equals(Version, other.Version);
     }
 
     public override bool Equals(object? obj)
@@ -41,7 +48,7 @@ public readonly struct StreamPosition : IEquatable<StreamPosition>, IComparable<
 
     public override int GetHashCode()
     {
-        return _value.GetHashCode();
+        return HashCode.Combine((int)Kind, Version);
     }
 
     public static bool operator ==(StreamPosition left, StreamPosition right)
@@ -52,38 +59,5 @@ public readonly struct StreamPosition : IEquatable<StreamPosition>, IComparable<
     public static bool operator !=(StreamPosition left, StreamPosition right)
     {
         return !left.Equals(right);
-    }
-
-    public int CompareTo(StreamPosition other)
-    {
-        return _value.CompareTo(other._value);
-    }
-
-    public int CompareTo(object? obj)
-    {
-        if (obj is null) return 1;
-        return obj is StreamPosition other
-            ? CompareTo(other)
-            : throw new ArgumentException($"Object must be of type {nameof(StreamPosition)}");
-    }
-
-    public static bool operator <(StreamPosition left, StreamPosition right)
-    {
-        return left.CompareTo(right) < 0;
-    }
-
-    public static bool operator >(StreamPosition left, StreamPosition right)
-    {
-        return left.CompareTo(right) > 0;
-    }
-
-    public static bool operator <=(StreamPosition left, StreamPosition right)
-    {
-        return left.CompareTo(right) <= 0;
-    }
-
-    public static bool operator >=(StreamPosition left, StreamPosition right)
-    {
-        return left.CompareTo(right) >= 0;
     }
 }
