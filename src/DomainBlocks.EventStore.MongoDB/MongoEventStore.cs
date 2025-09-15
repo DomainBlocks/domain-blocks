@@ -41,13 +41,13 @@ public class MongoEventStore<TEventDocument, TPayload>(
         if (expectedState.IsStreamDoesNotExist && !currentVersion.IsNone)
             throw WrongExpectedStreamStateException.ExpectedStreamToNotExist(streamId, currentVersion);
 
-        expectedState = expectedState.IsAny || expectedState.IsStreamExists
-            ? ExpectedStreamState.FromVersion(currentVersion)
-            : expectedState;
-
-        if (expectedState.Version != currentVersion)
-            // Consider retrying N times here for expected state Any or Exists.
+        if (expectedState.IsSpecificVersion && expectedState.Version != currentVersion)
             throw WrongExpectedStreamStateException.VersionConflict(streamId, expectedState, currentVersion);
+
+        // For non-specific expectations (Any/StreamExists), treat the current version as expected to enforce strict
+        // ordering and guard against races.
+        if (expectedState.IsAny || expectedState.IsStreamExists)
+            expectedState = ExpectedStreamState.FromVersion(currentVersion);
 
         var documents = ToEventDocuments(streamId, events, currentVersion);
 
@@ -58,6 +58,7 @@ public class MongoEventStore<TEventDocument, TPayload>(
         }
         catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
         {
+            // Consider automatically retrying if the original expectation was Any/StreamExists.
             throw WrongExpectedStreamStateException.VersionConflict(streamId, expectedState, currentVersion);
         }
     }
@@ -109,7 +110,7 @@ public class MongoEventStore<TEventDocument, TPayload>(
                 do
                 {
                     foreach (var doc in cursor.Current)
-                        yield return options.EventDocumentMapper.FromEventDocument(doc);
+                        yield return FromEventDocument(doc);
                 } while (await cursor.MoveNextAsync(cancellationToken));
             }
         }
@@ -143,17 +144,41 @@ public class MongoEventStore<TEventDocument, TPayload>(
         return events.Select((@event, index) =>
         {
             var streamVersion = currentStreamVersion.Add(index + 1);
-            var doc = options.EventDocumentMapper.ToEventDocument(streamId, streamVersion, @event, committedAt);
-
-            // Ensure the mapped document has the expected version.
-            // Consider if this test is necessary, of if a unit test is enough. Also consider if something similar
-            // should be done when reading and converting to EventRecord.
-            if (_streamVersionFunc(doc) != streamVersion.ToInt64())
-                throw new InvalidOperationException(
-                    $"Event document mapper produced an invalid stream version. " +
-                    $"Expected={streamVersion.ToInt64()}, Actual={_streamVersionFunc(doc)}.");
-
-            return doc;
+            return ToEventDocument(streamId, streamVersion, @event, committedAt);
         });
+    }
+
+    private TEventDocument ToEventDocument(
+        string streamId,
+        StreamVersion version,
+        NewEventRecord<TPayload> eventRecord,
+        DateTime committedAt)
+    {
+        var doc = options.EventDocumentMapper.ToEventDocument(streamId, version, eventRecord, committedAt);
+
+        var expectedVersion = version.ToInt64();
+        var actualVersion = _streamVersionFunc(doc);
+        EnsureMappedStreamVersionIsValid(expectedVersion, actualVersion);
+
+        return doc;
+    }
+
+    private EventRecord<TPayload> FromEventDocument(TEventDocument doc)
+    {
+        var eventRecord = options.EventDocumentMapper.FromEventDocument(doc);
+
+        var expectedVersion = _streamVersionFunc(doc);
+        var actualVersion = eventRecord.Header.StreamVersion.ToInt64();
+        EnsureMappedStreamVersionIsValid(expectedVersion, actualVersion);
+
+        return eventRecord;
+    }
+
+    private static void EnsureMappedStreamVersionIsValid(long expectedVersion, long actualVersion)
+    {
+        if (expectedVersion != actualVersion)
+            throw new InvalidOperationException(
+                $"Event document mapper produced an invalid stream version. " +
+                $"Expected={expectedVersion}, Actual={actualVersion}.");
     }
 }
