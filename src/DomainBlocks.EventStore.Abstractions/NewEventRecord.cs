@@ -1,5 +1,7 @@
 namespace DomainBlocks.EventStore.Abstractions;
 
+// UncommittedEventRecord
+
 public static class NewEventRecord
 {
     public static NewEventRecord<TPayload> Create<TPayload>(TPayload payload)
@@ -13,7 +15,7 @@ public static class NewEventRecord
     }
 }
 
-public readonly struct NewEventRecord<TPayload>(NewEventHeader header, TPayload payload)
+public sealed class NewEventRecord<TPayload>(NewEventHeader header, TPayload payload)
 {
     public NewEventHeader Header { get; } = header;
     public TPayload Payload { get; } = payload;

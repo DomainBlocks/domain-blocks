@@ -23,37 +23,21 @@ public class KurrentDBEventDataStore(KurrentDBClient client) : IEventStoreBacken
         StreamPosition? fromPosition = null,
         CancellationToken cancellationToken = default)
     {
-        KurrentDBClient.ReadStreamResult readStreamResult;
+        var kurrentDirection = direction == StreamReadDirection.Forward ? Direction.Forwards : Direction.Backwards;
 
-        try
+        var revision = fromPosition switch
         {
-            var kurrentDirection = direction == StreamReadDirection.Forward
-                ? Direction.Forwards
-                : Direction.Backwards;
+            { IsStart: true } => KurrentStreamPosition.Start,
+            { IsEnd: true } => KurrentStreamPosition.End,
+            { IsSpecificVersion: true } pos => KurrentStreamPosition.FromInt64(pos.Version.Value.ToInt64()),
+            _ => direction == StreamReadDirection.Forward ? KurrentStreamPosition.Start : KurrentStreamPosition.End
+        };
 
-            var kurrentFromVersion = KurrentStreamPosition.Start;
-
-            if (fromPosition.HasValue)
-            {
-                if (fromPosition.Value.IsStart)
-                    kurrentFromVersion = KurrentStreamPosition.Start;
-                else if (fromPosition.Value.IsEnd)
-                    kurrentFromVersion = KurrentStreamPosition.End;
-                else if (fromPosition.Value.IsSpecificVersion)
-                    kurrentFromVersion = KurrentStreamPosition.FromInt64(fromPosition.Value.Version.Value.ToInt64());
-            }
-
-            readStreamResult = client.ReadStreamAsync(
-                kurrentDirection,
-                streamId,
-                kurrentFromVersion,
-                cancellationToken: cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            //Logger.LogError(ex, "Unable to load events from {StreamName}", streamName);
-            throw;
-        }
+        var readStreamResult = client.ReadStreamAsync(
+            kurrentDirection,
+            streamId,
+            revision,
+            cancellationToken: cancellationToken);
 
         var readState = await readStreamResult.ReadState;
 
@@ -63,7 +47,7 @@ public class KurrentDBEventDataStore(KurrentDBClient client) : IEventStoreBacken
 
         async IAsyncEnumerable<EventRecord<ReadOnlyMemory<byte>>> MapEventStream()
         {
-            await foreach (var resolvedEvent in readStreamResult.WithCancellation(cancellationToken))
+            await foreach (var resolvedEvent in readStreamResult)
             {
                 var header = new EventHeader(
                     streamId,
