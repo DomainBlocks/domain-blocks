@@ -12,11 +12,11 @@ public interface IEventStore
 
     Task AppendToStreamAsync(
         string streamId,
-        IEnumerable<NewEventRecord<object>> events,
+        IEnumerable<UncommittedEvent<object>> events,
         ExpectedStreamState expectedState = default,
         CancellationToken cancellationToken = default);
 
-    Task<ReadStreamResult<EventRecord<object>>> ReadStreamAsync(
+    Task<ReadStreamResult<CommittedEvent<object>>> ReadStreamAsync(
         string streamId,
         StreamReadDirection direction = StreamReadDirection.Forward,
         StreamPosition? fromPosition = null,

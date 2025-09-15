@@ -28,11 +28,11 @@ public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider e
         var entityId = entityAdapter.GetId(entity.Entity);
 
         // PoC for adding metadata.
-        var header = new NewEventHeader(
+        var header = new UncommittedEventHeader(
             metadata: [KeyValuePair.Create("EntityClrType", entity.Entity.GetType().Name)]);
 
         var uncommittedEvents = entityAdapter.GetUncommittedEvents(entity.Entity)
-            .Select(e => NewEventRecord.Create(header, e))
+            .Select(e => UncommittedEvent.Create(header, e))
             .ToArray();
 
         if (uncommittedEvents.Length == 0)

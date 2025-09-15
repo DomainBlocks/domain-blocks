@@ -105,7 +105,7 @@ public class EventReadTransformTests
 
     private class ShipmentDispatchedTransform : EventReadTransform<ShipmentDispatched>
     {
-        protected override IEnumerable<object> Apply(ShipmentDispatched @event, EventHeader header)
+        protected override IEnumerable<object> Apply(ShipmentDispatched @event, CommittedEventHeader header)
         {
             yield return new ShipmentDispatchedV2(
                 @event.ShipmentId,

@@ -7,7 +7,7 @@ public static class ReadStreamResult
 
     public static ReadStreamResult<TEvent> NotFound<TEvent>() =>
         new(ReadStreamStatus.StreamNotFound, AsyncEnumerableEx.Empty<TEvent>());
-    
+
     public static ReadStreamResult<TEvent> RangeEmpty<TEvent>() =>
         new(ReadStreamStatus.RangeEmpty, AsyncEnumerableEx.Empty<TEvent>());
 }
