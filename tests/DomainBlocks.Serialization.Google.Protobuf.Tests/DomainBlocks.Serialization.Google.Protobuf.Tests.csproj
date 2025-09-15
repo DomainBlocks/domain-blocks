@@ -7,7 +7,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\DomainBlocks.Serialization.Google.Protobuf\DomainBlocks.Serialization.Google.Protobuf.csproj" />
+        <ProjectReference Include="..\..\src\DomainBlocks.Serialization.Google.Protobuf\DomainBlocks.Serialization.Google.Protobuf.csproj"/>
     </ItemGroup>
 
     <ItemGroup>
@@ -17,14 +17,11 @@
         </PackageReference>
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1"/>
         <PackageReference Include="NUnit" Version="4.4.0"/>
-        <PackageReference Include="Shouldly" Version="4.3.0" />
+        <PackageReference Include="Shouldly" Version="4.3.0"/>
     </ItemGroup>
 
     <ItemGroup>
-        <Protobuf Include="Protos\UserCreated.proto"
-                  GrpcServices="None"
-                  OutputDir="Generated"
-                  CompileOutputs="true"/>
+        <Protobuf Include="Proto\UserCreated.proto" GrpcServices="None"/>
     </ItemGroup>
 
 </Project>

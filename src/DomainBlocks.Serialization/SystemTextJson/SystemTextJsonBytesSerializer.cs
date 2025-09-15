@@ -3,15 +3,63 @@ using DomainBlocks.Serialization.Abstractions;
 
 namespace DomainBlocks.Serialization.SystemTextJson;
 
-public class SystemTextJsonBytesSerializer(JsonSerializerOptions? options = null) : ISerializer<ReadOnlyMemory<byte>>
+public sealed class SystemTextJsonBytesSerializer(JsonSerializerOptions? options = null) :
+    IPayloadSerializer<byte[]>,
+    IPayloadSerializer<ReadOnlyMemory<byte>>
 {
-    public ReadOnlyMemory<byte> Serialize(object value)
+    public byte[] Serialize(object value)
     {
-        return JsonSerializer.SerializeToUtf8Bytes(value, options);
+        try
+        {
+            return JsonSerializer.SerializeToUtf8Bytes(value, options);
+        }
+        catch (Exception ex)
+        {
+            throw PayloadSerializationException.ForSerialization(value.GetType(), ex);
+        }
     }
 
-    public object? Deserialize(ReadOnlyMemory<byte> payload, Type type)
+    public object Deserialize(byte[] payload, Type type)
     {
-        return JsonSerializer.Deserialize(payload.Span, type, options);
+        object? result;
+
+        try
+        {
+            result = JsonSerializer.Deserialize(payload, type, options);
+        }
+        catch (Exception ex)
+        {
+            throw PayloadSerializationException.ForDeserialization(type, ex);
+        }
+
+        return result ?? throw PayloadSerializationException.NullResult(type);
+    }
+
+    ReadOnlyMemory<byte> IPayloadSerializer<ReadOnlyMemory<byte>>.Serialize(object value)
+    {
+        try
+        {
+            return JsonSerializer.SerializeToUtf8Bytes(value, options);
+        }
+        catch (Exception ex)
+        {
+            throw PayloadSerializationException.ForSerialization(value.GetType(), ex);
+        }
+    }
+
+    object IPayloadSerializer<ReadOnlyMemory<byte>>.Deserialize(ReadOnlyMemory<byte> payload, Type type)
+    {
+        object? result;
+
+        try
+        {
+            result = JsonSerializer.Deserialize(payload.Span, type, options);
+        }
+        catch (Exception ex)
+        {
+            throw PayloadSerializationException.ForDeserialization(type, ex);
+        }
+
+        return result ?? throw PayloadSerializationException.NullResult(type);
     }
 }

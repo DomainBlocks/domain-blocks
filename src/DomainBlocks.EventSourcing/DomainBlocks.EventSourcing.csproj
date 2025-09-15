@@ -7,7 +7,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\DomainBlocks.Persistence\DomainBlocks.Persistence.csproj" />
+      <ProjectReference Include="..\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj" />
     </ItemGroup>
 
 </Project>

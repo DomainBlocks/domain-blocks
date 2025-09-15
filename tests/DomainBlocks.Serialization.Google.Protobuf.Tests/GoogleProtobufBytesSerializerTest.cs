@@ -1,5 +1,4 @@
-﻿using DomainBlocks.Serialization.Google.Protobuf.Tests.Generated;
-using Google.Protobuf;
+﻿using Google.Protobuf;
 using Google.Protobuf.Reflection;
 using NUnit.Framework;
 using Shouldly;
@@ -13,14 +12,14 @@ public class GoogleProtobufBytesSerializerTest
     [Test]
     public void Should_serialize_and_deserialize()
     {
-        var original = new UserCreated
+        var original = new Proto.UserCreated
         {
             UserId = "user-123",
             Name = "Alice"
         };
 
         var bytes = _bytesSerializer.Serialize(original);
-        var deserialized = (UserCreated?)_bytesSerializer.Deserialize(bytes, typeof(UserCreated));
+        var deserialized = (Proto.UserCreated?)_bytesSerializer.Deserialize(bytes, typeof(Proto.UserCreated));
 
         deserialized.ShouldNotBeNull();
         deserialized.UserId.ShouldBe(original.UserId);

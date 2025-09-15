@@ -1,5 +1,5 @@
-using DomainBlocks.Persistence.Abstractions.Events;
-using DomainBlocks.Persistence.Events;
+using DomainBlocks.EventStore;
+using DomainBlocks.EventStore.Abstractions;
 
 namespace DomainBlocks.EventSourcing;
 
@@ -42,14 +42,14 @@ public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider e
 
         var entity = await entityAdapter.RestoreAsync(initialState, EnumerateEvents(), cancellationToken);
 
-        return Versioned.From(entity, loadedVersion);
+        return Versioned.From(entity, ExpectedStreamVersion.At(loadedVersion));
 
         async IAsyncEnumerable<object> EnumerateEvents()
         {
             await foreach (var @event in result.Events.WithCancellation(cancellationToken))
             {
                 loadedVersion++;
-                yield return @event;
+                yield return @event.Payload;
             }
         }
     }
