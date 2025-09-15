@@ -30,8 +30,7 @@ public class EventStore<TPayload> : IEventStore
         ExpectedStreamState expectedState = default,
         CancellationToken cancellationToken = default)
     {
-        var records = events.Select(e => NewEventRecord.Create(new NewEventHeader(), e));
-        return AppendToStreamAsync(streamId, records, expectedState, cancellationToken);
+        return AppendToStreamAsync(streamId, events.Select(NewEventRecord.Create), expectedState, cancellationToken);
     }
 
     public async Task AppendToStreamAsync(
@@ -56,6 +55,7 @@ public class EventStore<TPayload> : IEventStore
                     eventName = _eventTypeMapper.GetEventName(@event.GetType());
                 }
 
+                // PoC for adding metadata.
                 var header = e.Header
                     .WithEventName(eventName)
                     .WithMetadata("EventClrType", @event.GetType().Name);

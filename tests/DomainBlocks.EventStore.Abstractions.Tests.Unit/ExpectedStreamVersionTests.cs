@@ -15,18 +15,43 @@ public class ExpectedStreamStateTests
     public void Kind_WhenInstanceIsAny_IsAny()
     {
         ExpectedStreamState.Any.Kind.ShouldBe(ExpectedStreamStateKind.Any);
+        ExpectedStreamState.Any.IsAny.ShouldBeTrue();
+        ExpectedStreamState.Any.IsStreamExists.ShouldBeFalse();
+        ExpectedStreamState.Any.IsStreamDoesNotExist.ShouldBeFalse();
+        ExpectedStreamState.Any.IsSpecificVersion.ShouldBeFalse();
     }
 
     [Test]
     public void Kind_WhenInstanceIsStreamExists_IsStreamExists()
     {
         ExpectedStreamState.StreamExists.Kind.ShouldBe(ExpectedStreamStateKind.StreamExists);
+        ExpectedStreamState.StreamExists.IsAny.ShouldBeFalse();
+        ExpectedStreamState.StreamExists.IsStreamExists.ShouldBeTrue();
+        ExpectedStreamState.StreamExists.IsStreamDoesNotExist.ShouldBeFalse();
+        ExpectedStreamState.StreamExists.IsSpecificVersion.ShouldBeFalse();
     }
 
     [Test]
     public void Kind_WhenInstanceIsStreamDoesNotExist_IsStreamDoesNotExist()
     {
         ExpectedStreamState.StreamDoesNotExist.Kind.ShouldBe(ExpectedStreamStateKind.StreamDoesNotExist);
+        ExpectedStreamState.StreamDoesNotExist.IsAny.ShouldBeFalse();
+        ExpectedStreamState.StreamDoesNotExist.IsStreamExists.ShouldBeFalse();
+        ExpectedStreamState.StreamDoesNotExist.IsStreamDoesNotExist.ShouldBeTrue();
+        ExpectedStreamState.StreamDoesNotExist.IsSpecificVersion.ShouldBeFalse();
+    }
+
+    [Test]
+    public void Kind_WhenInstanceIsSpecificVersion_IsSpecificVersion()
+    {
+        var version = StreamVersion.FromInt64(42);
+        var expected = ExpectedStreamState.FromVersion(version);
+
+        expected.Kind.ShouldBe(ExpectedStreamStateKind.SpecificVersion);
+        expected.IsAny.ShouldBeFalse();
+        expected.IsStreamExists.ShouldBeFalse();
+        expected.IsStreamDoesNotExist.ShouldBeFalse();
+        expected.IsSpecificVersion.ShouldBeTrue();
     }
 
     [Test]
@@ -41,7 +66,7 @@ public class ExpectedStreamStateTests
     {
         var version = StreamVersion.FromInt64(42);
         var result = ExpectedStreamState.FromVersion(version);
-        result.Kind.ShouldBe(ExpectedStreamStateKind.SpecificVersion);
+        result.Version.ShouldBe(version);
     }
 
     [Test]
@@ -96,5 +121,12 @@ public class ExpectedStreamStateTests
         var b = ExpectedStreamState.FromVersion(StreamVersion.FromInt64(2));
 
         a.Equals(b).ShouldBeFalse();
+        a.Equals(ExpectedStreamState.Any).ShouldBeFalse();
+        a.Equals(ExpectedStreamState.StreamExists).ShouldBeFalse();
+        a.Equals(ExpectedStreamState.StreamDoesNotExist).ShouldBeFalse();
+
+        ExpectedStreamState.Any.Equals(ExpectedStreamState.StreamExists).ShouldBeFalse();
+        ExpectedStreamState.Any.Equals(ExpectedStreamState.StreamDoesNotExist).ShouldBeFalse();
+        ExpectedStreamState.StreamExists.Equals(ExpectedStreamState.StreamDoesNotExist).ShouldBeFalse();
     }
 }

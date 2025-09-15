@@ -4,6 +4,8 @@ namespace DomainBlocks.EventStore.Abstractions;
 
 public sealed class NewEventHeader
 {
+    public static readonly NewEventHeader Empty = new();
+
     private readonly ImmutableDictionary<string, string> _metadata;
 
     public NewEventHeader(string? eventName = null, IEnumerable<KeyValuePair<string, string>>? metadata = null) :
@@ -32,10 +34,13 @@ public sealed class NewEventHeader
 
     public NewEventHeader WithMetadata(string key, string value) => new(EventName, _metadata.SetItem(key, value));
 
-    public NewEventHeader WithMetadata(params IEnumerable<KeyValuePair<string, string>> entries)
+    public NewEventHeader WithMetadata(IEnumerable<KeyValuePair<string, string>> items)
     {
-        return new NewEventHeader(EventName, _metadata.SetItems(entries));
+        var builder = _metadata.ToBuilder();
+        builder.AddRange(items);
+        return new NewEventHeader(EventName, builder.ToImmutable());
     }
 
-    public string GetEventNameOrThrow() => EventName ?? throw new InvalidOperationException("Event name is not set.");
+    public string GetEventNameOrThrow() =>
+        EventName ?? throw new InvalidOperationException("Event name not specified.");
 }

@@ -27,13 +27,9 @@ public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider e
         var entityAdapter = GetEntityAdapter<TEntity>();
         var entityId = entityAdapter.GetId(entity.Entity);
 
-        // PoC for stamping out metadata for entities.
-        KeyValuePair<string, string>[] metadata =
-        [
-            KeyValuePair.Create("EntityClrType", entity.Entity.GetType().Name)
-        ];
-
-        var header = new NewEventHeader(metadata: metadata);
+        // PoC for adding metadata.
+        var header = new NewEventHeader(
+            metadata: [KeyValuePair.Create("EntityClrType", entity.Entity.GetType().Name)]);
 
         var uncommittedEvents = entityAdapter.GetUncommittedEvents(entity.Entity)
             .Select(e => NewEventRecord.Create(header, e))

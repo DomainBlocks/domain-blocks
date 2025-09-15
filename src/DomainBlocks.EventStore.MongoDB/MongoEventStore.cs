@@ -146,6 +146,8 @@ public class MongoEventStore<TEventDocument, TPayload>(
             var doc = options.EventDocumentMapper.ToEventDocument(streamId, streamVersion, @event, committedAt);
 
             // Ensure the mapped document has the expected version.
+            // Consider if this test is necessary, of if a unit test is enough. Also consider if something similar
+            // should be done when reading and converting to EventRecord.
             if (_streamVersionFunc(doc) != streamVersion.ToInt64())
                 throw new InvalidOperationException(
                     $"Event document mapper produced an invalid stream version. " +
