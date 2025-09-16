@@ -28,11 +28,11 @@ public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider e
         var entityId = entityAdapter.GetId(entity.Entity);
 
         // PoC for adding metadata.
-        var header = new NewEventHeader(
+        var header = new UncommittedEventHeader(
             metadata: [KeyValuePair.Create("EntityClrType", entity.Entity.GetType().Name)]);
 
         var uncommittedEvents = entityAdapter.GetUncommittedEvents(entity.Entity)
-            .Select(e => NewEventRecord.Create(header, e))
+            .Select(e => UncommittedEvent.Create(header, e))
             .ToArray();
 
         if (uncommittedEvents.Length == 0)
@@ -53,16 +53,14 @@ public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider e
         var streamName = GetStreamName<TEntity>(entityId);
         var result = await eventStore.ReadStreamAsync(streamName, cancellationToken: cancellationToken);
 
-        if (streamNotFoundBehavior == StreamNotFoundBehavior.Throw && result.Status == ReadStreamStatus.StreamNotFound)
-        {
-            throw new StreamNotFoundException($"Stream '{streamName}' could not be found.");
-        }
+        if (result.Status == ReadStreamStatus.StreamNotFound && streamNotFoundBehavior == StreamNotFoundBehavior.Throw)
+            throw new StreamNotFoundException($"Stream '{streamName}' not found.");
 
         var entityAdapter = GetEntityAdapter<TEntity>();
         var initialState = entityAdapter.CreateState(); // May come from a snapshot (in future).
 
-        // Used in closure of EnumerateEvents, so must be declared before the async enumerable is materialized, i.e.
-        // before RestoreEntityAsync is invoked.
+        // Used in closure of EnumerateEvents, so must be declared before the async enumerable is materialised, i.e.
+        // before RestoreAsync is invoked.
         var loadedVersion = StreamVersion.None;
 
         var entity = await entityAdapter.RestoreAsync(initialState, EnumerateEvents(), cancellationToken);

@@ -29,7 +29,7 @@ public class MongoEventStore<TEventDocument, TPayload>(
 
     public async Task AppendToStreamAsync(
         string streamId,
-        IEnumerable<NewEventRecord<TPayload>> events,
+        IEnumerable<UncommittedEvent<TPayload>> events,
         ExpectedStreamState expectedState = default,
         CancellationToken cancellationToken = default)
     {
@@ -63,7 +63,7 @@ public class MongoEventStore<TEventDocument, TPayload>(
         }
     }
 
-    public async Task<ReadStreamResult<EventRecord<TPayload>>> ReadStreamAsync(
+    public async Task<ReadStreamResult<CommittedEvent<TPayload>>> ReadStreamAsync(
         string streamId,
         StreamReadDirection direction = StreamReadDirection.Forward,
         StreamPosition? fromPosition = null,
@@ -74,7 +74,7 @@ public class MongoEventStore<TEventDocument, TPayload>(
         // Edge cases: empty range
         if (fromPosition.Value.IsStart && direction == StreamReadDirection.Backward ||
             fromPosition.Value.IsEnd && direction == StreamReadDirection.Forward)
-            return ReadStreamResult.RangeEmpty<EventRecord<TPayload>>();
+            return ReadStreamResult.RangeEmpty<CommittedEvent<TPayload>>();
 
         var filter = Builders<TEventDocument>.Filter.Eq(_streamIdField, streamId);
 
@@ -99,11 +99,11 @@ public class MongoEventStore<TEventDocument, TPayload>(
             .ToCursorAsync(cancellationToken);
 
         if (!await cursor.MoveNextAsync(cancellationToken) || !cursor.Current.Any())
-            return ReadStreamResult.NotFound<EventRecord<TPayload>>();
+            return ReadStreamResult.NotFound<CommittedEvent<TPayload>>();
 
         return ReadStreamResult.Success(Enumerate());
 
-        async IAsyncEnumerable<EventRecord<TPayload>> Enumerate()
+        async IAsyncEnumerable<CommittedEvent<TPayload>> Enumerate()
         {
             using (cursor)
             {
@@ -136,7 +136,7 @@ public class MongoEventStore<TEventDocument, TPayload>(
 
     private IEnumerable<TEventDocument> ToEventDocuments(
         string streamId,
-        IEnumerable<NewEventRecord<TPayload>> events,
+        IEnumerable<UncommittedEvent<TPayload>> events,
         StreamVersion currentStreamVersion)
     {
         var committedAt = DateTime.UtcNow;
@@ -151,10 +151,10 @@ public class MongoEventStore<TEventDocument, TPayload>(
     private TEventDocument ToEventDocument(
         string streamId,
         StreamVersion version,
-        NewEventRecord<TPayload> eventRecord,
+        UncommittedEvent<TPayload> @event,
         DateTime committedAt)
     {
-        var doc = options.EventDocumentMapper.ToEventDocument(streamId, version, eventRecord, committedAt);
+        var doc = options.EventDocumentMapper.ToEventDocument(streamId, version, @event, committedAt);
 
         var expectedVersion = version.ToInt64();
         var actualVersion = _streamVersionFunc(doc);
@@ -163,15 +163,15 @@ public class MongoEventStore<TEventDocument, TPayload>(
         return doc;
     }
 
-    private EventRecord<TPayload> FromEventDocument(TEventDocument doc)
+    private CommittedEvent<TPayload> FromEventDocument(TEventDocument doc)
     {
-        var eventRecord = options.EventDocumentMapper.FromEventDocument(doc);
+        var @event = options.EventDocumentMapper.FromEventDocument(doc);
 
         var expectedVersion = _streamVersionFunc(doc);
-        var actualVersion = eventRecord.Header.StreamVersion.ToInt64();
+        var actualVersion = @event.Header.StreamVersion.ToInt64();
         EnsureMappedStreamVersionIsValid(expectedVersion, actualVersion);
 
-        return eventRecord;
+        return @event;
     }
 
     private static void EnsureMappedStreamVersionIsValid(long expectedVersion, long actualVersion)

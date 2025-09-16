@@ -7,8 +7,8 @@ public interface IEventDocumentMapper<TEventDocument, TPayload>
     TEventDocument ToEventDocument(
         string streamId,
         StreamVersion streamVersion,
-        NewEventRecord<TPayload> @event,
+        UncommittedEvent<TPayload> @event,
         DateTime committedAt);
 
-    EventRecord<TPayload> FromEventDocument(TEventDocument document);
+    CommittedEvent<TPayload> FromEventDocument(TEventDocument document);
 }

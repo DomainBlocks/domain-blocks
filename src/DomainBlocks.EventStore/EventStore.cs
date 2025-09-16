@@ -30,45 +30,45 @@ public class EventStore<TPayload> : IEventStore
         ExpectedStreamState expectedState = default,
         CancellationToken cancellationToken = default)
     {
-        return AppendToStreamAsync(streamId, events.Select(NewEventRecord.Create), expectedState, cancellationToken);
+        return AppendToStreamAsync(streamId, events.Select(UncommittedEvent.Create), expectedState, cancellationToken);
     }
 
     public async Task AppendToStreamAsync(
         string streamId,
-        IEnumerable<NewEventRecord<object>> events,
+        IEnumerable<UncommittedEvent<object>> events,
         ExpectedStreamState expectedState = default,
         CancellationToken cancellationToken = default)
     {
-        var records = events
+        var serializedEvents = events
             .Select(e =>
             {
                 string eventName;
-                var @event = e.Payload;
+                var payload = e.Payload;
 
-                if (_contractMappersByEventType.TryGetValue(@event.GetType(), out var mapper))
+                if (_contractMappersByEventType.TryGetValue(payload.GetType(), out var mapper))
                 {
                     eventName = _eventTypeMapper.GetEventName(mapper.ContractType);
-                    @event = mapper.ToContract(@event);
+                    payload = mapper.ToContract(payload);
                 }
                 else
                 {
-                    eventName = _eventTypeMapper.GetEventName(@event.GetType());
+                    eventName = _eventTypeMapper.GetEventName(payload.GetType());
                 }
 
                 // PoC for adding metadata.
                 var header = e.Header
                     .WithEventName(eventName)
-                    .WithMetadata("EventClrType", @event.GetType().Name);
+                    .WithMetadata("EventClrType", payload.GetType().Name);
 
-                var payload = _serializer.Serialize(@event);
+                var serializedPayload = _serializer.Serialize(payload);
 
-                return NewEventRecord.Create(header, payload);
+                return UncommittedEvent.Create(header, serializedPayload);
             });
 
-        await _backend.AppendToStreamAsync(streamId, records, expectedState, cancellationToken);
+        await _backend.AppendToStreamAsync(streamId, serializedEvents, expectedState, cancellationToken);
     }
 
-    public async Task<ReadStreamResult<EventRecord<object>>> ReadStreamAsync(
+    public async Task<ReadStreamResult<CommittedEvent<object>>> ReadStreamAsync(
         string streamId,
         StreamReadDirection direction = StreamReadDirection.Forward,
         StreamPosition? fromPosition = null,
@@ -79,43 +79,44 @@ public class EventStore<TPayload> : IEventStore
         return result.Status switch
         {
             ReadStreamStatus.Success => ReadStreamResult.Success(TransformEvents()),
-            ReadStreamStatus.StreamNotFound => ReadStreamResult.NotFound<EventRecord<object>>(),
-            ReadStreamStatus.RangeEmpty => ReadStreamResult.RangeEmpty<EventRecord<object>>(),
+            ReadStreamStatus.StreamNotFound => ReadStreamResult.NotFound<CommittedEvent<object>>(),
+            ReadStreamStatus.RangeEmpty => ReadStreamResult.RangeEmpty<CommittedEvent<object>>(),
             _ => throw new UnreachableException($"Unexpected {nameof(ReadStreamStatus)}: {result.Status}")
         };
 
-        async IAsyncEnumerable<EventRecord<object>> TransformEvents()
+        async IAsyncEnumerable<CommittedEvent<object>> TransformEvents()
         {
             var queue = _readTransforms.Count > 0 ? new Queue<object>() : null;
 
-            await foreach (var record in result.Events.WithCancellation(cancellationToken))
+            await foreach (var serializedEvent in result.Events.WithCancellation(cancellationToken))
             {
-                var eventType = _eventTypeMapper.GetEventType(record.Header.EventName);
-                var sourceEvent = _serializer.Deserialize(record.Payload, eventType);
+                var header = serializedEvent.Header;
+                var eventType = _eventTypeMapper.GetEventType(header.EventName);
+                var deserializedPayload = _serializer.Deserialize(serializedEvent.Payload, eventType);
 
-                if (_contractMappersByContractType.TryGetValue(sourceEvent.GetType(), out var mapper))
-                    sourceEvent = mapper.FromContract(sourceEvent);
+                if (_contractMappersByContractType.TryGetValue(deserializedPayload.GetType(), out var mapper))
+                    deserializedPayload = mapper.FromContract(deserializedPayload);
 
                 if (queue == null)
                 {
-                    yield return EventRecord.Create(record.Header, sourceEvent);
+                    yield return CommittedEvent.Create(header, deserializedPayload);
                     continue;
                 }
 
-                queue.Enqueue(sourceEvent);
+                queue.Enqueue(deserializedPayload);
 
                 while (queue.TryDequeue(out var @event))
                 {
                     if (_readTransforms.TryGetValue(@event.GetType(), out var transform))
                     {
-                        var transformedEvents = transform.Apply(@event, record.Header);
+                        var transformedEvents = transform.Apply(@event, header);
 
                         foreach (var transformedEvent in transformedEvents)
                             queue.Enqueue(transformedEvent);
                     }
                     else
                     {
-                        yield return EventRecord.Create(record.Header, @event);
+                        yield return CommittedEvent.Create(header, @event);
                     }
                 }
             }

@@ -12,7 +12,11 @@ public readonly struct GlobalPosition
         _value = value;
     }
 
+    public static GlobalPosition FromInt64(long value) => new(value);
+
     public static GlobalPosition FromUInt64(ulong value) => new(Convert.ToInt64(value));
 
-    // TODO (DS): Expand this type
+    public long ToInt64() => _value;
+
+    public ulong ToUInt64() => Convert.ToUInt64(_value);
 }

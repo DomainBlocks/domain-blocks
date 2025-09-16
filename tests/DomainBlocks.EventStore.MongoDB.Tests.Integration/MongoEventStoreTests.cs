@@ -30,7 +30,7 @@ public class MongoEventStoreTests
     public async Task AppendToStreamAsync_WhenExpectedStateAnyAndStreamDoesNotExist_AppendsEventsToStream(
         CancellationToken cancellationToken)
     {
-        NewEventRecord<BsonDocument>[] newEvents =
+        UncommittedEvent<BsonDocument>[] events =
         [
             CreateEvent("TestEvent1"),
             CreateEvent("TestEvent2"),
@@ -41,7 +41,7 @@ public class MongoEventStoreTests
 
         await _mongoEventStore.AppendToStreamAsync(
             streamId,
-            newEvents,
+            events,
             ExpectedStreamState.Any,
             cancellationToken);
 
@@ -52,7 +52,7 @@ public class MongoEventStoreTests
 
         readEvents
             .Select(x => x.Header.EventName)
-            .ShouldBe(newEvents.Select(x => x.Header.EventName));
+            .ShouldBe(events.Select(x => x.Header.EventName));
     }
 
     [Test]
@@ -60,14 +60,14 @@ public class MongoEventStoreTests
     public async Task AppendToStreamAsync_WhenExpectedStateAnyAndStreamExists_AppendsEventsToStream(
         CancellationToken cancellationToken)
     {
-        NewEventRecord<BsonDocument>[] newEvents1 =
+        UncommittedEvent<BsonDocument>[] newEvents1 =
         [
             CreateEvent("TestEvent1"),
             CreateEvent("TestEvent2"),
             CreateEvent("TestEvent3")
         ];
 
-        NewEventRecord<BsonDocument>[] newEvents2 =
+        UncommittedEvent<BsonDocument>[] newEvents2 =
         [
             CreateEvent("TestEvent4"),
             CreateEvent("TestEvent5"),
@@ -96,10 +96,13 @@ public class MongoEventStoreTests
         readEvents
             .Select(x => x.Header.EventName)
             .ShouldBe(newEvents1.Concat(newEvents2).Select(x => x.Header.EventName));
+
+        var foo = await _mongoEventStore.ReadStreamAsync(
+            streamId, StreamReadDirection.Backward, cancellationToken: cancellationToken);
     }
 
-    private static NewEventRecord<BsonDocument> CreateEvent(string eventName)
+    private static UncommittedEvent<BsonDocument> CreateEvent(string eventName)
     {
-        return NewEventRecord.Create(new NewEventHeader(eventName), new BsonDocument());
+        return UncommittedEvent.Create(new UncommittedEventHeader(eventName), new BsonDocument());
     }
 }

@@ -1,6 +1,5 @@
 using DomainBlocks.EventStore.Abstractions;
 using KurrentDB.Client;
-using EventRecord = DomainBlocks.EventStore.Abstractions.EventRecord;
 using KurrentStreamPosition = KurrentDB.Client.StreamPosition;
 using StreamPosition = DomainBlocks.EventStore.Abstractions.StreamPosition;
 
@@ -10,62 +9,47 @@ public class KurrentDBEventDataStore(KurrentDBClient client) : IEventStoreBacken
 {
     public Task AppendToStreamAsync(
         string streamId,
-        IEnumerable<NewEventRecord<ReadOnlyMemory<byte>>> events,
+        IEnumerable<UncommittedEvent<ReadOnlyMemory<byte>>> events,
         ExpectedStreamState expectedState = default,
         CancellationToken cancellationToken = default)
     {
         throw new NotImplementedException();
     }
 
-    public async Task<ReadStreamResult<EventRecord<ReadOnlyMemory<byte>>>> ReadStreamAsync(
+    public async Task<ReadStreamResult<CommittedEvent<ReadOnlyMemory<byte>>>> ReadStreamAsync(
         string streamId,
         StreamReadDirection direction = StreamReadDirection.Forward,
         StreamPosition? fromPosition = null,
         CancellationToken cancellationToken = default)
     {
-        KurrentDBClient.ReadStreamResult readStreamResult;
+        var kurrentDirection = direction == StreamReadDirection.Forward ? Direction.Forwards : Direction.Backwards;
 
-        try
+        var revision = fromPosition switch
         {
-            var kurrentDirection = direction == StreamReadDirection.Forward
-                ? Direction.Forwards
-                : Direction.Backwards;
+            { IsStart: true } => KurrentStreamPosition.Start,
+            { IsEnd: true } => KurrentStreamPosition.End,
+            { IsSpecificVersion: true } pos => KurrentStreamPosition.FromInt64(pos.Version.Value.ToInt64()),
+            _ => direction == StreamReadDirection.Forward ? KurrentStreamPosition.Start : KurrentStreamPosition.End
+        };
 
-            var kurrentFromVersion = KurrentStreamPosition.Start;
-
-            if (fromPosition.HasValue)
-            {
-                if (fromPosition.Value.IsStart)
-                    kurrentFromVersion = KurrentStreamPosition.Start;
-                else if (fromPosition.Value.IsEnd)
-                    kurrentFromVersion = KurrentStreamPosition.End;
-                else if (fromPosition.Value.IsSpecificVersion)
-                    kurrentFromVersion = KurrentStreamPosition.FromInt64(fromPosition.Value.Version.Value.ToInt64());
-            }
-
-            readStreamResult = client.ReadStreamAsync(
-                kurrentDirection,
-                streamId,
-                kurrentFromVersion,
-                cancellationToken: cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            //Logger.LogError(ex, "Unable to load events from {StreamName}", streamName);
-            throw;
-        }
+        var readStreamResult = client.ReadStreamAsync(
+            kurrentDirection,
+            streamId,
+            revision,
+            cancellationToken: cancellationToken);
 
         var readState = await readStreamResult.ReadState;
 
-        return readState == ReadState.StreamNotFound
-            ? ReadStreamResult.NotFound<EventRecord<ReadOnlyMemory<byte>>>()
-            : ReadStreamResult.Success(MapEventStream());
+        if (readState == ReadState.StreamNotFound)
+            return ReadStreamResult.NotFound<CommittedEvent<ReadOnlyMemory<byte>>>();
+        
+        return ReadStreamResult.Success(MapEventStream());
 
-        async IAsyncEnumerable<EventRecord<ReadOnlyMemory<byte>>> MapEventStream()
+        async IAsyncEnumerable<CommittedEvent<ReadOnlyMemory<byte>>> MapEventStream()
         {
-            await foreach (var resolvedEvent in readStreamResult.WithCancellation(cancellationToken))
+            await foreach (var resolvedEvent in readStreamResult)
             {
-                var header = new EventHeader(
+                var header = new CommittedEventHeader(
                     streamId,
                     StreamVersion.FromInt64(resolvedEvent.OriginalEvent.EventNumber.ToInt64()),
                     resolvedEvent.Event.EventType,
@@ -73,7 +57,7 @@ public class KurrentDBEventDataStore(KurrentDBClient client) : IEventStoreBacken
                     resolvedEvent.Event.Created.Date,
                     GlobalPosition.FromUInt64(resolvedEvent.OriginalEvent.Position.CommitPosition));
 
-                yield return EventRecord.Create(header, resolvedEvent.Event.Data);
+                yield return CommittedEvent.Create(header, resolvedEvent.Event.Data);
             }
         }
     }
