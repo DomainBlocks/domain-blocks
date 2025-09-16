@@ -2,14 +2,11 @@ namespace DomainBlocks.EventStore.Abstractions;
 
 public static class ReadStreamResult
 {
-    public static ReadStreamResult<TEvent> Success<TEvent>(IAsyncEnumerable<TEvent> events) =>
-        new(ReadStreamStatus.Success, events);
+    public static ReadStreamResult<TEvent> Success<TEvent>(IAsyncEnumerable<TEvent>? events = null) =>
+        new(ReadStreamStatus.Success, events ?? AsyncEnumerableEx.Empty<TEvent>());
 
     public static ReadStreamResult<TEvent> NotFound<TEvent>() =>
         new(ReadStreamStatus.StreamNotFound, AsyncEnumerableEx.Empty<TEvent>());
-
-    public static ReadStreamResult<TEvent> RangeEmpty<TEvent>() =>
-        new(ReadStreamStatus.RangeEmpty, AsyncEnumerableEx.Empty<TEvent>());
 }
 
 public sealed class ReadStreamResult<TEvent>

@@ -1,7 +1,6 @@
 using DomainBlocks.EventStore.Abstractions;
 using KurrentDB.Client;
 using KurrentStreamPosition = KurrentDB.Client.StreamPosition;
-using StreamPosition = DomainBlocks.EventStore.Abstractions.StreamPosition;
 
 namespace DomainBlocks.EventStore.KurrentDB;
 
@@ -18,34 +17,36 @@ public class KurrentDBEventDataStore(KurrentDBClient client) : IEventStoreBacken
 
     public async Task<ReadStreamResult<CommittedEvent<ReadOnlyMemory<byte>>>> ReadStreamAsync(
         string streamId,
-        StreamReadDirection direction = StreamReadDirection.Forward,
-        StreamPosition? fromPosition = null,
+        ReadStreamOptions? options = null,
         CancellationToken cancellationToken = default)
     {
+        options ??= ReadStreamOptions.Default;
+        var direction = options.Direction;
+        var position = options.Position;
         var kurrentDirection = direction == StreamReadDirection.Forward ? Direction.Forwards : Direction.Backwards;
 
-        var revision = fromPosition switch
+        var revision = position switch
         {
             { IsStart: true } => KurrentStreamPosition.Start,
             { IsEnd: true } => KurrentStreamPosition.End,
-            { IsSpecificVersion: true } pos => KurrentStreamPosition.FromInt64(pos.Version.Value.ToInt64()),
-            _ => direction == StreamReadDirection.Forward ? KurrentStreamPosition.Start : KurrentStreamPosition.End
+            { IsSpecificVersion: true } => KurrentStreamPosition.FromInt64(position.Version.Value.ToInt64()),
+            _ => default
         };
 
         var readStreamResult = client.ReadStreamAsync(
             kurrentDirection,
             streamId,
             revision,
+            options.MaxCount ?? long.MaxValue,
             cancellationToken: cancellationToken);
 
         var readState = await readStreamResult.ReadState;
 
-        if (readState == ReadState.StreamNotFound)
-            return ReadStreamResult.NotFound<CommittedEvent<ReadOnlyMemory<byte>>>();
-        
-        return ReadStreamResult.Success(MapEventStream());
+        return readState == ReadState.StreamNotFound
+            ? ReadStreamResult.NotFound<CommittedEvent<ReadOnlyMemory<byte>>>()
+            : ReadStreamResult.Success(ToCommittedEvents());
 
-        async IAsyncEnumerable<CommittedEvent<ReadOnlyMemory<byte>>> MapEventStream()
+        async IAsyncEnumerable<CommittedEvent<ReadOnlyMemory<byte>>> ToCommittedEvents()
         {
             await foreach (var resolvedEvent in readStreamResult)
             {

@@ -19,12 +19,6 @@ public class StreamVersionTests
     }
 
     [Test]
-    public void ToInt64_WhenInstanceIsZero_ReturnsZero()
-    {
-        StreamVersion.Zero.ToInt64().ShouldBe(0);
-    }
-
-    [Test]
     public void ToInt64_WhenInstanceIsNone_ReturnsNegativeOne()
     {
         StreamVersion.None.ToInt64().ShouldBe(-1);

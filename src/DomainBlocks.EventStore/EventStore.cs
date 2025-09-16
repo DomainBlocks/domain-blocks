@@ -70,17 +70,15 @@ public class EventStore<TPayload> : IEventStore
 
     public async Task<ReadStreamResult<CommittedEvent<object>>> ReadStreamAsync(
         string streamId,
-        StreamReadDirection direction = StreamReadDirection.Forward,
-        StreamPosition? fromPosition = null,
+        ReadStreamOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await _backend.ReadStreamAsync(streamId, direction, fromPosition, cancellationToken);
+        var result = await _backend.ReadStreamAsync(streamId, options, cancellationToken);
 
         return result.Status switch
         {
             ReadStreamStatus.Success => ReadStreamResult.Success(TransformEvents()),
             ReadStreamStatus.StreamNotFound => ReadStreamResult.NotFound<CommittedEvent<object>>(),
-            ReadStreamStatus.RangeEmpty => ReadStreamResult.RangeEmpty<CommittedEvent<object>>(),
             _ => throw new UnreachableException($"Unexpected {nameof(ReadStreamStatus)}: {result.Status}")
         };
 

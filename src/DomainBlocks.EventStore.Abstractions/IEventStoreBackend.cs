@@ -10,7 +10,6 @@ public interface IEventStoreBackend<TPayload>
 
     Task<ReadStreamResult<CommittedEvent<TPayload>>> ReadStreamAsync(
         string streamId,
-        StreamReadDirection direction = StreamReadDirection.Forward,
-        StreamPosition? fromPosition = null,
+        ReadStreamOptions? options = null,
         CancellationToken cancellationToken = default);
 }
