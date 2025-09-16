@@ -44,8 +44,7 @@ public class MongoEventStore<TEventDocument, TPayload>(
         if (expectedState.IsSpecificVersion && expectedState.Version != currentVersion)
             throw WrongExpectedStreamStateException.VersionConflict(streamId, expectedState, currentVersion);
 
-        // For non-specific expectations (Any/StreamExists), treat the current version as expected to enforce strict
-        // ordering and guard against races.
+        // For non-specific version expectations (i.e. Any/StreamExists), treat the current version as expected.
         if (expectedState.IsAny || expectedState.IsStreamExists)
             expectedState = ExpectedStreamState.FromVersion(currentVersion);
 
