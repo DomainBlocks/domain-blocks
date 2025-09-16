@@ -23,9 +23,11 @@ public class GenericEntityAdapterProvider : IEntityAdapterProvider
             .SingleOrDefault(x => x.IsGenericType && x.GetGenericTypeDefinition() == typeof(IEntityAdapter<>));
 
         if (entityAdapterInterfaceType == null)
+        {
             throw new ArgumentException(
                 $"Entity adapter type must implement {typeof(IEntityAdapter<>).GetPrettyName()}.",
                 nameof(genericTypeDefinition));
+        }
 
         // Check all generic parameters can be resolved via TEntity.
         var entityGenericArg = entityAdapterInterfaceType.GetGenericArguments()[0];

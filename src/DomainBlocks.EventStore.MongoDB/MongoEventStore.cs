@@ -64,26 +64,33 @@ public class MongoEventStore<TEventDocument, TPayload>(
 
     public async Task<ReadStreamResult<CommittedEvent<TPayload>>> ReadStreamAsync(
         string streamId,
-        StreamReadDirection direction = StreamReadDirection.Forward,
-        StreamPosition? fromPosition = null,
+        ReadStreamOptions? readOptions = null,
         CancellationToken cancellationToken = default)
     {
-        fromPosition ??= direction == StreamReadDirection.Forward ? StreamPosition.Start : StreamPosition.End;
+        readOptions ??= ReadStreamOptions.Default;
+        var position = readOptions.Position;
+        var direction = readOptions.Direction;
 
-        // Edge cases: empty range
-        if (fromPosition.Value.IsStart && direction == StreamReadDirection.Backward ||
-            fromPosition.Value.IsEnd && direction == StreamReadDirection.Forward)
-            return ReadStreamResult.RangeEmpty<CommittedEvent<TPayload>>();
+        // Edge cases that represent an empty sequence of events.
+        if (position.IsStart && direction == StreamReadDirection.Backward ||
+            position.IsEnd && direction == StreamReadDirection.Forward)
+        {
+            var streamExists = await StreamExistsAsync(streamId, cancellationToken);
+
+            return streamExists
+                ? ReadStreamResult.Success<CommittedEvent<TPayload>>()
+                : ReadStreamResult.NotFound<CommittedEvent<TPayload>>();
+        }
 
         var filter = Builders<TEventDocument>.Filter.Eq(_streamIdField, streamId);
 
-        if (fromPosition.Value.IsSpecificVersion)
+        if (position.IsSpecificVersion)
         {
-            var streamVersion = fromPosition.Value.Version.Value.ToInt64();
+            var version = position.Version.Value.ToInt64();
 
             var versionFilter = direction == StreamReadDirection.Forward
-                ? Builders<TEventDocument>.Filter.Gte(_streamVersionField, streamVersion)
-                : Builders<TEventDocument>.Filter.Lte(_streamVersionField, streamVersion);
+                ? Builders<TEventDocument>.Filter.Gte(_streamVersionField, version)
+                : Builders<TEventDocument>.Filter.Lte(_streamVersionField, version);
 
             filter = Builders<TEventDocument>.Filter.And(filter, versionFilter);
         }
@@ -95,6 +102,7 @@ public class MongoEventStore<TEventDocument, TPayload>(
         var cursor = await collection
             .Find(filter)
             .Sort(sort)
+            .Limit(readOptions.MaxCount)
             .ToCursorAsync(cancellationToken);
 
         if (!await cursor.MoveNextAsync(cancellationToken) || !cursor.Current.Any())
@@ -131,6 +139,11 @@ public class MongoEventStore<TEventDocument, TPayload>(
             .FirstOrDefaultAsync(cancellationToken);
 
         return StreamVersion.FromInt64(latestVersion ?? -1);
+    }
+
+    private async Task<bool> StreamExistsAsync(string streamId, CancellationToken cancellationToken)
+    {
+        return await GetCurrentStreamVersionAsync(streamId, cancellationToken) != StreamVersion.None;
     }
 
     private IEnumerable<TEventDocument> ToEventDocuments(

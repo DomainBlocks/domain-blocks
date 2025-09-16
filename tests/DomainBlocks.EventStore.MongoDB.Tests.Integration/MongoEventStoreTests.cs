@@ -96,9 +96,51 @@ public class MongoEventStoreTests
         readEvents
             .Select(x => x.Header.EventName)
             .ShouldBe(newEvents1.Concat(newEvents2).Select(x => x.Header.EventName));
+    }
 
-        var foo = await _mongoEventStore.ReadStreamAsync(
-            streamId, StreamReadDirection.Backward, cancellationToken: cancellationToken);
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task ReadStreamAsync_FromStartBackwardWhenStreamExists_ReturnsEmptySuccess(
+        CancellationToken cancellationToken)
+    {
+        var streamId = $"test-{Guid.NewGuid()}";
+
+        await _mongoEventStore.AppendToStreamAsync(
+            streamId,
+            [CreateEvent("TestEvent1")],
+            cancellationToken: cancellationToken);
+
+        var options = new ReadStreamOptions
+        {
+            Position = StreamPosition.Start,
+            Direction = StreamReadDirection.Backward
+        };
+
+        var readResult = await _mongoEventStore.ReadStreamAsync(streamId, options, cancellationToken);
+        var events = await readResult.Events.ToArrayAsync(cancellationToken);
+
+        readResult.Status.ShouldBe(ReadStreamStatus.Success);
+        events.ShouldBeEmpty();
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task ReadStreamAsync_FromStartBackwardWhenStreamDoesNotExist_ReturnsNotFound(
+        CancellationToken cancellationToken)
+    {
+        var streamId = $"test-{Guid.NewGuid()}";
+
+        var options = new ReadStreamOptions
+        {
+            Position = StreamPosition.Start,
+            Direction = StreamReadDirection.Backward
+        };
+
+        var readResult = await _mongoEventStore.ReadStreamAsync(streamId, options, cancellationToken);
+        var events = await readResult.Events.ToArrayAsync(cancellationToken);
+
+        readResult.Status.ShouldBe(ReadStreamStatus.StreamNotFound);
+        events.ShouldBeEmpty();
     }
 
     private static UncommittedEvent<BsonDocument> CreateEvent(string eventName)

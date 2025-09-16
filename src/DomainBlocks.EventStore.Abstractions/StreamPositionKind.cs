@@ -1,22 +1,22 @@
 namespace DomainBlocks.EventStore.Abstractions;
 
 /// <summary>
-/// Represents a position within a stream when reading events.
+/// Specifies the kind of position within a stream.
 /// </summary>
 public enum StreamPositionKind
 {
     /// <summary>
-    /// Logical position before the first event in the stream.
+    /// Logical position at the start of the stream, before the first committed event.
     /// </summary>
     Start = 0,
 
     /// <summary>
-    /// Logical position after the latest event in the stream.
+    /// Logical position at the end of the stream, after the last committed event.
     /// </summary>
     End,
 
     /// <summary>
-    /// A position at a specific version in the stream.
+    /// A position at a specific committed event version.
     /// </summary>
     SpecificVersion
 }

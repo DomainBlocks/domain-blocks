@@ -2,6 +2,10 @@ using DomainBlocks.Core.Exceptions;
 
 namespace DomainBlocks.EventStore.Abstractions;
 
+/// <summary>
+/// Exception thrown when the actual state of a stream does not match the <see cref="ExpectedStreamState"/> specified
+/// for an operation.
+/// </summary>
 public sealed class WrongExpectedStreamStateException : DomainBlocksException
 {
     private WrongExpectedStreamStateException(
