@@ -22,7 +22,10 @@ csharp_style_var_when_type_is_apparent = true
 dotnet_style_parentheses_in_other_binary_operators = never_if_unnecessary
 dotnet_style_prefer_conditional_expression_over_return = false
 
-# Severity level of specific rules (sorted by rule ID)
+# Default severity of warning
+dotnet_analyzer_diagnostic.category-Style.severity = warning
+
+# Set severity level of specific rules (sorted by rule ID)
 dotnet_diagnostic.IDE0007.severity = suggestion # Use var instead of explicit type
 dotnet_diagnostic.IDE0022.severity = suggestion # Use expression body for methods
 dotnet_diagnostic.IDE0023.severity = suggestion # Use expression body for conversion operators
@@ -33,9 +36,6 @@ dotnet_diagnostic.IDE0072.severity = suggestion # Add missing cases to switch ex
 dotnet_diagnostic.IDE0270.severity = suggestion # Null check can be simplified (if null check)
 dotnet_diagnostic.IDE0290.severity = suggestion # Use primary constructor
 dotnet_diagnostic.IDE0305.severity = suggestion # Use collection expression for fluent
-
-# Force all code style suggestions to build warnings
-dotnet_analyzer_diagnostic.category-Style.severity = warning
 
 # Xml files
 [*.{xml,csproj,props}]
