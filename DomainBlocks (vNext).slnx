@@ -1,4 +1,10 @@
 <Solution>
+  <Folder Name="/.solution/">
+    <File Path="compose.yaml" />
+    <File Path=".gitignore" />
+    <File Path=".editorconfig" />
+    <File Path="Directory.Build.props" />
+  </Folder>
   <Folder Name="/benchmarks/" />
   <Folder Name="/docs/">
     <File Path="docs\vision.md" />
@@ -26,9 +32,5 @@
     <Project Path="tests\DomainBlocks.EventStore.MongoDB.Tests.Integration\DomainBlocks.EventStore.MongoDB.Tests.Integration.csproj" Type="Classic C#" />
     <Project Path="tests\DomainBlocks.EventStore.Tests.Integration\DomainBlocks.EventStore.Tests.Integration.csproj" Type="Classic C#" />
     <Project Path="tests\DomainBlocks.Serialization.Google.Protobuf.Tests\DomainBlocks.Serialization.Google.Protobuf.Tests.csproj" Type="Classic C#" />
-  </Folder>
-  <Folder Name="/_Solution Items/">
-    <File Path="compose.yaml" />
-    <File Path=".gitignore" />
   </Folder>
 </Solution>

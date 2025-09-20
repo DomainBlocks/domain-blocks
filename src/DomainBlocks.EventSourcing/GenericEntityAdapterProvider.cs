@@ -72,7 +72,7 @@ public class GenericEntityAdapterProvider : IEntityAdapterProvider
             .Where(x => x.IsGenericParameter)
             .ToArray();
 
-        if (!adapterGenericParams.All(x => bindings.ContainsKey(x)))
+        if (!adapterGenericParams.All(bindings.ContainsKey))
         {
             adapterType = null;
             return false;

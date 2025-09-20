@@ -6,7 +6,7 @@ namespace DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 public record FunctionalShoppingCart : IIdentifiable
 {
     public Guid Id { get; private init; }
-    public ImmutableList<ShoppingCartItem> Items { get; private init; } = ImmutableList<ShoppingCartItem>.Empty;
+    public ImmutableList<ShoppingCartItem> Items { get; private init; } = [];
 
     public IEnumerable<object> AddItem(ShoppingCartItem item)
     {

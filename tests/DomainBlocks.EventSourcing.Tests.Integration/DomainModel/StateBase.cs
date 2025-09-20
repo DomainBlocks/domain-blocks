@@ -2,7 +2,7 @@ namespace DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 
 public abstract record StateBase<T> where T : StateBase<T>, new()
 {
-    private static readonly Dictionary<Type, Func<T, object, T>> EventAppliers = new();
+    private static readonly Dictionary<Type, Func<T, object, T>> EventAppliers = [];
 
     public T Apply(object @event) => When(@event);
 
@@ -16,9 +16,7 @@ public abstract record StateBase<T> where T : StateBase<T>, new()
         var eventType = @event.GetType();
 
         if (EventAppliers.TryGetValue(eventType, out var eventApplier))
-        {
             return eventApplier((T)this, @event);
-        }
 
         return (T)this;
     }

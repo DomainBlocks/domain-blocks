@@ -189,8 +189,10 @@ public class MongoEventStore<TEventDocument, TPayload>(
     private static void EnsureMappedStreamVersionIsValid(long expectedVersion, long actualVersion)
     {
         if (expectedVersion != actualVersion)
+        {
             throw new InvalidOperationException(
                 $"Event document mapper produced an invalid stream version. " +
                 $"Expected={expectedVersion}, Actual={actualVersion}.");
+        }
     }
 }
