@@ -8,8 +8,9 @@ public sealed class AggregateAdapter<TAggregate, TState> : EntityAdapter<TAggreg
     where TAggregate : Aggregate<TState>, new()
     where TState : StateBase<TState>, new()
 {
-    // The unused parameters are used dynamically in tests
+#pragma warning disable IDE0060 // The unused parameters are used dynamically in tests
     public AggregateAdapter(int i, string s)
+#pragma warning restore IDE0060
     {
     }
 

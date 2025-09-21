@@ -73,7 +73,7 @@ public readonly struct StreamPosition : IEquatable<StreamPosition>
     {
         StreamPositionKind.Start => nameof(Start),
         StreamPositionKind.End => nameof(End),
-        _ => $"Version={Version.ToString()}"
+        _ => $"Version={Version}"
     };
 
     public bool Equals(StreamPosition other) => Kind == other.Kind && Nullable.Equals(Version, other.Version);

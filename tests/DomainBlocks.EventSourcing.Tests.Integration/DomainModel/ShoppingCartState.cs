@@ -16,5 +16,5 @@ public record ShoppingCartState : StateBase<ShoppingCartState>
     }
 
     public Guid SessionId { get; init; }
-    public ImmutableList<ShoppingCartItem> Items { get; private init; } = ImmutableList<ShoppingCartItem>.Empty;
+    public ImmutableList<ShoppingCartItem> Items { get; private init; } = [];
 }

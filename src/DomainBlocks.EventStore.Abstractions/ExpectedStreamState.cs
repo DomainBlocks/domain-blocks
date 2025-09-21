@@ -88,7 +88,7 @@ public readonly struct ExpectedStreamState : IEquatable<ExpectedStreamState>
         ExpectedStreamStateKind.Any => nameof(Any),
         ExpectedStreamStateKind.StreamExists => nameof(StreamExists),
         ExpectedStreamStateKind.StreamDoesNotExist => nameof(StreamDoesNotExist),
-        _ => $"Version={Version.ToString()}"
+        _ => $"Version={Version}"
     };
 
     public bool Equals(ExpectedStreamState other) => Kind == other.Kind && Nullable.Equals(Version, other.Version);

@@ -1,17 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-    <PropertyGroup>
-        <TargetFramework>net9.0</TargetFramework>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
-    </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" Version="3.32.0"/>
+  </ItemGroup>
 
-    <ItemGroup>
-      <PackageReference Include="Google.Protobuf" Version="3.32.0" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <ProjectReference Include="..\DomainBlocks.Serialization.Abstractions\DomainBlocks.Serialization.Abstractions.csproj" />
-    </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DomainBlocks.Serialization.Abstractions\DomainBlocks.Serialization.Abstractions.csproj"/>
+  </ItemGroup>
 
 </Project>
