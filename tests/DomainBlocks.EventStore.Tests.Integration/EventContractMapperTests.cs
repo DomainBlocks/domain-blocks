@@ -16,13 +16,16 @@ public class EventContractMapperTests
         var mongoOptions = MongoEventStoreOptions.CreateDefault<byte[]>();
         await MongoEventStoreAdmin.EnsureIndexesAsync(mongoDb, mongoOptions);
 
+        var eventStoreBackend = MongoEventStore.Create(mongoDb, mongoOptions);
+
+        var eventTypeMap = new EventTypeMapBuilder()
+            .MapType<Proto.UserCreated>()
+            .Build();
+
         var eventStoreOptions = new EventStoreOptions<byte[]>
         {
-            Backend = MongoEventStore.Create(mongoDb, mongoOptions),
-            TypeMappings =
-            [
-                new EventTypeMapping(typeof(Proto.UserCreated))
-            ],
+            Backend = eventStoreBackend,
+            TypeMap = eventTypeMap,
             Serializer = new GoogleProtobufBytesSerializer(),
             ContractMappers =
             [

@@ -63,13 +63,16 @@ public class EventReadTransformTests
         var mongoOptions = MongoEventStoreOptions.CreateDefault();
         await MongoEventStoreAdmin.EnsureIndexesAsync(mongoDb, mongoOptions);
 
+        var eventStoreBackend = MongoEventStore.Create(mongoDb, mongoOptions);
+
+        var eventTypeMap = new EventTypeMapBuilder()
+            .MapType<ShipmentDispatched>()
+            .Build();
+
         var eventStoreOptions = new EventStoreOptions<BsonDocument>
         {
-            Backend = MongoEventStore.Create(mongoDb, mongoOptions),
-            TypeMappings =
-            [
-                new EventTypeMapping(typeof(ShipmentDispatched))
-            ],
+            Backend = eventStoreBackend,
+            TypeMap = eventTypeMap,
             Serializer = new MongoBsonDocumentSerializer(),
             ReadTransforms =
             [

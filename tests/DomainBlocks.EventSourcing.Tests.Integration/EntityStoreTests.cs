@@ -32,15 +32,18 @@ public class EntityStoreTests
         var mongoOptions = MongoEventStoreOptions.CreateDefault();
         await MongoEventStoreAdmin.EnsureIndexesAsync(mongoDb, mongoOptions);
 
+        var eventStoreBackend = MongoEventStore.Create(mongoDb, mongoOptions);
+
+        var eventTypeMap = new EventTypeMapBuilder()
+            .MapType<ShoppingSessionStarted>()
+            .MapType<ItemAddedToShoppingCart>()
+            .MapType<ItemRemovedFromShoppingCart>()
+            .Build();
+
         var eventStoreOptions = new EventStoreOptions<BsonDocument>
         {
-            Backend = MongoEventStore.Create(mongoDb, mongoOptions),
-            TypeMappings =
-            [
-                new EventTypeMapping(typeof(ShoppingSessionStarted)),
-                new EventTypeMapping(typeof(ItemAddedToShoppingCart)),
-                new EventTypeMapping(typeof(ItemRemovedFromShoppingCart))
-            ],
+            Backend = eventStoreBackend,
+            TypeMap = eventTypeMap,
             Serializer = new MongoBsonDocumentSerializer()
         };
 

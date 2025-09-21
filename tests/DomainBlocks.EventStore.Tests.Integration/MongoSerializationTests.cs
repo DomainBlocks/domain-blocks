@@ -86,14 +86,17 @@ public class MongoSerializationTests
         var mongoOptions = MongoEventStoreOptions.CreateDefault<TPayload>();
         await MongoEventStoreAdmin.EnsureIndexesAsync(mongoDb, mongoOptions);
 
+        var eventStoreBackend = MongoEventStore.Create(mongoDb, mongoOptions);
+
+        var eventTypeMap = new EventTypeMapBuilder()
+            .MapType<UserCreated>()
+            .MapType<Proto.UserCreated>("ProtoUserCreated")
+            .Build();
+
         var eventStoreOptions = new EventStoreOptions<TPayload>
         {
-            Backend = MongoEventStore.Create(mongoDb, mongoOptions),
-            TypeMappings =
-            [
-                new EventTypeMapping(typeof(UserCreated)),
-                new EventTypeMapping(typeof(Proto.UserCreated), "ProtoUserCreated")
-            ],
+            Backend = eventStoreBackend,
+            TypeMap = eventTypeMap,
             Serializer = serializer
         };
 

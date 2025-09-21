@@ -2,15 +2,16 @@ using DomainBlocks.Core.Exceptions;
 
 namespace DomainBlocks.EventStore;
 
-public class EventTypeMappingNotFoundException : DomainBlocksException
+public sealed class EventTypeMappingNotFoundException : DomainBlocksException
 {
-    public EventTypeMappingNotFoundException(Type eventType) : base($"Mapping not found for event type '{eventType}'.")
+    public EventTypeMappingNotFoundException(Type eventType) :
+        base($"Event name mapping not found for type '{eventType}'.")
     {
         EventType = eventType;
     }
 
     public EventTypeMappingNotFoundException(string eventName) :
-        base($"Mapping not found for event name '{eventName}'.")
+        base($"Event type mapping not found for name '{eventName}'.")
     {
         EventName = eventName;
     }
