@@ -4,6 +4,7 @@
     <ProjectReference Include="..\..\src\DomainBlocks.EventSourcing\DomainBlocks.EventSourcing.csproj"/>
     <ProjectReference Include="..\..\src\DomainBlocks.EventStore.MongoDB\DomainBlocks.EventStore.MongoDB.csproj"/>
     <ProjectReference Include="..\..\src\DomainBlocks.Serialization.MongoDB.Bson\DomainBlocks.Serialization.MongoDB.Bson.csproj"/>
+    <ProjectReference Include="..\DomainBocks.Testing.Integration.MongoDB\DomainBocks.Testing.Integration.MongoDB.csproj" />
   </ItemGroup>
 
   <ItemGroup>

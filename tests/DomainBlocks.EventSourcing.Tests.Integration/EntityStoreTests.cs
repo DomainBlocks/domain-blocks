@@ -3,37 +3,22 @@ using DomainBlocks.EventSourcing.Tests.Integration.DomainEvents;
 using DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.MongoDB;
 using DomainBlocks.Serialization.MongoDB.Bson;
+using DomainBocks.Testing.Integration.MongoDB;
 using MongoDB.Bson;
-using MongoDB.Bson.Serialization;
-using MongoDB.Bson.Serialization.Serializers;
-using MongoDB.Driver;
 using NUnit.Framework;
 using Shouldly;
 
 namespace DomainBlocks.EventSourcing.Tests.Integration;
 
 [TestFixture]
-public class EntityStoreTests
+public class EntityStoreTests : MongoEventStoreTestFixture<BsonDocument>
 {
     private EntityStore _entityStore = null!;
 
-    static EntityStoreTests()
-    {
-        BsonSerializer.RegisterSerializer(new GuidSerializer(GuidRepresentation.Standard));
-    }
-
     [SetUp]
-    public async Task SetUp()
+    public void SetUp()
     {
-        var client = new MongoClient("mongodb://localhost:27017");
-        var mongoDb = client.GetDatabase("test");
-        var mongoOptions = MongoEventStoreOptions.CreateDefault();
-        await MongoEventStoreAdmin.EnsureIndexesAsync(mongoDb, mongoOptions);
-
-        var eventStoreBackend = MongoEventStore.Create(mongoDb, mongoOptions);
-
         var eventTypeMap = new EventTypeMapBuilder()
             .MapType<ShoppingSessionStarted>()
             .MapType<ItemAddedToShoppingCart>()
@@ -42,7 +27,7 @@ public class EntityStoreTests
 
         var eventStoreOptions = new EventStoreOptions<BsonDocument>
         {
-            Backend = eventStoreBackend,
+            Backend = EventStoreBackend,
             TypeMap = eventTypeMap,
             Serializer = new MongoBsonDocumentSerializer()
         };

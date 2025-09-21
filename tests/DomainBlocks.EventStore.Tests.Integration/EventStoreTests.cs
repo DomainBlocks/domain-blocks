@@ -1,148 +1,143 @@
-using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.MongoDB;
-using DomainBlocks.Serialization.SystemTextJson;
-using MongoDB.Driver;
+using DomainBlocks.Serialization.MongoDB.Bson;
+using DomainBocks.Testing.Integration.MongoDB;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization;
 using NUnit.Framework;
 using Shouldly;
 
 namespace DomainBlocks.EventStore.Tests.Integration;
 
-public class EventStoreTests
+public class EventStoreTests : MongoEventStoreTestFixture<BsonDocument>
 {
-    private static readonly MongoEventStoreOptions<EventDocument<string>, string> MongoEventStoreOptions =
-        MongoDB.MongoEventStoreOptions.CreateDefault<string>();
-
-    private IEventStoreBackend<string> _eventStoreBackend = null!;
-
-    [OneTimeSetUp]
-    public async Task OneTimeSetUp()
+    static EventStoreTests()
     {
-        var client = new MongoClient("mongodb://localhost:27017");
-        var mongoDatabase = client.GetDatabase("test");
-        await MongoEventStoreAdmin.EnsureIndexesAsync(mongoDatabase, MongoEventStoreOptions);
-
-        _eventStoreBackend = MongoEventStore.Create(mongoDatabase, MongoEventStoreOptions);
+        BsonClassMap.RegisterClassMap<LimitOrderEvent>(cm =>
+        {
+            cm.AutoMap();
+            cm.SetIgnoreExtraElements(true);
+        });
     }
 
     [Test]
     public async Task Should_allow_reading_multiple_events_as_common_type()
     {
         var writeEventTypeMap = new EventTypeMapBuilder()
-            .MapType<TradeCaptured>()
-            .MapType<TradeAmended>()
-            .MapType<TradeBooked>()
+            .MapType<LimitOrderSubmitted>()
+            .MapType<LimitOrderAmended>()
+            .MapType<LimitOrderFilled>()
             .Build();
 
         var readEventTypeMap = new EventTypeMapBuilder()
-            .MapReadType<TradeEvent>(nameof(TradeCaptured), nameof(TradeAmended), nameof(TradeBooked))
+            .MapReadType<LimitOrderEvent>(
+                nameof(LimitOrderSubmitted),
+                nameof(LimitOrderAmended),
+                nameof(LimitOrderFilled))
             .Build();
 
-        var writeEventStoreOptions = new EventStoreOptions<string>
+        var writeEventStoreOptions = new EventStoreOptions<BsonDocument>
         {
-            Backend = _eventStoreBackend,
+            Backend = EventStoreBackend,
             TypeMap = writeEventTypeMap,
-            Serializer = new SystemTextJsonStringSerializer()
+            Serializer = new MongoBsonDocumentSerializer()
         };
 
-        var readEventStoreOptions = new EventStoreOptions<string>
+        var readEventStoreOptions = new EventStoreOptions<BsonDocument>
         {
-            Backend = _eventStoreBackend,
+            Backend = EventStoreBackend,
             TypeMap = readEventTypeMap,
-            Serializer = new SystemTextJsonStringSerializer()
+            Serializer = new MongoBsonDocumentSerializer()
         };
 
-        var writeEventStore = new EventStore<string>(writeEventStoreOptions);
-        var readEventStore = new EventStore<string>(readEventStoreOptions);
+        var writeEventStore = new EventStore<BsonDocument>(writeEventStoreOptions);
+        var readEventStore = new EventStore<BsonDocument>(readEventStoreOptions);
 
-        var tradeId = Guid.NewGuid();
-        var streamId = $"trade-{tradeId}";
+        var orderId = Guid.NewGuid();
+        var streamId = $"order-{orderId}";
 
-        var tradeCaptured = new TradeCaptured
+        var submitted = new LimitOrderSubmitted
         {
-            TradeId = tradeId,
-            Amount = 10_000,
-            Currency = "EUR",
-            CreatedAt = new DateTimeOffset(2025, 1, 1, 9, 0, 0, TimeSpan.Zero),
-            CreatedBy = "Bob"
+            OrderId = orderId,
+            Quantity = 10,
+            LimitPrice = 100,
+            SubmittedAt = new DateTimeOffset(2025, 1, 1, 9, 0, 0, TimeSpan.Zero),
+            SubmittedBy = "Bob"
         };
 
-        var tradeAmended = new TradeAmended
+        var amended = new LimitOrderAmended
         {
-            TradeId = tradeId,
-            Amount = 15_000,
-            Currency = "CHF",
+            OrderId = orderId,
+            Quantity = 11,
+            LimitPrice = 101,
             AmendedAt = new DateTimeOffset(2025, 1, 1, 10, 0, 0, TimeSpan.Zero),
             AmendedBy = "Alice"
         };
 
-        var tradeBooked = new TradeBooked
+        var filled = new LimitOrderFilled
         {
-            TradeId = tradeId,
-            Amount = 15_000,
-            Currency = "CHF",
-            BookedAt = new DateTimeOffset(2025, 1, 1, 11, 0, 0, TimeSpan.Zero),
-            BookedBy = "Joe",
-            Counterparty = "Some Company Inc."
+            OrderId = orderId,
+            Quantity = 11,
+            LimitPrice = 101,
+            FillPrice = 99,
+            FilledAt = new DateTimeOffset(2025, 1, 1, 11, 0, 0, TimeSpan.Zero)
         };
 
-        await writeEventStore.AppendToStreamAsync(streamId, [tradeCaptured, tradeAmended, tradeBooked]);
+        await writeEventStore.AppendToStreamAsync(streamId, [submitted, amended, filled]);
 
-        var tradeEvents = await (await readEventStore.ReadStreamAsync(streamId)).Events
+        var orderEvents = await (await readEventStore.ReadStreamAsync(streamId)).Events
             .Select(x => x.Payload)
-            .OfType<TradeEvent>()
+            .OfType<LimitOrderEvent>()
             .ToArrayAsync();
 
-        tradeEvents.Length.ShouldBe(3);
+        orderEvents.Length.ShouldBe(3);
 
-        tradeEvents[0].TradeId.ShouldBe(tradeId);
-        tradeEvents[0].Amount.ShouldBe(10_000);
-        tradeEvents[0].Currency.ShouldBe("EUR");
+        orderEvents[0].OrderId.ShouldBe(orderId);
+        orderEvents[0].Quantity.ShouldBe(10);
+        orderEvents[0].LimitPrice.ShouldBe(100);
 
-        tradeEvents[1].TradeId.ShouldBe(tradeId);
-        tradeEvents[1].Amount.ShouldBe(15_000);
-        tradeEvents[1].Currency.ShouldBe("CHF");
+        orderEvents[1].OrderId.ShouldBe(orderId);
+        orderEvents[1].Quantity.ShouldBe(11);
+        orderEvents[1].LimitPrice.ShouldBe(101);
 
-        tradeEvents[2].TradeId.ShouldBe(tradeId);
-        tradeEvents[2].Amount.ShouldBe(15_000);
-        tradeEvents[2].Currency.ShouldBe("CHF");
+        orderEvents[2].OrderId.ShouldBe(orderId);
+        orderEvents[2].Quantity.ShouldBe(11);
+        orderEvents[1].LimitPrice.ShouldBe(101);
     }
 
     // ReSharper disable UnusedAutoPropertyAccessor.Global
 
-    public record TradeCaptured
+    public record LimitOrderSubmitted
     {
-        public required Guid TradeId { get; init; }
-        public required decimal Amount { get; init; }
-        public required string Currency { get; init; }
-        public required DateTimeOffset CreatedAt { get; init; }
-        public required string CreatedBy { get; init; }
+        public required Guid OrderId { get; init; }
+        public required int Quantity { get; init; }
+        public required decimal LimitPrice { get; init; }
+        public required DateTimeOffset SubmittedAt { get; init; }
+        public required string SubmittedBy { get; init; }
     }
 
-    public record TradeAmended
+    public record LimitOrderAmended
     {
-        public required Guid TradeId { get; init; }
-        public required decimal Amount { get; init; }
-        public required string Currency { get; init; }
+        public required Guid OrderId { get; init; }
+        public required int Quantity { get; init; }
+        public required decimal LimitPrice { get; init; }
         public required DateTimeOffset AmendedAt { get; init; }
         public required string AmendedBy { get; init; }
     }
 
-    public record TradeBooked
+    public record LimitOrderFilled
     {
-        public required Guid TradeId { get; init; }
-        public required decimal Amount { get; init; }
-        public required string Currency { get; init; }
-        public required DateTimeOffset BookedAt { get; init; }
-        public required string BookedBy { get; init; }
-        public required string Counterparty { get; init; }
+        public required Guid OrderId { get; init; }
+        public required int Quantity { get; init; }
+        public required decimal LimitPrice { get; init; }
+        public required decimal FillPrice { get; init; }
+        public required DateTimeOffset FilledAt { get; init; }
     }
 
     // ReSharper disable once ClassNeverInstantiated.Global
-    public record TradeEvent
+    public record LimitOrderEvent
     {
-        public required Guid TradeId { get; init; }
-        public required decimal Amount { get; init; }
-        public required string Currency { get; init; }
+        public required Guid OrderId { get; init; }
+        public required int Quantity { get; init; }
+        public required decimal LimitPrice { get; init; }
     }
 
     // ReSharper restore UnusedAutoPropertyAccessor.Global

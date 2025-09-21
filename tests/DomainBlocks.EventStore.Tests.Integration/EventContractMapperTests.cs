@@ -1,30 +1,22 @@
-using DomainBlocks.EventStore.MongoDB;
 using DomainBlocks.Serialization.Google.Protobuf;
-using MongoDB.Driver;
+using DomainBocks.Testing.Integration.MongoDB;
 using NUnit.Framework;
 using Shouldly;
 
 namespace DomainBlocks.EventStore.Tests.Integration;
 
-public class EventContractMapperTests
+public class EventContractMapperTests : MongoEventStoreTestFixture<byte[]>
 {
     [Test]
     public async Task Should_map_to_and_from_contract()
     {
-        var client = new MongoClient("mongodb://localhost:27017");
-        var mongoDb = client.GetDatabase("test");
-        var mongoOptions = MongoEventStoreOptions.CreateDefault<byte[]>();
-        await MongoEventStoreAdmin.EnsureIndexesAsync(mongoDb, mongoOptions);
-
-        var eventStoreBackend = MongoEventStore.Create(mongoDb, mongoOptions);
-
         var eventTypeMap = new EventTypeMapBuilder()
             .MapType<Proto.UserCreated>()
             .Build();
 
         var eventStoreOptions = new EventStoreOptions<byte[]>
         {
-            Backend = eventStoreBackend,
+            Backend = EventStoreBackend,
             TypeMap = eventTypeMap,
             Serializer = new GoogleProtobufBytesSerializer(),
             ContractMappers =
