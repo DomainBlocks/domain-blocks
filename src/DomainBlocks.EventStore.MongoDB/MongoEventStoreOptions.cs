@@ -7,13 +7,13 @@ public static class MongoEventStoreOptions
 {
     private const string DefaultEventCollectionName = "domainblocks.events";
 
-    public static MongoEventStoreOptions<EventDocument> CreateDefault(
+    public static MongoEventStoreOptions<DefaultEventDocument> CreateDefault(
         string eventCollectionName = DefaultEventCollectionName)
     {
-        return new MongoEventStoreOptions<EventDocument>
+        return new MongoEventStoreOptions<DefaultEventDocument>
         {
             EventCollectionName = eventCollectionName,
-            EventDocumentConverter = new EventDocumentConverter(),
+            EventDocumentConverter = new DefaultEventDocumentConverter(),
             StreamIdExpression = doc => doc.StreamId,
             StreamVersionExpression = doc => doc.StreamVersion,
             CommittedAtExpression = doc => doc.CommittedAt

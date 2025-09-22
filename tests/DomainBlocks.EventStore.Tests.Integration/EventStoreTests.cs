@@ -68,7 +68,7 @@ public class EventStoreTests : MongoEventStoreTestFixture<BsonDocument>
             OrderId = orderId,
             Quantity = 11,
             LimitPrice = 101,
-            AmendedAt = new DateTimeOffset(2025, 1, 1, 10, 0, 0, TimeSpan.Zero),
+            AmendedAt = submitted.SubmittedAt.AddHours(1),
             AmendedBy = "Alice"
         };
 
@@ -78,7 +78,7 @@ public class EventStoreTests : MongoEventStoreTestFixture<BsonDocument>
             Quantity = 11,
             LimitPrice = 101,
             FillPrice = 99,
-            FilledAt = new DateTimeOffset(2025, 1, 1, 11, 0, 0, TimeSpan.Zero)
+            FilledAt = amended.AmendedAt.AddHours(1)
         };
 
         await writeEventStore.AppendToStreamAsync(streamId, [submitted, amended, filled]);
@@ -104,7 +104,6 @@ public class EventStoreTests : MongoEventStoreTestFixture<BsonDocument>
     }
 
     // ReSharper disable UnusedAutoPropertyAccessor.Global
-
     public record LimitOrderSubmitted
     {
         public required Guid OrderId { get; init; }
@@ -139,6 +138,5 @@ public class EventStoreTests : MongoEventStoreTestFixture<BsonDocument>
         public required int Quantity { get; init; }
         public required decimal LimitPrice { get; init; }
     }
-
     // ReSharper restore UnusedAutoPropertyAccessor.Global
 }

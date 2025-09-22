@@ -81,7 +81,7 @@ public class MongoSerializationTests : MongoEventStoreTestFixture
     private EventStore<TPayload> CreateEventStore<TPayload>(IPayloadSerializer<TPayload> serializer)
         where TPayload : notnull
     {
-        var eventStoreBackend = MongoEventStore.Create<EventDocument, TPayload>(MongoDatabase, MongoEventStoreOptions);
+        var eventStoreBackend = MongoEventStore.Create<DefaultEventDocument, TPayload>(MongoDatabase, MongoEventStoreOptions);
 
         var eventTypeMap = new EventTypeMapBuilder()
             .MapType<UserCreated>()

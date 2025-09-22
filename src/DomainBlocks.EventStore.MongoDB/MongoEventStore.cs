@@ -166,7 +166,7 @@ public class MongoEventStore<TEventDocument, TPayload>(
         UncommittedEvent<TPayload> @event,
         DateTime committedAt)
     {
-        var doc = options.EventDocumentConverter.ToEventDocument(streamId, version, @event, committedAt);
+        var doc = options.EventDocumentConverter.ToEventDocument(@event, streamId, version, committedAt);
 
         var expectedVersion = version.ToInt64();
         var actualVersion = _streamVersionFunc(doc);

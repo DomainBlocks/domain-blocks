@@ -15,7 +15,8 @@ public class MongoEventStoreTestFixture
     }
 
     protected IMongoDatabase MongoDatabase { get; private set; } = null!;
-    protected MongoEventStoreOptions<EventDocument> MongoEventStoreOptions { get; private set; } = null!;
+
+    protected MongoEventStoreOptions<DefaultEventDocument> MongoEventStoreOptions { get; private set; } = null!;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -34,7 +35,7 @@ public class MongoEventStoreTestFixture<TPayload> : MongoEventStoreTestFixture w
     [OneTimeSetUp]
     public new void OneTimeSetUp()
     {
-        MongoEventStore = DomainBlocks.EventStore.MongoDB.MongoEventStore.Create<EventDocument, TPayload>(
+        MongoEventStore = DomainBlocks.EventStore.MongoDB.MongoEventStore.Create<DefaultEventDocument, TPayload>(
             MongoDatabase,
             MongoEventStoreOptions);
     }
