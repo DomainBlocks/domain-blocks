@@ -2,4 +2,4 @@ using DomainBlocks.EventStore.Abstractions;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
-public interface IMongoEventStore<TPayload> : IEventStoreBackend<TPayload>;
+public interface IMongoEventStore<TPayload> : IEventStoreBackend<TPayload> where TPayload : notnull;

@@ -2,7 +2,7 @@ using MongoDB.Bson;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
-public class EventDocument<TPayload>
+public class EventDocument
 {
     public ObjectId Id { get; init; }
     public required string StreamId { get; init; }
@@ -10,5 +10,5 @@ public class EventDocument<TPayload>
     public required string EventName { get; init; }
     public required Dictionary<string, string> Metadata { get; init; }
     public required DateTime CommittedAt { get; init; }
-    public required TPayload Payload { get; init; }
+    public required BsonValue Payload { get; init; }
 }

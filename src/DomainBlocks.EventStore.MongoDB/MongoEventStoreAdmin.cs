@@ -4,9 +4,9 @@ namespace DomainBlocks.EventStore.MongoDB;
 
 public static class MongoEventStoreAdmin
 {
-    public static Task EnsureIndexesAsync<TEventDocument, TPayload>(
+    public static Task EnsureIndexesAsync<TEventDocument>(
         IMongoDatabase database,
-        MongoEventStoreOptions<TEventDocument, TPayload> options,
+        MongoEventStoreOptions<TEventDocument> options,
         CancellationToken cancellationToken = default)
     {
         var collection = database.GetCollection<TEventDocument>(options.EventCollectionName);

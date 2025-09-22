@@ -27,7 +27,7 @@ public class EntityStoreTests : MongoEventStoreTestFixture<BsonDocument>
 
         var eventStoreOptions = new EventStoreOptions<BsonDocument>
         {
-            Backend = EventStoreBackend,
+            Backend = MongoEventStore,
             TypeMap = eventTypeMap,
             Serializer = new MongoBsonDocumentSerializer()
         };

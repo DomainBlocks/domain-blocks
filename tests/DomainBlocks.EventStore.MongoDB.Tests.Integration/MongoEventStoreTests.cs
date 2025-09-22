@@ -24,13 +24,13 @@ public class MongoEventStoreTests : MongoEventStoreTestFixture<BsonDocument>
 
         var streamId = $"test-{Guid.NewGuid()}";
 
-        await EventStoreBackend.AppendToStreamAsync(
+        await MongoEventStore.AppendToStreamAsync(
             streamId,
             events,
             ExpectedStreamState.Any,
             cancellationToken);
 
-        var readResult = await EventStoreBackend.ReadStreamAsync(streamId, cancellationToken: cancellationToken);
+        var readResult = await MongoEventStore.ReadStreamAsync(streamId, cancellationToken: cancellationToken);
         var readEvents = await readResult.Events.ToArrayAsync(cancellationToken);
 
         readEvents.ShouldAllBe(x => x.Header.StreamId == streamId);
@@ -61,19 +61,19 @@ public class MongoEventStoreTests : MongoEventStoreTestFixture<BsonDocument>
 
         var streamId = $"test-{Guid.NewGuid()}";
 
-        await EventStoreBackend.AppendToStreamAsync(
+        await MongoEventStore.AppendToStreamAsync(
             streamId,
             newEvents1,
             ExpectedStreamState.Any,
             cancellationToken);
 
-        await EventStoreBackend.AppendToStreamAsync(
+        await MongoEventStore.AppendToStreamAsync(
             streamId,
             newEvents2,
             ExpectedStreamState.Any,
             cancellationToken);
 
-        var readResult = await EventStoreBackend.ReadStreamAsync(streamId, cancellationToken: cancellationToken);
+        var readResult = await MongoEventStore.ReadStreamAsync(streamId, cancellationToken: cancellationToken);
         var readEvents = await readResult.Events.ToArrayAsync(cancellationToken);
 
         readEvents.ShouldAllBe(x => x.Header.StreamId == streamId);
@@ -90,7 +90,7 @@ public class MongoEventStoreTests : MongoEventStoreTestFixture<BsonDocument>
     {
         var streamId = $"test-{Guid.NewGuid()}";
 
-        await EventStoreBackend.AppendToStreamAsync(
+        await MongoEventStore.AppendToStreamAsync(
             streamId,
             [CreateEvent("TestEvent1")],
             cancellationToken: cancellationToken);
@@ -101,7 +101,7 @@ public class MongoEventStoreTests : MongoEventStoreTestFixture<BsonDocument>
             Direction = StreamReadDirection.Backward
         };
 
-        var readResult = await EventStoreBackend.ReadStreamAsync(streamId, options, cancellationToken);
+        var readResult = await MongoEventStore.ReadStreamAsync(streamId, options, cancellationToken);
         var events = await readResult.Events.ToArrayAsync(cancellationToken);
 
         readResult.Status.ShouldBe(ReadStreamStatus.Success);
@@ -121,7 +121,7 @@ public class MongoEventStoreTests : MongoEventStoreTestFixture<BsonDocument>
             Direction = StreamReadDirection.Backward
         };
 
-        var readResult = await EventStoreBackend.ReadStreamAsync(streamId, options, cancellationToken);
+        var readResult = await MongoEventStore.ReadStreamAsync(streamId, options, cancellationToken);
         var events = await readResult.Events.ToArrayAsync(cancellationToken);
 
         readResult.Status.ShouldBe(ReadStreamStatus.StreamNotFound);

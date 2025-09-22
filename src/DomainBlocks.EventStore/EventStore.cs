@@ -5,7 +5,7 @@ using DomainBlocks.Serialization.Abstractions;
 
 namespace DomainBlocks.EventStore;
 
-public class EventStore<TPayload> : IEventStore
+public class EventStore<TPayload> : IEventStore where TPayload : notnull
 {
     private readonly IEventStoreBackend<TPayload> _backend;
     private readonly EventTypeMap _eventTypeMap;

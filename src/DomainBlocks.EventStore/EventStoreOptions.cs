@@ -3,7 +3,7 @@ using DomainBlocks.Serialization.Abstractions;
 
 namespace DomainBlocks.EventStore;
 
-public class EventStoreOptions<TPayload>
+public class EventStoreOptions<TPayload> where TPayload : notnull
 {
     public required IEventStoreBackend<TPayload> Backend { get; init; }
     public required EventTypeMap TypeMap { get; init; }

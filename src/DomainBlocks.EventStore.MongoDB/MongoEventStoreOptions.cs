@@ -1,5 +1,4 @@
 using System.Linq.Expressions;
-using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB;
@@ -8,19 +7,13 @@ public static class MongoEventStoreOptions
 {
     private const string DefaultEventCollectionName = "domainblocks.events";
 
-    public static MongoEventStoreOptions<EventDocument<BsonDocument>, BsonDocument> CreateDefault(
+    public static MongoEventStoreOptions<EventDocument> CreateDefault(
         string eventCollectionName = DefaultEventCollectionName)
     {
-        return CreateDefault<BsonDocument>(eventCollectionName);
-    }
-
-    public static MongoEventStoreOptions<EventDocument<TPayload>, TPayload> CreateDefault<TPayload>(
-        string eventCollectionName = DefaultEventCollectionName)
-    {
-        return new MongoEventStoreOptions<EventDocument<TPayload>, TPayload>
+        return new MongoEventStoreOptions<EventDocument>
         {
             EventCollectionName = eventCollectionName,
-            EventDocumentMapper = new EventDocumentMapper<TPayload>(),
+            EventDocumentConverter = new EventDocumentConverter(),
             StreamIdExpression = doc => doc.StreamId,
             StreamVersionExpression = doc => doc.StreamVersion,
             CommittedAtExpression = doc => doc.CommittedAt
@@ -28,10 +21,10 @@ public static class MongoEventStoreOptions
     }
 }
 
-public class MongoEventStoreOptions<TEventDocument, TPayload>
+public class MongoEventStoreOptions<TEventDocument>
 {
     public required string EventCollectionName { get; init; }
-    public required IEventDocumentMapper<TEventDocument, TPayload> EventDocumentMapper { get; init; }
+    public required IEventDocumentConverter<TEventDocument> EventDocumentConverter { get; init; }
     public required Expression<Func<TEventDocument, string>> StreamIdExpression { get; init; }
     public required Expression<Func<TEventDocument, long>> StreamVersionExpression { get; init; }
     public required Expression<Func<TEventDocument, DateTime>> CommittedAtExpression { get; init; }

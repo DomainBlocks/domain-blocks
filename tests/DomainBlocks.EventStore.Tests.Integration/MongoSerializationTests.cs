@@ -3,13 +3,13 @@ using DomainBlocks.Serialization.Abstractions;
 using DomainBlocks.Serialization.Google.Protobuf;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Serialization.SystemTextJson;
-using MongoDB.Driver;
+using DomainBocks.Testing.Integration.MongoDB;
 using NUnit.Framework;
 using Shouldly;
 
 namespace DomainBlocks.EventStore.Tests.Integration;
 
-public class MongoSerializationTests
+public class MongoSerializationTests : MongoEventStoreTestFixture
 {
     private static readonly UserCreated TestEvent = new()
     {
@@ -61,12 +61,11 @@ public class MongoSerializationTests
         await Should_write_and_read_event(TestEvent, new SystemTextJsonStringSerializer());
     }
 
-    private static async Task Should_write_and_read_event<TEvent, TPayload>(
+    private async Task Should_write_and_read_event<TEvent, TPayload>(
         TEvent @event,
-        IPayloadSerializer<TPayload> serializer)
-        where TEvent : notnull
+        IPayloadSerializer<TPayload> serializer) where TEvent : notnull where TPayload : notnull
     {
-        var eventStore = await CreateEventStore(serializer);
+        var eventStore = CreateEventStore(serializer);
         var streamId = $"test-{serializer.GetType().Name}-{Guid.NewGuid()}";
         await eventStore.AppendToStreamAsync(streamId, [@event]);
         var result = await eventStore.ReadStreamAsync(streamId);
@@ -79,14 +78,10 @@ public class MongoSerializationTests
             .ShouldBe(@event);
     }
 
-    private static async Task<EventStore<TPayload>> CreateEventStore<TPayload>(IPayloadSerializer<TPayload> serializer)
+    private EventStore<TPayload> CreateEventStore<TPayload>(IPayloadSerializer<TPayload> serializer)
+        where TPayload : notnull
     {
-        var client = new MongoClient("mongodb://localhost:27017");
-        var mongoDb = client.GetDatabase("test");
-        var mongoOptions = MongoEventStoreOptions.CreateDefault<TPayload>();
-        await MongoEventStoreAdmin.EnsureIndexesAsync(mongoDb, mongoOptions);
-
-        var eventStoreBackend = MongoEventStore.Create(mongoDb, mongoOptions);
+        var eventStoreBackend = MongoEventStore.Create<EventDocument, TPayload>(MongoDatabase, MongoEventStoreOptions);
 
         var eventTypeMap = new EventTypeMapBuilder()
             .MapType<UserCreated>()

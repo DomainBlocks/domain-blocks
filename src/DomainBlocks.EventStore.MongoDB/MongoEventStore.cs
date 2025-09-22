@@ -8,7 +8,7 @@ public static class MongoEventStore
 {
     public static IMongoEventStore<TPayload> Create<TEventDocument, TPayload>(
         IMongoDatabase database,
-        MongoEventStoreOptions<TEventDocument, TPayload> options)
+        MongoEventStoreOptions<TEventDocument> options) where TPayload : notnull
     {
         var collection = database.GetCollection<TEventDocument>(options.EventCollectionName);
         return new MongoEventStore<TEventDocument, TPayload>(collection, options);
@@ -17,7 +17,7 @@ public static class MongoEventStore
 
 public class MongoEventStore<TEventDocument, TPayload>(
     IMongoCollection<TEventDocument> collection,
-    MongoEventStoreOptions<TEventDocument, TPayload> options) : IMongoEventStore<TPayload>
+    MongoEventStoreOptions<TEventDocument> options) : IMongoEventStore<TPayload> where TPayload : notnull
 {
     private readonly FieldDefinition<TEventDocument, string> _streamIdField = options.StreamIdField;
     private readonly FieldDefinition<TEventDocument, long> _streamVersionField = options.StreamVersionField;
@@ -166,7 +166,7 @@ public class MongoEventStore<TEventDocument, TPayload>(
         UncommittedEvent<TPayload> @event,
         DateTime committedAt)
     {
-        var doc = options.EventDocumentMapper.ToEventDocument(streamId, version, @event, committedAt);
+        var doc = options.EventDocumentConverter.ToEventDocument(streamId, version, @event, committedAt);
 
         var expectedVersion = version.ToInt64();
         var actualVersion = _streamVersionFunc(doc);
@@ -177,7 +177,7 @@ public class MongoEventStore<TEventDocument, TPayload>(
 
     private CommittedEvent<TPayload> FromEventDocument(TEventDocument doc)
     {
-        var @event = options.EventDocumentMapper.FromEventDocument(doc);
+        var @event = options.EventDocumentConverter.FromEventDocument<TPayload>(doc);
 
         var expectedVersion = _streamVersionFunc(doc);
         var actualVersion = @event.Header.StreamVersion.ToInt64();

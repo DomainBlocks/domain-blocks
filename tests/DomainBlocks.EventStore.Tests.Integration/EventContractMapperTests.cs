@@ -16,7 +16,7 @@ public class EventContractMapperTests : MongoEventStoreTestFixture<byte[]>
 
         var eventStoreOptions = new EventStoreOptions<byte[]>
         {
-            Backend = EventStoreBackend,
+            Backend = MongoEventStore,
             TypeMap = eventTypeMap,
             Serializer = new GoogleProtobufBytesSerializer(),
             ContractMappers =
