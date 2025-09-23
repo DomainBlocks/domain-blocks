@@ -58,7 +58,7 @@ public class EventReadTransformTests : MongoEventStoreTestFixture<BsonDocument>
         {
             Backend = MongoEventStore,
             TypeMap = eventTypeMap,
-            Serializer = new MongoBsonDocumentSerializer(),
+            Serializer = new BsonDocumentSerializer(),
             ReadTransforms =
             [
                 new ShipmentDispatchedTransform()

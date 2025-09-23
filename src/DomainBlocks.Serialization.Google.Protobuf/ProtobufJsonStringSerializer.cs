@@ -3,8 +3,7 @@ using Google.Protobuf;
 
 namespace DomainBlocks.Serialization.Google.Protobuf;
 
-public sealed class GoogleProtobufJsonStringSerializer(JsonFormatter.Settings? settings = null) :
-    IPayloadSerializer<string>
+public sealed class ProtobufJsonStringSerializer(JsonFormatter.Settings? settings = null) : IPayloadSerializer<string>
 {
     private readonly JsonFormatter _formatter = new(settings ?? JsonFormatter.Settings.Default);
 

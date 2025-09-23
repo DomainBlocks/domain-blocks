@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB;
@@ -7,13 +8,20 @@ public static class MongoEventStoreOptions
 {
     private const string DefaultEventCollectionName = "domainblocks.events";
 
-    public static MongoEventStoreOptions<DefaultEventDocument> CreateDefault(
+    public static MongoEventStoreOptions<DefaultEventDocument<BsonValue>, BsonValue> CreateDefault(
         string eventCollectionName = DefaultEventCollectionName)
     {
-        return new MongoEventStoreOptions<DefaultEventDocument>
+        return CreateDefault<BsonValue>(eventCollectionName);
+    }
+
+    public static MongoEventStoreOptions<DefaultEventDocument<TPayload>, TPayload> CreateDefault<TPayload>(
+        string eventCollectionName = DefaultEventCollectionName)
+        where TPayload : notnull
+    {
+        return new MongoEventStoreOptions<DefaultEventDocument<TPayload>, TPayload>
         {
             EventCollectionName = eventCollectionName,
-            EventDocumentConverter = new DefaultEventDocumentConverter(),
+            EventDocumentConverter = new DefaultEventDocumentConverter<TPayload>(),
             StreamIdExpression = doc => doc.StreamId,
             StreamVersionExpression = doc => doc.StreamVersion,
             CommittedAtExpression = doc => doc.CommittedAt
@@ -21,10 +29,10 @@ public static class MongoEventStoreOptions
     }
 }
 
-public class MongoEventStoreOptions<TEventDocument>
+public class MongoEventStoreOptions<TEventDocument, TPayload> where TPayload : notnull
 {
     public required string EventCollectionName { get; init; }
-    public required IEventDocumentConverter<TEventDocument> EventDocumentConverter { get; init; }
+    public required IEventDocumentConverter<TEventDocument, TPayload> EventDocumentConverter { get; init; }
     public required Expression<Func<TEventDocument, string>> StreamIdExpression { get; init; }
     public required Expression<Func<TEventDocument, long>> StreamVersionExpression { get; init; }
     public required Expression<Func<TEventDocument, DateTime>> CommittedAtExpression { get; init; }

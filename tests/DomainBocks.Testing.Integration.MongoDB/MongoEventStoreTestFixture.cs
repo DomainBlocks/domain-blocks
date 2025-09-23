@@ -7,36 +7,23 @@ using NUnit.Framework;
 
 namespace DomainBocks.Testing.Integration.MongoDB;
 
-public class MongoEventStoreTestFixture
+public class MongoEventStoreTestFixture<TPayload> where TPayload : notnull
 {
     static MongoEventStoreTestFixture()
     {
         BsonSerializer.RegisterSerializer(new GuidSerializer(GuidRepresentation.Standard));
     }
 
-    protected IMongoDatabase MongoDatabase { get; private set; } = null!;
-
-    protected MongoEventStoreOptions<DefaultEventDocument> MongoEventStoreOptions { get; private set; } = null!;
+    protected IMongoEventStore<TPayload> MongoEventStore { get; private set; } = null!;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
     {
         var client = new MongoClient("mongodb://localhost:27017");
-        MongoDatabase = client.GetDatabase("test");
-        MongoEventStoreOptions = DomainBlocks.EventStore.MongoDB.MongoEventStoreOptions.CreateDefault();
-        await MongoEventStoreAdmin.EnsureIndexesAsync(MongoDatabase, MongoEventStoreOptions);
-    }
-}
+        var database = client.GetDatabase("test");
+        var options = MongoEventStoreOptions.CreateDefault<TPayload>();
+        await MongoEventStoreAdmin.EnsureIndexesAsync(database, options);
 
-public class MongoEventStoreTestFixture<TPayload> : MongoEventStoreTestFixture where TPayload : notnull
-{
-    protected IMongoEventStore<TPayload> MongoEventStore { get; private set; } = null!;
-
-    [OneTimeSetUp]
-    public new void OneTimeSetUp()
-    {
-        MongoEventStore = DomainBlocks.EventStore.MongoDB.MongoEventStore.Create<DefaultEventDocument, TPayload>(
-            MongoDatabase,
-            MongoEventStoreOptions);
+        MongoEventStore = DomainBlocks.EventStore.MongoDB.MongoEventStore.Create(database, options);
     }
 }

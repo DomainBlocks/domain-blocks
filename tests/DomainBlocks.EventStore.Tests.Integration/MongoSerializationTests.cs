@@ -1,15 +1,15 @@
-using DomainBlocks.EventStore.MongoDB;
 using DomainBlocks.Serialization.Abstractions;
 using DomainBlocks.Serialization.Google.Protobuf;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Serialization.SystemTextJson;
 using DomainBocks.Testing.Integration.MongoDB;
+using MongoDB.Bson;
 using NUnit.Framework;
 using Shouldly;
 
 namespace DomainBlocks.EventStore.Tests.Integration;
 
-public class MongoSerializationTests : MongoEventStoreTestFixture
+public class MongoSerializationTests : MongoEventStoreTestFixture<BsonValue>
 {
     private static readonly UserCreated TestEvent = new()
     {
@@ -26,44 +26,46 @@ public class MongoSerializationTests : MongoEventStoreTestFixture
     [Test]
     public async Task Should_write_and_read_event_with_bson_document_payload()
     {
-        await Should_write_and_read_event(TestEvent, new MongoBsonDocumentSerializer());
+        await Should_write_and_read_event(TestEvent, new BsonDocumentSerializer());
     }
 
     [Test]
     public async Task Should_write_and_read_event_with_bson_bytes_payload()
     {
-        await Should_write_and_read_event<UserCreated, byte[]>(TestEvent, new MongoBsonBytesSerializer());
+        await Should_write_and_read_event(TestEvent, new BsonBytesSerializer());
     }
 
     [Test]
     public async Task Should_write_and_read_event_with_proto_bytes_payload()
     {
-        await Should_write_and_read_event<Proto.UserCreated, byte[]>(
-            TestProtoEvent,
-            new GoogleProtobufBytesSerializer());
+        var serializer = new ProtobufBytesSerializer().AsBsonValueSerializer();
+        await Should_write_and_read_event(TestProtoEvent, serializer);
     }
 
     [Test]
     public async Task Should_write_and_read_event_with_proto_json_string_payload()
     {
-        await Should_write_and_read_event(TestProtoEvent, new GoogleProtobufJsonStringSerializer());
+        var serializer = new ProtobufJsonStringSerializer().AsBsonValueSerializer();
+        await Should_write_and_read_event(TestProtoEvent, serializer);
     }
 
     [Test]
     public async Task Should_write_and_read_event_with_json_bytes_payload()
     {
-        await Should_write_and_read_event<UserCreated, byte[]>(TestEvent, new SystemTextJsonBytesSerializer());
+        var serializer = new SystemTextJsonBytesSerializer().AsBsonValueSerializer();
+        await Should_write_and_read_event(TestEvent, serializer);
     }
 
     [Test]
     public async Task Should_write_and_read_event_with_json_string_payload()
     {
-        await Should_write_and_read_event(TestEvent, new SystemTextJsonStringSerializer());
+        var serializer = new SystemTextJsonStringSerializer().AsBsonValueSerializer();
+        await Should_write_and_read_event(TestEvent, serializer);
     }
 
-    private async Task Should_write_and_read_event<TEvent, TPayload>(
+    private async Task Should_write_and_read_event<TEvent>(
         TEvent @event,
-        IPayloadSerializer<TPayload> serializer) where TEvent : notnull where TPayload : notnull
+        IPayloadSerializer<BsonValue> serializer) where TEvent : notnull
     {
         var eventStore = CreateEventStore(serializer);
         var streamId = $"test-{serializer.GetType().Name}-{Guid.NewGuid()}";
@@ -78,24 +80,21 @@ public class MongoSerializationTests : MongoEventStoreTestFixture
             .ShouldBe(@event);
     }
 
-    private EventStore<TPayload> CreateEventStore<TPayload>(IPayloadSerializer<TPayload> serializer)
-        where TPayload : notnull
+    private EventStore<BsonValue> CreateEventStore(IPayloadSerializer<BsonValue> serializer)
     {
-        var eventStoreBackend = MongoEventStore.Create<DefaultEventDocument, TPayload>(MongoDatabase, MongoEventStoreOptions);
-
         var eventTypeMap = new EventTypeMapBuilder()
             .MapType<UserCreated>()
             .MapType<Proto.UserCreated>("ProtoUserCreated")
             .Build();
 
-        var eventStoreOptions = new EventStoreOptions<TPayload>
+        var eventStoreOptions = new EventStoreOptions<BsonValue>
         {
-            Backend = eventStoreBackend,
+            Backend = MongoEventStore,
             TypeMap = eventTypeMap,
             Serializer = serializer
         };
 
-        var eventStore = new EventStore<TPayload>(eventStoreOptions);
+        var eventStore = new EventStore<BsonValue>(eventStoreOptions);
 
         return eventStore;
     }
