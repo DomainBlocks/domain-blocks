@@ -5,39 +5,45 @@ namespace DomainBlocks.EventStore;
 /// </summary>
 public sealed class EventTypeMapBuilder
 {
-    private readonly HashSet<EventTypeToNameMapping> _writeMappings = [];
-    private readonly HashSet<EventNameToTypeMapping> _readMappings = [];
+    private readonly EventTypeToNameMappingSet _writeMappings = new();
+    private readonly EventNameToTypeMappingSet _readMappings = new();
 
     /// <summary>
-    /// Maps an event CLR type with a name for both writing and reading.
+    /// Maps an event CLR type to a name for both writing (type-to-name) and reading (name-to-type).
     /// </summary>
     /// <typeparam name="TEvent">The event type to map.</typeparam>
     /// <param name="eventName">The event name to map. If omitted, <c>typeof(TEvent).Name</c> is used.</param>
     /// <returns>The current <see cref="EventTypeMapBuilder"/> instance.</returns>
+    /// <exception cref="DomainBlocks.EventStore.Exceptions.EventTypeMapConfigurationException">
+    /// Thrown when applying the mapping would violate any of the following constraints:
+    /// <list type="bullet">
+    ///   <item>One-to-one for type-to-name (write-side) mappings.</item>
+    ///   <item>Many-to-one for name-to-type (read-side) mappings.</item>
+    /// </list>
+    /// </exception>
     public EventTypeMapBuilder MapType<TEvent>(string? eventName = null)
     {
         var eventType = typeof(TEvent);
         eventName ??= eventType.Name;
 
-        _writeMappings.Add(new EventTypeToNameMapping(typeof(TEvent), eventName));
-        _readMappings.Add(new EventNameToTypeMapping(eventName, typeof(TEvent)));
+        _writeMappings.Add<TEvent>(eventName);
+        _readMappings.Add<TEvent>(eventName);
 
         return this;
     }
 
     /// <summary>
-    /// Maps one or more event names to a single CLR type for reading.
+    /// Maps one or more event names to a CLR type for reading (name-to-type).
     /// </summary>
     /// <typeparam name="TEvent">The event type to map to.</typeparam>
     /// <param name="eventNames">One or more event names to map from.</param>
     /// <returns>The current <see cref="EventTypeMapBuilder"/> instance.</returns>
+    /// <exception cref="DomainBlocks.EventStore.Exceptions.EventTypeMapConfigurationException">
+    /// Thrown when applying the mapping would violate the read-side many-to-one constraint for name-to-type mappings.
+    /// </exception>
     public EventTypeMapBuilder MapReadType<TEvent>(params string[] eventNames)
     {
-        var mappings = eventNames.Select(x => new EventNameToTypeMapping(x, typeof(TEvent)));
-
-        foreach (var mapping in mappings)
-            _readMappings.Add(mapping);
-
+        _readMappings.Add<TEvent>(eventNames);
         return this;
     }
 

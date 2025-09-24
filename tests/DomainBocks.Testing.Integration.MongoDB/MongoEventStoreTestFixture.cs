@@ -7,13 +7,16 @@ using NUnit.Framework;
 
 namespace DomainBocks.Testing.Integration.MongoDB;
 
-public class MongoEventStoreTestFixture<TPayload> where TPayload : notnull
+public abstract class MongoEventStoreTestFixture
 {
     static MongoEventStoreTestFixture()
     {
         BsonSerializer.RegisterSerializer(new GuidSerializer(GuidRepresentation.Standard));
     }
+}
 
+public abstract class MongoEventStoreTestFixture<TPayload> : MongoEventStoreTestFixture where TPayload : notnull
+{
     protected IMongoEventStore<TPayload> MongoEventStore { get; private set; } = null!;
 
     [OneTimeSetUp]
