@@ -121,7 +121,7 @@ public class KurrentDbTests
         readResult.Status.ShouldBe(ReadStreamStatus.Success);
         events.ShouldBeEmpty();
     }
-    
+
     [Test]
     [CancelAfter(TestTimeoutMillis)]
     public async Task ReadStreamAsync_FromEndForwardsWhenStreamExists_ReturnsEmptySuccess(
@@ -169,7 +169,7 @@ public class KurrentDbTests
         readResult.Status.ShouldBe(ReadStreamStatus.StreamNotFound);
         events.ShouldBeEmpty();
     }
-    
+
     private static UncommittedEvent<ReadOnlyMemory<byte>> CreateEvent(string eventName)
     {
         var payload = new Dictionary<string, string>
