@@ -4,15 +4,31 @@ using KurrentStreamPosition = KurrentDB.Client.StreamPosition;
 
 namespace DomainBlocks.EventStore.KurrentDB;
 
-public class KurrentDBEventDataStore(KurrentDBClient client) : IEventStoreBackend<ReadOnlyMemory<byte>>
+public interface IKurrentDbEventStore : IEventStoreBackend<ReadOnlyMemory<byte>>;
+
+public class KurrentDbEventStore(KurrentDBClient client) : IKurrentDbEventStore
 {
-    public Task AppendToStreamAsync(
+    public async Task AppendToStreamAsync(
         string streamId,
         IEnumerable<UncommittedEvent<ReadOnlyMemory<byte>>> events,
         ExpectedStreamState expectedState = default,
         CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException();
+        var kurrentDbStreamState = expectedState.ToKurrentDBStreamState();
+
+        var eventData =
+            events.Select(e =>
+                new EventData(Uuid.NewUuid(), e.Header.EventName, e.Payload, e.Header.Metadata.SerializeToUtf8Json()));
+
+        try
+        {
+            _ = await client.AppendToStreamAsync(streamId, kurrentDbStreamState, eventData,
+                cancellationToken: cancellationToken);
+        }
+        catch (WrongExpectedVersionException e)
+        {
+            throw e.ToWrongExpectedStreamStateException(streamId, expectedState);
+        }
     }
 
     public async Task<ReadStreamResult<CommittedEvent<ReadOnlyMemory<byte>>>> ReadStreamAsync(
@@ -37,7 +53,6 @@ public class KurrentDBEventDataStore(KurrentDBClient client) : IEventStoreBacken
             kurrentDirection,
             streamId,
             revision,
-            options.MaxCount ?? long.MaxValue,
             cancellationToken: cancellationToken);
 
         var readState = await readStreamResult.ReadState;

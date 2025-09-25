@@ -38,6 +38,13 @@ public readonly struct StreamVersion : IEquatable<StreamVersion>, IComparable<St
     /// </summary>
     public long ToInt64() => _value;
 
+    public ulong ToUint64()
+    {
+        if (_value < 0)
+            throw new InvalidOperationException("Cannot convert a negative stream version to UInt64.");
+        return (ulong)_value;
+    }
+
     /// <summary>
     /// Returns the next stream version.
     /// </summary>
