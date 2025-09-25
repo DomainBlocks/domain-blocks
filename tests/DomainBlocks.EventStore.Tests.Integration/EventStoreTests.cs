@@ -100,7 +100,7 @@ public class EventStoreTests : MongoEventStoreTestFixture<BsonDocument>
 
         orderEvents[2].OrderId.ShouldBe(orderId);
         orderEvents[2].Quantity.ShouldBe(11);
-        orderEvents[1].LimitPrice.ShouldBe(101);
+        orderEvents[2].LimitPrice.ShouldBe(101);
     }
 
     // ReSharper disable UnusedAutoPropertyAccessor.Global
