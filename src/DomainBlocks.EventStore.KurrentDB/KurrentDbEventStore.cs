@@ -49,6 +49,21 @@ public class KurrentDbEventStore(KurrentDBClient client) : IKurrentDbEventStore
             _ => default
         };
 
+        if (position.IsStart && direction == StreamReadDirection.Backward ||
+            position.IsEnd && direction == StreamReadDirection.Forward)
+        {
+            var streamExist = client.ReadStreamAsync(
+                Direction.Backwards,
+                streamId,
+                KurrentStreamPosition.End,
+                maxCount: 1,
+                cancellationToken: cancellationToken);
+            var streamExistsReadState = await streamExist.ReadState;
+            return streamExistsReadState == ReadState.StreamNotFound
+                ? ReadStreamResult.NotFound<CommittedEvent<ReadOnlyMemory<byte>>>()
+                : ReadStreamResult.Success<CommittedEvent<ReadOnlyMemory<byte>>>();
+        }
+
         var readStreamResult = client.ReadStreamAsync(
             kurrentDirection,
             streamId,
