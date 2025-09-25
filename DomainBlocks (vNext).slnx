@@ -33,6 +33,7 @@
     <Project Path="tests\DomainBlocks.EventSourcing.Tests.Integration\DomainBlocks.EventSourcing.Tests.Integration.csproj" Type="Classic C#" />
     <Project Path="tests\DomainBlocks.EventSourcing.Tests.Unit\DomainBlocks.EventSourcing.Tests.Unit.csproj" Type="Classic C#" />
     <Project Path="tests\DomainBlocks.EventStore.Abstractions.Tests.Unit\DomainBlocks.EventStore.Abstractions.Tests.Unit.csproj" Type="Classic C#" />
+    <Project Path="tests\DomainBlocks.EventStore.KurrentDb.Tests\DomainBlocks.EventStore.KurrentDb.Tests.csproj" Type="Classic C#" />
     <Project Path="tests\DomainBlocks.EventStore.MongoDB.Tests.Integration\DomainBlocks.EventStore.MongoDB.Tests.Integration.csproj" Type="Classic C#" />
     <Project Path="tests\DomainBlocks.EventStore.NATS.Tests.Integration\DomainBlocks.EventStore.NATS.Tests.Integration.csproj" Type="Classic C#" />
     <Project Path="tests\DomainBlocks.EventStore.Tests.Integration\DomainBlocks.EventStore.Tests.Integration.csproj" Type="Classic C#" />

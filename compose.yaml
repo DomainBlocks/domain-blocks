@@ -15,6 +15,16 @@ services:
       timeout: 3s
       retries: 5
   
+  kurrent-db:
+    image: kurrentplatform/kurrentdb:25.0.1-experimental-arm64-8.0-jammy
+    container_name: domain-blocks-kurrent-db
+    ports:
+      - "2113:2113"
+    command: [ "--insecure" ]
+    environment:
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=changeit
+
   nats:
     image: nats:latest
     container_name: nats-main
