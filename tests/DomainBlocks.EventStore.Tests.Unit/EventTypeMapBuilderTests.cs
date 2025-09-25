@@ -48,7 +48,7 @@ public class EventTypeMapBuilderTests
             Should.Throw<EventTypeMapConfigurationException>(() => builder.MapType<TestEvent2>("Name1"));
         }
 
-        // Case 1: Name already mapped to a type via MapReadType
+        // Case 2: Name already mapped to a type via MapReadType
         {
             var builder = new EventTypeMapBuilder()
                 .MapReadType<TestEvent1>("Name1");
