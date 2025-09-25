@@ -1,6 +1,6 @@
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.Serialization.MongoDB.Bson;
-using DomainBocks.Testing.Integration.MongoDB;
+using DomainBlocks.Testing.Integration.MongoDB;
 using MongoDB.Bson;
 using NUnit.Framework;
 using Shouldly;

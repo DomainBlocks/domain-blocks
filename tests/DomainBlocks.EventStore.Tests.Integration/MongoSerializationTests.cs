@@ -2,7 +2,7 @@ using DomainBlocks.Serialization.Abstractions;
 using DomainBlocks.Serialization.Google.Protobuf;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Serialization.SystemTextJson;
-using DomainBocks.Testing.Integration.MongoDB;
+using DomainBlocks.Testing.Integration.MongoDB;
 using MongoDB.Bson;
 using NUnit.Framework;
 using Shouldly;

@@ -33,6 +33,6 @@
     <Project Path="tests\DomainBlocks.EventStore.Tests.Integration\DomainBlocks.EventStore.Tests.Integration.csproj" Type="Classic C#" />
     <Project Path="tests\DomainBlocks.EventStore.Tests.Unit\DomainBlocks.EventStore.Tests.Unit.csproj" Type="Classic C#" />
     <Project Path="tests\DomainBlocks.Serialization.Google.Protobuf.Tests\DomainBlocks.Serialization.Google.Protobuf.Tests.csproj" Type="Classic C#" />
-    <Project Path="tests\DomainBocks.Testing.Integration.MongoDB\DomainBocks.Testing.Integration.MongoDB.csproj" Type="Classic C#" />
+    <Project Path="tests\DomainBlocks.Testing.Integration.MongoDB\DomainBlocks.Testing.Integration.MongoDB.csproj" Type="Classic C#" />
   </Folder>
 </Solution>

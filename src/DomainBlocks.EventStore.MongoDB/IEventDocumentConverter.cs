@@ -1,5 +1,4 @@
 using DomainBlocks.EventStore.Abstractions;
-using MongoDB.Bson;
 
 namespace DomainBlocks.EventStore.MongoDB;
 

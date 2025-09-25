@@ -23,7 +23,7 @@
     <ProjectReference Include="..\..\src\DomainBlocks.Serialization.MongoDB.Bson\DomainBlocks.Serialization.MongoDB.Bson.csproj"/>
     <ProjectReference Include="..\..\src\DomainBlocks.Serialization.SystemTextJson\DomainBlocks.Serialization.SystemTextJson.csproj"/>
     <ProjectReference Include="..\DomainBlocks.Serialization.Google.Protobuf.Tests\DomainBlocks.Serialization.Google.Protobuf.Tests.csproj"/>
-    <ProjectReference Include="..\DomainBocks.Testing.Integration.MongoDB\DomainBocks.Testing.Integration.MongoDB.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Testing.Integration.MongoDB\DomainBlocks.Testing.Integration.MongoDB.csproj" />
   </ItemGroup>
 
 </Project>

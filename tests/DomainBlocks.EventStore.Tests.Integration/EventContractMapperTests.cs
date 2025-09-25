@@ -1,5 +1,5 @@
 using DomainBlocks.Serialization.Google.Protobuf;
-using DomainBocks.Testing.Integration.MongoDB;
+using DomainBlocks.Testing.Integration.MongoDB;
 using NUnit.Framework;
 using Shouldly;
 

@@ -5,7 +5,7 @@ using MongoDB.Bson.Serialization.Serializers;
 using MongoDB.Driver;
 using NUnit.Framework;
 
-namespace DomainBocks.Testing.Integration.MongoDB;
+namespace DomainBlocks.Testing.Integration.MongoDB;
 
 public abstract class MongoEventStoreTestFixture
 {
