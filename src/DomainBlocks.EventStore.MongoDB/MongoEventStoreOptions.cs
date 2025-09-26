@@ -8,19 +8,20 @@ public static class MongoEventStoreOptions
 {
     private const string DefaultEventCollectionName = "domainblocks.events";
 
-    public static MongoEventStoreOptions<EventDocument<BsonDocument>, BsonDocument> CreateDefault(
+    public static MongoEventStoreOptions<DefaultEventDocument<BsonValue>, BsonValue> CreateDefault(
         string eventCollectionName = DefaultEventCollectionName)
     {
-        return CreateDefault<BsonDocument>(eventCollectionName);
+        return CreateDefault<BsonValue>(eventCollectionName);
     }
 
-    public static MongoEventStoreOptions<EventDocument<TPayload>, TPayload> CreateDefault<TPayload>(
+    public static MongoEventStoreOptions<DefaultEventDocument<TPayload>, TPayload> CreateDefault<TPayload>(
         string eventCollectionName = DefaultEventCollectionName)
+        where TPayload : notnull
     {
-        return new MongoEventStoreOptions<EventDocument<TPayload>, TPayload>
+        return new MongoEventStoreOptions<DefaultEventDocument<TPayload>, TPayload>
         {
             EventCollectionName = eventCollectionName,
-            EventDocumentMapper = new EventDocumentMapper<TPayload>(),
+            EventDocumentConverter = new DefaultEventDocumentConverter<TPayload>(),
             StreamIdExpression = doc => doc.StreamId,
             StreamVersionExpression = doc => doc.StreamVersion,
             CommittedAtExpression = doc => doc.CommittedAt
@@ -28,10 +29,10 @@ public static class MongoEventStoreOptions
     }
 }
 
-public class MongoEventStoreOptions<TEventDocument, TPayload>
+public class MongoEventStoreOptions<TEventDocument, TPayload> where TPayload : notnull
 {
     public required string EventCollectionName { get; init; }
-    public required IEventDocumentMapper<TEventDocument, TPayload> EventDocumentMapper { get; init; }
+    public required IEventDocumentConverter<TEventDocument, TPayload> EventDocumentConverter { get; init; }
     public required Expression<Func<TEventDocument, string>> StreamIdExpression { get; init; }
     public required Expression<Func<TEventDocument, long>> StreamVersionExpression { get; init; }
     public required Expression<Func<TEventDocument, DateTime>> CommittedAtExpression { get; init; }

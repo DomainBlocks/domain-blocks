@@ -2,26 +2,34 @@ using DomainBlocks.EventStore.Abstractions;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
-public sealed class EventDocumentMapper<TPayload> : IEventDocumentMapper<EventDocument<TPayload>, TPayload>
+/// <summary>
+/// Provides conversion between uncommitted/committed event wrappers and the default event document for Mongo
+/// persistence.
+/// </summary>
+public sealed class DefaultEventDocumentConverter<TPayload> :
+    IEventDocumentConverter<DefaultEventDocument<TPayload>, TPayload>
+    where TPayload : notnull
 {
-    public EventDocument<TPayload> ToEventDocument(
+    /// <inheritdoc/>
+    public DefaultEventDocument<TPayload> ToEventDocument(
+        UncommittedEvent<TPayload> @event,
         string streamId,
         StreamVersion streamVersion,
-        UncommittedEvent<TPayload> @event,
         DateTime committedAt)
     {
-        return new EventDocument<TPayload>
+        return new DefaultEventDocument<TPayload>
         {
             StreamId = streamId,
             StreamVersion = streamVersion.ToInt64(),
             EventName = @event.Header.EventName,
-            Metadata = @event.Header.Metadata.ToDictionary(),
+            Metadata = @event.Header.Metadata,
             CommittedAt = committedAt,
             Payload = @event.Payload
         };
     }
 
-    public CommittedEvent<TPayload> FromEventDocument(EventDocument<TPayload> document)
+    /// <inheritdoc/>
+    public CommittedEvent<TPayload> FromEventDocument(DefaultEventDocument<TPayload> document)
     {
         return CommittedEvent.Create(
             new CommittedEventHeader(

@@ -1,22 +1,14 @@
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.MongoDB;
 using DomainBlocks.Serialization.MongoDB.Bson;
+using DomainBlocks.Testing.Integration.MongoDB;
 using MongoDB.Bson;
-using MongoDB.Bson.Serialization;
-using MongoDB.Bson.Serialization.Serializers;
-using MongoDB.Driver;
 using NUnit.Framework;
 using Shouldly;
 
 namespace DomainBlocks.EventStore.Tests.Integration;
 
-public class EventReadTransformTests
+public class EventReadTransformTests : MongoEventStoreTestFixture<BsonDocument>
 {
-    static EventReadTransformTests()
-    {
-        BsonSerializer.RegisterSerializer(new GuidSerializer(GuidRepresentation.Standard));
-    }
-
     [Test]
     public async Task Should_transform_read_event()
     {
@@ -58,19 +50,15 @@ public class EventReadTransformTests
                 Destination: "Madrid, ES")
         };
 
-        var client = new MongoClient("mongodb://localhost:27017");
-        var mongoDb = client.GetDatabase("test");
-        var mongoOptions = MongoEventStoreOptions.CreateDefault();
-        await MongoEventStoreAdmin.EnsureIndexesAsync(mongoDb, mongoOptions);
+        var eventTypeMap = new EventTypeMapBuilder()
+            .MapType<ShipmentDispatched>()
+            .Build();
 
         var eventStoreOptions = new EventStoreOptions<BsonDocument>
         {
-            Backend = MongoEventStore.Create(mongoDb, mongoOptions),
-            TypeMappings =
-            [
-                new EventTypeMapping(typeof(ShipmentDispatched))
-            ],
-            Serializer = new MongoBsonDocumentSerializer(),
+            Backend = MongoEventStore,
+            TypeMap = eventTypeMap,
+            Serializer = new BsonDocumentSerializer(),
             ReadTransforms =
             [
                 new ShipmentDispatchedTransform()

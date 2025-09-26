@@ -5,10 +5,10 @@ using DomainBlocks.Serialization.Abstractions;
 
 namespace DomainBlocks.EventStore;
 
-public class EventStore<TPayload> : IEventStore
+public class EventStore<TPayload> : IEventStore where TPayload : notnull
 {
     private readonly IEventStoreBackend<TPayload> _backend;
-    private readonly EventTypeMapper _eventTypeMapper;
+    private readonly EventTypeMap _eventTypeMap;
     private readonly IPayloadSerializer<TPayload> _serializer;
     private readonly FrozenDictionary<Type, IEventContractMapper> _contractMappersByEventType;
     private readonly FrozenDictionary<Type, IEventContractMapper> _contractMappersByContractType;
@@ -17,7 +17,7 @@ public class EventStore<TPayload> : IEventStore
     public EventStore(EventStoreOptions<TPayload> options)
     {
         _backend = options.Backend;
-        _eventTypeMapper = new EventTypeMapper(options.TypeMappings);
+        _eventTypeMap = options.TypeMap;
         _serializer = options.Serializer;
         _contractMappersByEventType = options.ContractMappers.ToFrozenDictionary(x => x.EventType);
         _contractMappersByContractType = options.ContractMappers.ToFrozenDictionary(x => x.ContractType);
@@ -47,12 +47,12 @@ public class EventStore<TPayload> : IEventStore
 
                 if (_contractMappersByEventType.TryGetValue(payload.GetType(), out var mapper))
                 {
-                    eventName = _eventTypeMapper.GetEventName(mapper.ContractType);
+                    eventName = _eventTypeMap.GetEventName(mapper.ContractType);
                     payload = mapper.ToContract(payload);
                 }
                 else
                 {
-                    eventName = _eventTypeMapper.GetEventName(payload.GetType());
+                    eventName = _eventTypeMap.GetEventName(payload.GetType());
                 }
 
                 // PoC for adding metadata.
@@ -89,7 +89,7 @@ public class EventStore<TPayload> : IEventStore
             await foreach (var serializedEvent in result.Events.WithCancellation(cancellationToken))
             {
                 var header = serializedEvent.Header;
-                var eventType = _eventTypeMapper.GetEventType(header.EventName);
+                var eventType = _eventTypeMap.GetEventType(header.EventName);
                 var deserializedPayload = _serializer.Deserialize(serializedEvent.Payload, eventType);
 
                 if (_contractMappersByContractType.TryGetValue(deserializedPayload.GetType(), out var mapper))

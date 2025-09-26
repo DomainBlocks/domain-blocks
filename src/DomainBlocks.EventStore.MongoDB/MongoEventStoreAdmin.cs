@@ -8,6 +8,7 @@ public static class MongoEventStoreAdmin
         IMongoDatabase database,
         MongoEventStoreOptions<TEventDocument, TPayload> options,
         CancellationToken cancellationToken = default)
+        where TPayload : notnull
     {
         var collection = database.GetCollection<TEventDocument>(options.EventCollectionName);
         var indexBuilder = Builders<TEventDocument>.IndexKeys;

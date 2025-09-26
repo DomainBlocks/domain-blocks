@@ -5,9 +5,9 @@ using Shouldly;
 
 namespace DomainBlocks.Serialization.Google.Protobuf.Tests;
 
-public class GoogleProtobufBytesSerializerTest
+public class ProtobufBytesSerializerTest
 {
-    private readonly GoogleProtobufBytesSerializer _bytesSerializer = new();
+    private readonly ProtobufBytesSerializer _bytesSerializer = new();
 
     [Test]
     public void Should_serialize_and_deserialize()
