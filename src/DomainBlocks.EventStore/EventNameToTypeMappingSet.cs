@@ -10,12 +10,14 @@ internal class EventNameToTypeMappingSet
 
     public void Add<TEvent>(params string[] eventNames)
     {
-        var newMappings = eventNames
-            .Select(x => new EventNameToTypeMapping(x, typeof(TEvent)))
-            .Aggregate(_mappings, (acc, next) => acc.Add(next));
+        var newMappings = eventNames.Select(x => new EventNameToTypeMapping(x, typeof(TEvent)));
 
-        EnsureManyToOne(newMappings);
-        _mappings = newMappings;
+        var builder = _mappings.ToBuilder();
+        builder.UnionWith(newMappings);
+
+        var newMappingSet = builder.ToImmutable();
+        EnsureManyToOne(newMappingSet);
+        _mappings = newMappingSet;
     }
 
     public FrozenDictionary<string, Type> ToFrozenDictionary()
