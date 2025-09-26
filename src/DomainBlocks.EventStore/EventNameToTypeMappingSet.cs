@@ -11,11 +11,7 @@ internal class EventNameToTypeMappingSet
     public void Add<TEvent>(params string[] eventNames)
     {
         var newMappings = eventNames.Select(x => new EventNameToTypeMapping(x, typeof(TEvent)));
-
-        var builder = _mappings.ToBuilder();
-        builder.UnionWith(newMappings);
-
-        var newMappingSet = builder.ToImmutable();
+        var newMappingSet = _mappings.Union(newMappings);
         EnsureManyToOne(newMappingSet);
         _mappings = newMappingSet;
     }
