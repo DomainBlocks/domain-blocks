@@ -1,0 +1,18 @@
+﻿syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "DomainBlocks.EventStore.NATS.Proto";
+
+message CommitRecord {
+  string stream_id = 1;
+  int64 head_stream_version = 2;
+  repeated EventRecord event_records = 3;
+  google.protobuf.Timestamp committed_at = 4;
+}
+
+message EventRecord {
+  string event_name = 2;
+  map<string, string> metadata = 3;
+  bytes payload = 4;
+}

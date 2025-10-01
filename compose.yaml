@@ -14,6 +14,24 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+  
+  nats:
+    image: nats:latest
+    container_name: nats-main
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - ./nats.conf:/etc/nats/nats.conf
+    command: [ "-c", "/etc/nats/nats.conf", "-D", "-V" ]
+  
+  nats-client:
+    image: natsio/nats-box
+    container_name: nats-client
+    depends_on:
+      - nats
+    entrypoint: /bin/sh
+    tty: true
 
 volumes:
   mongo-data:

@@ -4,6 +4,7 @@
     <File Path=".gitignore" />
     <File Path=".editorconfig" />
     <File Path="Directory.Build.props" />
+    <File Path="nats.conf" />
   </Folder>
   <Folder Name="/benchmarks/" />
   <Folder Name="/docs/">
@@ -19,6 +20,7 @@
     <Project Path="src\DomainBlocks.EventStore.Abstractions\DomainBlocks.EventStore.Abstractions.csproj" />
     <Project Path="src\DomainBlocks.EventStore.KurrentDB\DomainBlocks.EventStore.KurrentDB.csproj" Type="Classic C#" />
     <Project Path="src\DomainBlocks.EventStore.MongoDB\DomainBlocks.EventStore.MongoDB.csproj" Type="Classic C#" />
+    <Project Path="src\DomainBlocks.EventStore.NATS\DomainBlocks.EventStore.NATS.csproj" Type="Classic C#" />
     <Project Path="src\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj" Type="Classic C#" />
     <Project Path="src\DomainBlocks.Serialization.Abstractions\DomainBlocks.Serialization.Abstractions.csproj" Type="Classic C#" />
     <Project Path="src\DomainBlocks.Serialization.Google.Protobuf\DomainBlocks.Serialization.Google.Protobuf.csproj" Type="Classic C#" />
@@ -30,6 +32,7 @@
     <Project Path="tests\DomainBlocks.EventSourcing.Tests.Unit\DomainBlocks.EventSourcing.Tests.Unit.csproj" Type="Classic C#" />
     <Project Path="tests\DomainBlocks.EventStore.Abstractions.Tests.Unit\DomainBlocks.EventStore.Abstractions.Tests.Unit.csproj" Type="Classic C#" />
     <Project Path="tests\DomainBlocks.EventStore.MongoDB.Tests.Integration\DomainBlocks.EventStore.MongoDB.Tests.Integration.csproj" Type="Classic C#" />
+    <Project Path="tests\DomainBlocks.EventStore.NATS.Tests.Integration\DomainBlocks.EventStore.NATS.Tests.Integration.csproj" Type="Classic C#" />
     <Project Path="tests\DomainBlocks.EventStore.Tests.Integration\DomainBlocks.EventStore.Tests.Integration.csproj" Type="Classic C#" />
     <Project Path="tests\DomainBlocks.EventStore.Tests.Unit\DomainBlocks.EventStore.Tests.Unit.csproj" Type="Classic C#" />
     <Project Path="tests\DomainBlocks.Serialization.Google.Protobuf.Tests\DomainBlocks.Serialization.Google.Protobuf.Tests.csproj" Type="Classic C#" />
