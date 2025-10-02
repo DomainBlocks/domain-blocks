@@ -12,13 +12,6 @@ public static class KurrentDbExtensions
     {
         var actualState = ex.ActualStreamState.ToExpectedStreamState();
 
-        var version = actualState.Version;
-        if (version != expectedStreamState.Version)
-        {
-            return WrongExpectedStreamStateException.VersionConflict(streamId, expectedStreamState,
-                actualState.Version!.Value);
-        }
-
         if (expectedStreamState == ExpectedStreamState.StreamDoesNotExist &&
             actualState != ExpectedStreamState.StreamDoesNotExist)
         {
@@ -29,6 +22,13 @@ public static class KurrentDbExtensions
             actualState == ExpectedStreamState.StreamDoesNotExist)
         {
             return WrongExpectedStreamStateException.ExpectedStreamToExist(streamId);
+        }
+
+        var version = actualState.Version;
+        if (version != expectedStreamState.Version)
+        {
+            return WrongExpectedStreamStateException.VersionConflict(streamId, expectedStreamState,
+                actualState.Version!.Value);
         }
 
         // Not sure I like this part.

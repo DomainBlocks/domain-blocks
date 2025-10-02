@@ -4,8 +4,6 @@ using KurrentStreamPosition = KurrentDB.Client.StreamPosition;
 
 namespace DomainBlocks.EventStore.KurrentDB;
 
-public interface IKurrentDbEventStore : IEventStoreBackend<ReadOnlyMemory<byte>>;
-
 public class KurrentDbEventStore(KurrentDBClient client) : IKurrentDbEventStore
 {
     public async Task AppendToStreamAsync(

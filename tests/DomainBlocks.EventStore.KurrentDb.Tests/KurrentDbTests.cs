@@ -170,7 +170,7 @@ public class KurrentDbTests
         events.ShouldBeEmpty();
     }
 
-    private static UncommittedEvent<ReadOnlyMemory<byte>> CreateEvent(string eventName)
+    internal static UncommittedEvent<ReadOnlyMemory<byte>> CreateEvent(string eventName)
     {
         var payload = new Dictionary<string, string>
         {
