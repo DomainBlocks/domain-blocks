@@ -6,7 +6,9 @@
     <File Path="Directory.Build.props" />
     <File Path="nats.conf" />
   </Folder>
-  <Folder Name="/benchmarks/" />
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks\DomainBlocks.EventStore.Benchmarks\DomainBlocks.EventStore.Benchmarks.csproj" Type="Classic C#" />
+  </Folder>
   <Folder Name="/docs/">
     <File Path="docs\vision.md" />
     <File Path="docs\architecture.md" />

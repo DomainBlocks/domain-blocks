@@ -50,15 +50,28 @@ public class MongoEventStore<TEventDocument, TPayload>(
 
         var documents = ToEventDocuments(streamId, events, currentVersion);
 
+        using var session = await collection.Database.Client.StartSessionAsync(cancellationToken: cancellationToken);
+        var transactionOptions = new TransactionOptions(ReadConcern.Majority, writeConcern: WriteConcern.WMajority);
+        session.StartTransaction(transactionOptions);
+
         try
         {
             var insertManyOptions = new InsertManyOptions { IsOrdered = true };
-            await collection.InsertManyAsync(documents, insertManyOptions, cancellationToken);
+            await collection.InsertManyAsync(session, documents, insertManyOptions, cancellationToken);
+
+            await session.CommitTransactionAsync(cancellationToken);
         }
         catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
         {
+            await session.AbortTransactionAsync(cancellationToken);
+
             // Consider automatically retrying if the original expectation was Any/StreamExists.
             throw WrongExpectedStreamStateException.VersionConflict(streamId, expectedState, currentVersion);
+        }
+        catch
+        {
+            await session.AbortTransactionAsync(cancellationToken);
+            throw;
         }
     }
 

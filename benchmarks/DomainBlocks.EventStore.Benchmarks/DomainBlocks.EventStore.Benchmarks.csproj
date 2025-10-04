@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>DomainBlocks.EventStore.Benchmarks</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DomainBlocks.EventStore.MongoDB\DomainBlocks.EventStore.MongoDB.csproj" />
+    <ProjectReference Include="..\..\src\DomainBlocks.EventStore.NATS\DomainBlocks.EventStore.NATS.csproj" />
+  </ItemGroup>
+
+</Project>

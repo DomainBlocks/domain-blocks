@@ -22,7 +22,9 @@ public abstract class MongoEventStoreTestFixture<TPayload> : MongoEventStoreTest
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
     {
-        var client = new MongoClient("mongodb://localhost:27017");
+        var settings = MongoClientSettings.FromConnectionString("mongodb://localhost:27017");
+        //settings.WriteConcern = WriteConcern.WMajority;
+        var client = new MongoClient(settings);
         var database = client.GetDatabase("test");
         var options = MongoEventStoreOptions.CreateDefault<TPayload>();
         await MongoEventStoreAdmin.EnsureIndexesAsync(database, options);

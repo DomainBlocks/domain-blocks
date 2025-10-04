@@ -9,16 +9,16 @@ using NATS.Net;
 
 namespace DomainBlocks.EventStore.NATS;
 
-public class NatsEventStore : IEventStoreBackend<byte[]>
+public class NatsEventStore(INatsClient natsClient) : IEventStoreBackend<byte[]>
 {
+    private readonly INatsJSContext _jsContext = natsClient.CreateJetStreamContext();
+
     public async Task AppendToStreamAsync(
         string streamId,
         IEnumerable<UncommittedEvent<byte[]>> events,
         ExpectedStreamState expectedState = default,
         CancellationToken cancellationToken = default)
     {
-        await using var natsClient = new NatsClient();
-        var js = new NatsJSContext(natsClient.Connection);
         var subject = $"events.{streamId}";
 
         // Name must be provided if using FilterSubject: https://github.com/nats-io/nats.net/discussions/234
@@ -28,10 +28,10 @@ public class NatsEventStore : IEventStoreBackend<byte[]>
             AckPolicy = ConsumerConfigAckPolicy.Explicit,
             AckWait = TimeSpan.FromSeconds(5),
             FilterSubjects = [subject],
-            //HeadersOnly = true
+            HeadersOnly = true
         };
 
-        var consumer = await js.CreateOrUpdateConsumerAsync("EVENTS", consumerConfig, cancellationToken);
+        var consumer = await _jsContext.CreateOrUpdateConsumerAsync("EVENTS", consumerConfig, cancellationToken);
 
         var messages = consumer.FetchNoWaitAsync<byte[]>(
             new NatsJSFetchOpts { MaxMsgs = 1 },
@@ -44,14 +44,9 @@ public class NatsEventStore : IEventStoreBackend<byte[]>
         {
             expectedLastSubjectSeq = long.Parse(msg.Headers!["Nats-Expected-Last-Subject-Sequence"]!);
             headStreamVersion = long.Parse(msg.Headers!["DomainBlocks-Head-Stream-Version"]!);
-            var record = CommitRecord.Parser.ParseFrom(msg.Data);
-            headStreamVersion = record.HeadStreamVersion;
             await msg.AckAsync(cancellationToken: cancellationToken);
+            break;
         }
-
-        // var streamInfoRequest = new StreamInfoRequest { SubjectsFilter = subject };
-        // var stream = await js.GetStreamAsync("EVENTS", streamInfoRequest, cancellationToken);
-        // var subjectSeq = stream.Info.State.Subjects?.TryGetValue(subject, out var seq) is true ? seq : 0;
 
         var commitRecord = new CommitRecord
         {
@@ -87,7 +82,7 @@ public class NatsEventStore : IEventStoreBackend<byte[]>
             { "DomainBlocks-Head-Stream-Version", commitRecord.HeadStreamVersion.ToString() }
         };
 
-        var ack = await js.PublishAsync(
+        var ack = await _jsContext.PublishAsync(
             subject,
             payload,
             opts: options,
@@ -95,6 +90,85 @@ public class NatsEventStore : IEventStoreBackend<byte[]>
             cancellationToken: cancellationToken);
 
         ack.EnsureSuccess();
+    }
+
+    public async Task AppendToStreamWithAtomicBatchAsync(
+        string streamId,
+        IEnumerable<UncommittedEvent<byte[]>> events,
+        ExpectedStreamState expectedState = default,
+        CancellationToken cancellationToken = default)
+    {
+        var subject = $"events.{streamId}";
+
+        // Name must be provided if using FilterSubject: https://github.com/nats-io/nats.net/discussions/234
+        var consumerConfig = new ConsumerConfig
+        {
+            DeliverPolicy = ConsumerConfigDeliverPolicy.Last,
+            AckPolicy = ConsumerConfigAckPolicy.Explicit,
+            AckWait = TimeSpan.FromSeconds(5),
+            FilterSubjects = [subject],
+            HeadersOnly = true
+        };
+
+        var consumer = await _jsContext.CreateOrUpdateConsumerAsync("EVENTS", consumerConfig, cancellationToken);
+
+        var messages = consumer.FetchNoWaitAsync<byte[]>(
+            new NatsJSFetchOpts { MaxMsgs = 1 },
+            cancellationToken: cancellationToken);
+
+        long expectedLastSubjectSeq = -1;
+
+        await foreach (var msg in messages)
+        {
+            expectedLastSubjectSeq = long.Parse(msg.Headers!["Nats-Expected-Last-Subject-Sequence"]!);
+            await msg.AckAsync(cancellationToken: cancellationToken);
+            break;
+        }
+
+        var eventsArray = events as UncommittedEvent<byte[]>[] ?? [.. events];
+        var batchId = Guid.NewGuid().ToString();
+        var batchSeq = 1;
+
+        var ackTasks = new List<Task<NatsResult<PubAckResponse>>>(eventsArray.Length);
+
+        for (var i = 0; i < eventsArray.Length; i++)
+        {
+            var e = eventsArray[i];
+            var isFirst = i == 0;
+            var isLast = i == eventsArray.Length - 1;
+
+            var options = isFirst
+                ? new NatsJSPubOpts { ExpectedLastSubjectSequence = Convert.ToUInt64(expectedLastSubjectSeq + 1) }
+                : new NatsJSPubOpts();
+
+            var natsHeaders = new NatsHeaders
+            {
+                //{ "Nats-Batch-Id", batchId },
+                //{ "Nats-Batch-Sequence", batchSeq++.ToString() }
+            };
+
+            // if (isLast)
+            //     natsHeaders.Add("Nats-Batch-Commit", "1");
+
+            var result = _jsContext.TryPublishAsync(
+                subject,
+                e.Payload,
+                opts: options,
+                headers: natsHeaders,
+                cancellationToken: cancellationToken);
+
+            ackTasks.Add(result.AsTask());
+        }
+
+        await Task.WhenAll(ackTasks);
+
+        foreach (var ackTask in ackTasks)
+        {
+            var result = await ackTask;
+
+            if (result is not { Success: false, Error.Message: "No response data received" })
+                result.Value.EnsureSuccess();
+        }
     }
 
     public async Task<ReadStreamResult<CommittedEvent<byte[]>>> ReadStreamAsync(
