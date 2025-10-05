@@ -1,5 +1,4 @@
-﻿
-using DomainBlocks.EventStore.Abstractions;
+﻿using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.KurrentDB;
 using KurrentDB.Client;
 using NUnit.Framework;
@@ -31,9 +30,9 @@ public class KurrentDbTests
     {
         UncommittedEvent<ReadOnlyMemory<byte>>[] events =
         [
-           CreateEvent("TestEvent1"),
-           CreateEvent("TestEvent2"),
-           CreateEvent("TestEvent3")
+            CreateEvent("TestEvent1"),
+            CreateEvent("TestEvent2"),
+            CreateEvent("TestEvent3")
         ];
 
         var streamId = $"test-{Uuid.NewUuid()}";
@@ -55,13 +54,14 @@ public class KurrentDbTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task AppendToStreamAsync_WhenExpectedStateAnyAndStreamExists_AppendsEventsToStream(CancellationToken cancellationToken)
+    public async Task AppendToStreamAsync_WhenExpectedStateAnyAndStreamExists_AppendsEventsToStream(
+        CancellationToken cancellationToken)
     {
         UncommittedEvent<ReadOnlyMemory<byte>>[] events =
         [
-           CreateEvent("TestEvent1"),
-           CreateEvent("TestEvent2"),
-           CreateEvent("TestEvent3")
+            CreateEvent("TestEvent1"),
+            CreateEvent("TestEvent2"),
+            CreateEvent("TestEvent3")
         ];
 
         UncommittedEvent<ReadOnlyMemory<byte>>[] events2 =

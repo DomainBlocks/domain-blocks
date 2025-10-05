@@ -2,8 +2,10 @@
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
 using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.KurrentDB;
 using DomainBlocks.EventStore.MongoDB;
 using DomainBlocks.EventStore.NATS;
+using KurrentDB.Client;
 using MongoDB.Driver;
 using NATS.Client.JetStream;
 using NATS.Client.JetStream.Models;
@@ -11,25 +13,32 @@ using NATS.Net;
 
 namespace DomainBlocks.EventStore.Benchmarks;
 
-[SimpleJob(RunStrategy.Monitoring, iterationCount: 20)]
+[SimpleJob(RunStrategy.Monitoring, iterationCount: 100)]
 [MemoryDiagnoser]
 public class EventStoreBenchmarks
 {
-    private const int EventCount = 1000;
+    private const int EventCount = 1_000;
     private static readonly Random Random = new();
     private static int _nextSequence;
 
     private NatsClient _natsClient = null!;
     private UncommittedEvent<byte[]>[] _events = null!;
+    private UncommittedEvent<ReadOnlyMemory<byte>>[] _eventsWithReadOnlyMemoryPayload = null!;
     private NatsEventStore _natsEventStore = null!;
     private MongoEventStore<DefaultEventDocument<byte[]>, byte[]> _mongoEventStore = null!;
+    private KurrentDbEventStore _kurrentDbEventStore = null!;
 
     [GlobalSetup]
     public async Task GlobalSetup()
     {
         _events = [.. Enumerable.Range(1, EventCount).Select(i => CreateEvent($"event{i}"))];
+
+        _eventsWithReadOnlyMemoryPayload =
+            [.. _events.Select(x => new UncommittedEvent<ReadOnlyMemory<byte>>(x.Header, x.Payload))];
+
         await SetupNatsEventStore();
         await SetupMongoEventStore();
+        SetupKurrentDbEventStore();
     }
 
     [GlobalCleanup]
@@ -44,7 +53,7 @@ public class EventStoreBenchmarks
         await _natsEventStore.AppendToStreamWithAtomicBatchAsync($"stream{GetNextSequence()}", _events);
     }
 
-    [Benchmark]
+    //[Benchmark]
     public async Task AppendToStream_NatsProtoBatchMessage()
     {
         await _natsEventStore.AppendToStreamAsync($"stream{GetNextSequence()}", _events);
@@ -54,6 +63,12 @@ public class EventStoreBenchmarks
     public async Task AppendToStream_Mongo()
     {
         await _mongoEventStore.AppendToStreamAsync($"stream{GetNextSequence()}", _events);
+    }
+
+    [Benchmark]
+    public async Task AppendToStream_KurrentDb()
+    {
+        await _kurrentDbEventStore.AppendToStreamAsync($"stream{GetNextSequence()}", _eventsWithReadOnlyMemoryPayload);
     }
 
     private async Task SetupNatsEventStore()
@@ -83,6 +98,16 @@ public class EventStoreBenchmarks
         await MongoEventStoreAdmin.EnsureIndexesAsync(database, options);
 
         _mongoEventStore = MongoEventStore.Create(database, options);
+    }
+
+    private void SetupKurrentDbEventStore()
+    {
+        var settings = KurrentDBClientSettings.Create(
+            "kurrentdb://admin:changeit@localhost:2113?tls=false&tlsVerifyCert=false");
+
+        var client = new KurrentDBClient(settings);
+
+        _kurrentDbEventStore = new KurrentDbEventStore(client);
     }
 
     private static async Task DeleteNatsStreamIfExits(INatsJSContext jsContext, string stream)
