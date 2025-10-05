@@ -34,9 +34,9 @@ public class NatsEventStoreTests
 
         await jsContext.CreateStreamAsync(streamConfig);
 
-        var events = Enumerable.Range(1, 100).Select(i => CreateEvent($"event{i}"));
+        var events = Enumerable.Range(1, 3).Select(i => CreateEvent($"event{i}"));
         var eventStore = new NatsEventStore(natsClient);
-        await eventStore.AppendToStreamAsync("stream1", events);
+        await eventStore.AppendToStreamWithAtomicBatchAsync("stream1", events);
 
         //var result = await eventStore.ReadStreamAsync("stream1");
     }

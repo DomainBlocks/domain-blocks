@@ -6,7 +6,7 @@ namespace DomainBlocks.EventStore.MongoDB;
 
 public static class MongoEventStore
 {
-    public static IMongoEventStore<TPayload> Create<TEventDocument, TPayload>(
+    public static MongoEventStore<TEventDocument, TPayload> Create<TEventDocument, TPayload>(
         IMongoDatabase database,
         MongoEventStoreOptions<TEventDocument, TPayload> options) where TPayload : notnull
     {
@@ -51,14 +51,13 @@ public class MongoEventStore<TEventDocument, TPayload>(
         var documents = ToEventDocuments(streamId, events, currentVersion);
 
         using var session = await collection.Database.Client.StartSessionAsync(cancellationToken: cancellationToken);
-        var transactionOptions = new TransactionOptions(ReadConcern.Majority, writeConcern: WriteConcern.WMajority);
+        var transactionOptions = new TransactionOptions(ReadConcern.Snapshot, writeConcern: WriteConcern.WMajority);
         session.StartTransaction(transactionOptions);
 
         try
         {
             var insertManyOptions = new InsertManyOptions { IsOrdered = true };
             await collection.InsertManyAsync(session, documents, insertManyOptions, cancellationToken);
-
             await session.CommitTransactionAsync(cancellationToken);
         }
         catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)

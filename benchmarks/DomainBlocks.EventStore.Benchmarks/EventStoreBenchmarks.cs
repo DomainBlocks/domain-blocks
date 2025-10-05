@@ -67,7 +67,7 @@ public class EventStoreBenchmarks
             Name = "EVENTS",
             Subjects = ["events.*"],
             Storage = StreamConfigStorage.File,
-            //AllowAtomicPublish = true
+            AllowAtomicPublish = true
         };
 
         await jsContext.CreateStreamAsync(streamConfig);
@@ -75,15 +75,14 @@ public class EventStoreBenchmarks
         _natsEventStore = new NatsEventStore(_natsClient);
     }
 
-    public async Task SetupMongoEventStore()
+    private async Task SetupMongoEventStore()
     {
         var client = new MongoClient("mongodb://localhost:27017");
         var database = client.GetDatabase("test");
         var options = MongoEventStoreOptions.CreateDefault<byte[]>();
         await MongoEventStoreAdmin.EnsureIndexesAsync(database, options);
 
-        _mongoEventStore =
-            (MongoEventStore<DefaultEventDocument<byte[]>, byte[]>)MongoEventStore.Create(database, options);
+        _mongoEventStore = MongoEventStore.Create(database, options);
     }
 
     private static async Task DeleteNatsStreamIfExits(INatsJSContext jsContext, string stream)

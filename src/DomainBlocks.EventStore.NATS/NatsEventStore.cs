@@ -126,49 +126,61 @@ public class NatsEventStore(INatsClient natsClient) : IEventStoreBackend<byte[]>
         }
 
         var eventsArray = events as UncommittedEvent<byte[]>[] ?? [.. events];
+        if (eventsArray.Length == 0)
+            return;
+
         var batchId = Guid.NewGuid().ToString();
         var batchSeq = 1;
 
-        var ackTasks = new List<Task<NatsResult<PubAckResponse>>>(eventsArray.Length);
+        // First message
+        var firstHeaders = new NatsHeaders
+        {
+            { "Nats-Batch-Id", batchId },
+            { "Nats-Batch-Sequence", batchSeq++.ToString() },
+            { "Nats-Expected-Last-Subject-Sequence", (expectedLastSubjectSeq + 1).ToString() }
+        };
 
-        for (var i = 0; i < eventsArray.Length; i++)
+        await _jsContext.Connection.PublishAsync(
+            subject,
+            eventsArray[0],
+            firstHeaders,
+            cancellationToken: cancellationToken);
+
+        // All except first and last
+        for (var i = 1; i < eventsArray.Length - 1; i++)
         {
             var e = eventsArray[i];
-            var isFirst = i == 0;
-            var isLast = i == eventsArray.Length - 1;
 
-            var options = isFirst
-                ? new NatsJSPubOpts { ExpectedLastSubjectSequence = Convert.ToUInt64(expectedLastSubjectSeq + 1) }
-                : new NatsJSPubOpts();
-
-            var natsHeaders = new NatsHeaders
+            var headers = new NatsHeaders
             {
-                //{ "Nats-Batch-Id", batchId },
-                //{ "Nats-Batch-Sequence", batchSeq++.ToString() }
+                { "Nats-Batch-Id", batchId },
+                { "Nats-Batch-Sequence", batchSeq++.ToString() }
             };
 
-            // if (isLast)
-            //     natsHeaders.Add("Nats-Batch-Commit", "1");
-
-            var result = _jsContext.TryPublishAsync(
+            await _jsContext.Connection.PublishAsync(
                 subject,
                 e.Payload,
-                opts: options,
-                headers: natsHeaders,
+                headers,
                 cancellationToken: cancellationToken);
-
-            ackTasks.Add(result.AsTask());
         }
 
-        await Task.WhenAll(ackTasks);
-
-        foreach (var ackTask in ackTasks)
+        // Last message
+        var lastHeaders = new NatsHeaders
         {
-            var result = await ackTask;
+            { "Nats-Batch-Id", batchId },
+            { "Nats-Batch-Sequence", batchSeq.ToString() },
+            { "Nats-Batch-Commit", "1" }
+        };
 
-            if (result is not { Success: false, Error.Message: "No response data received" })
-                result.Value.EnsureSuccess();
-        }
+        var lastEvent = eventsArray[^1];
+
+        var result = await _jsContext.TryPublishAsync(
+            subject,
+            lastEvent.Payload,
+            headers: lastHeaders,
+            cancellationToken: cancellationToken);
+
+        result.Value.EnsureSuccess();
     }
 
     public async Task<ReadStreamResult<CommittedEvent<byte[]>>> ReadStreamAsync(
