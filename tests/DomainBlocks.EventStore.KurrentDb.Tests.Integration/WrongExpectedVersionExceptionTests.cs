@@ -73,7 +73,7 @@ public class WrongExpectedVersionExceptionTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public void AppendToStreamAsync_WhenExpectedStateStreamDoesNotExistAndStreamExists_WrongExpectedStreamStateExceptionThrown(
+    public async Task AppendToStreamAsync_WhenExpectedStateStreamDoesNotExistAndStreamExists_WrongExpectedStreamStateExceptionThrown(
         CancellationToken cancellationToken)
     {
         var streamId = $"test-{Uuid.NewUuid()}";
@@ -84,21 +84,17 @@ public class WrongExpectedVersionExceptionTests
             TestEventsHelper.CreateTestEvent("TestEvent3")
         };
 
-       var appendTask = _eventStore.AppendToStreamAsync(
+       await _eventStore.AppendToStreamAsync(
             streamId,
             events,
             ExpectedStreamState.Any,
             cancellationToken);
 
-       appendTask.Wait(cancellationToken);
-       appendTask.IsCompletedSuccessfully.ShouldBeTrue();
-
-        var wrongExpectedStreamStateException = Assert.ThrowsAsync<WrongExpectedStreamStateException>(async () =>
-            await _eventStore.AppendToStreamAsync(
-                streamId,
-                events,
-                ExpectedStreamState.StreamDoesNotExist,
-                cancellationToken));
+        var wrongExpectedStreamStateException = await _eventStore.AppendToStreamAsync(
+            streamId,
+            events,
+            ExpectedStreamState.StreamDoesNotExist,
+            cancellationToken).ShouldThrowAsync<WrongExpectedStreamStateException>();
 
         wrongExpectedStreamStateException.ShouldNotBeNull().Reason
              .ShouldBe(WrongExpectedStreamStateReason.ExpectedStreamToNotExist);
