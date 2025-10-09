@@ -3,9 +3,9 @@ using KurrentDB.Client;
 
 namespace DomainBlocks.EventStore.KurrentDB;
 
-public static class StreamStateExtensions
+internal static class StreamStateExtensions
 {
-    public static StreamState ToKurrentDBStreamState(this ExpectedStreamState streamState)
+    internal static StreamState ToKurrentDBStreamState(this ExpectedStreamState streamState)
     {
         if (streamState == ExpectedStreamState.Any)
             return StreamState.Any;
@@ -18,7 +18,7 @@ public static class StreamStateExtensions
             : throw new ArgumentOutOfRangeException(nameof(streamState), "Unknown ExpectedStreamState");
     }
 
-    public static ExpectedStreamState ToExpectedStreamState(this StreamState streamState)
+    internal static ExpectedStreamState ToExpectedStreamState(this StreamState streamState)
     {
         if (streamState == StreamState.Any)
             return ExpectedStreamState.Any;

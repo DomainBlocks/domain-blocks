@@ -4,14 +4,14 @@ using KurrentDB.Client;
 using NUnit.Framework;
 using Shouldly;
 
-namespace DomainBlocks.EventStore.KurrentDb.Tests;
+namespace DomainBlocks.EventStore.KurrentDb.Tests.Integration;
 
 
 public class WrongExpectedVersionExceptionTests
 {
     private const int TestTimeoutMillis = 5_000;
 
-    private IKurrentDbEventStore _eventStore;
+    private IKurrentDbEventStore _eventStore = null!;
 
     [SetUp]
     public void OneTimeSetUp()
@@ -31,9 +31,9 @@ public class WrongExpectedVersionExceptionTests
         var streamId = $"test-{Uuid.NewUuid()}";
         var events = new[]
         {
-            KurrentDbTests.CreateEvent("TestEvent1"),
-            KurrentDbTests.CreateEvent("TestEvent2"),
-            KurrentDbTests.CreateEvent("TestEvent3")
+            TestEventsHelper.CreateTestEvent("TestEvent1"),
+            TestEventsHelper.CreateTestEvent("TestEvent2"),
+            TestEventsHelper.CreateTestEvent("TestEvent3")
         };
 
         var wrongExpectedStreamStateException = Assert.ThrowsAsync<WrongExpectedStreamStateException>(async () =>
@@ -55,9 +55,9 @@ public class WrongExpectedVersionExceptionTests
         var streamId = $"test-{Uuid.NewUuid()}";
         var events = new[]
         {
-            KurrentDbTests.CreateEvent("TestEvent1"),
-            KurrentDbTests.CreateEvent("TestEvent2"),
-            KurrentDbTests.CreateEvent("TestEvent3")
+            TestEventsHelper.CreateTestEvent("TestEvent1"),
+            TestEventsHelper.CreateTestEvent("TestEvent2"),
+            TestEventsHelper.CreateTestEvent("TestEvent3")
         };
 
         var wrongExpectedStreamStateException = Assert.ThrowsAsync<WrongExpectedStreamStateException>(async () =>
@@ -78,9 +78,9 @@ public class WrongExpectedVersionExceptionTests
         var streamId = $"test-{Uuid.NewUuid()}";
         var events = new[]
         {
-            KurrentDbTests.CreateEvent("TestEvent1"),
-            KurrentDbTests.CreateEvent("TestEvent2"),
-            KurrentDbTests.CreateEvent("TestEvent3")
+            TestEventsHelper.CreateTestEvent("TestEvent1"),
+            TestEventsHelper.CreateTestEvent("TestEvent2"),
+            TestEventsHelper.CreateTestEvent("TestEvent3")
         };
 
         await _eventStore.AppendToStreamAsync(

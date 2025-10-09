@@ -1,3 +1,4 @@
+using System.Text.Json;
 using DomainBlocks.EventStore.Abstractions;
 using KurrentDB.Client;
 using KurrentStreamPosition = KurrentDB.Client.StreamPosition;
@@ -16,7 +17,10 @@ public class KurrentDbEventStore(KurrentDBClient client) : IKurrentDbEventStore
 
         var eventData =
             events.Select(e =>
-                new EventData(Uuid.NewUuid(), e.Header.EventName, e.Payload, e.Header.Metadata.SerializeToUtf8Json()));
+            {
+                var serializedMetadata = JsonSerializer.SerializeToUtf8Bytes(e.Header.Metadata);
+                return new EventData(Uuid.NewUuid(), e.Header.EventName, e.Payload, serializedMetadata);
+            });
 
         try
         {

@@ -7,7 +7,7 @@ using Shouldly;
 using StreamPosition = DomainBlocks.EventStore.Abstractions.StreamPosition;
 
 
-namespace DomainBlocks.EventStore.KurrentDb.Tests;
+namespace DomainBlocks.EventStore.KurrentDb.Tests.Integration;
 
 public class KurrentDbTests
 {
@@ -31,9 +31,9 @@ public class KurrentDbTests
     {
         UncommittedEvent<ReadOnlyMemory<byte>>[] events =
         [
-           CreateEvent("TestEvent1"),
-           CreateEvent("TestEvent2"),
-           CreateEvent("TestEvent3")
+           TestEventsHelper.CreateTestEvent("TestEvent1"),
+           TestEventsHelper.CreateTestEvent("TestEvent2"),
+           TestEventsHelper.CreateTestEvent("TestEvent3")
         ];
 
         var streamId = $"test-{Uuid.NewUuid()}";
@@ -59,16 +59,16 @@ public class KurrentDbTests
     {
         UncommittedEvent<ReadOnlyMemory<byte>>[] events =
         [
-           CreateEvent("TestEvent1"),
-           CreateEvent("TestEvent2"),
-           CreateEvent("TestEvent3")
+           TestEventsHelper.CreateTestEvent("TestEvent1"),
+           TestEventsHelper.CreateTestEvent("TestEvent2"),
+           TestEventsHelper.CreateTestEvent("TestEvent3")
         ];
 
         UncommittedEvent<ReadOnlyMemory<byte>>[] events2 =
         [
-            CreateEvent("TestEvent4"),
-            CreateEvent("TestEvent5"),
-            CreateEvent("TestEvent6")
+            TestEventsHelper.CreateTestEvent("TestEvent4"),
+            TestEventsHelper.CreateTestEvent("TestEvent5"),
+            TestEventsHelper.CreateTestEvent("TestEvent6")
         ];
 
         var streamId = $"test-{Uuid.NewUuid()}";
@@ -102,11 +102,11 @@ public class KurrentDbTests
 
         await _eventStore.AppendToStreamAsync(
             streamId,
-            [CreateEvent("TestEvent1")],
+            [TestEventsHelper.CreateTestEvent("TestEvent1")],
             cancellationToken: cancellationToken);
         await _eventStore.AppendToStreamAsync(
             streamId,
-            [CreateEvent("TestEvent2")],
+            [TestEventsHelper.CreateTestEvent("TestEvent2")],
             cancellationToken: cancellationToken);
 
         var options = new ReadStreamOptions
@@ -131,11 +131,11 @@ public class KurrentDbTests
 
         await _eventStore.AppendToStreamAsync(
             streamId,
-            [CreateEvent("TestEvent1")],
+            [TestEventsHelper.CreateTestEvent("TestEvent1")],
             cancellationToken: cancellationToken);
         await _eventStore.AppendToStreamAsync(
             streamId,
-            [CreateEvent("TestEvent2")],
+            [TestEventsHelper.CreateTestEvent("TestEvent2")],
             cancellationToken: cancellationToken);
 
         var options = new ReadStreamOptions
@@ -168,15 +168,5 @@ public class KurrentDbTests
 
         readResult.Status.ShouldBe(ReadStreamStatus.StreamNotFound);
         events.ShouldBeEmpty();
-    }
-
-    internal static UncommittedEvent<ReadOnlyMemory<byte>> CreateEvent(string eventName)
-    {
-        var payload = new Dictionary<string, string>
-        {
-            { "TestProperty", "TestValue" }
-        };
-        var header = new UncommittedEventHeader(eventName);
-        return UncommittedEvent.Create(header, payload.SerializeToUtf8Json());
     }
 }
