@@ -16,11 +16,13 @@ internal static class KurrentDbExtensions
             actualState != ExpectedStreamState.StreamDoesNotExist)
         {
             // Version is supposed to exist here by virtue of how "StreamDoesNotExist" is constructed.
-            if (expectedStreamState.Version != null)
+            if (actualState.Version != null)
             {
                 return WrongExpectedStreamStateException.ExpectedStreamToNotExist(streamId,
-                    expectedStreamState.Version.Value);
+                    actualState.Version.Value);
             }
+
+            return WrongExpectedStreamStateException.ExpectedStreamToExist(streamId);
         }
 
         if (expectedStreamState == ExpectedStreamState.StreamExists &&

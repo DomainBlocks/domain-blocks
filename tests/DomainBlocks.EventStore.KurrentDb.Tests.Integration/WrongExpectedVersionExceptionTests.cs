@@ -67,12 +67,13 @@ public class WrongExpectedVersionExceptionTests
                 ExpectedStreamState.StreamExists,
                 cancellationToken));
 
-        wrongExpectedStreamStateException.ShouldNotBeNull().Reason.ShouldBe(WrongExpectedStreamStateReason.ExpectedStreamToExist);
+        wrongExpectedStreamStateException.ShouldNotBeNull().Reason
+            .ShouldBe(WrongExpectedStreamStateReason.ExpectedStreamToExist);
     }
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task AppendToStreamAsync_WhenExpectedStateStreamDoesNotExistAndStreamExists_WrongExpectedStreamStateExceptionThrown(
+    public void AppendToStreamAsync_WhenExpectedStateStreamDoesNotExistAndStreamExists_WrongExpectedStreamStateExceptionThrown(
         CancellationToken cancellationToken)
     {
         var streamId = $"test-{Uuid.NewUuid()}";
@@ -83,21 +84,23 @@ public class WrongExpectedVersionExceptionTests
             TestEventsHelper.CreateTestEvent("TestEvent3")
         };
 
-        await _eventStore.AppendToStreamAsync(
+       var appendTask = _eventStore.AppendToStreamAsync(
             streamId,
             events,
             ExpectedStreamState.Any,
             cancellationToken);
 
+       appendTask.Wait(cancellationToken);
+       appendTask.IsCompletedSuccessfully.ShouldBeTrue();
+
         var wrongExpectedStreamStateException = Assert.ThrowsAsync<WrongExpectedStreamStateException>(async () =>
-            // this call fails
             await _eventStore.AppendToStreamAsync(
                 streamId,
                 events,
                 ExpectedStreamState.StreamDoesNotExist,
                 cancellationToken));
 
-        wrongExpectedStreamStateException.ShouldNotBeNull()
-            .Reason.ShouldBe(WrongExpectedStreamStateReason.ExpectedStreamToNotExist);
+        wrongExpectedStreamStateException.ShouldNotBeNull().Reason
+             .ShouldBe(WrongExpectedStreamStateReason.ExpectedStreamToNotExist);
     }
 }
