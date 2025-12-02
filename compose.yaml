@@ -24,6 +24,7 @@ services:
     environment:
       - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD=changeit
+      - KURRENTDB_LOG_LEVEL=VERBOSE
 
 volumes:
   mongo-data:

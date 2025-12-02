@@ -35,3 +35,22 @@ Anyone who wants to build event-sourced applications using DDD principles in .NE
 * Composable, opt-in, building blocks. Individual components can be used in isolation without taking on implicit
   dependencies.
 * Idiomatic - following best practices.
+
+## Workshop
+
+### MVP
+
+- Subscriptions
+- Process Managers
+- Domain Primitives
+
+
+### Nice to have
+
+- Snapshotting
+
+### Non-technical
+
+- Direction / Product to showcase 
+- Content for marketing (blog posts, videos, etc.)
+- DomainFocus vs DomainBlocks

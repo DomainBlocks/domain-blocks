@@ -17,7 +17,7 @@ public class WrongExpectedVersionExceptionTests
     public void OneTimeSetUp()
     {
         var client = new KurrentDBClient(
-            KurrentDBClientSettings.Create("kurrentdb://admin:changeit@localhost:2113?tls=false&tlsVerifyCert=false")
+            KurrentDBClientSettings.Create("kurrentdb://admin:changeit@localhost:2113?tls=false&tlsVerifyCert=false&gossipTimeout=5000&keepAliveTimeout=5000")
         );
 
         _eventStore = new KurrentDbEventStore(client);
@@ -92,7 +92,7 @@ public class WrongExpectedVersionExceptionTests
 
         var wrongExpectedStreamStateException = await _eventStore.AppendToStreamAsync(
             streamId,
-            events,
+            [TestEventsHelper.CreateTestEvent("TestEvent4")],
             ExpectedStreamState.StreamDoesNotExist,
             cancellationToken).ShouldThrowAsync<WrongExpectedStreamStateException>();
 

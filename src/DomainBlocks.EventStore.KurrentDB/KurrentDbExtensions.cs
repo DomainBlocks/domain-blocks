@@ -10,28 +10,34 @@ internal static class KurrentDbExtensions
         string streamId,
         ExpectedStreamState expectedStreamState)
     {
+        // we request an "expectedStreamState", but kurrent returns an actual that will just be either StreamRevision, or NoStream.
+        // The goal of this method is to convert from "WrongExpectedVersionException" to "WrongExpectedStreamStateException",
+        // so we need to provide the actual stream state.
+        var expectedState = ex.ExpectedStreamState.ToExpectedStreamState();
         var actualState = ex.ActualStreamState.ToExpectedStreamState();
 
-        if (expectedStreamState == ExpectedStreamState.StreamDoesNotExist &&
-            actualState != ExpectedStreamState.StreamDoesNotExist)
+        if (actualState.IsSpecificVersion && expectedState.IsSpecificVersion)
         {
-            // Version is supposed to exist here by virtue of how "StreamDoesNotExist" is constructed.
-            if (actualState.Version != null)
-            {
-                return WrongExpectedStreamStateException.ExpectedStreamToNotExist(streamId,
-                    actualState.Version.Value);
-            }
-
-            return WrongExpectedStreamStateException.ExpectedStreamToExist(streamId);
+            return WrongExpectedStreamStateException.VersionConflict(streamId, expectedState,
+                StreamVersion.FromInt64(actualState.Version.Value.ToInt64()));
         }
 
-        if (expectedStreamState == ExpectedStreamState.StreamExists &&
-            actualState == ExpectedStreamState.StreamDoesNotExist)
+        if (actualState == ExpectedStreamState.StreamDoesNotExist && expectedState.IsSpecificVersion)
         {
             return WrongExpectedStreamStateException.ExpectedStreamToExist(streamId);
         }
 
-        return WrongExpectedStreamStateException.VersionConflict(streamId, expectedStreamState,
-            actualState.Version ?? StreamVersion.None);
+        if (actualState.IsSpecificVersion && expectedState == ExpectedStreamState.StreamDoesNotExist)
+        {
+            return WrongExpectedStreamStateException.ExpectedStreamToNotExist(streamId,
+                actualState.Version.GetValueOrDefault());
+        }
+
+        if (actualState.IsSpecificVersion && expectedStreamState.IsAny)
+        {
+            // return WrongExpectedStreamStateException.VersionConflict();
+        }
+
+        return WrongExpectedStreamStateException.Unknown(streamId, expectedStreamState, ex);
     }
 }

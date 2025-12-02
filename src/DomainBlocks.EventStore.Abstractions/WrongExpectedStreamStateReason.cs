@@ -18,5 +18,10 @@ public enum WrongExpectedStreamStateReason
     /// <summary>
     /// The operation expected the stream to be at a specific version, but the actual version does not match.
     /// </summary>
-    VersionConflict
+    VersionConflict,
+
+    /// <summary>
+    /// The operation failed for an unknown reason.
+    /// </summary>
+    Unknown
 }
