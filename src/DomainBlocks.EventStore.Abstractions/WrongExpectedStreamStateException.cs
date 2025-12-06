@@ -58,6 +58,19 @@ public sealed class WrongExpectedStreamStateException : DomainBlocksException
             actualVersion);
     }
 
+    public static WrongExpectedStreamStateException Unknown(
+        string streamId,
+        ExpectedStreamState expectedState,
+        Exception inner)
+    {
+        return new WrongExpectedStreamStateException(
+            streamId,
+            WrongExpectedStreamStateReason.Unknown,
+            expectedState,
+            StreamVersion.None,
+            inner);
+    }
+
     private static string BuildMessage(
         string streamId,
         WrongExpectedStreamStateReason reason,

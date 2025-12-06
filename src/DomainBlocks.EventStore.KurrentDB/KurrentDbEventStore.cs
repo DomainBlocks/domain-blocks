@@ -1,18 +1,36 @@
+using System.Text.Json;
 using DomainBlocks.EventStore.Abstractions;
 using KurrentDB.Client;
 using KurrentStreamPosition = KurrentDB.Client.StreamPosition;
 
 namespace DomainBlocks.EventStore.KurrentDB;
 
-public class KurrentDBEventDataStore(KurrentDBClient client) : IEventStoreBackend<ReadOnlyMemory<byte>>
+public class KurrentDbEventStore(KurrentDBClient client) : IKurrentDbEventStore
 {
-    public Task AppendToStreamAsync(
+    public async Task AppendToStreamAsync(
         string streamId,
         IEnumerable<UncommittedEvent<ReadOnlyMemory<byte>>> events,
         ExpectedStreamState expectedState = default,
         CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException();
+        var kurrentDbStreamState = expectedState.ToKurrentDBStreamState();
+
+        var eventData =
+            events.Select(e =>
+            {
+                var serializedMetadata = JsonSerializer.SerializeToUtf8Bytes(e.Header.Metadata);
+                return new EventData(Uuid.NewUuid(), e.Header.EventName, e.Payload, serializedMetadata);
+            });
+
+        try
+        {
+            _ = await client.AppendToStreamAsync(streamId, kurrentDbStreamState, eventData,
+                cancellationToken: cancellationToken);
+        }
+        catch (WrongExpectedVersionException e)
+        {
+            throw e.ToWrongExpectedStreamStateException(streamId, expectedState);
+        }
     }
 
     public async Task<ReadStreamResult<CommittedEvent<ReadOnlyMemory<byte>>>> ReadStreamAsync(
@@ -33,11 +51,25 @@ public class KurrentDBEventDataStore(KurrentDBClient client) : IEventStoreBacken
             _ => default
         };
 
+        if (position.IsStart && direction == StreamReadDirection.Backward ||
+            position.IsEnd && direction == StreamReadDirection.Forward)
+        {
+            var streamExist = client.ReadStreamAsync(
+                Direction.Backwards,
+                streamId,
+                KurrentStreamPosition.End,
+                maxCount: 1,
+                cancellationToken: cancellationToken);
+            var streamExistsReadState = await streamExist.ReadState;
+            return streamExistsReadState == ReadState.StreamNotFound
+                ? ReadStreamResult.NotFound<CommittedEvent<ReadOnlyMemory<byte>>>()
+                : ReadStreamResult.Success<CommittedEvent<ReadOnlyMemory<byte>>>();
+        }
+
         var readStreamResult = client.ReadStreamAsync(
             kurrentDirection,
             streamId,
             revision,
-            options.MaxCount ?? long.MaxValue,
             cancellationToken: cancellationToken);
 
         var readState = await readStreamResult.ReadState;

@@ -39,6 +39,21 @@ public readonly struct StreamVersion : IEquatable<StreamVersion>, IComparable<St
     public long ToInt64() => _value;
 
     /// <summary>
+    /// Converts a stream revision (i.e a specific version) to a UInt64 value.
+    /// Though unlikely, the exception may be thrown if the input stream state is at None (-1) version and an
+    /// attempt is made to convert that to a specific stream revision (greater than 0 value)
+    /// Used in KurrentDb's implementation of IEventStore
+    /// </summary>
+    /// <returns></returns>
+    /// <exception cref="InvalidOperationException"></exception>
+    public ulong ToUint64()
+    {
+        if (_value < 0)
+            throw new InvalidOperationException("Cannot convert StreamVersion 'None' to UInt64.");
+        return (ulong)_value;
+    }
+
+    /// <summary>
     /// Returns the next stream version.
     /// </summary>
     /// <exception cref="OverflowException">
