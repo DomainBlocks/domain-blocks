@@ -5,7 +5,7 @@ using DomainBlocks.Serialization.Abstractions;
 
 namespace DomainBlocks.EventStore;
 
-public class EventStore<TPayload> : IEventStore where TPayload : notnull
+public class EventStoreClient<TPayload> : IEventStoreClient where TPayload : notnull
 {
     private readonly IEventStoreBackend<TPayload> _backend;
     private readonly EventTypeMap _eventTypeMap;
@@ -14,7 +14,7 @@ public class EventStore<TPayload> : IEventStore where TPayload : notnull
     private readonly FrozenDictionary<Type, IEventContractMapper> _contractMappersByContractType;
     private readonly FrozenDictionary<Type, IEventReadTransform> _readTransforms;
 
-    public EventStore(EventStoreOptions<TPayload> options)
+    public EventStoreClient(EventStoreClientOptions<TPayload> options)
     {
         _backend = options.Backend;
         _eventTypeMap = options.TypeMap;

@@ -54,7 +54,7 @@ public class EventReadTransformTests : MongoEventStoreTestFixture<BsonDocument>
             .MapType<ShipmentDispatched>()
             .Build();
 
-        var eventStoreOptions = new EventStoreOptions<BsonDocument>
+        var clientOptions = new EventStoreClientOptions<BsonDocument>
         {
             Backend = MongoEventStore,
             TypeMap = eventTypeMap,
@@ -65,10 +65,10 @@ public class EventReadTransformTests : MongoEventStoreTestFixture<BsonDocument>
             ]
         };
 
-        var eventStore = new EventStore<BsonDocument>(eventStoreOptions);
+        var client = new EventStoreClient<BsonDocument>(clientOptions);
         var streamId = $"test-read-transform-{Guid.NewGuid()}";
-        await eventStore.AppendToStreamAsync(streamId, [legacyEvent]);
-        var result = await eventStore.ReadStreamAsync(streamId);
+        await client.AppendToStreamAsync(streamId, [legacyEvent]);
+        var result = await client.ReadStreamAsync(streamId);
         var readEvents = await result.Events.Select(x => x.Payload).ToArrayAsync();
 
         readEvents.ShouldBe(expectedEvents);

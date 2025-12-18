@@ -3,7 +3,9 @@ using DomainBlocks.EventStore.Abstractions;
 
 namespace DomainBlocks.EventSourcing;
 
-public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider entityAdapterProvider) : IEntityStore
+public sealed class EntityStore(
+    IEventStoreClient eventStoreClient,
+    IEntityAdapterProvider entityAdapterProvider) : IEntityStore
 {
     public async Task<Versioned<TEntity>> LoadAsync<TEntity>(
         string entityId,
@@ -41,7 +43,7 @@ public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider e
         var streamName = GetStreamName<TEntity>(entityId);
         var expectedState = ExpectedStreamState.FromVersion(entity.Version);
 
-        await eventStore.AppendToStreamAsync(streamName, uncommittedEvents, expectedState, cancellationToken);
+        await eventStoreClient.AppendToStreamAsync(streamName, uncommittedEvents, expectedState, cancellationToken);
     }
 
     private async Task<Versioned<TEntity>> LoadInternalAsync<TEntity>(
@@ -51,7 +53,7 @@ public sealed class EntityStore(IEventStore eventStore, IEntityAdapterProvider e
         where TEntity : notnull
     {
         var streamName = GetStreamName<TEntity>(entityId);
-        var result = await eventStore.ReadStreamAsync(streamName, cancellationToken: cancellationToken);
+        var result = await eventStoreClient.ReadStreamAsync(streamName, cancellationToken: cancellationToken);
 
         if (result.Status == ReadStreamStatus.StreamNotFound && streamNotFoundBehavior == StreamNotFoundBehavior.Throw)
             throw new StreamNotFoundException($"Stream '{streamName}' not found.");
