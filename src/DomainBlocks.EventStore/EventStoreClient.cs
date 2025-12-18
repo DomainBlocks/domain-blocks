@@ -5,18 +5,18 @@ using DomainBlocks.Serialization.Abstractions;
 
 namespace DomainBlocks.EventStore;
 
-public class EventStore<TPayload> : IEventStore where TPayload : notnull
+public class EventStoreClient<TPayload> : IEventStoreClient where TPayload : notnull
 {
-    private readonly IEventStoreBackend<TPayload> _backend;
+    private readonly IEventStoreAdapter<TPayload> _adapter;
     private readonly EventTypeMap _eventTypeMap;
     private readonly IPayloadSerializer<TPayload> _serializer;
     private readonly FrozenDictionary<Type, IEventContractMapper> _contractMappersByEventType;
     private readonly FrozenDictionary<Type, IEventContractMapper> _contractMappersByContractType;
     private readonly FrozenDictionary<Type, IEventReadTransform> _readTransforms;
 
-    public EventStore(EventStoreOptions<TPayload> options)
+    public EventStoreClient(EventStoreClientOptions<TPayload> options)
     {
-        _backend = options.Backend;
+        _adapter = options.Adapter;
         _eventTypeMap = options.TypeMap;
         _serializer = options.Serializer;
         _contractMappersByEventType = options.ContractMappers.ToFrozenDictionary(x => x.EventType);
@@ -65,7 +65,7 @@ public class EventStore<TPayload> : IEventStore where TPayload : notnull
                 return UncommittedEvent.Create(header, serializedPayload);
             });
 
-        await _backend.AppendToStreamAsync(streamId, serializedEvents, expectedState, cancellationToken);
+        await _adapter.AppendToStreamAsync(streamId, serializedEvents, expectedState, cancellationToken);
     }
 
     public async Task<ReadStreamResult<CommittedEvent<object>>> ReadStreamAsync(
@@ -73,7 +73,7 @@ public class EventStore<TPayload> : IEventStore where TPayload : notnull
         ReadStreamOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await _backend.ReadStreamAsync(streamId, options, cancellationToken);
+        var result = await _adapter.ReadStreamAsync(streamId, options, cancellationToken);
 
         return result.Status switch
         {

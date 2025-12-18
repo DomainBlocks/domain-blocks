@@ -67,10 +67,10 @@ public class MongoSerializationTests : MongoEventStoreTestFixture<BsonValue>
         TEvent @event,
         IPayloadSerializer<BsonValue> serializer) where TEvent : notnull
     {
-        var eventStore = CreateEventStore(serializer);
+        var client = CreateEventStore(serializer);
         var streamId = $"test-{serializer.GetType().Name}-{Guid.NewGuid()}";
-        await eventStore.AppendToStreamAsync(streamId, [@event]);
-        var result = await eventStore.ReadStreamAsync(streamId);
+        await client.AppendToStreamAsync(streamId, [@event]);
+        var result = await client.ReadStreamAsync(streamId);
         var readEvents = await result.Events.ToArrayAsync();
 
         readEvents
@@ -80,23 +80,21 @@ public class MongoSerializationTests : MongoEventStoreTestFixture<BsonValue>
             .ShouldBe(@event);
     }
 
-    private EventStore<BsonValue> CreateEventStore(IPayloadSerializer<BsonValue> serializer)
+    private EventStoreClient<BsonValue> CreateEventStore(IPayloadSerializer<BsonValue> serializer)
     {
         var eventTypeMap = new EventTypeMapBuilder()
             .MapType<UserCreated>()
             .MapType<Proto.UserCreated>("ProtoUserCreated")
             .Build();
 
-        var eventStoreOptions = new EventStoreOptions<BsonValue>
+        var clientOptions = new EventStoreClientOptions<BsonValue>
         {
-            Backend = MongoEventStore,
+            Adapter = EventStoreAdapter,
             TypeMap = eventTypeMap,
             Serializer = serializer
         };
 
-        var eventStore = new EventStore<BsonValue>(eventStoreOptions);
-
-        return eventStore;
+        return new EventStoreClient<BsonValue>(clientOptions);
     }
 
     private record UserCreated

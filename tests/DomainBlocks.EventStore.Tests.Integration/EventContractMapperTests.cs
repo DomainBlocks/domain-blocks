@@ -14,9 +14,9 @@ public class EventContractMapperTests : MongoEventStoreTestFixture<byte[]>
             .MapType<Proto.UserCreated>()
             .Build();
 
-        var eventStoreOptions = new EventStoreOptions<byte[]>
+        var clientOptions = new EventStoreClientOptions<byte[]>
         {
-            Backend = MongoEventStore,
+            Adapter = EventStoreAdapter,
             TypeMap = eventTypeMap,
             Serializer = new ProtobufBytesSerializer(),
             ContractMappers =
@@ -25,7 +25,7 @@ public class EventContractMapperTests : MongoEventStoreTestFixture<byte[]>
             ]
         };
 
-        var eventStore = new EventStore<byte[]>(eventStoreOptions);
+        var client = new EventStoreClient<byte[]>(clientOptions);
 
         var originalEvent = new UserCreated
         {
@@ -35,9 +35,9 @@ public class EventContractMapperTests : MongoEventStoreTestFixture<byte[]>
 
         var streamId = $"test-contract-mapper-{Guid.NewGuid()}";
 
-        await eventStore.AppendToStreamAsync(streamId, [originalEvent]);
+        await client.AppendToStreamAsync(streamId, [originalEvent]);
 
-        var result = await eventStore.ReadStreamAsync(streamId);
+        var result = await client.ReadStreamAsync(streamId);
         var readEvents = await result.Events.ToArrayAsync();
 
         readEvents

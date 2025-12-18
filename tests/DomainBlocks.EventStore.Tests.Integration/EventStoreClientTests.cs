@@ -7,9 +7,9 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.Tests.Integration;
 
-public class EventStoreTests : MongoEventStoreTestFixture<BsonDocument>
+public class EventStoreClientTests : MongoEventStoreTestFixture<BsonDocument>
 {
-    static EventStoreTests()
+    static EventStoreClientTests()
     {
         BsonClassMap.RegisterClassMap<LimitOrderEvent>(cm =>
         {
@@ -34,22 +34,22 @@ public class EventStoreTests : MongoEventStoreTestFixture<BsonDocument>
                 nameof(LimitOrderFilled))
             .Build();
 
-        var writeEventStoreOptions = new EventStoreOptions<BsonDocument>
+        var writeClientOptions = new EventStoreClientOptions<BsonDocument>
         {
-            Backend = MongoEventStore,
+            Adapter = EventStoreAdapter,
             TypeMap = writeEventTypeMap,
             Serializer = new BsonDocumentSerializer()
         };
 
-        var readEventStoreOptions = new EventStoreOptions<BsonDocument>
+        var readClientOptions = new EventStoreClientOptions<BsonDocument>
         {
-            Backend = MongoEventStore,
+            Adapter = EventStoreAdapter,
             TypeMap = readEventTypeMap,
             Serializer = new BsonDocumentSerializer()
         };
 
-        var writeEventStore = new EventStore<BsonDocument>(writeEventStoreOptions);
-        var readEventStore = new EventStore<BsonDocument>(readEventStoreOptions);
+        var writeClient = new EventStoreClient<BsonDocument>(writeClientOptions);
+        var readClient = new EventStoreClient<BsonDocument>(readClientOptions);
 
         var orderId = Guid.NewGuid();
         var streamId = $"order-{orderId}";
@@ -81,9 +81,9 @@ public class EventStoreTests : MongoEventStoreTestFixture<BsonDocument>
             FilledAt = amended.AmendedAt.AddHours(1)
         };
 
-        await writeEventStore.AppendToStreamAsync(streamId, [submitted, amended, filled]);
+        await writeClient.AppendToStreamAsync(streamId, [submitted, amended, filled]);
 
-        var orderEvents = await (await readEventStore.ReadStreamAsync(streamId)).Events
+        var orderEvents = await (await readClient.ReadStreamAsync(streamId)).Events
             .Select(x => x.Payload)
             .OfType<LimitOrderEvent>()
             .ToArrayAsync();
