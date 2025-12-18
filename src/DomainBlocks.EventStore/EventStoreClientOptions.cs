@@ -5,7 +5,7 @@ namespace DomainBlocks.EventStore;
 
 public class EventStoreClientOptions<TPayload> where TPayload : notnull
 {
-    public required IEventStoreBackend<TPayload> Backend { get; init; }
+    public required IEventStoreAdapter<TPayload> Adapter { get; init; }
     public required EventTypeMap TypeMap { get; init; }
     public required IPayloadSerializer<TPayload> Serializer { get; init; }
     public IEnumerable<IEventContractMapper> ContractMappers { get; init; } = [];

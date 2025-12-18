@@ -11,7 +11,7 @@ public class WrongExpectedVersionExceptionTests
     private const int TestTimeoutMillis = 5_000;
 
     // ReSharper disable once NullableWarningSuppressionIsUsed This is initialized in OneTimeSetUp
-    private IKurrentDbEventStore _eventStore = null!;
+    private IKurrentDbEventStoreAdapter _adapter = null!;
 
     [SetUp]
     public void OneTimeSetUp()
@@ -21,7 +21,7 @@ public class WrongExpectedVersionExceptionTests
                 "kurrentdb://admin:changeit@localhost:2113?tls=false&tlsVerifyCert=false&gossipTimeout=5000&keepAliveTimeout=5000")
         );
 
-        _eventStore = new KurrentDbEventStore(client);
+        _adapter = new KurrentDbEventStoreAdapter(client);
     }
 
     [Test]
@@ -38,7 +38,7 @@ public class WrongExpectedVersionExceptionTests
         };
 
         var wrongExpectedStreamStateException = Assert.ThrowsAsync<WrongExpectedStreamStateException>(async () =>
-            await _eventStore.AppendToStreamAsync(
+            await _adapter.AppendToStreamAsync(
                 streamId,
                 events,
                 ExpectedStreamState.FromVersion(StreamVersion.FromInt64(1)),
@@ -64,7 +64,7 @@ public class WrongExpectedVersionExceptionTests
         };
 
         var wrongExpectedStreamStateException = Assert.ThrowsAsync<WrongExpectedStreamStateException>(async () =>
-            await _eventStore.AppendToStreamAsync(
+            await _adapter.AppendToStreamAsync(
                 streamId,
                 events,
                 ExpectedStreamState.StreamExists,
@@ -88,13 +88,13 @@ public class WrongExpectedVersionExceptionTests
             TestEventsHelper.CreateTestEvent("TestEvent3")
         };
 
-        await _eventStore.AppendToStreamAsync(
+        await _adapter.AppendToStreamAsync(
             streamId,
             events,
             ExpectedStreamState.Any,
             cancellationToken);
 
-        var wrongExpectedStreamStateException = await _eventStore.AppendToStreamAsync(
+        var wrongExpectedStreamStateException = await _adapter.AppendToStreamAsync(
             streamId,
             [TestEventsHelper.CreateTestEvent("TestEvent4")],
             ExpectedStreamState.StreamDoesNotExist,
@@ -116,12 +116,12 @@ public class WrongExpectedVersionExceptionTests
             TestEventsHelper.CreateTestEvent("TestEvent3")
         };
 
-        await _eventStore.AppendToStreamAsync(
+        await _adapter.AppendToStreamAsync(
             streamId,
             events,
             ExpectedStreamState.Any);
 
-        var wrongExpectedStreamStateException = await _eventStore.AppendToStreamAsync(
+        var wrongExpectedStreamStateException = await _adapter.AppendToStreamAsync(
                 streamId,
                 [TestEventsHelper.CreateTestEvent("TestEvent4")],
                 ExpectedStreamState.FromVersion(StreamVersion.FromInt64(1)))

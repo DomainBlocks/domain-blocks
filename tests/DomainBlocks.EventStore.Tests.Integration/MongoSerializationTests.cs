@@ -89,7 +89,7 @@ public class MongoSerializationTests : MongoEventStoreTestFixture<BsonValue>
 
         var clientOptions = new EventStoreClientOptions<BsonValue>
         {
-            Backend = MongoEventStore,
+            Adapter = EventStoreAdapter,
             TypeMap = eventTypeMap,
             Serializer = serializer
         };

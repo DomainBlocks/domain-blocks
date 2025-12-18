@@ -7,7 +7,7 @@ namespace DomainBlocks.EventStore;
 
 public class EventStoreClient<TPayload> : IEventStoreClient where TPayload : notnull
 {
-    private readonly IEventStoreBackend<TPayload> _backend;
+    private readonly IEventStoreAdapter<TPayload> _adapter;
     private readonly EventTypeMap _eventTypeMap;
     private readonly IPayloadSerializer<TPayload> _serializer;
     private readonly FrozenDictionary<Type, IEventContractMapper> _contractMappersByEventType;
@@ -16,7 +16,7 @@ public class EventStoreClient<TPayload> : IEventStoreClient where TPayload : not
 
     public EventStoreClient(EventStoreClientOptions<TPayload> options)
     {
-        _backend = options.Backend;
+        _adapter = options.Adapter;
         _eventTypeMap = options.TypeMap;
         _serializer = options.Serializer;
         _contractMappersByEventType = options.ContractMappers.ToFrozenDictionary(x => x.EventType);
@@ -65,7 +65,7 @@ public class EventStoreClient<TPayload> : IEventStoreClient where TPayload : not
                 return UncommittedEvent.Create(header, serializedPayload);
             });
 
-        await _backend.AppendToStreamAsync(streamId, serializedEvents, expectedState, cancellationToken);
+        await _adapter.AppendToStreamAsync(streamId, serializedEvents, expectedState, cancellationToken);
     }
 
     public async Task<ReadStreamResult<CommittedEvent<object>>> ReadStreamAsync(
@@ -73,7 +73,7 @@ public class EventStoreClient<TPayload> : IEventStoreClient where TPayload : not
         ReadStreamOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await _backend.ReadStreamAsync(streamId, options, cancellationToken);
+        var result = await _adapter.ReadStreamAsync(streamId, options, cancellationToken);
 
         return result.Status switch
         {

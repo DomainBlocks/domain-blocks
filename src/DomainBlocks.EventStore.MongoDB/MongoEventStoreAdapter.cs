@@ -4,20 +4,21 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
-public static class MongoEventStore
+public static class MongoEventStoreAdapter
 {
-    public static IMongoEventStore<TPayload> Create<TEventDocument, TPayload>(
+    public static IMongoEventStoreAdapter<TPayload> Create<TEventDocument, TPayload>(
         IMongoDatabase database,
         MongoEventStoreOptions<TEventDocument, TPayload> options) where TPayload : notnull
     {
         var collection = database.GetCollection<TEventDocument>(options.EventCollectionName);
-        return new MongoEventStore<TEventDocument, TPayload>(collection, options);
+        return new MongoEventStoreAdapter<TEventDocument, TPayload>(collection, options);
     }
 }
 
-public class MongoEventStore<TEventDocument, TPayload>(
+public class MongoEventStoreAdapter<TEventDocument, TPayload>(
     IMongoCollection<TEventDocument> collection,
-    MongoEventStoreOptions<TEventDocument, TPayload> options) : IMongoEventStore<TPayload> where TPayload : notnull
+    MongoEventStoreOptions<TEventDocument, TPayload> options) :
+    IMongoEventStoreAdapter<TPayload> where TPayload : notnull
 {
     private readonly FieldDefinition<TEventDocument, string> _streamIdField = options.StreamIdField;
     private readonly FieldDefinition<TEventDocument, long> _streamVersionField = options.StreamVersionField;

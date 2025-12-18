@@ -5,7 +5,7 @@ using KurrentStreamPosition = KurrentDB.Client.StreamPosition;
 
 namespace DomainBlocks.EventStore.KurrentDB;
 
-public class KurrentDbEventStore(KurrentDBClient client) : IKurrentDbEventStore
+public class KurrentDbEventStoreAdapter(KurrentDBClient client) : IKurrentDbEventStoreAdapter
 {
     public async Task AppendToStreamAsync(
         string streamId,

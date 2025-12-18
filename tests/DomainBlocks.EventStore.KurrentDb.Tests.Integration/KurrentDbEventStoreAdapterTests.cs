@@ -1,5 +1,4 @@
-﻿
-using DomainBlocks.EventStore.Abstractions;
+﻿using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.KurrentDB;
 using KurrentDB.Client;
 using NUnit.Framework;
@@ -9,19 +8,18 @@ using StreamPosition = DomainBlocks.EventStore.Abstractions.StreamPosition;
 
 namespace DomainBlocks.EventStore.KurrentDb.Tests.Integration;
 
-public class KurrentDbTests
+public class KurrentDbEventStoreAdapterTests
 {
     private const int TestTimeoutMillis = 5_000;
-    private IKurrentDbEventStore _eventStore = null!;
+    private IKurrentDbEventStoreAdapter _adapter = null!;
 
     [SetUp]
     public void OneTimeSetUp()
     {
-        var client = new KurrentDBClient(
-            KurrentDBClientSettings.Create("kurrentdb://admin:changeit@localhost:2113?tls=false&tlsVerifyCert=false")
-        );
+        const string connectionString = "kurrentdb://admin:changeit@localhost:2113?tls=false&tlsVerifyCert=false";
+        var client = new KurrentDBClient(KurrentDBClientSettings.Create(connectionString));
 
-        _eventStore = new KurrentDbEventStore(client);
+        _adapter = new KurrentDbEventStoreAdapter(client);
     }
 
     [Test]
@@ -31,19 +29,19 @@ public class KurrentDbTests
     {
         UncommittedEvent<ReadOnlyMemory<byte>>[] events =
         [
-           TestEventsHelper.CreateTestEvent("TestEvent1"),
-           TestEventsHelper.CreateTestEvent("TestEvent2"),
-           TestEventsHelper.CreateTestEvent("TestEvent3")
+            TestEventsHelper.CreateTestEvent("TestEvent1"),
+            TestEventsHelper.CreateTestEvent("TestEvent2"),
+            TestEventsHelper.CreateTestEvent("TestEvent3")
         ];
 
         var streamId = $"test-{Uuid.NewUuid()}";
-        await _eventStore.AppendToStreamAsync(
+        await _adapter.AppendToStreamAsync(
             streamId,
             events,
             ExpectedStreamState.Any,
             cancellationToken);
 
-        var readResult = await _eventStore.ReadStreamAsync(streamId, cancellationToken: cancellationToken);
+        var readResult = await _adapter.ReadStreamAsync(streamId, cancellationToken: cancellationToken);
         var readEvents = await readResult.Events.ToArrayAsync(cancellationToken);
 
         readEvents.ShouldAllBe(x => x.Header.StreamId == streamId);
@@ -55,13 +53,14 @@ public class KurrentDbTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task AppendToStreamAsync_WhenExpectedStateAnyAndStreamExists_AppendsEventsToStream(CancellationToken cancellationToken)
+    public async Task AppendToStreamAsync_WhenExpectedStateAnyAndStreamExists_AppendsEventsToStream(
+        CancellationToken cancellationToken)
     {
         UncommittedEvent<ReadOnlyMemory<byte>>[] events =
         [
-           TestEventsHelper.CreateTestEvent("TestEvent1"),
-           TestEventsHelper.CreateTestEvent("TestEvent2"),
-           TestEventsHelper.CreateTestEvent("TestEvent3")
+            TestEventsHelper.CreateTestEvent("TestEvent1"),
+            TestEventsHelper.CreateTestEvent("TestEvent2"),
+            TestEventsHelper.CreateTestEvent("TestEvent3")
         ];
 
         UncommittedEvent<ReadOnlyMemory<byte>>[] events2 =
@@ -73,17 +72,17 @@ public class KurrentDbTests
 
         var streamId = $"test-{Uuid.NewUuid()}";
 
-        await _eventStore.AppendToStreamAsync(
+        await _adapter.AppendToStreamAsync(
             streamId,
             events,
             ExpectedStreamState.Any, cancellationToken);
 
-        await _eventStore.AppendToStreamAsync(
+        await _adapter.AppendToStreamAsync(
             streamId,
             events2,
             ExpectedStreamState.Any, cancellationToken);
 
-        var readResult = await _eventStore.ReadStreamAsync(streamId, cancellationToken: cancellationToken);
+        var readResult = await _adapter.ReadStreamAsync(streamId, cancellationToken: cancellationToken);
         var readEvents = await readResult.Events.ToArrayAsync(cancellationToken);
 
         readEvents.ShouldAllBe(x => x.Header.StreamId == streamId);
@@ -100,11 +99,12 @@ public class KurrentDbTests
     {
         var streamId = $"test-{Guid.NewGuid()}";
 
-        await _eventStore.AppendToStreamAsync(
+        await _adapter.AppendToStreamAsync(
             streamId,
             [TestEventsHelper.CreateTestEvent("TestEvent1")],
             cancellationToken: cancellationToken);
-        await _eventStore.AppendToStreamAsync(
+
+        await _adapter.AppendToStreamAsync(
             streamId,
             [TestEventsHelper.CreateTestEvent("TestEvent2")],
             cancellationToken: cancellationToken);
@@ -115,7 +115,7 @@ public class KurrentDbTests
             Direction = StreamReadDirection.Backward
         };
 
-        var readResult = await _eventStore.ReadStreamAsync(streamId, options, cancellationToken);
+        var readResult = await _adapter.ReadStreamAsync(streamId, options, cancellationToken);
         var events = await readResult.Events.ToArrayAsync(cancellationToken);
 
         readResult.Status.ShouldBe(ReadStreamStatus.Success);
@@ -129,11 +129,12 @@ public class KurrentDbTests
     {
         var streamId = $"test-{Guid.NewGuid()}";
 
-        await _eventStore.AppendToStreamAsync(
+        await _adapter.AppendToStreamAsync(
             streamId,
             [TestEventsHelper.CreateTestEvent("TestEvent1")],
             cancellationToken: cancellationToken);
-        await _eventStore.AppendToStreamAsync(
+
+        await _adapter.AppendToStreamAsync(
             streamId,
             [TestEventsHelper.CreateTestEvent("TestEvent2")],
             cancellationToken: cancellationToken);
@@ -144,7 +145,7 @@ public class KurrentDbTests
             Direction = StreamReadDirection.Forward
         };
 
-        var readResult = await _eventStore.ReadStreamAsync(streamId, options, cancellationToken);
+        var readResult = await _adapter.ReadStreamAsync(streamId, options, cancellationToken);
         var events = await readResult.Events.ToArrayAsync(cancellationToken);
 
         readResult.Status.ShouldBe(ReadStreamStatus.Success);
@@ -163,7 +164,7 @@ public class KurrentDbTests
             Direction = StreamReadDirection.Backward
         };
 
-        var readResult = await _eventStore.ReadStreamAsync(streamId, options, cancellationToken);
+        var readResult = await _adapter.ReadStreamAsync(streamId, options, cancellationToken);
         var events = await readResult.Events.ToArrayAsync(cancellationToken);
 
         readResult.Status.ShouldBe(ReadStreamStatus.StreamNotFound);

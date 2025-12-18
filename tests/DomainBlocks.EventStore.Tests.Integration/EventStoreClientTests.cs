@@ -36,14 +36,14 @@ public class EventStoreClientTests : MongoEventStoreTestFixture<BsonDocument>
 
         var writeClientOptions = new EventStoreClientOptions<BsonDocument>
         {
-            Backend = MongoEventStore,
+            Adapter = EventStoreAdapter,
             TypeMap = writeEventTypeMap,
             Serializer = new BsonDocumentSerializer()
         };
 
         var readClientOptions = new EventStoreClientOptions<BsonDocument>
         {
-            Backend = MongoEventStore,
+            Adapter = EventStoreAdapter,
             TypeMap = readEventTypeMap,
             Serializer = new BsonDocumentSerializer()
         };

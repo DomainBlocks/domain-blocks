@@ -17,7 +17,7 @@ public abstract class MongoEventStoreTestFixture
 
 public abstract class MongoEventStoreTestFixture<TPayload> : MongoEventStoreTestFixture where TPayload : notnull
 {
-    protected IMongoEventStore<TPayload> MongoEventStore { get; private set; } = null!;
+    protected IMongoEventStoreAdapter<TPayload> EventStoreAdapter { get; private set; } = null!;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -27,6 +27,6 @@ public abstract class MongoEventStoreTestFixture<TPayload> : MongoEventStoreTest
         var options = MongoEventStoreOptions.CreateDefault<TPayload>();
         await MongoEventStoreAdmin.EnsureIndexesAsync(database, options);
 
-        MongoEventStore = DomainBlocks.EventStore.MongoDB.MongoEventStore.Create(database, options);
+        EventStoreAdapter = MongoEventStoreAdapter.Create(database, options);
     }
 }
