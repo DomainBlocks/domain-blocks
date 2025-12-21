@@ -16,7 +16,7 @@ public interface IEventStoreClient
         ExpectedStreamState expectedState = default,
         CancellationToken cancellationToken = default);
 
-    Task<ReadStreamResult<CommittedEvent<object>>> ReadStreamAsync(
+    IAsyncEnumerable<CommittedEvent<object>> ReadStreamAsync(
         string streamId,
         ReadStreamOptions? options = null,
         CancellationToken cancellationToken = default);

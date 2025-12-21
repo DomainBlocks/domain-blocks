@@ -11,29 +11,30 @@
     <File Path="docs\architecture.md" />
   </Folder>
   <Folder Name="/examples/">
-    <Project Path="examples\DomainBlocks.Examples.TodoList.Domain\DomainBlocks.Examples.TodoList.Domain.csproj" Type="Classic C#" />
+    <Project Path="examples\DomainBlocks.Examples.TodoList.Domain\DomainBlocks.Examples.TodoList.Domain.csproj" Type="C#" />
   </Folder>
   <Folder Name="/src/">
-    <Project Path="src\DomainBlocks.Core\DomainBlocks.Core.csproj" Type="Classic C#" />
-    <Project Path="src\DomainBlocks.EventSourcing\DomainBlocks.EventSourcing.csproj" Type="Classic C#" />
+    <Project Path="src\DomainBlocks.Core\DomainBlocks.Core.csproj" Type="C#" />
+    <Project Path="src\DomainBlocks.EventSourcing\DomainBlocks.EventSourcing.csproj" Type="C#" />
     <Project Path="src\DomainBlocks.EventStore.Abstractions\DomainBlocks.EventStore.Abstractions.csproj" />
-    <Project Path="src\DomainBlocks.EventStore.KurrentDB\DomainBlocks.EventStore.KurrentDB.csproj" Type="Classic C#" />
-    <Project Path="src\DomainBlocks.EventStore.MongoDB\DomainBlocks.EventStore.MongoDB.csproj" Type="Classic C#" />
-    <Project Path="src\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj" Type="Classic C#" />
-    <Project Path="src\DomainBlocks.Serialization.Abstractions\DomainBlocks.Serialization.Abstractions.csproj" Type="Classic C#" />
-    <Project Path="src\DomainBlocks.Serialization.Google.Protobuf\DomainBlocks.Serialization.Google.Protobuf.csproj" Type="Classic C#" />
-    <Project Path="src\DomainBlocks.Serialization.MongoDB.Bson\DomainBlocks.Serialization.MongoDB.Bson.csproj" Type="Classic C#" />
-    <Project Path="src\DomainBlocks.Serialization.SystemTextJson\DomainBlocks.Serialization.SystemTextJson.csproj" Type="Classic C#" />
+    <Project Path="src\DomainBlocks.EventStore.KurrentDB\DomainBlocks.EventStore.KurrentDB.csproj" Type="C#" />
+    <Project Path="src\DomainBlocks.EventStore.MongoDB\DomainBlocks.EventStore.MongoDB.csproj" Type="C#" />
+    <Project Path="src\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj" Type="C#" />
+    <Project Path="src\DomainBlocks.Serialization.Abstractions\DomainBlocks.Serialization.Abstractions.csproj" Type="C#" />
+    <Project Path="src\DomainBlocks.Serialization.Google.Protobuf\DomainBlocks.Serialization.Google.Protobuf.csproj" Type="C#" />
+    <Project Path="src\DomainBlocks.Serialization.MongoDB.Bson\DomainBlocks.Serialization.MongoDB.Bson.csproj" Type="C#" />
+    <Project Path="src\DomainBlocks.Serialization.SystemTextJson\DomainBlocks.Serialization.SystemTextJson.csproj" Type="C#" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests\DomainBlocks.EventSourcing.Tests.Integration\DomainBlocks.EventSourcing.Tests.Integration.csproj" Type="Classic C#" />
-    <Project Path="tests\DomainBlocks.EventSourcing.Tests.Unit\DomainBlocks.EventSourcing.Tests.Unit.csproj" Type="Classic C#" />
-    <Project Path="tests\DomainBlocks.EventStore.Abstractions.Tests.Unit\DomainBlocks.EventStore.Abstractions.Tests.Unit.csproj" Type="Classic C#" />
-    <Project Path="tests\DomainBlocks.EventStore.KurrentDb.Tests.Integration\DomainBlocks.EventStore.KurrentDb.Tests.Integration.csproj" Type="Classic C#" />
-    <Project Path="tests\DomainBlocks.EventStore.MongoDB.Tests.Integration\DomainBlocks.EventStore.MongoDB.Tests.Integration.csproj" Type="Classic C#" />
-    <Project Path="tests\DomainBlocks.EventStore.Tests.Integration\DomainBlocks.EventStore.Tests.Integration.csproj" Type="Classic C#" />
-    <Project Path="tests\DomainBlocks.EventStore.Tests.Unit\DomainBlocks.EventStore.Tests.Unit.csproj" Type="Classic C#" />
-    <Project Path="tests\DomainBlocks.Serialization.Google.Protobuf.Tests\DomainBlocks.Serialization.Google.Protobuf.Tests.csproj" Type="Classic C#" />
-    <Project Path="tests\DomainBlocks.Testing.Integration.MongoDB\DomainBlocks.Testing.Integration.MongoDB.csproj" Type="Classic C#" />
+    <Project Path="tests/DomainBlocks.Testing.Integration/DomainBlocks.Testing.Integration.csproj" />
+    <Project Path="tests\DomainBlocks.EventSourcing.Tests.Integration\DomainBlocks.EventSourcing.Tests.Integration.csproj" Type="C#" />
+    <Project Path="tests\DomainBlocks.EventSourcing.Tests.Unit\DomainBlocks.EventSourcing.Tests.Unit.csproj" Type="C#" />
+    <Project Path="tests\DomainBlocks.EventStore.Abstractions.Tests.Unit\DomainBlocks.EventStore.Abstractions.Tests.Unit.csproj" Type="C#" />
+    <Project Path="tests\DomainBlocks.EventStore.KurrentDb.Tests.Integration\DomainBlocks.EventStore.KurrentDb.Tests.Integration.csproj" Type="C#" />
+    <Project Path="tests\DomainBlocks.EventStore.MongoDB.Tests.Integration\DomainBlocks.EventStore.MongoDB.Tests.Integration.csproj" Type="C#" />
+    <Project Path="tests\DomainBlocks.EventStore.Tests.Integration\DomainBlocks.EventStore.Tests.Integration.csproj" Type="C#" />
+    <Project Path="tests\DomainBlocks.EventStore.Tests.Unit\DomainBlocks.EventStore.Tests.Unit.csproj" Type="C#" />
+    <Project Path="tests\DomainBlocks.Serialization.Google.Protobuf.Tests\DomainBlocks.Serialization.Google.Protobuf.Tests.csproj" Type="C#" />
+    <Project Path="tests\DomainBlocks.Testing.Integration.MongoDB\DomainBlocks.Testing.Integration.MongoDB.csproj" Type="C#" />
   </Folder>
 </Solution>

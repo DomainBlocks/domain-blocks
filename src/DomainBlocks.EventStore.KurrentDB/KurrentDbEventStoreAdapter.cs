@@ -1,8 +1,10 @@
 using System.Collections.Frozen;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using DomainBlocks.EventStore.Abstractions;
 using KurrentDB.Client;
 using KurrentStreamPosition = KurrentDB.Client.StreamPosition;
+using StreamNotFoundException = DomainBlocks.EventStore.Abstractions.StreamNotFoundException;
 
 namespace DomainBlocks.EventStore.KurrentDB;
 
@@ -24,7 +26,10 @@ public class KurrentDbEventStoreAdapter(KurrentDBClient client) : IKurrentDbEven
 
         try
         {
-            _ = await client.AppendToStreamAsync(streamId, kurrentDbStreamState, eventData,
+            _ = await client.AppendToStreamAsync(
+                streamId,
+                kurrentDbStreamState,
+                eventData,
                 cancellationToken: cancellationToken);
         }
         catch (WrongExpectedVersionException ex)
@@ -33,10 +38,10 @@ public class KurrentDbEventStoreAdapter(KurrentDBClient client) : IKurrentDbEven
         }
     }
 
-    public async Task<ReadStreamResult<CommittedEvent<ReadOnlyMemory<byte>>>> ReadStreamAsync(
+    public async IAsyncEnumerable<CommittedEvent<ReadOnlyMemory<byte>>> ReadStreamAsync(
         string streamId,
         ReadStreamOptions? options = null,
-        CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         options ??= ReadStreamOptions.Default;
         var direction = options.Direction;
@@ -54,46 +59,38 @@ public class KurrentDbEventStoreAdapter(KurrentDBClient client) : IKurrentDbEven
         if (position.IsStart && direction == StreamReadDirection.Backward ||
             position.IsEnd && direction == StreamReadDirection.Forward)
         {
-            var streamExist = client.ReadStreamAsync(
-                Direction.Backwards,
-                streamId,
-                KurrentStreamPosition.End,
-                maxCount: 1,
-                cancellationToken: cancellationToken);
+            if (options.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw &&
+                !await StreamExistsAsync(streamId, cancellationToken).ConfigureAwait(false))
+            {
+                throw new StreamNotFoundException(streamId);
+            }
 
-            var streamExistsReadState = await streamExist.ReadState;
-
-            return streamExistsReadState == ReadState.StreamNotFound
-                ? ReadStreamResult.NotFound<CommittedEvent<ReadOnlyMemory<byte>>>()
-                : ReadStreamResult.Success<CommittedEvent<ReadOnlyMemory<byte>>>();
+            yield break;
         }
 
-        var readStreamResult = client.ReadStreamAsync(
+        var result = client.ReadStreamAsync(
             kurrentDirection,
             streamId,
             revision,
             cancellationToken: cancellationToken);
 
-        var readState = await readStreamResult.ReadState;
-
-        return readState == ReadState.StreamNotFound
-            ? ReadStreamResult.NotFound<CommittedEvent<ReadOnlyMemory<byte>>>()
-            : ReadStreamResult.Success(ToCommittedEvents());
-
-        async IAsyncEnumerable<CommittedEvent<ReadOnlyMemory<byte>>> ToCommittedEvents()
+        if (options.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw &&
+            await result.ReadState.ConfigureAwait(false) == ReadState.StreamNotFound)
         {
-            await foreach (var resolvedEvent in readStreamResult)
-            {
-                var header = new CommittedEventHeader(
-                    streamId,
-                    StreamVersion.FromInt64(resolvedEvent.OriginalEvent.EventNumber.ToInt64()),
-                    resolvedEvent.Event.EventType,
-                    FrozenDictionary<string, string>.Empty,
-                    resolvedEvent.Event.Created.Date,
-                    GlobalPosition.FromUInt64(resolvedEvent.OriginalEvent.Position.CommitPosition));
+            throw new StreamNotFoundException(streamId);
+        }
 
-                yield return CommittedEvent.Create(header, resolvedEvent.Event.Data);
-            }
+        await foreach (var resolvedEvent in result)
+        {
+            var header = new CommittedEventHeader(
+                streamId,
+                StreamVersion.FromInt64(resolvedEvent.OriginalEvent.EventNumber.ToInt64()),
+                resolvedEvent.Event.EventType,
+                FrozenDictionary<string, string>.Empty,
+                resolvedEvent.Event.Created.Date,
+                GlobalPosition.FromUInt64(resolvedEvent.OriginalEvent.Position.CommitPosition));
+
+            yield return CommittedEvent.Create(header, resolvedEvent.Event.Data);
         }
     }
 
@@ -159,5 +156,19 @@ public class KurrentDbEventStoreAdapter(KurrentDBClient client) : IKurrentDbEven
         {
             return ExpectedStreamState.FromVersion(StreamVersion.FromInt64(streamState.ToInt64()));
         }
+    }
+
+    private async Task<bool> StreamExistsAsync(string streamId, CancellationToken cancellationToken)
+    {
+        var streamExist = client.ReadStreamAsync(
+            Direction.Backwards,
+            streamId,
+            KurrentStreamPosition.End,
+            maxCount: 1,
+            cancellationToken: cancellationToken);
+
+        var readState = await streamExist.ReadState.ConfigureAwait(false);
+
+        return readState == ReadState.Ok;
     }
 }

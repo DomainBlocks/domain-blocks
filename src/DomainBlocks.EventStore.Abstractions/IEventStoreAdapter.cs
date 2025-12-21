@@ -8,7 +8,7 @@ public interface IEventStoreAdapter<TPayload> where TPayload : notnull
         ExpectedStreamState expectedState = default,
         CancellationToken cancellationToken = default);
 
-    Task<ReadStreamResult<CommittedEvent<TPayload>>> ReadStreamAsync(
+    IAsyncEnumerable<CommittedEvent<TPayload>> ReadStreamAsync(
         string streamId,
         ReadStreamOptions? options = null,
         CancellationToken cancellationToken = default);

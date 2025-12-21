@@ -83,7 +83,8 @@ public class EventStoreClientTests : MongoEventStoreTestFixture<BsonDocument>
 
         await writeClient.AppendToStreamAsync(streamId, [submitted, amended, filled]);
 
-        var orderEvents = await (await readClient.ReadStreamAsync(streamId)).Events
+        var orderEvents = await readClient
+            .ReadStreamAsync(streamId)
             .Select(x => x.Payload)
             .OfType<LimitOrderEvent>()
             .ToArrayAsync();

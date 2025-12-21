@@ -24,4 +24,9 @@ public sealed class ReadStreamOptions
     /// The maximum number of events to read, or <c>null</c> for no limit.
     /// </summary>
     public int? MaxCount { get; init; }
+
+    /// <summary>
+    /// Defines the behavior when the requested stream does not exist.
+    /// </summary>
+    public StreamNotFoundBehavior StreamNotFoundBehavior { get; init; }
 }

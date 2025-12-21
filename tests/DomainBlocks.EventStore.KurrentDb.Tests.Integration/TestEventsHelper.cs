@@ -10,8 +10,10 @@ internal static class TestEventsHelper
         {
             { "TestProperty", "TestValue" }
         };
+
         var header = new UncommittedEventHeader(eventName);
         ReadOnlyMemory<byte> serializeToUtf8Bytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(payload);
+
         return UncommittedEvent.Create(header, serializeToUtf8Bytes);
     }
 }

@@ -18,7 +18,7 @@ public sealed class EntityStore(
         string entityId,
         CancellationToken cancellationToken = default) where TEntity : notnull
     {
-        return await LoadInternalAsync<TEntity>(entityId, StreamNotFoundBehavior.CreateEntity, cancellationToken);
+        return await LoadInternalAsync<TEntity>(entityId, StreamNotFoundBehavior.Ignore, cancellationToken);
     }
 
     public async Task SaveAsync<TEntity>(Versioned<TEntity> entity, CancellationToken cancellationToken = default)
@@ -48,15 +48,13 @@ public sealed class EntityStore(
 
     private async Task<Versioned<TEntity>> LoadInternalAsync<TEntity>(
         string entityId,
-        StreamNotFoundBehavior streamNotFoundBehavior = StreamNotFoundBehavior.CreateEntity,
-        CancellationToken cancellationToken = default)
+        StreamNotFoundBehavior streamNotFoundBehavior,
+        CancellationToken cancellationToken)
         where TEntity : notnull
     {
         var streamName = GetStreamName<TEntity>(entityId);
-        var result = await eventStoreClient.ReadStreamAsync(streamName, cancellationToken: cancellationToken);
-
-        if (result.Status == ReadStreamStatus.StreamNotFound && streamNotFoundBehavior == StreamNotFoundBehavior.Throw)
-            throw new StreamNotFoundException($"Stream '{streamName}' not found.");
+        var readOptions = new ReadStreamOptions { StreamNotFoundBehavior = streamNotFoundBehavior };
+        var events = eventStoreClient.ReadStreamAsync(streamName, readOptions, cancellationToken);
 
         var entityAdapter = GetEntityAdapter<TEntity>();
         var initialState = entityAdapter.CreateState(); // May come from a snapshot (in future).
@@ -71,7 +69,7 @@ public sealed class EntityStore(
 
         async IAsyncEnumerable<object> EnumerateEvents()
         {
-            await foreach (var e in result.Events.WithCancellation(cancellationToken))
+            await foreach (var e in events)
             {
                 loadedVersion = e.Header.StreamVersion;
                 yield return e.Payload;
@@ -90,11 +88,5 @@ public sealed class EntityStore(
     {
         var streamNamePrefix = DefaultStreamNamePrefix.CreateFor(typeof(TEntity));
         return $"{streamNamePrefix}-{entityId}";
-    }
-
-    private enum StreamNotFoundBehavior
-    {
-        CreateEntity,
-        Throw
     }
 }
