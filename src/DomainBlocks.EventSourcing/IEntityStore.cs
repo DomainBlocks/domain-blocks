@@ -4,7 +4,7 @@ public interface IEntityStore
 {
     /// <summary>
     /// Loads an entity from an event stream in the event store. If the stream does not exist, a
-    /// <see cref="StreamNotFoundException"/> is thrown.
+    /// <see cref="DomainBlocks.EventStore.Abstractions.StreamNotFoundException"/> is thrown.
     /// </summary>
     /// <param name="entityId">The ID of the entity</param>
     /// <param name="cancellationToken">A cancellation token</param>

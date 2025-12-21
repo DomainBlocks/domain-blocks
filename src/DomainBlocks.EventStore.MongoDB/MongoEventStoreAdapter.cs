@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Abstractions;
 using MongoDB.Driver;
 
@@ -63,10 +64,10 @@ public class MongoEventStoreAdapter<TEventDocument, TPayload>(
         }
     }
 
-    public async Task<ReadStreamResult<CommittedEvent<TPayload>>> ReadStreamAsync(
+    public async IAsyncEnumerable<CommittedEvent<TPayload>> ReadStreamAsync(
         string streamId,
         ReadStreamOptions? readOptions = null,
-        CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         readOptions ??= ReadStreamOptions.Default;
         var position = readOptions.Position;
@@ -76,11 +77,13 @@ public class MongoEventStoreAdapter<TEventDocument, TPayload>(
         if (position.IsStart && direction == StreamReadDirection.Backward ||
             position.IsEnd && direction == StreamReadDirection.Forward)
         {
-            var streamExists = await StreamExistsAsync(streamId, cancellationToken);
+            if (readOptions.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw &&
+                !await StreamExistsAsync(streamId, cancellationToken).ConfigureAwait(false))
+            {
+                throw new StreamNotFoundException(streamId);
+            }
 
-            return streamExists
-                ? ReadStreamResult.Success<CommittedEvent<TPayload>>()
-                : ReadStreamResult.NotFound<CommittedEvent<TPayload>>();
+            yield break;
         }
 
         var filter = Builders<TEventDocument>.Filter.Eq(_streamIdField, streamId);
@@ -100,28 +103,26 @@ public class MongoEventStoreAdapter<TEventDocument, TPayload>(
             ? Builders<TEventDocument>.Sort.Ascending(_streamVersionField)
             : Builders<TEventDocument>.Sort.Descending(_streamVersionField);
 
-        var cursor = await collection
+        using var cursor = await collection
             .Find(filter)
             .Sort(sort)
             .Limit(readOptions.MaxCount)
-            .ToCursorAsync(cancellationToken);
+            .ToCursorAsync(cancellationToken)
+            .ConfigureAwait(false);
 
-        if (!await cursor.MoveNextAsync(cancellationToken) || !cursor.Current.Any())
-            return ReadStreamResult.NotFound<CommittedEvent<TPayload>>();
+        var isEmpty = true;
 
-        return ReadStreamResult.Success(Enumerate());
-
-        async IAsyncEnumerable<CommittedEvent<TPayload>> Enumerate()
+        while (await cursor.MoveNextAsync(cancellationToken).ConfigureAwait(false))
         {
-            using (cursor)
+            foreach (var doc in cursor.Current)
             {
-                do
-                {
-                    foreach (var doc in cursor.Current)
-                        yield return FromEventDocument(doc);
-                } while (await cursor.MoveNextAsync(cancellationToken));
+                isEmpty = false;
+                yield return FromEventDocument(doc);
             }
         }
+
+        if (isEmpty & readOptions.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw)
+            throw new StreamNotFoundException(streamId);
     }
 
     private static Expression<Func<TEventDocument, long?>> AsNullable(Expression<Func<TEventDocument, long>> expr)

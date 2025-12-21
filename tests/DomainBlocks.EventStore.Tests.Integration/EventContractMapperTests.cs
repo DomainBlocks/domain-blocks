@@ -37,8 +37,7 @@ public class EventContractMapperTests : MongoEventStoreTestFixture<byte[]>
 
         await client.AppendToStreamAsync(streamId, [originalEvent]);
 
-        var result = await client.ReadStreamAsync(streamId);
-        var readEvents = await result.Events.ToArrayAsync();
+        var readEvents = await client.ReadStreamAsync(streamId).ToArrayAsync();
 
         readEvents
             .ShouldHaveSingleItem()

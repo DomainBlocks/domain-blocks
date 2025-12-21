@@ -68,8 +68,7 @@ public class EventReadTransformTests : MongoEventStoreTestFixture<BsonDocument>
         var client = new EventStoreClient<BsonDocument>(clientOptions);
         var streamId = $"test-read-transform-{Guid.NewGuid()}";
         await client.AppendToStreamAsync(streamId, [legacyEvent]);
-        var result = await client.ReadStreamAsync(streamId);
-        var readEvents = await result.Events.Select(x => x.Payload).ToArrayAsync();
+        var readEvents = await client.ReadStreamAsync(streamId).Select(x => x.Payload).ToArrayAsync();
 
         readEvents.ShouldBe(expectedEvents);
     }

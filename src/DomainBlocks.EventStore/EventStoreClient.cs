@@ -1,5 +1,5 @@
 using System.Collections.Frozen;
-using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.Serialization.Abstractions;
 
@@ -68,54 +68,43 @@ public class EventStoreClient<TPayload> : IEventStoreClient where TPayload : not
         await _adapter.AppendToStreamAsync(streamId, serializedEvents, expectedState, cancellationToken);
     }
 
-    public async Task<ReadStreamResult<CommittedEvent<object>>> ReadStreamAsync(
+    public async IAsyncEnumerable<CommittedEvent<object>> ReadStreamAsync(
         string streamId,
         ReadStreamOptions? options = null,
-        CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var result = await _adapter.ReadStreamAsync(streamId, options, cancellationToken);
+        var serializedEvents = _adapter.ReadStreamAsync(streamId, options, cancellationToken);
+        var queue = _readTransforms.Count > 0 ? new Queue<object>() : null;
 
-        return result.Status switch
+        await foreach (var serializedEvent in serializedEvents)
         {
-            ReadStreamStatus.Success => ReadStreamResult.Success(TransformEvents()),
-            ReadStreamStatus.StreamNotFound => ReadStreamResult.NotFound<CommittedEvent<object>>(),
-            _ => throw new UnreachableException($"Unexpected {nameof(ReadStreamStatus)}: {result.Status}")
-        };
+            var header = serializedEvent.Header;
+            var eventType = _eventTypeMap.GetEventType(header.EventName);
+            var deserializedPayload = _serializer.Deserialize(serializedEvent.Payload, eventType);
 
-        async IAsyncEnumerable<CommittedEvent<object>> TransformEvents()
-        {
-            var queue = _readTransforms.Count > 0 ? new Queue<object>() : null;
+            if (_contractMappersByContractType.TryGetValue(deserializedPayload.GetType(), out var mapper))
+                deserializedPayload = mapper.FromContract(deserializedPayload);
 
-            await foreach (var serializedEvent in result.Events.WithCancellation(cancellationToken))
+            if (queue == null)
             {
-                var header = serializedEvent.Header;
-                var eventType = _eventTypeMap.GetEventType(header.EventName);
-                var deserializedPayload = _serializer.Deserialize(serializedEvent.Payload, eventType);
+                yield return CommittedEvent.Create(header, deserializedPayload);
+                continue;
+            }
 
-                if (_contractMappersByContractType.TryGetValue(deserializedPayload.GetType(), out var mapper))
-                    deserializedPayload = mapper.FromContract(deserializedPayload);
+            queue.Enqueue(deserializedPayload);
 
-                if (queue == null)
+            while (queue.TryDequeue(out var @event))
+            {
+                if (_readTransforms.TryGetValue(@event.GetType(), out var transform))
                 {
-                    yield return CommittedEvent.Create(header, deserializedPayload);
-                    continue;
+                    var transformedEvents = transform.Apply(@event, header);
+
+                    foreach (var transformedEvent in transformedEvents)
+                        queue.Enqueue(transformedEvent);
                 }
-
-                queue.Enqueue(deserializedPayload);
-
-                while (queue.TryDequeue(out var @event))
+                else
                 {
-                    if (_readTransforms.TryGetValue(@event.GetType(), out var transform))
-                    {
-                        var transformedEvents = transform.Apply(@event, header);
-
-                        foreach (var transformedEvent in transformedEvents)
-                            queue.Enqueue(transformedEvent);
-                    }
-                    else
-                    {
-                        yield return CommittedEvent.Create(header, @event);
-                    }
+                    yield return CommittedEvent.Create(header, @event);
                 }
             }
         }

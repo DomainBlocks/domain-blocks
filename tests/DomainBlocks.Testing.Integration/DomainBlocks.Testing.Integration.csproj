@@ -1,0 +1,11 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="NUnit" Version="4.4.0"/>
+    <PackageReference Include="Shouldly" Version="4.3.0"/>
+    <PackageReference Include="System.Linq.Async" Version="6.0.3"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DomainBlocks.EventStore.Abstractions\DomainBlocks.EventStore.Abstractions.csproj"/>
+  </ItemGroup>
+</Project>
