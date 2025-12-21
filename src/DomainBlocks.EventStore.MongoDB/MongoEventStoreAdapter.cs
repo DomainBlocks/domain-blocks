@@ -121,7 +121,7 @@ public class MongoEventStoreAdapter<TEventDocument, TPayload>(
             }
         }
 
-        if (isEmpty & readOptions.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw)
+        if (isEmpty && readOptions.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw)
             throw new StreamNotFoundException(streamId);
     }
 
