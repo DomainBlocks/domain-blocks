@@ -2,7 +2,7 @@ using DomainBlocks.EventStore.Abstractions;
 
 namespace DomainBlocks.EventStore;
 
-public interface IEventStoreClient
+public interface IEventStoreClient : IAsyncDisposable
 {
     Task AppendToStreamAsync(
         string streamId,

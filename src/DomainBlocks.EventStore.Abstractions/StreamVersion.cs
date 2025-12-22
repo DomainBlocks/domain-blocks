@@ -48,6 +48,8 @@ public readonly struct StreamVersion : IEquatable<StreamVersion>, IComparable<St
     /// <exception cref="InvalidOperationException"></exception>
     public ulong ToUint64()
     {
+        // TODO (DS): Revisit this
+
         if (_value < 0)
             throw new InvalidOperationException("Cannot convert StreamVersion 'None' to UInt64.");
         return (ulong)_value;

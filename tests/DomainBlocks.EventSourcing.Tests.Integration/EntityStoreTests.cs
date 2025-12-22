@@ -12,7 +12,7 @@ using Shouldly;
 namespace DomainBlocks.EventSourcing.Tests.Integration;
 
 [TestFixture]
-public class EntityStoreTests : MongoEventStoreTestFixture<BsonDocument>
+public class EntityStoreTests : MongoEventStoreTestFixture
 {
     private EntityStore _entityStore = null!;
 
@@ -27,7 +27,7 @@ public class EntityStoreTests : MongoEventStoreTestFixture<BsonDocument>
 
         var clientOptions = new EventStoreClientOptions<BsonDocument>
         {
-            Adapter = EventStoreAdapter,
+            AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync<BsonDocument>(ct),
             TypeMap = eventTypeMap,
             Serializer = new BsonDocumentSerializer()
         };
@@ -43,6 +43,12 @@ public class EntityStoreTests : MongoEventStoreTestFixture<BsonDocument>
         ]);
 
         _entityStore = new EntityStore(client, entityAdapterProvider);
+    }
+
+    [TearDown]
+    public async Task TearDown()
+    {
+        await _entityStore.DisposeAsync();
     }
 
     [Test]

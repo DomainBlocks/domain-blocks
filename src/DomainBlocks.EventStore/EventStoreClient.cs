@@ -7,16 +7,19 @@ namespace DomainBlocks.EventStore;
 
 public class EventStoreClient<TPayload> : IEventStoreClient where TPayload : notnull
 {
-    private readonly IEventStoreAdapter<TPayload> _adapter;
+    private readonly Func<CancellationToken, ValueTask<IEventStoreAdapter<TPayload>>> _adapterFactory;
     private readonly EventTypeMap _eventTypeMap;
     private readonly IPayloadSerializer<TPayload> _serializer;
     private readonly FrozenDictionary<Type, IEventContractMapper> _contractMappersByEventType;
     private readonly FrozenDictionary<Type, IEventContractMapper> _contractMappersByContractType;
     private readonly FrozenDictionary<Type, IEventReadTransform> _readTransforms;
+    private volatile IEventStoreAdapter<TPayload>? _adapter;
+    private Task<IEventStoreAdapter<TPayload>>? _adapterCreateTask;
+    private readonly Lock _adapterLock = new();
 
     public EventStoreClient(EventStoreClientOptions<TPayload> options)
     {
-        _adapter = options.Adapter;
+        _adapterFactory = options.AdapterFactory;
         _eventTypeMap = options.TypeMap;
         _serializer = options.Serializer;
         _contractMappersByEventType = options.ContractMappers.ToFrozenDictionary(x => x.EventType);
@@ -65,7 +68,11 @@ public class EventStoreClient<TPayload> : IEventStoreClient where TPayload : not
                 return UncommittedEvent.Create(header, serializedPayload);
             });
 
-        await _adapter.AppendToStreamAsync(streamId, serializedEvents, expectedState, cancellationToken);
+        var adapter = await GetAdapterAsync(cancellationToken).ConfigureAwait(false);
+
+        await adapter
+            .AppendToStreamAsync(streamId, serializedEvents, expectedState, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public async IAsyncEnumerable<CommittedEvent<object>> ReadStreamAsync(
@@ -73,10 +80,11 @@ public class EventStoreClient<TPayload> : IEventStoreClient where TPayload : not
         ReadStreamOptions? options = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var serializedEvents = _adapter.ReadStreamAsync(streamId, options, cancellationToken);
+        var adapter = await GetAdapterAsync(cancellationToken).ConfigureAwait(false);
+        var serializedEvents = adapter.ReadStreamAsync(streamId, options, cancellationToken);
         var queue = _readTransforms.Count > 0 ? new Queue<object>() : null;
 
-        await foreach (var serializedEvent in serializedEvents)
+        await foreach (var serializedEvent in serializedEvents.ConfigureAwait(false))
         {
             var header = serializedEvent.Header;
             var eventType = _eventTypeMap.GetEventType(header.EventName);
@@ -107,6 +115,49 @@ public class EventStoreClient<TPayload> : IEventStoreClient where TPayload : not
                     yield return CommittedEvent.Create(header, @event);
                 }
             }
+        }
+    }
+
+    // TODO: Implement
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
+    private ValueTask<IEventStoreAdapter<TPayload>> GetAdapterAsync(CancellationToken cancellationToken)
+    {
+        var adapter = _adapter;
+        if (adapter is not null)
+            return ValueTask.FromResult(adapter);
+
+        Task<IEventStoreAdapter<TPayload>> createTask;
+
+        lock (_adapterLock)
+        {
+            // Check again under lock
+            adapter = _adapter;
+            if (adapter is not null)
+                return ValueTask.FromResult(adapter);
+
+            // Ensure only one initialization runs; others await the same task.
+            createTask = _adapterCreateTask ??= CreateAdapterAsync(cancellationToken);
+        }
+
+        return new ValueTask<IEventStoreAdapter<TPayload>>(createTask);
+    }
+
+    private async Task<IEventStoreAdapter<TPayload>> CreateAdapterAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var adapter = await _adapterFactory(cancellationToken).ConfigureAwait(false);
+            _adapter = adapter;
+            return adapter;
+        }
+        catch
+        {
+            // Allow retry if create fails
+            lock (_adapterLock)
+                _adapterCreateTask = null;
+
+            throw;
         }
     }
 }

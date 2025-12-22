@@ -7,7 +7,7 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.Tests.Integration;
 
-public class EventReadTransformTests : MongoEventStoreTestFixture<BsonDocument>
+public class EventReadTransformTests : MongoEventStoreTestFixture
 {
     [Test]
     public async Task Should_transform_read_event()
@@ -56,7 +56,7 @@ public class EventReadTransformTests : MongoEventStoreTestFixture<BsonDocument>
 
         var clientOptions = new EventStoreClientOptions<BsonDocument>
         {
-            Adapter = EventStoreAdapter,
+            AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync<BsonDocument>(ct),
             TypeMap = eventTypeMap,
             Serializer = new BsonDocumentSerializer(),
             ReadTransforms =

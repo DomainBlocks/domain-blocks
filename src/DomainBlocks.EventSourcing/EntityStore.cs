@@ -11,14 +11,16 @@ public sealed class EntityStore(
         string entityId,
         CancellationToken cancellationToken = default) where TEntity : notnull
     {
-        return await LoadInternalAsync<TEntity>(entityId, StreamNotFoundBehavior.Throw, cancellationToken);
+        return await LoadInternalAsync<TEntity>(entityId, StreamNotFoundBehavior.Throw, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public async Task<Versioned<TEntity>> LoadOrCreateAsync<TEntity>(
         string entityId,
         CancellationToken cancellationToken = default) where TEntity : notnull
     {
-        return await LoadInternalAsync<TEntity>(entityId, StreamNotFoundBehavior.Ignore, cancellationToken);
+        return await LoadInternalAsync<TEntity>(entityId, StreamNotFoundBehavior.Ignore, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public async Task SaveAsync<TEntity>(Versioned<TEntity> entity, CancellationToken cancellationToken = default)
@@ -43,8 +45,13 @@ public sealed class EntityStore(
         var streamName = GetStreamName<TEntity>(entityId);
         var expectedState = ExpectedStreamState.FromVersion(entity.Version);
 
-        await eventStoreClient.AppendToStreamAsync(streamName, uncommittedEvents, expectedState, cancellationToken);
+        await eventStoreClient
+            .AppendToStreamAsync(streamName, uncommittedEvents, expectedState, cancellationToken)
+            .ConfigureAwait(false);
     }
+
+    // TODO: Implement
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
     private async Task<Versioned<TEntity>> LoadInternalAsync<TEntity>(
         string entityId,
@@ -63,13 +70,15 @@ public sealed class EntityStore(
         // before RestoreAsync is invoked.
         var loadedVersion = StreamVersion.None;
 
-        var entity = await entityAdapter.RestoreAsync(initialState, EnumerateEvents(), cancellationToken);
+        var entity = await entityAdapter
+            .RestoreAsync(initialState, EnumerateEvents(), cancellationToken)
+            .ConfigureAwait(false);
 
         return Versioned.From(entity, loadedVersion);
 
         async IAsyncEnumerable<object> EnumerateEvents()
         {
-            await foreach (var e in events)
+            await foreach (var e in events.ConfigureAwait(false))
             {
                 loadedVersion = e.Header.StreamVersion;
                 yield return e.Payload;

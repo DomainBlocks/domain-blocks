@@ -26,11 +26,13 @@ public class KurrentDbEventStoreAdapter(KurrentDBClient client) : IKurrentDbEven
 
         try
         {
-            _ = await client.AppendToStreamAsync(
-                streamId,
-                kurrentDbStreamState,
-                eventData,
-                cancellationToken: cancellationToken);
+            _ = await client
+                .AppendToStreamAsync(
+                    streamId,
+                    kurrentDbStreamState,
+                    eventData,
+                    cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (WrongExpectedVersionException ex)
         {
@@ -80,7 +82,7 @@ public class KurrentDbEventStoreAdapter(KurrentDBClient client) : IKurrentDbEven
             throw new StreamNotFoundException(streamId);
         }
 
-        await foreach (var resolvedEvent in result)
+        await foreach (var resolvedEvent in result.ConfigureAwait(false))
         {
             var header = new CommittedEventHeader(
                 streamId,
