@@ -96,6 +96,8 @@ public class KurrentDbEventStoreAdapter(KurrentDBClient client) : IKurrentDbEven
         }
     }
 
+    public ValueTask DisposeAsync() => client.DisposeAsync();
+
     private static WrongExpectedStreamStateException MapWrongExpectedVersionException(
         WrongExpectedVersionException ex,
         string streamId,

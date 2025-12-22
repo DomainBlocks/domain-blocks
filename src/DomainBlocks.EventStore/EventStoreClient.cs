@@ -13,9 +13,13 @@ public class EventStoreClient<TPayload> : IEventStoreClient where TPayload : not
     private readonly FrozenDictionary<Type, IEventContractMapper> _contractMappersByEventType;
     private readonly FrozenDictionary<Type, IEventContractMapper> _contractMappersByContractType;
     private readonly FrozenDictionary<Type, IEventReadTransform> _readTransforms;
+
+    // Critical state
+    private readonly Lock _adapterLock = new();
     private volatile IEventStoreAdapter<TPayload>? _adapter;
     private Task<IEventStoreAdapter<TPayload>>? _adapterCreateTask;
-    private readonly Lock _adapterLock = new();
+
+    private int _disposed;
 
     public EventStoreClient(EventStoreClientOptions<TPayload> options)
     {
@@ -118,8 +122,15 @@ public class EventStoreClient<TPayload> : IEventStoreClient where TPayload : not
         }
     }
 
-    // TODO: Implement
-    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    // TODO: Consider if this is correct
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+
+        var adapter = await GetAdapterAsync(CancellationToken.None).ConfigureAwait(false);
+        await adapter.DisposeAsync().ConfigureAwait(false);
+    }
 
     private ValueTask<IEventStoreAdapter<TPayload>> GetAdapterAsync(CancellationToken cancellationToken)
     {
