@@ -127,8 +127,6 @@ public class MongoEventStoreAdapter<TEventDocument, TPayload>(
             throw new StreamNotFoundException(streamId);
     }
 
-    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-
     private static Expression<Func<TEventDocument, long?>> AsNullable(Expression<Func<TEventDocument, long>> expr)
     {
         var body = Expression.Convert(expr.Body, typeof(long?));

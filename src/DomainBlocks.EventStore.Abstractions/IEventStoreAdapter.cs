@@ -1,6 +1,6 @@
 namespace DomainBlocks.EventStore.Abstractions;
 
-public interface IEventStoreAdapter<TPayload> : IAsyncDisposable where TPayload : notnull
+public interface IEventStoreAdapter<TPayload> where TPayload : notnull
 {
     Task AppendToStreamAsync(
         string streamId,
