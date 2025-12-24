@@ -171,6 +171,85 @@ public abstract class EventStoreAdapterTests<TPayload> where TPayload : notnull
             .ShouldThrowAsync<StreamNotFoundException>();
     }
 
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task AppendToStreamAsync_WhenVersionConflict_ThrowsVersionConflict(CancellationToken cancellationToken)
+    {
+        var streamId = $"test-{Guid.NewGuid()}";
+
+        await _adapter.AppendToStreamAsync(
+            streamId,
+            [
+                CreateTestEvent("TestEvent1"),
+                CreateTestEvent("TestEvent2"),
+                CreateTestEvent("TestEvent3")
+            ],
+            cancellationToken: cancellationToken);
+
+        var exception = await _adapter
+            .AppendToStreamAsync(
+                streamId,
+                [CreateTestEvent("TestEvent4")],
+                new AppendToStreamOptions
+                {
+                    ExpectedState = ExpectedStreamState.FromVersion(StreamVersion.FromInt64(1))
+                },
+                cancellationToken)
+            .ShouldThrowAsync<WrongExpectedStreamStateException>();
+
+        exception.Reason.ShouldBe(WrongExpectedStreamStateReason.VersionConflict);
+        exception.ActualVersion.ShouldBe(StreamVersion.FromInt64(2));
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task AppendToStreamAsync_WhenStreamExistsExpectedAndStreamDoesNotExist_ThrowsExpectedStreamToExist(
+        CancellationToken cancellationToken)
+    {
+        var streamId = $"test-{Guid.NewGuid()}";
+
+        var exception = await _adapter
+            .AppendToStreamAsync(
+                streamId,
+                [
+                    CreateTestEvent("TestEvent1"),
+                    CreateTestEvent("TestEvent2"),
+                    CreateTestEvent("TestEvent3")
+                ],
+                new AppendToStreamOptions { ExpectedState = ExpectedStreamState.StreamExists },
+                cancellationToken)
+            .ShouldThrowAsync<WrongExpectedStreamStateException>();
+
+        exception.Reason.ShouldBe(WrongExpectedStreamStateReason.ExpectedStreamToExist);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task AppendToStreamAsync_WhenStreamDoesNotExistExpectedAndStreamExists_ThrowsStreamDoesNotExist(
+        CancellationToken cancellationToken)
+    {
+        var streamId = $"test-{Guid.NewGuid()}";
+
+        await _adapter.AppendToStreamAsync(
+            streamId,
+            [
+                CreateTestEvent("TestEvent1"),
+                CreateTestEvent("TestEvent2"),
+                CreateTestEvent("TestEvent3")
+            ],
+            cancellationToken: cancellationToken);
+
+        var exception = await _adapter
+            .AppendToStreamAsync(
+                streamId,
+                [CreateTestEvent("TestEvent4")],
+                new AppendToStreamOptions { ExpectedState = ExpectedStreamState.StreamDoesNotExist },
+                cancellationToken)
+            .ShouldThrowAsync<WrongExpectedStreamStateException>();
+
+        exception.Reason.ShouldBe(WrongExpectedStreamStateReason.ExpectedStreamToNotExist);
+    }
+
     protected abstract Task<IEventStoreAdapter<TPayload>> CreateEventStoreAdapterAsync();
 
     protected abstract UncommittedEvent<TPayload> CreateTestEvent(string eventName);
