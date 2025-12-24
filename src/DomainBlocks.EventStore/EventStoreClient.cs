@@ -13,6 +13,7 @@ public sealed class EventStoreClient<TPayload> : IEventStoreClient where TPayloa
     private readonly FrozenDictionary<Type, IEventContractMapper> _contractMappersByEventType;
     private readonly FrozenDictionary<Type, IEventContractMapper> _contractMappersByContractType;
     private readonly FrozenDictionary<Type, IEventReadTransform> _readTransforms;
+    private readonly CancellationTokenSource _lifetimeCts = new();
     private readonly Lock _lock = new();
     private volatile IEventStoreAdapter<TPayload>? _adapter;
     private Task<IEventStoreAdapter<TPayload>>? _adapterCreateTask;
@@ -125,11 +126,14 @@ public sealed class EventStoreClient<TPayload> : IEventStoreClient where TPayloa
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
             return;
 
+        await _lifetimeCts.CancelAsync().ConfigureAwait(false);
+
         // Fast path: if adapter already created, dispose it.
         var adapter = _adapter;
         if (adapter is not null)
         {
             await DisposeIfSupportedAsync(adapter).ConfigureAwait(false);
+            _lifetimeCts.Dispose();
             return;
         }
 
@@ -137,19 +141,20 @@ public sealed class EventStoreClient<TPayload> : IEventStoreClient where TPayloa
         lock (_lock)
             createTask = _adapterCreateTask;
 
-        if (createTask is null)
-            return;
-
-        try
+        if (createTask is not null)
         {
-            adapter = await createTask.ConfigureAwait(false);
-        }
-        catch
-        {
-            return;
+            try
+            {
+                adapter = await createTask.ConfigureAwait(false);
+                await DisposeIfSupportedAsync(adapter).ConfigureAwait(false);
+            }
+            catch
+            {
+                // Create task failed/canceled; nothing to dispose.
+            }
         }
 
-        await DisposeIfSupportedAsync(adapter).ConfigureAwait(false);
+        _lifetimeCts.Dispose();
     }
 
     private ValueTask<IEventStoreAdapter<TPayload>> GetAdapterAsync(CancellationToken cancellationToken)
@@ -167,23 +172,23 @@ public sealed class EventStoreClient<TPayload> : IEventStoreClient where TPayloa
             ThrowIfDisposed();
 
             // Ensure only one initialization runs; others await the same task.
-            createTask = _adapterCreateTask ??= CreateAdapterAsync(cancellationToken);
+            createTask = (_adapterCreateTask ??= CreateAdapterAsync()).WaitAsync(cancellationToken);
         }
 
         return new ValueTask<IEventStoreAdapter<TPayload>>(createTask);
     }
 
-    private async Task<IEventStoreAdapter<TPayload>> CreateAdapterAsync(CancellationToken cancellationToken)
+    private async Task<IEventStoreAdapter<TPayload>> CreateAdapterAsync()
     {
         try
         {
-            var adapter = await _adapterFactory(cancellationToken).ConfigureAwait(false);
+            var adapter = await _adapterFactory(_lifetimeCts.Token).ConfigureAwait(false);
             _adapter = adapter;
             return adapter;
         }
         catch
         {
-            // Allow retry if create fails
+            // Allow retry if create fails.
             lock (_lock)
                 _adapterCreateTask = null;
 
