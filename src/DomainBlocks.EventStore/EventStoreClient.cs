@@ -34,16 +34,16 @@ public class EventStoreClient<TPayload> : IEventStoreClient where TPayload : not
     public Task AppendToStreamAsync(
         string streamId,
         IEnumerable<object> events,
-        ExpectedStreamState expectedState = default,
+        AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        return AppendToStreamAsync(streamId, events.Select(UncommittedEvent.Create), expectedState, cancellationToken);
+        return AppendToStreamAsync(streamId, events.Select(UncommittedEvent.Create), options, cancellationToken);
     }
 
     public async Task AppendToStreamAsync(
         string streamId,
         IEnumerable<UncommittedEvent<object>> events,
-        ExpectedStreamState expectedState = default,
+        AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default)
     {
         var serializedEvents = events
@@ -75,7 +75,7 @@ public class EventStoreClient<TPayload> : IEventStoreClient where TPayload : not
         var adapter = await GetAdapterAsync(cancellationToken).ConfigureAwait(false);
 
         await adapter
-            .AppendToStreamAsync(streamId, serializedEvents, expectedState, cancellationToken)
+            .AppendToStreamAsync(streamId, serializedEvents, options, cancellationToken)
             .ConfigureAwait(false);
     }
 

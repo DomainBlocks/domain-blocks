@@ -5,7 +5,7 @@ public interface IEventStoreAdapter<TPayload> : IAsyncDisposable where TPayload 
     Task AppendToStreamAsync(
         string streamId,
         IEnumerable<UncommittedEvent<TPayload>> events,
-        ExpectedStreamState expectedState = default,
+        AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default);
 
     IAsyncEnumerable<CommittedEvent<TPayload>> ReadStreamAsync(

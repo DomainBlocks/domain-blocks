@@ -80,8 +80,7 @@ public class EntityStoreTests : MongoEventStoreTestFixture
 
         entity2.AddItem(new ShoppingCartItem(entity1.State.SessionId, "Bar"));
 
-        await Should.ThrowAsync<WrongExpectedStreamStateException>(() =>
-            _entityStore.SaveAsync(Versioned.New(entity2)));
+        await _entityStore.SaveAsync(Versioned.New(entity2)).ShouldThrowAsync<WrongExpectedStreamStateException>();
     }
 
     [Test]
@@ -122,8 +121,7 @@ public class EntityStoreTests : MongoEventStoreTestFixture
     {
         const string id = "cart-1";
 
-        var exception = await Should.ThrowAsync<StreamNotFoundException>(() =>
-            _entityStore.LoadAsync<ShoppingCart>(id));
+        var exception = await _entityStore.LoadAsync<ShoppingCart>(id).ShouldThrowAsync<StreamNotFoundException>();
 
         exception.Message.ShouldBe("Stream 'shoppingCart-cart-1' not found.");
     }
@@ -135,13 +133,13 @@ public class EntityStoreTests : MongoEventStoreTestFixture
         shoppingCart.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Item 1"));
         await _entityStore.SaveAsync(Versioned.New(shoppingCart));
 
-        await Should.NotThrowAsync(() => _entityStore.LoadAsync<ShoppingCart>(shoppingCart.Id));
+        await _entityStore.LoadAsync<ShoppingCart>(shoppingCart.Id).ShouldNotThrowAsync();
     }
 
     [Test]
     public async Task LoadOrCreateAsync_WhenStreamDoesNotExist_Succeeds()
     {
-        await Should.NotThrowAsync(() => _entityStore.LoadOrCreateAsync<ShoppingCart>("cart-1"));
+        await _entityStore.LoadOrCreateAsync<ShoppingCart>("cart-1").ShouldNotThrowAsync();
     }
 
     [Test]

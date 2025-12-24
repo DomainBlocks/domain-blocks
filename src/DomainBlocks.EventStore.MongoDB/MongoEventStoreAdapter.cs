@@ -32,9 +32,11 @@ public class MongoEventStoreAdapter<TEventDocument, TPayload>(
     public async Task AppendToStreamAsync(
         string streamId,
         IEnumerable<UncommittedEvent<TPayload>> events,
-        ExpectedStreamState expectedState = default,
+        AppendToStreamOptions? appendOptions = null,
         CancellationToken cancellationToken = default)
     {
+        appendOptions ??= AppendToStreamOptions.Default;
+        var expectedState = appendOptions.ExpectedState;
         var currentVersion = await GetCurrentStreamVersionAsync(streamId, cancellationToken).ConfigureAwait(false);
 
         if (expectedState.IsStreamExists && currentVersion.IsNone)

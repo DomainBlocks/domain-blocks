@@ -43,10 +43,14 @@ public sealed class EntityStore(
             return;
 
         var streamName = GetStreamName<TEntity>(entityId);
-        var expectedState = ExpectedStreamState.FromVersion(entity.Version);
+
+        var options = new AppendToStreamOptions
+        {
+            ExpectedState = ExpectedStreamState.FromVersion(entity.Version),
+        };
 
         await eventStoreClient
-            .AppendToStreamAsync(streamName, uncommittedEvents, expectedState, cancellationToken)
+            .AppendToStreamAsync(streamName, uncommittedEvents, options, cancellationToken)
             .ConfigureAwait(false);
     }
 

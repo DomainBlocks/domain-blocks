@@ -13,10 +13,11 @@ public class KurrentDbEventStoreAdapter(KurrentDBClient client) : IKurrentDbEven
     public async Task AppendToStreamAsync(
         string streamId,
         IEnumerable<UncommittedEvent<ReadOnlyMemory<byte>>> events,
-        ExpectedStreamState expectedState = default,
+        AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var kurrentDbStreamState = ToKurrentDbStreamState(expectedState);
+        options ??= AppendToStreamOptions.Default;
+        var kurrentDbStreamState = ToKurrentDbStreamState(options.ExpectedState);
 
         var eventData = events.Select(e =>
         {
@@ -36,7 +37,7 @@ public class KurrentDbEventStoreAdapter(KurrentDBClient client) : IKurrentDbEven
         }
         catch (WrongExpectedVersionException ex)
         {
-            throw MapWrongExpectedVersionException(ex, streamId, expectedState);
+            throw MapWrongExpectedVersionException(ex, streamId, options.ExpectedState);
         }
     }
 
