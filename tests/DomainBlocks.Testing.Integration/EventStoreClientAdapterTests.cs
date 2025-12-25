@@ -5,11 +5,11 @@ using Shouldly;
 
 namespace DomainBlocks.Testing.Integration;
 
-public abstract class EventStoreAdapterTests<TPayload> where TPayload : notnull
+public abstract class EventStoreClientAdapterTests<TPayload> where TPayload : notnull
 {
     private const int TestTimeoutMillis = 5_000;
 
-    private IEventStoreAdapter<TPayload> _adapter = null!;
+    private IEventStoreClientAdapter<TPayload> _adapter = null!;
 
     private static IEnumerable<TestCaseData> PositionAndDirectionCases
     {
@@ -253,7 +253,7 @@ public abstract class EventStoreAdapterTests<TPayload> where TPayload : notnull
             .ShouldThrowAsync<StreamNotFoundException>();
     }
 
-    protected abstract Task<IEventStoreAdapter<TPayload>> CreateEventStoreAdapterAsync();
+    protected abstract Task<IEventStoreClientAdapter<TPayload>> CreateEventStoreAdapterAsync();
 
     protected abstract UncommittedEvent<TPayload> CreateTestEvent(string eventName);
 }

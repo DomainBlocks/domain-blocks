@@ -8,15 +8,15 @@ namespace DomainBlocks.EventStore;
 
 public sealed class EventStoreClient<TPayload> : IEventStoreClient where TPayload : notnull
 {
-    private readonly Func<CancellationToken, ValueTask<IEventStoreAdapter<TPayload>>> _adapterFactory;
+    private readonly Func<CancellationToken, ValueTask<IEventStoreClientAdapter<TPayload>>> _adapterFactory;
     private readonly EventTypeMap _eventTypeMap;
     private readonly IPayloadSerializer<TPayload> _serializer;
     private readonly FrozenDictionary<Type, IEventContractMapper> _contractMappersByEventType;
     private readonly FrozenDictionary<Type, IEventContractMapper> _contractMappersByContractType;
     private readonly CancellationTokenSource _lifetimeCts = new();
     private readonly Lock _lock = new();
-    private volatile IEventStoreAdapter<TPayload>? _adapter;
-    private Task<IEventStoreAdapter<TPayload>>? _adapterCreateTask;
+    private volatile IEventStoreClientAdapter<TPayload>? _adapter;
+    private Task<IEventStoreClientAdapter<TPayload>>? _adapterCreateTask;
 
     private int _disposed;
 
@@ -114,7 +114,7 @@ public sealed class EventStoreClient<TPayload> : IEventStoreClient where TPayloa
             return;
         }
 
-        Task<IEventStoreAdapter<TPayload>>? createTask;
+        Task<IEventStoreClientAdapter<TPayload>>? createTask;
         lock (_lock)
             createTask = _adapterCreateTask;
 
@@ -134,7 +134,7 @@ public sealed class EventStoreClient<TPayload> : IEventStoreClient where TPayloa
         _lifetimeCts.Dispose();
     }
 
-    private ValueTask<IEventStoreAdapter<TPayload>> GetAdapterAsync(CancellationToken cancellationToken)
+    private ValueTask<IEventStoreClientAdapter<TPayload>> GetAdapterAsync(CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
 
@@ -142,7 +142,7 @@ public sealed class EventStoreClient<TPayload> : IEventStoreClient where TPayloa
         if (adapter is not null)
             return ValueTask.FromResult(adapter);
 
-        Task<IEventStoreAdapter<TPayload>> createTask;
+        Task<IEventStoreClientAdapter<TPayload>> createTask;
 
         lock (_lock)
         {
@@ -152,10 +152,10 @@ public sealed class EventStoreClient<TPayload> : IEventStoreClient where TPayloa
             createTask = (_adapterCreateTask ??= CreateAdapterAsync()).WaitAsync(cancellationToken);
         }
 
-        return new ValueTask<IEventStoreAdapter<TPayload>>(createTask);
+        return new ValueTask<IEventStoreClientAdapter<TPayload>>(createTask);
     }
 
-    private async Task<IEventStoreAdapter<TPayload>> CreateAdapterAsync()
+    private async Task<IEventStoreClientAdapter<TPayload>> CreateAdapterAsync()
     {
         try
         {
@@ -173,7 +173,7 @@ public sealed class EventStoreClient<TPayload> : IEventStoreClient where TPayloa
         }
     }
 
-    private static ValueTask DisposeIfSupportedAsync(IEventStoreAdapter<TPayload> adapter)
+    private static ValueTask DisposeIfSupportedAsync(IEventStoreClientAdapter<TPayload> adapter)
     {
         if (adapter is IAsyncDisposable asyncDisposable)
             return asyncDisposable.DisposeAsync();

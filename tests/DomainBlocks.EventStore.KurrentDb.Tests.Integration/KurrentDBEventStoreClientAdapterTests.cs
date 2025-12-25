@@ -9,13 +9,13 @@ using NUnit.Framework;
 namespace DomainBlocks.EventStore.KurrentDb.Tests.Integration;
 
 [TestFixture]
-public class KurrentDbEventStoreAdapterTests : EventStoreAdapterTests<ReadOnlyMemory<byte>>
+public class KurrentDBEventStoreClientAdapterTests : EventStoreClientAdapterTests<ReadOnlyMemory<byte>>
 {
-    protected override Task<IEventStoreAdapter<ReadOnlyMemory<byte>>> CreateEventStoreAdapterAsync()
+    protected override Task<IEventStoreClientAdapter<ReadOnlyMemory<byte>>> CreateEventStoreAdapterAsync()
     {
         const string connectionString = "kurrentdb://admin:changeit@localhost:2113?tls=false&tlsVerifyCert=false";
         var client = new KurrentDBClient(KurrentDBClientSettings.Create(connectionString));
-        IEventStoreAdapter<ReadOnlyMemory<byte>> adapter = new KurrentDbEventStoreAdapter(client);
+        IEventStoreClientAdapter<ReadOnlyMemory<byte>> adapter = new KurrentDBEventStoreClientAdapter(client);
         return Task.FromResult(adapter);
     }
 

@@ -9,7 +9,9 @@ using StreamNotFoundException = DomainBlocks.EventStore.Abstractions.StreamNotFo
 
 namespace DomainBlocks.EventStore.KurrentDB;
 
-public class KurrentDbEventStoreAdapter(KurrentDBClient client) : IKurrentDbEventStoreAdapter, IAsyncDisposable
+public class KurrentDBEventStoreClientAdapter(KurrentDBClient client) :
+    IKurrentDBEventStoreClientAdapter,
+    IAsyncDisposable
 {
     public async Task AppendToStreamAsync(
         string streamId,

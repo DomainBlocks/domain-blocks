@@ -6,7 +6,7 @@ namespace DomainBlocks.Testing.Integration.MongoDB;
 
 public static class MongoEventStoreAdapterFactory
 {
-    public static async Task<IEventStoreAdapter<TPayload>> CreateAsync<TPayload>(CancellationToken cancellationToken)
+    public static async Task<IEventStoreClientAdapter<TPayload>> CreateAsync<TPayload>(CancellationToken cancellationToken)
         where TPayload : notnull
     {
         var client = new MongoClient("mongodb://localhost:27017");
@@ -15,6 +15,6 @@ public static class MongoEventStoreAdapterFactory
 
         await MongoEventStoreAdmin.EnsureIndexesAsync(database, options, cancellationToken);
 
-        return MongoEventStoreAdapter.Create(database, options);
+        return MongoEventStoreClientAdapter.Create(database, options);
     }
 }
