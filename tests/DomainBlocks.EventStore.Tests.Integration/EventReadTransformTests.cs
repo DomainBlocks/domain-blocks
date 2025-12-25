@@ -94,16 +94,16 @@ public class EventReadTransformTests : MongoEventStoreTestFixture
 
     private class ShipmentDispatchedTransform : EventReadTransform<ShipmentDispatched>
     {
-        protected override IEnumerable<object> Apply(ShipmentDispatched @event, CommittedEventHeader header)
+        protected override IEnumerable<object> Apply(ShipmentDispatched sourceEvent, CommittedEventHeader header)
         {
             yield return new ShipmentDispatchedV2(
-                @event.ShipmentId,
-                @event.DispatchedAt);
+                sourceEvent.ShipmentId,
+                sourceEvent.DispatchedAt);
 
-            foreach (var pkg in @event.Packages)
+            foreach (var pkg in sourceEvent.Packages)
             {
                 yield return new PackageShipped(
-                    @event.ShipmentId,
+                    sourceEvent.ShipmentId,
                     pkg.TrackingNumber,
                     pkg.WeightKg,
                     pkg.Destination);

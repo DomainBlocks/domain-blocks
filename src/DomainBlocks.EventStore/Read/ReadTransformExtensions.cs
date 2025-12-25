@@ -19,7 +19,7 @@ public static class ReadTransformExtensions
         public async IAsyncEnumerator<IReadEvent<object>> GetAsyncEnumerator(
             CancellationToken cancellationToken = default)
         {
-            var transformsByType = transforms.ToFrozenDictionary(x => x.SourceType);
+            var transformsByType = transforms.ToFrozenDictionary(x => x.SourceEventType);
             var queue = new Queue<IReadEvent<object>>();
 
             await foreach (var sourceEvent in source.WithCancellation(cancellationToken).ConfigureAwait(false))
