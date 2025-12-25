@@ -1,4 +1,5 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.Abstractions.Events;
 using DomainBlocks.EventStore.KurrentDB;
 using DomainBlocks.Testing.Integration;
 using KurrentDB.Client;

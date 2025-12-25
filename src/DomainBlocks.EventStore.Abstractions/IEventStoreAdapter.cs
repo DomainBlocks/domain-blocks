@@ -1,3 +1,5 @@
+using DomainBlocks.EventStore.Abstractions.Events;
+
 namespace DomainBlocks.EventStore.Abstractions;
 
 public interface IEventStoreAdapter<TPayload> where TPayload : notnull

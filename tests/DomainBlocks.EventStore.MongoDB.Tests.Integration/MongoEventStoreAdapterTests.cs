@@ -1,4 +1,5 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.Abstractions.Events;
 using DomainBlocks.Testing.Integration;
 using MongoDB.Bson;
 using MongoDB.Driver;

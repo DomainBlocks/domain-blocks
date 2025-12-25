@@ -1,4 +1,4 @@
-using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.Abstractions.Events;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Testing.Integration.MongoDB;
 using MongoDB.Bson;

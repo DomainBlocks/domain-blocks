@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.Abstractions.Events;
 using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB;
