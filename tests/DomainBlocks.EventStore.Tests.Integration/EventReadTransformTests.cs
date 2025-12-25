@@ -1,4 +1,5 @@
 using DomainBlocks.EventStore.Abstractions.Events;
+using DomainBlocks.EventStore.Read;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Testing.Integration.MongoDB;
 using MongoDB.Bson;
@@ -58,17 +59,18 @@ public class EventReadTransformTests : MongoEventStoreTestFixture
         {
             AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync<BsonDocument>(ct),
             TypeMap = eventTypeMap,
-            Serializer = new BsonDocumentSerializer(),
-            ReadTransforms =
-            [
-                new ShipmentDispatchedTransform()
-            ]
+            Serializer = new BsonDocumentSerializer()
         };
 
         var client = new EventStoreClient<BsonDocument>(clientOptions);
         var streamId = $"test-read-transform-{Guid.NewGuid()}";
         await client.AppendToStreamAsync(streamId, [legacyEvent]);
-        var readEvents = await client.ReadStreamAsync(streamId).Select(x => x.Payload).ToArrayAsync();
+
+        var readEvents = await client
+            .ReadStreamAsync(streamId)
+            .Transform([new ShipmentDispatchedTransform()])
+            .Select(x => x.Payload)
+            .ToArrayAsync();
 
         readEvents.ShouldBe(expectedEvents);
     }

@@ -4,7 +4,7 @@ namespace DomainBlocks.EventStore;
 
 public abstract class EventReadTransform<TFrom> : IEventReadTransform
 {
-    public Type FromType => typeof(TFrom);
+    public Type SourceType => typeof(TFrom);
 
     protected abstract IEnumerable<object> Apply(TFrom @event, CommittedEventHeader header);
 

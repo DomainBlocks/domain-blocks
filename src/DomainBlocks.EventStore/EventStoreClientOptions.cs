@@ -9,5 +9,4 @@ public class EventStoreClientOptions<TPayload> where TPayload : notnull
     public required EventTypeMap TypeMap { get; init; }
     public required IPayloadSerializer<TPayload> Serializer { get; init; }
     public IEnumerable<IEventContractMapper> ContractMappers { get; init; } = [];
-    public IEnumerable<IEventReadTransform> ReadTransforms { get; init; } = [];
 }

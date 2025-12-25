@@ -4,6 +4,6 @@ namespace DomainBlocks.EventStore;
 
 public interface IEventReadTransform
 {
-    Type FromType { get; }
+    Type SourceType { get; }
     IEnumerable<object> Apply(object @event, CommittedEventHeader header);
 }
