@@ -3,7 +3,7 @@ using DomainBlocks.EventStore.Abstractions.Events;
 
 namespace DomainBlocks.EventStore.Read;
 
-public static class ReadTransformExtensions
+public static class TransformExtensions
 {
     public static IAsyncEnumerable<IReadEvent<object>> Transform(
         this IAsyncEnumerable<CommittedEvent<object>> source,
