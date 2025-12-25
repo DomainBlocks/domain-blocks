@@ -25,14 +25,14 @@ public class EntityStoreTests : MongoEventStoreTestFixture
             .MapType<ItemRemovedFromShoppingCart>()
             .Build();
 
-        var clientOptions = new EventStoreClientOptions<BsonDocument>
+        var clientOptions = new EventStoreClientOptions<object, BsonDocument>
         {
             AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync<BsonDocument>(ct),
             TypeMap = eventTypeMap,
             Serializer = new BsonDocumentSerializer()
         };
 
-        var client = new EventStoreClient<BsonDocument>(clientOptions);
+        var client = new EventStoreClient<object, BsonDocument>(clientOptions);
 
         var entityAdapterProvider = new CompositeEntityAdapterProvider(
         [

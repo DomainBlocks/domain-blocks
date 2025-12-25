@@ -8,19 +8,19 @@ namespace DomainBlocks.EventStore.MongoDB;
 
 public static class MongoEventStoreClientAdapter
 {
-    public static IMongoEventStoreClientAdapter<TPayload> Create<TEventDocument, TPayload>(
+    public static IMongoEventStoreClientAdapter<TSerialized> Create<TEventDocument, TSerialized>(
         IMongoDatabase database,
-        MongoEventStoreOptions<TEventDocument, TPayload> options) where TPayload : notnull
+        MongoEventStoreOptions<TEventDocument, TSerialized> options) where TSerialized : notnull
     {
         var collection = database.GetCollection<TEventDocument>(options.EventCollectionName);
-        return new MongoEventStoreClientAdapter<TEventDocument, TPayload>(collection, options);
+        return new MongoEventStoreClientAdapter<TEventDocument, TSerialized>(collection, options);
     }
 }
 
-public class MongoEventStoreClientAdapter<TEventDocument, TPayload>(
+public class MongoEventStoreClientAdapter<TEventDocument, TSerialized>(
     IMongoCollection<TEventDocument> collection,
-    MongoEventStoreOptions<TEventDocument, TPayload> options) :
-    IMongoEventStoreClientAdapter<TPayload> where TPayload : notnull
+    MongoEventStoreOptions<TEventDocument, TSerialized> options) :
+    IMongoEventStoreClientAdapter<TSerialized> where TSerialized : notnull
 {
     private readonly FieldDefinition<TEventDocument, string> _streamIdField = options.StreamIdField;
     private readonly FieldDefinition<TEventDocument, long> _streamVersionField = options.StreamVersionField;
@@ -32,7 +32,7 @@ public class MongoEventStoreClientAdapter<TEventDocument, TPayload>(
 
     public async Task AppendToStreamAsync(
         string streamId,
-        IEnumerable<UncommittedEvent<TPayload>> events,
+        IEnumerable<UncommittedEvent<TSerialized>> events,
         AppendToStreamOptions? appendOptions = null,
         CancellationToken cancellationToken = default)
     {
@@ -67,7 +67,7 @@ public class MongoEventStoreClientAdapter<TEventDocument, TPayload>(
         }
     }
 
-    public async IAsyncEnumerable<CommittedEvent<TPayload>> ReadStreamAsync(
+    public async IAsyncEnumerable<CommittedEvent<TSerialized>> ReadStreamAsync(
         string streamId,
         ReadStreamOptions? readOptions = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -157,7 +157,7 @@ public class MongoEventStoreClientAdapter<TEventDocument, TPayload>(
 
     private IEnumerable<TEventDocument> ToEventDocuments(
         string streamId,
-        IEnumerable<UncommittedEvent<TPayload>> events,
+        IEnumerable<UncommittedEvent<TSerialized>> events,
         StreamVersion currentStreamVersion)
     {
         var committedAt = DateTime.UtcNow;
@@ -172,7 +172,7 @@ public class MongoEventStoreClientAdapter<TEventDocument, TPayload>(
     private TEventDocument ToEventDocument(
         string streamId,
         StreamVersion version,
-        UncommittedEvent<TPayload> @event,
+        UncommittedEvent<TSerialized> @event,
         DateTime committedAt)
     {
         var doc = options.EventDocumentConverter.ToEventDocument(@event, streamId, version, committedAt);
@@ -184,7 +184,7 @@ public class MongoEventStoreClientAdapter<TEventDocument, TPayload>(
         return doc;
     }
 
-    private CommittedEvent<TPayload> FromEventDocument(TEventDocument doc)
+    private CommittedEvent<TSerialized> FromEventDocument(TEventDocument doc)
     {
         var @event = options.EventDocumentConverter.FromEventDocument(doc);
 

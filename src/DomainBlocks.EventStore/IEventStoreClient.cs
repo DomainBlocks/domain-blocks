@@ -3,21 +3,22 @@ using DomainBlocks.EventStore.Abstractions.Events;
 
 namespace DomainBlocks.EventStore;
 
-public interface IEventStoreClient : IAsyncDisposable
+public interface IEventStoreClient<TEventBase> : IAsyncDisposable where TEventBase : class
 {
+    // TODO: Move to extension (?)
     Task AppendToStreamAsync(
         string streamId,
-        IEnumerable<object> events,
+        IEnumerable<TEventBase> events,
         AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default);
 
     Task AppendToStreamAsync(
         string streamId,
-        IEnumerable<UncommittedEvent<object>> events,
+        IEnumerable<UncommittedEvent<TEventBase>> events,
         AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default);
 
-    IAsyncEnumerable<CommittedEvent<object>> ReadStreamAsync(
+    IAsyncEnumerable<CommittedEvent<TEventBase>> ReadStreamAsync(
         string streamId,
         ReadStreamOptions? options = null,
         CancellationToken cancellationToken = default);

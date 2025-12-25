@@ -5,7 +5,7 @@ using DomainBlocks.EventStore.Abstractions.Events;
 namespace DomainBlocks.EventSourcing;
 
 public sealed class EntityStore(
-    IEventStoreClient eventStoreClient,
+    IEventStoreClient<object> eventStoreClient,
     IEntityAdapterProvider entityAdapterProvider) : IEntityStore
 {
     public async Task<Versioned<TEntity>> LoadAsync<TEntity>(

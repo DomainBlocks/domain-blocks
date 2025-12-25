@@ -7,18 +7,18 @@ namespace DomainBlocks.EventStore.MongoDB;
 /// Provides conversion between uncommitted/committed event wrappers and the default event document for Mongo
 /// persistence.
 /// </summary>
-public sealed class DefaultEventDocumentConverter<TPayload> :
-    IEventDocumentConverter<DefaultEventDocument<TPayload>, TPayload>
-    where TPayload : notnull
+public sealed class DefaultEventDocumentConverter<TSerialized> :
+    IEventDocumentConverter<DefaultEventDocument<TSerialized>, TSerialized>
+    where TSerialized : notnull
 {
     /// <inheritdoc/>
-    public DefaultEventDocument<TPayload> ToEventDocument(
-        UncommittedEvent<TPayload> @event,
+    public DefaultEventDocument<TSerialized> ToEventDocument(
+        UncommittedEvent<TSerialized> @event,
         string streamId,
         StreamVersion streamVersion,
         DateTime committedAt)
     {
-        return new DefaultEventDocument<TPayload>
+        return new DefaultEventDocument<TSerialized>
         {
             StreamId = streamId,
             StreamVersion = streamVersion.ToInt64(),
@@ -30,7 +30,7 @@ public sealed class DefaultEventDocumentConverter<TPayload> :
     }
 
     /// <inheritdoc/>
-    public CommittedEvent<TPayload> FromEventDocument(DefaultEventDocument<TPayload> document)
+    public CommittedEvent<TSerialized> FromEventDocument(DefaultEventDocument<TSerialized> document)
     {
         return CommittedEvent.Create(
             new CommittedEventHeader(

@@ -2,15 +2,15 @@ using DomainBlocks.EventStore.Abstractions.Events;
 
 namespace DomainBlocks.EventStore.Abstractions;
 
-public interface IEventStoreClientAdapter<TPayload> where TPayload : notnull
+public interface IEventStoreClientAdapter<TSerialized> where TSerialized : notnull
 {
     Task AppendToStreamAsync(
         string streamId,
-        IEnumerable<UncommittedEvent<TPayload>> events,
+        IEnumerable<UncommittedEvent<TSerialized>> events,
         AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default);
 
-    IAsyncEnumerable<CommittedEvent<TPayload>> ReadStreamAsync(
+    IAsyncEnumerable<CommittedEvent<TSerialized>> ReadStreamAsync(
         string streamId,
         ReadStreamOptions? options = null,
         CancellationToken cancellationToken = default);

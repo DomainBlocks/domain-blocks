@@ -2,8 +2,8 @@ using DomainBlocks.EventStore.Abstractions.Events;
 
 namespace DomainBlocks.EventStore.Read;
 
-public interface IEventReadTransform
+public interface IEventReadTransform<TEventBase> where TEventBase : class
 {
     Type SourceEventType { get; }
-    IEnumerable<object> Apply(object sourceEvent, CommittedEventHeader header);
+    IEnumerable<TEventBase> Apply(TEventBase sourceEvent, CommittedEventHeader header);
 }

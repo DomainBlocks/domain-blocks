@@ -1,8 +1,9 @@
 namespace DomainBlocks.EventStore;
 
-public abstract class EventContractMapper<TEvent, TContract> :
-    IEventContractMapper
-    where TEvent : notnull
+public abstract class EventContractMapper<TEventBase, TEvent, TContract> :
+    IEventContractMapper<TEventBase>
+    where TEventBase : class
+    where TEvent : TEventBase
     where TContract : notnull
 
 {
@@ -11,6 +12,6 @@ public abstract class EventContractMapper<TEvent, TContract> :
 
     protected abstract TContract ToContract(TEvent @event);
     protected abstract TEvent FromContract(TContract contract);
-    object IEventContractMapper.ToContract(object @event) => ToContract((TEvent)@event);
-    object IEventContractMapper.FromContract(object contract) => FromContract((TContract)contract);
+    object IEventContractMapper<TEventBase>.ToContract(TEventBase @event) => ToContract((TEvent)@event);
+    TEventBase IEventContractMapper<TEventBase>.FromContract(object contract) => FromContract((TContract)contract);
 }

@@ -6,21 +6,24 @@ using DomainBlocks.Serialization.Abstractions;
 
 namespace DomainBlocks.EventStore;
 
-public sealed class EventStoreClient<TPayload> : IEventStoreClient where TPayload : notnull
+public sealed class EventStoreClient<TEventBase, TSerialized> :
+    IEventStoreClient<TEventBase>
+    where TEventBase : class
+    where TSerialized : notnull
 {
-    private readonly Func<CancellationToken, ValueTask<IEventStoreClientAdapter<TPayload>>> _adapterFactory;
+    private readonly Func<CancellationToken, ValueTask<IEventStoreClientAdapter<TSerialized>>> _adapterFactory;
     private readonly EventTypeMap _eventTypeMap;
-    private readonly IPayloadSerializer<TPayload> _serializer;
-    private readonly FrozenDictionary<Type, IEventContractMapper> _contractMappersByEventType;
-    private readonly FrozenDictionary<Type, IEventContractMapper> _contractMappersByContractType;
+    private readonly IPayloadSerializer<TSerialized> _serializer;
+    private readonly FrozenDictionary<Type, IEventContractMapper<TEventBase>> _contractMappersByEventType;
+    private readonly FrozenDictionary<Type, IEventContractMapper<TEventBase>> _contractMappersByContractType;
     private readonly CancellationTokenSource _lifetimeCts = new();
     private readonly Lock _lock = new();
-    private volatile IEventStoreClientAdapter<TPayload>? _adapter;
-    private Task<IEventStoreClientAdapter<TPayload>>? _adapterCreateTask;
+    private volatile IEventStoreClientAdapter<TSerialized>? _adapter;
+    private Task<IEventStoreClientAdapter<TSerialized>>? _adapterCreateTask;
 
     private int _disposed;
 
-    public EventStoreClient(EventStoreClientOptions<TPayload> options)
+    public EventStoreClient(EventStoreClientOptions<TEventBase, TSerialized> options)
     {
         _adapterFactory = options.AdapterFactory;
         _eventTypeMap = options.TypeMap;
@@ -31,7 +34,7 @@ public sealed class EventStoreClient<TPayload> : IEventStoreClient where TPayloa
 
     public Task AppendToStreamAsync(
         string streamId,
-        IEnumerable<object> events,
+        IEnumerable<TEventBase> events,
         AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default)
     {
@@ -40,7 +43,7 @@ public sealed class EventStoreClient<TPayload> : IEventStoreClient where TPayloa
 
     public async Task AppendToStreamAsync(
         string streamId,
-        IEnumerable<UncommittedEvent<object>> events,
+        IEnumerable<UncommittedEvent<TEventBase>> events,
         AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default)
     {
@@ -49,11 +52,12 @@ public sealed class EventStoreClient<TPayload> : IEventStoreClient where TPayloa
             {
                 string eventName;
                 var payload = e.Payload;
+                object payloadToSerialize = payload;
 
                 if (_contractMappersByEventType.TryGetValue(payload.GetType(), out var mapper))
                 {
                     eventName = _eventTypeMap.GetEventName(mapper.ContractType);
-                    payload = mapper.ToContract(payload);
+                    payloadToSerialize = mapper.ToContract(payload);
                 }
                 else
                 {
@@ -63,9 +67,9 @@ public sealed class EventStoreClient<TPayload> : IEventStoreClient where TPayloa
                 // PoC for adding metadata.
                 var header = e.Header
                     .WithEventName(eventName)
-                    .WithMetadata("EventClrType", payload.GetType().Name);
+                    .WithMetadata("EventClrType", payloadToSerialize.GetType().Name);
 
-                var serializedPayload = _serializer.Serialize(payload);
+                var serializedPayload = _serializer.Serialize(payloadToSerialize);
 
                 return UncommittedEvent.Create(header, serializedPayload);
             });
@@ -77,7 +81,7 @@ public sealed class EventStoreClient<TPayload> : IEventStoreClient where TPayloa
             .ConfigureAwait(false);
     }
 
-    public async IAsyncEnumerable<CommittedEvent<object>> ReadStreamAsync(
+    public async IAsyncEnumerable<CommittedEvent<TEventBase>> ReadStreamAsync(
         string streamId,
         ReadStreamOptions? options = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -94,7 +98,7 @@ public sealed class EventStoreClient<TPayload> : IEventStoreClient where TPayloa
             if (_contractMappersByContractType.TryGetValue(deserializedPayload.GetType(), out var mapper))
                 deserializedPayload = mapper.FromContract(deserializedPayload);
 
-            yield return CommittedEvent.Create(header, deserializedPayload);
+            yield return CommittedEvent.Create(header, (TEventBase)deserializedPayload);
         }
     }
 
@@ -114,7 +118,7 @@ public sealed class EventStoreClient<TPayload> : IEventStoreClient where TPayloa
             return;
         }
 
-        Task<IEventStoreClientAdapter<TPayload>>? createTask;
+        Task<IEventStoreClientAdapter<TSerialized>>? createTask;
         lock (_lock)
             createTask = _adapterCreateTask;
 
@@ -134,7 +138,7 @@ public sealed class EventStoreClient<TPayload> : IEventStoreClient where TPayloa
         _lifetimeCts.Dispose();
     }
 
-    private ValueTask<IEventStoreClientAdapter<TPayload>> GetAdapterAsync(CancellationToken cancellationToken)
+    private ValueTask<IEventStoreClientAdapter<TSerialized>> GetAdapterAsync(CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
 
@@ -142,7 +146,7 @@ public sealed class EventStoreClient<TPayload> : IEventStoreClient where TPayloa
         if (adapter is not null)
             return ValueTask.FromResult(adapter);
 
-        Task<IEventStoreClientAdapter<TPayload>> createTask;
+        Task<IEventStoreClientAdapter<TSerialized>> createTask;
 
         lock (_lock)
         {
@@ -152,10 +156,10 @@ public sealed class EventStoreClient<TPayload> : IEventStoreClient where TPayloa
             createTask = (_adapterCreateTask ??= CreateAdapterAsync()).WaitAsync(cancellationToken);
         }
 
-        return new ValueTask<IEventStoreClientAdapter<TPayload>>(createTask);
+        return new ValueTask<IEventStoreClientAdapter<TSerialized>>(createTask);
     }
 
-    private async Task<IEventStoreClientAdapter<TPayload>> CreateAdapterAsync()
+    private async Task<IEventStoreClientAdapter<TSerialized>> CreateAdapterAsync()
     {
         try
         {
@@ -173,7 +177,7 @@ public sealed class EventStoreClient<TPayload> : IEventStoreClient where TPayloa
         }
     }
 
-    private static ValueTask DisposeIfSupportedAsync(IEventStoreClientAdapter<TPayload> adapter)
+    private static ValueTask DisposeIfSupportedAsync(IEventStoreClientAdapter<TSerialized> adapter)
     {
         if (adapter is IAsyncDisposable asyncDisposable)
             return asyncDisposable.DisposeAsync();

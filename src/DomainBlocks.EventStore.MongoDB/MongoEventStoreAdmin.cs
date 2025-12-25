@@ -4,11 +4,11 @@ namespace DomainBlocks.EventStore.MongoDB;
 
 public static class MongoEventStoreAdmin
 {
-    public static Task EnsureIndexesAsync<TEventDocument, TPayload>(
+    public static Task EnsureIndexesAsync<TEventDocument, TSerialized>(
         IMongoDatabase database,
-        MongoEventStoreOptions<TEventDocument, TPayload> options,
+        MongoEventStoreOptions<TEventDocument, TSerialized> options,
         CancellationToken cancellationToken = default)
-        where TPayload : notnull
+        where TSerialized : notnull
     {
         var collection = database.GetCollection<TEventDocument>(options.EventCollectionName);
         var indexBuilder = Builders<TEventDocument>.IndexKeys;

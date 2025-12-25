@@ -55,14 +55,14 @@ public class EventReadTransformTests : MongoEventStoreTestFixture
             .MapType<ShipmentDispatched>()
             .Build();
 
-        var clientOptions = new EventStoreClientOptions<BsonDocument>
+        var clientOptions = new EventStoreClientOptions<object, BsonDocument>
         {
             AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync<BsonDocument>(ct),
             TypeMap = eventTypeMap,
             Serializer = new BsonDocumentSerializer()
         };
 
-        var client = new EventStoreClient<BsonDocument>(clientOptions);
+        var client = new EventStoreClient<object, BsonDocument>(clientOptions);
         var streamId = $"test-read-transform-{Guid.NewGuid()}";
         await client.AppendToStreamAsync(streamId, [legacyEvent]);
 
@@ -92,7 +92,7 @@ public class EventReadTransformTests : MongoEventStoreTestFixture
         double WeightKg,
         string Destination);
 
-    private class ShipmentDispatchedTransform : EventReadTransform<ShipmentDispatched>
+    private class ShipmentDispatchedTransform : EventReadTransform<object, ShipmentDispatched>
     {
         protected override IEnumerable<object> Apply(ShipmentDispatched sourceEvent, CommittedEventHeader header)
         {

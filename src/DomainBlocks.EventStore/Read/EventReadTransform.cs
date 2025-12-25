@@ -2,12 +2,16 @@ using DomainBlocks.EventStore.Abstractions.Events;
 
 namespace DomainBlocks.EventStore.Read;
 
-public abstract class EventReadTransform<TSourceEvent> : IEventReadTransform
+public abstract class EventReadTransform<TEventBase, TSourceEvent> : IEventReadTransform<TEventBase>
+    where TEventBase : class
+    where TSourceEvent : TEventBase
 {
     public Type SourceEventType => typeof(TSourceEvent);
 
-    protected abstract IEnumerable<object> Apply(TSourceEvent sourceEvent, CommittedEventHeader header);
+    protected abstract IEnumerable<TEventBase> Apply(TSourceEvent sourceEvent, CommittedEventHeader header);
 
-    IEnumerable<object> IEventReadTransform.Apply(object sourceEvent, CommittedEventHeader header) =>
-        Apply((TSourceEvent)sourceEvent, header);
+    IEnumerable<TEventBase> IEventReadTransform<TEventBase>.Apply(TEventBase sourceEvent, CommittedEventHeader header)
+    {
+        return Apply((TSourceEvent)sourceEvent, header);
+    }
 }

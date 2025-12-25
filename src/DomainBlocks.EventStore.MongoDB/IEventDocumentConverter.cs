@@ -7,8 +7,8 @@ namespace DomainBlocks.EventStore.MongoDB;
 /// Provides conversion between uncommitted/committed event wrappers and event documents for Mongo persistence.
 /// </summary>
 /// <typeparam name="TEventDocument">The document type used to store events.</typeparam>
-/// <typeparam name="TPayload">The event payload type.</typeparam>
-public interface IEventDocumentConverter<TEventDocument, TPayload> where TPayload : notnull
+/// <typeparam name="TSerialized">The serialized event payload type.</typeparam>
+public interface IEventDocumentConverter<TEventDocument, TSerialized> where TSerialized : notnull
 {
     /// <summary>
     /// Converts an uncommitted event into an event document.
@@ -19,7 +19,7 @@ public interface IEventDocumentConverter<TEventDocument, TPayload> where TPayloa
     /// <param name="committedAt">The UTC timestamp at which this event is committed.</param>
     /// <returns>An event document representing the specified event.</returns>
     TEventDocument ToEventDocument(
-        UncommittedEvent<TPayload> @event,
+        UncommittedEvent<TSerialized> @event,
         string streamId,
         StreamVersion streamVersion,
         DateTime committedAt);
@@ -29,5 +29,5 @@ public interface IEventDocumentConverter<TEventDocument, TPayload> where TPayloa
     /// </summary>
     /// <param name="document">The event document to convert.</param>
     /// <returns>A committed event reconstructed from the specified event document.</returns>
-    CommittedEvent<TPayload> FromEventDocument(TEventDocument document);
+    CommittedEvent<TSerialized> FromEventDocument(TEventDocument document);
 }
