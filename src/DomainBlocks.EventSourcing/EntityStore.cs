@@ -54,8 +54,7 @@ public sealed class EntityStore(
             .ConfigureAwait(false);
     }
 
-    // TODO: Implement
-    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    public ValueTask DisposeAsync() => eventStoreClient.DisposeAsync();
 
     private async Task<Versioned<TEntity>> LoadInternalAsync<TEntity>(
         string entityId,

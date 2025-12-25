@@ -21,7 +21,7 @@ public abstract class EventStoreAdapterTests<TPayload> where TPayload : notnull
         }
     }
 
-    private static IEnumerable<TestCaseData> BoundaryPositionAndDirectionCases
+    private static IEnumerable<TestCaseData> PositionAndDirectionEdgeCases
     {
         get
         {
@@ -38,7 +38,7 @@ public abstract class EventStoreAdapterTests<TPayload> where TPayload : notnull
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task AppendToStreamAsync_WhenExpectedStateAnyAndStreamDoesNotExist_AppendsEventsToStream(
+    public async Task AppendToStreamAsync_ExpectedStateIsAnyAndStreamDoesNotExist_AppendsEvents(
         CancellationToken cancellationToken)
     {
         UncommittedEvent<TPayload>[] events =
@@ -65,7 +65,7 @@ public abstract class EventStoreAdapterTests<TPayload> where TPayload : notnull
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task AppendToStreamAsync_WhenExpectedStateAnyAndStreamExists_AppendsEventsToStream(
+    public async Task AppendToStreamAsync_ExpectedStateIsAnyAndStreamExists_AppendsEvents(
         CancellationToken cancellationToken)
     {
         UncommittedEvent<TPayload>[] events1 =
@@ -98,82 +98,10 @@ public abstract class EventStoreAdapterTests<TPayload> where TPayload : notnull
             .ShouldBe(events1.Concat(events2).Select(x => x.Header.EventName));
     }
 
-    [TestCaseSource(nameof(BoundaryPositionAndDirectionCases))]
-    [CancelAfter(TestTimeoutMillis)]
-    public async Task ReadStreamAsync_FromBoundaryPositionAndDirectionWhenStreamExists_ReturnsEmpty(
-        StreamPosition position,
-        StreamReadDirection direction,
-        CancellationToken cancellationToken)
-    {
-        var streamId = $"test-{Guid.NewGuid()}";
-
-        await _adapter.AppendToStreamAsync(
-            streamId,
-            [CreateTestEvent("TestEvent1"), CreateTestEvent("TestEvent2")],
-            cancellationToken: cancellationToken);
-
-        var options = new ReadStreamOptions
-        {
-            Position = position,
-            Direction = direction
-        };
-
-        var readEvents = await _adapter
-            .ReadStreamAsync(streamId, options, cancellationToken)
-            .ToArrayAsync(cancellationToken);
-
-        readEvents.ShouldBeEmpty();
-    }
-
-    [TestCaseSource(nameof(BoundaryPositionAndDirectionCases))]
-    [CancelAfter(TestTimeoutMillis)]
-    public async Task ReadStreamAsync_FromBoundaryPositionAndDirectionWhenStreamDoesNotExist_ReturnsEmpty(
-        StreamPosition position,
-        StreamReadDirection direction,
-        CancellationToken cancellationToken)
-    {
-        var streamId = $"test-{Guid.NewGuid()}";
-
-        var options = new ReadStreamOptions
-        {
-            Position = position,
-            Direction = direction
-        };
-
-        var readEvents = await _adapter
-            .ReadStreamAsync(streamId, options, cancellationToken)
-            .ToArrayAsync(cancellationToken);
-
-        readEvents.ShouldBeEmpty();
-    }
-
-    [TestCaseSource(nameof(PositionAndDirectionCases))]
-    [CancelAfter(TestTimeoutMillis)]
-    public async Task ReadStreamAsync_WhenStreamDoesNotExistAndThrowBehaviorUsed_ThrowsStreamNotFoundException(
-        StreamPosition position,
-        StreamReadDirection direction,
-        CancellationToken cancellationToken)
-    {
-        var streamId = $"test-{Guid.NewGuid()}";
-
-        var options = new ReadStreamOptions
-        {
-            Position = position,
-            Direction = direction,
-            StreamNotFoundBehavior = StreamNotFoundBehavior.Throw
-        };
-
-        await _adapter
-            .ReadStreamAsync(streamId, options, cancellationToken)
-            // Stream must be materialized.
-            .ToArrayAsync(cancellationToken)
-            .AsTask()
-            .ShouldThrowAsync<StreamNotFoundException>();
-    }
-
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task AppendToStreamAsync_WhenVersionConflict_ThrowsVersionConflict(CancellationToken cancellationToken)
+    public async Task AppendToStreamAsync_ExpectedStateIsWrongVersion_ThrowsVersionConflict(
+        CancellationToken cancellationToken)
     {
         var streamId = $"test-{Guid.NewGuid()}";
 
@@ -203,7 +131,7 @@ public abstract class EventStoreAdapterTests<TPayload> where TPayload : notnull
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task AppendToStreamAsync_WhenStreamExistsExpectedAndStreamDoesNotExist_ThrowsExpectedStreamToExist(
+    public async Task AppendToStreamAsync_ExpectedStateIsStreamExistsAndStreamDoesNotExist_ThrowsExpectedStreamToExist(
         CancellationToken cancellationToken)
     {
         var streamId = $"test-{Guid.NewGuid()}";
@@ -225,7 +153,7 @@ public abstract class EventStoreAdapterTests<TPayload> where TPayload : notnull
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task AppendToStreamAsync_WhenStreamDoesNotExistExpectedAndStreamExists_ThrowsStreamDoesNotExist(
+    public async Task AppendToStreamAsync_ExpectedStateIsStreamDoesNotExistAndStreamExists_ThrowsStreamDoesNotExist(
         CancellationToken cancellationToken)
     {
         var streamId = $"test-{Guid.NewGuid()}";
@@ -248,6 +176,79 @@ public abstract class EventStoreAdapterTests<TPayload> where TPayload : notnull
             .ShouldThrowAsync<WrongExpectedStreamStateException>();
 
         exception.Reason.ShouldBe(WrongExpectedStreamStateReason.ExpectedStreamToNotExist);
+    }
+
+    [TestCaseSource(nameof(PositionAndDirectionEdgeCases))]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task ReadStreamAsync_EdgeCasePositionAndDirectionAndStreamExists_ReturnsEmpty(
+        StreamPosition position,
+        StreamReadDirection direction,
+        CancellationToken cancellationToken)
+    {
+        var streamId = $"test-{Guid.NewGuid()}";
+
+        await _adapter.AppendToStreamAsync(
+            streamId,
+            [CreateTestEvent("TestEvent1"), CreateTestEvent("TestEvent2")],
+            cancellationToken: cancellationToken);
+
+        var options = new ReadStreamOptions
+        {
+            Position = position,
+            Direction = direction
+        };
+
+        var readEvents = await _adapter
+            .ReadStreamAsync(streamId, options, cancellationToken)
+            .ToArrayAsync(cancellationToken);
+
+        readEvents.ShouldBeEmpty();
+    }
+
+    [TestCaseSource(nameof(PositionAndDirectionEdgeCases))]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task ReadStreamAsync_EdgeCasePositionAndDirectionAndStreamDoesNotExist_ReturnsEmpty(
+        StreamPosition position,
+        StreamReadDirection direction,
+        CancellationToken cancellationToken)
+    {
+        var streamId = $"test-{Guid.NewGuid()}";
+
+        var options = new ReadStreamOptions
+        {
+            Position = position,
+            Direction = direction
+        };
+
+        var readEvents = await _adapter
+            .ReadStreamAsync(streamId, options, cancellationToken)
+            .ToArrayAsync(cancellationToken);
+
+        readEvents.ShouldBeEmpty();
+    }
+
+    [TestCaseSource(nameof(PositionAndDirectionCases))]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task ReadStreamAsync_StreamDoesNotExistAndBehaviorIsThrow_ThrowsStreamNotFound(
+        StreamPosition position,
+        StreamReadDirection direction,
+        CancellationToken cancellationToken)
+    {
+        var streamId = $"test-{Guid.NewGuid()}";
+
+        var options = new ReadStreamOptions
+        {
+            Position = position,
+            Direction = direction,
+            StreamNotFoundBehavior = StreamNotFoundBehavior.Throw
+        };
+
+        await _adapter
+            .ReadStreamAsync(streamId, options, cancellationToken)
+            // Stream must be materialized.
+            .ToArrayAsync(cancellationToken)
+            .AsTask()
+            .ShouldThrowAsync<StreamNotFoundException>();
     }
 
     protected abstract Task<IEventStoreAdapter<TPayload>> CreateEventStoreAdapterAsync();
