@@ -1,9 +1,9 @@
 using DomainBlocks.EventSourcing.Tests.Integration.DomainEvents;
 using DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 
-namespace DomainBlocks.EventSourcing.Tests.Integration.Adapters;
+namespace DomainBlocks.EventSourcing.Tests.Integration.EntityDefinitions;
 
-public sealed class MutableAggregateAdapter<TAggregate> : EntityAdapter<IDomainEvent, TAggregate>
+public sealed class MutableAggregateDefinition<TAggregate> : EntityDefinition<IDomainEvent, TAggregate>
     where TAggregate : MutableAggregateBase, new()
 {
     public override string GetId(TAggregate entity) => entity.Id.ToString();

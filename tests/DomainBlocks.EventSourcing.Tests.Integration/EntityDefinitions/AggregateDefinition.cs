@@ -2,14 +2,14 @@ using DomainBlocks.EventSourcing.Tests.Integration.DomainEvents;
 using DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 
 // ReSharper disable UnusedParameter.Local
-namespace DomainBlocks.EventSourcing.Tests.Integration.Adapters;
+namespace DomainBlocks.EventSourcing.Tests.Integration.EntityDefinitions;
 
-public sealed class AggregateAdapter<TAggregate, TState> : EntityAdapter<IDomainEvent, TAggregate, TState>
+public sealed class AggregateDefinition<TAggregate, TState> : EntityDefinition<IDomainEvent, TAggregate, TState>
     where TAggregate : Aggregate<TState>, new()
     where TState : StateBase<TState>, new()
 {
 #pragma warning disable IDE0060 // The unused parameters are used dynamically in tests
-    public AggregateAdapter(int i, string s)
+    public AggregateDefinition(int i, string s)
 #pragma warning restore IDE0060
     {
     }

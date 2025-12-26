@@ -1,9 +1,9 @@
 using DomainBlocks.EventSourcing.Tests.Integration.DomainEvents;
 using DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 
-namespace DomainBlocks.EventSourcing.Tests.Integration.Adapters;
+namespace DomainBlocks.EventSourcing.Tests.Integration.EntityDefinitions;
 
-public class MutableShoppingCartEntityAdapter : IEntityAdapter<IDomainEvent, MutableShoppingCart>
+public class MutableShoppingCartEntityDefinition : IEntityDefinition<IDomainEvent, MutableShoppingCart>
 {
     public Type StateType => typeof(MutableShoppingCart);
     public string GetId(MutableShoppingCart entity) => entity.Id.ToString();

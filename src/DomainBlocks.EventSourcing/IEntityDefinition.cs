@@ -1,16 +1,16 @@
 ﻿namespace DomainBlocks.EventSourcing;
 
 // ReSharper disable once UnusedTypeParameter - marker interface
-public interface IEntityAdapter<TEventBase> where TEventBase : class
+public interface IEntityDefinition<TEventBase> where TEventBase : class
 {
     Type EntityType { get; }
 }
 
-public interface IEntityAdapter<TEventBase, TEntity> : IEntityAdapter<TEventBase>
+public interface IEntityDefinition<TEventBase, TEntity> : IEntityDefinition<TEventBase>
     where TEventBase : class
     where TEntity : notnull
 {
-    Type IEntityAdapter<TEventBase>.EntityType => typeof(TEntity);
+    Type IEntityDefinition<TEventBase>.EntityType => typeof(TEntity);
 
     // Not used yet, but will be used for snapshot deserialization.
     Type StateType { get; }

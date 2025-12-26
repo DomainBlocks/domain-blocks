@@ -1,6 +1,6 @@
-using DomainBlocks.EventSourcing.Tests.Integration.Adapters;
 using DomainBlocks.EventSourcing.Tests.Integration.DomainEvents;
 using DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
+using DomainBlocks.EventSourcing.Tests.Integration.EntityDefinitions;
 using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.Serialization.MongoDB.Bson;
@@ -34,15 +34,15 @@ public class EntityStoreTests : MongoEventStoreTestFixture
 
         var client = new EventStoreClient<IDomainEvent, BsonDocument>(clientOptions);
 
-        var entityAdapterProvider = new CompositeEntityAdapterProvider<IDomainEvent>(
+        var entityDefinitionProvider = new CompositeEntityDefinitionProvider<IDomainEvent>(
         [
-            new GenericEntityAdapterProvider<IDomainEvent>(typeof(AggregateAdapter<,>), [123, "ABC"]),
-            //new GenericEntityAdapterProvider<IDomainEvent>(typeof(AggregateAdapter2<,>)),
-            new GenericEntityAdapterProvider<IDomainEvent>(typeof(MutableAggregateAdapter<>)),
-            new GenericEntityAdapterProvider<IDomainEvent>(typeof(FunctionalAggregateWrapperAdapter<>))
+            new GenericEntityDefinitionProvider<IDomainEvent>(typeof(AggregateDefinition<,>), [123, "ABC"]),
+            //new GenericEntityDefinitionProvider<IDomainEvent>(typeof(AggregateDefinition2<,>)),
+            new GenericEntityDefinitionProvider<IDomainEvent>(typeof(MutableAggregateDefinition<>)),
+            new GenericEntityDefinitionProvider<IDomainEvent>(typeof(FunctionalAggregateWrapperDefinition<>))
         ]);
 
-        _entityStore = new EntityStore<IDomainEvent>(client, entityAdapterProvider);
+        _entityStore = new EntityStore<IDomainEvent>(client, entityDefinitionProvider);
     }
 
     [TearDown]

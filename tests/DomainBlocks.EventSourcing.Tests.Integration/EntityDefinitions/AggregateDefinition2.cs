@@ -1,9 +1,9 @@
 using DomainBlocks.EventSourcing.Tests.Integration.DomainEvents;
 using DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 
-namespace DomainBlocks.EventSourcing.Tests.Integration.Adapters;
+namespace DomainBlocks.EventSourcing.Tests.Integration.EntityDefinitions;
 
-public sealed class AggregateAdapter2<TAggregate, TState> : IEntityAdapter<IDomainEvent, TAggregate>
+public sealed class AggregateDefinition2<TAggregate, TState> : IEntityDefinition<IDomainEvent, TAggregate>
     where TAggregate : Aggregate<TState>, new()
     where TState : StateBase<TState>, new()
 {

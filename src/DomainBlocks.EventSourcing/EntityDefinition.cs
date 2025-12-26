@@ -1,6 +1,6 @@
 namespace DomainBlocks.EventSourcing;
 
-public abstract class EntityAdapter<TEventBase, TEntity, TState> : IEntityAdapter<TEventBase, TEntity>
+public abstract class EntityDefinition<TEventBase, TEntity, TState> : IEntityDefinition<TEventBase, TEntity>
     where TEventBase : class
     where TEntity : notnull
     where TState : notnull
@@ -17,10 +17,10 @@ public abstract class EntityAdapter<TEventBase, TEntity, TState> : IEntityAdapte
     protected abstract TState Apply(TState state, TEventBase @event);
     protected abstract TEntity CreateFromState(TState state);
 
-    object IEntityAdapter<TEventBase, TEntity>.GetState(TEntity entity) => GetState(entity);
-    object IEntityAdapter<TEventBase, TEntity>.CreateInitialState() => CreateInitialState();
+    object IEntityDefinition<TEventBase, TEntity>.GetState(TEntity entity) => GetState(entity);
+    object IEntityDefinition<TEventBase, TEntity>.CreateInitialState() => CreateInitialState();
 
-    async Task<TEntity> IEntityAdapter<TEventBase, TEntity>.RestoreAsync(
+    async Task<TEntity> IEntityDefinition<TEventBase, TEntity>.RestoreAsync(
         object initialState,
         IAsyncEnumerable<TEventBase> events,
         CancellationToken cancellationToken)
@@ -34,7 +34,7 @@ public abstract class EntityAdapter<TEventBase, TEntity, TState> : IEntityAdapte
     }
 }
 
-public abstract class EntityAdapter<TEventBase, TEntity> : EntityAdapter<TEventBase, TEntity, TEntity>
+public abstract class EntityDefinition<TEventBase, TEntity> : EntityDefinition<TEventBase, TEntity, TEntity>
     where TEventBase : class
     where TEntity : notnull
 {
