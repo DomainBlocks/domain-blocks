@@ -3,13 +3,13 @@ using DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 
 namespace DomainBlocks.EventSourcing.Tests.Integration.Adapters;
 
-public class MutableShoppingCartEntityAdapter : IEntityAdapter<MutableShoppingCart, IDomainEvent>
+public class MutableShoppingCartEntityAdapter : IEntityAdapter<IDomainEvent, MutableShoppingCart>
 {
     public Type StateType => typeof(MutableShoppingCart);
     public string GetId(MutableShoppingCart entity) => entity.Id.ToString();
-    public object GetCurrentState(MutableShoppingCart entity) => entity;
+    public object GetState(MutableShoppingCart entity) => entity;
     public IEnumerable<IDomainEvent> GetUncommittedEvents(MutableShoppingCart entity) => entity.RaisedEvents;
-    public object CreateState() => new MutableShoppingCart();
+    public object CreateInitialState() => new MutableShoppingCart();
 
     public async Task<MutableShoppingCart> RestoreAsync(
         object initialState,

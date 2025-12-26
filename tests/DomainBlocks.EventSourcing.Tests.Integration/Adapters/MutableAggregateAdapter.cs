@@ -3,13 +3,12 @@ using DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 
 namespace DomainBlocks.EventSourcing.Tests.Integration.Adapters;
 
-public sealed class MutableAggregateAdapter<TAggregate> :
-    EntityAdapter<TAggregate, IDomainEvent>
+public sealed class MutableAggregateAdapter<TAggregate> : EntityAdapter<IDomainEvent, TAggregate>
     where TAggregate : MutableAggregateBase, new()
 {
     public override string GetId(TAggregate entity) => entity.Id.ToString();
     public override IEnumerable<IDomainEvent> GetUncommittedEvents(TAggregate entity) => entity.RaisedEvents;
-    public override TAggregate CreateState() => new();
+    public override TAggregate CreateInitialState() => new();
 
     protected override TAggregate Apply(TAggregate state, IDomainEvent @event)
     {

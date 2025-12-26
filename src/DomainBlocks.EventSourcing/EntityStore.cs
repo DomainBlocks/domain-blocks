@@ -68,7 +68,7 @@ public sealed class EntityStore<TEventBase>(
         var events = eventStoreClient.ReadStreamAsync(streamName, readOptions, cancellationToken);
 
         var entityAdapter = GetEntityAdapter<TEntity>();
-        var initialState = entityAdapter.CreateState(); // May come from a snapshot (in future).
+        var initialState = entityAdapter.CreateInitialState(); // May come from a snapshot (in future).
 
         // Used in closure of EnumerateEvents, so must be declared before the async enumerable is materialised, i.e.
         // before RestoreAsync is invoked.
@@ -90,7 +90,7 @@ public sealed class EntityStore<TEventBase>(
         }
     }
 
-    private IEntityAdapter<TEntity, TEventBase> GetEntityAdapter<TEntity>() where TEntity : notnull
+    private IEntityAdapter<TEventBase, TEntity> GetEntityAdapter<TEntity>() where TEntity : notnull
     {
         return entityAdapterProvider.GetAdapter<TEntity>() ?? throw new ArgumentException(
             $"Entity adapter not found for type '{typeof(TEntity)}'.",

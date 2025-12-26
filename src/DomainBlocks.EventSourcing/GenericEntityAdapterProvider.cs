@@ -30,7 +30,7 @@ public class GenericEntityAdapterProvider<TEventBase> : IEntityAdapterProvider<T
         }
 
         // Check all generic parameters can be resolved via TEntity.
-        var entityGenericArg = entityAdapterInterfaceType.GetGenericArguments()[0];
+        var entityGenericArg = entityAdapterInterfaceType.GetGenericArguments()[1];
         var reachableEntityParams = entityGenericArg.GetReachableGenericParameters();
         var adapterParams = genericTypeDefinition.GetGenericArguments().Where(x => x.IsGenericParameter).ToArray();
         var missingParams = adapterParams.Where(x => !reachableEntityParams.Contains(x)).ToArray();
@@ -49,14 +49,14 @@ public class GenericEntityAdapterProvider<TEventBase> : IEntityAdapterProvider<T
         _constructorArgs = constructorArgs;
     }
 
-    public IEntityAdapter<TEntity, TEventBase>? GetAdapter<TEntity>() where TEntity : notnull
+    public IEntityAdapter<TEventBase, TEntity>? GetAdapter<TEntity>() where TEntity : notnull
     {
         if (!TryResolveAdapterType(typeof(TEntity), out var adapterType))
             return null;
 
         var adapter = Activator.CreateInstance(adapterType, _constructorArgs)!;
 
-        return (IEntityAdapter<TEntity, TEventBase>)adapter;
+        return (IEntityAdapter<TEventBase, TEntity>)adapter;
     }
 
     private bool TryResolveAdapterType(Type entityType, [NotNullWhen(true)] out Type? adapterType)

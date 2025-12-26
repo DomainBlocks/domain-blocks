@@ -4,7 +4,7 @@ using DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 namespace DomainBlocks.EventSourcing.Tests.Integration.Adapters;
 
 public sealed class FunctionalAggregateWrapperAdapter<TEntity> :
-    EntityAdapter<FunctionalAggregateWrapper<TEntity>, IDomainEvent>
+    EntityAdapter<IDomainEvent, FunctionalAggregateWrapper<TEntity>>
     where TEntity : IIdentifiable, new()
 {
     public override string GetId(FunctionalAggregateWrapper<TEntity> aggregate) => aggregate.Id.ToString();
@@ -12,7 +12,7 @@ public sealed class FunctionalAggregateWrapperAdapter<TEntity> :
     public override IEnumerable<IDomainEvent> GetUncommittedEvents(FunctionalAggregateWrapper<TEntity> aggregate) =>
         aggregate.RaisedEvents;
 
-    public override FunctionalAggregateWrapper<TEntity> CreateState() => new();
+    public override FunctionalAggregateWrapper<TEntity> CreateInitialState() => new();
 
     protected override FunctionalAggregateWrapper<TEntity> Apply(
         FunctionalAggregateWrapper<TEntity> state,
