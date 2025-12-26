@@ -2,7 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace DomainBlocks.EventSourcing;
 
-public class GenericEntityAdapterProvider : IEntityAdapterProvider
+public class GenericEntityAdapterProvider<TEventBase> : IEntityAdapterProvider<TEventBase> where TEventBase : class
 {
     private readonly Type _genericTypeDefinition;
     private readonly Type _entityGenericArgType;
@@ -20,12 +20,12 @@ public class GenericEntityAdapterProvider : IEntityAdapterProvider
 
         var entityAdapterInterfaceType = genericTypeDefinition
             .GetInterfaces()
-            .SingleOrDefault(x => x.IsGenericType && x.GetGenericTypeDefinition() == typeof(IEntityAdapter<>));
+            .SingleOrDefault(x => x.IsGenericType && x.GetGenericTypeDefinition() == typeof(IEntityAdapter<,>));
 
         if (entityAdapterInterfaceType == null)
         {
             throw new ArgumentException(
-                $"Entity adapter type must implement {typeof(IEntityAdapter<>).GetPrettyName()}.",
+                $"Entity adapter type must implement {typeof(IEntityAdapter<,>).GetPrettyName()}.",
                 nameof(genericTypeDefinition));
         }
 
@@ -49,14 +49,14 @@ public class GenericEntityAdapterProvider : IEntityAdapterProvider
         _constructorArgs = constructorArgs;
     }
 
-    public IEntityAdapter<TEntity>? GetAdapter<TEntity>() where TEntity : notnull
+    public IEntityAdapter<TEntity, TEventBase>? GetAdapter<TEntity>() where TEntity : notnull
     {
         if (!TryResolveAdapterType(typeof(TEntity), out var adapterType))
             return null;
 
-        var adapter = (IEntityAdapter<TEntity>)Activator.CreateInstance(adapterType, _constructorArgs)!;
+        var adapter = Activator.CreateInstance(adapterType, _constructorArgs)!;
 
-        return adapter;
+        return (IEntityAdapter<TEntity, TEventBase>)adapter;
     }
 
     private bool TryResolveAdapterType(Type entityType, [NotNullWhen(true)] out Type? adapterType)

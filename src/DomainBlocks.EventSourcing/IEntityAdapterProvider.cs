@@ -1,6 +1,6 @@
 namespace DomainBlocks.EventSourcing;
 
-public interface IEntityAdapterProvider
+public interface IEntityAdapterProvider<TEventBase> where TEventBase : class
 {
-    IEntityAdapter<TEntity>? GetAdapter<TEntity>() where TEntity : notnull;
+    IEntityAdapter<TEntity, TEventBase>? GetAdapter<TEntity>() where TEntity : notnull;
 }

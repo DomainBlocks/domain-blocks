@@ -14,7 +14,7 @@ namespace DomainBlocks.EventSourcing.Tests.Integration;
 [TestFixture]
 public class EntityStoreTests : MongoEventStoreTestFixture
 {
-    private EntityStore _entityStore = null!;
+    private EntityStore<IDomainEvent> _entityStore = null!;
 
     [SetUp]
     public void SetUp()
@@ -25,24 +25,24 @@ public class EntityStoreTests : MongoEventStoreTestFixture
             .MapType<ItemRemovedFromShoppingCart>()
             .Build();
 
-        var clientOptions = new EventStoreClientOptions<object, BsonDocument>
+        var clientOptions = new EventStoreClientOptions<IDomainEvent, BsonDocument>
         {
             AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync<BsonDocument>(ct),
             TypeMap = eventTypeMap,
             Serializer = new BsonDocumentSerializer()
         };
 
-        var client = new EventStoreClient<object, BsonDocument>(clientOptions);
+        var client = new EventStoreClient<IDomainEvent, BsonDocument>(clientOptions);
 
-        var entityAdapterProvider = new CompositeEntityAdapterProvider(
+        var entityAdapterProvider = new CompositeEntityAdapterProvider<IDomainEvent>(
         [
-            new GenericEntityAdapterProvider(typeof(AggregateAdapter<,>), [123, "ABC"]),
-            //new GenericEntityAdapterProvider(typeof(AggregateAdapter2<,>)),
-            new GenericEntityAdapterProvider(typeof(MutableAggregateAdapter<>)),
-            new GenericEntityAdapterProvider(typeof(FunctionalAggregateWrapperAdapter<>))
+            new GenericEntityAdapterProvider<IDomainEvent>(typeof(AggregateAdapter<,>), [123, "ABC"]),
+            //new GenericEntityAdapterProvider<IDomainEvent>(typeof(AggregateAdapter2<,>)),
+            new GenericEntityAdapterProvider<IDomainEvent>(typeof(MutableAggregateAdapter<>)),
+            new GenericEntityAdapterProvider<IDomainEvent>(typeof(FunctionalAggregateWrapperAdapter<>))
         ]);
 
-        _entityStore = new EntityStore(client, entityAdapterProvider);
+        _entityStore = new EntityStore<IDomainEvent>(client, entityAdapterProvider);
     }
 
     [TearDown]

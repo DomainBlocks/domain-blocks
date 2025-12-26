@@ -5,7 +5,7 @@ public interface IEntityAdapter
     Type EntityType { get; }
 }
 
-public interface IEntityAdapter<TEntity> : IEntityAdapter where TEntity : notnull
+public interface IEntityAdapter<TEntity, TEventBase> : IEntityAdapter where TEntity : notnull where TEventBase : class
 {
     Type IEntityAdapter.EntityType => typeof(TEntity);
 
@@ -17,12 +17,12 @@ public interface IEntityAdapter<TEntity> : IEntityAdapter where TEntity : notnul
     // Not used yet, but will be used for snapshot serialization.
     object GetCurrentState(TEntity entity);
 
-    IEnumerable<object> GetUncommittedEvents(TEntity entity);
+    IEnumerable<TEventBase> GetUncommittedEvents(TEntity entity);
 
     object CreateState();
 
     Task<TEntity> RestoreAsync(
         object initialState,
-        IAsyncEnumerable<object> events,
+        IAsyncEnumerable<TEventBase> events,
         CancellationToken cancellationToken);
 }

@@ -4,9 +4,9 @@ using DomainBlocks.EventStore.Abstractions.Events;
 
 namespace DomainBlocks.EventSourcing;
 
-public sealed class EntityStore(
-    IEventStoreClient<object> eventStoreClient,
-    IEntityAdapterProvider entityAdapterProvider) : IEntityStore
+public sealed class EntityStore<TEventBase>(
+    IEventStoreClient<TEventBase> eventStoreClient,
+    IEntityAdapterProvider<TEventBase> entityAdapterProvider) : IEntityStore where TEventBase : class
 {
     public async Task<Versioned<TEntity>> LoadAsync<TEntity>(
         string entityId,
@@ -80,7 +80,7 @@ public sealed class EntityStore(
 
         return Versioned.From(entity, loadedVersion);
 
-        async IAsyncEnumerable<object> EnumerateEvents()
+        async IAsyncEnumerable<TEventBase> EnumerateEvents()
         {
             await foreach (var e in events.ConfigureAwait(false))
             {
@@ -90,7 +90,7 @@ public sealed class EntityStore(
         }
     }
 
-    private IEntityAdapter<TEntity> GetEntityAdapter<TEntity>() where TEntity : notnull
+    private IEntityAdapter<TEntity, TEventBase> GetEntityAdapter<TEntity>() where TEntity : notnull
     {
         return entityAdapterProvider.GetAdapter<TEntity>() ?? throw new ArgumentException(
             $"Entity adapter not found for type '{typeof(TEntity)}'.",
