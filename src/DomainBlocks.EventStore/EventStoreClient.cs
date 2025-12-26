@@ -32,15 +32,6 @@ public sealed class EventStoreClient<TEventBase, TSerialized> :
         _contractMappersByContractType = options.ContractMappers.ToFrozenDictionary(x => x.ContractType);
     }
 
-    public Task AppendToStreamAsync(
-        string streamId,
-        IEnumerable<TEventBase> events,
-        AppendToStreamOptions? options = null,
-        CancellationToken cancellationToken = default)
-    {
-        return AppendToStreamAsync(streamId, events.Select(UncommittedEvent.Create), options, cancellationToken);
-    }
-
     public async Task AppendToStreamAsync(
         string streamId,
         IEnumerable<UncommittedEvent<TEventBase>> events,

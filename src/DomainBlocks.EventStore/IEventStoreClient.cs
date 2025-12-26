@@ -5,13 +5,6 @@ namespace DomainBlocks.EventStore;
 
 public interface IEventStoreClient<TEventBase> : IAsyncDisposable where TEventBase : class
 {
-    // TODO: Move to extension (?)
-    Task AppendToStreamAsync(
-        string streamId,
-        IEnumerable<TEventBase> events,
-        AppendToStreamOptions? options = null,
-        CancellationToken cancellationToken = default);
-
     Task AppendToStreamAsync(
         string streamId,
         IEnumerable<UncommittedEvent<TEventBase>> events,
