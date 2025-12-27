@@ -26,7 +26,7 @@ public abstract class EntityAdapter<TEntity, TState> : IEntityAdapter<TEntity>
     {
         var currentState = (TState)initialState;
 
-        await foreach (var e in events.WithCancellation(cancellationToken))
+        await foreach (var e in events.WithCancellation(cancellationToken).ConfigureAwait(false))
             currentState = Apply(currentState, e);
 
         return Create(currentState);

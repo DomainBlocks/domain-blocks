@@ -8,15 +8,16 @@ using StreamNotFoundException = DomainBlocks.EventStore.Abstractions.StreamNotFo
 
 namespace DomainBlocks.EventStore.KurrentDB;
 
-public class KurrentDbEventStoreAdapter(KurrentDBClient client) : IKurrentDbEventStoreAdapter
+public class KurrentDbEventStoreAdapter(KurrentDBClient client) : IKurrentDbEventStoreAdapter, IAsyncDisposable
 {
     public async Task AppendToStreamAsync(
         string streamId,
         IEnumerable<UncommittedEvent<ReadOnlyMemory<byte>>> events,
-        ExpectedStreamState expectedState = default,
+        AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var kurrentDbStreamState = ToKurrentDbStreamState(expectedState);
+        options ??= AppendToStreamOptions.Default;
+        var kurrentDbStreamState = ToKurrentDbStreamState(options.ExpectedState);
 
         var eventData = events.Select(e =>
         {
@@ -26,15 +27,17 @@ public class KurrentDbEventStoreAdapter(KurrentDBClient client) : IKurrentDbEven
 
         try
         {
-            _ = await client.AppendToStreamAsync(
-                streamId,
-                kurrentDbStreamState,
-                eventData,
-                cancellationToken: cancellationToken);
+            _ = await client
+                .AppendToStreamAsync(
+                    streamId,
+                    kurrentDbStreamState,
+                    eventData,
+                    cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (WrongExpectedVersionException ex)
         {
-            throw MapWrongExpectedVersionException(ex, streamId, expectedState);
+            throw MapWrongExpectedVersionException(ex, streamId, options.ExpectedState);
         }
     }
 
@@ -80,7 +83,7 @@ public class KurrentDbEventStoreAdapter(KurrentDBClient client) : IKurrentDbEven
             throw new StreamNotFoundException(streamId);
         }
 
-        await foreach (var resolvedEvent in result)
+        await foreach (var resolvedEvent in result.ConfigureAwait(false))
         {
             var header = new CommittedEventHeader(
                 streamId,
@@ -93,6 +96,8 @@ public class KurrentDbEventStoreAdapter(KurrentDBClient client) : IKurrentDbEven
             yield return CommittedEvent.Create(header, resolvedEvent.Event.Data);
         }
     }
+
+    public ValueTask DisposeAsync() => client.DisposeAsync();
 
     private static WrongExpectedStreamStateException MapWrongExpectedVersionException(
         WrongExpectedVersionException ex,

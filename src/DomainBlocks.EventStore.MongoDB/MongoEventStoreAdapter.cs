@@ -32,10 +32,12 @@ public class MongoEventStoreAdapter<TEventDocument, TPayload>(
     public async Task AppendToStreamAsync(
         string streamId,
         IEnumerable<UncommittedEvent<TPayload>> events,
-        ExpectedStreamState expectedState = default,
+        AppendToStreamOptions? appendOptions = null,
         CancellationToken cancellationToken = default)
     {
-        var currentVersion = await GetCurrentStreamVersionAsync(streamId, cancellationToken);
+        appendOptions ??= AppendToStreamOptions.Default;
+        var expectedState = appendOptions.ExpectedState;
+        var currentVersion = await GetCurrentStreamVersionAsync(streamId, cancellationToken).ConfigureAwait(false);
 
         if (expectedState.IsStreamExists && currentVersion.IsNone)
             throw WrongExpectedStreamStateException.ExpectedStreamToExist(streamId);
@@ -55,7 +57,7 @@ public class MongoEventStoreAdapter<TEventDocument, TPayload>(
         try
         {
             var insertManyOptions = new InsertManyOptions { IsOrdered = true };
-            await collection.InsertManyAsync(documents, insertManyOptions, cancellationToken);
+            await collection.InsertManyAsync(documents, insertManyOptions, cancellationToken).ConfigureAwait(false);
         }
         catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
         {
@@ -138,14 +140,18 @@ public class MongoEventStoreAdapter<TEventDocument, TPayload>(
             .Sort(Builders<TEventDocument>.Sort.Descending(_streamVersionField))
             .Limit(1)
             .Project(_nullableStreamVersionExpression)
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
 
         return StreamVersion.FromInt64(latestVersion ?? -1);
     }
 
     private async Task<bool> StreamExistsAsync(string streamId, CancellationToken cancellationToken)
     {
-        return await GetCurrentStreamVersionAsync(streamId, cancellationToken) != StreamVersion.None;
+        var currentStreamVersion = await GetCurrentStreamVersionAsync(streamId, cancellationToken)
+            .ConfigureAwait(false);
+
+        return currentStreamVersion != StreamVersion.None;
     }
 
     private IEnumerable<TEventDocument> ToEventDocuments(

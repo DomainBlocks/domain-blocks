@@ -2,18 +2,18 @@ using DomainBlocks.EventStore.Abstractions;
 
 namespace DomainBlocks.EventStore;
 
-public interface IEventStoreClient
+public interface IEventStoreClient : IAsyncDisposable
 {
     Task AppendToStreamAsync(
         string streamId,
         IEnumerable<object> events,
-        ExpectedStreamState expectedState = default,
+        AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default);
 
     Task AppendToStreamAsync(
         string streamId,
         IEnumerable<UncommittedEvent<object>> events,
-        ExpectedStreamState expectedState = default,
+        AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default);
 
     IAsyncEnumerable<CommittedEvent<object>> ReadStreamAsync(

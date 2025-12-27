@@ -9,7 +9,7 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.Tests.Integration;
 
-public class MongoSerializationTests : MongoEventStoreTestFixture<BsonValue>
+public class MongoSerializationTests : MongoEventStoreTestFixture
 {
     private static readonly UserCreated TestEvent = new()
     {
@@ -88,7 +88,7 @@ public class MongoSerializationTests : MongoEventStoreTestFixture<BsonValue>
 
         var clientOptions = new EventStoreClientOptions<BsonValue>
         {
-            Adapter = EventStoreAdapter,
+            AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync<BsonValue>(ct),
             TypeMap = eventTypeMap,
             Serializer = serializer
         };

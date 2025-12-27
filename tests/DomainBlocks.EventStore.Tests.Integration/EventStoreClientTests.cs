@@ -7,7 +7,7 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.Tests.Integration;
 
-public class EventStoreClientTests : MongoEventStoreTestFixture<BsonDocument>
+public class EventStoreClientTests : MongoEventStoreTestFixture
 {
     static EventStoreClientTests()
     {
@@ -36,14 +36,14 @@ public class EventStoreClientTests : MongoEventStoreTestFixture<BsonDocument>
 
         var writeClientOptions = new EventStoreClientOptions<BsonDocument>
         {
-            Adapter = EventStoreAdapter,
+            AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync<BsonDocument>(ct),
             TypeMap = writeEventTypeMap,
             Serializer = new BsonDocumentSerializer()
         };
 
         var readClientOptions = new EventStoreClientOptions<BsonDocument>
         {
-            Adapter = EventStoreAdapter,
+            AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync<BsonDocument>(ct),
             TypeMap = readEventTypeMap,
             Serializer = new BsonDocumentSerializer()
         };

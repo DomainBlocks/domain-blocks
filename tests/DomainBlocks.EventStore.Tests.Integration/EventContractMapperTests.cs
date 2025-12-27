@@ -5,7 +5,7 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.Tests.Integration;
 
-public class EventContractMapperTests : MongoEventStoreTestFixture<byte[]>
+public class EventContractMapperTests : MongoEventStoreTestFixture
 {
     [Test]
     public async Task Should_map_to_and_from_contract()
@@ -16,7 +16,7 @@ public class EventContractMapperTests : MongoEventStoreTestFixture<byte[]>
 
         var clientOptions = new EventStoreClientOptions<byte[]>
         {
-            Adapter = EventStoreAdapter,
+            AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync<byte[]>(ct),
             TypeMap = eventTypeMap,
             Serializer = new ProtobufBytesSerializer(),
             ContractMappers =
