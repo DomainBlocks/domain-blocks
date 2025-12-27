@@ -4,7 +4,7 @@ using DomainBlocks.EventStore.Abstractions.Events;
 namespace DomainBlocks.EventStore.MongoDB;
 
 /// <summary>
-/// Provides conversion between uncommitted/committed event wrappers and event documents for Mongo persistence.
+/// Provides conversion between event wrappers and event documents for Mongo persistence.
 /// </summary>
 /// <typeparam name="TEventDocument">The document type used to store events.</typeparam>
 /// <typeparam name="TSerialized">The serialized event type.</typeparam>
@@ -16,18 +16,18 @@ public interface IEventDocumentConverter<TEventDocument, TSerialized> where TSer
     /// <param name="event">The uncommitted event.</param>
     /// <param name="streamId">The identifier of the event stream.</param>
     /// <param name="streamVersion">The version of the stream for this event.</param>
-    /// <param name="committedAt">The UTC timestamp at which this event is committed.</param>
+    /// <param name="createdAt">The UTC timestamp at which this event was created.</param>
     /// <returns>An event document representing the specified event.</returns>
     TEventDocument ToEventDocument(
         UncommittedEvent<TSerialized> @event,
         string streamId,
         StreamVersion streamVersion,
-        DateTime committedAt);
+        DateTime createdAt);
 
     /// <summary>
-    /// Converts an event document into a committed event.
+    /// Converts an event document into a read event.
     /// </summary>
     /// <param name="document">The event document to convert.</param>
-    /// <returns>A committed event reconstructed from the specified event document.</returns>
-    CommittedEvent<TSerialized> FromEventDocument(TEventDocument document);
+    /// <returns>A read event reconstructed from the specified event document.</returns>
+    ReadEvent<TSerialized> FromEventDocument(TEventDocument document);
 }

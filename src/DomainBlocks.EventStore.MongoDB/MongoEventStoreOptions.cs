@@ -24,7 +24,7 @@ public static class MongoEventStoreOptions
             EventDocumentConverter = new DefaultEventDocumentConverter<TSerialized>(),
             StreamIdExpression = doc => doc.StreamId,
             StreamVersionExpression = doc => doc.StreamVersion,
-            CommittedAtExpression = doc => doc.CommittedAt
+            CreatedAtExpression = doc => doc.CreatedAt
         };
     }
 }
@@ -35,7 +35,7 @@ public class MongoEventStoreOptions<TEventDocument, TSerialized> where TSerializ
     public required IEventDocumentConverter<TEventDocument, TSerialized> EventDocumentConverter { get; init; }
     public required Expression<Func<TEventDocument, string>> StreamIdExpression { get; init; }
     public required Expression<Func<TEventDocument, long>> StreamVersionExpression { get; init; }
-    public required Expression<Func<TEventDocument, DateTime>> CommittedAtExpression { get; init; }
+    public required Expression<Func<TEventDocument, DateTime>> CreatedAtExpression { get; init; }
 
     internal FieldDefinition<TEventDocument, string> StreamIdField =>
         new ExpressionFieldDefinition<TEventDocument, string>(StreamIdExpression);
@@ -43,6 +43,6 @@ public class MongoEventStoreOptions<TEventDocument, TSerialized> where TSerializ
     internal FieldDefinition<TEventDocument, long> StreamVersionField =>
         new ExpressionFieldDefinition<TEventDocument, long>(StreamVersionExpression);
 
-    internal FieldDefinition<TEventDocument, DateTime> CommittedAtField =>
-        new ExpressionFieldDefinition<TEventDocument, DateTime>(CommittedAtExpression);
+    internal FieldDefinition<TEventDocument, DateTime> CreatedAtField =>
+        new ExpressionFieldDefinition<TEventDocument, DateTime>(CreatedAtExpression);
 }

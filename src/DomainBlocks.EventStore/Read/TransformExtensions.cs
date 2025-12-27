@@ -5,8 +5,8 @@ namespace DomainBlocks.EventStore.Read;
 
 public static class TransformExtensions
 {
-    public static IAsyncEnumerable<IReadEvent<TEventBase>> Transform<TEventBase>(
-        this IAsyncEnumerable<CommittedEvent<TEventBase>> source,
+    public static IAsyncEnumerable<ReadEvent<TEventBase>> Transform<TEventBase>(
+        this IAsyncEnumerable<ReadEvent<TEventBase>> source,
         IEnumerable<IEventReadTransform<TEventBase>> transforms)
         where TEventBase : class
     {
@@ -14,16 +14,16 @@ public static class TransformExtensions
     }
 
     private class TransformAsyncEnumerable<TEventBase>(
-        IAsyncEnumerable<CommittedEvent<TEventBase>> source,
+        IAsyncEnumerable<ReadEvent<TEventBase>> source,
         IEnumerable<IEventReadTransform<TEventBase>> transforms) :
-        IAsyncEnumerable<IReadEvent<TEventBase>>
+        IAsyncEnumerable<ReadEvent<TEventBase>>
         where TEventBase : class
     {
-        public async IAsyncEnumerator<IReadEvent<TEventBase>> GetAsyncEnumerator(
+        public async IAsyncEnumerator<ReadEvent<TEventBase>> GetAsyncEnumerator(
             CancellationToken cancellationToken = default)
         {
             var transformsByType = transforms.ToFrozenDictionary(x => x.SourceEventType);
-            var queue = new Queue<IReadEvent<TEventBase>>();
+            var queue = new Queue<ReadEvent<TEventBase>>();
 
             await foreach (var sourceEvent in source.WithCancellation(cancellationToken).ConfigureAwait(false))
             {
@@ -36,7 +36,7 @@ public static class TransformExtensions
                         var transformedEvents = transform.Apply(nextEvent.Value, nextEvent.Header);
 
                         foreach (var transformedEvent in transformedEvents)
-                            queue.Enqueue(new TransformedEvent<TEventBase>(nextEvent.Header, transformedEvent));
+                            queue.Enqueue(ReadEvent.Create(nextEvent.Header, transformedEvent, isTransformed: true));
                     }
                     else
                     {

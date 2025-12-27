@@ -4,8 +4,7 @@ using DomainBlocks.EventStore.Abstractions.Events;
 namespace DomainBlocks.EventStore.MongoDB;
 
 /// <summary>
-/// Provides conversion between uncommitted/committed event wrappers and the default event document for Mongo
-/// persistence.
+/// Provides conversion between event wrappers and the default event document for Mongo persistence.
 /// </summary>
 public sealed class DefaultEventDocumentConverter<TSerialized> :
     IEventDocumentConverter<DefaultEventDocument<TSerialized>, TSerialized>
@@ -16,7 +15,7 @@ public sealed class DefaultEventDocumentConverter<TSerialized> :
         UncommittedEvent<TSerialized> @event,
         string streamId,
         StreamVersion streamVersion,
-        DateTime committedAt)
+        DateTime createdAt)
     {
         return new DefaultEventDocument<TSerialized>
         {
@@ -24,21 +23,21 @@ public sealed class DefaultEventDocumentConverter<TSerialized> :
             StreamVersion = streamVersion.ToInt64(),
             EventName = @event.Header.EventName,
             Metadata = @event.Header.Metadata,
-            CommittedAt = committedAt,
+            CreatedAt = createdAt,
             Value = @event.Value
         };
     }
 
     /// <inheritdoc/>
-    public CommittedEvent<TSerialized> FromEventDocument(DefaultEventDocument<TSerialized> document)
+    public ReadEvent<TSerialized> FromEventDocument(DefaultEventDocument<TSerialized> document)
     {
-        return CommittedEvent.Create(
-            new CommittedEventHeader(
+        return ReadEvent.Create(
+            new ReadEventHeader(
                 document.StreamId,
                 StreamVersion.FromInt64(document.StreamVersion),
                 document.EventName,
                 document.Metadata,
-                document.CommittedAt),
+                document.CreatedAt),
             document.Value);
     }
 }

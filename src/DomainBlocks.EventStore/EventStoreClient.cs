@@ -72,7 +72,7 @@ public sealed class EventStoreClient<TEventBase, TSerialized> :
             .ConfigureAwait(false);
     }
 
-    public async IAsyncEnumerable<CommittedEvent<TEventBase>> ReadStreamAsync(
+    public async IAsyncEnumerable<ReadEvent<TEventBase>> ReadStreamAsync(
         string streamId,
         ReadStreamOptions? options = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -89,7 +89,7 @@ public sealed class EventStoreClient<TEventBase, TSerialized> :
             if (_contractMappersByContractType.TryGetValue(deserializedValue.GetType(), out var mapper))
                 deserializedValue = mapper.FromContract(deserializedValue);
 
-            yield return CommittedEvent.Create(header, (TEventBase)deserializedValue);
+            yield return ReadEvent.Create(header, (TEventBase)deserializedValue);
         }
     }
 

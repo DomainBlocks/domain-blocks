@@ -44,7 +44,7 @@ public class KurrentDBEventStoreClientAdapter(KurrentDBClient client) :
         }
     }
 
-    public async IAsyncEnumerable<CommittedEvent<ReadOnlyMemory<byte>>> ReadStreamAsync(
+    public async IAsyncEnumerable<ReadEvent<ReadOnlyMemory<byte>>> ReadStreamAsync(
         string streamId,
         ReadStreamOptions? options = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -88,7 +88,7 @@ public class KurrentDBEventStoreClientAdapter(KurrentDBClient client) :
 
         await foreach (var resolvedEvent in result.ConfigureAwait(false))
         {
-            var header = new CommittedEventHeader(
+            var header = new ReadEventHeader(
                 streamId,
                 StreamVersion.FromInt64(resolvedEvent.OriginalEvent.EventNumber.ToInt64()),
                 resolvedEvent.Event.EventType,
@@ -96,7 +96,7 @@ public class KurrentDBEventStoreClientAdapter(KurrentDBClient client) :
                 resolvedEvent.Event.Created.Date,
                 GlobalPosition.FromUInt64(resolvedEvent.OriginalEvent.Position.CommitPosition));
 
-            yield return CommittedEvent.Create(header, resolvedEvent.Event.Data);
+            yield return ReadEvent.Create(header, resolvedEvent.Event.Data);
         }
     }
 

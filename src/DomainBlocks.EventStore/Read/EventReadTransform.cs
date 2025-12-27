@@ -8,9 +8,9 @@ public abstract class EventReadTransform<TEventBase, TSourceEvent> : IEventReadT
 {
     public Type SourceEventType => typeof(TSourceEvent);
 
-    protected abstract IEnumerable<TEventBase> Apply(TSourceEvent sourceEvent, CommittedEventHeader header);
+    protected abstract IEnumerable<TEventBase> Apply(TSourceEvent sourceEvent, ReadEventHeader header);
 
-    IEnumerable<TEventBase> IEventReadTransform<TEventBase>.Apply(TEventBase sourceEvent, CommittedEventHeader header)
+    IEnumerable<TEventBase> IEventReadTransform<TEventBase>.Apply(TEventBase sourceEvent, ReadEventHeader header)
     {
         return Apply((TSourceEvent)sourceEvent, header);
     }
