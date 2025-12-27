@@ -13,12 +13,12 @@ public static class MongoEventStoreAdmin
         var collection = database.GetCollection<TEventDocument>(options.EventCollectionName);
         var indexBuilder = Builders<TEventDocument>.IndexKeys;
         var uniqueKey = indexBuilder.Ascending(options.StreamIdField).Ascending(options.StreamVersionField);
-        var committedAt = indexBuilder.Ascending(options.CommittedAtField);
+        var createdAt = indexBuilder.Ascending(options.CreatedAtField);
 
         CreateIndexModel<TEventDocument>[] indexModels =
         [
             new(uniqueKey, new CreateIndexOptions { Unique = true }),
-            new(committedAt)
+            new(createdAt)
         ];
 
         return collection.Indexes.CreateManyAsync(indexModels, cancellationToken);

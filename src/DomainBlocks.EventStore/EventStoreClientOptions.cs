@@ -12,6 +12,6 @@ public class EventStoreClientOptions<TEventBase, TSerialized> where TEventBase :
     }
 
     public required EventTypeMap TypeMap { get; init; }
-    public required IPayloadSerializer<TSerialized> Serializer { get; init; }
+    public required IObjectSerializer<TSerialized> Serializer { get; init; }
     public IEnumerable<IEventContractMapper<TEventBase>> ContractMappers { get; init; } = [];
 }

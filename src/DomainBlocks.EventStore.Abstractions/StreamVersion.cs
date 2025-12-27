@@ -8,7 +8,7 @@ public readonly struct StreamVersion : IEquatable<StreamVersion>, IComparable<St
 {
     /// <summary>
     /// Represents the absence of a version. Internally stored as -1. Indicates that a stream does not exist and has no
-    /// committed events.
+    /// events.
     /// </summary>
     public static readonly StreamVersion None = new(-1);
 

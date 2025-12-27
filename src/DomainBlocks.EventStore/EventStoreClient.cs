@@ -13,7 +13,7 @@ public sealed class EventStoreClient<TEventBase, TSerialized> :
 {
     private readonly Func<CancellationToken, ValueTask<IEventStoreClientAdapter<TSerialized>>> _adapterFactory;
     private readonly EventTypeMap _eventTypeMap;
-    private readonly IPayloadSerializer<TSerialized> _serializer;
+    private readonly IObjectSerializer<TSerialized> _serializer;
     private readonly FrozenDictionary<Type, IEventContractMapper<TEventBase>> _contractMappersByEventType;
     private readonly FrozenDictionary<Type, IEventContractMapper<TEventBase>> _contractMappersByContractType;
     private readonly CancellationTokenSource _lifetimeCts = new();
@@ -42,27 +42,27 @@ public sealed class EventStoreClient<TEventBase, TSerialized> :
             .Select(e =>
             {
                 string eventName;
-                var payload = e.Payload;
-                object payloadToSerialize = payload;
+                var value = e.Value;
+                object valueToSerialize = value;
 
-                if (_contractMappersByEventType.TryGetValue(payload.GetType(), out var mapper))
+                if (_contractMappersByEventType.TryGetValue(value.GetType(), out var mapper))
                 {
                     eventName = _eventTypeMap.GetEventName(mapper.ContractType);
-                    payloadToSerialize = mapper.ToContract(payload);
+                    valueToSerialize = mapper.ToContract(value);
                 }
                 else
                 {
-                    eventName = _eventTypeMap.GetEventName(payload.GetType());
+                    eventName = _eventTypeMap.GetEventName(value.GetType());
                 }
 
                 // PoC for adding metadata.
                 var header = e.Header
                     .WithEventName(eventName)
-                    .WithMetadata("EventClrType", payloadToSerialize.GetType().Name);
+                    .WithMetadata("EventClrType", valueToSerialize.GetType().Name);
 
-                var serializedPayload = _serializer.Serialize(payloadToSerialize);
+                var serializedValue = _serializer.Serialize(valueToSerialize);
 
-                return UncommittedEvent.Create(header, serializedPayload);
+                return UncommittedEvent.Create(header, serializedValue);
             });
 
         var adapter = await GetAdapterAsync(cancellationToken).ConfigureAwait(false);
@@ -72,7 +72,7 @@ public sealed class EventStoreClient<TEventBase, TSerialized> :
             .ConfigureAwait(false);
     }
 
-    public async IAsyncEnumerable<CommittedEvent<TEventBase>> ReadStreamAsync(
+    public async IAsyncEnumerable<ReadEvent<TEventBase>> ReadStreamAsync(
         string streamId,
         ReadStreamOptions? options = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -84,12 +84,12 @@ public sealed class EventStoreClient<TEventBase, TSerialized> :
         {
             var header = serializedEvent.Header;
             var eventType = _eventTypeMap.GetEventType(header.EventName);
-            var deserializedPayload = _serializer.Deserialize(serializedEvent.Payload, eventType);
+            var deserializedValue = _serializer.Deserialize(serializedEvent.Value, eventType);
 
-            if (_contractMappersByContractType.TryGetValue(deserializedPayload.GetType(), out var mapper))
-                deserializedPayload = mapper.FromContract(deserializedPayload);
+            if (_contractMappersByContractType.TryGetValue(deserializedValue.GetType(), out var mapper))
+                deserializedValue = mapper.FromContract(deserializedValue);
 
-            yield return CommittedEvent.Create(header, (TEventBase)deserializedPayload);
+            yield return ReadEvent.Create(header, (TEventBase)deserializedValue);
         }
     }
 

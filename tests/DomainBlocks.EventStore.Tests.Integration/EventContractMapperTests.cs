@@ -41,7 +41,7 @@ public class EventContractMapperTests : MongoEventStoreTestFixture
 
         readEvents
             .ShouldHaveSingleItem()
-            .Payload
+            .Value
             .ShouldBeOfType<UserCreated>()
             .ShouldBe(originalEvent);
     }

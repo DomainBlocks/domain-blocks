@@ -3,7 +3,7 @@ using Google.Protobuf;
 
 namespace DomainBlocks.Serialization.Google.Protobuf;
 
-public sealed class ProtobufBytesSerializer : IPayloadSerializer<byte[]>, IPayloadSerializer<ReadOnlyMemory<byte>>
+public sealed class ProtobufBytesSerializer : IObjectSerializer<byte[]>, IObjectSerializer<ReadOnlyMemory<byte>>
 {
     public byte[] Serialize(object value)
     {
@@ -17,7 +17,7 @@ public sealed class ProtobufBytesSerializer : IPayloadSerializer<byte[]>, IPaylo
         return ms.ToArray();
     }
 
-    public object Deserialize(byte[] payload, Type type)
+    public object Deserialize(byte[] value, Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
 
@@ -26,11 +26,11 @@ public sealed class ProtobufBytesSerializer : IPayloadSerializer<byte[]>, IPaylo
 
         var parser = MessageParserCache.Get(type);
 
-        return parser.ParseFrom(payload);
+        return parser.ParseFrom(value);
     }
 
-    ReadOnlyMemory<byte> IPayloadSerializer<ReadOnlyMemory<byte>>.Serialize(object value) => Serialize(value);
+    ReadOnlyMemory<byte> IObjectSerializer<ReadOnlyMemory<byte>>.Serialize(object value) => Serialize(value);
 
-    object IPayloadSerializer<ReadOnlyMemory<byte>>.Deserialize(ReadOnlyMemory<byte> payload, Type type) =>
-        Deserialize(payload.ToArray(), type);
+    object IObjectSerializer<ReadOnlyMemory<byte>>.Deserialize(ReadOnlyMemory<byte> value, Type type) =>
+        Deserialize(value.ToArray(), type);
 }

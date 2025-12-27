@@ -3,7 +3,7 @@ using DomainBlocks.Serialization.Abstractions;
 
 namespace DomainBlocks.Serialization.SystemTextJson;
 
-public sealed class SystemTextJsonStringSerializer(JsonSerializerOptions? options = null) : IPayloadSerializer<string>
+public sealed class SystemTextJsonStringSerializer(JsonSerializerOptions? options = null) : IObjectSerializer<string>
 {
     public string Serialize(object value)
     {
@@ -13,23 +13,23 @@ public sealed class SystemTextJsonStringSerializer(JsonSerializerOptions? option
         }
         catch (Exception ex)
         {
-            throw PayloadSerializationException.ForSerialization(value.GetType(), ex);
+            throw ObjectSerializationException.ForSerialization(value.GetType(), ex);
         }
     }
 
-    public object Deserialize(string payload, Type type)
+    public object Deserialize(string value, Type type)
     {
         object? result;
 
         try
         {
-            result = JsonSerializer.Deserialize(payload, type, options);
+            result = JsonSerializer.Deserialize(value, type, options);
         }
         catch (Exception ex)
         {
-            throw PayloadSerializationException.ForDeserialization(type, ex);
+            throw ObjectSerializationException.ForDeserialization(type, ex);
         }
 
-        return result ?? throw PayloadSerializationException.NullResult(type);
+        return result ?? throw ObjectSerializationException.NullResult(type);
     }
 }

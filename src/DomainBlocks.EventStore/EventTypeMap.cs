@@ -12,7 +12,7 @@ namespace DomainBlocks.EventStore;
 /// </para>
 /// <para>
 /// Name-to-type mappings are used when reading events, and may be many-to-one to support renamed events, or to
-/// deserialize payloads with a shared structure into a common CLR type.
+/// deserialize events with a shared structure into a common CLR type.
 /// </para>
 /// </remarks>
 public sealed class EventTypeMap

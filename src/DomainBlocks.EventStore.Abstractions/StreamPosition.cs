@@ -4,17 +4,17 @@ namespace DomainBlocks.EventStore.Abstractions;
 
 /// <summary>
 /// Represents a position within a stream. A position may refer to the start of the stream, the end of the stream, or a
-/// specific committed event version.
+/// specific event version.
 /// </summary>
 public readonly struct StreamPosition : IEquatable<StreamPosition>
 {
     /// <summary>
-    /// Logical position at the start of the stream, before the first committed event.
+    /// Logical position at the start of the stream, before the first event.
     /// </summary>
     public static readonly StreamPosition Start = new(StreamPositionKind.Start);
 
     /// <summary>
-    /// Logical position at the end of the stream, after the last committed event.
+    /// Logical position at the end of the stream, after the last event.
     /// </summary>
     public static readonly StreamPosition End = new(StreamPositionKind.End);
 

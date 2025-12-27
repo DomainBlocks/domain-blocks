@@ -4,14 +4,14 @@ using MongoDB.Bson.Serialization;
 
 namespace DomainBlocks.Serialization.MongoDB.Bson;
 
-public sealed class BsonDocumentSerializer : IPayloadSerializer<BsonDocument>, IPayloadSerializer<BsonValue>
+public sealed class BsonDocumentSerializer : IObjectSerializer<BsonDocument>, IObjectSerializer<BsonValue>
 {
     public BsonDocument Serialize(object value) => value.ToBsonDocument(value.GetType());
 
-    public object Deserialize(BsonDocument payload, Type type) => BsonSerializer.Deserialize(payload, type);
+    public object Deserialize(BsonDocument value, Type type) => BsonSerializer.Deserialize(value, type);
 
-    BsonValue IPayloadSerializer<BsonValue>.Serialize(object value) => Serialize(value);
+    BsonValue IObjectSerializer<BsonValue>.Serialize(object value) => Serialize(value);
 
-    object IPayloadSerializer<BsonValue>.Deserialize(BsonValue payload, Type type) =>
-        Deserialize(payload.AsBsonDocument, type);
+    object IObjectSerializer<BsonValue>.Deserialize(BsonValue value, Type type) =>
+        Deserialize(value.AsBsonDocument, type);
 }

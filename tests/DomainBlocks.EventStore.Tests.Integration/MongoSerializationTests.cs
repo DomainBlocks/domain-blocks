@@ -24,40 +24,40 @@ public class MongoSerializationTests : MongoEventStoreTestFixture
     };
 
     [Test]
-    public async Task Should_write_and_read_event_with_bson_document_payload()
+    public async Task Should_write_and_read_event_as_bson_document()
     {
         await Should_write_and_read_event(TestEvent, new BsonDocumentSerializer());
     }
 
     [Test]
-    public async Task Should_write_and_read_event_with_bson_bytes_payload()
+    public async Task Should_write_and_read_event_as_bson_bytes()
     {
         await Should_write_and_read_event(TestEvent, new BsonBytesSerializer());
     }
 
     [Test]
-    public async Task Should_write_and_read_event_with_proto_bytes_payload()
+    public async Task Should_write_and_read_event_as_proto_bytes()
     {
         var serializer = new ProtobufBytesSerializer().AsBsonValueSerializer();
         await Should_write_and_read_event(TestProtoEvent, serializer);
     }
 
     [Test]
-    public async Task Should_write_and_read_event_with_proto_json_string_payload()
+    public async Task Should_write_and_read_event_as_proto_json_string()
     {
         var serializer = new ProtobufJsonStringSerializer().AsBsonValueSerializer();
         await Should_write_and_read_event(TestProtoEvent, serializer);
     }
 
     [Test]
-    public async Task Should_write_and_read_event_with_json_bytes_payload()
+    public async Task Should_write_and_read_event_as_json_bytes()
     {
         var serializer = new SystemTextJsonBytesSerializer().AsBsonValueSerializer();
         await Should_write_and_read_event(TestEvent, serializer);
     }
 
     [Test]
-    public async Task Should_write_and_read_event_with_json_string_payload()
+    public async Task Should_write_and_read_event_as_json_string()
     {
         var serializer = new SystemTextJsonStringSerializer().AsBsonValueSerializer();
         await Should_write_and_read_event(TestEvent, serializer);
@@ -65,7 +65,7 @@ public class MongoSerializationTests : MongoEventStoreTestFixture
 
     private async Task Should_write_and_read_event<TEvent>(
         TEvent @event,
-        IPayloadSerializer<BsonValue> serializer) where TEvent : notnull
+        IObjectSerializer<BsonValue> serializer) where TEvent : notnull
     {
         var client = CreateEventStore(serializer);
         var streamId = $"test-{serializer.GetType().Name}-{Guid.NewGuid()}";
@@ -74,12 +74,12 @@ public class MongoSerializationTests : MongoEventStoreTestFixture
 
         readEvents
             .ShouldHaveSingleItem()
-            .Payload
+            .Value
             .ShouldBeOfType<TEvent>()
             .ShouldBe(@event);
     }
 
-    private static EventStoreClient<object, BsonValue> CreateEventStore(IPayloadSerializer<BsonValue> serializer)
+    private static EventStoreClient<object, BsonValue> CreateEventStore(IObjectSerializer<BsonValue> serializer)
     {
         var eventTypeMap = new EventTypeMapBuilder()
             .MapType<UserCreated>()

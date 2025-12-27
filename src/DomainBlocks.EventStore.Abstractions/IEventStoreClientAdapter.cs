@@ -10,7 +10,7 @@ public interface IEventStoreClientAdapter<TSerialized> where TSerialized : notnu
         AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default);
 
-    IAsyncEnumerable<CommittedEvent<TSerialized>> ReadStreamAsync(
+    IAsyncEnumerable<ReadEvent<TSerialized>> ReadStreamAsync(
         string streamId,
         ReadStreamOptions? options = null,
         CancellationToken cancellationToken = default);

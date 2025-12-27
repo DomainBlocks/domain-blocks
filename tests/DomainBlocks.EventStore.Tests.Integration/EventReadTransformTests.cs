@@ -69,7 +69,7 @@ public class EventReadTransformTests : MongoEventStoreTestFixture
         var readEvents = await client
             .ReadStreamAsync(streamId)
             .Transform([new ShipmentDispatchedTransform()])
-            .Select(x => x.Payload)
+            .Select(x => x.Value)
             .ToArrayAsync();
 
         readEvents.ShouldBe(expectedEvents);
@@ -94,7 +94,7 @@ public class EventReadTransformTests : MongoEventStoreTestFixture
 
     private class ShipmentDispatchedTransform : EventReadTransform<object, ShipmentDispatched>
     {
-        protected override IEnumerable<object> Apply(ShipmentDispatched sourceEvent, CommittedEventHeader header)
+        protected override IEnumerable<object> Apply(ShipmentDispatched sourceEvent, ReadEventHeader header)
         {
             yield return new ShipmentDispatchedV2(
                 sourceEvent.ShipmentId,

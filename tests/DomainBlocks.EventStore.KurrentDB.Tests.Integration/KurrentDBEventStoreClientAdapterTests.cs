@@ -1,11 +1,10 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Events;
-using DomainBlocks.EventStore.KurrentDB;
 using DomainBlocks.Testing.Integration;
 using KurrentDB.Client;
 using NUnit.Framework;
 
-namespace DomainBlocks.EventStore.KurrentDb.Tests.Integration;
+namespace DomainBlocks.EventStore.KurrentDB.Tests.Integration;
 
 [TestFixture]
 public class KurrentDBEventStoreClientAdapterTests : EventStoreClientAdapterTests<ReadOnlyMemory<byte>>

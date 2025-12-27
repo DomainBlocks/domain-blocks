@@ -67,7 +67,7 @@ public class MongoEventStoreClientAdapter<TEventDocument, TSerialized>(
         }
     }
 
-    public async IAsyncEnumerable<CommittedEvent<TSerialized>> ReadStreamAsync(
+    public async IAsyncEnumerable<ReadEvent<TSerialized>> ReadStreamAsync(
         string streamId,
         ReadStreamOptions? readOptions = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -160,12 +160,12 @@ public class MongoEventStoreClientAdapter<TEventDocument, TSerialized>(
         IEnumerable<UncommittedEvent<TSerialized>> events,
         StreamVersion currentStreamVersion)
     {
-        var committedAt = DateTime.UtcNow;
+        var createdAt = DateTime.UtcNow;
 
         return events.Select((@event, index) =>
         {
             var streamVersion = currentStreamVersion.Add(index + 1);
-            return ToEventDocument(streamId, streamVersion, @event, committedAt);
+            return ToEventDocument(streamId, streamVersion, @event, createdAt);
         });
     }
 
@@ -173,9 +173,9 @@ public class MongoEventStoreClientAdapter<TEventDocument, TSerialized>(
         string streamId,
         StreamVersion version,
         UncommittedEvent<TSerialized> @event,
-        DateTime committedAt)
+        DateTime createdAt)
     {
-        var doc = options.EventDocumentConverter.ToEventDocument(@event, streamId, version, committedAt);
+        var doc = options.EventDocumentConverter.ToEventDocument(@event, streamId, version, createdAt);
 
         var expectedVersion = version.ToInt64();
         var actualVersion = _streamVersionFunc(doc);
@@ -184,7 +184,7 @@ public class MongoEventStoreClientAdapter<TEventDocument, TSerialized>(
         return doc;
     }
 
-    private CommittedEvent<TSerialized> FromEventDocument(TEventDocument doc)
+    private ReadEvent<TSerialized> FromEventDocument(TEventDocument doc)
     {
         var @event = options.EventDocumentConverter.FromEventDocument(doc);
 

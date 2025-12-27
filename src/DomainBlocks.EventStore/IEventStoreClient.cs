@@ -11,7 +11,7 @@ public interface IEventStoreClient<TEventBase> : IAsyncDisposable where TEventBa
         AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default);
 
-    IAsyncEnumerable<CommittedEvent<TEventBase>> ReadStreamAsync(
+    IAsyncEnumerable<ReadEvent<TEventBase>> ReadStreamAsync(
         string streamId,
         ReadStreamOptions? options = null,
         CancellationToken cancellationToken = default);
