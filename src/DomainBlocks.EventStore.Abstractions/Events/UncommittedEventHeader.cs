@@ -1,6 +1,6 @@
 using System.Collections.Immutable;
 
-namespace DomainBlocks.EventStore.Abstractions;
+namespace DomainBlocks.EventStore.Abstractions.Events;
 
 public sealed class UncommittedEventHeader
 {

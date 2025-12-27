@@ -1,25 +1,26 @@
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.Abstractions.Events;
 using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
-public static class MongoEventStoreAdapter
+public static class MongoEventStoreClientAdapter
 {
-    public static IMongoEventStoreAdapter<TPayload> Create<TEventDocument, TPayload>(
+    public static IMongoEventStoreClientAdapter<TPayload> Create<TEventDocument, TPayload>(
         IMongoDatabase database,
         MongoEventStoreOptions<TEventDocument, TPayload> options) where TPayload : notnull
     {
         var collection = database.GetCollection<TEventDocument>(options.EventCollectionName);
-        return new MongoEventStoreAdapter<TEventDocument, TPayload>(collection, options);
+        return new MongoEventStoreClientAdapter<TEventDocument, TPayload>(collection, options);
     }
 }
 
-public class MongoEventStoreAdapter<TEventDocument, TPayload>(
+public class MongoEventStoreClientAdapter<TEventDocument, TPayload>(
     IMongoCollection<TEventDocument> collection,
     MongoEventStoreOptions<TEventDocument, TPayload> options) :
-    IMongoEventStoreAdapter<TPayload> where TPayload : notnull
+    IMongoEventStoreClientAdapter<TPayload> where TPayload : notnull
 {
     private readonly FieldDefinition<TEventDocument, string> _streamIdField = options.StreamIdField;
     private readonly FieldDefinition<TEventDocument, long> _streamVersionField = options.StreamVersionField;

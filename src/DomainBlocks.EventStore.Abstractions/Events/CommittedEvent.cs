@@ -1,4 +1,4 @@
-namespace DomainBlocks.EventStore.Abstractions;
+namespace DomainBlocks.EventStore.Abstractions.Events;
 
 public static class CommittedEvent
 {
@@ -9,7 +9,8 @@ public static class CommittedEvent
     }
 }
 
-public sealed class CommittedEvent<TPayload>(CommittedEventHeader header, TPayload payload) where TPayload : notnull
+public sealed class CommittedEvent<TPayload>(CommittedEventHeader header, TPayload payload) : IReadEvent<TPayload>
+    where TPayload : notnull
 {
     public CommittedEventHeader Header { get; } = header;
     public TPayload Payload { get; } = payload;

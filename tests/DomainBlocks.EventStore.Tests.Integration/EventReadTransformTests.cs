@@ -1,4 +1,5 @@
-using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.Abstractions.Events;
+using DomainBlocks.EventStore.Read;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Testing.Integration.MongoDB;
 using MongoDB.Bson;
@@ -58,17 +59,18 @@ public class EventReadTransformTests : MongoEventStoreTestFixture
         {
             AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync<BsonDocument>(ct),
             TypeMap = eventTypeMap,
-            Serializer = new BsonDocumentSerializer(),
-            ReadTransforms =
-            [
-                new ShipmentDispatchedTransform()
-            ]
+            Serializer = new BsonDocumentSerializer()
         };
 
         var client = new EventStoreClient<BsonDocument>(clientOptions);
         var streamId = $"test-read-transform-{Guid.NewGuid()}";
         await client.AppendToStreamAsync(streamId, [legacyEvent]);
-        var readEvents = await client.ReadStreamAsync(streamId).Select(x => x.Payload).ToArrayAsync();
+
+        var readEvents = await client
+            .ReadStreamAsync(streamId)
+            .Transform([new ShipmentDispatchedTransform()])
+            .Select(x => x.Payload)
+            .ToArrayAsync();
 
         readEvents.ShouldBe(expectedEvents);
     }
@@ -92,16 +94,16 @@ public class EventReadTransformTests : MongoEventStoreTestFixture
 
     private class ShipmentDispatchedTransform : EventReadTransform<ShipmentDispatched>
     {
-        protected override IEnumerable<object> Apply(ShipmentDispatched @event, CommittedEventHeader header)
+        protected override IEnumerable<object> Apply(ShipmentDispatched sourceEvent, CommittedEventHeader header)
         {
             yield return new ShipmentDispatchedV2(
-                @event.ShipmentId,
-                @event.DispatchedAt);
+                sourceEvent.ShipmentId,
+                sourceEvent.DispatchedAt);
 
-            foreach (var pkg in @event.Packages)
+            foreach (var pkg in sourceEvent.Packages)
             {
                 yield return new PackageShipped(
-                    @event.ShipmentId,
+                    sourceEvent.ShipmentId,
                     pkg.TrackingNumber,
                     pkg.WeightKg,
                     pkg.Destination);

@@ -2,13 +2,16 @@ using System.Collections.Frozen;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.Abstractions.Events;
 using KurrentDB.Client;
 using KurrentStreamPosition = KurrentDB.Client.StreamPosition;
 using StreamNotFoundException = DomainBlocks.EventStore.Abstractions.StreamNotFoundException;
 
 namespace DomainBlocks.EventStore.KurrentDB;
 
-public class KurrentDbEventStoreAdapter(KurrentDBClient client) : IKurrentDbEventStoreAdapter, IAsyncDisposable
+public class KurrentDBEventStoreClientAdapter(KurrentDBClient client) :
+    IKurrentDBEventStoreClientAdapter,
+    IAsyncDisposable
 {
     public async Task AppendToStreamAsync(
         string streamId,
