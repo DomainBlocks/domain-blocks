@@ -3,7 +3,7 @@ using Google.Protobuf;
 
 namespace DomainBlocks.Serialization.Google.Protobuf;
 
-public sealed class ProtobufJsonStringSerializer(JsonFormatter.Settings? settings = null) : IPayloadSerializer<string>
+public sealed class ProtobufJsonStringSerializer(JsonFormatter.Settings? settings = null) : IObjectSerializer<string>
 {
     private readonly JsonFormatter _formatter = new(settings ?? JsonFormatter.Settings.Default);
 
@@ -12,12 +12,12 @@ public sealed class ProtobufJsonStringSerializer(JsonFormatter.Settings? setting
         ArgumentNullException.ThrowIfNull(value);
 
         if (value is not IMessage message)
-            throw new ArgumentException("Object must implement IMessage.", nameof(value));
+            throw new ArgumentException("Value must implement IMessage.", nameof(value));
 
         return _formatter.Format(message);
     }
 
-    public object Deserialize(string payload, Type type)
+    public object Deserialize(string value, Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
 
@@ -26,6 +26,6 @@ public sealed class ProtobufJsonStringSerializer(JsonFormatter.Settings? setting
 
         var parser = MessageParserCache.Get(type);
 
-        return parser.ParseJson(payload);
+        return parser.ParseJson(value);
     }
 }

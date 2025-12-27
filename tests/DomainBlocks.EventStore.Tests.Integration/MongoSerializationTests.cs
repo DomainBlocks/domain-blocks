@@ -65,7 +65,7 @@ public class MongoSerializationTests : MongoEventStoreTestFixture
 
     private async Task Should_write_and_read_event<TEvent>(
         TEvent @event,
-        IPayloadSerializer<BsonValue> serializer) where TEvent : notnull
+        IObjectSerializer<BsonValue> serializer) where TEvent : notnull
     {
         var client = CreateEventStore(serializer);
         var streamId = $"test-{serializer.GetType().Name}-{Guid.NewGuid()}";
@@ -79,7 +79,7 @@ public class MongoSerializationTests : MongoEventStoreTestFixture
             .ShouldBe(@event);
     }
 
-    private static EventStoreClient<object, BsonValue> CreateEventStore(IPayloadSerializer<BsonValue> serializer)
+    private static EventStoreClient<object, BsonValue> CreateEventStore(IObjectSerializer<BsonValue> serializer)
     {
         var eventTypeMap = new EventTypeMapBuilder()
             .MapType<UserCreated>()

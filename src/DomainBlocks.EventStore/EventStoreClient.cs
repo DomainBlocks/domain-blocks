@@ -13,7 +13,7 @@ public sealed class EventStoreClient<TEventBase, TSerialized> :
 {
     private readonly Func<CancellationToken, ValueTask<IEventStoreClientAdapter<TSerialized>>> _adapterFactory;
     private readonly EventTypeMap _eventTypeMap;
-    private readonly IPayloadSerializer<TSerialized> _serializer;
+    private readonly IObjectSerializer<TSerialized> _serializer;
     private readonly FrozenDictionary<Type, IEventContractMapper<TEventBase>> _contractMappersByEventType;
     private readonly FrozenDictionary<Type, IEventContractMapper<TEventBase>> _contractMappersByContractType;
     private readonly CancellationTokenSource _lifetimeCts = new();

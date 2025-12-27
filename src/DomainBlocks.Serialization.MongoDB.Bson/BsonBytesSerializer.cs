@@ -5,20 +5,20 @@ using MongoDB.Bson.Serialization;
 namespace DomainBlocks.Serialization.MongoDB.Bson;
 
 public sealed class BsonBytesSerializer :
-    IPayloadSerializer<byte[]>,
-    IPayloadSerializer<ReadOnlyMemory<byte>>,
-    IPayloadSerializer<BsonValue>
+    IObjectSerializer<byte[]>,
+    IObjectSerializer<ReadOnlyMemory<byte>>,
+    IObjectSerializer<BsonValue>
 {
     public byte[] Serialize(object value) => value.ToBson(value.GetType());
 
-    public object Deserialize(byte[] payload, Type type) => BsonSerializer.Deserialize(payload, type);
+    public object Deserialize(byte[] value, Type type) => BsonSerializer.Deserialize(value, type);
 
-    ReadOnlyMemory<byte> IPayloadSerializer<ReadOnlyMemory<byte>>.Serialize(object value) => Serialize(value);
+    ReadOnlyMemory<byte> IObjectSerializer<ReadOnlyMemory<byte>>.Serialize(object value) => Serialize(value);
 
-    object IPayloadSerializer<ReadOnlyMemory<byte>>.Deserialize(ReadOnlyMemory<byte> payload, Type type) =>
-        Deserialize(payload.ToArray(), type);
+    object IObjectSerializer<ReadOnlyMemory<byte>>.Deserialize(ReadOnlyMemory<byte> value, Type type) =>
+        Deserialize(value.ToArray(), type);
 
-    BsonValue IPayloadSerializer<BsonValue>.Serialize(object value) => Serialize(value);
+    BsonValue IObjectSerializer<BsonValue>.Serialize(object value) => Serialize(value);
 
-    public object Deserialize(BsonValue payload, Type type) => Deserialize(payload.AsByteArray, type);
+    public object Deserialize(BsonValue value, Type type) => Deserialize(value.AsByteArray, type);
 }

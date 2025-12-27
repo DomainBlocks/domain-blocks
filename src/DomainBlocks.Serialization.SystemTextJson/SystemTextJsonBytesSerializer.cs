@@ -4,8 +4,8 @@ using DomainBlocks.Serialization.Abstractions;
 namespace DomainBlocks.Serialization.SystemTextJson;
 
 public sealed class SystemTextJsonBytesSerializer(JsonSerializerOptions? options = null) :
-    IPayloadSerializer<byte[]>,
-    IPayloadSerializer<ReadOnlyMemory<byte>>
+    IObjectSerializer<byte[]>,
+    IObjectSerializer<ReadOnlyMemory<byte>>
 {
     public byte[] Serialize(object value)
     {
@@ -15,27 +15,27 @@ public sealed class SystemTextJsonBytesSerializer(JsonSerializerOptions? options
         }
         catch (Exception ex)
         {
-            throw PayloadSerializationException.ForSerialization(value.GetType(), ex);
+            throw ObjectSerializationException.ForSerialization(value.GetType(), ex);
         }
     }
 
-    public object Deserialize(byte[] payload, Type type)
+    public object Deserialize(byte[] value, Type type)
     {
         object? result;
 
         try
         {
-            result = JsonSerializer.Deserialize(payload, type, options);
+            result = JsonSerializer.Deserialize(value, type, options);
         }
         catch (Exception ex)
         {
-            throw PayloadSerializationException.ForDeserialization(type, ex);
+            throw ObjectSerializationException.ForDeserialization(type, ex);
         }
 
-        return result ?? throw PayloadSerializationException.NullResult(type);
+        return result ?? throw ObjectSerializationException.NullResult(type);
     }
 
-    ReadOnlyMemory<byte> IPayloadSerializer<ReadOnlyMemory<byte>>.Serialize(object value)
+    ReadOnlyMemory<byte> IObjectSerializer<ReadOnlyMemory<byte>>.Serialize(object value)
     {
         try
         {
@@ -43,23 +43,23 @@ public sealed class SystemTextJsonBytesSerializer(JsonSerializerOptions? options
         }
         catch (Exception ex)
         {
-            throw PayloadSerializationException.ForSerialization(value.GetType(), ex);
+            throw ObjectSerializationException.ForSerialization(value.GetType(), ex);
         }
     }
 
-    object IPayloadSerializer<ReadOnlyMemory<byte>>.Deserialize(ReadOnlyMemory<byte> payload, Type type)
+    object IObjectSerializer<ReadOnlyMemory<byte>>.Deserialize(ReadOnlyMemory<byte> value, Type type)
     {
         object? result;
 
         try
         {
-            result = JsonSerializer.Deserialize(payload.Span, type, options);
+            result = JsonSerializer.Deserialize(value.Span, type, options);
         }
         catch (Exception ex)
         {
-            throw PayloadSerializationException.ForDeserialization(type, ex);
+            throw ObjectSerializationException.ForDeserialization(type, ex);
         }
 
-        return result ?? throw PayloadSerializationException.NullResult(type);
+        return result ?? throw ObjectSerializationException.NullResult(type);
     }
 }
