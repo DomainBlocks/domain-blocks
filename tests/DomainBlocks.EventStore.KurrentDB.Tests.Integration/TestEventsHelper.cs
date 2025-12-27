@@ -1,7 +1,7 @@
 using System.Text.Json;
 using DomainBlocks.EventStore.Abstractions.Events;
 
-namespace DomainBlocks.EventStore.KurrentDb.Tests.Integration;
+namespace DomainBlocks.EventStore.KurrentDB.Tests.Integration;
 
 internal static class TestEventsHelper
 {
