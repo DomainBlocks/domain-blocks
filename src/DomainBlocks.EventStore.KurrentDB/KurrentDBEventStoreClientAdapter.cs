@@ -25,7 +25,7 @@ public class KurrentDBEventStoreClientAdapter(KurrentDBClient client) :
         var eventData = events.Select(e =>
         {
             var serializedMetadata = JsonSerializer.SerializeToUtf8Bytes(e.Header.Metadata);
-            return new EventData(Uuid.NewUuid(), e.Header.EventName, e.Payload, serializedMetadata);
+            return new EventData(Uuid.NewUuid(), e.Header.EventName, e.Value, serializedMetadata);
         });
 
         try

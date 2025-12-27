@@ -5,11 +5,11 @@ using Shouldly;
 
 namespace DomainBlocks.Testing.Integration;
 
-public abstract class EventStoreClientAdapterTests<TPayload> where TPayload : notnull
+public abstract class EventStoreClientAdapterTests<TSerialized> where TSerialized : notnull
 {
     private const int TestTimeoutMillis = 5_000;
 
-    private IEventStoreClientAdapter<TPayload> _adapter = null!;
+    private IEventStoreClientAdapter<TSerialized> _adapter = null!;
 
     private static IEnumerable<TestCaseData> PositionAndDirectionCases
     {
@@ -42,7 +42,7 @@ public abstract class EventStoreClientAdapterTests<TPayload> where TPayload : no
     public async Task AppendToStreamAsync_ExpectedStateIsAnyAndStreamDoesNotExist_AppendsEvents(
         CancellationToken cancellationToken)
     {
-        UncommittedEvent<TPayload>[] events =
+        UncommittedEvent<TSerialized>[] events =
         [
             CreateTestEvent("TestEvent1"),
             CreateTestEvent("TestEvent2"),
@@ -69,14 +69,14 @@ public abstract class EventStoreClientAdapterTests<TPayload> where TPayload : no
     public async Task AppendToStreamAsync_ExpectedStateIsAnyAndStreamExists_AppendsEvents(
         CancellationToken cancellationToken)
     {
-        UncommittedEvent<TPayload>[] events1 =
+        UncommittedEvent<TSerialized>[] events1 =
         [
             CreateTestEvent("TestEvent1"),
             CreateTestEvent("TestEvent2"),
             CreateTestEvent("TestEvent3")
         ];
 
-        UncommittedEvent<TPayload>[] events2 =
+        UncommittedEvent<TSerialized>[] events2 =
         [
             CreateTestEvent("TestEvent4"),
             CreateTestEvent("TestEvent5"),
@@ -253,7 +253,7 @@ public abstract class EventStoreClientAdapterTests<TPayload> where TPayload : no
             .ShouldThrowAsync<StreamNotFoundException>();
     }
 
-    protected abstract Task<IEventStoreClientAdapter<TPayload>> CreateEventStoreAdapterAsync();
+    protected abstract Task<IEventStoreClientAdapter<TSerialized>> CreateEventStoreAdapterAsync();
 
-    protected abstract UncommittedEvent<TPayload> CreateTestEvent(string eventName);
+    protected abstract UncommittedEvent<TSerialized> CreateTestEvent(string eventName);
 }

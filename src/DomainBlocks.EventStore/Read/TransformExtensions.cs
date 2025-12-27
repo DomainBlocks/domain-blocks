@@ -31,9 +31,9 @@ public static class TransformExtensions
 
                 while (queue.TryDequeue(out var nextEvent))
                 {
-                    if (transformsByType.TryGetValue(nextEvent.Payload.GetType(), out var transform))
+                    if (transformsByType.TryGetValue(nextEvent.Value.GetType(), out var transform))
                     {
-                        var transformedEvents = transform.Apply(nextEvent.Payload, nextEvent.Header);
+                        var transformedEvents = transform.Apply(nextEvent.Value, nextEvent.Header);
 
                         foreach (var transformedEvent in transformedEvents)
                             queue.Enqueue(new TransformedEvent<TEventBase>(nextEvent.Header, transformedEvent));

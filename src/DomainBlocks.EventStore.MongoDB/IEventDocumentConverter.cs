@@ -7,7 +7,7 @@ namespace DomainBlocks.EventStore.MongoDB;
 /// Provides conversion between uncommitted/committed event wrappers and event documents for Mongo persistence.
 /// </summary>
 /// <typeparam name="TEventDocument">The document type used to store events.</typeparam>
-/// <typeparam name="TSerialized">The serialized event payload type.</typeparam>
+/// <typeparam name="TSerialized">The serialized event type.</typeparam>
 public interface IEventDocumentConverter<TEventDocument, TSerialized> where TSerialized : notnull
 {
     /// <summary>

@@ -69,7 +69,7 @@ public class EventReadTransformTests : MongoEventStoreTestFixture
         var readEvents = await client
             .ReadStreamAsync(streamId)
             .Transform([new ShipmentDispatchedTransform()])
-            .Select(x => x.Payload)
+            .Select(x => x.Value)
             .ToArrayAsync();
 
         readEvents.ShouldBe(expectedEvents);

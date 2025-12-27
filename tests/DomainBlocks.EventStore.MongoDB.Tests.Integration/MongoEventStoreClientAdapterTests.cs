@@ -22,11 +22,13 @@ public class MongoEventStoreClientAdapterTests : EventStoreClientAdapterTests<Bs
 
     protected override UncommittedEvent<BsonDocument> CreateTestEvent(string eventName)
     {
-        var payload = new BsonDocument
+        var header = new UncommittedEventHeader(eventName);
+
+        var value = new BsonDocument
         {
             { "TestProperty", "TestValue" }
         };
 
-        return UncommittedEvent.Create(new UncommittedEventHeader(eventName), payload);
+        return UncommittedEvent.Create(header, value);
     }
 }

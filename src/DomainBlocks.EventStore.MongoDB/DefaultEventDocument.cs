@@ -13,5 +13,5 @@ public class DefaultEventDocument<TSerialized>
     public required string EventName { get; init; }
     public required IReadOnlyDictionary<string, string> Metadata { get; init; }
     public required DateTime CommittedAt { get; init; }
-    public required TSerialized Payload { get; init; }
+    public required TSerialized Value { get; init; }
 }

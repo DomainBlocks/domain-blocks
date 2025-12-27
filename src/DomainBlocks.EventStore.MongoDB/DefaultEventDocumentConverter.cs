@@ -25,7 +25,7 @@ public sealed class DefaultEventDocumentConverter<TSerialized> :
             EventName = @event.Header.EventName,
             Metadata = @event.Header.Metadata,
             CommittedAt = committedAt,
-            Payload = @event.Payload
+            Value = @event.Value
         };
     }
 
@@ -39,6 +39,6 @@ public sealed class DefaultEventDocumentConverter<TSerialized> :
                 document.EventName,
                 document.Metadata,
                 document.CommittedAt),
-            document.Payload);
+            document.Value);
     }
 }

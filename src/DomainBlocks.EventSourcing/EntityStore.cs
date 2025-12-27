@@ -85,7 +85,7 @@ public sealed class EntityStore<TEventBase>(
             await foreach (var e in events.ConfigureAwait(false))
             {
                 loadedVersion = e.Header.StreamVersion;
-                yield return e.Payload;
+                yield return e.Value;
             }
         }
     }

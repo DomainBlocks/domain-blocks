@@ -23,5 +23,5 @@ public class ObjectSerializationException : DomainBlocksException
         new($"Deserialization failed for type '{type.FullName}'.", innerException);
 
     public static ObjectSerializationException NullResult(Type type) =>
-        new($"Payload deserialized to null for type '{type.FullName}'.");
+        new($"Value deserialized to null for type '{type.FullName}'.");
 }

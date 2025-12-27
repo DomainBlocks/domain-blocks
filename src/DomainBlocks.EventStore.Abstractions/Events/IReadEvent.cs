@@ -1,7 +1,7 @@
 namespace DomainBlocks.EventStore.Abstractions.Events;
 
-public interface IReadEvent<out TPayload> where TPayload : notnull
+public interface IReadEvent<out TValue> where TValue : notnull
 {
     CommittedEventHeader Header { get; }
-    TPayload Payload { get; }
+    TValue Value { get; }
 }

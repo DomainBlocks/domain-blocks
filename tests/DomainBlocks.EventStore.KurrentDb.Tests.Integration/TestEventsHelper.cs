@@ -1,3 +1,4 @@
+using System.Text.Json;
 using DomainBlocks.EventStore.Abstractions.Events;
 
 namespace DomainBlocks.EventStore.KurrentDb.Tests.Integration;
@@ -6,14 +7,15 @@ internal static class TestEventsHelper
 {
     internal static UncommittedEvent<ReadOnlyMemory<byte>> CreateTestEvent(string eventName)
     {
-        var payload = new Dictionary<string, string>
+        var header = new UncommittedEventHeader(eventName);
+
+        var value = new Dictionary<string, string>
         {
             { "TestProperty", "TestValue" }
         };
 
-        var header = new UncommittedEventHeader(eventName);
-        ReadOnlyMemory<byte> serializeToUtf8Bytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(payload);
+        ReadOnlyMemory<byte> serializedValue = JsonSerializer.SerializeToUtf8Bytes(value);
 
-        return UncommittedEvent.Create(header, serializeToUtf8Bytes);
+        return UncommittedEvent.Create(header, serializedValue);
     }
 }
