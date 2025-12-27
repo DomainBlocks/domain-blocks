@@ -20,7 +20,7 @@ public class KurrentDBEventStoreClientAdapter(KurrentDBClient client) :
         CancellationToken cancellationToken = default)
     {
         options ??= AppendToStreamOptions.Default;
-        var kurrentDbStreamState = ToKurrentDbStreamState(options.ExpectedState);
+        var kurrentExpectedState = ToKurrentStreamState(options.ExpectedState);
 
         var eventData = events.Select(e =>
         {
@@ -33,14 +33,14 @@ public class KurrentDBEventStoreClientAdapter(KurrentDBClient client) :
             _ = await client
                 .AppendToStreamAsync(
                     streamId,
-                    kurrentDbStreamState,
+                    kurrentExpectedState,
                     eventData,
                     cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (WrongExpectedVersionException ex)
         {
-            throw MapWrongExpectedVersionException(ex, streamId, options.ExpectedState);
+            throw MapWrongExpectedVersionException(streamId, options.ExpectedState, ex);
         }
     }
 
@@ -50,8 +50,8 @@ public class KurrentDBEventStoreClientAdapter(KurrentDBClient client) :
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         options ??= ReadStreamOptions.Default;
-        var direction = options.Direction;
         var position = options.Position;
+        var direction = options.Direction;
         var kurrentDirection = direction == StreamReadDirection.Forward ? Direction.Forwards : Direction.Backwards;
 
         var revision = position switch
@@ -106,68 +106,37 @@ public class KurrentDBEventStoreClientAdapter(KurrentDBClient client) :
     public ValueTask DisposeAsync() => client.DisposeAsync();
 
     private static WrongExpectedStreamStateException MapWrongExpectedVersionException(
-        WrongExpectedVersionException ex,
         string streamId,
-        ExpectedStreamState expectedStreamState)
+        ExpectedStreamState expectedState,
+        WrongExpectedVersionException sourceException)
     {
-        // We request an "expectedStreamState", but kurrent returns an actual that will just be either StreamRevision,
-        // or NoStream.The goal of this method is to convert from "WrongExpectedVersionException" to
-        // "WrongExpectedStreamStateException", so we need to provide the actual stream state.
-        var actualState = ToExpectedStreamState(ex.ActualStreamState);
+        var actualState = sourceException.ActualStreamState;
 
-        // When we expect "StreamDoesNotExist" & the stream does exist, Kurrent returns the actual stream version.
-        if (expectedStreamState.IsStreamDoesNotExist &&
-            expectedStreamState.IsStreamDoesNotExist != actualState.IsStreamDoesNotExist)
-        {
-            var streamRevision = actualState.IsSpecificVersion ? actualState.Version.Value : StreamVersion.None;
-            return WrongExpectedStreamStateException.ExpectedStreamToNotExist(streamId, streamRevision);
-        }
-
-        if ((expectedStreamState.IsStreamExists || expectedStreamState.IsAny) && actualState.IsStreamDoesNotExist)
-        {
+        if (expectedState.IsStreamExists && actualState == StreamState.NoStream)
             return WrongExpectedStreamStateException.ExpectedStreamToExist(streamId);
-        }
 
-        if (expectedStreamState.IsSpecificVersion)
+        if (actualState.HasPosition)
         {
-            // We have a version conflict. Either because the stream doesn't exist or the version is different.
-            // So the stream revision is either None or the actual version.
-            var actualStreamRevision = actualState.IsSpecificVersion ? actualState.Version.Value : StreamVersion.None;
+            var actualVersion = StreamVersion.FromInt64(actualState.ToInt64());
 
-            return WrongExpectedStreamStateException.VersionConflict(
-                streamId,
-                ToExpectedStreamState(ex.ExpectedStreamState),
-                actualStreamRevision);
+            if (expectedState.IsStreamDoesNotExist)
+                return WrongExpectedStreamStateException.ExpectedStreamToNotExist(streamId, actualVersion);
+
+            if (expectedState.IsSpecificVersion)
+                return WrongExpectedStreamStateException.VersionConflict(streamId, expectedState, actualVersion);
         }
 
-        return WrongExpectedStreamStateException.Unknown(streamId, expectedStreamState, ex);
+        return WrongExpectedStreamStateException.Unknown(streamId, expectedState, sourceException);
     }
 
-    private static StreamState ToKurrentDbStreamState(ExpectedStreamState streamState) => streamState switch
+    private static StreamState ToKurrentStreamState(ExpectedStreamState expectedState) => expectedState switch
     {
-        _ when streamState.IsAny => StreamState.Any,
-        _ when streamState.IsStreamExists => StreamState.StreamExists,
-        _ when streamState.IsStreamDoesNotExist => StreamState.NoStream,
-        _ when streamState.IsSpecificVersion => StreamState.StreamRevision(streamState.Version.Value.ToUint64()),
-        _ => throw new ArgumentOutOfRangeException(nameof(streamState), streamState, null)
+        _ when expectedState.IsAny => StreamState.Any,
+        _ when expectedState.IsStreamExists => StreamState.StreamExists,
+        _ when expectedState.IsStreamDoesNotExist => StreamState.NoStream,
+        _ when expectedState.IsSpecificVersion => StreamState.StreamRevision(expectedState.Version.Value.ToUint64()),
+        _ => throw new ArgumentOutOfRangeException(nameof(expectedState), expectedState, null)
     };
-
-    private static ExpectedStreamState ToExpectedStreamState(StreamState streamState)
-    {
-        return streamState switch
-        {
-            _ when streamState == StreamState.Any => ExpectedStreamState.Any,
-            _ when streamState == StreamState.StreamExists => ExpectedStreamState.StreamExists,
-            _ when streamState == StreamState.NoStream => ExpectedStreamState.StreamDoesNotExist,
-            _ when streamState.HasPosition => FromVersion(streamState),
-            _ => throw new ArgumentOutOfRangeException(nameof(streamState), streamState, null)
-        };
-
-        static ExpectedStreamState FromVersion(StreamState streamState)
-        {
-            return ExpectedStreamState.FromVersion(StreamVersion.FromInt64(streamState.ToInt64()));
-        }
-    }
 
     private async Task<bool> StreamExistsAsync(string streamId, CancellationToken cancellationToken)
     {
