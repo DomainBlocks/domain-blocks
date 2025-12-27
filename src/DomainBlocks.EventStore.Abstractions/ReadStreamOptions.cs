@@ -11,9 +11,9 @@ public sealed class ReadStreamOptions
     public static readonly ReadStreamOptions Default = new();
 
     /// <summary>
-    /// The position at which to begin reading. Defaults to <see cref="StreamPosition.Start"/>.
+    /// The position at which to begin reading. Defaults to <see cref="StreamReadPosition.Start"/>.
     /// </summary>
-    public StreamPosition Position { get; init; } = StreamPosition.Start;
+    public StreamReadPosition Position { get; init; } = StreamReadPosition.Start;
 
     /// <summary>
     /// The direction in which to read events. Defaults to <see cref="StreamReadDirection.Forward"/>.

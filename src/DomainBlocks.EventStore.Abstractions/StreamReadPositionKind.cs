@@ -1,9 +1,9 @@
 namespace DomainBlocks.EventStore.Abstractions;
 
 /// <summary>
-/// Specifies the kind of position within a stream.
+/// Specifies the kind of position used when reading a stream.
 /// </summary>
-public enum StreamPositionKind
+public enum StreamReadPositionKind
 {
     /// <summary>
     /// Logical position at the start of the stream, before the first event.

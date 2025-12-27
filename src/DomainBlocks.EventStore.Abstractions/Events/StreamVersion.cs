@@ -1,4 +1,4 @@
-namespace DomainBlocks.EventStore.Abstractions;
+namespace DomainBlocks.EventStore.Abstractions.Events;
 
 /// <summary>
 /// Represents the version of a stream. Versions are zero-based, increasing with each appended event. A version of
