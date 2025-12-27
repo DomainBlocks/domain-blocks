@@ -88,15 +88,18 @@ public class KurrentDBEventStoreClientAdapter(KurrentDBClient client) :
 
         await foreach (var resolvedEvent in result.ConfigureAwait(false))
         {
+            var @event = resolvedEvent.Event;
+            var originalEvent = resolvedEvent.OriginalEvent;
+
             var header = new ReadEventHeader(
                 streamId,
-                StreamVersion.FromInt64(resolvedEvent.OriginalEvent.EventNumber.ToInt64()),
-                resolvedEvent.Event.EventType,
+                StreamVersion.FromInt64(originalEvent.EventNumber.ToInt64()),
+                @event.EventType,
                 FrozenDictionary<string, string>.Empty,
-                resolvedEvent.Event.Created.Date,
-                GlobalPosition.FromUInt64(resolvedEvent.OriginalEvent.Position.CommitPosition));
+                @event.Created.Date,
+                GlobalPosition.FromUInt64(originalEvent.Position.CommitPosition));
 
-            yield return ReadEvent.Create(header, resolvedEvent.Event.Data);
+            yield return ReadEvent.Create(header, @event.Data);
         }
     }
 
