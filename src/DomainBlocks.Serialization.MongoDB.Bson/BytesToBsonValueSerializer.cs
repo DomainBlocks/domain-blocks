@@ -3,7 +3,7 @@ using MongoDB.Bson;
 
 namespace DomainBlocks.Serialization.MongoDB.Bson;
 
-public sealed class ByteToBsonValueSerializer(IObjectSerializer<byte[]> serializer) : IObjectSerializer<BsonValue>
+public sealed class BytesToBsonValueSerializer(IObjectSerializer<byte[]> serializer) : IObjectSerializer<BsonValue>
 {
     public BsonValue Serialize(object value) => serializer.Serialize(value);
 

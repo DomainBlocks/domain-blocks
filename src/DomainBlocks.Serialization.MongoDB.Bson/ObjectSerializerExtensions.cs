@@ -7,7 +7,7 @@ public static class ObjectSerializerExtensions
 {
     public static IObjectSerializer<BsonValue> AsBsonValueSerializer(this IObjectSerializer<byte[]> serializer)
     {
-        return new ByteToBsonValueSerializer(serializer);
+        return new BytesToBsonValueSerializer(serializer);
     }
 
     public static IObjectSerializer<BsonValue> AsBsonValueSerializer(this IObjectSerializer<string> serializer)
