@@ -5,7 +5,7 @@ namespace DomainBlocks.EventStore.MongoDB;
 /// <summary>
 /// The default event document for storing and retrieving events in Mongo.
 /// </summary>
-public class DefaultEventDocument<TPayload>
+public class DefaultEventDocument<TSerialized>
 {
     public ObjectId Id { get; init; }
     public required string StreamId { get; init; }
@@ -13,5 +13,5 @@ public class DefaultEventDocument<TPayload>
     public required string EventName { get; init; }
     public required IReadOnlyDictionary<string, string> Metadata { get; init; }
     public required DateTime CommittedAt { get; init; }
-    public required TPayload Payload { get; init; }
+    public required TSerialized Payload { get; init; }
 }

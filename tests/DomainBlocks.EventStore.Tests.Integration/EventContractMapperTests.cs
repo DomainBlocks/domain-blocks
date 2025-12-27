@@ -14,7 +14,7 @@ public class EventContractMapperTests : MongoEventStoreTestFixture
             .MapType<Proto.UserCreated>()
             .Build();
 
-        var clientOptions = new EventStoreClientOptions<byte[]>
+        var clientOptions = new EventStoreClientOptions<object, byte[]>
         {
             AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync<byte[]>(ct),
             TypeMap = eventTypeMap,
@@ -25,7 +25,7 @@ public class EventContractMapperTests : MongoEventStoreTestFixture
             ]
         };
 
-        var client = new EventStoreClient<byte[]>(clientOptions);
+        var client = new EventStoreClient<object, byte[]>(clientOptions);
 
         var originalEvent = new UserCreated
         {
@@ -52,7 +52,7 @@ public class EventContractMapperTests : MongoEventStoreTestFixture
         public required string Name { get; init; }
     }
 
-    private class UserCreatedProtoMapper : EventContractMapper<UserCreated, Proto.UserCreated>
+    private class UserCreatedProtoMapper : EventContractMapper<object, UserCreated, Proto.UserCreated>
     {
         protected override Proto.UserCreated ToContract(UserCreated @event)
         {

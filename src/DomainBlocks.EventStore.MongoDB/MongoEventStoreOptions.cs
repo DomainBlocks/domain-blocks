@@ -14,14 +14,14 @@ public static class MongoEventStoreOptions
         return CreateDefault<BsonValue>(eventCollectionName);
     }
 
-    public static MongoEventStoreOptions<DefaultEventDocument<TPayload>, TPayload> CreateDefault<TPayload>(
+    public static MongoEventStoreOptions<DefaultEventDocument<TSerialized>, TSerialized> CreateDefault<TSerialized>(
         string eventCollectionName = DefaultEventCollectionName)
-        where TPayload : notnull
+        where TSerialized : notnull
     {
-        return new MongoEventStoreOptions<DefaultEventDocument<TPayload>, TPayload>
+        return new MongoEventStoreOptions<DefaultEventDocument<TSerialized>, TSerialized>
         {
             EventCollectionName = eventCollectionName,
-            EventDocumentConverter = new DefaultEventDocumentConverter<TPayload>(),
+            EventDocumentConverter = new DefaultEventDocumentConverter<TSerialized>(),
             StreamIdExpression = doc => doc.StreamId,
             StreamVersionExpression = doc => doc.StreamVersion,
             CommittedAtExpression = doc => doc.CommittedAt
@@ -29,10 +29,10 @@ public static class MongoEventStoreOptions
     }
 }
 
-public class MongoEventStoreOptions<TEventDocument, TPayload> where TPayload : notnull
+public class MongoEventStoreOptions<TEventDocument, TSerialized> where TSerialized : notnull
 {
     public required string EventCollectionName { get; init; }
-    public required IEventDocumentConverter<TEventDocument, TPayload> EventDocumentConverter { get; init; }
+    public required IEventDocumentConverter<TEventDocument, TSerialized> EventDocumentConverter { get; init; }
     public required Expression<Func<TEventDocument, string>> StreamIdExpression { get; init; }
     public required Expression<Func<TEventDocument, long>> StreamVersionExpression { get; init; }
     public required Expression<Func<TEventDocument, DateTime>> CommittedAtExpression { get; init; }

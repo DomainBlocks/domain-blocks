@@ -5,7 +5,6 @@ using DomainBlocks.Testing.Integration;
 using KurrentDB.Client;
 using NUnit.Framework;
 
-
 namespace DomainBlocks.EventStore.KurrentDb.Tests.Integration;
 
 [TestFixture]

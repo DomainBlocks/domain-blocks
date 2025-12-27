@@ -1,18 +1,20 @@
+using DomainBlocks.EventSourcing.Tests.Integration.DomainEvents;
+
 namespace DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 
 public abstract class MutableAggregateBase
 {
-    private readonly List<object> _raisedEvents = [];
+    private readonly List<IDomainEvent> _raisedEvents = [];
 
     public abstract Guid Id { get; }
-    public IEnumerable<object> RaisedEvents => _raisedEvents.AsReadOnly();
+    public IEnumerable<IDomainEvent> RaisedEvents => _raisedEvents.AsReadOnly();
 
     public void Apply(object @event)
     {
         ((dynamic)this).Apply((dynamic)@event);
     }
 
-    protected void Raise<TEvent>(TEvent @event)
+    protected void Raise<TEvent>(TEvent @event) where TEvent : IDomainEvent
     {
         if (@event == null) throw new ArgumentNullException(nameof(@event));
         Apply(@event);

@@ -6,12 +6,13 @@ namespace DomainBlocks.Testing.Integration.MongoDB;
 
 public static class MongoEventStoreAdapterFactory
 {
-    public static async Task<IEventStoreClientAdapter<TPayload>> CreateAsync<TPayload>(CancellationToken cancellationToken)
-        where TPayload : notnull
+    public static async Task<IEventStoreClientAdapter<TSerialized>> CreateAsync<TSerialized>(
+        CancellationToken cancellationToken)
+        where TSerialized : notnull
     {
         var client = new MongoClient("mongodb://localhost:27017");
         var database = client.GetDatabase("test");
-        var options = MongoEventStoreOptions.CreateDefault<TPayload>();
+        var options = MongoEventStoreOptions.CreateDefault<TSerialized>();
 
         await MongoEventStoreAdmin.EnsureIndexesAsync(database, options, cancellationToken);
 

@@ -79,21 +79,21 @@ public class MongoSerializationTests : MongoEventStoreTestFixture
             .ShouldBe(@event);
     }
 
-    private EventStoreClient<BsonValue> CreateEventStore(IPayloadSerializer<BsonValue> serializer)
+    private static EventStoreClient<object, BsonValue> CreateEventStore(IPayloadSerializer<BsonValue> serializer)
     {
         var eventTypeMap = new EventTypeMapBuilder()
             .MapType<UserCreated>()
             .MapType<Proto.UserCreated>("ProtoUserCreated")
             .Build();
 
-        var clientOptions = new EventStoreClientOptions<BsonValue>
+        var clientOptions = new EventStoreClientOptions<object, BsonValue>
         {
             AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync<BsonValue>(ct),
             TypeMap = eventTypeMap,
             Serializer = serializer
         };
 
-        return new EventStoreClient<BsonValue>(clientOptions);
+        return new EventStoreClient<object, BsonValue>(clientOptions);
     }
 
     private record UserCreated

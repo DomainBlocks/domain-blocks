@@ -8,7 +8,7 @@ public record FunctionalShoppingCart : IIdentifiable
     public Guid Id { get; private init; }
     public ImmutableList<ShoppingCartItem> Items { get; private init; } = [];
 
-    public IEnumerable<object> AddItem(ShoppingCartItem item)
+    public IEnumerable<IDomainEvent> AddItem(ShoppingCartItem item)
     {
         var currentState = this;
 

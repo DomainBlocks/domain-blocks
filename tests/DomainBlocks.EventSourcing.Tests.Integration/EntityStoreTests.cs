@@ -1,6 +1,6 @@
-using DomainBlocks.EventSourcing.Tests.Integration.Adapters;
 using DomainBlocks.EventSourcing.Tests.Integration.DomainEvents;
 using DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
+using DomainBlocks.EventSourcing.Tests.Integration.EntityDefinitions;
 using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.Serialization.MongoDB.Bson;
@@ -14,7 +14,7 @@ namespace DomainBlocks.EventSourcing.Tests.Integration;
 [TestFixture]
 public class EntityStoreTests : MongoEventStoreTestFixture
 {
-    private EntityStore _entityStore = null!;
+    private EntityStore<IDomainEvent> _entityStore = null!;
 
     [SetUp]
     public void SetUp()
@@ -25,24 +25,24 @@ public class EntityStoreTests : MongoEventStoreTestFixture
             .MapType<ItemRemovedFromShoppingCart>()
             .Build();
 
-        var clientOptions = new EventStoreClientOptions<BsonDocument>
+        var clientOptions = new EventStoreClientOptions<IDomainEvent, BsonDocument>
         {
             AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync<BsonDocument>(ct),
             TypeMap = eventTypeMap,
             Serializer = new BsonDocumentSerializer()
         };
 
-        var client = new EventStoreClient<BsonDocument>(clientOptions);
+        var client = new EventStoreClient<IDomainEvent, BsonDocument>(clientOptions);
 
-        var entityAdapterProvider = new CompositeEntityAdapterProvider(
+        var entityDefinitionProvider = new CompositeEntityDefinitionProvider<IDomainEvent>(
         [
-            new GenericEntityAdapterProvider(typeof(AggregateAdapter<,>), [123, "ABC"]),
-            //new GenericEntityAdapterProvider(typeof(AggregateAdapter2<,>)),
-            new GenericEntityAdapterProvider(typeof(MutableAggregateAdapter<>)),
-            new GenericEntityAdapterProvider(typeof(FunctionalAggregateWrapperAdapter<>))
+            new GenericEntityDefinitionProvider<IDomainEvent>(typeof(AggregateDefinition<,>), [123, "ABC"]),
+            //new GenericEntityDefinitionProvider<IDomainEvent>(typeof(AggregateDefinition2<,>)),
+            new GenericEntityDefinitionProvider<IDomainEvent>(typeof(MutableAggregateDefinition<>)),
+            new GenericEntityDefinitionProvider<IDomainEvent>(typeof(FunctionalAggregateWrapperDefinition<>))
         ]);
 
-        _entityStore = new EntityStore(client, entityAdapterProvider);
+        _entityStore = new EntityStore<IDomainEvent>(client, entityDefinitionProvider);
     }
 
     [TearDown]

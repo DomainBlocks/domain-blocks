@@ -2,13 +2,14 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace DomainBlocks.EventSourcing;
 
-public class GenericEntityAdapterProvider : IEntityAdapterProvider
+public class GenericEntityDefinitionProvider<TEventBase> : IEntityDefinitionProvider<TEventBase>
+    where TEventBase : class
 {
     private readonly Type _genericTypeDefinition;
     private readonly Type _entityGenericArgType;
     private readonly object?[]? _constructorArgs;
 
-    public GenericEntityAdapterProvider(Type genericTypeDefinition, object?[]? constructorArgs = null)
+    public GenericEntityDefinitionProvider(Type genericTypeDefinition, object?[]? constructorArgs = null)
     {
         ArgumentNullException.ThrowIfNull(genericTypeDefinition);
 
@@ -18,27 +19,27 @@ public class GenericEntityAdapterProvider : IEntityAdapterProvider
         if (!genericTypeDefinition.IsGenericTypeDefinition)
             throw new ArgumentException("Expected a generic type definition.", nameof(genericTypeDefinition));
 
-        var entityAdapterInterfaceType = genericTypeDefinition
+        var entityDefinitionInterfaceType = genericTypeDefinition
             .GetInterfaces()
-            .SingleOrDefault(x => x.IsGenericType && x.GetGenericTypeDefinition() == typeof(IEntityAdapter<>));
+            .SingleOrDefault(x => x.IsGenericType && x.GetGenericTypeDefinition() == typeof(IEntityDefinition<,>));
 
-        if (entityAdapterInterfaceType == null)
+        if (entityDefinitionInterfaceType == null)
         {
             throw new ArgumentException(
-                $"Entity adapter type must implement {typeof(IEntityAdapter<>).GetPrettyName()}.",
+                $"Entity definition type must implement {typeof(IEntityDefinition<,>).GetPrettyName()}.",
                 nameof(genericTypeDefinition));
         }
 
         // Check all generic parameters can be resolved via TEntity.
-        var entityGenericArg = entityAdapterInterfaceType.GetGenericArguments()[0];
+        var entityGenericArg = entityDefinitionInterfaceType.GetGenericArguments()[1];
         var reachableEntityParams = entityGenericArg.GetReachableGenericParameters();
-        var adapterParams = genericTypeDefinition.GetGenericArguments().Where(x => x.IsGenericParameter).ToArray();
-        var missingParams = adapterParams.Where(x => !reachableEntityParams.Contains(x)).ToArray();
+        var definitionParams = genericTypeDefinition.GetGenericArguments().Where(x => x.IsGenericParameter).ToArray();
+        var missingParams = definitionParams.Where(x => !reachableEntityParams.Contains(x)).ToArray();
 
         if (missingParams.Length > 0)
         {
             throw new ArgumentException(
-                $"Invalid entity adapter type '{genericTypeDefinition.GetPrettyName()}'. " +
+                $"Invalid entity definition type '{genericTypeDefinition.GetPrettyName()}'. " +
                 $"The following generic parameters are not reachable from '{entityGenericArg.GetPrettyName()}': " +
                 $"{string.Join<Type>(", ", missingParams)}",
                 nameof(genericTypeDefinition));
@@ -49,41 +50,41 @@ public class GenericEntityAdapterProvider : IEntityAdapterProvider
         _constructorArgs = constructorArgs;
     }
 
-    public IEntityAdapter<TEntity>? GetAdapter<TEntity>() where TEntity : notnull
+    public IEntityDefinition<TEventBase, TEntity>? GetDefinition<TEntity>() where TEntity : notnull
     {
-        if (!TryResolveAdapterType(typeof(TEntity), out var adapterType))
+        if (!TryResolveDefinitionType(typeof(TEntity), out var definitionType))
             return null;
 
-        var adapter = (IEntityAdapter<TEntity>)Activator.CreateInstance(adapterType, _constructorArgs)!;
+        var definition = Activator.CreateInstance(definitionType, _constructorArgs)!;
 
-        return adapter;
+        return (IEntityDefinition<TEventBase, TEntity>)definition;
     }
 
-    private bool TryResolveAdapterType(Type entityType, [NotNullWhen(true)] out Type? adapterType)
+    private bool TryResolveDefinitionType(Type entityType, [NotNullWhen(true)] out Type? definitionType)
     {
         if (!_entityGenericArgType.TryBindGenericParameters(entityType, out var bindings))
         {
-            adapterType = null;
+            definitionType = null;
             return false;
         }
 
-        var adapterGenericParams = _genericTypeDefinition
+        var definitionGenericParams = _genericTypeDefinition
             .GetGenericArguments()
             .Where(x => x.IsGenericParameter)
             .ToArray();
 
-        if (!adapterGenericParams.All(bindings.ContainsKey))
+        if (!definitionGenericParams.All(bindings.ContainsKey))
         {
-            adapterType = null;
+            definitionType = null;
             return false;
         }
 
-        var genericArgs = new Type[adapterGenericParams.Length];
+        var genericArgs = new Type[definitionGenericParams.Length];
 
-        foreach (var param in adapterGenericParams)
+        foreach (var param in definitionGenericParams)
             genericArgs[param.GenericParameterPosition] = bindings[param];
 
-        adapterType = _genericTypeDefinition.MakeGenericType(genericArgs);
+        definitionType = _genericTypeDefinition.MakeGenericType(genericArgs);
         return true;
     }
 }

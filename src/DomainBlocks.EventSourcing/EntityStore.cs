@@ -4,9 +4,9 @@ using DomainBlocks.EventStore.Abstractions.Events;
 
 namespace DomainBlocks.EventSourcing;
 
-public sealed class EntityStore(
-    IEventStoreClient eventStoreClient,
-    IEntityAdapterProvider entityAdapterProvider) : IEntityStore
+public sealed class EntityStore<TEventBase>(
+    IEventStoreClient<TEventBase> eventStoreClient,
+    IEntityDefinitionProvider<TEventBase> entityDefinitionProvider) : IEntityStore where TEventBase : class
 {
     public async Task<Versioned<TEntity>> LoadAsync<TEntity>(
         string entityId,
@@ -29,14 +29,14 @@ public sealed class EntityStore(
     {
         ArgumentNullException.ThrowIfNull(entity);
 
-        var entityAdapter = GetEntityAdapter<TEntity>();
-        var entityId = entityAdapter.GetId(entity.Entity);
+        var entityDefinition = GetEntityDefinition<TEntity>();
+        var entityId = entityDefinition.GetId(entity.Entity);
 
         // PoC for adding metadata.
         var header = new UncommittedEventHeader(
             metadata: [KeyValuePair.Create("EntityClrType", entity.Entity.GetType().Name)]);
 
-        var uncommittedEvents = entityAdapter.GetUncommittedEvents(entity.Entity)
+        var uncommittedEvents = entityDefinition.GetUncommittedEvents(entity.Entity)
             .Select(e => UncommittedEvent.Create(header, e))
             .ToArray();
 
@@ -67,20 +67,20 @@ public sealed class EntityStore(
         var readOptions = new ReadStreamOptions { StreamNotFoundBehavior = streamNotFoundBehavior };
         var events = eventStoreClient.ReadStreamAsync(streamName, readOptions, cancellationToken);
 
-        var entityAdapter = GetEntityAdapter<TEntity>();
-        var initialState = entityAdapter.CreateState(); // May come from a snapshot (in future).
+        var entityDefinition = GetEntityDefinition<TEntity>();
+        var initialState = entityDefinition.CreateInitialState(); // May come from a snapshot (in future).
 
         // Used in closure of EnumerateEvents, so must be declared before the async enumerable is materialised, i.e.
         // before RestoreAsync is invoked.
         var loadedVersion = StreamVersion.None;
 
-        var entity = await entityAdapter
+        var entity = await entityDefinition
             .RestoreAsync(initialState, EnumerateEvents(), cancellationToken)
             .ConfigureAwait(false);
 
         return Versioned.From(entity, loadedVersion);
 
-        async IAsyncEnumerable<object> EnumerateEvents()
+        async IAsyncEnumerable<TEventBase> EnumerateEvents()
         {
             await foreach (var e in events.ConfigureAwait(false))
             {
@@ -90,10 +90,10 @@ public sealed class EntityStore(
         }
     }
 
-    private IEntityAdapter<TEntity> GetEntityAdapter<TEntity>() where TEntity : notnull
+    private IEntityDefinition<TEventBase, TEntity> GetEntityDefinition<TEntity>() where TEntity : notnull
     {
-        return entityAdapterProvider.GetAdapter<TEntity>() ?? throw new ArgumentException(
-            $"Entity adapter not found for type '{typeof(TEntity)}'.",
+        return entityDefinitionProvider.GetDefinition<TEntity>() ?? throw new ArgumentException(
+            $"Entity definition not found for type '{typeof(TEntity)}'.",
             nameof(TEntity));
     }
 
