@@ -153,8 +153,9 @@ public abstract class EventStoreAdapterTests<TPayload> where TPayload : notnull
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task AppendToStreamAsync_ExpectedStateIsStreamDoesNotExistAndStreamExists_ThrowsStreamDoesNotExist(
-        CancellationToken cancellationToken)
+    public async Task
+        AppendToStreamAsync_ExpectedStateIsStreamDoesNotExistAndStreamExists_ThrowsExpectedStreamToNotExist(
+            CancellationToken cancellationToken)
     {
         var streamId = $"test-{Guid.NewGuid()}";
 

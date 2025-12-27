@@ -46,7 +46,7 @@ public sealed class EntityStore(
 
         var options = new AppendToStreamOptions
         {
-            ExpectedState = ExpectedStreamState.FromVersion(entity.Version),
+            ExpectedState = ExpectedStreamState.FromVersion(entity.Version)
         };
 
         await eventStoreClient
