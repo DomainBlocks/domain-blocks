@@ -5,100 +5,94 @@ namespace DomainBlocks.EventStore.Abstractions;
 
 /// <summary>
 /// Represents the expected state of a stream. Used to enforce concurrency or existence checks when performing stream
-/// operations.
+/// operations. The default value is <see cref="Any"/>.
 /// </summary>
 public readonly struct ExpectedStreamState : IEquatable<ExpectedStreamState>
 {
+    private readonly Kind _kind;
+
     /// <summary>
     /// Any state; stream may exist at any version or may not exist.
     /// </summary>
-    public static readonly ExpectedStreamState Any = new(ExpectedStreamStateKind.Any);
+    public static readonly ExpectedStreamState Any = new(Kind.Any);
 
     /// <summary>
     /// Stream must exist.
     /// </summary>
-    public static readonly ExpectedStreamState StreamExists = new(ExpectedStreamStateKind.StreamExists);
+    public static readonly ExpectedStreamState StreamExists = new(Kind.StreamExists);
 
     /// <summary>
     /// Stream must not exist.
     /// </summary>
-    public static readonly ExpectedStreamState StreamDoesNotExist =
-        new(ExpectedStreamStateKind.StreamDoesNotExist, StreamVersion.None);
+    public static readonly ExpectedStreamState StreamDoesNotExist = new(Kind.StreamDoesNotExist);
 
-    private ExpectedStreamState(ExpectedStreamStateKind kind, StreamVersion? version = null)
+    private ExpectedStreamState(Kind kind, StreamVersion? version = null)
     {
-        Kind = kind;
+        _kind = kind;
         Version = version;
     }
 
     /// <summary>
-    /// The kind of expected state.
-    /// </summary>
-    public ExpectedStreamStateKind Kind { get; }
-
-    /// <summary>
-    /// The expected stream version when <see cref="Kind"/> is:
-    /// <list type="bullet">
-    ///   <item><see cref="ExpectedStreamStateKind.SpecificVersion"/> – a specific stream version.</item>
-    ///   <item>
-    ///     <see cref="ExpectedStreamStateKind.StreamDoesNotExist"/> – always <see cref="StreamVersion.None"/>.
-    ///   </item>
-    /// </list>
-    /// Otherwise, <c>null</c>.
+    /// The expected stream version when <see cref="IsSpecificVersion"/> is <c>true</c>.
     /// </summary>
     public StreamVersion? Version { get; }
 
     /// <summary>
-    /// True if <see cref="Kind"/> is <see cref="ExpectedStreamStateKind.Any"/>.
+    /// True if this instance is <see cref="Any"/>.
     /// </summary>
-    public bool IsAny => Kind == ExpectedStreamStateKind.Any;
+    public bool IsAny => this == Any;
 
     /// <summary>
-    /// True if <see cref="Kind"/> is <see cref="ExpectedStreamStateKind.StreamExists"/>.
+    /// True if this instance is <see cref="StreamExists"/>.
     /// </summary>
-    public bool IsStreamExists => Kind == ExpectedStreamStateKind.StreamExists;
+    public bool IsStreamExists => this == StreamExists;
 
     /// <summary>
-    /// True if <see cref="Kind"/> is <see cref="ExpectedStreamStateKind.StreamDoesNotExist"/>.
+    /// True if this instance is <see cref="StreamDoesNotExist"/>.
     /// </summary>
     [MemberNotNullWhen(true, nameof(Version))]
-    public bool IsStreamDoesNotExist => Kind == ExpectedStreamStateKind.StreamDoesNotExist;
+    public bool IsStreamDoesNotExist => this == StreamDoesNotExist;
 
     /// <summary>
-    /// True if <see cref="Kind"/> is <see cref="ExpectedStreamStateKind.SpecificVersion"/>.
+    /// True if this instance represents a specific stream version.
     /// </summary>
     [MemberNotNullWhen(true, nameof(Version))]
-    public bool IsSpecificVersion => Kind == ExpectedStreamStateKind.SpecificVersion;
+    public bool IsSpecificVersion => _kind == Kind.SpecificVersion;
 
     /// <summary>
-    /// Creates an expected stream state for a specific version. A version of
-    /// <see cref="StreamVersion.None"/> is treated as <see cref="StreamDoesNotExist"/>.
+    /// Creates an expected stream state for a specific version.
     /// </summary>
-    public static ExpectedStreamState FromVersion(StreamVersion version)
+    public static ExpectedStreamState SpecificVersion(StreamVersion version)
     {
-        return version == StreamVersion.None
-            ? StreamDoesNotExist
-            : new ExpectedStreamState(ExpectedStreamStateKind.SpecificVersion, version);
+        return new ExpectedStreamState(Kind.SpecificVersion, version);
     }
 
     /// <summary>
     /// Returns a string representation of this expected stream state.
     /// </summary>
-    public override string ToString() => Kind switch
+    public override string ToString() => _kind switch
     {
-        ExpectedStreamStateKind.Any => nameof(Any),
-        ExpectedStreamStateKind.StreamExists => nameof(StreamExists),
-        ExpectedStreamStateKind.StreamDoesNotExist => nameof(StreamDoesNotExist),
-        _ => $"Version={Version}"
+        Kind.Any => nameof(Any),
+        Kind.StreamExists => nameof(StreamExists),
+        Kind.StreamDoesNotExist => nameof(StreamDoesNotExist),
+        _ => $"Version={Version?.Value}"
     };
 
-    public bool Equals(ExpectedStreamState other) => Kind == other.Kind && Nullable.Equals(Version, other.Version);
+    public bool Equals(ExpectedStreamState other) => _kind == other._kind && Nullable.Equals(Version, other.Version);
 
     public override bool Equals(object? obj) => obj is ExpectedStreamState other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine((int)Kind, Version);
+    public override int GetHashCode() => HashCode.Combine(_kind, Version);
 
     public static bool operator ==(ExpectedStreamState left, ExpectedStreamState right) => left.Equals(right);
 
     public static bool operator !=(ExpectedStreamState left, ExpectedStreamState right) => !left.Equals(right);
+
+    private enum Kind
+    {
+        Any = 0,
+        StreamExists,
+        StreamDoesNotExist,
+        SpecificVersion
+    }
 }

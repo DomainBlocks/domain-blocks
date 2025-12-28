@@ -1,7 +1,7 @@
 using DomainBlocks.Core.Exceptions;
 using DomainBlocks.EventStore.Abstractions.Events;
 
-namespace DomainBlocks.EventStore.Abstractions;
+namespace DomainBlocks.EventStore.Abstractions.Exceptions;
 
 /// <summary>
 /// Exception thrown when the actual state of a stream does not match the <see cref="ExpectedStreamState"/> specified
@@ -13,7 +13,7 @@ public sealed class WrongExpectedStreamStateException : DomainBlocksException
         string streamId,
         WrongExpectedStreamStateReason reason,
         ExpectedStreamState expectedState,
-        StreamVersion actualVersion,
+        StreamVersion? actualVersion,
         Exception? inner = null) : base(BuildMessage(streamId, reason, expectedState, actualVersion), inner)
     {
         StreamId = streamId;
@@ -25,7 +25,7 @@ public sealed class WrongExpectedStreamStateException : DomainBlocksException
     public string StreamId { get; }
     public WrongExpectedStreamStateReason Reason { get; }
     public ExpectedStreamState ExpectedState { get; }
-    public StreamVersion ActualVersion { get; }
+    public StreamVersion? ActualVersion { get; }
 
     public static WrongExpectedStreamStateException ExpectedStreamToExist(string streamId)
     {
@@ -33,7 +33,7 @@ public sealed class WrongExpectedStreamStateException : DomainBlocksException
             streamId,
             WrongExpectedStreamStateReason.ExpectedStreamToExist,
             ExpectedStreamState.StreamExists,
-            StreamVersion.None);
+            null);
     }
 
     public static WrongExpectedStreamStateException ExpectedStreamToNotExist(
@@ -50,7 +50,7 @@ public sealed class WrongExpectedStreamStateException : DomainBlocksException
     public static WrongExpectedStreamStateException VersionConflict(
         string streamId,
         ExpectedStreamState expectedState,
-        StreamVersion actualVersion)
+        StreamVersion? actualVersion)
     {
         return new WrongExpectedStreamStateException(
             streamId,
@@ -68,7 +68,7 @@ public sealed class WrongExpectedStreamStateException : DomainBlocksException
             streamId,
             WrongExpectedStreamStateReason.Unknown,
             expectedState,
-            StreamVersion.None,
+            null,
             inner);
     }
 
@@ -76,7 +76,7 @@ public sealed class WrongExpectedStreamStateException : DomainBlocksException
         string streamId,
         WrongExpectedStreamStateReason reason,
         ExpectedStreamState expectedState,
-        StreamVersion actualVersion)
+        StreamVersion? actualVersion)
     {
         if (reason == WrongExpectedStreamStateReason.ExpectedStreamToNotExist)
             return $"Expected stream '{streamId}' to not exist, but found version {actualVersion}.";
@@ -84,6 +84,7 @@ public sealed class WrongExpectedStreamStateException : DomainBlocksException
         if (reason == WrongExpectedStreamStateReason.ExpectedStreamToExist)
             return $"Expected stream '{streamId}' to exist, but found none.";
 
-        return $"Expected stream '{streamId}' to be version {expectedState}, but found {actualVersion}.";
+        return $"Expected stream '{streamId}' to be version {expectedState}, " +
+               $"but found {actualVersion?.ToString() ?? "<none>"}.";
     }
 }

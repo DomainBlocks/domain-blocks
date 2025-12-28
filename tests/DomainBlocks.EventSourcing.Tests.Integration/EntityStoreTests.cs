@@ -2,7 +2,7 @@ using DomainBlocks.EventSourcing.Tests.Integration.DomainEvents;
 using DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 using DomainBlocks.EventSourcing.Tests.Integration.EntityDefinitions;
 using DomainBlocks.EventStore;
-using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.Abstractions.Exceptions;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Testing.Integration.MongoDB;
 using MongoDB.Bson;

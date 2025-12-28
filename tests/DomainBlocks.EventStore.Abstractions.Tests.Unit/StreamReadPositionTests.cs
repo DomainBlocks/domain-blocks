@@ -10,42 +10,7 @@ public class StreamReadPositionTests
     public void Instance_WhenDefaultConstructed_EqualsStart()
     {
         default(StreamReadPosition).ShouldBe(StreamReadPosition.Start);
-    }
-
-    [Test]
-    public void Kind_WhenInstanceIsStart_IsStart()
-    {
-        StreamReadPosition.Start.Kind.ShouldBe(StreamReadPositionKind.Start);
-        StreamReadPosition.Start.IsStart.ShouldBeTrue();
-        StreamReadPosition.Start.IsEnd.ShouldBeFalse();
-        StreamReadPosition.Start.IsSpecificVersion.ShouldBeFalse();
-    }
-
-    [Test]
-    public void Kind_WhenInstanceIsEnd_IsEnd()
-    {
-        StreamReadPosition.End.Kind.ShouldBe(StreamReadPositionKind.End);
-        StreamReadPosition.End.IsStart.ShouldBeFalse();
-        StreamReadPosition.End.IsEnd.ShouldBeTrue();
-        StreamReadPosition.End.IsSpecificVersion.ShouldBeFalse();
-    }
-
-    [Test]
-    public void Kind_WhenInstanceIsSpecificVersion_IsSpecificVersion()
-    {
-        var version = StreamVersion.FromInt64(42);
-        var position = StreamReadPosition.At(version);
-
-        position.Kind.ShouldBe(StreamReadPositionKind.SpecificVersion);
-        position.IsStart.ShouldBeFalse();
-        position.IsEnd.ShouldBeFalse();
-        position.IsSpecificVersion.ShouldBeTrue();
-    }
-
-    [Test]
-    public void At_WhenVersionIsNone_ReturnsStart()
-    {
-        StreamReadPosition.At(StreamVersion.None).ShouldBe(StreamReadPosition.Start);
+        new StreamReadPosition().ShouldBe(StreamReadPosition.Start);
     }
 
     [Test]
@@ -58,7 +23,7 @@ public class StreamReadPositionTests
     [Test]
     public void Version_WhenSpecificVersion_IsSpecificVersion()
     {
-        var version = StreamVersion.FromInt64(123);
+        var version = new StreamVersion(123);
         var position = StreamReadPosition.At(version);
         position.Version.ShouldBe(version);
     }
@@ -73,15 +38,15 @@ public class StreamReadPositionTests
     [Test]
     public void ToString_ForSpecificVersion_ReturnsNumericValue()
     {
-        var specific = StreamReadPosition.At(StreamVersion.FromInt64(99));
+        var specific = StreamReadPosition.At(new StreamVersion(99));
         specific.ToString().ShouldBe("Version=99");
     }
 
     [Test]
     public void Equals_WhenValuesAreSame_ReturnsTrue()
     {
-        var a = StreamReadPosition.At(StreamVersion.FromInt64(1));
-        var b = StreamReadPosition.At(StreamVersion.FromInt64(1));
+        var a = StreamReadPosition.At(new StreamVersion(1));
+        var b = StreamReadPosition.At(new StreamVersion(1));
 
         a.Equals(b).ShouldBeTrue();
     }
@@ -89,8 +54,8 @@ public class StreamReadPositionTests
     [Test]
     public void Equals_WhenValuesDiffer_ReturnsFalse()
     {
-        var a = StreamReadPosition.At(StreamVersion.FromInt64(1));
-        var b = StreamReadPosition.At(StreamVersion.FromInt64(2));
+        var a = StreamReadPosition.At(new StreamVersion(1));
+        var b = StreamReadPosition.At(new StreamVersion(2));
 
         a.Equals(b).ShouldBeFalse();
         StreamReadPosition.Start.Equals(StreamReadPosition.End).ShouldBeFalse();

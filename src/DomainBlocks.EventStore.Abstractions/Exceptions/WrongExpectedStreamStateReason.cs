@@ -1,4 +1,4 @@
-namespace DomainBlocks.EventStore.Abstractions;
+namespace DomainBlocks.EventStore.Abstractions.Exceptions;
 
 /// <summary>
 /// Specifies the reason an <see cref="ExpectedStreamState"/> check failed.

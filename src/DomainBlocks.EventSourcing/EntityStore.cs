@@ -47,7 +47,9 @@ public sealed class EntityStore<TEventBase>(
 
         var options = new AppendToStreamOptions
         {
-            ExpectedState = ExpectedStreamState.FromVersion(entity.Version)
+            ExpectedState = entity.Version.HasValue
+                ? ExpectedStreamState.SpecificVersion(entity.Version.Value)
+                : ExpectedStreamState.StreamDoesNotExist
         };
 
         await eventStoreClient
@@ -72,7 +74,7 @@ public sealed class EntityStore<TEventBase>(
 
         // Used in closure of EnumerateEvents, so must be declared before the async enumerable is materialised, i.e.
         // before RestoreAsync is invoked.
-        var loadedVersion = StreamVersion.None;
+        StreamVersion? loadedVersion = null;
 
         var entity = await entityDefinition
             .RestoreAsync(initialState, EnumerateEvents(), cancellationToken)

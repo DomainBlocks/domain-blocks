@@ -1,5 +1,6 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Events;
+using DomainBlocks.EventStore.Abstractions.Exceptions;
 using NUnit.Framework;
 using Shouldly;
 
@@ -121,13 +122,13 @@ public abstract class EventStoreClientAdapterTests<TSerialized> where TSerialize
                 [CreateTestEvent("TestEvent4")],
                 new AppendToStreamOptions
                 {
-                    ExpectedState = ExpectedStreamState.FromVersion(StreamVersion.FromInt64(1))
+                    ExpectedState = ExpectedStreamState.SpecificVersion(new StreamVersion(1))
                 },
                 cancellationToken)
             .ShouldThrowAsync<WrongExpectedStreamStateException>();
 
         exception.Reason.ShouldBe(WrongExpectedStreamStateReason.VersionConflict);
-        exception.ActualVersion.ShouldBe(StreamVersion.FromInt64(2));
+        exception.ActualVersion.ShouldBe(new StreamVersion(2));
     }
 
     [Test]
