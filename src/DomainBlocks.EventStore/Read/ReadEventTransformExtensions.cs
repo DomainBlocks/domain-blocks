@@ -3,11 +3,11 @@ using DomainBlocks.EventStore.Abstractions.Events;
 
 namespace DomainBlocks.EventStore.Read;
 
-public static class TransformExtensions
+public static class ReadEventTransformExtensions
 {
     public static IAsyncEnumerable<ReadEvent<TEventBase>> Transform<TEventBase>(
         this IAsyncEnumerable<ReadEvent<TEventBase>> source,
-        IEnumerable<IEventReadTransform<TEventBase>> transforms)
+        IEnumerable<IReadEventTransform<TEventBase>> transforms)
         where TEventBase : class
     {
         return new TransformAsyncEnumerable<TEventBase>(source, transforms);
@@ -15,7 +15,7 @@ public static class TransformExtensions
 
     private class TransformAsyncEnumerable<TEventBase>(
         IAsyncEnumerable<ReadEvent<TEventBase>> source,
-        IEnumerable<IEventReadTransform<TEventBase>> transforms) :
+        IEnumerable<IReadEventTransform<TEventBase>> transforms) :
         IAsyncEnumerable<ReadEvent<TEventBase>>
         where TEventBase : class
     {
@@ -33,7 +33,7 @@ public static class TransformExtensions
                 {
                     if (transformsByType.TryGetValue(nextEvent.Value.GetType(), out var transform))
                     {
-                        var transformedEvents = transform.Apply(nextEvent.Value, nextEvent.Header);
+                        var transformedEvents = transform.Apply(nextEvent);
 
                         foreach (var transformedEvent in transformedEvents)
                             queue.Enqueue(ReadEvent.Create(nextEvent.Header, transformedEvent, isTransformed: true));
