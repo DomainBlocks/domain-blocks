@@ -8,7 +8,7 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.Tests.Integration;
 
-public class EventReadTransformTests : MongoEventStoreTestFixture
+public class ReadEventTransformTests : MongoEventStoreTestFixture
 {
     [Test]
     public async Task Should_transform_read_event()
@@ -92,9 +92,9 @@ public class EventReadTransformTests : MongoEventStoreTestFixture
         double WeightKg,
         string Destination);
 
-    private class ShipmentDispatchedTransform : EventReadTransform<object, ShipmentDispatched>
+    private class ShipmentDispatchedTransform : ReadEventTransform<object, ShipmentDispatched>
     {
-        protected override IEnumerable<object> Apply(ShipmentDispatched sourceEvent, ReadEventHeader header)
+        protected override IEnumerable<object> Apply(ShipmentDispatched sourceEvent, ReadEventHeader sourceHeader)
         {
             yield return new ShipmentDispatchedV2(
                 sourceEvent.ShipmentId,
