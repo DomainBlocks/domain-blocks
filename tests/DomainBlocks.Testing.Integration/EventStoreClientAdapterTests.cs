@@ -15,10 +15,10 @@ public abstract class EventStoreClientAdapterTests<TSerialized> where TSerialize
     {
         get
         {
-            yield return new TestCaseData(StreamPosition.Start, StreamReadDirection.Forward);
-            yield return new TestCaseData(StreamPosition.Start, StreamReadDirection.Backward);
-            yield return new TestCaseData(StreamPosition.End, StreamReadDirection.Forward);
-            yield return new TestCaseData(StreamPosition.End, StreamReadDirection.Backward);
+            yield return new TestCaseData(StreamReadPosition.Start, StreamReadDirection.Forward);
+            yield return new TestCaseData(StreamReadPosition.Start, StreamReadDirection.Backward);
+            yield return new TestCaseData(StreamReadPosition.End, StreamReadDirection.Forward);
+            yield return new TestCaseData(StreamReadPosition.End, StreamReadDirection.Backward);
         }
     }
 
@@ -26,8 +26,8 @@ public abstract class EventStoreClientAdapterTests<TSerialized> where TSerialize
     {
         get
         {
-            yield return new TestCaseData(StreamPosition.Start, StreamReadDirection.Backward);
-            yield return new TestCaseData(StreamPosition.End, StreamReadDirection.Forward);
+            yield return new TestCaseData(StreamReadPosition.Start, StreamReadDirection.Backward);
+            yield return new TestCaseData(StreamReadPosition.End, StreamReadDirection.Forward);
         }
     }
 
@@ -183,7 +183,7 @@ public abstract class EventStoreClientAdapterTests<TSerialized> where TSerialize
     [TestCaseSource(nameof(PositionAndDirectionEdgeCases))]
     [CancelAfter(TestTimeoutMillis)]
     public async Task ReadStreamAsync_EdgeCasePositionAndDirectionAndStreamExists_ReturnsEmpty(
-        StreamPosition position,
+        StreamReadPosition position,
         StreamReadDirection direction,
         CancellationToken cancellationToken)
     {
@@ -210,7 +210,7 @@ public abstract class EventStoreClientAdapterTests<TSerialized> where TSerialize
     [TestCaseSource(nameof(PositionAndDirectionEdgeCases))]
     [CancelAfter(TestTimeoutMillis)]
     public async Task ReadStreamAsync_EdgeCasePositionAndDirectionAndStreamDoesNotExist_ReturnsEmpty(
-        StreamPosition position,
+        StreamReadPosition position,
         StreamReadDirection direction,
         CancellationToken cancellationToken)
     {
@@ -232,7 +232,7 @@ public abstract class EventStoreClientAdapterTests<TSerialized> where TSerialize
     [TestCaseSource(nameof(PositionAndDirectionCases))]
     [CancelAfter(TestTimeoutMillis)]
     public async Task ReadStreamAsync_StreamDoesNotExistAndBehaviorIsThrow_ThrowsStreamNotFound(
-        StreamPosition position,
+        StreamReadPosition position,
         StreamReadDirection direction,
         CancellationToken cancellationToken)
     {

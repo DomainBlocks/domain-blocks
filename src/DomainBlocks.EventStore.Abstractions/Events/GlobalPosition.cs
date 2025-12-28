@@ -1,4 +1,4 @@
-namespace DomainBlocks.EventStore.Abstractions;
+namespace DomainBlocks.EventStore.Abstractions.Events;
 
 public readonly struct GlobalPosition
 {

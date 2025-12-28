@@ -1,4 +1,5 @@
 using DomainBlocks.Core.Exceptions;
+using DomainBlocks.EventStore.Abstractions.Events;
 
 namespace DomainBlocks.EventStore.Abstractions;
 
