@@ -34,14 +34,14 @@ public class MongoEventStoreOptions<TEventDocument, TSerialized> where TSerializ
     public required string EventCollectionName { get; init; }
     public required IEventDocumentConverter<TEventDocument, TSerialized> EventDocumentConverter { get; init; }
     public required Expression<Func<TEventDocument, string>> StreamIdExpression { get; init; }
-    public required Expression<Func<TEventDocument, long>> StreamVersionExpression { get; init; }
+    public required Expression<Func<TEventDocument, ulong>> StreamVersionExpression { get; init; }
     public required Expression<Func<TEventDocument, DateTime>> CreatedAtExpression { get; init; }
 
     internal FieldDefinition<TEventDocument, string> StreamIdField =>
         new ExpressionFieldDefinition<TEventDocument, string>(StreamIdExpression);
 
-    internal FieldDefinition<TEventDocument, long> StreamVersionField =>
-        new ExpressionFieldDefinition<TEventDocument, long>(StreamVersionExpression);
+    internal FieldDefinition<TEventDocument, ulong> StreamVersionField =>
+        new ExpressionFieldDefinition<TEventDocument, ulong>(StreamVersionExpression);
 
     internal FieldDefinition<TEventDocument, DateTime> CreatedAtField =>
         new ExpressionFieldDefinition<TEventDocument, DateTime>(CreatedAtExpression);

@@ -3,9 +3,10 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Events;
+using DomainBlocks.EventStore.Abstractions.Exceptions;
 using KurrentDB.Client;
 using KurrentStreamPosition = KurrentDB.Client.StreamPosition;
-using StreamNotFoundException = DomainBlocks.EventStore.Abstractions.StreamNotFoundException;
+using StreamNotFoundException = DomainBlocks.EventStore.Abstractions.Exceptions.StreamNotFoundException;
 
 namespace DomainBlocks.EventStore.KurrentDB;
 
@@ -22,7 +23,7 @@ public class KurrentDBEventStoreClientAdapter(KurrentDBClient client) :
         options ??= AppendToStreamOptions.Default;
         var kurrentExpectedState = ToKurrentStreamState(options.ExpectedState);
 
-        var eventData = events.Select(e =>
+        var eventData = events.Select(static e =>
         {
             var serializedMetadata = JsonSerializer.SerializeToUtf8Bytes(e.Header.Metadata);
             return new EventData(Uuid.NewUuid(), e.Header.EventName, e.Value, serializedMetadata);
@@ -58,7 +59,7 @@ public class KurrentDBEventStoreClientAdapter(KurrentDBClient client) :
         {
             { IsStart: true } => KurrentStreamPosition.Start,
             { IsEnd: true } => KurrentStreamPosition.End,
-            { IsSpecificVersion: true } => KurrentStreamPosition.FromInt64(position.Version.Value.ToInt64()),
+            { IsSpecificVersion: true } => KurrentStreamPosition.FromStreamRevision(position.Version.Value.Value),
             _ => default
         };
 
@@ -93,7 +94,7 @@ public class KurrentDBEventStoreClientAdapter(KurrentDBClient client) :
 
             var header = new ReadEventHeader(
                 streamId,
-                StreamVersion.FromInt64(originalEvent.EventNumber.ToInt64()),
+                new StreamVersion(originalEvent.EventNumber.ToUInt64()),
                 @event.EventType,
                 FrozenDictionary<string, string>.Empty,
                 @event.Created.Date,
@@ -117,7 +118,8 @@ public class KurrentDBEventStoreClientAdapter(KurrentDBClient client) :
 
         if (actualState.HasPosition)
         {
-            var actualVersion = StreamVersion.FromInt64(actualState.ToInt64());
+            // Consider adding validation here rather than trusting Kurrent to be correct.
+            var actualVersion = new StreamVersion((ulong)actualState.ToInt64());
 
             if (expectedState.IsStreamDoesNotExist)
                 return WrongExpectedStreamStateException.ExpectedStreamToNotExist(streamId, actualVersion);
@@ -134,7 +136,7 @@ public class KurrentDBEventStoreClientAdapter(KurrentDBClient client) :
         _ when expectedState.IsAny => StreamState.Any,
         _ when expectedState.IsStreamExists => StreamState.StreamExists,
         _ when expectedState.IsStreamDoesNotExist => StreamState.NoStream,
-        _ when expectedState.IsSpecificVersion => StreamState.StreamRevision(expectedState.Version.Value.ToUint64()),
+        _ when expectedState.IsSpecificVersion => StreamState.StreamRevision(expectedState.Version.Value.Value),
         _ => throw new ArgumentOutOfRangeException(nameof(expectedState), expectedState, null)
     };
 

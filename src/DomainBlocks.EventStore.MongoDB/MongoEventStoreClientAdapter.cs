@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Events;
+using DomainBlocks.EventStore.Abstractions.Exceptions;
 using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB;
@@ -22,13 +23,14 @@ public class MongoEventStoreClientAdapter<TEventDocument, TSerialized>(
     MongoEventStoreOptions<TEventDocument, TSerialized> options) :
     IMongoEventStoreClientAdapter<TSerialized> where TSerialized : notnull
 {
+    private readonly IEventDocumentConverter<TEventDocument, TSerialized> _eventDocumentConverter =
+        options.EventDocumentConverter;
+
     private readonly FieldDefinition<TEventDocument, string> _streamIdField = options.StreamIdField;
-    private readonly FieldDefinition<TEventDocument, long> _streamVersionField = options.StreamVersionField;
+    private readonly FieldDefinition<TEventDocument, ulong> _streamVersionField = options.StreamVersionField;
 
-    private readonly Expression<Func<TEventDocument, long?>> _nullableStreamVersionExpression =
+    private readonly Expression<Func<TEventDocument, ulong?>> _nullableStreamVersionExpression =
         AsNullable(options.StreamVersionExpression);
-
-    private readonly Func<TEventDocument, long> _streamVersionFunc = options.StreamVersionExpression.Compile();
 
     public async Task AppendToStreamAsync(
         string streamId,
@@ -40,18 +42,22 @@ public class MongoEventStoreClientAdapter<TEventDocument, TSerialized>(
         var expectedState = appendOptions.ExpectedState;
         var currentVersion = await GetCurrentStreamVersionAsync(streamId, cancellationToken).ConfigureAwait(false);
 
-        if (expectedState.IsStreamExists && currentVersion.IsNone)
+        if (expectedState.IsStreamExists && !currentVersion.HasValue)
             throw WrongExpectedStreamStateException.ExpectedStreamToExist(streamId);
 
-        if (expectedState.IsStreamDoesNotExist && !currentVersion.IsNone)
-            throw WrongExpectedStreamStateException.ExpectedStreamToNotExist(streamId, currentVersion);
+        if (expectedState.IsStreamDoesNotExist && currentVersion.HasValue)
+            throw WrongExpectedStreamStateException.ExpectedStreamToNotExist(streamId, currentVersion.Value);
 
-        if (expectedState.IsSpecificVersion && expectedState.Version != currentVersion)
+        if (expectedState.IsSpecificVersion && expectedState.Version.Value != currentVersion)
             throw WrongExpectedStreamStateException.VersionConflict(streamId, expectedState, currentVersion);
 
         // For non-specific version expectations (i.e. Any/StreamExists), treat the current version as expected.
         if (expectedState.IsAny || expectedState.IsStreamExists)
-            expectedState = ExpectedStreamState.FromVersion(currentVersion);
+        {
+            expectedState = currentVersion.HasValue
+                ? ExpectedStreamState.SpecificVersion(currentVersion.Value)
+                : ExpectedStreamState.StreamDoesNotExist;
+        }
 
         var documents = ToEventDocuments(streamId, events, currentVersion);
 
@@ -93,7 +99,7 @@ public class MongoEventStoreClientAdapter<TEventDocument, TSerialized>(
 
         if (position.IsSpecificVersion)
         {
-            var version = position.Version.Value.ToInt64();
+            var version = position.Version.Value.Value;
 
             var versionFilter = direction == StreamReadDirection.Forward
                 ? Builders<TEventDocument>.Filter.Gte(_streamVersionField, version)
@@ -120,7 +126,7 @@ public class MongoEventStoreClientAdapter<TEventDocument, TSerialized>(
             foreach (var doc in cursor.Current)
             {
                 isEmpty = false;
-                yield return FromEventDocument(doc);
+                yield return _eventDocumentConverter.FromEventDocument(doc);
             }
         }
 
@@ -128,13 +134,15 @@ public class MongoEventStoreClientAdapter<TEventDocument, TSerialized>(
             throw new StreamNotFoundException(streamId);
     }
 
-    private static Expression<Func<TEventDocument, long?>> AsNullable(Expression<Func<TEventDocument, long>> expr)
+    private static Expression<Func<TEventDocument, ulong?>> AsNullable(Expression<Func<TEventDocument, ulong>> expr)
     {
-        var body = Expression.Convert(expr.Body, typeof(long?));
-        return Expression.Lambda<Func<TEventDocument, long?>>(body, expr.Parameters[0]);
+        var body = Expression.Convert(expr.Body, typeof(ulong?));
+        return Expression.Lambda<Func<TEventDocument, ulong?>>(body, expr.Parameters[0]);
     }
 
-    private async Task<StreamVersion> GetCurrentStreamVersionAsync(string streamId, CancellationToken cancellationToken)
+    private async Task<StreamVersion?> GetCurrentStreamVersionAsync(
+        string streamId,
+        CancellationToken cancellationToken)
     {
         var latestVersion = await collection
             .Find(Builders<TEventDocument>.Filter.Eq(_streamIdField, streamId))
@@ -144,7 +152,7 @@ public class MongoEventStoreClientAdapter<TEventDocument, TSerialized>(
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return StreamVersion.FromInt64(latestVersion ?? -1);
+        return latestVersion.HasValue ? new StreamVersion(latestVersion.Value) : null;
     }
 
     private async Task<bool> StreamExistsAsync(string streamId, CancellationToken cancellationToken)
@@ -152,56 +160,21 @@ public class MongoEventStoreClientAdapter<TEventDocument, TSerialized>(
         var currentStreamVersion = await GetCurrentStreamVersionAsync(streamId, cancellationToken)
             .ConfigureAwait(false);
 
-        return currentStreamVersion != StreamVersion.None;
+        return currentStreamVersion.HasValue;
     }
 
     private IEnumerable<TEventDocument> ToEventDocuments(
         string streamId,
         IEnumerable<UncommittedEvent<TSerialized>> events,
-        StreamVersion currentStreamVersion)
+        StreamVersion? currentStreamVersion)
     {
+        var nextVersionValue = (currentStreamVersion?.Value + 1) ?? 0;
         var createdAt = DateTime.UtcNow;
 
-        return events.Select((@event, index) =>
+        foreach (var @event in events)
         {
-            var streamVersion = currentStreamVersion.Add(index + 1);
-            return ToEventDocument(streamId, streamVersion, @event, createdAt);
-        });
-    }
-
-    private TEventDocument ToEventDocument(
-        string streamId,
-        StreamVersion version,
-        UncommittedEvent<TSerialized> @event,
-        DateTime createdAt)
-    {
-        var doc = options.EventDocumentConverter.ToEventDocument(@event, streamId, version, createdAt);
-
-        var expectedVersion = version.ToInt64();
-        var actualVersion = _streamVersionFunc(doc);
-        EnsureMappedStreamVersionIsValid(expectedVersion, actualVersion);
-
-        return doc;
-    }
-
-    private ReadEvent<TSerialized> FromEventDocument(TEventDocument doc)
-    {
-        var @event = options.EventDocumentConverter.FromEventDocument(doc);
-
-        var expectedVersion = _streamVersionFunc(doc);
-        var actualVersion = @event.Header.StreamVersion.ToInt64();
-        EnsureMappedStreamVersionIsValid(expectedVersion, actualVersion);
-
-        return @event;
-    }
-
-    private static void EnsureMappedStreamVersionIsValid(long expectedVersion, long actualVersion)
-    {
-        if (expectedVersion != actualVersion)
-        {
-            throw new InvalidOperationException(
-                $"Event document mapper produced an invalid stream version. " +
-                $"Expected={expectedVersion}, Actual={actualVersion}.");
+            var streamVersion = new StreamVersion(nextVersionValue++);
+            yield return _eventDocumentConverter.ToEventDocument(@event, streamId, streamVersion, createdAt);
         }
     }
 }

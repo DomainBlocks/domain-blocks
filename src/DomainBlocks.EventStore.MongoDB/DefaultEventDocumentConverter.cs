@@ -19,7 +19,7 @@ public sealed class DefaultEventDocumentConverter<TSerialized> :
         return new DefaultEventDocument<TSerialized>
         {
             StreamId = streamId,
-            StreamVersion = streamVersion.ToInt64(),
+            StreamVersion = streamVersion.Value,
             EventName = @event.Header.EventName,
             Metadata = @event.Header.Metadata,
             CreatedAt = createdAt,
@@ -33,7 +33,7 @@ public sealed class DefaultEventDocumentConverter<TSerialized> :
         return ReadEvent.Create(
             new ReadEventHeader(
                 document.StreamId,
-                StreamVersion.FromInt64(document.StreamVersion),
+                new StreamVersion(document.StreamVersion),
                 document.EventName,
                 document.Metadata,
                 document.CreatedAt),
