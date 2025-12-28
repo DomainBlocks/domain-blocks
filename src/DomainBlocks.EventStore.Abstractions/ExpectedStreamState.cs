@@ -33,7 +33,7 @@ public readonly struct ExpectedStreamState : IEquatable<ExpectedStreamState>
     }
 
     /// <summary>
-    /// The expected stream version when <see cref="IsSpecificVersion"/> is <c>true</c>.
+    /// The expected stream version when <see cref="IsSpecificVersion"/> is <c>true</c>, otherwise <c>null</c>.
     /// </summary>
     public StreamVersion? Version { get; }
 
@@ -50,7 +50,6 @@ public readonly struct ExpectedStreamState : IEquatable<ExpectedStreamState>
     /// <summary>
     /// True if this instance is <see cref="StreamDoesNotExist"/>.
     /// </summary>
-    [MemberNotNullWhen(true, nameof(Version))]
     public bool IsStreamDoesNotExist => this == StreamDoesNotExist;
 
     /// <summary>

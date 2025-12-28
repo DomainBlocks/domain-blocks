@@ -28,7 +28,7 @@ public readonly struct StreamReadPosition : IEquatable<StreamReadPosition>
     }
 
     /// <summary>
-    /// The stream version when <see cref="IsSpecificVersion"/> is <c>true</c>.
+    /// The stream version when <see cref="IsSpecificVersion"/> is <c>true</c>, otherwise <c>null</c>.
     /// </summary>
     public StreamVersion? Version { get; }
 

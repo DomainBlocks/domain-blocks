@@ -118,6 +118,7 @@ public class KurrentDBEventStoreClientAdapter(KurrentDBClient client) :
 
         if (actualState.HasPosition)
         {
+            // Consider adding validation here rather than trusting Kurrent to be correct.
             var actualVersion = new StreamVersion((ulong)actualState.ToInt64());
 
             if (expectedState.IsStreamDoesNotExist)
