@@ -12,6 +12,7 @@ indent_size = 4
 tab_width = 4
 
 # Style preferences (sorted by option name)
+csharp_keep_existing_attribute_arrangement = true
 csharp_prefer_braces = when_multiline
 csharp_style_expression_bodied_methods = false
 csharp_style_expression_bodied_operators = false
