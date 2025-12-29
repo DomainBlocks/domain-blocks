@@ -12,7 +12,7 @@ public sealed class UncommittedEventHeader
     public UncommittedEventHeader(
         string? eventName = null,
         IEnumerable<KeyValuePair<string, string>>? metadata = null) :
-        this(eventName, metadata?.ToImmutableDictionary() ?? ImmutableDictionary<string, string>.Empty)
+        this(eventName, metadata?.ToImmutableDictionary() ?? [])
     {
     }
 
