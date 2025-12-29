@@ -2,7 +2,6 @@
   <ItemGroup>
     <PackageReference Include="NUnit" Version="4.4.0"/>
     <PackageReference Include="Shouldly" Version="4.3.0"/>
-    <PackageReference Include="System.Linq.Async" Version="6.0.3"/>
   </ItemGroup>
 
   <ItemGroup>
