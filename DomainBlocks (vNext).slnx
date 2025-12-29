@@ -5,7 +5,9 @@
     <File Path=".editorconfig" />
     <File Path="Directory.Build.props" />
   </Folder>
-  <Folder Name="/benchmarks/" />
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/DomainBlocks.EventStore.Abstractions.Benchmarks/DomainBlocks.EventStore.Abstractions.Benchmarks.csproj" />
+  </Folder>
   <Folder Name="/docs/">
     <File Path="docs\vision.md" />
     <File Path="docs\architecture.md" />
