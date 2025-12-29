@@ -84,7 +84,9 @@ public class EventStoreClientAdapterBenchmarks
             throw new NotImplementedException();
         }
 
+#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
         public async IAsyncEnumerable<ReadEvent<ReadOnlyMemory<byte>>> ReadStreamAsync(
+#pragma warning restore CS1998
             string streamId,
             ReadStreamOptions? options = null,
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -103,8 +105,6 @@ public class EventStoreClientAdapterBenchmarks
                     GlobalPosition.FromUInt64(originalEvent.Position.CommitPosition));
 
                 yield return ReadEvent.Create(header, @event.Data);
-
-                await Task.CompletedTask;
             }
         }
     }
