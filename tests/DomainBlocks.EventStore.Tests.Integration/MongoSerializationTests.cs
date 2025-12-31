@@ -90,7 +90,8 @@ public class MongoSerializationTests : MongoEventStoreTestFixture
         {
             AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync<BsonValue>(ct),
             TypeMap = eventTypeMap,
-            Serializer = serializer
+            EventSerializer = serializer,
+            MetadataSerializer = new BsonDocumentMetadataSerializer()
         };
 
         return new EventStoreClient<object, BsonValue>(clientOptions);

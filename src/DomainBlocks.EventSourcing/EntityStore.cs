@@ -33,11 +33,11 @@ public sealed class EntityStore<TEventBase>(
         var entityId = entityDefinition.GetId(entity.Entity);
 
         // PoC for adding metadata.
-        var header = new UncommittedEventHeader(
-            metadata: [KeyValuePair.Create("EntityClrType", entity.Entity.GetType().Name)]);
+        // Should this be stream-level metadata?
+        KeyValuePair<string, string>[] metadata = [KeyValuePair.Create("EntityClrType", entity.Entity.GetType().Name)];
 
         var uncommittedEvents = entityDefinition.GetUncommittedEvents(entity.Entity)
-            .Select(e => UncommittedEvent.Create(header, e))
+            .Select(e => AppendEvent.Create(e, metadata))
             .ToArray();
 
         if (uncommittedEvents.Length == 0)

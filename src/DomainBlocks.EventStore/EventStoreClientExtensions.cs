@@ -1,5 +1,4 @@
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.Abstractions.Events;
 
 namespace DomainBlocks.EventStore;
 
@@ -12,6 +11,10 @@ public static class EventStoreClientExtensions
         AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default) where TEventBase : class
     {
-        return client.AppendToStreamAsync(streamId, events.Select(UncommittedEvent.Create), options, cancellationToken);
+        return client.AppendToStreamAsync(
+            streamId,
+            events.Select(x => AppendEvent.Create(x)),
+            options,
+            cancellationToken);
     }
 }

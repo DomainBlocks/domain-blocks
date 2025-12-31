@@ -17,7 +17,7 @@ public class KurrentDBEventStoreClientAdapterTests : EventStoreClientAdapterTest
         return Task.FromResult(adapter);
     }
 
-    protected override UncommittedEvent<ReadOnlyMemory<byte>> CreateTestEvent(string eventName)
+    protected override SerializedAppendEvent<ReadOnlyMemory<byte>> CreateTestEvent(string eventName)
     {
         return TestEventsHelper.CreateTestEvent(eventName);
     }

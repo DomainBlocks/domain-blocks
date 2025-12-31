@@ -6,7 +6,7 @@ public interface IEventStoreClientAdapter<TSerialized> where TSerialized : notnu
 {
     Task AppendToStreamAsync(
         string streamId,
-        IEnumerable<UncommittedEvent<TSerialized>> events,
+        IEnumerable<SerializedAppendEvent<TSerialized>> events,
         AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default);
 

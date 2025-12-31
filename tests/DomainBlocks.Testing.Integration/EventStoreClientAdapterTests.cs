@@ -43,7 +43,7 @@ public abstract class EventStoreClientAdapterTests<TSerialized> where TSerialize
     public async Task AppendToStreamAsync_ExpectedStateIsAnyAndStreamDoesNotExist_AppendsEvents(
         CancellationToken cancellationToken)
     {
-        UncommittedEvent<TSerialized>[] events =
+        SerializedAppendEvent<TSerialized>[] events =
         [
             CreateTestEvent("TestEvent1"),
             CreateTestEvent("TestEvent2"),
@@ -62,7 +62,7 @@ public abstract class EventStoreClientAdapterTests<TSerialized> where TSerialize
 
         readEvents
             .Select(x => x.Header.EventName)
-            .ShouldBe(events.Select(x => x.Header.EventName));
+            .ShouldBe(events.Select(x => x.EventName));
     }
 
     [Test]
@@ -70,14 +70,14 @@ public abstract class EventStoreClientAdapterTests<TSerialized> where TSerialize
     public async Task AppendToStreamAsync_ExpectedStateIsAnyAndStreamExists_AppendsEvents(
         CancellationToken cancellationToken)
     {
-        UncommittedEvent<TSerialized>[] events1 =
+        SerializedAppendEvent<TSerialized>[] events1 =
         [
             CreateTestEvent("TestEvent1"),
             CreateTestEvent("TestEvent2"),
             CreateTestEvent("TestEvent3")
         ];
 
-        UncommittedEvent<TSerialized>[] events2 =
+        SerializedAppendEvent<TSerialized>[] events2 =
         [
             CreateTestEvent("TestEvent4"),
             CreateTestEvent("TestEvent5"),
@@ -97,7 +97,7 @@ public abstract class EventStoreClientAdapterTests<TSerialized> where TSerialize
 
         readEvents
             .Select(x => x.Header.EventName)
-            .ShouldBe(events1.Concat(events2).Select(x => x.Header.EventName));
+            .ShouldBe(events1.Concat(events2).Select(x => x.EventName));
     }
 
     [Test]
@@ -256,5 +256,5 @@ public abstract class EventStoreClientAdapterTests<TSerialized> where TSerialize
 
     protected abstract Task<IEventStoreClientAdapter<TSerialized>> CreateEventStoreAdapterAsync();
 
-    protected abstract UncommittedEvent<TSerialized> CreateTestEvent(string eventName);
+    protected abstract SerializedAppendEvent<TSerialized> CreateTestEvent(string eventName);
 }
