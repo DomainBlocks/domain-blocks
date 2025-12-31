@@ -7,17 +7,22 @@ using NUnit.Framework;
 namespace DomainBlocks.EventStore.KurrentDB.Tests.Integration;
 
 [TestFixture]
-public class KurrentDBEventStoreClientAdapterTests : EventStoreClientAdapterTests<ReadOnlyMemory<byte>>
+public class KurrentDBEventStoreClientAdapterTests :
+    EventStoreClientAdapterTests<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
 {
-    protected override Task<IEventStoreClientAdapter<ReadOnlyMemory<byte>>> CreateEventStoreAdapterAsync()
+    protected override Task<IEventStoreClientAdapter<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>>
+        CreateEventStoreAdapterAsync()
     {
         const string connectionString = "kurrentdb://admin:changeit@localhost:2113?tls=false&tlsVerifyCert=false";
         var client = new KurrentDBClient(KurrentDBClientSettings.Create(connectionString));
-        IEventStoreClientAdapter<ReadOnlyMemory<byte>> adapter = new KurrentDBEventStoreClientAdapter(client);
+
+        IEventStoreClientAdapter<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> adapter =
+            new KurrentDBEventStoreClientAdapter(client);
+
         return Task.FromResult(adapter);
     }
 
-    protected override SerializedAppendEvent<ReadOnlyMemory<byte>> CreateTestEvent(string eventName)
+    protected override AppendEvent<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> CreateTestEvent(string eventName)
     {
         return TestEventsHelper.CreateTestEvent(eventName);
     }

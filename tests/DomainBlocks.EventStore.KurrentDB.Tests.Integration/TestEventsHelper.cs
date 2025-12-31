@@ -5,7 +5,7 @@ namespace DomainBlocks.EventStore.KurrentDB.Tests.Integration;
 
 internal static class TestEventsHelper
 {
-    internal static SerializedAppendEvent<ReadOnlyMemory<byte>> CreateTestEvent(string eventName)
+    internal static AppendEvent<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> CreateTestEvent(string eventName)
     {
         var value = new Dictionary<string, string>
         {
@@ -14,6 +14,6 @@ internal static class TestEventsHelper
 
         ReadOnlyMemory<byte> serializedValue = JsonSerializer.SerializeToUtf8Bytes(value);
 
-        return SerializedAppendEvent.Create(eventName, serializedValue);
+        return AppendEvent.Create<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>(eventName, serializedValue);
     }
 }

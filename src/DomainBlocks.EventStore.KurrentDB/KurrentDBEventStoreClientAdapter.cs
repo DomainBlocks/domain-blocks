@@ -15,7 +15,7 @@ public class KurrentDBEventStoreClientAdapter(KurrentDBClient client) :
 {
     public async Task AppendToStreamAsync(
         string streamId,
-        IEnumerable<SerializedAppendEvent<ReadOnlyMemory<byte>>> events,
+        IEnumerable<AppendEvent<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>> events,
         AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default)
     {

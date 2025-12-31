@@ -1,6 +1,7 @@
 using DomainBlocks.Serialization.Google.Protobuf;
-using DomainBlocks.Serialization.SystemTextJson;
+using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Testing.Integration.MongoDB;
+using MongoDB.Bson;
 using NUnit.Framework;
 using Shouldly;
 
@@ -15,19 +16,19 @@ public class EventContractMapperTests : MongoEventStoreTestFixture
             .MapType<Proto.UserCreated>()
             .Build();
 
-        var clientOptions = new EventStoreClientOptions<object, byte[]>
+        var clientOptions = new EventStoreClientOptions<object, BsonValue, BsonValue>
         {
-            AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync<byte[]>(ct),
+            AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync(ct),
             TypeMap = eventTypeMap,
-            EventSerializer = new ProtobufBytesSerializer(),
-            MetadataSerializer = new SystemTextJsonBytesMetadataSerializer(),
+            EventSerializer = new ProtobufBytesSerializer().AsBsonValueSerializer(),
+            MetadataSerializer = new BsonDocumentMetadataSerializer(),
             ContractMappers =
             [
                 new UserCreatedProtoMapper()
             ]
         };
 
-        var client = new EventStoreClient<object, byte[]>(clientOptions);
+        var client = new EventStoreClient<object, BsonValue, BsonValue>(clientOptions);
 
         var originalEvent = new UserCreated
         {

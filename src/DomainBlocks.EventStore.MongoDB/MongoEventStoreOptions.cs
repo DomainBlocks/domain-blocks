@@ -8,20 +8,13 @@ public static class MongoEventStoreOptions
 {
     private const string DefaultEventCollectionName = "domainblocks.events";
 
-    public static MongoEventStoreOptions<DefaultEventDocument<BsonValue>, BsonValue> CreateDefault(
+    public static MongoEventStoreOptions<DefaultEventDocument, BsonValue, BsonValue> CreateDefault(
         string eventCollectionName = DefaultEventCollectionName)
     {
-        return CreateDefault<BsonValue>(eventCollectionName);
-    }
-
-    public static MongoEventStoreOptions<DefaultEventDocument<TSerialized>, TSerialized> CreateDefault<TSerialized>(
-        string eventCollectionName = DefaultEventCollectionName)
-        where TSerialized : notnull
-    {
-        return new MongoEventStoreOptions<DefaultEventDocument<TSerialized>, TSerialized>
+        return new MongoEventStoreOptions<DefaultEventDocument, BsonValue, BsonValue>
         {
             EventCollectionName = eventCollectionName,
-            EventDocumentConverter = new DefaultEventDocumentConverter<TSerialized>(),
+            EventDocumentConverter = new DefaultEventDocumentConverter(),
             StreamIdExpression = doc => doc.StreamId,
             StreamVersionExpression = doc => doc.StreamVersion,
             CreatedAtExpression = doc => doc.CreatedAt
@@ -29,10 +22,12 @@ public static class MongoEventStoreOptions
     }
 }
 
-public class MongoEventStoreOptions<TEventDocument, TSerialized> where TSerialized : notnull
+public class MongoEventStoreOptions<TEventDocument, TEventData, TMetadata>
+    where TEventData : notnull
+    where TMetadata : notnull
 {
     public required string EventCollectionName { get; init; }
-    public required IEventDocumentConverter<TEventDocument, TSerialized> EventDocumentConverter { get; init; }
+    public required IEventDocumentConverter<TEventDocument, TEventData, TMetadata> EventDocumentConverter { get; init; }
     public required Expression<Func<TEventDocument, string>> StreamIdExpression { get; init; }
     public required Expression<Func<TEventDocument, ulong>> StreamVersionExpression { get; init; }
     public required Expression<Func<TEventDocument, DateTime>> CreatedAtExpression { get; init; }

@@ -65,7 +65,7 @@ public class MongoSerializationTests : MongoEventStoreTestFixture
 
     private async Task Should_write_and_read_event<TEvent>(
         TEvent @event,
-        IObjectSerializer<BsonValue> serializer) where TEvent : notnull
+        IObjectSerializer<BsonValue> serializer) where TEvent : class
     {
         var client = CreateEventStore(serializer);
         var streamId = $"test-{serializer.GetType().Name}-{Guid.NewGuid()}";
@@ -79,22 +79,23 @@ public class MongoSerializationTests : MongoEventStoreTestFixture
             .ShouldBe(@event);
     }
 
-    private static EventStoreClient<object, BsonValue> CreateEventStore(IObjectSerializer<BsonValue> serializer)
+    private static EventStoreClient<object, BsonValue, BsonValue> CreateEventStore(
+        IObjectSerializer<BsonValue> serializer)
     {
         var eventTypeMap = new EventTypeMapBuilder()
             .MapType<UserCreated>()
             .MapType<Proto.UserCreated>("ProtoUserCreated")
             .Build();
 
-        var clientOptions = new EventStoreClientOptions<object, BsonValue>
+        var clientOptions = new EventStoreClientOptions<object, BsonValue, BsonValue>
         {
-            AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync<BsonValue>(ct),
+            AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync(ct),
             TypeMap = eventTypeMap,
             EventSerializer = serializer,
             MetadataSerializer = new BsonDocumentMetadataSerializer()
         };
 
-        return new EventStoreClient<object, BsonValue>(clientOptions);
+        return new EventStoreClient<object, BsonValue, BsonValue>(clientOptions);
     }
 
     private record UserCreated

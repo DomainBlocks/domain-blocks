@@ -14,7 +14,7 @@ public class EventStoreClientAdapterBenchmarks
     private const string StreamId = "test-stream";
 
     private readonly Consumer _consumer = new();
-    private IEventStoreClientAdapter<ReadOnlyMemory<byte>> _adapter = null!;
+    private IEventStoreClientAdapter<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> _adapter = null!;
 
     [GlobalSetup]
     public void GlobalSetup()
@@ -66,11 +66,11 @@ public class EventStoreClientAdapterBenchmarks
     }
 
     private sealed class FakeKurrentDBEventStoreClientAdapter(ResolvedEvent[] nativeEvents) :
-        IEventStoreClientAdapter<ReadOnlyMemory<byte>>
+        IEventStoreClientAdapter<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
     {
         public Task AppendToStreamAsync(
             string streamId,
-            IEnumerable<SerializedAppendEvent<ReadOnlyMemory<byte>>> events,
+            IEnumerable<AppendEvent<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>> events,
             AppendToStreamOptions? options = null,
             CancellationToken cancellationToken = default)
         {

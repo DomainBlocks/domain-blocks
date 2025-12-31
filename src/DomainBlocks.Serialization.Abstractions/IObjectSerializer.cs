@@ -1,8 +1,8 @@
 ﻿namespace DomainBlocks.Serialization.Abstractions;
 
-public interface IObjectSerializer<TSerialized>
+public interface IObjectSerializer<TData>
 {
-    TSerialized Serialize(object value);
+    TData Serialize(object value);
 
-    object Deserialize(TSerialized value, Type type);
+    object Deserialize(TData value, Type type);
 }

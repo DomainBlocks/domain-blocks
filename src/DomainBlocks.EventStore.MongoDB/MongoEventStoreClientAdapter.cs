@@ -9,21 +9,25 @@ namespace DomainBlocks.EventStore.MongoDB;
 
 public static class MongoEventStoreClientAdapter
 {
-    public static IMongoEventStoreClientAdapter<TSerialized> Create<TEventDocument, TSerialized>(
+    public static IMongoEventStoreClientAdapter<TEventData, TMetadata> Create<TEventDocument, TEventData, TMetadata>(
         IMongoDatabase database,
-        MongoEventStoreOptions<TEventDocument, TSerialized> options) where TSerialized : notnull
+        MongoEventStoreOptions<TEventDocument, TEventData, TMetadata> options)
+        where TEventData : notnull
+        where TMetadata : notnull
     {
         var collection = database.GetCollection<TEventDocument>(options.EventCollectionName);
-        return new MongoEventStoreClientAdapter<TEventDocument, TSerialized>(collection, options);
+        return new MongoEventStoreClientAdapter<TEventDocument, TEventData, TMetadata>(collection, options);
     }
 }
 
-public class MongoEventStoreClientAdapter<TEventDocument, TSerialized>(
+public class MongoEventStoreClientAdapter<TEventDocument, TEventData, TMetadata>(
     IMongoCollection<TEventDocument> collection,
-    MongoEventStoreOptions<TEventDocument, TSerialized> options) :
-    IMongoEventStoreClientAdapter<TSerialized> where TSerialized : notnull
+    MongoEventStoreOptions<TEventDocument, TEventData, TMetadata> options) :
+    IMongoEventStoreClientAdapter<TEventData, TMetadata>
+    where TEventData : notnull
+    where TMetadata : notnull
 {
-    private readonly IEventDocumentConverter<TEventDocument, TSerialized> _eventDocumentConverter =
+    private readonly IEventDocumentConverter<TEventDocument, TEventData, TMetadata> _eventDocumentConverter =
         options.EventDocumentConverter;
 
     private readonly FieldDefinition<TEventDocument, string> _streamIdField = options.StreamIdField;
@@ -34,7 +38,7 @@ public class MongoEventStoreClientAdapter<TEventDocument, TSerialized>(
 
     public async Task AppendToStreamAsync(
         string streamId,
-        IEnumerable<SerializedAppendEvent<TSerialized>> events,
+        IEnumerable<AppendEvent<TEventData, TMetadata>> events,
         AppendToStreamOptions? appendOptions = null,
         CancellationToken cancellationToken = default)
     {
@@ -73,7 +77,7 @@ public class MongoEventStoreClientAdapter<TEventDocument, TSerialized>(
         }
     }
 
-    public async IAsyncEnumerable<ReadEvent<TSerialized>> ReadStreamAsync(
+    public async IAsyncEnumerable<ReadEvent<TEventData>> ReadStreamAsync(
         string streamId,
         ReadStreamOptions? readOptions = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -165,7 +169,7 @@ public class MongoEventStoreClientAdapter<TEventDocument, TSerialized>(
 
     private IEnumerable<TEventDocument> ToEventDocuments(
         string streamId,
-        IEnumerable<SerializedAppendEvent<TSerialized>> events,
+        IEnumerable<AppendEvent<TEventData, TMetadata>> events,
         StreamVersion? currentStreamVersion)
     {
         var nextVersionValue = (currentStreamVersion?.Value + 1) ?? 0;

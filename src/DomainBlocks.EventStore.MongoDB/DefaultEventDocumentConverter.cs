@@ -1,35 +1,34 @@
 using System.Collections.Frozen;
 using DomainBlocks.EventStore.Abstractions.Events;
+using MongoDB.Bson;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
 /// <summary>
 /// Provides conversion between event wrappers and the default event document for Mongo persistence.
 /// </summary>
-public sealed class DefaultEventDocumentConverter<TSerialized> :
-    IEventDocumentConverter<DefaultEventDocument<TSerialized>, TSerialized>
-    where TSerialized : notnull
+public sealed class DefaultEventDocumentConverter : IEventDocumentConverter<DefaultEventDocument, BsonValue, BsonValue>
 {
     /// <inheritdoc/>
-    public DefaultEventDocument<TSerialized> ToEventDocument(
-        SerializedAppendEvent<TSerialized> @event,
+    public DefaultEventDocument ToEventDocument(
+        AppendEvent<BsonValue, BsonValue> @event,
         string streamId,
         StreamVersion streamVersion,
         DateTime createdAt)
     {
-        return new DefaultEventDocument<TSerialized>
+        return new DefaultEventDocument
         {
             StreamId = streamId,
             StreamVersion = streamVersion.Value,
             EventName = @event.EventName,
             CreatedAt = createdAt,
             EventData = @event.EventData,
-            Metadata = @event.Metadata
+            Metadata = @event.Metadata ?? BsonNull.Value
         };
     }
 
     /// <inheritdoc/>
-    public ReadEvent<TSerialized> FromEventDocument(DefaultEventDocument<TSerialized> document)
+    public ReadEvent<BsonValue> FromEventDocument(DefaultEventDocument document)
     {
         return ReadEvent.Create(
             new ReadEventHeader(

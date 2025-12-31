@@ -55,15 +55,15 @@ public class ReadEventTransformTests : MongoEventStoreTestFixture
             .MapType<ShipmentDispatched>()
             .Build();
 
-        var clientOptions = new EventStoreClientOptions<object, BsonDocument>
+        var clientOptions = new EventStoreClientOptions<object, BsonValue, BsonValue>
         {
-            AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync<BsonDocument>(ct),
+            AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync(ct),
             TypeMap = eventTypeMap,
             EventSerializer = new BsonDocumentSerializer(),
             MetadataSerializer = new BsonDocumentMetadataSerializer()
         };
 
-        var client = new EventStoreClient<object, BsonDocument>(clientOptions);
+        var client = new EventStoreClient<object, BsonValue, BsonValue>(clientOptions);
         var streamId = $"test-read-transform-{Guid.NewGuid()}";
         await client.AppendToStreamAsync(streamId, [legacyEvent]);
 
