@@ -34,24 +34,24 @@ public class EventStoreClientTests : MongoEventStoreTestFixture
                 nameof(LimitOrderFilled))
             .Build();
 
-        var writeClientOptions = new EventStoreClientOptions<object, BsonDocument>
+        var writeClientOptions = new EventStoreClientOptions<object, BsonValue, BsonValue>
         {
-            AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync<BsonDocument>(ct),
+            AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync(ct),
             TypeMap = writeEventTypeMap,
             EventSerializer = new BsonDocumentSerializer(),
             MetadataSerializer = new BsonDocumentMetadataSerializer()
         };
 
-        var readClientOptions = new EventStoreClientOptions<object, BsonDocument>
+        var readClientOptions = new EventStoreClientOptions<object, BsonValue, BsonValue>
         {
-            AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync<BsonDocument>(ct),
+            AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync(ct),
             TypeMap = readEventTypeMap,
             EventSerializer = new BsonDocumentSerializer(),
             MetadataSerializer = new BsonDocumentMetadataSerializer()
         };
 
-        var writeClient = new EventStoreClient<object, BsonDocument>(writeClientOptions);
-        var readClient = new EventStoreClient<object, BsonDocument>(readClientOptions);
+        var writeClient = new EventStoreClient<object, BsonValue, BsonValue>(writeClientOptions);
+        var readClient = new EventStoreClient<object, BsonValue, BsonValue>(readClientOptions);
 
         var orderId = Guid.NewGuid();
         var streamId = $"order-{orderId}";

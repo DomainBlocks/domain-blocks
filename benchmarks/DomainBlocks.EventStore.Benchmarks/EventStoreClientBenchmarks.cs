@@ -20,9 +20,9 @@ public class EventStoreClientBenchmarks
             .MapType<TestEvent>()
             .Build();
 
-        IEventStoreClientAdapter<byte[]> adapter = new FakeEventStoreClientAdapter();
+        IEventStoreClientAdapter<byte[], byte[]> adapter = new FakeEventStoreClientAdapter();
 
-        var clientOptions = new EventStoreClientOptions<IDomainEvent, byte[]>
+        var clientOptions = new EventStoreClientOptions<IDomainEvent, byte[], byte[]>
         {
             AdapterFactory = _ => ValueTask.FromResult(adapter),
             TypeMap = typeMap,
@@ -31,7 +31,7 @@ public class EventStoreClientBenchmarks
             MetadataContributors = [new MetadataContributor()]
         };
 
-        _client = new EventStoreClient<IDomainEvent, byte[]>(clientOptions);
+        _client = new EventStoreClient<IDomainEvent, byte[], byte[]>(clientOptions);
         _eventsToAppend = CreateEventsToAppend(EventCount);
     }
 
@@ -62,11 +62,11 @@ public class EventStoreClientBenchmarks
         public required string Value { get; init; }
     }
 
-    private sealed class FakeEventStoreClientAdapter : IEventStoreClientAdapter<byte[]>
+    private sealed class FakeEventStoreClientAdapter : IEventStoreClientAdapter<byte[], byte[]>
     {
         public Task AppendToStreamAsync(
             string streamId,
-            IEnumerable<SerializedAppendEvent<byte[]>> events,
+            IEnumerable<AppendEvent<byte[], byte[]>> events,
             AppendToStreamOptions? options = null,
             CancellationToken cancellationToken = default)
         {

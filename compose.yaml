@@ -1,8 +1,6 @@
-﻿version: "3.8"
-
-services:
+﻿services:
   mongo:
-    image: mongo:6.0
+    image: mongo:latest
     container_name: domain-blocks-mongo-rs
     ports:
       - "27017:27017"

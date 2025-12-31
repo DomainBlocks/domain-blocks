@@ -1,8 +1,8 @@
 ﻿namespace DomainBlocks.Serialization.Abstractions;
 
-public interface IMetadataSerializer<TSerialized> where TSerialized : notnull
+public interface IMetadataSerializer<TData> where TData : notnull
 {
-    TSerialized Serialize(IReadOnlyDictionary<string, string> metadata);
+    TData Serialize(IReadOnlyDictionary<string, string> metadata);
 
-    IReadOnlyDictionary<string, string> Deserialize(TSerialized metadata);
+    IReadOnlyDictionary<string, string> Deserialize(TData metadata);
 }

@@ -6,26 +6,29 @@ using DomainBlocks.Serialization.Abstractions;
 
 namespace DomainBlocks.EventStore;
 
-public sealed class EventStoreClient<TEventBase, TSerialized> :
+public sealed class EventStoreClient<TEventBase, TEventData, TMetadata> :
     IEventStoreClient<TEventBase>
     where TEventBase : class
-    where TSerialized : notnull
+    where TEventData : notnull
+    where TMetadata : notnull
 {
-    private readonly Func<CancellationToken, ValueTask<IEventStoreClientAdapter<TSerialized>>> _adapterFactory;
+    private readonly Func<CancellationToken, ValueTask<IEventStoreClientAdapter<TEventData, TMetadata>>>
+        _adapterFactory;
+
     private readonly EventTypeMap _eventTypeMap;
-    private readonly IObjectSerializer<TSerialized> _serializer;
-    private readonly IMetadataSerializer<TSerialized> _metadataSerializer;
+    private readonly IObjectSerializer<TEventData> _serializer;
+    private readonly IMetadataSerializer<TMetadata> _metadataSerializer;
     private readonly IMetadataContributor<TEventBase>[] _metadataContributors;
     private readonly FrozenDictionary<Type, IEventContractMapper<TEventBase>> _contractMappersByEventType;
     private readonly FrozenDictionary<Type, IEventContractMapper<TEventBase>> _contractMappersByContractType;
     private readonly CancellationTokenSource _lifetimeCts = new();
     private readonly Lock _lock = new();
-    private volatile IEventStoreClientAdapter<TSerialized>? _adapter;
-    private Task<IEventStoreClientAdapter<TSerialized>>? _adapterCreateTask;
+    private volatile IEventStoreClientAdapter<TEventData, TMetadata>? _adapter;
+    private Task<IEventStoreClientAdapter<TEventData, TMetadata>>? _adapterCreateTask;
 
     private int _disposed;
 
-    public EventStoreClient(EventStoreClientOptions<TEventBase, TSerialized> options)
+    public EventStoreClient(EventStoreClientOptions<TEventBase, TEventData, TMetadata> options)
     {
         _adapterFactory = options.AdapterFactory;
         _eventTypeMap = options.TypeMap;
@@ -87,7 +90,7 @@ public sealed class EventStoreClient<TEventBase, TSerialized> :
             return;
         }
 
-        Task<IEventStoreClientAdapter<TSerialized>>? createTask;
+        Task<IEventStoreClientAdapter<TEventData, TMetadata>>? createTask;
         lock (_lock)
             createTask = _adapterCreateTask;
 
@@ -107,7 +110,8 @@ public sealed class EventStoreClient<TEventBase, TSerialized> :
         _lifetimeCts.Dispose();
     }
 
-    private ValueTask<IEventStoreClientAdapter<TSerialized>> GetAdapterAsync(CancellationToken cancellationToken)
+    private ValueTask<IEventStoreClientAdapter<TEventData, TMetadata>> GetAdapterAsync(
+        CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
 
@@ -115,7 +119,7 @@ public sealed class EventStoreClient<TEventBase, TSerialized> :
         if (adapter is not null)
             return ValueTask.FromResult(adapter);
 
-        Task<IEventStoreClientAdapter<TSerialized>> createTask;
+        Task<IEventStoreClientAdapter<TEventData, TMetadata>> createTask;
 
         lock (_lock)
         {
@@ -125,10 +129,10 @@ public sealed class EventStoreClient<TEventBase, TSerialized> :
             createTask = (_adapterCreateTask ??= CreateAdapterAsync()).WaitAsync(cancellationToken);
         }
 
-        return new ValueTask<IEventStoreClientAdapter<TSerialized>>(createTask);
+        return new ValueTask<IEventStoreClientAdapter<TEventData, TMetadata>>(createTask);
     }
 
-    private async Task<IEventStoreClientAdapter<TSerialized>> CreateAdapterAsync()
+    private async Task<IEventStoreClientAdapter<TEventData, TMetadata>> CreateAdapterAsync()
     {
         try
         {
@@ -146,7 +150,7 @@ public sealed class EventStoreClient<TEventBase, TSerialized> :
         }
     }
 
-    private static ValueTask DisposeIfSupportedAsync(IEventStoreClientAdapter<TSerialized> adapter)
+    private static ValueTask DisposeIfSupportedAsync(IEventStoreClientAdapter<TEventData, TMetadata> adapter)
     {
         if (adapter is IAsyncDisposable asyncDisposable)
             return asyncDisposable.DisposeAsync();
@@ -161,7 +165,7 @@ public sealed class EventStoreClient<TEventBase, TSerialized> :
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed != 0, this);
 
-    private IEnumerable<SerializedAppendEvent<TSerialized>> SerializeEvents(IEnumerable<AppendEvent<TEventBase>> events)
+    private IEnumerable<AppendEvent<TEventData, TMetadata>> SerializeEvents(IEnumerable<AppendEvent<TEventBase>> events)
     {
         var metadata = new Dictionary<string, string>();
         var metadataWriter = new MetadataWriter(metadata);
@@ -194,7 +198,7 @@ public sealed class EventStoreClient<TEventBase, TSerialized> :
 
             var serializedMetadata = metadata.Count > 0 ? _metadataSerializer.Serialize(metadata) : default;
 
-            yield return SerializedAppendEvent.Create(eventName, serializedEvent, serializedMetadata);
+            yield return Abstractions.Events.AppendEvent.Create(eventName, serializedEvent, serializedMetadata);
         }
     }
 }

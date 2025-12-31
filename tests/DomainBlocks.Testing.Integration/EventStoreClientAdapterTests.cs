@@ -6,11 +6,13 @@ using Shouldly;
 
 namespace DomainBlocks.Testing.Integration;
 
-public abstract class EventStoreClientAdapterTests<TSerialized> where TSerialized : notnull
+public abstract class EventStoreClientAdapterTests<TEventData, TMetadata>
+    where TEventData : notnull
+    where TMetadata : notnull
 {
     private const int TestTimeoutMillis = 5_000;
 
-    private IEventStoreClientAdapter<TSerialized> _adapter = null!;
+    private IEventStoreClientAdapter<TEventData, TMetadata> _adapter = null!;
 
     private static IEnumerable<TestCaseData> PositionAndDirectionCases
     {
@@ -43,7 +45,7 @@ public abstract class EventStoreClientAdapterTests<TSerialized> where TSerialize
     public async Task AppendToStreamAsync_ExpectedStateIsAnyAndStreamDoesNotExist_AppendsEvents(
         CancellationToken cancellationToken)
     {
-        SerializedAppendEvent<TSerialized>[] events =
+        AppendEvent<TEventData, TMetadata>[] events =
         [
             CreateTestEvent("TestEvent1"),
             CreateTestEvent("TestEvent2"),
@@ -70,14 +72,14 @@ public abstract class EventStoreClientAdapterTests<TSerialized> where TSerialize
     public async Task AppendToStreamAsync_ExpectedStateIsAnyAndStreamExists_AppendsEvents(
         CancellationToken cancellationToken)
     {
-        SerializedAppendEvent<TSerialized>[] events1 =
+        AppendEvent<TEventData, TMetadata>[] events1 =
         [
             CreateTestEvent("TestEvent1"),
             CreateTestEvent("TestEvent2"),
             CreateTestEvent("TestEvent3")
         ];
 
-        SerializedAppendEvent<TSerialized>[] events2 =
+        AppendEvent<TEventData, TMetadata>[] events2 =
         [
             CreateTestEvent("TestEvent4"),
             CreateTestEvent("TestEvent5"),
@@ -254,7 +256,7 @@ public abstract class EventStoreClientAdapterTests<TSerialized> where TSerialize
             .ShouldThrowAsync<StreamNotFoundException>();
     }
 
-    protected abstract Task<IEventStoreClientAdapter<TSerialized>> CreateEventStoreAdapterAsync();
+    protected abstract Task<IEventStoreClientAdapter<TEventData, TMetadata>> CreateEventStoreAdapterAsync();
 
-    protected abstract SerializedAppendEvent<TSerialized> CreateTestEvent(string eventName);
+    protected abstract AppendEvent<TEventData, TMetadata> CreateTestEvent(string eventName);
 }

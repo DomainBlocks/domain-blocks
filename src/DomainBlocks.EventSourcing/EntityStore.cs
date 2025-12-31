@@ -1,6 +1,7 @@
 using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Events;
+using AppendEvent = DomainBlocks.EventStore.AppendEvent;
 
 namespace DomainBlocks.EventSourcing;
 
