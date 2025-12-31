@@ -1,4 +1,4 @@
-using System.Collections.Frozen;
+﻿using System.Collections.Frozen;
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Events;
@@ -14,6 +14,8 @@ public sealed class EventStoreClient<TEventBase, TSerialized> :
     private readonly Func<CancellationToken, ValueTask<IEventStoreClientAdapter<TSerialized>>> _adapterFactory;
     private readonly EventTypeMap _eventTypeMap;
     private readonly IObjectSerializer<TSerialized> _serializer;
+    private readonly IMetadataSerializer<TSerialized> _metadataSerializer;
+    private readonly IMetadataContributor<TEventBase>[] _metadataContributors;
     private readonly FrozenDictionary<Type, IEventContractMapper<TEventBase>> _contractMappersByEventType;
     private readonly FrozenDictionary<Type, IEventContractMapper<TEventBase>> _contractMappersByContractType;
     private readonly CancellationTokenSource _lifetimeCts = new();
@@ -27,45 +29,21 @@ public sealed class EventStoreClient<TEventBase, TSerialized> :
     {
         _adapterFactory = options.AdapterFactory;
         _eventTypeMap = options.TypeMap;
-        _serializer = options.Serializer;
+        _serializer = options.EventSerializer;
+        _metadataSerializer = options.MetadataSerializer;
+        _metadataContributors = options.MetadataContributors.ToArray();
         _contractMappersByEventType = options.ContractMappers.ToFrozenDictionary(x => x.EventType);
         _contractMappersByContractType = options.ContractMappers.ToFrozenDictionary(x => x.ContractType);
     }
 
     public async Task AppendToStreamAsync(
         string streamId,
-        IEnumerable<UncommittedEvent<TEventBase>> events,
+        IEnumerable<AppendEvent<TEventBase>> events,
         AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var serializedEvents = events
-            .Select(e =>
-            {
-                string eventName;
-                var value = e.Value;
-                object valueToSerialize = value;
-
-                if (_contractMappersByEventType.TryGetValue(value.GetType(), out var mapper))
-                {
-                    eventName = _eventTypeMap.GetEventName(mapper.ContractType);
-                    valueToSerialize = mapper.ToContract(value);
-                }
-                else
-                {
-                    eventName = _eventTypeMap.GetEventName(value.GetType());
-                }
-
-                // PoC for adding metadata.
-                var header = e.Header
-                    .WithEventName(eventName)
-                    .WithMetadata("EventClrType", valueToSerialize.GetType().Name);
-
-                var serializedValue = _serializer.Serialize(valueToSerialize);
-
-                return UncommittedEvent.Create(header, serializedValue);
-            });
-
         var adapter = await GetAdapterAsync(cancellationToken).ConfigureAwait(false);
+        var serializedEvents = SerializeEvents(events);
 
         await adapter
             .AppendToStreamAsync(streamId, serializedEvents, options, cancellationToken)
@@ -182,4 +160,41 @@ public sealed class EventStoreClient<TEventBase, TSerialized> :
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed != 0, this);
+
+    private IEnumerable<SerializedAppendEvent<TSerialized>> SerializeEvents(IEnumerable<AppendEvent<TEventBase>> events)
+    {
+        var metadata = new Dictionary<string, string>();
+        var metadataWriter = new MetadataWriter(metadata);
+
+        foreach (var e in events)
+        {
+            metadata.Clear();
+
+            var @event = e.Event;
+            object? contract = null;
+            string eventName;
+
+            if (_contractMappersByEventType.TryGetValue(@event.GetType(), out var mapper))
+            {
+                contract = mapper.ToContract(@event);
+                eventName = _eventTypeMap.GetEventName(mapper.ContractType);
+            }
+            else
+            {
+                eventName = _eventTypeMap.GetEventName(@event.GetType());
+            }
+
+            var serializedEvent = _serializer.Serialize(contract ?? @event);
+
+            foreach (var metadataContributor in _metadataContributors)
+                metadataContributor.Contribute(@event, contract, eventName, metadataWriter);
+
+            foreach (var (key, value) in e.Metadata)
+                metadata[key] = value;
+
+            var serializedMetadata = metadata.Count > 0 ? _metadataSerializer.Serialize(metadata) : default;
+
+            yield return SerializedAppendEvent.Create(eventName, serializedEvent, serializedMetadata);
+        }
+    }
 }

@@ -1,4 +1,5 @@
 using DomainBlocks.Serialization.Google.Protobuf;
+using DomainBlocks.Serialization.SystemTextJson;
 using DomainBlocks.Testing.Integration.MongoDB;
 using NUnit.Framework;
 using Shouldly;
@@ -18,7 +19,8 @@ public class EventContractMapperTests : MongoEventStoreTestFixture
         {
             AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync<byte[]>(ct),
             TypeMap = eventTypeMap,
-            Serializer = new ProtobufBytesSerializer(),
+            EventSerializer = new ProtobufBytesSerializer(),
+            MetadataSerializer = new SystemTextJsonBytesMetadataSerializer(),
             ContractMappers =
             [
                 new UserCreatedProtoMapper()

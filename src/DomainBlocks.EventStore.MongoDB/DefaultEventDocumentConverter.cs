@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using DomainBlocks.EventStore.Abstractions.Events;
 
 namespace DomainBlocks.EventStore.MongoDB;
@@ -11,7 +12,7 @@ public sealed class DefaultEventDocumentConverter<TSerialized> :
 {
     /// <inheritdoc/>
     public DefaultEventDocument<TSerialized> ToEventDocument(
-        UncommittedEvent<TSerialized> @event,
+        SerializedAppendEvent<TSerialized> @event,
         string streamId,
         StreamVersion streamVersion,
         DateTime createdAt)
@@ -20,10 +21,10 @@ public sealed class DefaultEventDocumentConverter<TSerialized> :
         {
             StreamId = streamId,
             StreamVersion = streamVersion.Value,
-            EventName = @event.Header.EventName,
-            Metadata = @event.Header.Metadata,
+            EventName = @event.EventName,
             CreatedAt = createdAt,
-            Value = @event.Value
+            EventData = @event.EventData,
+            Metadata = @event.Metadata
         };
     }
 
@@ -35,8 +36,9 @@ public sealed class DefaultEventDocumentConverter<TSerialized> :
                 document.StreamId,
                 new StreamVersion(document.StreamVersion),
                 document.EventName,
-                document.Metadata,
+                // TODO: Deal with metadata for reads (will address in a future PR),
+                FrozenDictionary<string, string>.Empty,
                 document.CreatedAt),
-            document.Value);
+            document.EventData);
     }
 }

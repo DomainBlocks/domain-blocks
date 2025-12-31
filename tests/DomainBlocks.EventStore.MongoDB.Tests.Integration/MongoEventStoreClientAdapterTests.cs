@@ -8,27 +8,25 @@ using NUnit.Framework;
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
 [TestFixture]
-public class MongoEventStoreClientAdapterTests : EventStoreClientAdapterTests<BsonDocument>
+public class MongoEventStoreClientAdapterTests : EventStoreClientAdapterTests<BsonValue>
 {
-    protected override async Task<IEventStoreClientAdapter<BsonDocument>> CreateEventStoreAdapterAsync()
+    protected override async Task<IEventStoreClientAdapter<BsonValue>> CreateEventStoreAdapterAsync()
     {
         var client = new MongoClient("mongodb://localhost:27017");
         var database = client.GetDatabase("test");
-        var options = MongoEventStoreOptions.CreateDefault<BsonDocument>();
+        var options = MongoEventStoreOptions.CreateDefault<BsonValue>();
         await MongoEventStoreAdmin.EnsureIndexesAsync(database, options);
 
         return MongoEventStoreClientAdapter.Create(database, options);
     }
 
-    protected override UncommittedEvent<BsonDocument> CreateTestEvent(string eventName)
+    protected override SerializedAppendEvent<BsonValue> CreateTestEvent(string eventName)
     {
-        var header = new UncommittedEventHeader(eventName);
-
-        var value = new BsonDocument
+        BsonValue value = new BsonDocument
         {
             { "TestProperty", "TestValue" }
         };
 
-        return UncommittedEvent.Create(header, value);
+        return SerializedAppendEvent.Create(eventName, value);
     }
 }

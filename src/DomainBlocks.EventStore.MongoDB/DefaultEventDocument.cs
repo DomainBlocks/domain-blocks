@@ -11,7 +11,7 @@ public class DefaultEventDocument<TSerialized>
     public required string StreamId { get; init; }
     public required ulong StreamVersion { get; init; }
     public required string EventName { get; init; }
-    public required IReadOnlyDictionary<string, string> Metadata { get; init; }
     public required DateTime CreatedAt { get; init; }
-    public required TSerialized Value { get; init; }
+    public required TSerialized EventData { get; init; }
+    public required TSerialized? Metadata { get; init; }
 }

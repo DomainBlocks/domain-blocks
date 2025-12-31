@@ -29,7 +29,8 @@ public class EntityStoreTests : MongoEventStoreTestFixture
         {
             AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync<BsonDocument>(ct),
             TypeMap = eventTypeMap,
-            Serializer = new BsonDocumentSerializer()
+            EventSerializer = new BsonDocumentSerializer(),
+            MetadataSerializer = new BsonDocumentMetadataSerializer()
         };
 
         var client = new EventStoreClient<IDomainEvent, BsonDocument>(clientOptions);

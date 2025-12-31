@@ -34,7 +34,7 @@ public class MongoEventStoreClientAdapter<TEventDocument, TSerialized>(
 
     public async Task AppendToStreamAsync(
         string streamId,
-        IEnumerable<UncommittedEvent<TSerialized>> events,
+        IEnumerable<SerializedAppendEvent<TSerialized>> events,
         AppendToStreamOptions? appendOptions = null,
         CancellationToken cancellationToken = default)
     {
@@ -165,7 +165,7 @@ public class MongoEventStoreClientAdapter<TEventDocument, TSerialized>(
 
     private IEnumerable<TEventDocument> ToEventDocuments(
         string streamId,
-        IEnumerable<UncommittedEvent<TSerialized>> events,
+        IEnumerable<SerializedAppendEvent<TSerialized>> events,
         StreamVersion? currentStreamVersion)
     {
         var nextVersionValue = (currentStreamVersion?.Value + 1) ?? 0;

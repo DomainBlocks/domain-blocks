@@ -1,4 +1,4 @@
-using DomainBlocks.EventStore.Abstractions;
+﻿using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Events;
 
 namespace DomainBlocks.EventStore;
@@ -7,7 +7,7 @@ public interface IEventStoreClient<TEventBase> : IAsyncDisposable where TEventBa
 {
     Task AppendToStreamAsync(
         string streamId,
-        IEnumerable<UncommittedEvent<TEventBase>> events,
+        IEnumerable<AppendEvent<TEventBase>> events,
         AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default);
 

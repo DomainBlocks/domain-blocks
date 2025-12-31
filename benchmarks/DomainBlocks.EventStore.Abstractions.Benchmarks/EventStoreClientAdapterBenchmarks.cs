@@ -1,6 +1,7 @@
 ﻿using System.Collections.Frozen;
 using System.Runtime.CompilerServices;
 using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Engines;
 using DomainBlocks.EventStore.Abstractions.Events;
 using KurrentDB.Client;
 
@@ -12,10 +13,8 @@ public class EventStoreClientAdapterBenchmarks
     private const uint EventCount = 10_000;
     private const string StreamId = "test-stream";
 
+    private readonly Consumer _consumer = new();
     private IEventStoreClientAdapter<ReadOnlyMemory<byte>> _adapter = null!;
-
-    // prevent dead-code elimination
-    private ulong _sink;
 
     [GlobalSetup]
     public void GlobalSetup()
@@ -25,20 +24,14 @@ public class EventStoreClientAdapterBenchmarks
     }
 
     [Benchmark]
-    public async Task<ulong> ReadStreamAsync_CurrentAbstraction()
+    public async Task ReadStreamAsync_AbstractionCostWithoutIO()
     {
-        ulong acc = 0;
-
         await foreach (var e in _adapter.ReadStreamAsync(StreamId))
         {
-            // Touch a few fields so wrapper isn't optimized away
-            acc ^= e.Header.StreamVersion.Value;
-            acc += (ulong)e.Header.EventName.Length;
-            acc += (ulong)e.Value.Length;
+            _consumer.Consume(e.Header.StreamVersion.Value);
+            _consumer.Consume(e.Header.EventName);
+            _consumer.Consume(e.Value.Length);
         }
-
-        _sink = acc;
-        return _sink;
     }
 
     private static ResolvedEvent[] CreateKurrentDBEvents(uint count)
@@ -77,7 +70,7 @@ public class EventStoreClientAdapterBenchmarks
     {
         public Task AppendToStreamAsync(
             string streamId,
-            IEnumerable<UncommittedEvent<ReadOnlyMemory<byte>>> events,
+            IEnumerable<SerializedAppendEvent<ReadOnlyMemory<byte>>> events,
             AppendToStreamOptions? options = null,
             CancellationToken cancellationToken = default)
         {

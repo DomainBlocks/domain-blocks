@@ -7,6 +7,7 @@
   </Folder>
   <Folder Name="/benchmarks/">
     <Project Path="benchmarks/DomainBlocks.EventStore.Abstractions.Benchmarks/DomainBlocks.EventStore.Abstractions.Benchmarks.csproj" />
+    <Project Path="benchmarks/DomainBlocks.EventStore.Benchmarks/DomainBlocks.EventStore.Benchmarks.csproj" />
   </Folder>
   <Folder Name="/docs/">
     <File Path="docs\vision.md" />

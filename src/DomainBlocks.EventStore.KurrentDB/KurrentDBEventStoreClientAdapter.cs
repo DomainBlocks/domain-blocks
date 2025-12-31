@@ -1,6 +1,5 @@
 using System.Collections.Frozen;
 using System.Runtime.CompilerServices;
-using System.Text.Json;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Events;
 using DomainBlocks.EventStore.Abstractions.Exceptions;
@@ -16,18 +15,14 @@ public class KurrentDBEventStoreClientAdapter(KurrentDBClient client) :
 {
     public async Task AppendToStreamAsync(
         string streamId,
-        IEnumerable<UncommittedEvent<ReadOnlyMemory<byte>>> events,
+        IEnumerable<SerializedAppendEvent<ReadOnlyMemory<byte>>> events,
         AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default)
     {
         options ??= AppendToStreamOptions.Default;
         var kurrentExpectedState = ToKurrentStreamState(options.ExpectedState);
 
-        var eventData = events.Select(static e =>
-        {
-            var serializedMetadata = JsonSerializer.SerializeToUtf8Bytes(e.Header.Metadata);
-            return new EventData(Uuid.NewUuid(), e.Header.EventName, e.Value, serializedMetadata);
-        });
+        var eventData = events.Select(static e => new EventData(Uuid.NewUuid(), e.EventName, e.EventData, e.Metadata));
 
         try
         {

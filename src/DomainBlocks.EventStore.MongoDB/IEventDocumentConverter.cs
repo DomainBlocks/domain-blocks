@@ -10,15 +10,15 @@ namespace DomainBlocks.EventStore.MongoDB;
 public interface IEventDocumentConverter<TEventDocument, TSerialized> where TSerialized : notnull
 {
     /// <summary>
-    /// Converts an uncommitted event into an event document.
+    /// Converts a serialized append event into an event document.
     /// </summary>
-    /// <param name="event">The uncommitted event.</param>
+    /// <param name="event">The serialized event to append.</param>
     /// <param name="streamId">The identifier of the event stream.</param>
     /// <param name="streamVersion">The version of the stream for this event.</param>
     /// <param name="createdAt">The UTC timestamp at which this event was created.</param>
     /// <returns>An event document representing the specified event.</returns>
     TEventDocument ToEventDocument(
-        UncommittedEvent<TSerialized> @event,
+        SerializedAppendEvent<TSerialized> @event,
         string streamId,
         StreamVersion streamVersion,
         DateTime createdAt);

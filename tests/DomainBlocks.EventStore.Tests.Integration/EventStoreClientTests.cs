@@ -38,14 +38,16 @@ public class EventStoreClientTests : MongoEventStoreTestFixture
         {
             AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync<BsonDocument>(ct),
             TypeMap = writeEventTypeMap,
-            Serializer = new BsonDocumentSerializer()
+            EventSerializer = new BsonDocumentSerializer(),
+            MetadataSerializer = new BsonDocumentMetadataSerializer()
         };
 
         var readClientOptions = new EventStoreClientOptions<object, BsonDocument>
         {
             AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync<BsonDocument>(ct),
             TypeMap = readEventTypeMap,
-            Serializer = new BsonDocumentSerializer()
+            EventSerializer = new BsonDocumentSerializer(),
+            MetadataSerializer = new BsonDocumentMetadataSerializer()
         };
 
         var writeClient = new EventStoreClient<object, BsonDocument>(writeClientOptions);
