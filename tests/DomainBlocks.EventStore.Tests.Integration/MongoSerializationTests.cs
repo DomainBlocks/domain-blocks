@@ -76,7 +76,7 @@ public class MongoSerializationTests
 
         readEvents
             .ShouldHaveSingleItem()
-            .Value
+            .Event
             .ShouldBeOfType<TEvent>()
             .ShouldBe(@event);
     }

@@ -29,4 +29,10 @@ public sealed class ReadStreamOptions
     /// Defines the behavior when the requested stream does not exist.
     /// </summary>
     public StreamNotFoundBehavior StreamNotFoundBehavior { get; init; }
+
+    /// <summary>
+    /// Gets a value indicating whether event metadata is included in the returned results. Excluding metadata can
+    /// significantly reduce allocations and improve throughput for large stream reads.
+    /// </summary>
+    public bool IncludeMetadata { get; init; } = true;
 }

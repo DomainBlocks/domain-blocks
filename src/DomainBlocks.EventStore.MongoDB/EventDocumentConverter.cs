@@ -1,4 +1,3 @@
-using System.Collections.Frozen;
 using DomainBlocks.EventStore.Abstractions.Events;
 using MongoDB.Bson;
 
@@ -28,16 +27,14 @@ public sealed class EventDocumentConverter : IEventDocumentConverter<EventDocume
     }
 
     /// <inheritdoc/>
-    public ReadEvent<BsonValue> FromEventDocument(EventDocument document)
+    public ReadEvent<BsonValue, BsonValue> FromEventDocument(EventDocument document)
     {
-        return ReadEvent.Create(
-            new ReadEventHeader(
-                document.StreamId,
-                new StreamVersion(document.StreamVersion),
-                document.EventName,
-                // TODO: Deal with metadata for reads (will address in a future PR),
-                FrozenDictionary<string, string>.Empty,
-                document.CreatedAt),
-            document.EventData);
+        var context = new ReadEventContext(
+            document.StreamId,
+            new StreamVersion(document.StreamVersion),
+            document.CreatedAt,
+            null);
+
+        return ReadEvent.Create(document.EventName, document.EventData, document.Metadata, context);
     }
 }

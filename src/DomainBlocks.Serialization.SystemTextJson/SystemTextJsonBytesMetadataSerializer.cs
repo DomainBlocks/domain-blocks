@@ -15,8 +15,7 @@ public sealed class SystemTextJsonBytesMetadataSerializer(JsonSerializerOptions?
 
     public IReadOnlyDictionary<string, string> Deserialize(byte[] metadata)
     {
-        return JsonSerializer.Deserialize<IReadOnlyDictionary<string, string>>(metadata, options) ??
-               FrozenDictionary<string, string>.Empty;
+        return Deserialize(metadata.AsSpan());
     }
 
     ReadOnlyMemory<byte> IMetadataSerializer<ReadOnlyMemory<byte>>.Serialize(
@@ -28,7 +27,15 @@ public sealed class SystemTextJsonBytesMetadataSerializer(JsonSerializerOptions?
     IReadOnlyDictionary<string, string> IMetadataSerializer<ReadOnlyMemory<byte>>.Deserialize(
         ReadOnlyMemory<byte> metadata)
     {
-        return JsonSerializer.Deserialize<IReadOnlyDictionary<string, string>>(metadata.Span, options) ??
+        return Deserialize(metadata.Span);
+    }
+
+    private IReadOnlyDictionary<string, string> Deserialize(ReadOnlySpan<byte> metadata)
+    {
+        if (metadata.IsEmpty)
+            return FrozenDictionary<string, string>.Empty;
+
+        return JsonSerializer.Deserialize<IReadOnlyDictionary<string, string>>(metadata, options) ??
                FrozenDictionary<string, string>.Empty;
     }
 }

@@ -89,7 +89,7 @@ public class EventStoreClientTests
 
         var orderEvents = await readClient
             .ReadStreamAsync(streamId)
-            .Select(x => x.Value)
+            .Select(x => x.Event)
             .OfType<LimitOrderEvent>()
             .ToArrayAsync();
 

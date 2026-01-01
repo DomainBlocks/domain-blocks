@@ -31,5 +31,5 @@ public interface IEventDocumentConverter<TEventDocument, TEventData, TMetadata>
     /// </summary>
     /// <param name="document">The event document to convert.</param>
     /// <returns>A read event reconstructed from the specified event document.</returns>
-    ReadEvent<TEventData> FromEventDocument(TEventDocument document);
+    ReadEvent<TEventData, TMetadata> FromEventDocument(TEventDocument document);
 }

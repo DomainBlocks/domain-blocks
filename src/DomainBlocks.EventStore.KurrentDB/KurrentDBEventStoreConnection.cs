@@ -1,4 +1,3 @@
-using System.Collections.Frozen;
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Events;
@@ -38,7 +37,7 @@ public class KurrentDBEventStoreConnection(KurrentDBClient client) : IKurrentDBE
         }
     }
 
-    public async IAsyncEnumerable<ReadEvent<ReadOnlyMemory<byte>>> ReadStreamAsync(
+    public async IAsyncEnumerable<ReadEvent<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>> ReadStreamAsync(
         string streamId,
         ReadStreamOptions? options = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -85,15 +84,13 @@ public class KurrentDBEventStoreConnection(KurrentDBClient client) : IKurrentDBE
             var @event = resolvedEvent.Event;
             var originalEvent = resolvedEvent.OriginalEvent;
 
-            var header = new ReadEventHeader(
+            var context = new ReadEventContext(
                 streamId,
                 new StreamVersion(originalEvent.EventNumber.ToUInt64()),
-                @event.EventType,
-                FrozenDictionary<string, string>.Empty,
-                @event.Created.Date,
+                @event.Created,
                 GlobalPosition.FromUInt64(originalEvent.Position.CommitPosition));
 
-            yield return ReadEvent.Create(header, @event.Data);
+            yield return ReadEvent.Create(@event.EventType, @event.Data, @event.Metadata, context);
         }
     }
 
