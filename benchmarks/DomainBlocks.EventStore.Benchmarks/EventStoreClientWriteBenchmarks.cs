@@ -6,12 +6,13 @@ using DomainBlocks.Serialization.SystemTextJson;
 namespace DomainBlocks.EventStore.Benchmarks;
 
 [MemoryDiagnoser]
-public class EventStoreClientBenchmarks
+public class EventStoreClientWriteBenchmarks
 {
     private const int EventCount = 10_000;
+    private const string StreamId = "test-stream";
 
     private IEventStoreClient<IDomainEvent> _client = null!;
-    private AppendEvent<IDomainEvent>[] _eventsToAppend = null!;
+    private AppendEvent<IDomainEvent>[] _appendEvents = null!;
 
     [GlobalSetup]
     public void GlobalSetup()
@@ -20,7 +21,7 @@ public class EventStoreClientBenchmarks
             .MapType<TestEvent>()
             .Build();
 
-        var clientOptions = new EventStoreClientOptions<IDomainEvent, byte[], byte[]>
+        var clientOptions = new EventStoreClientOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
             ConnectionProvider = new FakeEventStoreConnectionProvider(),
             TypeMap = typeMap,
@@ -29,17 +30,17 @@ public class EventStoreClientBenchmarks
             MetadataContributors = [new MetadataContributor()]
         };
 
-        _client = new EventStoreClient<IDomainEvent, byte[], byte[]>(clientOptions);
-        _eventsToAppend = CreateEventsToAppend(EventCount);
+        _client = new EventStoreClient<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>(clientOptions);
+        _appendEvents = CreateAppendEvents(EventCount);
     }
 
     [Benchmark]
-    public Task AppendToStreamAsync_AbstractionCostWithoutIO()
+    public Task AppendToStreamAsync_NoIO()
     {
-        return _client.AppendToStreamAsync("test-stream", _eventsToAppend);
+        return _client.AppendToStreamAsync(StreamId, _appendEvents);
     }
 
-    private static AppendEvent<IDomainEvent>[] CreateEventsToAppend(int count)
+    private static AppendEvent<IDomainEvent>[] CreateAppendEvents(int count)
     {
         var events = new AppendEvent<IDomainEvent>[count];
 
@@ -60,23 +61,26 @@ public class EventStoreClientBenchmarks
         public required string Value { get; init; }
     }
 
-    private sealed class FakeEventStoreConnectionProvider : IEventStoreConnectionProvider<byte[], byte[]>
+    private sealed class FakeEventStoreConnectionProvider :
+        IEventStoreConnectionProvider<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
     {
-        public ValueTask<ConnectionScope<byte[], byte[]>> AcquireAsync(
+        public ValueTask<ConnectionScope<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>> AcquireAsync(
             CancellationToken cancellationToken = default)
         {
-            return ValueTask.FromResult(ConnectionScope.Create(new FakeEventStoreConnection()));
+            return ValueTask.FromResult(ConnectionScope.Create(new FakeKurrentDBEventStoreConnection()));
         }
     }
 
-    private sealed class FakeEventStoreConnection : IEventStoreConnection<byte[], byte[]>
+    private sealed class FakeKurrentDBEventStoreConnection :
+        IEventStoreConnection<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
     {
         public Task AppendToStreamAsync(
             string streamId,
-            IEnumerable<AppendEvent<byte[], byte[]>> events,
+            IEnumerable<AppendEvent<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>> events,
             AppendToStreamOptions? options = null,
             CancellationToken cancellationToken = default)
         {
+            // Force enumeration
             foreach (var _ in events)
             {
             }
@@ -84,7 +88,7 @@ public class EventStoreClientBenchmarks
             return Task.CompletedTask;
         }
 
-        public IAsyncEnumerable<ReadEvent<byte[]>> ReadStreamAsync(
+        public IAsyncEnumerable<ReadEvent<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>> ReadStreamAsync(
             string streamId,
             ReadStreamOptions? options = null,
             CancellationToken cancellationToken = default)

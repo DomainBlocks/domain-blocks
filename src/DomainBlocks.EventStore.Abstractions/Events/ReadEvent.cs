@@ -2,17 +2,28 @@ namespace DomainBlocks.EventStore.Abstractions.Events;
 
 public static class ReadEvent
 {
-    public static ReadEvent<TValue> Create<TValue>(ReadEventHeader header, TValue value, bool isTransformed = false)
-        where TValue : notnull
+    public static ReadEvent<TEventData, TMetadata> Create<TEventData, TMetadata>(
+        string eventName,
+        TEventData eventData,
+        TMetadata? metadata,
+        ReadEventContext context)
+        where TEventData : notnull
+        where TMetadata : notnull
     {
-        return new ReadEvent<TValue>(header, value, isTransformed);
+        return new ReadEvent<TEventData, TMetadata>(eventName, eventData, metadata, context);
     }
 }
 
-public sealed class ReadEvent<TValue>(ReadEventHeader header, TValue value, bool isTransformed = false)
-    where TValue : notnull
+public readonly struct ReadEvent<TEventData, TMetadata>(
+    string eventName,
+    TEventData eventData,
+    TMetadata? metadata,
+    ReadEventContext context)
+    where TEventData : notnull
+    where TMetadata : notnull
 {
-    public ReadEventHeader Header { get; } = header;
-    public TValue Value { get; } = value;
-    public bool IsTransformed { get; } = isTransformed;
+    public string EventName { get; } = eventName;
+    public TEventData EventData { get; } = eventData;
+    public TMetadata? Metadata { get; } = metadata;
+    public ReadEventContext Context { get; } = context;
 }

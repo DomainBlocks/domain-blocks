@@ -72,7 +72,7 @@ public class ReadEventTransformTests
         var readEvents = await client
             .ReadStreamAsync(streamId)
             .Transform([new ShipmentDispatchedTransform()])
-            .Select(x => x.Value)
+            .Select(x => x.Event)
             .ToArrayAsync();
 
         readEvents.ShouldBe(expectedEvents);
@@ -97,16 +97,19 @@ public class ReadEventTransformTests
 
     private class ShipmentDispatchedTransform : ReadEventTransform<object, ShipmentDispatched>
     {
-        protected override IEnumerable<object> Apply(ShipmentDispatched sourceEvent, ReadEventHeader sourceHeader)
+        protected override IEnumerable<object> Apply(
+            ShipmentDispatched @event,
+            IReadOnlyDictionary<string, string> metadata,
+            ReadEventContext context)
         {
             yield return new ShipmentDispatchedV2(
-                sourceEvent.ShipmentId,
-                sourceEvent.DispatchedAt);
+                @event.ShipmentId,
+                @event.DispatchedAt);
 
-            foreach (var pkg in sourceEvent.Packages)
+            foreach (var pkg in @event.Packages)
             {
                 yield return new PackageShipped(
-                    sourceEvent.ShipmentId,
+                    @event.ShipmentId,
                     pkg.TrackingNumber,
                     pkg.WeightKg,
                     pkg.Destination);

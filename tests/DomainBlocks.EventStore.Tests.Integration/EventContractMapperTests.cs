@@ -1,7 +1,6 @@
+using DomainBlocks.EventStore.KurrentDB;
 using DomainBlocks.Serialization.Google.Protobuf;
-using DomainBlocks.Serialization.MongoDB.Bson;
-using DomainBlocks.Testing.Integration.MongoDB;
-using MongoDB.Bson;
+using DomainBlocks.Serialization.SystemTextJson;
 using NUnit.Framework;
 using Shouldly;
 
@@ -12,25 +11,28 @@ public class EventContractMapperTests
     [Test]
     public async Task Should_map_to_and_from_contract()
     {
-        await using var connectionProvider = await MongoTestEventStoreConnectionProvider.CreateAsync();
+        const string connectionString = "kurrentdb://admin:changeit@localhost:2113?tls=false&tlsVerifyCert=false";
+
+        await using var connectionProvider =
+            KurrentDBEventStoreConnectionProvider.FromConnectionString(connectionString);
 
         var eventTypeMap = new EventTypeMapBuilder()
             .MapType<Proto.UserCreated>()
             .Build();
 
-        var clientOptions = new EventStoreClientOptions<object, BsonValue, BsonValue>
+        var clientOptions = new EventStoreClientOptions<object, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
             ConnectionProvider = connectionProvider,
             TypeMap = eventTypeMap,
-            EventSerializer = new ProtobufBytesSerializer().AsBsonValueSerializer(),
-            MetadataSerializer = new BsonDocumentMetadataSerializer(),
+            EventSerializer = new ProtobufBytesSerializer(),
+            MetadataSerializer = new SystemTextJsonBytesMetadataSerializer(),
             ContractMappers =
             [
                 new UserCreatedProtoMapper()
             ]
         };
 
-        var client = new EventStoreClient<object, BsonValue, BsonValue>(clientOptions);
+        var client = new EventStoreClient<object, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>(clientOptions);
 
         var originalEvent = new UserCreated
         {
@@ -46,7 +48,7 @@ public class EventContractMapperTests
 
         readEvents
             .ShouldHaveSingleItem()
-            .Value
+            .Event
             .ShouldBeOfType<UserCreated>()
             .ShouldBe(originalEvent);
     }

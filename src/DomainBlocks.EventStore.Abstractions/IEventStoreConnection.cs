@@ -10,7 +10,7 @@ public interface IEventStoreConnection<TEventData, TMetadata> where TEventData :
         AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default);
 
-    IAsyncEnumerable<ReadEvent<TEventData>> ReadStreamAsync(
+    IAsyncEnumerable<ReadEvent<TEventData, TMetadata>> ReadStreamAsync(
         string streamId,
         ReadStreamOptions? options = null,
         CancellationToken cancellationToken = default);

@@ -8,10 +8,13 @@ public abstract class ReadEventTransform<TEventBase, TSourceEvent> : IReadEventT
 {
     public Type SourceEventType => typeof(TSourceEvent);
 
-    protected abstract IEnumerable<TEventBase> Apply(TSourceEvent sourceEvent, ReadEventHeader sourceHeader);
+    protected abstract IEnumerable<TEventBase> Apply(
+        TSourceEvent @event,
+        IReadOnlyDictionary<string, string> metadata,
+        ReadEventContext context);
 
-    IEnumerable<TEventBase> IReadEventTransform<TEventBase>.Apply(ReadEvent<TEventBase> sourceEvent)
+    IEnumerable<TEventBase> IReadEventTransform<TEventBase>.Apply(ReadEvent<TEventBase> @event)
     {
-        return Apply((TSourceEvent)sourceEvent.Value, sourceEvent.Header);
+        return Apply((TSourceEvent)@event.Event, @event.Metadata, @event.Context);
     }
 }

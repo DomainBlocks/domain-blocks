@@ -1,5 +1,4 @@
 using System.Collections.Frozen;
-using DomainBlocks.EventStore.Abstractions.Events;
 
 namespace DomainBlocks.EventStore.Read;
 
@@ -31,12 +30,12 @@ public static class ReadEventTransformExtensions
 
                 while (queue.TryDequeue(out var nextEvent))
                 {
-                    if (transformsByType.TryGetValue(nextEvent.Value.GetType(), out var transform))
+                    if (transformsByType.TryGetValue(nextEvent.Event.GetType(), out var transform))
                     {
                         var transformedEvents = transform.Apply(nextEvent);
 
                         foreach (var transformedEvent in transformedEvents)
-                            queue.Enqueue(ReadEvent.Create(nextEvent.Header, transformedEvent, isTransformed: true));
+                            queue.Enqueue(ReadEvent.Create(transformedEvent, nextEvent.Metadata, nextEvent.Context));
                     }
                     else
                     {

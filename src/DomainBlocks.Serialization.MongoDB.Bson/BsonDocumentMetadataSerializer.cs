@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using DomainBlocks.Serialization.Abstractions;
 using MongoDB.Bson;
 
@@ -23,5 +24,7 @@ public sealed class BsonDocumentMetadataSerializer : IMetadataSerializer<BsonDoc
     BsonValue IMetadataSerializer<BsonValue>.Serialize(IReadOnlyDictionary<string, string> metadata) =>
         Serialize(metadata);
 
-    public IReadOnlyDictionary<string, string> Deserialize(BsonValue metadata) => Deserialize(metadata.AsBsonDocument);
+    public IReadOnlyDictionary<string, string> Deserialize(BsonValue metadata) => !metadata.IsBsonNull
+        ? Deserialize(metadata.AsBsonDocument)
+        : FrozenDictionary<string, string>.Empty;
 }

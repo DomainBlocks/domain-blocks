@@ -66,7 +66,7 @@ public class MongoEventStoreConnection<TEventDocument, TEventData, TMetadata>(
         }
     }
 
-    public async IAsyncEnumerable<ReadEvent<TEventData>> ReadStreamAsync(
+    public async IAsyncEnumerable<ReadEvent<TEventData, TMetadata>> ReadStreamAsync(
         string streamId,
         ReadStreamOptions? readOptions = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)

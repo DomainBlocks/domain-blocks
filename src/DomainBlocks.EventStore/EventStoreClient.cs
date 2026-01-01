@@ -51,18 +51,22 @@ public sealed class EventStoreClient<TEventBase, TEventData, TMetadata> :
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         await using var scope = await _connectionProvider.AcquireAsync(cancellationToken).ConfigureAwait(false);
+        options ??= ReadStreamOptions.Default;
         var serializedEvents = scope.Connection.ReadStreamAsync(streamId, options, cancellationToken);
 
-        await foreach (var serializedEvent in serializedEvents.ConfigureAwait(false))
+        await foreach (var e in serializedEvents.ConfigureAwait(false))
         {
-            var header = serializedEvent.Header;
-            var eventType = _eventTypeMap.GetEventType(header.EventName);
-            var deserializedValue = _eventSerializer.Deserialize(serializedEvent.Value, eventType);
+            var eventType = _eventTypeMap.GetEventType(e.EventName);
+            var deserializedEvent = _eventSerializer.Deserialize(e.EventData, eventType);
 
-            if (_contractMappersByContractType.TryGetValue(deserializedValue.GetType(), out var mapper))
-                deserializedValue = mapper.FromContract(deserializedValue);
+            if (_contractMappersByContractType.TryGetValue(deserializedEvent.GetType(), out var mapper))
+                deserializedEvent = mapper.FromContract(deserializedEvent);
 
-            yield return ReadEvent.Create(header, (TEventBase)deserializedValue);
+            var deserializedMetadata = options.IncludeMetadata && e.Metadata is not null
+                ? _metadataSerializer.Deserialize(e.Metadata)
+                : FrozenDictionary<string, string>.Empty;
+
+            yield return ReadEvent.Create((TEventBase)deserializedEvent, deserializedMetadata, e.Context);
         }
     }
 

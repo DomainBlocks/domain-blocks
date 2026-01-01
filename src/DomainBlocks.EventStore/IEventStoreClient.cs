@@ -1,5 +1,4 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.Abstractions.Events;
 
 namespace DomainBlocks.EventStore;
 

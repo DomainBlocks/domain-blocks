@@ -73,10 +73,10 @@ public abstract class EventStoreConnectionTests<TEventData, TMetadata>
             .ReadStreamAsync(streamId, cancellationToken: cancellationToken)
             .ToArrayAsync(cancellationToken);
 
-        readEvents.ShouldAllBe(x => x.Header.StreamId == streamId);
+        readEvents.ShouldAllBe(x => x.Context.StreamId == streamId);
 
         readEvents
-            .Select(x => x.Header.EventName)
+            .Select(x => x.EventName)
             .ShouldBe(events.Select(x => x.EventName));
     }
 
@@ -108,10 +108,10 @@ public abstract class EventStoreConnectionTests<TEventData, TMetadata>
             .ReadStreamAsync(streamId, cancellationToken: cancellationToken)
             .ToArrayAsync(cancellationToken);
 
-        readEvents.ShouldAllBe(x => x.Header.StreamId == streamId);
+        readEvents.ShouldAllBe(x => x.Context.StreamId == streamId);
 
         readEvents
-            .Select(x => x.Header.EventName)
+            .Select(x => x.EventName)
             .ShouldBe(events1.Concat(events2).Select(x => x.EventName));
     }
 
