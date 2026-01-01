@@ -35,6 +35,7 @@ public sealed class MongoEventStoreConnectionProvider<TEventDocument, TEventData
 {
     private readonly IMongoClient _client;
     private readonly MongoEventStoreConnection<TEventDocument, TEventData, TMetadata> _connection;
+    private int _disposed;
 
     public MongoEventStoreConnectionProvider(
         IMongoClient client,
@@ -51,13 +52,19 @@ public sealed class MongoEventStoreConnectionProvider<TEventDocument, TEventData
     public ValueTask<ConnectionScope<TEventData, TMetadata>> AcquireAsync(
         CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
         var scope = ConnectionScope.Create(_connection);
         return ValueTask.FromResult(scope);
     }
 
     public ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return ValueTask.CompletedTask;
+
         _client.Dispose();
         return ValueTask.CompletedTask;
     }
+
+    private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed != 0, this);
 }

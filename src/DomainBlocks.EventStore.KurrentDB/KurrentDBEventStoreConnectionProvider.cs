@@ -7,6 +7,7 @@ public sealed class KurrentDBEventStoreConnectionProvider(KurrentDBClient client
     IKurrentDBEventStoreConnectionProvider
 {
     private readonly KurrentDBEventStoreConnection _connection = new(client);
+    private int _disposed;
 
     public static KurrentDBEventStoreConnectionProvider FromConnectionString(string connectionString)
     {
@@ -23,9 +24,18 @@ public sealed class KurrentDBEventStoreConnectionProvider(KurrentDBClient client
     public ValueTask<ConnectionScope<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>> AcquireAsync(
         CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
         var scope = ConnectionScope.Create(_connection);
         return ValueTask.FromResult(scope);
     }
 
-    public ValueTask DisposeAsync() => client.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+
+        await client.DisposeAsync().ConfigureAwait(false);
+    }
+
+    private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed != 0, this);
 }
