@@ -7,18 +7,20 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.Tests.Integration;
 
-public class EventContractMapperTests : MongoEventStoreTestFixture
+public class EventContractMapperTests
 {
     [Test]
     public async Task Should_map_to_and_from_contract()
     {
+        await using var connectionProvider = await MongoTestEventStoreConnectionProvider.CreateAsync();
+
         var eventTypeMap = new EventTypeMapBuilder()
             .MapType<Proto.UserCreated>()
             .Build();
 
         var clientOptions = new EventStoreClientOptions<object, BsonValue, BsonValue>
         {
-            AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync(ct),
+            ConnectionProvider = connectionProvider,
             TypeMap = eventTypeMap,
             EventSerializer = new ProtobufBytesSerializer().AsBsonValueSerializer(),
             MetadataSerializer = new BsonDocumentMetadataSerializer(),

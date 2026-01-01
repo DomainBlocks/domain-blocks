@@ -4,10 +4,6 @@ namespace DomainBlocks.Serialization.Abstractions;
 
 public class ObjectSerializationException : DomainBlocksException
 {
-    public ObjectSerializationException()
-    {
-    }
-
     public ObjectSerializationException(string? message) : base(message)
     {
     }
@@ -16,12 +12,12 @@ public class ObjectSerializationException : DomainBlocksException
     {
     }
 
-    public static ObjectSerializationException ForSerialization(Type type, Exception innerException) =>
+    public static ObjectSerializationException SerializationFailed(Type type, Exception innerException) =>
         new($"Serialization failed for type '{type.FullName}'.", innerException);
 
-    public static ObjectSerializationException ForDeserialization(Type type, Exception innerException) =>
+    public static ObjectSerializationException DeserializationFailed(Type type, Exception innerException) =>
         new($"Deserialization failed for type '{type.FullName}'.", innerException);
 
-    public static ObjectSerializationException NullResult(Type type) =>
+    public static ObjectSerializationException DeserializationReturnedNull(Type type) =>
         new($"Value deserialized to null for type '{type.FullName}'.");
 }

@@ -58,8 +58,6 @@ public sealed class EntityStore<TEventBase>(
             .ConfigureAwait(false);
     }
 
-    public ValueTask DisposeAsync() => eventStoreClient.DisposeAsync();
-
     private async Task<Versioned<TEntity>> LoadInternalAsync<TEntity>(
         string entityId,
         StreamNotFoundBehavior streamNotFoundBehavior,

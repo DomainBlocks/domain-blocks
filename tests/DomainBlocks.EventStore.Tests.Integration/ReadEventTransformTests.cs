@@ -8,7 +8,7 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.Tests.Integration;
 
-public class ReadEventTransformTests : MongoEventStoreTestFixture
+public class ReadEventTransformTests
 {
     [Test]
     public async Task Should_transform_read_event()
@@ -51,13 +51,15 @@ public class ReadEventTransformTests : MongoEventStoreTestFixture
                 Destination: "Madrid, ES")
         };
 
+        await using var connectionProvider = await MongoTestEventStoreConnectionProvider.CreateAsync();
+
         var eventTypeMap = new EventTypeMapBuilder()
             .MapType<ShipmentDispatched>()
             .Build();
 
         var clientOptions = new EventStoreClientOptions<object, BsonValue, BsonValue>
         {
-            AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync(ct),
+            ConnectionProvider = connectionProvider,
             TypeMap = eventTypeMap,
             EventSerializer = new BsonDocumentSerializer(),
             MetadataSerializer = new BsonDocumentMetadataSerializer()

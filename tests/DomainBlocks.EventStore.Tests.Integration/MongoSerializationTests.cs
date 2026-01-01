@@ -1,3 +1,4 @@
+using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.Serialization.Abstractions;
 using DomainBlocks.Serialization.Google.Protobuf;
 using DomainBlocks.Serialization.MongoDB.Bson;
@@ -9,7 +10,7 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.Tests.Integration;
 
-public class MongoSerializationTests : MongoEventStoreTestFixture
+public class MongoSerializationTests
 {
     private static readonly UserCreated TestEvent = new()
     {
@@ -67,7 +68,8 @@ public class MongoSerializationTests : MongoEventStoreTestFixture
         TEvent @event,
         IObjectSerializer<BsonValue> serializer) where TEvent : class
     {
-        var client = CreateEventStore(serializer);
+        await using var connectionProvider = await MongoTestEventStoreConnectionProvider.CreateAsync();
+        var client = CreateEventStore(connectionProvider, serializer);
         var streamId = $"test-{serializer.GetType().Name}-{Guid.NewGuid()}";
         await client.AppendToStreamAsync(streamId, [@event]);
         var readEvents = await client.ReadStreamAsync(streamId).ToArrayAsync();
@@ -80,6 +82,7 @@ public class MongoSerializationTests : MongoEventStoreTestFixture
     }
 
     private static EventStoreClient<object, BsonValue, BsonValue> CreateEventStore(
+        IEventStoreConnectionProvider<BsonValue, BsonValue> connectionProvider,
         IObjectSerializer<BsonValue> serializer)
     {
         var eventTypeMap = new EventTypeMapBuilder()
@@ -89,7 +92,7 @@ public class MongoSerializationTests : MongoEventStoreTestFixture
 
         var clientOptions = new EventStoreClientOptions<object, BsonValue, BsonValue>
         {
-            AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync(ct),
+            ConnectionProvider = connectionProvider,
             TypeMap = eventTypeMap,
             EventSerializer = serializer,
             MetadataSerializer = new BsonDocumentMetadataSerializer()

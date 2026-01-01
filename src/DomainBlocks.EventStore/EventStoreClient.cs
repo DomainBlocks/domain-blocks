@@ -12,27 +12,19 @@ public sealed class EventStoreClient<TEventBase, TEventData, TMetadata> :
     where TEventData : notnull
     where TMetadata : notnull
 {
-    private readonly Func<CancellationToken, ValueTask<IEventStoreClientAdapter<TEventData, TMetadata>>>
-        _adapterFactory;
-
+    private readonly IEventStoreConnectionProvider<TEventData, TMetadata> _connectionProvider;
     private readonly EventTypeMap _eventTypeMap;
-    private readonly IObjectSerializer<TEventData> _serializer;
+    private readonly IObjectSerializer<TEventData> _eventSerializer;
     private readonly IMetadataSerializer<TMetadata> _metadataSerializer;
     private readonly IMetadataContributor<TEventBase>[] _metadataContributors;
     private readonly FrozenDictionary<Type, IEventContractMapper<TEventBase>> _contractMappersByEventType;
     private readonly FrozenDictionary<Type, IEventContractMapper<TEventBase>> _contractMappersByContractType;
-    private readonly CancellationTokenSource _lifetimeCts = new();
-    private readonly Lock _lock = new();
-    private volatile IEventStoreClientAdapter<TEventData, TMetadata>? _adapter;
-    private Task<IEventStoreClientAdapter<TEventData, TMetadata>>? _adapterCreateTask;
-
-    private int _disposed;
 
     public EventStoreClient(EventStoreClientOptions<TEventBase, TEventData, TMetadata> options)
     {
-        _adapterFactory = options.AdapterFactory;
+        _connectionProvider = options.ConnectionProvider;
         _eventTypeMap = options.TypeMap;
-        _serializer = options.EventSerializer;
+        _eventSerializer = options.EventSerializer;
         _metadataSerializer = options.MetadataSerializer;
         _metadataContributors = options.MetadataContributors.ToArray();
         _contractMappersByEventType = options.ContractMappers.ToFrozenDictionary(x => x.EventType);
@@ -45,10 +37,10 @@ public sealed class EventStoreClient<TEventBase, TEventData, TMetadata> :
         AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var adapter = await GetAdapterAsync(cancellationToken).ConfigureAwait(false);
+        await using var scope = await _connectionProvider.AcquireAsync(cancellationToken).ConfigureAwait(false);
         var serializedEvents = SerializeEvents(events);
 
-        await adapter
+        await scope.Connection
             .AppendToStreamAsync(streamId, serializedEvents, options, cancellationToken)
             .ConfigureAwait(false);
     }
@@ -58,14 +50,14 @@ public sealed class EventStoreClient<TEventBase, TEventData, TMetadata> :
         ReadStreamOptions? options = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var adapter = await GetAdapterAsync(cancellationToken).ConfigureAwait(false);
-        var serializedEvents = adapter.ReadStreamAsync(streamId, options, cancellationToken);
+        await using var scope = await _connectionProvider.AcquireAsync(cancellationToken).ConfigureAwait(false);
+        var serializedEvents = scope.Connection.ReadStreamAsync(streamId, options, cancellationToken);
 
         await foreach (var serializedEvent in serializedEvents.ConfigureAwait(false))
         {
             var header = serializedEvent.Header;
             var eventType = _eventTypeMap.GetEventType(header.EventName);
-            var deserializedValue = _serializer.Deserialize(serializedEvent.Value, eventType);
+            var deserializedValue = _eventSerializer.Deserialize(serializedEvent.Value, eventType);
 
             if (_contractMappersByContractType.TryGetValue(deserializedValue.GetType(), out var mapper))
                 deserializedValue = mapper.FromContract(deserializedValue);
@@ -73,97 +65,6 @@ public sealed class EventStoreClient<TEventBase, TEventData, TMetadata> :
             yield return ReadEvent.Create(header, (TEventBase)deserializedValue);
         }
     }
-
-    public async ValueTask DisposeAsync()
-    {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0)
-            return;
-
-        await _lifetimeCts.CancelAsync().ConfigureAwait(false);
-
-        // Fast path: if adapter already created, dispose it.
-        var adapter = _adapter;
-        if (adapter is not null)
-        {
-            await DisposeIfSupportedAsync(adapter).ConfigureAwait(false);
-            _lifetimeCts.Dispose();
-            return;
-        }
-
-        Task<IEventStoreClientAdapter<TEventData, TMetadata>>? createTask;
-        lock (_lock)
-            createTask = _adapterCreateTask;
-
-        if (createTask is not null)
-        {
-            try
-            {
-                adapter = await createTask.ConfigureAwait(false);
-                await DisposeIfSupportedAsync(adapter).ConfigureAwait(false);
-            }
-            catch
-            {
-                // Create task failed/canceled; nothing to dispose.
-            }
-        }
-
-        _lifetimeCts.Dispose();
-    }
-
-    private ValueTask<IEventStoreClientAdapter<TEventData, TMetadata>> GetAdapterAsync(
-        CancellationToken cancellationToken)
-    {
-        ThrowIfDisposed();
-
-        var adapter = _adapter;
-        if (adapter is not null)
-            return ValueTask.FromResult(adapter);
-
-        Task<IEventStoreClientAdapter<TEventData, TMetadata>> createTask;
-
-        lock (_lock)
-        {
-            ThrowIfDisposed();
-
-            // Ensure only one initialization runs; others await the same task.
-            createTask = (_adapterCreateTask ??= CreateAdapterAsync()).WaitAsync(cancellationToken);
-        }
-
-        return new ValueTask<IEventStoreClientAdapter<TEventData, TMetadata>>(createTask);
-    }
-
-    private async Task<IEventStoreClientAdapter<TEventData, TMetadata>> CreateAdapterAsync()
-    {
-        try
-        {
-            var adapter = await _adapterFactory(_lifetimeCts.Token).ConfigureAwait(false);
-            _adapter = adapter;
-            return adapter;
-        }
-        catch
-        {
-            // Allow retry if create fails.
-            lock (_lock)
-                _adapterCreateTask = null;
-
-            throw;
-        }
-    }
-
-    private static ValueTask DisposeIfSupportedAsync(IEventStoreClientAdapter<TEventData, TMetadata> adapter)
-    {
-        if (adapter is IAsyncDisposable asyncDisposable)
-            return asyncDisposable.DisposeAsync();
-
-        // ReSharper disable once SuspiciousTypeConversion.Global
-        // Implementers outside of the library codebase may be IDisposable.
-        if (adapter is IDisposable disposable)
-            disposable.Dispose();
-
-        return ValueTask.CompletedTask;
-    }
-
-    private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed != 0, this);
 
     private IEnumerable<AppendEvent<TEventData, TMetadata>> SerializeEvents(IEnumerable<AppendEvent<TEventBase>> events)
     {
@@ -188,7 +89,7 @@ public sealed class EventStoreClient<TEventBase, TEventData, TMetadata> :
                 eventName = _eventTypeMap.GetEventName(@event.GetType());
             }
 
-            var serializedEvent = _serializer.Serialize(contract ?? @event);
+            var serializedEvent = _eventSerializer.Serialize(contract ?? @event);
 
             foreach (var metadataContributor in _metadataContributors)
                 metadataContributor.Contribute(@event, contract, eventName, metadataWriter);

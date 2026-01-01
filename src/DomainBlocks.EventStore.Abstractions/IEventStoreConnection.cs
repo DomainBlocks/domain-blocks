@@ -2,7 +2,7 @@ using DomainBlocks.EventStore.Abstractions.Events;
 
 namespace DomainBlocks.EventStore.Abstractions;
 
-public interface IEventStoreClientAdapter<TEventData, TMetadata> where TEventData : notnull where TMetadata : notnull
+public interface IEventStoreConnection<TEventData, TMetadata> where TEventData : notnull where TMetadata : notnull
 {
     Task AppendToStreamAsync(
         string streamId,

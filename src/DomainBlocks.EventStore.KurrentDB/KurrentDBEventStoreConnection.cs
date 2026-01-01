@@ -9,9 +9,7 @@ using StreamNotFoundException = DomainBlocks.EventStore.Abstractions.Exceptions.
 
 namespace DomainBlocks.EventStore.KurrentDB;
 
-public class KurrentDBEventStoreClientAdapter(KurrentDBClient client) :
-    IKurrentDBEventStoreClientAdapter,
-    IAsyncDisposable
+public class KurrentDBEventStoreConnection(KurrentDBClient client) : IKurrentDBEventStoreConnection
 {
     public async Task AppendToStreamAsync(
         string streamId,
@@ -99,8 +97,6 @@ public class KurrentDBEventStoreClientAdapter(KurrentDBClient client) :
         }
     }
 
-    public ValueTask DisposeAsync() => client.DisposeAsync();
-
     private static WrongExpectedStreamStateException MapWrongExpectedVersionException(
         string streamId,
         ExpectedStreamState expectedState,
@@ -123,6 +119,7 @@ public class KurrentDBEventStoreClientAdapter(KurrentDBClient client) :
                 return WrongExpectedStreamStateException.VersionConflict(streamId, expectedState, actualVersion);
         }
 
+        // Revisit "Unknown".
         return WrongExpectedStreamStateException.Unknown(streamId, expectedState, sourceException);
     }
 

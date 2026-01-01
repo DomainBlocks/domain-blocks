@@ -3,7 +3,7 @@ using DomainBlocks.EventStore.Abstractions.Events;
 
 namespace DomainBlocks.EventStore;
 
-public interface IEventStoreClient<TEventBase> : IAsyncDisposable where TEventBase : class
+public interface IEventStoreClient<TEventBase> where TEventBase : class
 {
     Task AppendToStreamAsync(
         string streamId,

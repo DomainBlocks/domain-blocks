@@ -7,16 +7,16 @@ namespace DomainBlocks.EventStore.MongoDB;
 /// <summary>
 /// Provides conversion between event wrappers and the default event document for Mongo persistence.
 /// </summary>
-public sealed class DefaultEventDocumentConverter : IEventDocumentConverter<DefaultEventDocument, BsonValue, BsonValue>
+public sealed class EventDocumentConverter : IEventDocumentConverter<EventDocument, BsonValue, BsonValue>
 {
     /// <inheritdoc/>
-    public DefaultEventDocument ToEventDocument(
+    public EventDocument ToEventDocument(
         AppendEvent<BsonValue, BsonValue> @event,
         string streamId,
         StreamVersion streamVersion,
         DateTime createdAt)
     {
-        return new DefaultEventDocument
+        return new EventDocument
         {
             StreamId = streamId,
             StreamVersion = streamVersion.Value,
@@ -28,7 +28,7 @@ public sealed class DefaultEventDocumentConverter : IEventDocumentConverter<Defa
     }
 
     /// <inheritdoc/>
-    public ReadEvent<BsonValue> FromEventDocument(DefaultEventDocument document)
+    public ReadEvent<BsonValue> FromEventDocument(EventDocument document)
     {
         return ReadEvent.Create(
             new ReadEventHeader(

@@ -7,7 +7,7 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.Tests.Integration;
 
-public class EventStoreClientTests : MongoEventStoreTestFixture
+public class EventStoreClientTests
 {
     static EventStoreClientTests()
     {
@@ -21,6 +21,8 @@ public class EventStoreClientTests : MongoEventStoreTestFixture
     [Test]
     public async Task Should_allow_reading_multiple_events_as_common_type()
     {
+        await using var connectionProvider = await MongoTestEventStoreConnectionProvider.CreateAsync();
+
         var writeEventTypeMap = new EventTypeMapBuilder()
             .MapType<LimitOrderSubmitted>()
             .MapType<LimitOrderAmended>()
@@ -36,7 +38,7 @@ public class EventStoreClientTests : MongoEventStoreTestFixture
 
         var writeClientOptions = new EventStoreClientOptions<object, BsonValue, BsonValue>
         {
-            AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync(ct),
+            ConnectionProvider = connectionProvider,
             TypeMap = writeEventTypeMap,
             EventSerializer = new BsonDocumentSerializer(),
             MetadataSerializer = new BsonDocumentMetadataSerializer()
@@ -44,7 +46,7 @@ public class EventStoreClientTests : MongoEventStoreTestFixture
 
         var readClientOptions = new EventStoreClientOptions<object, BsonValue, BsonValue>
         {
-            AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync(ct),
+            ConnectionProvider = connectionProvider,
             TypeMap = readEventTypeMap,
             EventSerializer = new BsonDocumentSerializer(),
             MetadataSerializer = new BsonDocumentMetadataSerializer()

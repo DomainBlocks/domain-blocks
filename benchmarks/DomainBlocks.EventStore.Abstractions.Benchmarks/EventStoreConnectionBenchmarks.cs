@@ -8,25 +8,25 @@ using KurrentDB.Client;
 namespace DomainBlocks.EventStore.Abstractions.Benchmarks;
 
 [MemoryDiagnoser]
-public class EventStoreClientAdapterBenchmarks
+public class EventStoreConnectionBenchmarks
 {
     private const uint EventCount = 10_000;
     private const string StreamId = "test-stream";
 
     private readonly Consumer _consumer = new();
-    private IEventStoreClientAdapter<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> _adapter = null!;
+    private IEventStoreConnection<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> _connection = null!;
 
     [GlobalSetup]
     public void GlobalSetup()
     {
         var nativeEvents = CreateKurrentDBEvents(EventCount);
-        _adapter = new FakeKurrentDBEventStoreClientAdapter(nativeEvents);
+        _connection = new FakeKurrentDBEventStoreConnection(nativeEvents);
     }
 
     [Benchmark]
     public async Task ReadStreamAsync_AbstractionCostWithoutIO()
     {
-        await foreach (var e in _adapter.ReadStreamAsync(StreamId))
+        await foreach (var e in _connection.ReadStreamAsync(StreamId))
         {
             _consumer.Consume(e.Header.StreamVersion.Value);
             _consumer.Consume(e.Header.EventName);
@@ -65,8 +65,8 @@ public class EventStoreClientAdapterBenchmarks
         return resolvedEvents;
     }
 
-    private sealed class FakeKurrentDBEventStoreClientAdapter(ResolvedEvent[] nativeEvents) :
-        IEventStoreClientAdapter<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
+    private sealed class FakeKurrentDBEventStoreConnection(ResolvedEvent[] nativeEvents) :
+        IEventStoreConnection<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
     {
         public Task AppendToStreamAsync(
             string streamId,
