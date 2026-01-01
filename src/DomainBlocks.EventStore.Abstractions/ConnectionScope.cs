@@ -14,19 +14,30 @@ public static class ConnectionScope
 
 public sealed class ConnectionScope<TEventData, TMetadata>(
     IEventStoreConnection<TEventData, TMetadata> connection,
-    Func<ValueTask>? dispose = null) :
+    Func<ValueTask>? asyncDispose = null) :
     IAsyncDisposable
     where TEventData : notnull
     where TMetadata : notnull
 {
-    private Func<ValueTask>? _dispose = dispose;
+    private int _disposed;
 
-    public IEventStoreConnection<TEventData, TMetadata> Connection { get; } = connection;
+    public IEventStoreConnection<TEventData, TMetadata> Connection
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return field;
+        }
+    } = connection;
 
     public async ValueTask DisposeAsync()
     {
-        var d = Interlocked.Exchange(ref _dispose, null);
-        if (d is not null)
-            await d().ConfigureAwait(false);
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+
+        if (asyncDispose != null)
+            await asyncDispose().ConfigureAwait(false);
     }
+
+    private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed != 0, this);
 }
