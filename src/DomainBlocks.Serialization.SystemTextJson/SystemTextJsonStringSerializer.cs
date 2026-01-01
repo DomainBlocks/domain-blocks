@@ -13,7 +13,7 @@ public sealed class SystemTextJsonStringSerializer(JsonSerializerOptions? option
         }
         catch (Exception ex)
         {
-            throw ObjectSerializationException.ForSerialization(value.GetType(), ex);
+            throw ObjectSerializationException.SerializationFailed(value.GetType(), ex);
         }
     }
 
@@ -27,9 +27,9 @@ public sealed class SystemTextJsonStringSerializer(JsonSerializerOptions? option
         }
         catch (Exception ex)
         {
-            throw ObjectSerializationException.ForDeserialization(type, ex);
+            throw ObjectSerializationException.DeserializationFailed(type, ex);
         }
 
-        return result ?? throw ObjectSerializationException.NullResult(type);
+        return result ?? throw ObjectSerializationException.DeserializationReturnedNull(type);
     }
 }

@@ -4,10 +4,15 @@ using MongoDB.Bson.Serialization.Serializers;
 
 namespace DomainBlocks.Testing.Integration.MongoDB;
 
-public abstract class MongoEventStoreTestFixture
+public static class MongoTestSerialization
 {
-    static MongoEventStoreTestFixture()
+    private static int _configured;
+
+    public static void Configure()
     {
+        if (Interlocked.Exchange(ref _configured, 1) == 1)
+            return;
+
         BsonSerializer.RegisterSerializer(new GuidSerializer(GuidRepresentation.Standard));
     }
 }

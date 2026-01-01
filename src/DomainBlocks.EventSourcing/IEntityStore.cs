@@ -1,6 +1,6 @@
 ﻿namespace DomainBlocks.EventSourcing;
 
-public interface IEntityStore : IAsyncDisposable
+public interface IEntityStore
 {
     /// <summary>
     /// Loads an entity from an event stream in the event store. If the stream does not exist, a

@@ -3,6 +3,7 @@ using DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 using DomainBlocks.EventSourcing.Tests.Integration.EntityDefinitions;
 using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.Abstractions.Exceptions;
+using DomainBlocks.EventStore.MongoDB;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Testing.Integration.MongoDB;
 using MongoDB.Bson;
@@ -12,13 +13,16 @@ using Shouldly;
 namespace DomainBlocks.EventSourcing.Tests.Integration;
 
 [TestFixture]
-public class EntityStoreTests : MongoEventStoreTestFixture
+public class EntityStoreTests
 {
+    private IMongoEventStoreConnectionProvider<BsonValue, BsonValue> _connectionProvider = null!;
     private EntityStore<IDomainEvent> _entityStore = null!;
 
     [SetUp]
-    public void SetUp()
+    public async Task SetUp()
     {
+        _connectionProvider = await MongoTestEventStoreConnectionProvider.CreateAsync();
+
         var eventTypeMap = new EventTypeMapBuilder()
             .MapType<ShoppingSessionStarted>()
             .MapType<ItemAddedToShoppingCart>()
@@ -27,7 +31,7 @@ public class EntityStoreTests : MongoEventStoreTestFixture
 
         var clientOptions = new EventStoreClientOptions<IDomainEvent, BsonValue, BsonValue>
         {
-            AdapterFactory = async ct => await MongoEventStoreAdapterFactory.CreateAsync(ct),
+            ConnectionProvider = _connectionProvider,
             TypeMap = eventTypeMap,
             EventSerializer = new BsonDocumentSerializer(),
             MetadataSerializer = new BsonDocumentMetadataSerializer()
@@ -49,7 +53,7 @@ public class EntityStoreTests : MongoEventStoreTestFixture
     [TearDown]
     public async Task TearDown()
     {
-        await _entityStore.DisposeAsync();
+        await _connectionProvider.DisposeAsync();
     }
 
     [Test]

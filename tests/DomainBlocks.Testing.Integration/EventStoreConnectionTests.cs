@@ -6,13 +6,15 @@ using Shouldly;
 
 namespace DomainBlocks.Testing.Integration;
 
-public abstract class EventStoreClientAdapterTests<TEventData, TMetadata>
+public abstract class EventStoreConnectionTests<TEventData, TMetadata>
     where TEventData : notnull
     where TMetadata : notnull
 {
     private const int TestTimeoutMillis = 5_000;
 
-    private IEventStoreClientAdapter<TEventData, TMetadata> _adapter = null!;
+    private IEventStoreConnectionProvider<TEventData, TMetadata> _connectionProvider = null!;
+    private ConnectionScope<TEventData, TMetadata> _connectionScope = null!;
+    private IEventStoreConnection<TEventData, TMetadata> _connection = null!;
 
     private static IEnumerable<TestCaseData> PositionAndDirectionCases
     {
@@ -37,7 +39,18 @@ public abstract class EventStoreClientAdapterTests<TEventData, TMetadata>
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
     {
-        _adapter = await CreateEventStoreAdapterAsync();
+        _connectionProvider = await GetConnectionProviderAsync();
+        _connectionScope = await _connectionProvider.AcquireAsync();
+        _connection = _connectionScope.Connection;
+    }
+
+    [OneTimeTearDown]
+    public async Task OneTimeTearDown()
+    {
+        await _connectionScope.DisposeAsync();
+
+        if (_connectionProvider is IAsyncDisposable asyncDisposable)
+            await asyncDisposable.DisposeAsync();
     }
 
     [Test]
@@ -54,9 +67,9 @@ public abstract class EventStoreClientAdapterTests<TEventData, TMetadata>
 
         var streamId = $"test-{Guid.NewGuid()}";
 
-        await _adapter.AppendToStreamAsync(streamId, events, cancellationToken: cancellationToken);
+        await _connection.AppendToStreamAsync(streamId, events, cancellationToken: cancellationToken);
 
-        var readEvents = await _adapter
+        var readEvents = await _connection
             .ReadStreamAsync(streamId, cancellationToken: cancellationToken)
             .ToArrayAsync(cancellationToken);
 
@@ -88,10 +101,10 @@ public abstract class EventStoreClientAdapterTests<TEventData, TMetadata>
 
         var streamId = $"test-{Guid.NewGuid()}";
 
-        await _adapter.AppendToStreamAsync(streamId, events1, cancellationToken: cancellationToken);
-        await _adapter.AppendToStreamAsync(streamId, events2, cancellationToken: cancellationToken);
+        await _connection.AppendToStreamAsync(streamId, events1, cancellationToken: cancellationToken);
+        await _connection.AppendToStreamAsync(streamId, events2, cancellationToken: cancellationToken);
 
-        var readEvents = await _adapter
+        var readEvents = await _connection
             .ReadStreamAsync(streamId, cancellationToken: cancellationToken)
             .ToArrayAsync(cancellationToken);
 
@@ -109,7 +122,7 @@ public abstract class EventStoreClientAdapterTests<TEventData, TMetadata>
     {
         var streamId = $"test-{Guid.NewGuid()}";
 
-        await _adapter.AppendToStreamAsync(
+        await _connection.AppendToStreamAsync(
             streamId,
             [
                 CreateTestEvent("TestEvent1"),
@@ -118,7 +131,7 @@ public abstract class EventStoreClientAdapterTests<TEventData, TMetadata>
             ],
             cancellationToken: cancellationToken);
 
-        var exception = await _adapter
+        var exception = await _connection
             .AppendToStreamAsync(
                 streamId,
                 [CreateTestEvent("TestEvent4")],
@@ -140,7 +153,7 @@ public abstract class EventStoreClientAdapterTests<TEventData, TMetadata>
     {
         var streamId = $"test-{Guid.NewGuid()}";
 
-        var exception = await _adapter
+        var exception = await _connection
             .AppendToStreamAsync(
                 streamId,
                 [
@@ -163,7 +176,7 @@ public abstract class EventStoreClientAdapterTests<TEventData, TMetadata>
     {
         var streamId = $"test-{Guid.NewGuid()}";
 
-        await _adapter.AppendToStreamAsync(
+        await _connection.AppendToStreamAsync(
             streamId,
             [
                 CreateTestEvent("TestEvent1"),
@@ -172,7 +185,7 @@ public abstract class EventStoreClientAdapterTests<TEventData, TMetadata>
             ],
             cancellationToken: cancellationToken);
 
-        var exception = await _adapter
+        var exception = await _connection
             .AppendToStreamAsync(
                 streamId,
                 [CreateTestEvent("TestEvent4")],
@@ -192,7 +205,7 @@ public abstract class EventStoreClientAdapterTests<TEventData, TMetadata>
     {
         var streamId = $"test-{Guid.NewGuid()}";
 
-        await _adapter.AppendToStreamAsync(
+        await _connection.AppendToStreamAsync(
             streamId,
             [CreateTestEvent("TestEvent1"), CreateTestEvent("TestEvent2")],
             cancellationToken: cancellationToken);
@@ -203,7 +216,7 @@ public abstract class EventStoreClientAdapterTests<TEventData, TMetadata>
             Direction = direction
         };
 
-        var readEvents = await _adapter
+        var readEvents = await _connection
             .ReadStreamAsync(streamId, options, cancellationToken)
             .ToArrayAsync(cancellationToken);
 
@@ -225,7 +238,7 @@ public abstract class EventStoreClientAdapterTests<TEventData, TMetadata>
             Direction = direction
         };
 
-        var readEvents = await _adapter
+        var readEvents = await _connection
             .ReadStreamAsync(streamId, options, cancellationToken)
             .ToArrayAsync(cancellationToken);
 
@@ -248,7 +261,7 @@ public abstract class EventStoreClientAdapterTests<TEventData, TMetadata>
             StreamNotFoundBehavior = StreamNotFoundBehavior.Throw
         };
 
-        await _adapter
+        await _connection
             .ReadStreamAsync(streamId, options, cancellationToken)
             // Stream must be materialized.
             .ToArrayAsync(cancellationToken)
@@ -256,7 +269,7 @@ public abstract class EventStoreClientAdapterTests<TEventData, TMetadata>
             .ShouldThrowAsync<StreamNotFoundException>();
     }
 
-    protected abstract Task<IEventStoreClientAdapter<TEventData, TMetadata>> CreateEventStoreAdapterAsync();
+    protected abstract Task<IEventStoreConnectionProvider<TEventData, TMetadata>> GetConnectionProviderAsync();
 
     protected abstract AppendEvent<TEventData, TMetadata> CreateTestEvent(string eventName);
 }

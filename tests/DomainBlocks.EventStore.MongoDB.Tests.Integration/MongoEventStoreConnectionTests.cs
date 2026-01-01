@@ -1,23 +1,19 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Events;
 using DomainBlocks.Testing.Integration;
+using DomainBlocks.Testing.Integration.MongoDB;
 using MongoDB.Bson;
-using MongoDB.Driver;
 using NUnit.Framework;
 
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
 [TestFixture]
-public class MongoEventStoreClientAdapterTests : EventStoreClientAdapterTests<BsonValue, BsonValue>
+public class MongoEventStoreConnectionTests : EventStoreConnectionTests<BsonValue, BsonValue>
 {
-    protected override async Task<IEventStoreClientAdapter<BsonValue, BsonValue>> CreateEventStoreAdapterAsync()
+    protected override async Task<IEventStoreConnectionProvider<BsonValue, BsonValue>> GetConnectionProviderAsync()
     {
-        var client = new MongoClient("mongodb://localhost:27017");
-        var database = client.GetDatabase("test");
-        var options = MongoEventStoreOptions.CreateDefault();
-        await MongoEventStoreAdmin.EnsureIndexesAsync(database, options);
-
-        return MongoEventStoreClientAdapter.Create(database, options);
+        var provider = await MongoTestEventStoreConnectionProvider.CreateAsync();
+        return provider;
     }
 
     protected override AppendEvent<BsonValue, BsonValue> CreateTestEvent(string eventName)

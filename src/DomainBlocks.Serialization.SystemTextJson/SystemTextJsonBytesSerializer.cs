@@ -15,7 +15,7 @@ public sealed class SystemTextJsonBytesSerializer(JsonSerializerOptions? options
         }
         catch (Exception ex)
         {
-            throw ObjectSerializationException.ForSerialization(value.GetType(), ex);
+            throw ObjectSerializationException.SerializationFailed(value.GetType(), ex);
         }
     }
 
@@ -29,10 +29,10 @@ public sealed class SystemTextJsonBytesSerializer(JsonSerializerOptions? options
         }
         catch (Exception ex)
         {
-            throw ObjectSerializationException.ForDeserialization(type, ex);
+            throw ObjectSerializationException.DeserializationFailed(type, ex);
         }
 
-        return result ?? throw ObjectSerializationException.NullResult(type);
+        return result ?? throw ObjectSerializationException.DeserializationReturnedNull(type);
     }
 
     ReadOnlyMemory<byte> IObjectSerializer<ReadOnlyMemory<byte>>.Serialize(object value)
@@ -43,7 +43,7 @@ public sealed class SystemTextJsonBytesSerializer(JsonSerializerOptions? options
         }
         catch (Exception ex)
         {
-            throw ObjectSerializationException.ForSerialization(value.GetType(), ex);
+            throw ObjectSerializationException.SerializationFailed(value.GetType(), ex);
         }
     }
 
@@ -57,9 +57,9 @@ public sealed class SystemTextJsonBytesSerializer(JsonSerializerOptions? options
         }
         catch (Exception ex)
         {
-            throw ObjectSerializationException.ForDeserialization(type, ex);
+            throw ObjectSerializationException.DeserializationFailed(type, ex);
         }
 
-        return result ?? throw ObjectSerializationException.NullResult(type);
+        return result ?? throw ObjectSerializationException.DeserializationReturnedNull(type);
     }
 }

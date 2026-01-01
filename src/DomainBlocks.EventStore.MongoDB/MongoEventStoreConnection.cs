@@ -7,34 +7,23 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
-public static class MongoEventStoreClientAdapter
-{
-    public static IMongoEventStoreClientAdapter<TEventData, TMetadata> Create<TEventDocument, TEventData, TMetadata>(
-        IMongoDatabase database,
-        MongoEventStoreOptions<TEventDocument, TEventData, TMetadata> options)
-        where TEventData : notnull
-        where TMetadata : notnull
-    {
-        var collection = database.GetCollection<TEventDocument>(options.EventCollectionName);
-        return new MongoEventStoreClientAdapter<TEventDocument, TEventData, TMetadata>(collection, options);
-    }
-}
-
-public class MongoEventStoreClientAdapter<TEventDocument, TEventData, TMetadata>(
+public class MongoEventStoreConnection<TEventDocument, TEventData, TMetadata>(
     IMongoCollection<TEventDocument> collection,
-    MongoEventStoreOptions<TEventDocument, TEventData, TMetadata> options) :
-    IMongoEventStoreClientAdapter<TEventData, TMetadata>
+    MongoEventStoreConnectionOptions<TEventDocument, TEventData, TMetadata> options) :
+    IEventStoreConnection<TEventData, TMetadata>
     where TEventData : notnull
     where TMetadata : notnull
 {
     private readonly IEventDocumentConverter<TEventDocument, TEventData, TMetadata> _eventDocumentConverter =
-        options.EventDocumentConverter;
+        options.DocumentConverter;
 
-    private readonly FieldDefinition<TEventDocument, string> _streamIdField = options.StreamIdField;
-    private readonly FieldDefinition<TEventDocument, ulong> _streamVersionField = options.StreamVersionField;
+    private readonly FieldDefinition<TEventDocument, string> _streamIdField = options.DocumentMap.StreamIdField;
+
+    private readonly FieldDefinition<TEventDocument, ulong> _streamVersionField =
+        options.DocumentMap.StreamVersionField;
 
     private readonly Expression<Func<TEventDocument, ulong?>> _nullableStreamVersionExpression =
-        AsNullable(options.StreamVersionExpression);
+        AsNullable(options.DocumentMap.StreamVersion);
 
     public async Task AppendToStreamAsync(
         string streamId,

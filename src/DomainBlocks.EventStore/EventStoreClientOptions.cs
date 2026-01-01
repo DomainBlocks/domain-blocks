@@ -8,12 +8,7 @@ public class EventStoreClientOptions<TEventBase, TEventData, TMetadata>
     where TEventData : notnull
     where TMetadata : notnull
 {
-    public required Func<CancellationToken, ValueTask<IEventStoreClientAdapter<TEventData, TMetadata>>> AdapterFactory
-    {
-        get;
-        init;
-    }
-
+    public required IEventStoreConnectionProvider<TEventData, TMetadata> ConnectionProvider { get; init; }
     public required EventTypeMap TypeMap { get; init; }
     public required IObjectSerializer<TEventData> EventSerializer { get; init; }
     public required IMetadataSerializer<TMetadata> MetadataSerializer { get; init; }
