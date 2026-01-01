@@ -14,14 +14,14 @@ public static class MongoEventStoreAdmin
         return EnsureIndexesAsync(settings, collectionNamespace, documentMap, cancellationToken);
     }
 
-    public static Task EnsureIndexesAsync<TEventDocument>(
+    public static async Task EnsureIndexesAsync<TEventDocument>(
         MongoClientSettings settings,
         CollectionNamespace collectionNamespace,
         EventDocumentMap<TEventDocument> documentMap,
         CancellationToken cancellationToken = default)
     {
         using var client = new MongoClient(settings);
-        return EnsureIndexesAsync(client, collectionNamespace, documentMap, cancellationToken);
+        await EnsureIndexesAsync(client, collectionNamespace, documentMap, cancellationToken);
     }
 
     public static Task EnsureIndexesAsync<TEventDocument>(
