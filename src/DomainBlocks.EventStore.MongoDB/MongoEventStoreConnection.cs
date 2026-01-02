@@ -162,12 +162,12 @@ public class MongoEventStoreConnection<TEventDocument, TEventData, TMetadata>(
         StreamVersion? currentStreamVersion)
     {
         var nextVersionValue = (currentStreamVersion?.Value + 1) ?? 0;
-        var createdAt = DateTime.UtcNow;
+        var createdAtUtc = DateTime.UtcNow;
 
         foreach (var @event in events)
         {
             var streamVersion = new StreamVersion(nextVersionValue++);
-            yield return _eventDocumentConverter.ToEventDocument(@event, streamId, streamVersion, createdAt);
+            yield return _eventDocumentConverter.ToEventDocument(@event, streamId, streamVersion, createdAtUtc);
         }
     }
 }

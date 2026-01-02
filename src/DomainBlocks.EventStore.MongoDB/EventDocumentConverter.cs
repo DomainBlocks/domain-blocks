@@ -13,14 +13,14 @@ public sealed class EventDocumentConverter : IEventDocumentConverter<EventDocume
         AppendEvent<BsonValue, BsonValue> @event,
         string streamId,
         StreamVersion streamVersion,
-        DateTime createdAt)
+        DateTime createdAtUtc)
     {
         return new EventDocument
         {
             StreamId = streamId,
             StreamVersion = streamVersion.Value,
             EventName = @event.EventName,
-            CreatedAt = createdAt,
+            CreatedAtUtc = createdAtUtc,
             EventData = @event.EventData,
             Metadata = @event.Metadata ?? BsonNull.Value
         };
@@ -32,7 +32,7 @@ public sealed class EventDocumentConverter : IEventDocumentConverter<EventDocume
         var context = new ReadEventContext(
             document.StreamId,
             new StreamVersion(document.StreamVersion),
-            document.CreatedAt,
+            document.CreatedAtUtc,
             null);
 
         return ReadEvent.Create(document.EventName, document.EventData, document.Metadata, context);

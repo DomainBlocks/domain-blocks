@@ -20,7 +20,7 @@ public static class MongoEventStoreConnectionOptions
             {
                 StreamId = doc => doc.StreamId,
                 StreamVersion = doc => doc.StreamVersion,
-                CreatedAt = doc => doc.CreatedAt
+                CreatedAtUtc = doc => doc.CreatedAtUtc
             }
         };
     }

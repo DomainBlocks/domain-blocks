@@ -146,7 +146,7 @@ public class EventStoreClientReadBenchmarks
                     streamId,
                     new StreamVersion(originalEvent.EventNumber.ToUInt64()),
                     @event.Created,
-                    GlobalPosition.FromUInt64(originalEvent.Position.CommitPosition));
+                    new GlobalPosition(originalEvent.Position.CommitPosition));
 
                 yield return Abstractions.Events.ReadEvent.Create(
                     @event.EventType,

@@ -88,7 +88,7 @@ public class KurrentDBEventStoreConnection(KurrentDBClient client) : IKurrentDBE
                 streamId,
                 new StreamVersion(originalEvent.EventNumber.ToUInt64()),
                 @event.Created,
-                GlobalPosition.FromUInt64(originalEvent.Position.CommitPosition));
+                new GlobalPosition(originalEvent.Position.CommitPosition));
 
             yield return ReadEvent.Create(@event.EventType, @event.Data, @event.Metadata, context);
         }
