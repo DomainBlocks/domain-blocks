@@ -18,13 +18,13 @@ public interface IEventDocumentConverter<TEventDocument, TEventData, TMetadata>
     /// <param name="event">The event to append.</param>
     /// <param name="streamId">The identifier of the event stream.</param>
     /// <param name="streamVersion">The version of the stream for this event.</param>
-    /// <param name="createdAt">The UTC timestamp at which this event was created.</param>
+    /// <param name="createdAtUtc">The UTC timestamp at which this event was created.</param>
     /// <returns>An event document representing the specified event.</returns>
     TEventDocument ToEventDocument(
         AppendEvent<TEventData, TMetadata> @event,
         string streamId,
         StreamVersion streamVersion,
-        DateTime createdAt);
+        DateTime createdAtUtc);
 
     /// <summary>
     /// Converts an event document into a read event.

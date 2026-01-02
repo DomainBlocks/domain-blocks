@@ -11,7 +11,7 @@ public class EventDocument
     public required string StreamId { get; init; }
     public required ulong StreamVersion { get; init; }
     public required string EventName { get; init; }
-    public required DateTime CreatedAt { get; init; }
+    public required DateTime CreatedAtUtc { get; init; }
     public required BsonValue EventData { get; init; }
     public required BsonValue Metadata { get; init; }
 }
