@@ -18,7 +18,7 @@ public class EventStoreClientReadBenchmarks
     private FakeKurrentDBEventStoreClient<IDomainEvent> _client = null!;
     private ReadStreamOptions _readStreamOptions = null!;
 
-    [Params(false)]
+    [Params(false, true)]
     public bool IncludeMetadata { get; set; }
 
     //[Params(100, 1_000, 10_000)]
