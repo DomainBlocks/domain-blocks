@@ -36,13 +36,6 @@ public abstract class EventStoreClientTests
         _client = await CreateClientAsync();
     }
 
-    // [OneTimeTearDown]
-    // public async Task OneTimeTearDown()
-    // {
-    //     if (_client is IAsyncDisposable asyncDisposable)
-    //         await asyncDisposable.DisposeAsync();
-    // }
-
     [Test]
     [CancelAfter(TestTimeoutMillis)]
     public async Task AppendToStreamAsync_ExpectedStateIsAnyAndStreamDoesNotExist_AppendsEvents(
@@ -67,20 +60,19 @@ public abstract class EventStoreClientTests
         readEvents.Select(x => x.Event).ShouldBe(events.Select(x => x.Event));
     }
 
-    /*
     [Test]
     [CancelAfter(TestTimeoutMillis)]
     public async Task AppendToStreamAsync_ExpectedStateIsAnyAndStreamExists_AppendsEvents(
         CancellationToken cancellationToken)
     {
-        AppendEvent<TEventData, TMetadata>[] events1 =
+        AppendEvent<IDomainEvent>[] events1 =
         [
             CreateTestEvent("TestEvent1"),
             CreateTestEvent("TestEvent2"),
             CreateTestEvent("TestEvent3")
         ];
 
-        AppendEvent<TEventData, TMetadata>[] events2 =
+        AppendEvent<IDomainEvent>[] events2 =
         [
             CreateTestEvent("TestEvent4"),
             CreateTestEvent("TestEvent5"),
@@ -89,18 +81,18 @@ public abstract class EventStoreClientTests
 
         var streamId = $"test-{Guid.NewGuid()}";
 
-        await _connection.AppendToStreamAsync(streamId, events1, cancellationToken: cancellationToken);
-        await _connection.AppendToStreamAsync(streamId, events2, cancellationToken: cancellationToken);
+        await _client.AppendToStreamAsync(streamId, events1, cancellationToken: cancellationToken);
+        await _client.AppendToStreamAsync(streamId, events2, cancellationToken: cancellationToken);
 
-        var readEvents = await _connection
+        var readEvents = await _client
             .ReadStreamAsync(streamId, cancellationToken: cancellationToken)
             .ToArrayAsync(cancellationToken);
 
         readEvents.ShouldAllBe(x => x.Context.StreamId == streamId);
 
         readEvents
-            .Select(x => x.EventName)
-            .ShouldBe(events1.Concat(events2).Select(x => x.EventName));
+            .Select(x => x.Event)
+            .ShouldBe(events1.Concat(events2).Select(x => x.Event));
     }
 
     [Test]
@@ -110,7 +102,7 @@ public abstract class EventStoreClientTests
     {
         var streamId = $"test-{Guid.NewGuid()}";
 
-        await _connection.AppendToStreamAsync(
+        await _client.AppendToStreamAsync(
             streamId,
             [
                 CreateTestEvent("TestEvent1"),
@@ -119,7 +111,7 @@ public abstract class EventStoreClientTests
             ],
             cancellationToken: cancellationToken);
 
-        var exception = await _connection
+        var exception = await _client
             .AppendToStreamAsync(
                 streamId,
                 [CreateTestEvent("TestEvent4")],
@@ -141,7 +133,7 @@ public abstract class EventStoreClientTests
     {
         var streamId = $"test-{Guid.NewGuid()}";
 
-        var exception = await _connection
+        var exception = await _client
             .AppendToStreamAsync(
                 streamId,
                 [
@@ -164,7 +156,7 @@ public abstract class EventStoreClientTests
     {
         var streamId = $"test-{Guid.NewGuid()}";
 
-        await _connection.AppendToStreamAsync(
+        await _client.AppendToStreamAsync(
             streamId,
             [
                 CreateTestEvent("TestEvent1"),
@@ -173,7 +165,7 @@ public abstract class EventStoreClientTests
             ],
             cancellationToken: cancellationToken);
 
-        var exception = await _connection
+        var exception = await _client
             .AppendToStreamAsync(
                 streamId,
                 [CreateTestEvent("TestEvent4")],
@@ -193,7 +185,7 @@ public abstract class EventStoreClientTests
     {
         var streamId = $"test-{Guid.NewGuid()}";
 
-        await _connection.AppendToStreamAsync(
+        await _client.AppendToStreamAsync(
             streamId,
             [CreateTestEvent("TestEvent1"), CreateTestEvent("TestEvent2")],
             cancellationToken: cancellationToken);
@@ -204,7 +196,7 @@ public abstract class EventStoreClientTests
             Direction = direction
         };
 
-        var readEvents = await _connection
+        var readEvents = await _client
             .ReadStreamAsync(streamId, options, cancellationToken)
             .ToArrayAsync(cancellationToken);
 
@@ -226,7 +218,7 @@ public abstract class EventStoreClientTests
             Direction = direction
         };
 
-        var readEvents = await _connection
+        var readEvents = await _client
             .ReadStreamAsync(streamId, options, cancellationToken)
             .ToArrayAsync(cancellationToken);
 
@@ -249,14 +241,13 @@ public abstract class EventStoreClientTests
             StreamNotFoundBehavior = StreamNotFoundBehavior.Throw
         };
 
-        await _connection
+        await _client
             .ReadStreamAsync(streamId, options, cancellationToken)
             // Stream must be materialized.
             .ToArrayAsync(cancellationToken)
             .AsTask()
             .ShouldThrowAsync<StreamNotFoundException>();
     }
-    */
 
     protected abstract Task<IEventStoreClient<IDomainEvent>> CreateClientAsync();
 
