@@ -2,22 +2,23 @@
 
 public static class ReadEvent
 {
-    public static ReadEvent<TEventBase> Create<TEventBase>(
-        TEventBase @event,
+    public static ReadEvent<TEvent> Create<TEvent>(
+        TEvent @event,
         IReadOnlyDictionary<string, string> metadata,
-        ReadEventContext context) where TEventBase : class
+        ReadEventContext context)
+        where TEvent : notnull
     {
-        return new ReadEvent<TEventBase>(@event, metadata, context);
+        return new ReadEvent<TEvent>(@event, metadata, context);
     }
 }
 
-public readonly struct ReadEvent<TEventBase>(
-    TEventBase @event,
+public readonly struct ReadEvent<TEvent>(
+    TEvent @event,
     IReadOnlyDictionary<string, string> metadata,
     ReadEventContext context)
-    where TEventBase : class
+    where TEvent : notnull
 {
-    public TEventBase Event { get; } = @event;
+    public TEvent Event { get; } = @event;
     public IReadOnlyDictionary<string, string> Metadata { get; } = metadata;
     public ReadEventContext Context { get; } = context;
 }

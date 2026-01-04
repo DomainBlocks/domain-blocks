@@ -2,10 +2,10 @@
 
 namespace DomainBlocks.EventStore.MongoDB;
 
-public interface IEventDocumentEncoder<TEventBase, out TEventDocument> where TEventBase : class
+public interface IEventDocumentEncoder<TEvent, out TEventDocument> where TEvent : notnull
 {
     TEventDocument Encode(
-        AppendEvent<TEventBase> @event,
+        AppendEvent<TEvent> @event,
         string streamId,
         StreamVersion streamVersion,
         DateTime createdAtUtc);

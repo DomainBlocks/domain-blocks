@@ -6,15 +6,15 @@ using StreamNotFoundException = DomainBlocks.EventStore.Abstractions.StreamNotFo
 
 namespace DomainBlocks.EventStore.KurrentDB;
 
-public class KurrentDBEventStoreClient<TEventBase>(
+public class KurrentDBEventStoreClient<TEvent>(
     KurrentDBClient client,
-    IEventCodec<TEventBase, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec) :
-    IEventStoreClient<TEventBase>
-    where TEventBase : class
+    IEventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec) :
+    IEventStoreClient<TEvent>
+    where TEvent : notnull
 {
     public async Task AppendToStreamAsync(
         string streamId,
-        IEnumerable<AppendEvent<TEventBase>> events,
+        IEnumerable<AppendEvent<TEvent>> events,
         AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default)
     {
@@ -40,8 +40,8 @@ public class KurrentDBEventStoreClient<TEventBase>(
         return;
 
         static IEnumerable<EventData> EncodeEvents(
-            IEnumerable<AppendEvent<TEventBase>> sourceEvents,
-            IEventEncoder<TEventBase, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> encoder)
+            IEnumerable<AppendEvent<TEvent>> sourceEvents,
+            IEventEncoder<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> encoder)
         {
             foreach (var e in sourceEvents)
             {
@@ -51,7 +51,7 @@ public class KurrentDBEventStoreClient<TEventBase>(
         }
     }
 
-    public async IAsyncEnumerable<ReadEvent<TEventBase>> ReadStreamAsync(
+    public async IAsyncEnumerable<ReadEvent<TEvent>> ReadStreamAsync(
         string streamId,
         ReadStreamOptions? options = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)

@@ -5,13 +5,13 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
-public class MongoEventStoreClient<TEventBase, TEventDocument>(
+public class MongoEventStoreClient<TEvent, TEventDocument>(
     IMongoCollection<TEventDocument> collection,
-    MongoEventStoreClientOptions<TEventBase, TEventDocument> options) :
-    IEventStoreClient<TEventBase> where TEventBase : class
+    MongoEventStoreClientOptions<TEvent, TEventDocument> options) :
+    IEventStoreClient<TEvent>
+    where TEvent : notnull
 {
-    private readonly IEventDocumentCodec<TEventBase, TEventDocument> _eventDocumentCodec =
-        options.DocumentCodec;
+    private readonly IEventDocumentCodec<TEvent, TEventDocument> _eventDocumentCodec = options.DocumentCodec;
 
     private readonly FieldDefinition<TEventDocument, string> _streamIdField =
         options.Collection.DocumentSchema.StreamIdField;
@@ -24,7 +24,7 @@ public class MongoEventStoreClient<TEventBase, TEventDocument>(
 
     public async Task AppendToStreamAsync(
         string streamId,
-        IEnumerable<AppendEvent<TEventBase>> events,
+        IEnumerable<AppendEvent<TEvent>> events,
         AppendToStreamOptions? appendOptions = null,
         CancellationToken cancellationToken = default)
     {
@@ -63,7 +63,7 @@ public class MongoEventStoreClient<TEventBase, TEventDocument>(
         }
     }
 
-    public async IAsyncEnumerable<ReadEvent<TEventBase>> ReadStreamAsync(
+    public async IAsyncEnumerable<ReadEvent<TEvent>> ReadStreamAsync(
         string streamId,
         ReadStreamOptions? readOptions = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -116,7 +116,7 @@ public class MongoEventStoreClient<TEventBase, TEventDocument>(
             foreach (var doc in cursor.Current)
             {
                 isEmpty = false;
-                yield return _eventDocumentCodec.FromEventDocument(doc);
+                yield return _eventDocumentCodec.Decode(doc);
             }
         }
 
@@ -155,12 +155,12 @@ public class MongoEventStoreClient<TEventBase, TEventDocument>(
 
     private IEnumerable<TEventDocument> ToEventDocuments(
         string streamId,
-        IEnumerable<AppendEvent<TEventBase>> events,
+        IEnumerable<AppendEvent<TEvent>> events,
         StreamVersion? currentStreamVersion)
     {
-        var encoder = _eventDocumentCodec.CreateEncoder();
         var nextVersionValue = (currentStreamVersion?.Value + 1) ?? 0;
         var createdAtUtc = DateTime.UtcNow;
+        var encoder = _eventDocumentCodec.CreateEncoder();
 
         foreach (var @event in events)
         {

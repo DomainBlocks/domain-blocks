@@ -1,6 +1,6 @@
 namespace DomainBlocks.EventSourcing;
 
-public interface IEntityDefinitionProvider<TEventBase> where TEventBase : class
+public interface IEntityDefinitionProvider<TEvent> where TEvent : notnull
 {
-    IEntityDefinition<TEventBase, TEntity>? GetDefinition<TEntity>() where TEntity : notnull;
+    IEntityDefinition<TEvent, TEntity>? GetDefinition<TEntity>() where TEntity : notnull;
 }

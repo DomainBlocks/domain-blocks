@@ -1,11 +1,8 @@
 namespace DomainBlocks.EventStore.Abstractions;
 
-public interface IEventCodec<TEventBase, TEventData, TMetadata>
-    where TEventBase : class
-    where TEventData : notnull
-    where TMetadata : notnull
+public interface IEventCodec<TEvent, TEventData, TMetadata> where TEvent : notnull where TEventData : notnull
 {
-    IEventEncoder<TEventBase, TEventData, TMetadata> CreateEncoder();
+    IEventEncoder<TEvent, TEventData, TMetadata> CreateEncoder();
 
-    DecodedEvent<TEventBase> Decode(string eventName, TEventData eventData, TMetadata? metadata);
+    DecodedEvent<TEvent> Decode(string eventName, TEventData eventData, TMetadata? metadata);
 }

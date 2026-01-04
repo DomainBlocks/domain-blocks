@@ -2,11 +2,11 @@ using System.Collections.Frozen;
 
 namespace DomainBlocks.EventSourcing;
 
-public class EntityDefinitionProvider<TEventBase> : IEntityDefinitionProvider<TEventBase> where TEventBase : class
+public class EntityDefinitionProvider<TEvent> : IEntityDefinitionProvider<TEvent> where TEvent : notnull
 {
-    private readonly FrozenDictionary<Type, IEntityDefinition<TEventBase>> _definitions;
+    private readonly FrozenDictionary<Type, IEntityDefinition<TEvent>> _definitions;
 
-    public EntityDefinitionProvider(IEnumerable<IEntityDefinition<TEventBase>> definitions)
+    public EntityDefinitionProvider(IEnumerable<IEntityDefinition<TEvent>> definitions)
     {
         var definitionDict = definitions.ToFrozenDictionary(x => x.EntityType);
 
@@ -20,8 +20,8 @@ public class EntityDefinitionProvider<TEventBase> : IEntityDefinitionProvider<TE
         _definitions = definitionDict;
     }
 
-    public IEntityDefinition<TEventBase, TEntity>? GetDefinition<TEntity>() where TEntity : notnull
+    public IEntityDefinition<TEvent, TEntity>? GetDefinition<TEntity>() where TEntity : notnull
     {
-        return (IEntityDefinition<TEventBase, TEntity>?)_definitions.GetValueOrDefault(typeof(TEntity));
+        return (IEntityDefinition<TEvent, TEntity>?)_definitions.GetValueOrDefault(typeof(TEntity));
     }
 }

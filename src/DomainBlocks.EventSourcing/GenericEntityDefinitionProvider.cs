@@ -2,8 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace DomainBlocks.EventSourcing;
 
-public class GenericEntityDefinitionProvider<TEventBase> : IEntityDefinitionProvider<TEventBase>
-    where TEventBase : class
+public class GenericEntityDefinitionProvider<TEvent> : IEntityDefinitionProvider<TEvent> where TEvent : notnull
 {
     private readonly Type _genericTypeDefinition;
     private readonly Type _entityGenericArgType;
@@ -50,14 +49,14 @@ public class GenericEntityDefinitionProvider<TEventBase> : IEntityDefinitionProv
         _constructorArgs = constructorArgs;
     }
 
-    public IEntityDefinition<TEventBase, TEntity>? GetDefinition<TEntity>() where TEntity : notnull
+    public IEntityDefinition<TEvent, TEntity>? GetDefinition<TEntity>() where TEntity : notnull
     {
         if (!TryResolveDefinitionType(typeof(TEntity), out var definitionType))
             return null;
 
         var definition = Activator.CreateInstance(definitionType, _constructorArgs)!;
 
-        return (IEntityDefinition<TEventBase, TEntity>)definition;
+        return (IEntityDefinition<TEvent, TEntity>)definition;
     }
 
     private bool TryResolveDefinitionType(Type entityType, [NotNullWhen(true)] out Type? definitionType)

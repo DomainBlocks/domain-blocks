@@ -5,20 +5,15 @@ public static class EncodedEvent
     public static EncodedEvent<TEventData, TMetadata> Create<TEventData, TMetadata>(
         string eventName,
         TEventData eventData,
-        TMetadata? metadata = default)
+        TMetadata? metadata)
         where TEventData : notnull
-        where TMetadata : notnull
     {
         return new EncodedEvent<TEventData, TMetadata>(eventName, eventData, metadata);
     }
 }
 
-public readonly struct EncodedEvent<TEventData, TMetadata>(
-    string eventName,
-    TEventData eventData,
-    TMetadata? metadata = default)
+public readonly struct EncodedEvent<TEventData, TMetadata>(string eventName, TEventData eventData, TMetadata? metadata)
     where TEventData : notnull
-    where TMetadata : notnull
 {
     public string EventName { get; } = eventName;
     public TEventData EventData { get; } = eventData;

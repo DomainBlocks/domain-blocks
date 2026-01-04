@@ -32,7 +32,9 @@ public class MongoEventStoreClientTests : EventStoreClientTests
         };
 
         _mongoClient = new MongoClient(MongoConnectionStrings.Default);
-        var collection = _mongoClient.GetCollection<EventDocument>(options.Collection.CollectionNamespace);
+
+        var collection = _mongoClient.GetCollection<EventDocument>(
+            options.Collection.CollectionNamespace);
 
         await MongoEventStoreAdmin.EnsureIndexesAsync(collection, options.Collection);
 

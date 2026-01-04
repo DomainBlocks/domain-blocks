@@ -2,9 +2,9 @@ using DomainBlocks.EventStore.Abstractions;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
-public interface IEventDocumentCodec<TEventBase, TEventDocument> where TEventBase : class
+public interface IEventDocumentCodec<TEvent, TEventDocument> where TEvent : notnull
 {
-    IEventDocumentEncoder<TEventBase, TEventDocument> CreateEncoder();
+    IEventDocumentEncoder<TEvent, TEventDocument> CreateEncoder();
 
-    ReadEvent<TEventBase> FromEventDocument(TEventDocument document);
+    ReadEvent<TEvent> Decode(TEventDocument document);
 }

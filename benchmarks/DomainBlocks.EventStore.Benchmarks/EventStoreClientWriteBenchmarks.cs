@@ -77,15 +77,15 @@ public class EventStoreClientWriteBenchmarks
         public required string Value2 { get; init; }
     }
 
-    private sealed class FakeKurrentDBEventStoreClient<TEventBase>(
-        IEventCodec<TEventBase, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec,
+    private sealed class FakeKurrentDBEventStoreClient<TEvent>(
+        IEventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec,
         Consumer consumer) :
-        IEventStoreClient<TEventBase>
-        where TEventBase : class
+        IEventStoreClient<TEvent>
+        where TEvent : notnull
     {
         public Task AppendToStreamAsync(
             string streamId,
-            IEnumerable<AppendEvent<TEventBase>> events,
+            IEnumerable<AppendEvent<TEvent>> events,
             AppendToStreamOptions? options = null,
             CancellationToken cancellationToken = default)
         {
@@ -102,7 +102,7 @@ public class EventStoreClientWriteBenchmarks
             return Task.CompletedTask;
         }
 
-        public IAsyncEnumerable<ReadEvent<TEventBase>> ReadStreamAsync(
+        public IAsyncEnumerable<ReadEvent<TEvent>> ReadStreamAsync(
             string streamId,
             ReadStreamOptions? options = null,
             CancellationToken cancellationToken = default)

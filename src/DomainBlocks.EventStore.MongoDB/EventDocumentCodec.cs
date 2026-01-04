@@ -5,24 +5,25 @@ namespace DomainBlocks.EventStore.MongoDB;
 
 public static class EventDocumentCodec
 {
-    public static EventDocumentCodec<TEventBase> Create<TEventBase>(
-        IEventCodec<TEventBase, BsonValue, BsonValue> eventCodec)
-        where TEventBase : class
+    public static EventDocumentCodec<TEvent> Create<TEvent>(
+        IEventCodec<TEvent, BsonValue, BsonValue> eventCodec)
+        where TEvent : notnull
     {
-        return new EventDocumentCodec<TEventBase>(eventCodec);
+        return new EventDocumentCodec<TEvent>(eventCodec);
     }
 }
 
-public sealed class EventDocumentCodec<TEventBase>(IEventCodec<TEventBase, BsonValue, BsonValue> eventCodec) :
-    IEventDocumentCodec<TEventBase, EventDocument>
-    where TEventBase : class
+public sealed class EventDocumentCodec<TEvent>(
+    IEventCodec<TEvent, BsonValue, BsonValue> eventCodec) :
+    IEventDocumentCodec<TEvent, EventDocument>
+    where TEvent : notnull
 {
-    public IEventDocumentEncoder<TEventBase, EventDocument> CreateEncoder()
+    public IEventDocumentEncoder<TEvent, EventDocument> CreateEncoder()
     {
-        return new EventDocumentEncoder<TEventBase>(eventCodec.CreateEncoder());
+        return new EventDocumentEncoder<TEvent>(eventCodec.CreateEncoder());
     }
 
-    public ReadEvent<TEventBase> FromEventDocument(EventDocument document)
+    public ReadEvent<TEvent> Decode(EventDocument document)
     {
         var (@event, metadata) = eventCodec.Decode(document.EventName, document.EventData, document.Metadata);
 

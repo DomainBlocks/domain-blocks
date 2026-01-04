@@ -107,15 +107,15 @@ public class EventStoreClientReadBenchmarks
         public required string Value2 { get; init; }
     }
 
-    private sealed class FakeKurrentDBEventStoreClient<TEventBase>(
+    private sealed class FakeKurrentDBEventStoreClient<TEvent>(
         ResolvedEvent[] kurrentEvents,
-        IEventCodec<TEventBase, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec) :
-        IEventStoreClient<TEventBase>
-        where TEventBase : class
+        IEventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec) :
+        IEventStoreClient<TEvent>
+        where TEvent : notnull
     {
         public Task AppendToStreamAsync(
             string streamId,
-            IEnumerable<AppendEvent<TEventBase>> events,
+            IEnumerable<AppendEvent<TEvent>> events,
             AppendToStreamOptions? options = null,
             CancellationToken cancellationToken = default)
         {
@@ -123,7 +123,7 @@ public class EventStoreClientReadBenchmarks
         }
 
 #pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
-        public async IAsyncEnumerable<ReadEvent<TEventBase>> ReadStreamAsync(
+        public async IAsyncEnumerable<ReadEvent<TEvent>> ReadStreamAsync(
 #pragma warning restore CS1998
             string streamId,
             ReadStreamOptions? options = null,

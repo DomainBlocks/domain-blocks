@@ -2,24 +2,20 @@
 
 public static class DecodedEvent
 {
-    public static DecodedEvent<TEventBase> Create<TEventBase>(
-        TEventBase @event,
-        IReadOnlyDictionary<string, string> metadata)
-        where TEventBase : class
+    public static DecodedEvent<TEvent> Create<TEvent>(TEvent @event, IReadOnlyDictionary<string, string> metadata)
+        where TEvent : notnull
     {
-        return new DecodedEvent<TEventBase>(@event, metadata);
+        return new DecodedEvent<TEvent>(@event, metadata);
     }
 }
 
-public readonly struct DecodedEvent<TEventBase>(
-    TEventBase @event,
-    IReadOnlyDictionary<string, string> metadata)
-    where TEventBase : class
+public readonly struct DecodedEvent<TEvent>(TEvent @event, IReadOnlyDictionary<string, string> metadata)
+    where TEvent : notnull
 {
-    public TEventBase Event { get; } = @event;
+    public TEvent Event { get; } = @event;
     public IReadOnlyDictionary<string, string> Metadata { get; } = metadata;
 
-    public void Deconstruct(out TEventBase @event, out IReadOnlyDictionary<string, string> metadata)
+    public void Deconstruct(out TEvent @event, out IReadOnlyDictionary<string, string> metadata)
     {
         @event = Event;
         metadata = Metadata;

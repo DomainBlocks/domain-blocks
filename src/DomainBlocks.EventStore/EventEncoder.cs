@@ -5,22 +5,21 @@ using DomainBlocks.Serialization.Abstractions;
 
 namespace DomainBlocks.EventStore;
 
-public sealed class EventEncoder<TEventBase, TEventData, TMetadata> : IEventEncoder<TEventBase, TEventData, TMetadata>
-    where TEventBase : class
+public sealed class EventEncoder<TEvent, TEventData, TMetadata> : IEventEncoder<TEvent, TEventData, TMetadata>
+    where TEvent : notnull
     where TEventData : notnull
-    where TMetadata : notnull
 {
     private readonly EventTypeMap _eventTypeMap;
-    private readonly FrozenDictionary<Type, IEventContractMapper<TEventBase>> _contractMappers;
-    private readonly IMetadataContributor<TEventBase>[] _metadataContributors;
+    private readonly FrozenDictionary<Type, IEventContractMapper<TEvent>> _contractMappers;
+    private readonly IMetadataContributor<TEvent>[] _metadataContributors;
     private readonly IObjectSerializer<TEventData> _eventSerializer;
     private readonly IMetadataSerializer<TMetadata> _metadataSerializer;
     private readonly Dictionary<string, string> _metadataBuffer = [];
 
     internal EventEncoder(
         EventTypeMap eventTypeMap,
-        FrozenDictionary<Type, IEventContractMapper<TEventBase>> contractMappers,
-        IMetadataContributor<TEventBase>[] metadataContributors,
+        FrozenDictionary<Type, IEventContractMapper<TEvent>> contractMappers,
+        IMetadataContributor<TEvent>[] metadataContributors,
         IObjectSerializer<TEventData> eventSerializer,
         IMetadataSerializer<TMetadata> metadataSerializer)
     {
@@ -31,7 +30,7 @@ public sealed class EventEncoder<TEventBase, TEventData, TMetadata> : IEventEnco
         _metadataSerializer = metadataSerializer;
     }
 
-    public EncodedEvent<TEventData, TMetadata> Encode(AppendEvent<TEventBase> appendEvent)
+    public EncodedEvent<TEventData, TMetadata> Encode(AppendEvent<TEvent> appendEvent)
     {
         var @event = appendEvent.Event;
         object? contract = null;

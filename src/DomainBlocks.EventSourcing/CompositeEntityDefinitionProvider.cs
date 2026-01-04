@@ -2,18 +2,18 @@ using System.Collections.Concurrent;
 
 namespace DomainBlocks.EventSourcing;
 
-public class CompositeEntityDefinitionProvider<TEventBase>(
-    IEnumerable<IEntityDefinitionProvider<TEventBase>> providers) :
-    IEntityDefinitionProvider<TEventBase>
-    where TEventBase : class
+public class CompositeEntityDefinitionProvider<TEvent>(
+    IEnumerable<IEntityDefinitionProvider<TEvent>> providers) :
+    IEntityDefinitionProvider<TEvent>
+    where TEvent : notnull
 {
-    private readonly ConcurrentDictionary<Type, IEntityDefinition<TEventBase>> _definitions = new();
-    private readonly IEntityDefinitionProvider<TEventBase>[] _providers = providers.ToArray();
+    private readonly ConcurrentDictionary<Type, IEntityDefinition<TEvent>> _definitions = new();
+    private readonly IEntityDefinitionProvider<TEvent>[] _providers = providers.ToArray();
 
-    public IEntityDefinition<TEventBase, TEntity>? GetDefinition<TEntity>() where TEntity : notnull
+    public IEntityDefinition<TEvent, TEntity>? GetDefinition<TEntity>() where TEntity : notnull
     {
         if (_definitions.TryGetValue(typeof(TEntity), out var definition))
-            return (IEntityDefinition<TEventBase, TEntity>)definition;
+            return (IEntityDefinition<TEvent, TEntity>)definition;
 
         var newDefinition = _providers.Select(x => x.GetDefinition<TEntity>()).FirstOrDefault(x => x != null);
 

@@ -3,12 +3,13 @@ using MongoDB.Bson;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
-public sealed class EventDocumentEncoder<TEventBase>(IEventEncoder<TEventBase, BsonValue, BsonValue> eventEncoder) :
-    IEventDocumentEncoder<TEventBase, EventDocument>
-    where TEventBase : class
+public sealed class EventDocumentEncoder<TEvent>(
+    IEventEncoder<TEvent, BsonValue, BsonValue> eventEncoder) :
+    IEventDocumentEncoder<TEvent, EventDocument>
+    where TEvent : notnull
 {
     public EventDocument Encode(
-        AppendEvent<TEventBase> @event,
+        AppendEvent<TEvent> @event,
         string streamId,
         StreamVersion streamVersion,
         DateTime createdAtUtc)
