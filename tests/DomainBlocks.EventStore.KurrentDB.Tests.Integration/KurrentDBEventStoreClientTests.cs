@@ -8,9 +8,13 @@ using NUnit.Framework;
 namespace DomainBlocks.EventStore.KurrentDB.Tests.Integration;
 
 [TestFixture]
-public class KurrentDBEventStoreConnectionTests : EventStoreClientTests
+public class KurrentDBEventStoreClientTests : EventStoreClientTests
 {
-    protected override Task<IEventStoreClient<IDomainEvent>> CreateClientAsync()
+    private KurrentDBClient _kurrentClient = null!;
+    private KurrentDBEventStoreClient<IDomainEvent> _client = null!;
+
+    [OneTimeSetUp]
+    public void OneTimeSetUp()
     {
         var codecOptions = new EventCodecOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
@@ -22,9 +26,15 @@ public class KurrentDBEventStoreConnectionTests : EventStoreClientTests
         var codec = EventCodec.Create(codecOptions);
 
         const string connectionString = "kurrentdb://admin:changeit@localhost:2113?tls=false&tlsVerifyCert=false";
-        var kurrentClient = new KurrentDBClient(KurrentDBClientSettings.Create(connectionString));
-
-        return Task.FromResult<IEventStoreClient<IDomainEvent>>(
-            new KurrentDBEventStoreClient<IDomainEvent>(kurrentClient, codec));
+        _kurrentClient = new KurrentDBClient(KurrentDBClientSettings.Create(connectionString));
+        _client = new KurrentDBEventStoreClient<IDomainEvent>(_kurrentClient, codec);
     }
+
+    [OneTimeTearDown]
+    public async Task OneTimeTearDown()
+    {
+        await _kurrentClient.DisposeAsync();
+    }
+
+    protected override IEventStoreClient<IDomainEvent> Client => _client;
 }

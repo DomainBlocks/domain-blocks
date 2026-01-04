@@ -12,7 +12,11 @@ namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 [TestFixture]
 public class MongoEventStoreClientTests : EventStoreClientTests
 {
-    protected override async Task<IEventStoreClient<IDomainEvent>> CreateClientAsync()
+    private MongoClient _mongoClient = null!;
+    private MongoEventStoreClient<IDomainEvent, EventDocument> _client = null!;
+
+    [OneTimeSetUp]
+    public async Task OneTimeSetup()
     {
         var codecOptions = new EventCodecOptions<IDomainEvent, BsonValue, BsonValue>
         {
@@ -27,12 +31,19 @@ public class MongoEventStoreClientTests : EventStoreClientTests
             DocumentCodec = EventDocumentCodec.Create(EventCodec.Create(codecOptions))
         };
 
-        var mongoClient = new MongoClient(MongoConnectionStrings.Default);
-        var collection = mongoClient.GetCollection<EventDocument>(options.Collection.CollectionNamespace);
-        var eventStoreClient = new MongoEventStoreClient<IDomainEvent, EventDocument>(collection, options);
+        _mongoClient = new MongoClient(MongoConnectionStrings.Default);
+        var collection = _mongoClient.GetCollection<EventDocument>(options.Collection.CollectionNamespace);
 
         await MongoEventStoreAdmin.EnsureIndexesAsync(collection, options.Collection);
 
-        return eventStoreClient;
+        _client = new MongoEventStoreClient<IDomainEvent, EventDocument>(collection, options);
     }
+
+    [OneTimeTearDown]
+    public void OneTimeTearDown()
+    {
+        _mongoClient.Dispose();
+    }
+
+    protected override IEventStoreClient<IDomainEvent> Client => _client;
 }
