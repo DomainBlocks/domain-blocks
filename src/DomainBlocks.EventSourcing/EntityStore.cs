@@ -1,13 +1,10 @@
-using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.Abstractions.Events;
-using AppendEvent = DomainBlocks.EventStore.AppendEvent;
 
 namespace DomainBlocks.EventSourcing;
 
-public sealed class EntityStore<TEventBase>(
-    IEventStoreClient<TEventBase> eventStoreClient,
-    IEntityDefinitionProvider<TEventBase> entityDefinitionProvider) : IEntityStore where TEventBase : class
+public sealed class EntityStore<TEvent>(
+    IEventStoreClient<TEvent> eventStoreClient,
+    IEntityDefinitionProvider<TEvent> entityDefinitionProvider) : IEntityStore where TEvent : notnull
 {
     public async Task<Versioned<TEntity>> LoadAsync<TEntity>(
         string entityId,
@@ -81,7 +78,7 @@ public sealed class EntityStore<TEventBase>(
 
         return Versioned.From(entity, loadedVersion);
 
-        async IAsyncEnumerable<TEventBase> EnumerateEvents()
+        async IAsyncEnumerable<TEvent> EnumerateEvents()
         {
             await foreach (var e in events.ConfigureAwait(false))
             {
@@ -91,7 +88,7 @@ public sealed class EntityStore<TEventBase>(
         }
     }
 
-    private IEntityDefinition<TEventBase, TEntity> GetEntityDefinition<TEntity>() where TEntity : notnull
+    private IEntityDefinition<TEvent, TEntity> GetEntityDefinition<TEntity>() where TEntity : notnull
     {
         return entityDefinitionProvider.GetDefinition<TEntity>() ?? throw new ArgumentException(
             $"Entity definition not found for type '{typeof(TEntity)}'.",

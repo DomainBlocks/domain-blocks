@@ -1,10 +1,12 @@
-using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.MongoDB;
+using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.Abstractions;
 using DomainBlocks.Serialization.Google.Protobuf;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Serialization.SystemTextJson;
 using DomainBlocks.Testing.Integration.MongoDB;
 using MongoDB.Bson;
+using MongoDB.Driver;
 using NUnit.Framework;
 using Shouldly;
 
@@ -64,12 +66,14 @@ public class MongoSerializationTests
         await Should_write_and_read_event(TestEvent, serializer);
     }
 
-    private async Task Should_write_and_read_event<TEvent>(
+    private static async Task Should_write_and_read_event<TEvent>(
         TEvent @event,
         IObjectSerializer<BsonValue> serializer) where TEvent : class
     {
-        await using var connectionProvider = await MongoTestEventStoreConnectionProvider.CreateAsync();
-        var client = CreateEventStore(connectionProvider, serializer);
+        using var mongoClient = new MongoClient(MongoConnectionStrings.Default);
+
+        var client = CreateEventStoreClient(mongoClient, serializer);
+
         var streamId = $"test-{serializer.GetType().Name}-{Guid.NewGuid()}";
         await client.AppendToStreamAsync(streamId, [@event]);
         var readEvents = await client.ReadStreamAsync(streamId).ToArrayAsync();
@@ -81,8 +85,8 @@ public class MongoSerializationTests
             .ShouldBe(@event);
     }
 
-    private static EventStoreClient<object, BsonValue, BsonValue> CreateEventStore(
-        IEventStoreConnectionProvider<BsonValue, BsonValue> connectionProvider,
+    private static MongoEventStoreClient<object, EventDocument> CreateEventStoreClient(
+        MongoClient mongoClient,
         IObjectSerializer<BsonValue> serializer)
     {
         var eventTypeMap = new EventTypeMapBuilder()
@@ -90,15 +94,22 @@ public class MongoSerializationTests
             .MapType<Proto.UserCreated>("ProtoUserCreated")
             .Build();
 
-        var clientOptions = new EventStoreClientOptions<object, BsonValue, BsonValue>
+        var codecOptions = new EventCodecOptions<object, BsonValue, BsonValue>
         {
-            ConnectionProvider = connectionProvider,
             TypeMap = eventTypeMap,
             EventSerializer = serializer,
             MetadataSerializer = new BsonDocumentMetadataSerializer()
         };
 
-        return new EventStoreClient<object, BsonValue, BsonValue>(clientOptions);
+        var options = new MongoEventStoreClientOptions<object, EventDocument>
+        {
+            Collection = EventCollectionOptions.Default,
+            DocumentCodec = EventDocumentCodec.Create(EventCodec.Create(codecOptions))
+        };
+
+        var collection = mongoClient.GetCollection<EventDocument>(options.Collection.CollectionNamespace);
+
+        return new MongoEventStoreClient<object, EventDocument>(collection, options);
     }
 
     private record UserCreated

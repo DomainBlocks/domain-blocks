@@ -1,10 +1,10 @@
 namespace DomainBlocks.EventStore;
 
-public interface IEventContractMapper<TEventBase> where TEventBase : class
+public interface IEventContractMapper<TEvent> where TEvent : notnull
 {
     Type EventType { get; }
     Type ContractType { get; }
 
-    object ToContract(TEventBase @event);
-    TEventBase FromContract(object contract);
+    object ToContract(TEvent @event);
+    TEvent FromContract(object contract);
 }

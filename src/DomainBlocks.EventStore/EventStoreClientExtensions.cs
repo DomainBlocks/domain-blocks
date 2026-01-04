@@ -1,15 +1,15 @@
-using DomainBlocks.EventStore.Abstractions;
+﻿using DomainBlocks.EventStore.Abstractions;
 
 namespace DomainBlocks.EventStore;
 
 public static class EventStoreClientExtensions
 {
-    public static Task AppendToStreamAsync<TEventBase>(
-        this IEventStoreClient<TEventBase> client,
+    public static Task AppendToStreamAsync<TEvent>(
+        this IEventStoreClient<TEvent> client,
         string streamId,
-        IEnumerable<TEventBase> events,
+        IEnumerable<TEvent> events,
         AppendToStreamOptions? options = null,
-        CancellationToken cancellationToken = default) where TEventBase : class
+        CancellationToken cancellationToken = default) where TEvent : notnull
     {
         return client.AppendToStreamAsync(
             streamId,

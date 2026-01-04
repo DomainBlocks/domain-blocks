@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using DomainBlocks.EventStore.Abstractions;
 
 namespace DomainBlocks.EventStore.Read;
 

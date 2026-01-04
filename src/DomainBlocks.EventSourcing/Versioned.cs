@@ -1,4 +1,4 @@
-using DomainBlocks.EventStore.Abstractions.Events;
+using DomainBlocks.EventStore.Abstractions;
 
 namespace DomainBlocks.EventSourcing;
 

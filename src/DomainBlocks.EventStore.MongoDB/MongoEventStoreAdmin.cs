@@ -6,36 +6,43 @@ public static class MongoEventStoreAdmin
 {
     public static Task EnsureIndexesAsync<TEventDocument>(
         string connectionString,
-        CollectionNamespace collectionNamespace,
-        EventDocumentMap<TEventDocument> documentMap,
+        EventCollectionOptions<TEventDocument> collectionOptions,
         CancellationToken cancellationToken = default)
     {
         var settings = MongoClientSettings.FromConnectionString(connectionString);
-        return EnsureIndexesAsync(settings, collectionNamespace, documentMap, cancellationToken);
+        return EnsureIndexesAsync(settings, collectionOptions, cancellationToken);
     }
 
     public static async Task EnsureIndexesAsync<TEventDocument>(
-        MongoClientSettings settings,
-        CollectionNamespace collectionNamespace,
-        EventDocumentMap<TEventDocument> documentMap,
+        MongoClientSettings clientSettings,
+        EventCollectionOptions<TEventDocument> collectionOptions,
         CancellationToken cancellationToken = default)
     {
-        using var client = new MongoClient(settings);
-        await EnsureIndexesAsync(client, collectionNamespace, documentMap, cancellationToken);
+        using var client = new MongoClient(clientSettings);
+        await EnsureIndexesAsync(client, collectionOptions, cancellationToken);
     }
 
     public static Task EnsureIndexesAsync<TEventDocument>(
         MongoClient client,
-        CollectionNamespace collectionNamespace,
-        EventDocumentMap<TEventDocument> documentMap,
+        EventCollectionOptions<TEventDocument> collectionOptions,
         CancellationToken cancellationToken = default)
     {
-        var database = client.GetDatabase(collectionNamespace.DatabaseNamespace.DatabaseName);
-        var collection = database.GetCollection<TEventDocument>(collectionNamespace.CollectionName);
+        var collection = client.GetCollection<TEventDocument>(collectionOptions.CollectionNamespace);
+        return EnsureIndexesAsync(collection, collectionOptions, cancellationToken);
+    }
 
+    public static Task EnsureIndexesAsync<TEventDocument>(
+        IMongoCollection<TEventDocument> collection,
+        EventCollectionOptions<TEventDocument> collectionOptions,
+        CancellationToken cancellationToken = default)
+    {
         var indexBuilder = Builders<TEventDocument>.IndexKeys;
-        var uniqueKey = indexBuilder.Ascending(documentMap.StreamIdField).Ascending(documentMap.StreamVersionField);
-        var createdAtUtc = indexBuilder.Ascending(documentMap.CreatedAtUtcField);
+
+        var uniqueKey = indexBuilder
+            .Ascending(collectionOptions.DocumentSchema.StreamIdField)
+            .Ascending(collectionOptions.DocumentSchema.StreamVersionField);
+
+        var createdAtUtc = indexBuilder.Ascending(collectionOptions.DocumentSchema.CreatedAtUtcField);
 
         CreateIndexModel<TEventDocument>[] indexModels =
         [

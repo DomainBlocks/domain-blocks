@@ -1,4 +1,4 @@
-﻿using DomainBlocks.EventStore.Exceptions;
+﻿using DomainBlocks.EventStore.TypeMapping;
 using NUnit.Framework;
 using Shouldly;
 

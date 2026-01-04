@@ -1,7 +1,7 @@
 namespace DomainBlocks.EventSourcing;
 
-public abstract class EntityDefinition<TEventBase, TEntity, TState> : IEntityDefinition<TEventBase, TEntity>
-    where TEventBase : class
+public abstract class EntityDefinition<TEvent, TEntity, TState> : IEntityDefinition<TEvent, TEntity>
+    where TEvent : notnull
     where TEntity : notnull
     where TState : notnull
 {
@@ -10,19 +10,19 @@ public abstract class EntityDefinition<TEventBase, TEntity, TState> : IEntityDef
     // Required for writes
     public abstract string GetId(TEntity entity);
     public abstract TState GetState(TEntity entity);
-    public abstract IEnumerable<TEventBase> GetUncommittedEvents(TEntity entity);
+    public abstract IEnumerable<TEvent> GetUncommittedEvents(TEntity entity);
 
     // Required for reads
     public abstract TState CreateInitialState();
-    protected abstract TState Apply(TState state, TEventBase @event);
+    protected abstract TState Apply(TState state, TEvent @event);
     protected abstract TEntity CreateFromState(TState state);
 
-    object IEntityDefinition<TEventBase, TEntity>.GetState(TEntity entity) => GetState(entity);
-    object IEntityDefinition<TEventBase, TEntity>.CreateInitialState() => CreateInitialState();
+    object IEntityDefinition<TEvent, TEntity>.GetState(TEntity entity) => GetState(entity);
+    object IEntityDefinition<TEvent, TEntity>.CreateInitialState() => CreateInitialState();
 
-    async Task<TEntity> IEntityDefinition<TEventBase, TEntity>.RestoreAsync(
+    async Task<TEntity> IEntityDefinition<TEvent, TEntity>.RestoreAsync(
         object initialState,
-        IAsyncEnumerable<TEventBase> events,
+        IAsyncEnumerable<TEvent> events,
         CancellationToken cancellationToken)
     {
         var currentState = (TState)initialState;
@@ -34,8 +34,8 @@ public abstract class EntityDefinition<TEventBase, TEntity, TState> : IEntityDef
     }
 }
 
-public abstract class EntityDefinition<TEventBase, TEntity> : EntityDefinition<TEventBase, TEntity, TEntity>
-    where TEventBase : class
+public abstract class EntityDefinition<TEvent, TEntity> : EntityDefinition<TEvent, TEntity, TEntity>
+    where TEvent : notnull
     where TEntity : notnull
 {
     public override TEntity GetState(TEntity entity) => entity;
