@@ -53,11 +53,7 @@ public sealed class EventCodec<TEventBase, TEventData, TMetadata> :
             _metadataSerializer);
     }
 
-    public ReadEvent<TEventBase> Decode(
-        string eventName,
-        TEventData eventData,
-        TMetadata? metadata,
-        ReadEventContext context)
+    public DecodedEvent<TEventBase> Decode(string eventName, TEventData eventData, TMetadata? metadata)
     {
         var eventType = _eventTypeMap.GetEventType(eventName);
         var deserializedEvent = _eventSerializer.Deserialize(eventData, eventType);
@@ -71,6 +67,6 @@ public sealed class EventCodec<TEventBase, TEventData, TMetadata> :
             ? _metadataSerializer.Deserialize(metadata!)
             : FrozenDictionary<string, string>.Empty;
 
-        return ReadEvent.Create((TEventBase)deserializedEvent, deserializedMetadata, context);
+        return DecodedEvent.Create((TEventBase)deserializedEvent, deserializedMetadata);
     }
 }

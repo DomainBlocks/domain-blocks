@@ -18,7 +18,7 @@ public class EventStoreClientReadBenchmarks
     private FakeKurrentDBEventStoreClient<IDomainEvent> _client = null!;
     private ReadStreamOptions _readStreamOptions = null!;
 
-    [Params(false, true)]
+    [Params(false)]
     public bool IncludeMetadata { get; set; }
 
     //[Params(100, 1_000, 10_000)]
@@ -133,18 +133,19 @@ public class EventStoreClientReadBenchmarks
 
             foreach (var resolvedEvent in kurrentEvents)
             {
-                var @event = resolvedEvent.Event;
-                var originalEvent = resolvedEvent.OriginalEvent;
+                var eventRecord = resolvedEvent.Event;
+                var originalEventRecord = resolvedEvent.OriginalEvent;
+                var metadataBytes = options.IncludeMetadata ? eventRecord.Metadata : default;
+
+                var (@event, metadata) = eventCodec.Decode(eventRecord.EventType, eventRecord.Data, metadataBytes);
 
                 var context = new ReadEventContext(
                     streamId,
-                    new StreamVersion(originalEvent.EventNumber.ToUInt64()),
-                    @event.Created,
-                    new GlobalPosition(originalEvent.Position.CommitPosition));
+                    new StreamVersion(originalEventRecord.EventNumber.ToUInt64()),
+                    eventRecord.Created,
+                    new GlobalPosition(originalEventRecord.Position.CommitPosition));
 
-                var metadata = options.IncludeMetadata ? @event.Metadata : default;
-
-                yield return eventCodec.Decode(@event.EventType, @event.Data, metadata, context);
+                yield return ReadEvent.Create(@event, metadata, context);
             }
         }
     }

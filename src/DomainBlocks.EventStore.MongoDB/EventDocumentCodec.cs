@@ -24,12 +24,13 @@ public sealed class EventDocumentCodec<TEventBase>(IEventCodec<TEventBase, BsonV
 
     public ReadEvent<TEventBase> FromEventDocument(EventDocument document)
     {
+        var (@event, metadata) = eventCodec.Decode(document.EventName, document.EventData, document.Metadata);
+
         var context = new ReadEventContext(
             document.StreamId,
             new StreamVersion(document.StreamVersion),
-            document.CreatedAtUtc,
-            null);
+            document.CreatedAtUtc);
 
-        return eventCodec.Decode(document.EventName, document.EventData, document.Metadata, context);
+        return ReadEvent.Create(@event, metadata, context);
     }
 }

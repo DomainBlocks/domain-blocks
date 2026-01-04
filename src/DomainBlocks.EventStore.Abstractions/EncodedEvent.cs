@@ -1,28 +1,28 @@
 ﻿namespace DomainBlocks.EventStore.Abstractions;
 
-public static class EncodedAppendEvent
+public static class EncodedEvent
 {
-    public static EncodedAppendEvent<TEventData, TMetadata> Create<TEventData, TMetadata>(
+    public static EncodedEvent<TEventData, TMetadata> Create<TEventData, TMetadata>(
         string eventName,
         TEventData eventData,
         TMetadata? metadata = default)
         where TEventData : notnull
         where TMetadata : notnull
     {
-        return new EncodedAppendEvent<TEventData, TMetadata>(eventName, eventData, metadata);
+        return new EncodedEvent<TEventData, TMetadata>(eventName, eventData, metadata);
     }
 }
 
-public readonly struct EncodedAppendEvent<TEventData, TMetadata>(
+public readonly struct EncodedEvent<TEventData, TMetadata>(
     string eventName,
     TEventData eventData,
     TMetadata? metadata = default)
     where TEventData : notnull
     where TMetadata : notnull
 {
-    public readonly string EventName = eventName;
-    public readonly TEventData EventData = eventData;
-    public readonly TMetadata? Metadata = metadata;
+    public string EventName { get; } = eventName;
+    public TEventData EventData { get; } = eventData;
+    public TMetadata? Metadata { get; } = metadata;
 
     public void Deconstruct(out string eventName, out TEventData eventData, out TMetadata? metadata)
     {

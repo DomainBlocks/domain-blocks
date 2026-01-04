@@ -31,7 +31,7 @@ public sealed class EventEncoder<TEventBase, TEventData, TMetadata> : IEventEnco
         _metadataSerializer = metadataSerializer;
     }
 
-    public EncodedAppendEvent<TEventData, TMetadata> Encode(AppendEvent<TEventBase> appendEvent)
+    public EncodedEvent<TEventData, TMetadata> Encode(AppendEvent<TEventBase> appendEvent)
     {
         var @event = appendEvent.Event;
         object? contract = null;
@@ -62,6 +62,6 @@ public sealed class EventEncoder<TEventBase, TEventData, TMetadata> : IEventEnco
             ? _metadataSerializer.Serialize(_metadataBuffer)
             : default;
 
-        return EncodedAppendEvent.Create(eventName, serializedEventData, serializedMetadata);
+        return EncodedEvent.Create(eventName, serializedEventData, serializedMetadata);
     }
 }

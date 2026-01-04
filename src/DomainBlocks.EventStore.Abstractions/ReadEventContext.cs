@@ -4,7 +4,7 @@ public readonly struct ReadEventContext(
     string streamId,
     StreamVersion streamVersion,
     DateTime createdAtUtc,
-    GlobalPosition? globalPosition)
+    GlobalPosition? globalPosition = null)
 {
     public string StreamId { get; } = streamId;
     public StreamVersion StreamVersion { get; } = streamVersion;

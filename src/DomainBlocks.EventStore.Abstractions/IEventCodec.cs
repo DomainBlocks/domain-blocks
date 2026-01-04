@@ -7,9 +7,5 @@ public interface IEventCodec<TEventBase, TEventData, TMetadata>
 {
     IEventEncoder<TEventBase, TEventData, TMetadata> CreateEncoder();
 
-    ReadEvent<TEventBase> Decode(
-        string eventName,
-        TEventData eventData,
-        TMetadata? metadata,
-        ReadEventContext context);
+    DecodedEvent<TEventBase> Decode(string eventName, TEventData eventData, TMetadata? metadata);
 }

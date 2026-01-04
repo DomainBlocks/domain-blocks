@@ -5,5 +5,5 @@ public interface IEventEncoder<TEventBase, TEventData, TMetadata>
     where TEventData : notnull
     where TMetadata : notnull
 {
-    EncodedAppendEvent<TEventData, TMetadata> Encode(AppendEvent<TEventBase> appendEvent);
+    EncodedEvent<TEventData, TMetadata> Encode(AppendEvent<TEventBase> appendEvent);
 }
