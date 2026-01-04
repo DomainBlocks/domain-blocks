@@ -1,5 +1,6 @@
 using DomainBlocks.EventStore.KurrentDB;
 using DomainBlocks.EventStore.TypeMapping;
+using DomainBlocks.Serialization.Google.Protobuf;
 using DomainBlocks.Serialization.SystemTextJson;
 using KurrentDB.Client;
 using NUnit.Framework;
@@ -22,7 +23,7 @@ public class EventContractMapperTests
         var codecOptions = new EventCodecOptions<object, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
             TypeMap = eventTypeMap,
-            EventSerializer = new SystemTextJsonBytesSerializer(),
+            EventSerializer = new ProtobufBytesSerializer(),
             MetadataSerializer = new SystemTextJsonBytesMetadataSerializer(),
             ContractMappers = [new UserCreatedProtoMapper()]
         };

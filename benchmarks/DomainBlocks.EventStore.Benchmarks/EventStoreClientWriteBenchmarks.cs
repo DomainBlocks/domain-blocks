@@ -38,7 +38,7 @@ public class EventStoreClientWriteBenchmarks
             TypeMap = typeMap,
             EventSerializer = EventSerializer,
             MetadataSerializer = MetadataSerializer,
-            MetadataContributors = [new MetadataContributor()]
+            MetadataContributors = [new MetadataContributor(EventCount)]
         };
 
         var eventCodec = new EventCodec<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>(codecOptions);
@@ -128,13 +128,17 @@ public class EventStoreClientWriteBenchmarks
         }
     }
 
-    private sealed class MetadataContributor : IMetadataContributor<IDomainEvent>
+    private sealed class MetadataContributor(int eventCount) : IMetadataContributor<IDomainEvent>
     {
         private int _counter;
 
         public void Contribute(IDomainEvent @event, object? contract, string eventName, MetadataWriter metadata)
         {
-            metadata.Set("Value2", $"value2-{_counter++}");
+            metadata.Set("Value2", $"value2-{_counter}");
+
+            _counter++;
+            if (_counter == eventCount)
+                _counter = 0;
         }
     }
 }

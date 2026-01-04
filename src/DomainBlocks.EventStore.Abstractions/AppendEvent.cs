@@ -11,7 +11,7 @@ public static class AppendEvent
     }
 
     public static AppendEvent<TEvent> Create<TEvent>(TEvent @event, KeyValuePair<string, string>[] metadata)
-        where TEvent : class
+        where TEvent : notnull
     {
         return new AppendEvent<TEvent>(@event, metadata);
     }
