@@ -1,7 +1,7 @@
 ﻿using System.Runtime.CompilerServices;
 using BenchmarkDotNet.Attributes;
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.Abstractions.Events;
+using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.SystemTextJson;
 using KurrentDB.Client;
 
@@ -15,7 +15,7 @@ public class EventStoreClientReadBenchmarks
     private static readonly SystemTextJsonBytesSerializer EventSerializer = new();
     private static readonly SystemTextJsonBytesMetadataSerializer MetadataSerializer = new();
 
-    private IEventStoreClient<IDomainEvent> _client = null!;
+    private FakeKurrentDBEventStoreClient<IDomainEvent> _client = null!;
     private ReadStreamOptions _readStreamOptions = null!;
 
     [Params(false, true)]
@@ -34,16 +34,15 @@ public class EventStoreClientReadBenchmarks
             .MapType<TestEvent>()
             .Build();
 
-        var clientOptions = new EventStoreClientOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
+        var codecOptions = new EventCodecOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
-            ConnectionProvider = new FakeKurrentDBEventStoreConnectionProvider(kurrentEvents),
             TypeMap = typeMap,
             EventSerializer = EventSerializer,
             MetadataSerializer = MetadataSerializer
         };
 
-        _client = new EventStoreClient<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>(clientOptions);
-
+        var eventCodec = new EventCodec<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>(codecOptions);
+        _client = new FakeKurrentDBEventStoreClient<IDomainEvent>(kurrentEvents, eventCodec);
         _readStreamOptions = new ReadStreamOptions { IncludeMetadata = IncludeMetadata };
     }
 
@@ -108,22 +107,15 @@ public class EventStoreClientReadBenchmarks
         public required string Value2 { get; init; }
     }
 
-    private sealed class FakeKurrentDBEventStoreConnectionProvider(ResolvedEvent[] kurrentEvents) :
-        IEventStoreConnectionProvider<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
-    {
-        public ValueTask<ConnectionScope<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>> AcquireAsync(
-            CancellationToken cancellationToken = default)
-        {
-            return ValueTask.FromResult(ConnectionScope.Create(new FakeKurrentDBEventStoreConnection(kurrentEvents)));
-        }
-    }
-
-    private sealed class FakeKurrentDBEventStoreConnection(ResolvedEvent[] kurrentEvents) :
-        IEventStoreConnection<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
+    private sealed class FakeKurrentDBEventStoreClient<TEventBase>(
+        ResolvedEvent[] kurrentEvents,
+        IEventCodec<TEventBase, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec) :
+        IEventStoreClient<TEventBase>
+        where TEventBase : class
     {
         public Task AppendToStreamAsync(
             string streamId,
-            IEnumerable<AppendEvent<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>> events,
+            IEnumerable<AppendEvent<TEventBase>> events,
             AppendToStreamOptions? options = null,
             CancellationToken cancellationToken = default)
         {
@@ -131,12 +123,14 @@ public class EventStoreClientReadBenchmarks
         }
 
 #pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
-        public async IAsyncEnumerable<ReadEvent<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>> ReadStreamAsync(
+        public async IAsyncEnumerable<ReadEvent<TEventBase>> ReadStreamAsync(
 #pragma warning restore CS1998
             string streamId,
             ReadStreamOptions? options = null,
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
+            options ??= ReadStreamOptions.Default;
+
             foreach (var resolvedEvent in kurrentEvents)
             {
                 var @event = resolvedEvent.Event;
@@ -148,11 +142,9 @@ public class EventStoreClientReadBenchmarks
                     @event.Created,
                     new GlobalPosition(originalEvent.Position.CommitPosition));
 
-                yield return Abstractions.Events.ReadEvent.Create(
-                    @event.EventType,
-                    @event.Data,
-                    @event.Metadata,
-                    context);
+                var metadata = options.IncludeMetadata ? @event.Metadata : default;
+
+                yield return eventCodec.Decode(@event.EventType, @event.Data, metadata, context);
             }
         }
     }

@@ -1,15 +1,15 @@
 namespace DomainBlocks.EventStore;
 
-public sealed class MetadataWriter
+public readonly ref struct MetadataWriter
 {
-    private readonly Dictionary<string, string> _metadata;
+    private readonly Dictionary<string, string> _buffer;
 
-    internal MetadataWriter(Dictionary<string, string> metadata)
+    internal MetadataWriter(Dictionary<string, string> buffer)
     {
-        _metadata = metadata;
+        _buffer = buffer;
     }
 
-    public void Set(string key, string value) => _metadata[key] = value;
+    public void Set(string key, string value) => _buffer[key] = value;
 
-    public bool TryAdd(string key, string value) => _metadata.TryAdd(key, value);
+    public bool TryAdd(string key, string value) => _buffer.TryAdd(key, value);
 }

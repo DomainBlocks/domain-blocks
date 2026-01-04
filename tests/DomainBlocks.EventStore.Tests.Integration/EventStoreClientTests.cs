@@ -1,7 +1,10 @@
+using DomainBlocks.EventStore.MongoDB;
+using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Testing.Integration.MongoDB;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
+using MongoDB.Driver;
 using NUnit.Framework;
 using Shouldly;
 
@@ -21,8 +24,6 @@ public class EventStoreClientTests
     [Test]
     public async Task Should_allow_reading_multiple_events_as_common_type()
     {
-        await using var connectionProvider = await MongoTestEventStoreConnectionProvider.CreateAsync();
-
         var writeEventTypeMap = new EventTypeMapBuilder()
             .MapType<LimitOrderSubmitted>()
             .MapType<LimitOrderAmended>()
@@ -36,24 +37,37 @@ public class EventStoreClientTests
                 nameof(LimitOrderFilled))
             .Build();
 
-        var writeClientOptions = new EventStoreClientOptions<object, BsonValue, BsonValue>
+        var writeCodecOptions = new EventCodecOptions<object, BsonValue, BsonValue>
         {
-            ConnectionProvider = connectionProvider,
             TypeMap = writeEventTypeMap,
             EventSerializer = new BsonDocumentSerializer(),
             MetadataSerializer = new BsonDocumentMetadataSerializer()
         };
 
-        var readClientOptions = new EventStoreClientOptions<object, BsonValue, BsonValue>
+        var readCodecOptions = new EventCodecOptions<object, BsonValue, BsonValue>
         {
-            ConnectionProvider = connectionProvider,
             TypeMap = readEventTypeMap,
             EventSerializer = new BsonDocumentSerializer(),
             MetadataSerializer = new BsonDocumentMetadataSerializer()
         };
 
-        var writeClient = new EventStoreClient<object, BsonValue, BsonValue>(writeClientOptions);
-        var readClient = new EventStoreClient<object, BsonValue, BsonValue>(readClientOptions);
+        var writeOptions = new MongoEventStoreClientOptions<object, EventDocument>
+        {
+            Collection = EventCollectionOptions.Default,
+            DocumentCodec = EventDocumentCodec.Create(EventCodec.Create(writeCodecOptions))
+        };
+
+        var readOptions = new MongoEventStoreClientOptions<object, EventDocument>
+        {
+            Collection = EventCollectionOptions.Default,
+            DocumentCodec = EventDocumentCodec.Create(EventCodec.Create(readCodecOptions))
+        };
+
+        using var mongoClient = new MongoClient(MongoConnectionStrings.Default);
+        var collection = mongoClient.GetCollection<EventDocument>(writeOptions.Collection.CollectionNamespace);
+
+        var writeClient = new MongoEventStoreClient<object, EventDocument>(collection, writeOptions);
+        var readClient = new MongoEventStoreClient<object, EventDocument>(collection, readOptions);
 
         var orderId = Guid.NewGuid();
         var streamId = $"order-{orderId}";

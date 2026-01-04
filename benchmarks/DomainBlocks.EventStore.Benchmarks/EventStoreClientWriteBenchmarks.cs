@@ -1,6 +1,7 @@
 ﻿using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Engines;
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.Abstractions.Events;
+using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.SystemTextJson;
 
 namespace DomainBlocks.EventStore.Benchmarks;
@@ -8,29 +9,39 @@ namespace DomainBlocks.EventStore.Benchmarks;
 [MemoryDiagnoser]
 public class EventStoreClientWriteBenchmarks
 {
-    private const int EventCount = 10_000;
     private const string StreamId = "test-stream";
 
-    private IEventStoreClient<IDomainEvent> _client = null!;
+    private static readonly SystemTextJsonBytesSerializer EventSerializer = new();
+    private static readonly SystemTextJsonBytesMetadataSerializer MetadataSerializer = new();
+
+    private FakeKurrentDBEventStoreClient<IDomainEvent> _client = null!;
     private AppendEvent<IDomainEvent>[] _appendEvents = null!;
+
+    //[Params(100, 1_000, 10_000)]
+    [Params(10_000)]
+    public int EventCount { get; set; }
 
     [GlobalSetup]
     public void GlobalSetup()
     {
+        var consumer = new Consumer();
+
         var typeMap = new EventTypeMapBuilder()
             .MapType<TestEvent>()
             .Build();
 
-        var clientOptions = new EventStoreClientOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
+        var codecOptions = new EventCodecOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
-            ConnectionProvider = new FakeEventStoreConnectionProvider(),
             TypeMap = typeMap,
-            EventSerializer = new SystemTextJsonBytesSerializer(),
-            MetadataSerializer = new SystemTextJsonBytesMetadataSerializer(),
+            EventSerializer = EventSerializer,
+            MetadataSerializer = MetadataSerializer,
             MetadataContributors = [new MetadataContributor()]
         };
 
-        _client = new EventStoreClient<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>(clientOptions);
+        var eventCodec = new EventCodec<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>(codecOptions);
+
+        _client = new FakeKurrentDBEventStoreClient<IDomainEvent>(eventCodec, consumer);
+
         _appendEvents = CreateAppendEvents(EventCount);
     }
 
@@ -47,8 +58,12 @@ public class EventStoreClientWriteBenchmarks
         for (var i = 0; i < count; i++)
         {
             events[i] = new AppendEvent<IDomainEvent>(
-                new TestEvent { Value = $"value-{i}" },
-                [KeyValuePair.Create("Index", i.ToString())]);
+                new TestEvent
+                {
+                    Value1 = $"value1-{i}",
+                    Value2 = $"value2-{i}"
+                },
+                [KeyValuePair.Create("Value1", $"value1-{i}")]);
         }
 
         return events;
@@ -58,37 +73,36 @@ public class EventStoreClientWriteBenchmarks
 
     private sealed class TestEvent : IDomainEvent
     {
-        public required string Value { get; init; }
+        public required string Value1 { get; init; }
+        public required string Value2 { get; init; }
     }
 
-    private sealed class FakeEventStoreConnectionProvider :
-        IEventStoreConnectionProvider<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
-    {
-        public ValueTask<ConnectionScope<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>> AcquireAsync(
-            CancellationToken cancellationToken = default)
-        {
-            return ValueTask.FromResult(ConnectionScope.Create(new FakeKurrentDBEventStoreConnection()));
-        }
-    }
-
-    private sealed class FakeKurrentDBEventStoreConnection :
-        IEventStoreConnection<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
+    private sealed class FakeKurrentDBEventStoreClient<TEventBase>(
+        IEventCodec<TEventBase, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec,
+        Consumer consumer) :
+        IEventStoreClient<TEventBase>
+        where TEventBase : class
     {
         public Task AppendToStreamAsync(
             string streamId,
-            IEnumerable<AppendEvent<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>> events,
+            IEnumerable<AppendEvent<TEventBase>> events,
             AppendToStreamOptions? options = null,
             CancellationToken cancellationToken = default)
         {
-            // Force enumeration
-            foreach (var _ in events)
+            var eventEncoder = eventCodec.CreateEncoder();
+
+            foreach (var e in events)
             {
+                var (eventName, eventData, metadata) = eventEncoder.Encode(e);
+                consumer.Consume(eventName);
+                consumer.Consume(eventData);
+                consumer.Consume(metadata);
             }
 
             return Task.CompletedTask;
         }
 
-        public IAsyncEnumerable<ReadEvent<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>> ReadStreamAsync(
+        public IAsyncEnumerable<ReadEvent<TEventBase>> ReadStreamAsync(
             string streamId,
             ReadStreamOptions? options = null,
             CancellationToken cancellationToken = default)
@@ -99,11 +113,11 @@ public class EventStoreClientWriteBenchmarks
 
     private sealed class MetadataContributor : IMetadataContributor<IDomainEvent>
     {
-        private const string EventClrTypeKey = "EventClrType";
+        private int _counter;
 
         public void Contribute(IDomainEvent @event, object? contract, string eventName, MetadataWriter metadata)
         {
-            metadata.Set(EventClrTypeKey, (contract ?? @event).GetType().Name);
+            metadata.Set("Value2", $"value2-{_counter++}");
         }
     }
 }

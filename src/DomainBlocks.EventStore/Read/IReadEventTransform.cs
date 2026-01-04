@@ -1,3 +1,5 @@
+using DomainBlocks.EventStore.Abstractions;
+
 namespace DomainBlocks.EventStore.Read;
 
 public interface IReadEventTransform<TEventBase> where TEventBase : class

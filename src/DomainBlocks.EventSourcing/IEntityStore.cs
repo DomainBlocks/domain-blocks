@@ -1,10 +1,12 @@
-﻿namespace DomainBlocks.EventSourcing;
+﻿using DomainBlocks.EventStore.Abstractions;
+
+namespace DomainBlocks.EventSourcing;
 
 public interface IEntityStore
 {
     /// <summary>
     /// Loads an entity from an event stream in the event store. If the stream does not exist, a
-    /// <see cref="DomainBlocks.EventStore.Abstractions.Exceptions.StreamNotFoundException"/> is thrown.
+    /// <see cref="StreamNotFoundException"/> is thrown.
     /// </summary>
     /// <param name="entityId">The ID of the entity</param>
     /// <param name="cancellationToken">A cancellation token</param>

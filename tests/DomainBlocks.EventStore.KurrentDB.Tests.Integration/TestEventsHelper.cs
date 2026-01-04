@@ -1,11 +1,11 @@
 using System.Text.Json;
-using DomainBlocks.EventStore.Abstractions.Events;
+using DomainBlocks.EventStore.Abstractions;
 
 namespace DomainBlocks.EventStore.KurrentDB.Tests.Integration;
 
 internal static class TestEventsHelper
 {
-    internal static AppendEvent<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> CreateTestEvent(string eventName)
+    internal static EncodedAppendEvent<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> CreateTestEvent(string eventName)
     {
         var value = new Dictionary<string, string>
         {
@@ -14,6 +14,6 @@ internal static class TestEventsHelper
 
         ReadOnlyMemory<byte> serializedValue = JsonSerializer.SerializeToUtf8Bytes(value);
 
-        return AppendEvent.Create<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>(eventName, serializedValue);
+        return EncodedAppendEvent.Create<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>(eventName, serializedValue);
     }
 }

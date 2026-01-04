@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using DomainBlocks.EventStore.Abstractions.Events;
 
 namespace DomainBlocks.EventStore.Abstractions;
 

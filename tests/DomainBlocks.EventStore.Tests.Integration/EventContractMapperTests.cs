@@ -1,6 +1,7 @@
 using DomainBlocks.EventStore.KurrentDB;
-using DomainBlocks.Serialization.Google.Protobuf;
+using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.SystemTextJson;
+using KurrentDB.Client;
 using NUnit.Framework;
 using Shouldly;
 
@@ -12,27 +13,22 @@ public class EventContractMapperTests
     public async Task Should_map_to_and_from_contract()
     {
         const string connectionString = "kurrentdb://admin:changeit@localhost:2113?tls=false&tlsVerifyCert=false";
-
-        await using var connectionProvider =
-            KurrentDBEventStoreConnectionProvider.FromConnectionString(connectionString);
+        await using var kurrentClient = new KurrentDBClient(KurrentDBClientSettings.Create(connectionString));
 
         var eventTypeMap = new EventTypeMapBuilder()
             .MapType<Proto.UserCreated>()
             .Build();
 
-        var clientOptions = new EventStoreClientOptions<object, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
+        var codecOptions = new EventCodecOptions<object, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
-            ConnectionProvider = connectionProvider,
             TypeMap = eventTypeMap,
-            EventSerializer = new ProtobufBytesSerializer(),
+            EventSerializer = new SystemTextJsonBytesSerializer(),
             MetadataSerializer = new SystemTextJsonBytesMetadataSerializer(),
-            ContractMappers =
-            [
-                new UserCreatedProtoMapper()
-            ]
+            ContractMappers = [new UserCreatedProtoMapper()]
         };
 
-        var client = new EventStoreClient<object, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>(clientOptions);
+        var codec = EventCodec.Create(codecOptions);
+        var client = new KurrentDBEventStoreClient<object>(kurrentClient, codec);
 
         var originalEvent = new UserCreated
         {

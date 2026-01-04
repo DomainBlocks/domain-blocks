@@ -2,11 +2,13 @@ using DomainBlocks.EventSourcing.Tests.Integration.DomainEvents;
 using DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 using DomainBlocks.EventSourcing.Tests.Integration.EntityDefinitions;
 using DomainBlocks.EventStore;
-using DomainBlocks.EventStore.Abstractions.Exceptions;
+using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB;
+using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Testing.Integration.MongoDB;
 using MongoDB.Bson;
+using MongoDB.Driver;
 using NUnit.Framework;
 using Shouldly;
 
@@ -15,29 +17,34 @@ namespace DomainBlocks.EventSourcing.Tests.Integration;
 [TestFixture]
 public class EntityStoreTests
 {
-    private IMongoEventStoreConnectionProvider<BsonValue, BsonValue> _connectionProvider = null!;
     private EntityStore<IDomainEvent> _entityStore = null!;
+    private MongoClient _mongoClient = null!;
 
-    [SetUp]
-    public async Task SetUp()
+    [OneTimeSetUp]
+    public async Task OneTimeSetUp()
     {
-        _connectionProvider = await MongoTestEventStoreConnectionProvider.CreateAsync();
-
         var eventTypeMap = new EventTypeMapBuilder()
             .MapType<ShoppingSessionStarted>()
             .MapType<ItemAddedToShoppingCart>()
             .MapType<ItemRemovedFromShoppingCart>()
             .Build();
 
-        var clientOptions = new EventStoreClientOptions<IDomainEvent, BsonValue, BsonValue>
+        var codecOptions = new EventCodecOptions<IDomainEvent, BsonValue, BsonValue>
         {
-            ConnectionProvider = _connectionProvider,
             TypeMap = eventTypeMap,
             EventSerializer = new BsonDocumentSerializer(),
             MetadataSerializer = new BsonDocumentMetadataSerializer()
         };
 
-        var client = new EventStoreClient<IDomainEvent, BsonValue, BsonValue>(clientOptions);
+        var options = new MongoEventStoreClientOptions<IDomainEvent, EventDocument>
+        {
+            Collection = EventCollectionOptions.Default,
+            DocumentCodec = EventDocumentCodec.Create(EventCodec.Create(codecOptions))
+        };
+
+        _mongoClient = new MongoClient(MongoConnectionStrings.Default);
+        var collection = _mongoClient.GetCollection<EventDocument>(options.Collection.CollectionNamespace);
+        var eventStoreClient = new MongoEventStoreClient<IDomainEvent, EventDocument>(collection, options);
 
         var entityDefinitionProvider = new CompositeEntityDefinitionProvider<IDomainEvent>(
         [
@@ -47,13 +54,15 @@ public class EntityStoreTests
             new GenericEntityDefinitionProvider<IDomainEvent>(typeof(FunctionalAggregateWrapperDefinition<>))
         ]);
 
-        _entityStore = new EntityStore<IDomainEvent>(client, entityDefinitionProvider);
+        _entityStore = new EntityStore<IDomainEvent>(eventStoreClient, entityDefinitionProvider);
+
+        await MongoEventStoreAdmin.EnsureIndexesAsync(collection, options.Collection);
     }
 
-    [TearDown]
-    public async Task TearDown()
+    [OneTimeTearDown]
+    public void OneTimeTearDown()
     {
-        await _connectionProvider.DisposeAsync();
+        _mongoClient.Dispose();
     }
 
     [Test]

@@ -1,8 +1,9 @@
 using System.Collections.Frozen;
+using DomainBlocks.EventStore.Abstractions;
 
 namespace DomainBlocks.EventStore.Read;
 
-public static class ReadEventTransformExtensions
+public static class ReadEvent2TransformExtensions
 {
     public static IAsyncEnumerable<ReadEvent<TEventBase>> Transform<TEventBase>(
         this IAsyncEnumerable<ReadEvent<TEventBase>> source,

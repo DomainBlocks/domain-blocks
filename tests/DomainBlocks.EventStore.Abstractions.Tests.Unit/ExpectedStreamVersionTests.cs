@@ -1,4 +1,3 @@
-using DomainBlocks.EventStore.Abstractions.Events;
 using NUnit.Framework;
 using Shouldly;
 
