@@ -33,9 +33,6 @@ public readonly struct AppendEvent<TEvent> where TEvent : notnull
         _metadata = metadata;
     }
 
-    public TEvent Event =>
-        field ?? throw new InvalidOperationException(
-            "This operation cannot be performed on a default instance of AppendEvent<TEvent>.");
-
+    public TEvent Event { get; }
     public ReadOnlySpan<KeyValuePair<string, string>> Metadata => _metadata;
 }
