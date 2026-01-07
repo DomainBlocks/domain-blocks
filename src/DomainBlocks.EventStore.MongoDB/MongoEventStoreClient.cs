@@ -32,6 +32,39 @@ public class MongoEventStoreClient<TEvent, TEventDocument>(
         var expectedState = appendOptions.ExpectedState;
         var currentState = await GetStreamStateAsync(streamId, cancellationToken).ConfigureAwait(false);
 
+        Console.WriteLine($"Thread: {Environment.CurrentManagedThreadId}, State: {currentState}");
+
+        if (!expectedState.Matches(currentState))
+            throw new StreamAppendConflictException(streamId, expectedState, currentState);
+
+        var documents = ToEventDocuments(streamId, events, currentState.Version);
+
+        try
+        {
+            var insertManyOptions = new InsertManyOptions { IsOrdered = true };
+            await collection.InsertManyAsync(documents, insertManyOptions, cancellationToken).ConfigureAwait(false);
+        }
+        catch (MongoBulkWriteException ex) when
+            (ex.WriteErrors?.Any(e => e.Category == ServerErrorCategory.DuplicateKey) is true)
+        {
+            // Consider automatically retrying if the original expectation was Any/StreamExists.
+            throw new StreamAppendConflictException(streamId, expectedState, innerException: ex);
+        }
+    }
+
+    public async Task AppendToStreamAsync2(
+        string tag,
+        string streamId,
+        IEnumerable<AppendEvent<TEvent>> events,
+        AppendToStreamOptions? appendOptions = null,
+        CancellationToken cancellationToken = default)
+    {
+        appendOptions ??= AppendToStreamOptions.Default;
+        var expectedState = appendOptions.ExpectedState;
+        var currentState = await GetStreamStateAsync(streamId, cancellationToken).ConfigureAwait(false);
+
+        Console.WriteLine($"{tag} - {currentState}");
+
         if (!expectedState.Matches(currentState))
             throw new StreamAppendConflictException(streamId, expectedState, currentState);
 
@@ -141,9 +174,9 @@ public class MongoEventStoreClient<TEvent, TEventDocument>(
     private IEnumerable<TEventDocument> ToEventDocuments(
         string streamId,
         IEnumerable<AppendEvent<TEvent>> events,
-        StreamVersion? currentStreamVersion)
+        StreamVersion? baseVersion)
     {
-        var nextVersionValue = (currentStreamVersion?.Value + 1) ?? 0;
+        var nextVersionValue = (baseVersion?.Value + 1) ?? 0;
         var createdAtUtc = DateTime.UtcNow;
         var encoder = _eventDocumentCodec.CreateEncoder();
 

@@ -3,6 +3,16 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
+public static class EventDocumentSchema
+{
+    public static readonly EventDocumentSchema<EventDocument> Default = new()
+    {
+        StreamId = doc => doc.StreamId,
+        StreamVersion = doc => doc.StreamVersion,
+        CreatedAtUtc = doc => doc.CreatedAtUtc
+    };
+}
+
 public sealed class EventDocumentSchema<TEventDocument>
 {
     public required Expression<Func<TEventDocument, string>> StreamId { get; init; }
