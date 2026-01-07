@@ -30,36 +30,23 @@ public class MongoEventStoreClient<TEvent, TEventDocument>(
     {
         appendOptions ??= AppendToStreamOptions.Default;
         var expectedState = appendOptions.ExpectedState;
-        var currentVersion = await GetCurrentStreamVersionAsync(streamId, cancellationToken).ConfigureAwait(false);
+        var currentState = await GetStreamStateAsync(streamId, cancellationToken).ConfigureAwait(false);
 
-        if (expectedState.IsStreamExists && !currentVersion.HasValue)
-            throw WrongExpectedStreamStateException.ExpectedStreamToExist(streamId);
+        if (!expectedState.Matches(currentState))
+            throw new StreamAppendConflictException(streamId, expectedState, currentState);
 
-        if (expectedState.IsStreamDoesNotExist && currentVersion.HasValue)
-            throw WrongExpectedStreamStateException.ExpectedStreamToNotExist(streamId, currentVersion.Value);
-
-        if (expectedState.IsSpecificVersion && expectedState.Version.Value != currentVersion)
-            throw WrongExpectedStreamStateException.VersionConflict(streamId, expectedState, currentVersion);
-
-        // For non-specific version expectations (i.e. Any/StreamExists), treat the current version as expected.
-        if (expectedState.IsAny || expectedState.IsStreamExists)
-        {
-            expectedState = currentVersion.HasValue
-                ? ExpectedStreamState.SpecificVersion(currentVersion.Value)
-                : ExpectedStreamState.StreamDoesNotExist;
-        }
-
-        var documents = ToEventDocuments(streamId, events, currentVersion);
+        var documents = ToEventDocuments(streamId, events, currentState.Version);
 
         try
         {
             var insertManyOptions = new InsertManyOptions { IsOrdered = true };
             await collection.InsertManyAsync(documents, insertManyOptions, cancellationToken).ConfigureAwait(false);
         }
-        catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+        catch (MongoBulkWriteException ex) when
+            (ex.WriteErrors?.Any(e => e.Category == ServerErrorCategory.DuplicateKey) is true)
         {
             // Consider automatically retrying if the original expectation was Any/StreamExists.
-            throw WrongExpectedStreamStateException.VersionConflict(streamId, expectedState, currentVersion);
+            throw new StreamAppendConflictException(streamId, expectedState, innerException: ex);
         }
     }
 
@@ -130,9 +117,7 @@ public class MongoEventStoreClient<TEvent, TEventDocument>(
         return Expression.Lambda<Func<TEventDocument, ulong?>>(body, expr.Parameters[0]);
     }
 
-    private async Task<StreamVersion?> GetCurrentStreamVersionAsync(
-        string streamId,
-        CancellationToken cancellationToken)
+    private async Task<StreamState> GetStreamStateAsync(string streamId, CancellationToken cancellationToken)
     {
         var latestVersion = await collection
             .Find(Builders<TEventDocument>.Filter.Eq(_streamIdField, streamId))
@@ -142,15 +127,15 @@ public class MongoEventStoreClient<TEvent, TEventDocument>(
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return latestVersion.HasValue ? new StreamVersion(latestVersion.Value) : null;
+        return latestVersion.HasValue
+            ? StreamState.StreamExists(new StreamVersion(latestVersion.Value))
+            : StreamState.StreamDoesNotExist;
     }
 
     private async Task<bool> StreamExistsAsync(string streamId, CancellationToken cancellationToken)
     {
-        var currentStreamVersion = await GetCurrentStreamVersionAsync(streamId, cancellationToken)
-            .ConfigureAwait(false);
-
-        return currentStreamVersion.HasValue;
+        var streamState = await GetStreamStateAsync(streamId, cancellationToken).ConfigureAwait(false);
+        return streamState.IsStreamExists;
     }
 
     private IEnumerable<TEventDocument> ToEventDocuments(

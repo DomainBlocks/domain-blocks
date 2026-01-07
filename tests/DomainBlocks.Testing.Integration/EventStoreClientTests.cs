@@ -91,7 +91,7 @@ public abstract class EventStoreClientTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task AppendToStreamAsync_ExpectedStateIsWrongVersion_ThrowsVersionConflict(
+    public async Task AppendToStreamAsync_ExpectedStateHasWrongVersion_ThrowsVersionConflict(
         CancellationToken cancellationToken)
     {
         var streamId = $"test-{Guid.NewGuid()}";
@@ -105,19 +105,23 @@ public abstract class EventStoreClientTests
             ],
             cancellationToken: cancellationToken);
 
+        var expectedState = ExpectedStreamState.SpecificVersion(new StreamVersion(1));
+
         var exception = await Client
             .AppendToStreamAsync(
                 streamId,
                 [CreateTestEvent("TestEvent4")],
                 new AppendToStreamOptions
                 {
-                    ExpectedState = ExpectedStreamState.SpecificVersion(new StreamVersion(1))
+                    ExpectedState = expectedState
                 },
                 cancellationToken)
-            .ShouldThrowAsync<WrongExpectedStreamStateException>();
+            .ShouldThrowAsync<StreamAppendConflictException>();
 
-        exception.Reason.ShouldBe(WrongExpectedStreamStateReason.VersionConflict);
-        exception.ActualVersion.ShouldBe(new StreamVersion(2));
+        exception.StreamId.ShouldBe(streamId);
+        exception.ExpectedState.ShouldBe(expectedState);
+        exception.ActualState.ShouldNotBeNull();
+        exception.ActualState.ShouldBe(StreamState.StreamExists(new StreamVersion(2)));
     }
 
     [Test]
@@ -137,9 +141,12 @@ public abstract class EventStoreClientTests
                 ],
                 new AppendToStreamOptions { ExpectedState = ExpectedStreamState.StreamExists },
                 cancellationToken)
-            .ShouldThrowAsync<WrongExpectedStreamStateException>();
+            .ShouldThrowAsync<StreamAppendConflictException>();
 
-        exception.Reason.ShouldBe(WrongExpectedStreamStateReason.ExpectedStreamToExist);
+        exception.StreamId.ShouldBe(streamId);
+        exception.ExpectedState.ShouldBe(ExpectedStreamState.StreamExists);
+        exception.ActualState.ShouldNotBeNull();
+        exception.ActualState.ShouldBe(StreamState.StreamDoesNotExist);
     }
 
     [Test]
@@ -165,9 +172,12 @@ public abstract class EventStoreClientTests
                 [CreateTestEvent("TestEvent4")],
                 new AppendToStreamOptions { ExpectedState = ExpectedStreamState.StreamDoesNotExist },
                 cancellationToken)
-            .ShouldThrowAsync<WrongExpectedStreamStateException>();
+            .ShouldThrowAsync<StreamAppendConflictException>();
 
-        exception.Reason.ShouldBe(WrongExpectedStreamStateReason.ExpectedStreamToNotExist);
+        exception.StreamId.ShouldBe(streamId);
+        exception.ExpectedState.ShouldBe(ExpectedStreamState.StreamDoesNotExist);
+        exception.ActualState.ShouldNotBeNull();
+        exception.ActualState.ShouldBe(StreamState.StreamExists(new StreamVersion(2)));
     }
 
     [TestCaseSource(nameof(PositionAndDirectionEdgeCases))]

@@ -8,8 +8,6 @@ namespace DomainBlocks.EventStore.Abstractions;
 /// </summary>
 public readonly struct ExpectedStreamState : IEquatable<ExpectedStreamState>
 {
-    private readonly Kind _kind;
-
     /// <summary>
     /// Any state; stream may exist at any version or may not exist.
     /// </summary>
@@ -24,6 +22,8 @@ public readonly struct ExpectedStreamState : IEquatable<ExpectedStreamState>
     /// Stream must not exist.
     /// </summary>
     public static readonly ExpectedStreamState StreamDoesNotExist = new(Kind.StreamDoesNotExist);
+
+    private readonly Kind _kind;
 
     private ExpectedStreamState(Kind kind, StreamVersion? version = null)
     {
@@ -63,6 +63,27 @@ public readonly struct ExpectedStreamState : IEquatable<ExpectedStreamState>
     public static ExpectedStreamState SpecificVersion(StreamVersion version)
     {
         return new ExpectedStreamState(Kind.SpecificVersion, version);
+    }
+
+    /// <summary>
+    /// Returns <c>true</c> if this expected state matches the given actual state.
+    /// </summary>
+    public bool Matches(StreamState actualState)
+    {
+        if (IsAny)
+            return true;
+
+        if (IsStreamExists)
+            return actualState.IsStreamExists;
+
+        if (IsStreamDoesNotExist)
+            return actualState.IsStreamDoesNotExist;
+
+        if (IsSpecificVersion)
+            return actualState.IsStreamExists && Version.Value == actualState.Version.Value;
+
+        // Defensive fallback: kind not recognized
+        return false;
     }
 
     /// <summary>

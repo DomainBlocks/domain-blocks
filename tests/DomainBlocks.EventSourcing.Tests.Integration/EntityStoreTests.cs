@@ -94,7 +94,7 @@ public class EntityStoreTests
 
         entity2.AddItem(new ShoppingCartItem(entity1.State.SessionId, "Bar"));
 
-        await _entityStore.SaveAsync(Versioned.New(entity2)).ShouldThrowAsync<WrongExpectedStreamStateException>();
+        await _entityStore.SaveAsync(Versioned.New(entity2)).ShouldThrowAsync<StreamAppendConflictException>();
     }
 
     [Test]
