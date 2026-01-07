@@ -2,16 +2,9 @@ using DomainBlocks.Core.Exceptions;
 
 namespace DomainBlocks.Serialization.Abstractions;
 
-public class ObjectSerializationException : DomainBlocksException
+public class ObjectSerializationException(string? message = null, Exception? innerException = null) :
+    DomainBlocksException(message, innerException)
 {
-    public ObjectSerializationException(string? message) : base(message)
-    {
-    }
-
-    public ObjectSerializationException(string? message, Exception? innerException) : base(message, innerException)
-    {
-    }
-
     public static ObjectSerializationException SerializationFailed(Type type, Exception innerException) =>
         new($"Serialization failed for type '{type.FullName}'.", innerException);
 
