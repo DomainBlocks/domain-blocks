@@ -2,47 +2,52 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace DomainBlocks.EventStore.Abstractions;
 
-public readonly struct StreamState : IEquatable<StreamState>
+/// <summary>
+/// Represents the observed state of an event stream.
+/// </summary>
+public readonly record struct StreamState
 {
-    public static readonly StreamState StreamDoesNotExist = new(Kind.StreamDoesNotExist);
+    /// <summary>
+    /// Represents a stream state indicating that the stream does not exist (i.e. has no events).
+    /// </summary>
+    public static readonly StreamState StreamDoesNotExist = new(StreamStateKind.StreamDoesNotExist);
 
-    private readonly Kind _kind;
-
-    private StreamState(Kind kind, StreamVersion? version = null)
+    private StreamState(StreamStateKind kind, StreamVersion? version = null)
     {
-        _kind = kind;
+        Kind = kind;
         Version = version;
     }
 
+    /// <summary>
+    /// Gets the kind of this stream state.
+    /// </summary>
+    public StreamStateKind Kind { get; }
+
+    /// <summary>
+    /// Gets the stream version, if the stream exists.
+    /// </summary>
     public StreamVersion? Version { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether the stream does not exist.
+    /// </summary>
     [MemberNotNullWhen(false, nameof(Version))]
-    public bool IsStreamDoesNotExist => this == StreamDoesNotExist;
+    public bool IsStreamDoesNotExist => Kind == StreamStateKind.StreamDoesNotExist;
 
+    /// <summary>
+    /// Gets a value indicating whether the stream exists.
+    /// </summary>
     [MemberNotNullWhen(true, nameof(Version))]
-    public bool IsStreamExists => _kind == Kind.StreamExists;
+    public bool IsStreamExists => Kind == StreamStateKind.StreamExists;
 
-    public static StreamState StreamExists(StreamVersion version) => new(Kind.StreamExists, version);
+    /// <summary>
+    /// Creates a stream state representing an existing stream with the specified version.
+    /// </summary>
+    public static StreamState StreamExists(StreamVersion version) => new(StreamStateKind.StreamExists, version);
 
-    public override string ToString() => _kind switch
+    public override string ToString() => Kind switch
     {
-        Kind.StreamDoesNotExist => nameof(StreamDoesNotExist),
+        StreamStateKind.StreamDoesNotExist => nameof(StreamDoesNotExist),
         _ => $"Version={Version?.Value}"
     };
-
-    public bool Equals(StreamState other) => _kind == other._kind && Nullable.Equals(Version, other.Version);
-
-    public override bool Equals(object? obj) => obj is StreamState other && Equals(other);
-
-    public override int GetHashCode() => HashCode.Combine(_kind, Version);
-
-    public static bool operator ==(StreamState left, StreamState right) => left.Equals(right);
-
-    public static bool operator !=(StreamState left, StreamState right) => !left.Equals(right);
-
-    private enum Kind
-    {
-        StreamDoesNotExist = 0,
-        StreamExists
-    }
 }
