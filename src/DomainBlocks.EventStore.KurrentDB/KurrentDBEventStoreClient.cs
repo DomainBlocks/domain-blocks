@@ -62,15 +62,6 @@ public class KurrentDBEventStoreClient<TEvent>(
         options ??= ReadStreamOptions.Default;
         var position = options.Position;
         var direction = options.Direction;
-        var kurrentDirection = direction == StreamReadDirection.Forward ? Direction.Forwards : Direction.Backwards;
-
-        var revision = position switch
-        {
-            { IsStart: true } => KurrentStreamPosition.Start,
-            { IsEnd: true } => KurrentStreamPosition.End,
-            { IsSpecificVersion: true } => KurrentStreamPosition.FromStreamRevision(position.Version.Value.Value),
-            _ => default
-        };
 
         if (position.IsStart && direction == StreamReadDirection.Backward ||
             position.IsEnd && direction == StreamReadDirection.Forward)
@@ -84,10 +75,13 @@ public class KurrentDBEventStoreClient<TEvent>(
             yield break;
         }
 
+        var kurrentDirection = ToKurrentDirection(direction);
+        var kurrentPosition = ToKurrentStreamPosition(position);
+
         var result = client.ReadStreamAsync(
             kurrentDirection,
             streamId,
-            revision,
+            kurrentPosition,
             cancellationToken: cancellationToken);
 
         if (options.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw &&
@@ -98,30 +92,45 @@ public class KurrentDBEventStoreClient<TEvent>(
 
         await foreach (var resolvedEvent in result.ConfigureAwait(false))
         {
-            var eventRecord = resolvedEvent.Event;
-            var originalEventRecord = resolvedEvent.OriginalEvent;
-            var metadataBytes = options.IncludeMetadata ? eventRecord.Metadata : default;
+            var record = resolvedEvent.Event;
+            var originalRecord = resolvedEvent.OriginalEvent;
+            var metadataBytes = options.IncludeMetadata ? record.Metadata : default;
 
-            var (@event, metadata) = eventCodec.Decode(eventRecord.EventType, eventRecord.Data, metadataBytes);
+            var (@event, metadata) = eventCodec.Decode(record.EventType, record.Data, metadataBytes);
 
-            var context = new ReadEventContext(
-                streamId,
-                new StreamVersion(originalEventRecord.EventNumber.ToUInt64()),
-                eventRecord.Created,
-                new GlobalPosition(originalEventRecord.Position.CommitPosition));
+            var streamVersion = new StreamVersion(originalRecord.EventNumber.ToUInt64());
+            var globalPosition = new GlobalPosition(originalRecord.Position.CommitPosition);
+
+            var context = new ReadEventContext(streamId, streamVersion, record.Created, globalPosition);
 
             yield return ReadEvent.Create(@event, metadata, context);
         }
     }
 
-    private static KurrentStreamState ToKurrentStreamState(ExpectedStreamState expectedState) => expectedState switch
+    private static KurrentStreamState ToKurrentStreamState(ExpectedStreamState expected) => expected switch
     {
-        _ when expectedState.IsAny => KurrentStreamState.Any,
-        _ when expectedState.IsStreamExists => KurrentStreamState.StreamExists,
-        _ when expectedState.IsStreamDoesNotExist => KurrentStreamState.NoStream,
-        _ when expectedState.IsSpecificVersion => KurrentStreamState.StreamRevision(expectedState.Version.Value.Value),
-        _ => throw new ArgumentOutOfRangeException(nameof(expectedState), expectedState, null)
+        _ when expected.IsAny => KurrentStreamState.Any,
+        _ when expected.IsStreamExists => KurrentStreamState.StreamExists,
+        _ when expected.IsStreamDoesNotExist => KurrentStreamState.NoStream,
+        _ when expected.IsSpecificVersion => KurrentStreamState.StreamRevision(expected.Version.Value.Value),
+        _ => throw new ArgumentOutOfRangeException(nameof(expected), expected, null)
     };
+
+    private static Direction ToKurrentDirection(StreamReadDirection direction)
+    {
+        return direction == StreamReadDirection.Forward ? Direction.Forwards : Direction.Backwards;
+    }
+
+    private static KurrentStreamPosition ToKurrentStreamPosition(StreamReadPosition position)
+    {
+        return position switch
+        {
+            { IsStart: true } => KurrentStreamPosition.Start,
+            { IsEnd: true } => KurrentStreamPosition.End,
+            { IsSpecificVersion: true } => KurrentStreamPosition.FromStreamRevision(position.Version.Value.Value),
+            _ => default
+        };
+    }
 
     private static StreamState? ToStreamState(KurrentStreamState kurrentStreamState)
     {
