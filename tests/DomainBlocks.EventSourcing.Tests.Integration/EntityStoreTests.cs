@@ -38,13 +38,13 @@ public class EntityStoreTests
 
         var options = new MongoEventStoreClientOptions<IDomainEvent, EventDocument>
         {
-            Collection = EventCollectionOptions.Default,
-            DocumentCodec = EventDocumentCodec.Create(EventCodec.Create(codecOptions))
+            CollectionOptions = EventStoreCollectionOptions.Default,
+            EventDocumentSchema = EventDocumentSchema.Default,
+            EventDocumentCodec = EventDocumentCodec.Create(EventCodec.Create(codecOptions))
         };
 
         _mongoClient = new MongoClient(MongoConnectionStrings.Default);
-        var collection = _mongoClient.GetCollection<EventDocument>(options.Collection.CollectionNamespace);
-        var eventStoreClient = new MongoEventStoreClient<IDomainEvent, EventDocument>(collection, options);
+        var eventStoreClient = new MongoEventStoreClient<IDomainEvent, EventDocument>(_mongoClient, options);
 
         var entityDefinitionProvider = new CompositeEntityDefinitionProvider<IDomainEvent>(
         [
@@ -56,7 +56,10 @@ public class EntityStoreTests
 
         _entityStore = new EntityStore<IDomainEvent>(eventStoreClient, entityDefinitionProvider);
 
-        await MongoEventStoreAdmin.EnsureIndexesAsync(collection, options.Collection);
+        await MongoEventStoreAdmin.EnsureIndexesAsync(
+            _mongoClient,
+            options.CollectionOptions,
+            options.EventDocumentSchema);
     }
 
     [OneTimeTearDown]

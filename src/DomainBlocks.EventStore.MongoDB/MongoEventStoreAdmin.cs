@@ -5,44 +5,42 @@ namespace DomainBlocks.EventStore.MongoDB;
 public static class MongoEventStoreAdmin
 {
     public static Task EnsureIndexesAsync<TEventDocument>(
-        string connectionString,
-        EventCollectionOptions<TEventDocument> collectionOptions,
+        IMongoClient mongoClient,
+        EventStoreCollectionOptions collectionOptions,
+        EventDocumentSchema<TEventDocument> eventDocumentSchema,
         CancellationToken cancellationToken = default)
     {
-        var settings = MongoClientSettings.FromConnectionString(connectionString);
-        return EnsureIndexesAsync(settings, collectionOptions, cancellationToken);
+        var database = mongoClient.GetDatabase(collectionOptions.DatabaseName);
+        var eventsCollection = database.GetCollection<TEventDocument>(collectionOptions.EventsCollectionName);
+
+        var streamCommitsCollection =
+            database.GetCollection<StreamCommit>(collectionOptions.StreamCommitsCollectionName);
+
+        return EnsureIndexesAsync(eventsCollection, eventDocumentSchema, streamCommitsCollection, cancellationToken);
     }
 
     public static async Task EnsureIndexesAsync<TEventDocument>(
-        MongoClientSettings clientSettings,
-        EventCollectionOptions<TEventDocument> collectionOptions,
+        IMongoCollection<TEventDocument> eventsCollection,
+        EventDocumentSchema<TEventDocument> eventDocumentSchema,
+        IMongoCollection<StreamCommit> streamCommitsCollection,
         CancellationToken cancellationToken = default)
     {
-        using var client = new MongoClient(clientSettings);
-        await EnsureIndexesAsync(client, collectionOptions, cancellationToken);
+        await EnsureEventsCollectionIndexesAsync(eventsCollection, eventDocumentSchema, cancellationToken);
+        await EnsureStreamCommitsCollectionIndexesAsync(streamCommitsCollection, cancellationToken);
     }
 
-    public static Task EnsureIndexesAsync<TEventDocument>(
-        MongoClient client,
-        EventCollectionOptions<TEventDocument> collectionOptions,
-        CancellationToken cancellationToken = default)
-    {
-        var collection = client.GetCollection<TEventDocument>(collectionOptions.CollectionNamespace);
-        return EnsureIndexesAsync(collection, collectionOptions, cancellationToken);
-    }
-
-    public static Task EnsureIndexesAsync<TEventDocument>(
-        IMongoCollection<TEventDocument> collection,
-        EventCollectionOptions<TEventDocument> collectionOptions,
+    private static Task EnsureEventsCollectionIndexesAsync<TEventDocument>(
+        IMongoCollection<TEventDocument> eventsCollection,
+        EventDocumentSchema<TEventDocument> eventDocumentSchema,
         CancellationToken cancellationToken = default)
     {
         var indexBuilder = Builders<TEventDocument>.IndexKeys;
 
         var uniqueKey = indexBuilder
-            .Ascending(collectionOptions.DocumentSchema.StreamIdField)
-            .Ascending(collectionOptions.DocumentSchema.StreamVersionField);
+            .Ascending(eventDocumentSchema.StreamIdField)
+            .Ascending(eventDocumentSchema.StreamVersionField);
 
-        var createdAtUtc = indexBuilder.Ascending(collectionOptions.DocumentSchema.CreatedAtUtcField);
+        var createdAtUtc = indexBuilder.Ascending(eventDocumentSchema.CreatedAtUtcField);
 
         CreateIndexModel<TEventDocument>[] indexModels =
         [
@@ -50,6 +48,27 @@ public static class MongoEventStoreAdmin
             new(createdAtUtc)
         ];
 
-        return collection.Indexes.CreateManyAsync(indexModels, cancellationToken);
+        return eventsCollection.Indexes.CreateManyAsync(indexModels, cancellationToken);
+    }
+
+    private static Task EnsureStreamCommitsCollectionIndexesAsync(
+        IMongoCollection<StreamCommit> streamCommitsCollection,
+        CancellationToken cancellationToken = default)
+    {
+        var indexBuilder = Builders<StreamCommit>.IndexKeys;
+
+        var uniqueKey = indexBuilder
+            .Ascending(x => x.StreamId)
+            .Descending(x => x.StartVersion);
+
+        var createdAtUtc = indexBuilder.Ascending(x => x.CommittedAtUtc);
+
+        CreateIndexModel<StreamCommit>[] indexModels =
+        [
+            new(uniqueKey, new CreateIndexOptions { Unique = true }),
+            new(createdAtUtc)
+        ];
+
+        return streamCommitsCollection.Indexes.CreateManyAsync(indexModels, cancellationToken);
     }
 }

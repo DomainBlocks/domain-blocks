@@ -5,22 +5,27 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
-public class MongoEventStoreClient<TEvent, TEventDocument>(
-    IMongoCollection<TEventDocument> collection,
-    MongoEventStoreClientOptions<TEvent, TEventDocument> options) :
-    IEventStoreClient<TEvent>
-    where TEvent : notnull
+public class MongoEventStoreClient<TEvent, TEventDocument> : IEventStoreClient<TEvent> where TEvent : notnull
 {
-    private readonly IEventDocumentCodec<TEvent, TEventDocument> _eventDocumentCodec = options.DocumentCodec;
+    private readonly IMongoCollection<TEventDocument> _eventsCollection;
+    private readonly IMongoCollection<StreamCommit> _streamCommitsCollection;
+    private readonly IEventDocumentCodec<TEvent, TEventDocument> _eventDocumentCodec;
+    private readonly FieldDefinition<TEventDocument, string> _streamIdField;
+    private readonly FieldDefinition<TEventDocument, ulong> _streamVersionField;
+    private readonly Expression<Func<TEventDocument, ulong?>> _nullableStreamVersionExpression;
 
-    private readonly FieldDefinition<TEventDocument, string> _streamIdField =
-        options.Collection.DocumentSchema.StreamIdField;
+    public MongoEventStoreClient(IMongoClient mongoClient, MongoEventStoreClientOptions<TEvent, TEventDocument> options)
+    {
+        var collectionOptions = options.CollectionOptions;
+        var db = mongoClient.GetDatabase(collectionOptions.DatabaseName);
 
-    private readonly FieldDefinition<TEventDocument, ulong> _streamVersionField =
-        options.Collection.DocumentSchema.StreamVersionField;
-
-    private readonly Expression<Func<TEventDocument, ulong?>> _nullableStreamVersionExpression =
-        AsNullable(options.Collection.DocumentSchema.StreamVersion);
+        _eventsCollection = db.GetCollection<TEventDocument>(collectionOptions.EventsCollectionName);
+        _streamCommitsCollection = db.GetCollection<StreamCommit>(collectionOptions.StreamCommitsCollectionName);
+        _eventDocumentCodec = options.EventDocumentCodec;
+        _streamIdField = options.EventDocumentSchema.StreamIdField;
+        _streamVersionField = options.EventDocumentSchema.StreamVersionField;
+        _nullableStreamVersionExpression = AsNullable(options.EventDocumentSchema.StreamVersion);
+    }
 
     public async Task AppendToStreamAsync(
         string streamId,
@@ -40,7 +45,10 @@ public class MongoEventStoreClient<TEvent, TEventDocument>(
         try
         {
             var insertManyOptions = new InsertManyOptions { IsOrdered = true };
-            await collection.InsertManyAsync(documents, insertManyOptions, cancellationToken).ConfigureAwait(false);
+
+            await _eventsCollection
+                .InsertManyAsync(documents, insertManyOptions, cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (MongoBulkWriteException ex) when
             (ex.WriteErrors?.Any(e => e.Category == ServerErrorCategory.DuplicateKey) is true)
@@ -89,7 +97,7 @@ public class MongoEventStoreClient<TEvent, TEventDocument>(
             ? Builders<TEventDocument>.Sort.Ascending(_streamVersionField)
             : Builders<TEventDocument>.Sort.Descending(_streamVersionField);
 
-        using var cursor = await collection
+        using var cursor = await _eventsCollection
             .Find(filter)
             .Sort(sort)
             .Limit(readOptions.MaxCount)
@@ -119,7 +127,7 @@ public class MongoEventStoreClient<TEvent, TEventDocument>(
 
     private async Task<StreamState> GetStreamStateAsync(string streamId, CancellationToken cancellationToken)
     {
-        var latestVersion = await collection
+        var latestVersion = await _eventsCollection
             .Find(Builders<TEventDocument>.Filter.Eq(_streamIdField, streamId))
             .Sort(Builders<TEventDocument>.Sort.Descending(_streamVersionField))
             .Limit(1)
