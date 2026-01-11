@@ -17,10 +17,10 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
     {
         var collectionOptions = options.CollectionOptions;
         var db = mongoClient.GetDatabase(collectionOptions.DatabaseName);
-        var countersCollection = db.GetCollection<BsonDocument>(collectionOptions.SequencesCollectionName);
+        var sequencesCollection = db.GetCollection<BsonDocument>(collectionOptions.SequencesCollectionName);
 
         _commitsCollection = db.GetCollection<StreamCommit>(collectionOptions.StreamCommitsCollectionName);
-        _sequenceAllocator = new SequenceAllocator(countersCollection);
+        _sequenceAllocator = new SequenceAllocator(sequencesCollection);
         _eventCodec = options.EventCodec;
     }
 
