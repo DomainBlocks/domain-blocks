@@ -2,9 +2,9 @@
 
 namespace DomainBlocks.EventStore.MongoDB.Strict;
 
-public interface IEventDocumentEncoder<TEvent, out TEventDocument> where TEvent : notnull
+public interface IEventDocumentEncoder<TEvent> where TEvent : notnull
 {
-    TEventDocument Encode(
+    EventDocument Encode(
         AppendEvent<TEvent> @event,
         string streamId,
         StreamVersion streamVersion,

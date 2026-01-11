@@ -13,12 +13,11 @@ public static class EventDocumentCodec
     }
 }
 
-public sealed class EventDocumentCodec<TEvent>(
-    IEventCodec<TEvent, BsonValue, BsonValue> eventCodec) :
-    IEventDocumentCodec<TEvent, EventDocument>
+public sealed class EventDocumentCodec<TEvent>(IEventCodec<TEvent, BsonValue, BsonValue> eventCodec) :
+    IEventDocumentCodec<TEvent>
     where TEvent : notnull
 {
-    public IEventDocumentEncoder<TEvent, EventDocument> CreateEncoder()
+    public IEventDocumentEncoder<TEvent> CreateEncoder()
     {
         return new EventDocumentEncoder<TEvent>(eventCodec.CreateEncoder());
     }

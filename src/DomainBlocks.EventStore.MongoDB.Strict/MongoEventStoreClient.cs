@@ -1,38 +1,29 @@
-﻿using System.Linq.Expressions;
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Abstractions;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Strict;
 
-public class MongoEventStoreClient<TEvent, TEventDocument> : IEventStoreClient<TEvent> where TEvent : notnull
+public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEvent : notnull
 {
     private const string GlobalPositionSequenceId = "global_position";
 
-    private readonly IMongoCollection<TEventDocument> _eventsCollection;
+    private readonly IMongoCollection<EventDocument> _eventsCollection;
     private readonly IMongoCollection<StreamCommit> _streamCommitsCollection;
     private readonly SequenceStore _sequenceStore;
-    private readonly IEventDocumentCodec<TEvent, TEventDocument> _eventDocumentCodec;
-    private readonly FieldDefinition<TEventDocument, string> _streamIdField;
-    private readonly FieldDefinition<TEventDocument, long> _streamVersionField;
-    private readonly FieldDefinition<TEventDocument, Guid> _commitIdField;
-    private readonly Expression<Func<TEventDocument, long?>> _nullableStreamVersionExpression;
+    private readonly IEventDocumentCodec<TEvent> _eventDocumentCodec;
 
-    public MongoEventStoreClient(IMongoClient mongoClient, MongoEventStoreClientOptions<TEvent, TEventDocument> options)
+    public MongoEventStoreClient(IMongoClient mongoClient, MongoEventStoreClientOptions<TEvent> options)
     {
         var collectionOptions = options.CollectionOptions;
         var db = mongoClient.GetDatabase(collectionOptions.DatabaseName);
         var countersCollection = db.GetCollection<BsonDocument>(collectionOptions.SequencesCollectionName);
 
-        _eventsCollection = db.GetCollection<TEventDocument>(collectionOptions.EventsCollectionName);
+        _eventsCollection = db.GetCollection<EventDocument>(collectionOptions.EventsCollectionName);
         _streamCommitsCollection = db.GetCollection<StreamCommit>(collectionOptions.StreamCommitsCollectionName);
         _sequenceStore = new SequenceStore(countersCollection);
         _eventDocumentCodec = options.EventDocumentCodec;
-        _streamIdField = options.EventDocumentSchema.StreamIdField;
-        _streamVersionField = options.EventDocumentSchema.StreamVersionField;
-        _commitIdField = options.EventDocumentSchema.CommitIdField;
-        _nullableStreamVersionExpression = AsNullable(options.EventDocumentSchema.StreamVersion);
     }
 
     public async Task AppendToStreamAsync(
@@ -93,69 +84,6 @@ public class MongoEventStoreClient<TEvent, TEventDocument> : IEventStoreClient<T
         }
     }
 
-    /*
-    public async IAsyncEnumerable<ReadEvent<TEvent>> ReadStreamAsync(
-        string streamId,
-        ReadStreamOptions? readOptions = null,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        readOptions ??= ReadStreamOptions.Default;
-        var position = readOptions.Position;
-        var direction = readOptions.Direction;
-
-        // Edge cases that represent an empty sequence of events.
-        if (position.IsStart && direction == StreamReadDirection.Backward ||
-            position.IsEnd && direction == StreamReadDirection.Forward)
-        {
-            if (readOptions.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw &&
-                !await StreamExistsAsync(streamId, cancellationToken).ConfigureAwait(false))
-            {
-                throw new StreamNotFoundException(streamId);
-            }
-
-            yield break;
-        }
-
-        var filter = Builders<TEventDocument>.Filter.Eq(_streamIdField, streamId);
-
-        if (position.IsSpecificVersion)
-        {
-            var versionValue = checked((long)position.Version.Value.Value);
-
-            var versionFilter = direction == StreamReadDirection.Forward
-                ? Builders<TEventDocument>.Filter.Gte(_streamVersionField, versionValue)
-                : Builders<TEventDocument>.Filter.Lte(_streamVersionField, versionValue);
-
-            filter = Builders<TEventDocument>.Filter.And(filter, versionFilter);
-        }
-
-        var sort = direction == StreamReadDirection.Forward
-            ? Builders<TEventDocument>.Sort.Ascending(_streamVersionField)
-            : Builders<TEventDocument>.Sort.Descending(_streamVersionField);
-
-        using var cursor = await _eventsCollection
-            .Find(filter)
-            .Sort(sort)
-            .Limit(readOptions.MaxCount)
-            .ToCursorAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        var isEmpty = true;
-
-        while (await cursor.MoveNextAsync(cancellationToken).ConfigureAwait(false))
-        {
-            foreach (var doc in cursor.Current)
-            {
-                isEmpty = false;
-                yield return _eventDocumentCodec.Decode(doc);
-            }
-        }
-
-        if (isEmpty && readOptions.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw)
-            throw new StreamNotFoundException(streamId);
-    }
-    */
-
     public async IAsyncEnumerable<ReadEvent<TEvent>> ReadStreamAsync(
         string streamId,
         ReadStreamOptions? readOptions = null,
@@ -192,19 +120,19 @@ public class MongoEventStoreClient<TEvent, TEventDocument> : IEventStoreClient<T
         }
 
         var eventsSort = direction == StreamReadDirection.Forward
-            ? Builders<TEventDocument>.Sort.Ascending(_streamVersionField)
-            : Builders<TEventDocument>.Sort.Descending(_streamVersionField);
+            ? Builders<EventDocument>.Sort.Ascending(x => x.StreamVersion)
+            : Builders<EventDocument>.Sort.Descending(x => x.StreamVersion);
 
         var query = _streamCommitsCollection
             .Aggregate()
             .Match(commitsFilter)
-            .Lookup<TEventDocument, BsonDocument>(
+            .Lookup<EventDocument, BsonDocument>(
                 foreignCollectionName: _eventsCollection.CollectionNamespace.CollectionName,
                 localField: nameof(StreamCommit.CommitId),
-                foreignField: _commitIdField,
+                foreignField: nameof(EventDocument.CommitId),
                 @as: "events")
             .Unwind("events")
-            .ReplaceRoot<TEventDocument>("$events")
+            .ReplaceRoot<EventDocument>("$events")
             .Sort(eventsSort);
 
         if (readOptions.MaxCount.HasValue)
@@ -226,26 +154,8 @@ public class MongoEventStoreClient<TEvent, TEventDocument> : IEventStoreClient<T
             throw new StreamNotFoundException(streamId);
     }
 
-    private static Expression<Func<TEventDocument, long?>> AsNullable(Expression<Func<TEventDocument, long>> expr)
-    {
-        var body = Expression.Convert(expr.Body, typeof(long?));
-        return Expression.Lambda<Func<TEventDocument, long?>>(body, expr.Parameters[0]);
-    }
-
     private async Task<StreamState> GetStreamStateAsync(string streamId, CancellationToken cancellationToken)
     {
-        // var latestVersion = await _eventsCollection
-        //     .Find(Builders<TEventDocument>.Filter.Eq(_streamIdField, streamId))
-        //     .Sort(Builders<TEventDocument>.Sort.Descending(_streamVersionField))
-        //     .Limit(1)
-        //     .Project(_nullableStreamVersionExpression)
-        //     .FirstOrDefaultAsync(cancellationToken)
-        //     .ConfigureAwait(false);
-        //
-        // return latestVersion.HasValue
-        //     ? StreamState.StreamExists(new StreamVersion(Convert.ToUInt64(latestVersion.Value)))
-        //     : StreamState.StreamDoesNotExist;
-
         var latestVersion = await _streamCommitsCollection
             .Find(Builders<StreamCommit>.Filter.Eq(x => x.StreamId, streamId))
             .Sort(Builders<StreamCommit>.Sort.Descending(x => x.StartStreamVersion))
@@ -264,7 +174,7 @@ public class MongoEventStoreClient<TEvent, TEventDocument> : IEventStoreClient<T
         return streamState.IsStreamExists;
     }
 
-    private IEnumerable<TEventDocument> ToEventDocuments(
+    private IEnumerable<EventDocument> ToEventDocuments(
         IEnumerable<AppendEvent<TEvent>> events,
         string streamId,
         StreamVersion startVersion,

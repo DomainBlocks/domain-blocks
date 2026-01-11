@@ -7,13 +7,13 @@ using MongoDB.Bson;
 using MongoDB.Driver;
 using NUnit.Framework;
 
-namespace DomainBlocks.EventStore.MongoDB.Generic.Tests.Integration;
+namespace DomainBlocks.EventStore.MongoDB.Strict.Tests.Integration;
 
 [TestFixture]
-public class MongoEventStoreClientTests : EventStoreClientTests
+public class StrictMongoEventStoreClientTests : EventStoreClientTests
 {
     private MongoClient _mongoClient = null!;
-    private MongoEventStoreClient<IDomainEvent, EventDocument> _client = null!;
+    private MongoEventStoreClient<IDomainEvent> _client = null!;
 
     [OneTimeSetUp]
     public async Task OneTimeSetup()
@@ -25,20 +25,16 @@ public class MongoEventStoreClientTests : EventStoreClientTests
             MetadataSerializer = new BsonDocumentMetadataSerializer()
         };
 
-        var options = new MongoEventStoreClientOptions<IDomainEvent, EventDocument>
+        var options = new MongoEventStoreClientOptions<IDomainEvent>
         {
             CollectionOptions = EventStoreCollectionOptions.Default,
-            EventDocumentSchema = EventDocumentSchema.Default,
             EventDocumentCodec = EventDocumentCodec.Create(EventCodec.Create(codecOptions))
         };
 
         _mongoClient = new MongoClient(MongoConnectionStrings.Default);
-        _client = new MongoEventStoreClient<IDomainEvent, EventDocument>(_mongoClient, options);
+        _client = new MongoEventStoreClient<IDomainEvent>(_mongoClient, options);
 
-        await MongoEventStoreAdmin.EnsureIndexesAsync(
-            _mongoClient,
-            options.CollectionOptions,
-            options.EventDocumentSchema);
+        await MongoEventStoreAdmin.EnsureIndexesAsync(_mongoClient, options.CollectionOptions);
     }
 
     [OneTimeTearDown]

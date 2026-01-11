@@ -3,9 +3,8 @@ using MongoDB.Bson;
 
 namespace DomainBlocks.EventStore.MongoDB.Strict;
 
-public sealed class EventDocumentEncoder<TEvent>(
-    IEventEncoder<TEvent, BsonValue, BsonValue> eventEncoder) :
-    IEventDocumentEncoder<TEvent, EventDocument>
+public sealed class EventDocumentEncoder<TEvent>(IEventEncoder<TEvent, BsonValue, BsonValue> eventEncoder) :
+    IEventDocumentEncoder<TEvent>
     where TEvent : notnull
 {
     public EventDocument Encode(
