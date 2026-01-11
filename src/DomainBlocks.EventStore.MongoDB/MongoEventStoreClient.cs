@@ -8,11 +8,10 @@ namespace DomainBlocks.EventStore.MongoDB;
 public class MongoEventStoreClient<TEvent, TEventDocument> : IEventStoreClient<TEvent> where TEvent : notnull
 {
     private readonly IMongoCollection<TEventDocument> _eventsCollection;
-    private readonly IMongoCollection<StreamCommit> _streamCommitsCollection;
     private readonly IEventDocumentCodec<TEvent, TEventDocument> _eventDocumentCodec;
     private readonly FieldDefinition<TEventDocument, string> _streamIdField;
-    private readonly FieldDefinition<TEventDocument, ulong> _streamVersionField;
-    private readonly Expression<Func<TEventDocument, ulong?>> _nullableStreamVersionExpression;
+    private readonly FieldDefinition<TEventDocument, long> _streamVersionField;
+    private readonly Expression<Func<TEventDocument, long?>> _nullableStreamVersionExpression;
 
     public MongoEventStoreClient(IMongoClient mongoClient, MongoEventStoreClientOptions<TEvent, TEventDocument> options)
     {
@@ -20,7 +19,6 @@ public class MongoEventStoreClient<TEvent, TEventDocument> : IEventStoreClient<T
         var db = mongoClient.GetDatabase(collectionOptions.DatabaseName);
 
         _eventsCollection = db.GetCollection<TEventDocument>(collectionOptions.EventsCollectionName);
-        _streamCommitsCollection = db.GetCollection<StreamCommit>(collectionOptions.StreamCommitsCollectionName);
         _eventDocumentCodec = options.EventDocumentCodec;
         _streamIdField = options.EventDocumentSchema.StreamIdField;
         _streamVersionField = options.EventDocumentSchema.StreamVersionField;
@@ -40,7 +38,7 @@ public class MongoEventStoreClient<TEvent, TEventDocument> : IEventStoreClient<T
         if (!expectedState.Matches(currentState))
             throw new StreamAppendConflictException(streamId, expectedState, currentState);
 
-        var documents = ToEventDocuments(streamId, events, currentState.Version);
+        var documents = ToEventDocuments(events, streamId, currentState.Version);
 
         try
         {
@@ -84,11 +82,11 @@ public class MongoEventStoreClient<TEvent, TEventDocument> : IEventStoreClient<T
 
         if (position.IsSpecificVersion)
         {
-            var version = position.Version.Value.Value;
+            var versionValue = checked((long)position.Version.Value.Value);
 
             var versionFilter = direction == StreamReadDirection.Forward
-                ? Builders<TEventDocument>.Filter.Gte(_streamVersionField, version)
-                : Builders<TEventDocument>.Filter.Lte(_streamVersionField, version);
+                ? Builders<TEventDocument>.Filter.Gte(_streamVersionField, versionValue)
+                : Builders<TEventDocument>.Filter.Lte(_streamVersionField, versionValue);
 
             filter = Builders<TEventDocument>.Filter.And(filter, versionFilter);
         }
@@ -119,10 +117,10 @@ public class MongoEventStoreClient<TEvent, TEventDocument> : IEventStoreClient<T
             throw new StreamNotFoundException(streamId);
     }
 
-    private static Expression<Func<TEventDocument, ulong?>> AsNullable(Expression<Func<TEventDocument, ulong>> expr)
+    private static Expression<Func<TEventDocument, long?>> AsNullable(Expression<Func<TEventDocument, long>> expr)
     {
-        var body = Expression.Convert(expr.Body, typeof(ulong?));
-        return Expression.Lambda<Func<TEventDocument, ulong?>>(body, expr.Parameters[0]);
+        var body = Expression.Convert(expr.Body, typeof(long?));
+        return Expression.Lambda<Func<TEventDocument, long?>>(body, expr.Parameters[0]);
     }
 
     private async Task<StreamState> GetStreamStateAsync(string streamId, CancellationToken cancellationToken)
@@ -136,7 +134,7 @@ public class MongoEventStoreClient<TEvent, TEventDocument> : IEventStoreClient<T
             .ConfigureAwait(false);
 
         return latestVersion.HasValue
-            ? StreamState.StreamExists(new StreamVersion(latestVersion.Value))
+            ? StreamState.StreamExists(new StreamVersion(Convert.ToUInt64(latestVersion.Value)))
             : StreamState.StreamDoesNotExist;
     }
 
@@ -147,8 +145,8 @@ public class MongoEventStoreClient<TEvent, TEventDocument> : IEventStoreClient<T
     }
 
     private IEnumerable<TEventDocument> ToEventDocuments(
-        string streamId,
         IEnumerable<AppendEvent<TEvent>> events,
+        string streamId,
         StreamVersion? currentStreamVersion)
     {
         var nextVersionValue = (currentStreamVersion?.Value + 1) ?? 0;
