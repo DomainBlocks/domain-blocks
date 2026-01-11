@@ -1,4 +1,4 @@
-using DomainBlocks.EventStore.MongoDB;
+using DomainBlocks.EventStore.MongoDB.Generic;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Testing.Integration.MongoDB;
@@ -51,23 +51,25 @@ public class EventStoreClientTests
             MetadataSerializer = new BsonDocumentMetadataSerializer()
         };
 
+        var collectionOptions = EventStoreCollectionOptions.Default;
+
         var writeOptions = new MongoEventStoreClientOptions<object, EventDocument>
         {
-            Collection = EventCollectionOptions.Default,
-            DocumentCodec = EventDocumentCodec.Create(EventCodec.Create(writeCodecOptions))
+            CollectionOptions = collectionOptions,
+            EventDocumentSchema = EventDocumentSchema.Default,
+            EventDocumentCodec = EventDocumentCodec.Create(EventCodec.Create(writeCodecOptions))
         };
 
         var readOptions = new MongoEventStoreClientOptions<object, EventDocument>
         {
-            Collection = EventCollectionOptions.Default,
-            DocumentCodec = EventDocumentCodec.Create(EventCodec.Create(readCodecOptions))
+            CollectionOptions = collectionOptions,
+            EventDocumentSchema = EventDocumentSchema.Default,
+            EventDocumentCodec = EventDocumentCodec.Create(EventCodec.Create(readCodecOptions))
         };
 
         using var mongoClient = new MongoClient(MongoConnectionStrings.Default);
-        var collection = mongoClient.GetCollection<EventDocument>(writeOptions.Collection.CollectionNamespace);
-
-        var writeClient = new MongoEventStoreClient<object, EventDocument>(collection, writeOptions);
-        var readClient = new MongoEventStoreClient<object, EventDocument>(collection, readOptions);
+        var writeClient = new MongoEventStoreClient<object, EventDocument>(mongoClient, writeOptions);
+        var readClient = new MongoEventStoreClient<object, EventDocument>(mongoClient, readOptions);
 
         var orderId = Guid.NewGuid();
         var streamId = $"order-{orderId}";

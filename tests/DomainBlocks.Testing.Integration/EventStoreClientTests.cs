@@ -1,4 +1,5 @@
-﻿using DomainBlocks.EventStore.Abstractions;
+﻿using DomainBlocks.EventStore;
+using DomainBlocks.EventStore.Abstractions;
 using NUnit.Framework;
 using Shouldly;
 
@@ -251,6 +252,61 @@ public abstract class EventStoreClientTests
             .ToArrayAsync(cancellationToken)
             .AsTask()
             .ShouldThrowAsync<StreamNotFoundException>();
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task ReadStreamAsync_FromVersion_ReturnsExpectedEvents(CancellationToken cancellationToken)
+    {
+        IDomainEvent[] events1 =
+        [
+            CreateTestEvent("TestEvent1").Event,
+            CreateTestEvent("TestEvent2").Event,
+            CreateTestEvent("TestEvent3").Event
+        ];
+
+        IDomainEvent[] events2 =
+        [
+            CreateTestEvent("TestEvent4").Event,
+            CreateTestEvent("TestEvent5").Event,
+            CreateTestEvent("TestEvent6").Event
+        ];
+
+        var streamId = $"test-{Guid.NewGuid()}";
+
+        await Client.AppendToStreamAsync(streamId, events1, cancellationToken: cancellationToken);
+        await Client.AppendToStreamAsync(streamId, events2, cancellationToken: cancellationToken);
+
+        var expected = events1.Concat(events2).ToArray();
+
+        // Forward: At(v) == expected.Skip(v)
+        for (var v = 0; v < expected.Length; v++)
+        {
+            var actual = await ReadEvents(v, StreamReadDirection.Forward);
+            actual.ShouldBe(expected.Skip(v));
+        }
+
+        // Backward: At(v) == expected.Take(v+1).Reverse()
+        for (var v = expected.Length - 1; v >= 0; v--)
+        {
+            var actual = await ReadEvents(v, StreamReadDirection.Backward);
+            actual.ShouldBe(expected.Take(v + 1).Reverse());
+        }
+
+        ValueTask<IDomainEvent[]> ReadEvents(int startVersion, StreamReadDirection direction)
+        {
+            return Client
+                .ReadStreamAsync(
+                    streamId,
+                    new ReadStreamOptions
+                    {
+                        Position = StreamReadPosition.At(StreamVersion.FromInt64(startVersion)),
+                        Direction = direction
+                    },
+                    cancellationToken)
+                .Select(x => x.Event)
+                .ToArrayAsync(cancellationToken);
+        }
     }
 
     private static AppendEvent<IDomainEvent> CreateTestEvent(string value)

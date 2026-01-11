@@ -1,4 +1,4 @@
-using DomainBlocks.EventStore.MongoDB;
+using DomainBlocks.EventStore.MongoDB.Generic;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.Abstractions;
 using DomainBlocks.Serialization.Google.Protobuf;
@@ -103,13 +103,12 @@ public class MongoSerializationTests
 
         var options = new MongoEventStoreClientOptions<object, EventDocument>
         {
-            Collection = EventCollectionOptions.Default,
-            DocumentCodec = EventDocumentCodec.Create(EventCodec.Create(codecOptions))
+            CollectionOptions = EventStoreCollectionOptions.Default,
+            EventDocumentSchema = EventDocumentSchema.Default,
+            EventDocumentCodec = EventDocumentCodec.Create(EventCodec.Create(codecOptions))
         };
 
-        var collection = mongoClient.GetCollection<EventDocument>(options.Collection.CollectionNamespace);
-
-        return new MongoEventStoreClient<object, EventDocument>(collection, options);
+        return new MongoEventStoreClient<object, EventDocument>(mongoClient, options);
     }
 
     private record UserCreated

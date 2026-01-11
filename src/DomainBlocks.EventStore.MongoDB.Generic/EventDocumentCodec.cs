@@ -1,7 +1,7 @@
 using DomainBlocks.EventStore.Abstractions;
 using MongoDB.Bson;
 
-namespace DomainBlocks.EventStore.MongoDB;
+namespace DomainBlocks.EventStore.MongoDB.Generic;
 
 public static class EventDocumentCodec
 {
@@ -27,10 +27,8 @@ public sealed class EventDocumentCodec<TEvent>(
     {
         var (@event, metadata) = eventCodec.Decode(document.EventName, document.EventData, document.Metadata);
 
-        var context = new ReadEventContext(
-            document.StreamId,
-            new StreamVersion(document.StreamVersion),
-            document.CreatedAtUtc);
+        var streamVersion = StreamVersion.FromInt64(document.StreamVersion);
+        var context = new ReadEventContext(document.StreamId, streamVersion, document.CreatedAtUtc);
 
         return ReadEvent.Create(@event, metadata, context);
     }

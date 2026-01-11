@@ -1,7 +1,7 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
 using MongoDB.Bson;
 
-namespace DomainBlocks.EventStore.MongoDB;
+namespace DomainBlocks.EventStore.MongoDB.Generic;
 
 public sealed class EventDocumentEncoder<TEvent>(
     IEventEncoder<TEvent, BsonValue, BsonValue> eventEncoder) :
@@ -19,7 +19,7 @@ public sealed class EventDocumentEncoder<TEvent>(
         return new EventDocument
         {
             StreamId = streamId,
-            StreamVersion = streamVersion.Value,
+            StreamVersion = streamVersion.ToInt64(),
             EventName = eventName,
             CreatedAtUtc = createdAtUtc,
             EventData = eventData,

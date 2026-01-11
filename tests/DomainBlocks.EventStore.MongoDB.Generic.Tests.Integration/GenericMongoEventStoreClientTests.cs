@@ -7,10 +7,10 @@ using MongoDB.Bson;
 using MongoDB.Driver;
 using NUnit.Framework;
 
-namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
+namespace DomainBlocks.EventStore.MongoDB.Generic.Tests.Integration;
 
 [TestFixture]
-public class MongoEventStoreClientTests : EventStoreClientTests
+public class GenericMongoEventStoreClientTests : EventStoreClientTests
 {
     private MongoClient _mongoClient = null!;
     private MongoEventStoreClient<IDomainEvent, EventDocument> _client = null!;
@@ -27,18 +27,18 @@ public class MongoEventStoreClientTests : EventStoreClientTests
 
         var options = new MongoEventStoreClientOptions<IDomainEvent, EventDocument>
         {
-            Collection = EventCollectionOptions.Default,
-            DocumentCodec = EventDocumentCodec.Create(EventCodec.Create(codecOptions))
+            CollectionOptions = EventStoreCollectionOptions.Default,
+            EventDocumentSchema = EventDocumentSchema.Default,
+            EventDocumentCodec = EventDocumentCodec.Create(EventCodec.Create(codecOptions))
         };
 
         _mongoClient = new MongoClient(MongoConnectionStrings.Default);
+        _client = new MongoEventStoreClient<IDomainEvent, EventDocument>(_mongoClient, options);
 
-        var collection = _mongoClient.GetCollection<EventDocument>(
-            options.Collection.CollectionNamespace);
-
-        await MongoEventStoreAdmin.EnsureIndexesAsync(collection, options.Collection);
-
-        _client = new MongoEventStoreClient<IDomainEvent, EventDocument>(collection, options);
+        await MongoEventStoreAdmin.EnsureIndexesAsync(
+            _mongoClient,
+            options.CollectionOptions,
+            options.EventDocumentSchema);
     }
 
     [OneTimeTearDown]

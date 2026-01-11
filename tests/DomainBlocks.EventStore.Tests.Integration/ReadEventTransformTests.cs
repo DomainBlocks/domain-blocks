@@ -1,5 +1,5 @@
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.MongoDB;
+using DomainBlocks.EventStore.MongoDB.Generic;
 using DomainBlocks.EventStore.Read;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.MongoDB.Bson;
@@ -67,13 +67,13 @@ public class ReadEventTransformTests
 
         var options = new MongoEventStoreClientOptions<object, EventDocument>
         {
-            Collection = EventCollectionOptions.Default,
-            DocumentCodec = EventDocumentCodec.Create(EventCodec.Create(codecOptions))
+            CollectionOptions = EventStoreCollectionOptions.Default,
+            EventDocumentSchema = EventDocumentSchema.Default,
+            EventDocumentCodec = EventDocumentCodec.Create(EventCodec.Create(codecOptions))
         };
 
         using var mongoClient = new MongoClient(MongoConnectionStrings.Default);
-        var collection = mongoClient.GetCollection<EventDocument>(options.Collection.CollectionNamespace);
-        var client = new MongoEventStoreClient<object, EventDocument>(collection, options);
+        var client = new MongoEventStoreClient<object, EventDocument>(mongoClient, options);
 
         var streamId = $"test-read-transform-{Guid.NewGuid()}";
         await client.AppendToStreamAsync(streamId, [legacyEvent]);
