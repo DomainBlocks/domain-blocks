@@ -9,10 +9,9 @@ public sealed class StreamCommit
     public required string StreamId { get; init; }
     public required long StartStreamVersion { get; init; }
     public required long StartGlobalPosition { get; init; }
-    public required int EventCount { get; init; }
-
-    [BsonGuidRepresentation(GuidRepresentation.Standard)]
-    public required Guid CommitId { get; init; }
-
     public required DateTime CommittedAtUtc { get; init; }
+    public required EventDocument[] Events { get; init; }
+
+    [BsonIgnore]
+    public long EndStreamVersion => StartStreamVersion + Events.Length - 1;
 }

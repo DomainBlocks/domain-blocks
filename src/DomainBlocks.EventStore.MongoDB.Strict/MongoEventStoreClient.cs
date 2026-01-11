@@ -9,10 +9,9 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
 {
     private const string GlobalPositionSequenceId = "global_position";
 
-    private readonly IMongoCollection<EventDocument> _eventsCollection;
     private readonly IMongoCollection<StreamCommit> _streamCommitsCollection;
     private readonly SequenceStore _sequenceStore;
-    private readonly IEventDocumentCodec<TEvent> _eventDocumentCodec;
+    private readonly IEventCodec<TEvent, BsonValue, BsonValue> _eventCodec;
 
     public MongoEventStoreClient(IMongoClient mongoClient, MongoEventStoreClientOptions<TEvent> options)
     {
@@ -20,10 +19,9 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
         var db = mongoClient.GetDatabase(collectionOptions.DatabaseName);
         var countersCollection = db.GetCollection<BsonDocument>(collectionOptions.SequencesCollectionName);
 
-        _eventsCollection = db.GetCollection<EventDocument>(collectionOptions.EventsCollectionName);
         _streamCommitsCollection = db.GetCollection<StreamCommit>(collectionOptions.StreamCommitsCollectionName);
         _sequenceStore = new SequenceStore(countersCollection);
-        _eventDocumentCodec = options.EventDocumentCodec;
+        _eventCodec = options.EventCodec;
     }
 
     public async Task AppendToStreamAsync(
@@ -43,12 +41,10 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
             ? new StreamVersion(currentState.Version.Value.Value + 1)
             : new StreamVersion(0);
 
-        var commitId = Guid.NewGuid();
-        var committedAtUtc = DateTime.UtcNow;
-        var documents = ToEventDocuments(events, streamId, startVersion, commitId, committedAtUtc).ToArray();
+        var eventDocs = ToEventDocuments(events).ToArray();
 
         var globalPositionRange = await _sequenceStore
-            .NextRangeAsync(GlobalPositionSequenceId, documents.Length, cancellationToken)
+            .NextRangeAsync(GlobalPositionSequenceId, eventDocs.Length, cancellationToken)
             .ConfigureAwait(false);
 
         var streamCommit = new StreamCommit
@@ -56,26 +52,15 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
             StreamId = streamId,
             StartStreamVersion = Convert.ToInt64(startVersion.Value),
             StartGlobalPosition = globalPositionRange.Start,
-            EventCount = documents.Length,
-            CommitId = commitId,
-            CommittedAtUtc = committedAtUtc
+            CommittedAtUtc = DateTime.UtcNow,
+            Events = eventDocs
         };
 
         try
         {
-            await _eventsCollection
-                .InsertManyAsync(documents, new InsertManyOptions { IsOrdered = true }, cancellationToken)
-                .ConfigureAwait(false);
-
             await _streamCommitsCollection
                 .InsertOneAsync(streamCommit, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
-        }
-        catch (MongoBulkWriteException ex) when
-            (ex.WriteErrors?.Any(e => e.Category == ServerErrorCategory.DuplicateKey) is true)
-        {
-            // Consider automatically retrying if the original expectation was Any/StreamExists.
-            throw new StreamAppendConflictException(streamId, expectedState, innerException: ex);
         }
         catch (MongoWriteException ex) when (ex.WriteError.Category == ServerErrorCategory.DuplicateKey)
         {
@@ -106,7 +91,7 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
             yield break;
         }
 
-        var commitsFilter = Builders<StreamCommit>.Filter.Eq(x => x.StreamId, streamId);
+        var filter = Builders<StreamCommit>.Filter.Eq(x => x.StreamId, streamId);
 
         if (position.IsSpecificVersion)
         {
@@ -116,37 +101,50 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
                 ? Builders<StreamCommit>.Filter.Gte(x => x.StartStreamVersion, versionValue)
                 : Builders<StreamCommit>.Filter.Lte(x => x.StartStreamVersion, versionValue);
 
-            commitsFilter = Builders<StreamCommit>.Filter.And(commitsFilter, versionFilter);
+            filter = Builders<StreamCommit>.Filter.And(filter, versionFilter);
         }
 
-        var eventsSort = direction == StreamReadDirection.Forward
-            ? Builders<EventDocument>.Sort.Ascending(x => x.StreamVersion)
-            : Builders<EventDocument>.Sort.Descending(x => x.StreamVersion);
+        var sort = direction == StreamReadDirection.Forward
+            ? Builders<StreamCommit>.Sort.Ascending(x => x.StartStreamVersion)
+            : Builders<StreamCommit>.Sort.Descending(x => x.StartStreamVersion);
 
-        var query = _streamCommitsCollection
-            .Aggregate()
-            .Match(commitsFilter)
-            .Lookup<EventDocument, BsonDocument>(
-                foreignCollectionName: _eventsCollection.CollectionNamespace.CollectionName,
-                localField: nameof(StreamCommit.CommitId),
-                foreignField: nameof(EventDocument.CommitId),
-                @as: "events")
-            .Unwind("events")
-            .ReplaceRoot<EventDocument>("$events")
-            .Sort(eventsSort);
+        using var cursor = await _streamCommitsCollection
+            .Find(filter)
+            .Sort(sort)
+            .Limit(readOptions.MaxCount)
+            .ToCursorAsync(cancellationToken)
+            .ConfigureAwait(false);
 
-        if (readOptions.MaxCount.HasValue)
-            query = query.Limit(readOptions.MaxCount.Value);
-
-        using var cursor = await query.ToCursorAsync(cancellationToken).ConfigureAwait(false);
         var isEmpty = true;
 
         while (await cursor.MoveNextAsync(cancellationToken).ConfigureAwait(false))
         {
             foreach (var doc in cursor.Current)
             {
-                isEmpty = false;
-                yield return _eventDocumentCodec.Decode(doc);
+                if (direction == StreamReadDirection.Forward)
+                {
+                    var startVersionValue = Convert.ToUInt64(doc.StartStreamVersion);
+
+                    for (uint i = 0; i < doc.Events.Length; i++)
+                    {
+                        isEmpty = false;
+                        var eventDoc = doc.Events[i];
+
+                        var (@event, metadata) = _eventCodec.Decode(
+                            eventDoc.EventName,
+                            eventDoc.EventData,
+                            eventDoc.Metadata);
+
+                        var version = new StreamVersion(startVersionValue + i);
+                        var context = new ReadEventContext(streamId, version, doc.CommittedAtUtc);
+
+                        yield return ReadEvent.Create(@event, metadata, context);
+                    }
+                }
+                else
+                {
+                    var endVersionValue = Convert.ToUInt64(doc.EndStreamVersion);
+                }
             }
         }
 
@@ -159,7 +157,7 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
         var latestVersion = await _streamCommitsCollection
             .Find(Builders<StreamCommit>.Filter.Eq(x => x.StreamId, streamId))
             .Sort(Builders<StreamCommit>.Sort.Descending(x => x.StartStreamVersion))
-            .Project(x => (long?)x.StartStreamVersion + x.EventCount - 1)
+            .Project(x => (long?)x.StartStreamVersion + x.Events.Length - 1)
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -174,20 +172,20 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
         return streamState.IsStreamExists;
     }
 
-    private IEnumerable<EventDocument> ToEventDocuments(
-        IEnumerable<AppendEvent<TEvent>> events,
-        string streamId,
-        StreamVersion startVersion,
-        Guid commitId,
-        DateTime createdAtUtc)
+    private IEnumerable<EventDocument> ToEventDocuments(IEnumerable<AppendEvent<TEvent>> events)
     {
-        var nextVersionValue = startVersion.Value;
-        var encoder = _eventDocumentCodec.CreateEncoder();
+        var encoder = _eventCodec.CreateEncoder();
 
         foreach (var @event in events)
         {
-            var streamVersion = new StreamVersion(nextVersionValue++);
-            yield return encoder.Encode(@event, streamId, streamVersion, commitId, createdAtUtc);
+            var (eventName, eventData, metadata) = encoder.Encode(@event);
+
+            yield return new EventDocument
+            {
+                EventName = eventName,
+                EventData = eventData,
+                Metadata = metadata ?? BsonNull.Value
+            };
         }
     }
 }

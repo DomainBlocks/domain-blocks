@@ -28,7 +28,7 @@ public class StrictMongoEventStoreClientTests : EventStoreClientTests
         var options = new MongoEventStoreClientOptions<IDomainEvent>
         {
             CollectionOptions = EventStoreCollectionOptions.Default,
-            EventDocumentCodec = EventDocumentCodec.Create(EventCodec.Create(codecOptions))
+            EventCodec = EventCodec.Create(codecOptions)
         };
 
         _mongoClient = new MongoClient(MongoConnectionStrings.Default);
