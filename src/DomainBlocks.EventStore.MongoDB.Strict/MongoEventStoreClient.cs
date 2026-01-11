@@ -9,8 +9,8 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
 {
     private const string GlobalPositionSequenceId = "global_position";
 
-    private readonly IMongoCollection<StreamCommit> _streamCommitsCollection;
-    private readonly SequenceStore _sequenceStore;
+    private readonly IMongoCollection<StreamCommit> _commitsCollection;
+    private readonly SequenceAllocator _sequenceAllocator;
     private readonly IEventCodec<TEvent, BsonValue, BsonValue> _eventCodec;
 
     public MongoEventStoreClient(IMongoClient mongoClient, MongoEventStoreClientOptions<TEvent> options)
@@ -19,8 +19,8 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
         var db = mongoClient.GetDatabase(collectionOptions.DatabaseName);
         var countersCollection = db.GetCollection<BsonDocument>(collectionOptions.SequencesCollectionName);
 
-        _streamCommitsCollection = db.GetCollection<StreamCommit>(collectionOptions.StreamCommitsCollectionName);
-        _sequenceStore = new SequenceStore(countersCollection);
+        _commitsCollection = db.GetCollection<StreamCommit>(collectionOptions.StreamCommitsCollectionName);
+        _sequenceAllocator = new SequenceAllocator(countersCollection);
         _eventCodec = options.EventCodec;
     }
 
@@ -41,25 +41,32 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
             ? new StreamVersion(currentState.Version.Value.Value + 1)
             : new StreamVersion(0);
 
-        var eventDocs = ToEventDocuments(events).ToArray();
+        var eventDocuments = ToEventDocuments(events).ToArray();
+        if (eventDocuments.Length == 0)
+            return;
 
-        var globalPositionRange = await _sequenceStore
-            .NextRangeAsync(GlobalPositionSequenceId, eventDocs.Length, cancellationToken)
+        var globalPositionAllocation = await _sequenceAllocator
+            .AllocateNextAsync(GlobalPositionSequenceId, eventDocuments.Length, cancellationToken)
             .ConfigureAwait(false);
 
-        var streamCommit = new StreamCommit
+        // We may eventually enforce limits on:
+        //  - max events per commit
+        //  - max event size (for any single event)
+        //  - max commit BSON size (Mongo doc limit is 16MB; use a safety margin)
+        var commit = new StreamCommit
         {
+            Id = ObjectId.GenerateNewId(),
             StreamId = streamId,
             StartStreamVersion = Convert.ToInt64(startVersion.Value),
-            StartGlobalPosition = globalPositionRange.Start,
+            StartGlobalPosition = globalPositionAllocation.Start,
             CommittedAtUtc = DateTime.UtcNow,
-            Events = eventDocs
+            Events = eventDocuments
         };
 
         try
         {
-            await _streamCommitsCollection
-                .InsertOneAsync(streamCommit, cancellationToken: cancellationToken)
+            await _commitsCollection
+                .InsertOneAsync(commit, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (MongoWriteException ex) when (ex.WriteError.Category == ServerErrorCategory.DuplicateKey)
@@ -108,7 +115,7 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
             ? Builders<StreamCommit>.Sort.Ascending(x => x.StartStreamVersion)
             : Builders<StreamCommit>.Sort.Descending(x => x.StartStreamVersion);
 
-        using var cursor = await _streamCommitsCollection
+        using var cursor = await _commitsCollection
             .Find(filter)
             .Sort(sort)
             .Limit(readOptions.MaxCount)
@@ -119,42 +126,54 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
 
         while (await cursor.MoveNextAsync(cancellationToken).ConfigureAwait(false))
         {
-            foreach (var doc in cursor.Current)
+            foreach (var commit in cursor.Current)
             {
-                if (direction == StreamReadDirection.Forward)
+                if (commit.Events.Length == 0)
                 {
-                    var startVersionValue = Convert.ToUInt64(doc.StartStreamVersion);
-
-                    for (uint i = 0; i < doc.Events.Length; i++)
-                    {
-                        isEmpty = false;
-                        var eventDoc = doc.Events[i];
-
-                        var (@event, metadata) = _eventCodec.Decode(
-                            eventDoc.EventName,
-                            eventDoc.EventData,
-                            eventDoc.Metadata);
-
-                        var version = new StreamVersion(startVersionValue + i);
-                        var context = new ReadEventContext(streamId, version, doc.CommittedAtUtc);
-
-                        yield return ReadEvent.Create(@event, metadata, context);
-                    }
+                    throw new InvalidOperationException(
+                        $"Commit '{streamId}@v{commit.StartStreamVersion}' contains no events.");
                 }
-                else
+
+                isEmpty = false;
+
+                foreach (var (eventDoc, index) in EnumerateEvents(commit.Events, direction))
                 {
-                    var endVersionValue = Convert.ToUInt64(doc.EndStreamVersion);
+                    var (@event, metadata) = _eventCodec.Decode(
+                        eventDoc.EventName,
+                        eventDoc.EventData,
+                        eventDoc.Metadata);
+
+                    var version = new StreamVersion(checked((ulong)commit.StartStreamVersion + (ulong)index));
+                    var context = new ReadEventContext(streamId, version, commit.CommittedAtUtc);
+
+                    yield return ReadEvent.Create(@event, metadata, context);
                 }
             }
         }
 
         if (isEmpty && readOptions.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw)
             throw new StreamNotFoundException(streamId);
+
+        yield break;
+
+        static IEnumerable<(EventDocument, int)> EnumerateEvents(EventDocument[] events, StreamReadDirection direction)
+        {
+            if (direction == StreamReadDirection.Forward)
+            {
+                for (var i = 0; i < events.Length; i++)
+                    yield return (events[i], i);
+            }
+            else
+            {
+                for (var i = events.Length - 1; i >= 0; i--)
+                    yield return (events[i], i);
+            }
+        }
     }
 
     private async Task<StreamState> GetStreamStateAsync(string streamId, CancellationToken cancellationToken)
     {
-        var latestVersion = await _streamCommitsCollection
+        var latestVersion = await _commitsCollection
             .Find(Builders<StreamCommit>.Filter.Eq(x => x.StreamId, streamId))
             .Sort(Builders<StreamCommit>.Sort.Descending(x => x.StartStreamVersion))
             .Project(x => (long?)x.StartStreamVersion + x.Events.Length - 1)
