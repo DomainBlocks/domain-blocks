@@ -85,12 +85,12 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         readOptions ??= ReadStreamOptions.Default;
-        var position = readOptions.Position;
+        var readPosition = readOptions.Position;
         var direction = readOptions.Direction;
 
         // Edge cases that represent an empty sequence of events.
-        if (position.IsStart && direction == StreamReadDirection.Backward ||
-            position.IsEnd && direction == StreamReadDirection.Forward)
+        if (readPosition.IsStart && direction == StreamReadDirection.Backward ||
+            readPosition.IsEnd && direction == StreamReadDirection.Forward)
         {
             if (readOptions.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw &&
                 !await StreamExistsAsync(streamId, cancellationToken).ConfigureAwait(false))
@@ -103,9 +103,9 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
 
         var filter = Builders<StreamCommit>.Filter.Eq(x => x.StreamId, streamId);
 
-        if (position.IsSpecificVersion)
+        if (readPosition.IsSpecificVersion)
         {
-            var versionValue = position.Version.Value.ToInt64();
+            var versionValue = readPosition.Version.Value.ToInt64();
 
             var versionFilter = direction == StreamReadDirection.Forward
                 ? Builders<StreamCommit>.Filter.Gte(x => x.EndStreamVersion, versionValue)
@@ -126,7 +126,7 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
 
         var totalEventCount = 0;
         var yieldedEventCount = 0;
-        var startVersionValue = position.Version?.ToInt64();
+        var startVersionValue = readPosition.Version?.ToInt64();
 
         while (await cursor.MoveNextAsync(cancellationToken).ConfigureAwait(false))
         {
@@ -159,7 +159,8 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
                         eventDoc.Metadata);
 
                     var version = StreamVersion.FromInt64(versionValue);
-                    var context = new ReadEventContext(streamId, version, commit.CommittedAtUtc);
+                    var position = GlobalPosition.FromInt64(commit.StartGlobalPosition + index);
+                    var context = new ReadEventContext(streamId, version, commit.CommittedAtUtc, position);
 
                     yield return ReadEvent.Create(@event, metadata, context);
 
