@@ -141,7 +141,7 @@ public class KurrentDBEventStoreClient<TEvent>(
         {
             var value = kurrentStreamState.ToInt64();
             if (value >= 0)
-                return StreamState.StreamExists(new StreamVersion((ulong)value));
+                return StreamState.StreamExists(StreamVersion.FromInt64(value));
         }
 
         return null;

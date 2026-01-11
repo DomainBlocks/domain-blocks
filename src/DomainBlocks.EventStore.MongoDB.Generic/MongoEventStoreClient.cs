@@ -33,6 +33,7 @@ public class MongoEventStoreClient<TEvent, TEventDocument> : IEventStoreClient<T
     {
         appendOptions ??= AppendToStreamOptions.Default;
         var expectedState = appendOptions.ExpectedState;
+
         var currentState = await GetStreamStateAsync(streamId, cancellationToken).ConfigureAwait(false);
 
         if (!expectedState.Matches(currentState))
@@ -82,7 +83,7 @@ public class MongoEventStoreClient<TEvent, TEventDocument> : IEventStoreClient<T
 
         if (position.IsSpecificVersion)
         {
-            var versionValue = checked((long)position.Version.Value.Value);
+            var versionValue = position.Version.Value.ToInt64();
 
             var versionFilter = direction == StreamReadDirection.Forward
                 ? Builders<TEventDocument>.Filter.Gte(_streamVersionField, versionValue)
@@ -134,7 +135,7 @@ public class MongoEventStoreClient<TEvent, TEventDocument> : IEventStoreClient<T
             .ConfigureAwait(false);
 
         return latestVersion.HasValue
-            ? StreamState.StreamExists(new StreamVersion(Convert.ToUInt64(latestVersion.Value)))
+            ? StreamState.StreamExists(StreamVersion.FromInt64(latestVersion.Value))
             : StreamState.StreamDoesNotExist;
     }
 

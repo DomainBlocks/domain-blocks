@@ -16,12 +16,10 @@ public sealed class EventDocumentEncoder<TEvent>(
     {
         var (eventName, eventData, metadata) = eventEncoder.Encode(@event);
 
-        var streamVersionValue = checked((long)streamVersion.Value);
-
         return new EventDocument
         {
             StreamId = streamId,
-            StreamVersion = streamVersionValue,
+            StreamVersion = streamVersion.ToInt64(),
             EventName = eventName,
             CreatedAtUtc = createdAtUtc,
             EventData = eventData,

@@ -27,8 +27,7 @@ public sealed class EventDocumentCodec<TEvent>(
     {
         var (@event, metadata) = eventCodec.Decode(document.EventName, document.EventData, document.Metadata);
 
-        var streamVersionValue = Convert.ToUInt64(document.StreamVersion);
-        var streamVersion = new StreamVersion(streamVersionValue);
+        var streamVersion = StreamVersion.FromInt64(document.StreamVersion);
         var context = new ReadEventContext(document.StreamId, streamVersion, document.CreatedAtUtc);
 
         return ReadEvent.Create(@event, metadata, context);

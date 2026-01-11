@@ -21,17 +21,24 @@ public static class MongoEventStoreAdmin
     {
         var indexBuilder = Builders<StreamCommit>.IndexKeys;
 
-        var uniqueKey = indexBuilder
+        var streamStart = indexBuilder
             .Ascending(x => x.StreamId)
-            .Descending(x => x.StartStreamVersion);
+            .Ascending(x => x.StartStreamVersion);
 
-        var startGlobalPosition = indexBuilder.Ascending(x => x.StartGlobalPosition);
+        var streamEnd = indexBuilder
+            .Ascending(x => x.StreamId)
+            .Ascending(x => x.EndStreamVersion);
+
+        var globalStart = indexBuilder.Ascending(x => x.StartGlobalPosition);
+        var globalEnd = indexBuilder.Ascending(x => x.EndGlobalPosition);
         var committedAtUtc = indexBuilder.Descending(x => x.CommittedAtUtc);
 
         CreateIndexModel<StreamCommit>[] indexModels =
         [
-            new(uniqueKey, new CreateIndexOptions { Unique = true }),
-            new(startGlobalPosition, new CreateIndexOptions { Unique = true }),
+            new(streamStart, new CreateIndexOptions { Unique = true }),
+            new(streamEnd),
+            new(globalStart),
+            new(globalEnd),
             new(committedAtUtc)
         ];
 
