@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Abstractions;
 using MongoDB.Driver;
 
-namespace DomainBlocks.EventStore.MongoDB;
+namespace DomainBlocks.EventStore.MongoDB.Generic;
 
 public class MongoEventStoreClient<TEvent, TEventDocument> : IEventStoreClient<TEvent> where TEvent : notnull
 {

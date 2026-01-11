@@ -1,4 +1,4 @@
-namespace DomainBlocks.EventStore.MongoDB;
+namespace DomainBlocks.EventStore.MongoDB.Generic;
 
 public sealed class MongoEventStoreClientOptions<TEvent, TEventDocument> where TEvent : notnull
 {

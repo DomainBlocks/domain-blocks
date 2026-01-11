@@ -1,6 +1,6 @@
 using MongoDB.Bson;
 
-namespace DomainBlocks.EventStore.MongoDB;
+namespace DomainBlocks.EventStore.MongoDB.Generic;
 
 /// <summary>
 /// The default event document for storing and retrieving events in Mongo.

@@ -7,7 +7,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\DomainBlocks.EventStore.MongoDB\DomainBlocks.EventStore.MongoDB.csproj" />
+    <ProjectReference Include="..\..\src\DomainBlocks.EventStore.MongoDB.Generic\DomainBlocks.EventStore.MongoDB.Generic.csproj" />
   </ItemGroup>
 
 </Project>

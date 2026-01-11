@@ -1,4 +1,4 @@
-using DomainBlocks.EventStore.MongoDB;
+using DomainBlocks.EventStore.MongoDB.Generic;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.Abstractions;
 using DomainBlocks.Serialization.Google.Protobuf;

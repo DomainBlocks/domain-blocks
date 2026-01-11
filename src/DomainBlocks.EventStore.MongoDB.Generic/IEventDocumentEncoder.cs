@@ -1,6 +1,6 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
 
-namespace DomainBlocks.EventStore.MongoDB;
+namespace DomainBlocks.EventStore.MongoDB.Generic;
 
 public interface IEventDocumentEncoder<TEvent, out TEventDocument> where TEvent : notnull
 {

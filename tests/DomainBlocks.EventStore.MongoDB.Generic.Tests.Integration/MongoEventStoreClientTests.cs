@@ -7,7 +7,7 @@ using MongoDB.Bson;
 using MongoDB.Driver;
 using NUnit.Framework;
 
-namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
+namespace DomainBlocks.EventStore.MongoDB.Generic.Tests.Integration;
 
 [TestFixture]
 public class MongoEventStoreClientTests : EventStoreClientTests

@@ -1,7 +1,7 @@
 using System.Linq.Expressions;
 using MongoDB.Driver;
 
-namespace DomainBlocks.EventStore.MongoDB;
+namespace DomainBlocks.EventStore.MongoDB.Generic;
 
 public static class EventDocumentSchema
 {

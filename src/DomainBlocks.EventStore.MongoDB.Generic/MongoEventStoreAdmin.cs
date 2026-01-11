@@ -1,6 +1,6 @@
 using MongoDB.Driver;
 
-namespace DomainBlocks.EventStore.MongoDB;
+namespace DomainBlocks.EventStore.MongoDB.Generic;
 
 public static class MongoEventStoreAdmin
 {

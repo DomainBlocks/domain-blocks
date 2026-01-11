@@ -1,7 +1,7 @@
 using DomainBlocks.EventStore.Abstractions;
 using MongoDB.Bson;
 
-namespace DomainBlocks.EventStore.MongoDB;
+namespace DomainBlocks.EventStore.MongoDB.Generic;
 
 public static class EventDocumentCodec
 {
