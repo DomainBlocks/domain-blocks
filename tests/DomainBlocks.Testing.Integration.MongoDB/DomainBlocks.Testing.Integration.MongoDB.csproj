@@ -6,8 +6,4 @@
     <PackageReference Include="NUnit" Version="4.4.0"/>
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\DomainBlocks.EventStore.MongoDB.Generic\DomainBlocks.EventStore.MongoDB.Generic.csproj" />
-  </ItemGroup>
-
 </Project>

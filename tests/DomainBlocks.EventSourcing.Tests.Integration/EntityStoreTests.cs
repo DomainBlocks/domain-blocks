@@ -3,7 +3,7 @@ using DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 using DomainBlocks.EventSourcing.Tests.Integration.EntityDefinitions;
 using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.MongoDB.Generic;
+using DomainBlocks.EventStore.MongoDB.Strict;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Testing.Integration.MongoDB;
@@ -36,15 +36,14 @@ public class EntityStoreTests
             MetadataSerializer = new BsonDocumentMetadataSerializer()
         };
 
-        var options = new MongoEventStoreClientOptions<IDomainEvent, EventDocument>
+        var options = new MongoEventStoreClientOptions<IDomainEvent>
         {
             CollectionOptions = EventStoreCollectionOptions.Default,
-            EventDocumentSchema = EventDocumentSchema.Default,
-            EventDocumentCodec = EventDocumentCodec.Create(EventCodec.Create(codecOptions))
+            EventCodec = EventCodec.Create(codecOptions)
         };
 
         _mongoClient = new MongoClient(MongoConnectionStrings.Default);
-        var eventStoreClient = new MongoEventStoreClient<IDomainEvent, EventDocument>(_mongoClient, options);
+        var eventStoreClient = new MongoEventStoreClient<IDomainEvent>(_mongoClient, options);
 
         var entityDefinitionProvider = new CompositeEntityDefinitionProvider<IDomainEvent>(
         [
@@ -56,10 +55,7 @@ public class EntityStoreTests
 
         _entityStore = new EntityStore<IDomainEvent>(eventStoreClient, entityDefinitionProvider);
 
-        await MongoEventStoreAdmin.EnsureIndexesAsync(
-            _mongoClient,
-            options.CollectionOptions,
-            options.EventDocumentSchema);
+        await MongoEventStoreAdmin.EnsureIndexesAsync(_mongoClient, options.CollectionOptions);
     }
 
     [OneTimeTearDown]
