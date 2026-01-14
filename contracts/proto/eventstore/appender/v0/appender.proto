@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package domainblocks.eventstore.api.appender.v0;
+
+option csharp_namespace = "DomainBlocks.EventStore.Api.Appender.V0";
+
+message AppendToStreamRequest {
+  string stream_id = 1;
+  repeated AppendEvent events = 2;
+  AppendToStreamOptions options = 3;
+}
+
+message AppendToStreamResponse{
+}
+
+message AppendToStreamOptions {
+  ExpectedStreamState expected_state = 1;
+}
+
+message ExpectedStreamState {
+  ExpectedStreamStateKind kind = 1;
+  optional uint64 version = 2;
+}
+
+enum ExpectedStreamStateKind {
+  EXPECTED_STREAM_STATE_KIND_UNSPECIFIED = 0;
+  EXPECTED_STREAM_STATE_KIND_ANY = 1;
+  EXPECTED_STREAM_STATE_KIND_STREAM_EXISTS = 2;
+  EXPECTED_STREAM_STATE_KIND_STREAM_DOES_NOT_EXIST = 3;
+  EXPECTED_STREAM_STATE_KIND_SPECIFIC_VERSION = 4;
+}
+
+message AppendEvent {
+  bytes event_data = 1;
+  bytes meta_data = 2;
+}
+
+service AppenderService {
+  rpc AppendToStream(AppendToStreamRequest) returns (AppendToStreamResponse);
+}
