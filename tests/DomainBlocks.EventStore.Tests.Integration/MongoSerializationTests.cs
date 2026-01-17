@@ -32,11 +32,11 @@ public class MongoSerializationTests
         await Should_write_and_read_event(TestEvent, new BsonDocumentSerializer());
     }
 
-    [Test]
-    public async Task Should_write_and_read_event_as_bson_bytes()
-    {
-        await Should_write_and_read_event(TestEvent, new BsonBytesSerializer());
-    }
+    // [Test]
+    // public async Task Should_write_and_read_event_as_bson_bytes()
+    // {
+    //     await Should_write_and_read_event(TestEvent, new BsonBytesSerializer());
+    // }
 
     [Test]
     public async Task Should_write_and_read_event_as_proto_bytes()

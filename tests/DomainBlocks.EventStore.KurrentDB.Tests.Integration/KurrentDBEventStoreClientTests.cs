@@ -13,6 +13,8 @@ public class KurrentDBEventStoreClientTests : EventStoreClientTests
     private KurrentDBClient _kurrentClient = null!;
     private KurrentDBEventStoreClient<IDomainEvent> _client = null!;
 
+    protected override IEventStoreClient<IDomainEvent> Client => _client;
+
     [OneTimeSetUp]
     public void OneTimeSetUp()
     {
@@ -35,6 +37,4 @@ public class KurrentDBEventStoreClientTests : EventStoreClientTests
     {
         await _kurrentClient.DisposeAsync();
     }
-
-    protected override IEventStoreClient<IDomainEvent> Client => _client;
 }

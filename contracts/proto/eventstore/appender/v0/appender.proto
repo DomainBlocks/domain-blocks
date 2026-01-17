@@ -6,11 +6,23 @@ option csharp_namespace = "DomainBlocks.EventStore.Api.Appender.V0";
 
 message AppendToStreamRequest {
   string stream_id = 1;
-  repeated AppendEvent events = 2;
+  AppendEventBatch batch = 2;
   AppendToStreamOptions options = 3;
 }
 
 message AppendToStreamResponse{
+}
+
+message AppendEventBatch {
+  repeated AppendEvent events = 1;
+  string event_content_type = 2;
+  string metadata_content_type = 3;
+}
+
+message AppendEvent {
+  string eventName = 1;
+  bytes event_data = 2;
+  bytes metadata = 3;
 }
 
 message AppendToStreamOptions {
@@ -28,11 +40,6 @@ enum ExpectedStreamStateKind {
   EXPECTED_STREAM_STATE_KIND_STREAM_EXISTS = 2;
   EXPECTED_STREAM_STATE_KIND_STREAM_DOES_NOT_EXIST = 3;
   EXPECTED_STREAM_STATE_KIND_SPECIFIC_VERSION = 4;
-}
-
-message AppendEvent {
-  bytes event_data = 1;
-  bytes meta_data = 2;
 }
 
 service AppenderService {

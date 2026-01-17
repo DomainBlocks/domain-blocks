@@ -15,6 +15,8 @@ public class GenericMongoEventStoreClientTests : EventStoreClientTests
     private MongoClient _mongoClient = null!;
     private MongoEventStoreClient<IDomainEvent, EventDocument> _client = null!;
 
+    protected override IEventStoreClient<IDomainEvent> Client => _client;
+
     [OneTimeSetUp]
     public async Task OneTimeSetup()
     {
@@ -46,6 +48,4 @@ public class GenericMongoEventStoreClientTests : EventStoreClientTests
     {
         _mongoClient.Dispose();
     }
-
-    protected override IEventStoreClient<IDomainEvent> Client => _client;
 }
