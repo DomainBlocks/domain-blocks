@@ -31,7 +31,7 @@ public class EventStoreClientTests
             .Build();
 
         var readEventTypeMap = new EventTypeMapBuilder()
-            .MapReadType<LimitOrderEvent>(
+            .Read.MapType<LimitOrderEvent>(
                 nameof(LimitOrderSubmitted),
                 nameof(LimitOrderAmended),
                 nameof(LimitOrderFilled))

@@ -1,5 +1,3 @@
-using System.Collections.Frozen;
-
 namespace DomainBlocks.EventStore.TypeMapping;
 
 /// <summary>
@@ -14,26 +12,14 @@ namespace DomainBlocks.EventStore.TypeMapping;
 /// deserialize events with a shared structure into a common CLR type.
 /// </para>
 /// </remarks>
-public sealed class EventTypeMap
+public class EventTypeMap
 {
-    private readonly FrozenDictionary<Type, string> _writeMap;
-    private readonly FrozenDictionary<string, Type> _readMap;
-
-    internal EventTypeMap(EventTypeToNameMappingSet writeMappings, EventNameToTypeMappingSet readMappings)
+    internal EventTypeMap(AppendEventTypeMappingSet appendMappings, ReadEventTypeMappingSet readMappings)
     {
-        _writeMap = writeMappings.ToFrozenDictionary();
-        _readMap = readMappings.ToFrozenDictionary();
+        Append = new AppendEventTypeMap(appendMappings);
+        Read = new ReadEventTypeMap(readMappings);
     }
 
-    /// <summary>
-    /// Gets the event name associated with an event type.
-    /// </summary>
-    public string GetEventName(Type eventType) => _writeMap.GetValueOrDefault(eventType) ??
-                                                  throw new EventTypeToNameMappingNotFoundException(eventType);
-
-    /// <summary>
-    /// Gets the event type associated with an event name.
-    /// </summary>
-    public Type GetEventType(string eventName) => _readMap.GetValueOrDefault(eventName) ??
-                                                  throw new EventNameToTypeMappingNotFoundException(eventName);
+    public AppendEventTypeMap Append { get; }
+    public ReadEventTypeMap Read { get; }
 }

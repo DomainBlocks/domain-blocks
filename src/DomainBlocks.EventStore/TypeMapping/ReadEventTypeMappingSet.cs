@@ -3,13 +3,13 @@ using System.Collections.Immutable;
 
 namespace DomainBlocks.EventStore.TypeMapping;
 
-internal class EventNameToTypeMappingSet
+internal class ReadEventTypeMappingSet
 {
-    private ImmutableHashSet<EventNameToTypeMapping> _mappings = [];
+    private ImmutableHashSet<ReadEventTypeMapping> _mappings = [];
 
     public void Add<TEvent>(params string[] eventNames)
     {
-        var newMappings = eventNames.Select(x => new EventNameToTypeMapping(x, typeof(TEvent)));
+        var newMappings = eventNames.Select(x => new ReadEventTypeMapping(x, typeof(TEvent)));
         var newMappingSet = _mappings.Union(newMappings);
         EnsureManyToOne(newMappingSet);
         _mappings = newMappingSet;
@@ -20,7 +20,7 @@ internal class EventNameToTypeMappingSet
         return _mappings.ToFrozenDictionary(x => x.EventName, x => x.EventType);
     }
 
-    private static void EnsureManyToOne(ImmutableHashSet<EventNameToTypeMapping> mappings)
+    private static void EnsureManyToOne(ImmutableHashSet<ReadEventTypeMapping> mappings)
     {
         var duplicateTypes = mappings
             .GroupBy(x => x.EventName)

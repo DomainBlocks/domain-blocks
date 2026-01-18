@@ -39,11 +39,11 @@ public sealed class EventEncoder<TEvent, TEventData, TMetadata> : IEventEncoder<
         if (_contractMappers.TryGetValue(@event.GetType(), out var contractMapper))
         {
             contract = contractMapper.ToContract(@event);
-            eventName = _eventTypeMap.GetEventName(contractMapper.ContractType);
+            eventName = _eventTypeMap.Append.GetEventName(contractMapper.ContractType);
         }
         else
         {
-            eventName = _eventTypeMap.GetEventName(@event.GetType());
+            eventName = _eventTypeMap.Append.GetEventName(@event.GetType());
         }
 
         var serializedEventData = _eventSerializer.Serialize(contract ?? @event);

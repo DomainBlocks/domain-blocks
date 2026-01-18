@@ -52,7 +52,7 @@ public sealed class EventCodec<TEvent, TEventData, TMetadata> : IEventCodec<TEve
 
     public DecodedEvent<TEvent> Decode(string eventName, TEventData eventData, TMetadata? metadata)
     {
-        var eventType = _eventTypeMap.GetEventType(eventName);
+        var eventType = _eventTypeMap.Read.GetEventType(eventName);
         var deserializedEvent = _eventSerializer.Deserialize(eventData, eventType);
 
         if (_contractMappersByContractType.TryGetValue(deserializedEvent.GetType(), out var contractMapper))

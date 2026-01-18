@@ -31,6 +31,8 @@ public sealed class ProtobufBytesSerializer :
 
     private static object Deserialize(ReadOnlySpan<byte> value, Type type)
     {
+        ArgumentNullException.ThrowIfNull(type);
+
         if (!typeof(IMessage).IsAssignableFrom(type))
             throw new ArgumentException("Type must implement IMessage.", nameof(type));
 
