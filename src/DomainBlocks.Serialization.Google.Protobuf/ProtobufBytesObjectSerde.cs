@@ -3,13 +3,11 @@ using Google.Protobuf;
 
 namespace DomainBlocks.Serialization.Google.Protobuf;
 
-public sealed class ProtobufBytesSerializer :
-    IObjectSerializer<byte[]>,
-    IObjectSerializer<ReadOnlyMemory<byte>>,
-    IContentTypeSource
+public sealed class ProtobufBytesObjectSerde :
+    IObjectSerde<byte[]>,
+    IObjectSerde<ReadOnlyMemory<byte>>,
+    IByteObjectDeserializer
 {
-    public string ContentType => "application/protobuf";
-
     public byte[] Serialize(object value)
     {
         ArgumentNullException.ThrowIfNull(value);
@@ -22,14 +20,7 @@ public sealed class ProtobufBytesSerializer :
         return ms.ToArray();
     }
 
-    public object Deserialize(byte[] value, Type type) => Deserialize(value.AsSpan(), type);
-
-    ReadOnlyMemory<byte> IObjectSerializer<ReadOnlyMemory<byte>>.Serialize(object value) => Serialize(value);
-
-    object IObjectSerializer<ReadOnlyMemory<byte>>.Deserialize(ReadOnlyMemory<byte> value, Type type) =>
-        Deserialize(value.Span, type);
-
-    private static object Deserialize(ReadOnlySpan<byte> value, Type type)
+    public object Deserialize(ReadOnlySpan<byte> value, Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
 
@@ -40,4 +31,6 @@ public sealed class ProtobufBytesSerializer :
 
         return parser.ParseFrom(value);
     }
+
+    ReadOnlyMemory<byte> IObjectSerializer<ReadOnlyMemory<byte>>.Serialize(object value) => Serialize(value);
 }

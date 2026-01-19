@@ -40,15 +40,15 @@ public class EventStoreClientTests
         var writeCodecOptions = new EventCodecOptions<object, BsonValue, BsonValue>
         {
             TypeMap = writeEventTypeMap,
-            EventSerializer = new BsonDocumentSerializer(),
-            MetadataSerializer = new BsonDocumentMetadataSerializer()
+            EventSerde = new BsonDocumentObjectSerde(),
+            MetadataSerde = new BsonDocumentMetadataSerde()
         };
 
         var readCodecOptions = new EventCodecOptions<object, BsonValue, BsonValue>
         {
             TypeMap = readEventTypeMap,
-            EventSerializer = new BsonDocumentSerializer(),
-            MetadataSerializer = new BsonDocumentMetadataSerializer()
+            EventSerde = new BsonDocumentObjectSerde(),
+            MetadataSerde = new BsonDocumentMetadataSerde()
         };
 
         var collectionOptions = EventStoreCollectionOptions.Default;

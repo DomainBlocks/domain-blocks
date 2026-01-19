@@ -18,18 +18,24 @@ public class KurrentDBEventStoreClientTests : EventStoreClientTests
     [OneTimeSetUp]
     public void OneTimeSetUp()
     {
+        var eventTypeMap = new EventTypeMapBuilder()
+            .MapType<TestEvent>()
+            .Build();
+
         var codecOptions = new EventCodecOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
-            TypeMap = new EventTypeMapBuilder().MapType<TestEvent>().Build(),
-            EventSerializer = new SystemTextJsonBytesSerializer(),
-            MetadataSerializer = new SystemTextJsonBytesMetadataSerializer()
+            TypeMap = eventTypeMap,
+            EventSerde = new JsonUtf8BytesObjectSerde(),
+            MetadataSerde = new JsonUtf8BytesMetadataSerde()
         };
 
         var codec = EventCodec.Create(codecOptions);
 
         const string connectionString = "kurrentdb://admin:changeit@localhost:2113?tls=false&tlsVerifyCert=false";
+
         _kurrentClient = new KurrentDBClient(KurrentDBClientSettings.Create(connectionString));
-        _client = new KurrentDBEventStoreClient<IDomainEvent>(_kurrentClient, codec);
+
+        _client = new KurrentDBEventStoreClient<IDomainEvent>(_kurrentClient, codec.Encoder, codec.Decoder);
     }
 
     [OneTimeTearDown]

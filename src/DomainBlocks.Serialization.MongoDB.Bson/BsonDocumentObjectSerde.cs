@@ -4,7 +4,7 @@ using MongoDB.Bson.Serialization;
 
 namespace DomainBlocks.Serialization.MongoDB.Bson;
 
-public sealed class BsonDocumentSerializer : IObjectSerializer<BsonDocument>, IObjectSerializer<BsonValue>
+public sealed class BsonDocumentObjectSerde : IObjectSerde<BsonDocument>, IObjectSerde<BsonValue>
 {
     public BsonDocument Serialize(object value) => value.ToBsonDocument(value.GetType());
 
@@ -12,6 +12,6 @@ public sealed class BsonDocumentSerializer : IObjectSerializer<BsonDocument>, IO
 
     BsonValue IObjectSerializer<BsonValue>.Serialize(object value) => Serialize(value);
 
-    object IObjectSerializer<BsonValue>.Deserialize(BsonValue value, Type type) =>
+    object IObjectDeserializer<BsonValue>.Deserialize(BsonValue value, Type type) =>
         Deserialize(value.AsBsonDocument, type);
 }

@@ -4,7 +4,7 @@ using MongoDB.Bson;
 
 namespace DomainBlocks.Serialization.MongoDB.Bson;
 
-public sealed class BsonDocumentMetadataSerializer : IMetadataSerializer<BsonDocument>, IMetadataSerializer<BsonValue>
+public sealed class BsonDocumentMetadataSerde : IMetadataSerde<BsonDocument>, IMetadataSerde<BsonValue>
 {
     public BsonDocument Serialize(IReadOnlyDictionary<string, string> metadata)
     {
@@ -24,7 +24,10 @@ public sealed class BsonDocumentMetadataSerializer : IMetadataSerializer<BsonDoc
     BsonValue IMetadataSerializer<BsonValue>.Serialize(IReadOnlyDictionary<string, string> metadata) =>
         Serialize(metadata);
 
-    public IReadOnlyDictionary<string, string> Deserialize(BsonValue metadata) => !metadata.IsBsonNull
-        ? Deserialize(metadata.AsBsonDocument)
-        : FrozenDictionary<string, string>.Empty;
+    IReadOnlyDictionary<string, string> IMetadataDeserializer<BsonValue>.Deserialize(BsonValue metadata)
+    {
+        return !metadata.IsBsonNull
+            ? Deserialize(metadata.AsBsonDocument)
+            : FrozenDictionary<string, string>.Empty;
+    }
 }

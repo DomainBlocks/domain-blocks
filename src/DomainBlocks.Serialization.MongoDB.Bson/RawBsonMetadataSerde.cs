@@ -4,7 +4,7 @@ using MongoDB.Bson.Serialization;
 
 namespace DomainBlocks.Serialization.MongoDB.Bson;
 
-public sealed class RawBsonMetadataSerializer : IMetadataSerializer<byte[]>
+public sealed class RawBsonMetadataSerde : IMetadataSerde<byte[]>
 {
     public byte[] Serialize(IReadOnlyDictionary<string, string> metadata)
     {

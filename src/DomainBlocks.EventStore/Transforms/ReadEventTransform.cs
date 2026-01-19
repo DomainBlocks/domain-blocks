@@ -1,6 +1,6 @@
 using DomainBlocks.EventStore.Abstractions;
 
-namespace DomainBlocks.EventStore.Read;
+namespace DomainBlocks.EventStore.Transforms;
 
 public abstract class ReadEventTransform<TEventBase, TSourceEvent> : IReadEventTransform<TEventBase>
     where TEventBase : class

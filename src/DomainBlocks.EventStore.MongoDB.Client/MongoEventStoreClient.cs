@@ -10,20 +10,20 @@ namespace DomainBlocks.EventStore.MongoDB.Client;
 public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEvent : notnull
 {
     private readonly Api.Appender.V0.AppenderService.AppenderServiceClient _appenderClient;
-    private readonly IEventEncoderFactory<TEvent, byte[], byte[]> _eventEncoderFactory;
+    private readonly IEventEncoder<TEvent, byte[], byte[]> _eventEncoder;
     private readonly IEventDecoder<TEvent, BsonValue, BsonValue> _eventDecoder;
     private readonly IMongoCollection<Schema.StreamCommit> _commitsCollection;
 
     public MongoEventStoreClient(
         IMongoClient mongoClient,
         Api.Appender.V0.AppenderService.AppenderServiceClient appenderClient,
-        IEventEncoderFactory<TEvent, byte[], byte[]> eventEncoderFactory,
+        IEventEncoder<TEvent, byte[], byte[]> eventEncoder,
         IEventDecoder<TEvent, BsonValue, BsonValue> eventDecoder)
     {
         var db = mongoClient.GetDatabase("domainblocks");
 
         _appenderClient = appenderClient;
-        _eventEncoderFactory = eventEncoderFactory;
+        _eventEncoder = eventEncoder;
         _eventDecoder = eventDecoder;
         _commitsCollection = db.GetCollection<Schema.StreamCommit>("es_stream_commits");
     }
@@ -165,11 +165,11 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
             MetadataContentType = "application/bson"
         };
 
-        var encoder = _eventEncoderFactory.CreateEncoder();
+        var encodingSession = _eventEncoder.CreateSession();
 
         var grpcEvents = events.Select(x =>
         {
-            var (eventName, eventData, metadata) = encoder.Encode(x);
+            var (eventName, eventData, metadata) = encodingSession.Encode(x);
 
             return new Api.Appender.V0.AppendEvent
             {

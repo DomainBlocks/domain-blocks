@@ -3,9 +3,10 @@ using DomainBlocks.Serialization.Abstractions;
 
 namespace DomainBlocks.Serialization.SystemTextJson;
 
-public sealed class SystemTextJsonBytesSerializer(JsonSerializerOptions? options = null) :
-    IObjectSerializer<byte[]>,
-    IObjectSerializer<ReadOnlyMemory<byte>>
+public sealed class JsonUtf8BytesObjectSerde(JsonSerializerOptions? options = null) :
+    IObjectSerde<byte[]>,
+    IObjectSerde<ReadOnlyMemory<byte>>,
+    IByteObjectDeserializer
 {
     public byte[] Serialize(object value)
     {
@@ -19,14 +20,7 @@ public sealed class SystemTextJsonBytesSerializer(JsonSerializerOptions? options
         }
     }
 
-    public object Deserialize(byte[] value, Type type) => Deserialize(value.AsSpan(), type);
-
-    ReadOnlyMemory<byte> IObjectSerializer<ReadOnlyMemory<byte>>.Serialize(object value) => Serialize(value);
-
-    object IObjectSerializer<ReadOnlyMemory<byte>>.Deserialize(ReadOnlyMemory<byte> value, Type type) =>
-        Deserialize(value.Span, type);
-
-    private object Deserialize(ReadOnlySpan<byte> value, Type type)
+    public object Deserialize(ReadOnlySpan<byte> value, Type type)
     {
         object? result;
 
@@ -41,4 +35,6 @@ public sealed class SystemTextJsonBytesSerializer(JsonSerializerOptions? options
 
         return result ?? throw ObjectSerializationException.DeserializationReturnedNull(type);
     }
+
+    ReadOnlyMemory<byte> IObjectSerializer<ReadOnlyMemory<byte>>.Serialize(object value) => Serialize(value);
 }

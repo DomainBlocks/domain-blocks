@@ -1,7 +1,7 @@
 using System.Collections.Frozen;
 using DomainBlocks.EventStore.Abstractions;
 
-namespace DomainBlocks.EventStore.Read;
+namespace DomainBlocks.EventStore.Transforms;
 
 public static class ReadEventTransformExtensions
 {

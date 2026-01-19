@@ -1,3 +1,4 @@
+using DomainBlocks.EventStore.ContractMapping;
 using DomainBlocks.EventStore.KurrentDB;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.Google.Protobuf;
@@ -23,13 +24,13 @@ public class EventContractMapperTests
         var codecOptions = new EventCodecOptions<object, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
             TypeMap = eventTypeMap,
-            EventSerializer = new ProtobufBytesSerializer(),
-            MetadataSerializer = new SystemTextJsonBytesMetadataSerializer(),
+            EventSerde = new ProtobufBytesObjectSerde(),
+            MetadataSerde = new JsonUtf8BytesMetadataSerde(),
             ContractMappers = [new UserCreatedProtoMapper()]
         };
 
         var codec = EventCodec.Create(codecOptions);
-        var client = new KurrentDBEventStoreClient<object>(kurrentClient, codec);
+        var client = new KurrentDBEventStoreClient<object>(kurrentClient, codec.Encoder, codec.Decoder);
 
         var originalEvent = new UserCreated
         {

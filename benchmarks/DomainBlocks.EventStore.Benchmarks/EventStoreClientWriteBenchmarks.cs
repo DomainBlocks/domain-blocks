@@ -11,8 +11,8 @@ public class EventStoreClientWriteBenchmarks
 {
     private const string StreamId = "test-stream";
 
-    private static readonly SystemTextJsonBytesSerializer EventSerializer = new();
-    private static readonly SystemTextJsonBytesMetadataSerializer MetadataSerializer = new();
+    private static readonly JsonUtf8BytesObjectSerde EventSerde = new();
+    private static readonly JsonUtf8BytesMetadataSerde MetadataSerde = new();
 
     private FakeKurrentDBEventStoreClient<IDomainEvent> _client = null!;
     private AppendEvent<IDomainEvent>[] _appendEvents = null!;
@@ -36,12 +36,12 @@ public class EventStoreClientWriteBenchmarks
         var codecOptions = new EventCodecOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
             TypeMap = typeMap,
-            EventSerializer = EventSerializer,
-            MetadataSerializer = MetadataSerializer,
+            EventSerde = EventSerde,
+            MetadataSerde = MetadataSerde,
             MetadataContributors = [new MetadataContributor(EventCount)]
         };
 
-        var eventCodec = new EventCodec<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>(codecOptions);
+        var eventCodec = EventCodec.Create(codecOptions);
 
         _client = new FakeKurrentDBEventStoreClient<IDomainEvent>(eventCodec, consumer, SharedMetadataBuffer);
 
@@ -81,7 +81,7 @@ public class EventStoreClientWriteBenchmarks
     }
 
     private sealed class FakeKurrentDBEventStoreClient<TEvent>(
-        IEventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec,
+        EventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec,
         Consumer consumer,
         bool sharedMetadataBuffer) :
         IEventStoreClient<TEvent>
@@ -95,11 +95,11 @@ public class EventStoreClientWriteBenchmarks
         {
             if (sharedMetadataBuffer)
             {
-                var eventEncoder = eventCodec.CreateEncoder();
+                var encodingSession = eventCodec.Encoder.CreateSession();
 
                 foreach (var e in events)
                 {
-                    var (eventName, eventData, metadata) = eventEncoder.Encode(e);
+                    var (eventName, eventData, metadata) = encodingSession.Encode(e);
                     consumer.Consume(eventName);
                     consumer.Consume(eventData);
                     consumer.Consume(metadata);
@@ -109,7 +109,7 @@ public class EventStoreClientWriteBenchmarks
             {
                 foreach (var e in events)
                 {
-                    var (eventName, eventData, metadata) = eventCodec.CreateEncoder().Encode(e);
+                    var (eventName, eventData, metadata) = eventCodec.Encoder.CreateSession().Encode(e);
                     consumer.Consume(eventName);
                     consumer.Consume(eventData);
                     consumer.Consume(metadata);

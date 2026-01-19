@@ -32,8 +32,8 @@ public class EntityStoreTests
         var codecOptions = new EventCodecOptions<IDomainEvent, BsonValue, BsonValue>
         {
             TypeMap = eventTypeMap,
-            EventSerializer = new BsonDocumentSerializer(),
-            MetadataSerializer = new BsonDocumentMetadataSerializer()
+            EventSerde = new BsonDocumentObjectSerde(),
+            MetadataSerde = new BsonDocumentMetadataSerde()
         };
 
         var options = new MongoEventStoreClientOptions<IDomainEvent>

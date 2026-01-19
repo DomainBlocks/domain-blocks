@@ -4,7 +4,7 @@ using MongoDB.Bson;
 namespace DomainBlocks.EventStore.MongoDB.Generic;
 
 public sealed class EventDocumentEncoder<TEvent>(
-    IEventEncoder<TEvent, BsonValue, BsonValue> eventEncoder) :
+    IEventEncodingSession<TEvent, BsonValue, BsonValue> encodingSession) :
     IEventDocumentEncoder<TEvent, EventDocument>
     where TEvent : notnull
 {
@@ -14,7 +14,7 @@ public sealed class EventDocumentEncoder<TEvent>(
         StreamVersion streamVersion,
         DateTime createdAtUtc)
     {
-        var (eventName, eventData, metadata) = eventEncoder.Encode(@event);
+        var (eventName, eventData, metadata) = encodingSession.Encode(@event);
 
         return new EventDocument
         {

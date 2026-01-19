@@ -4,7 +4,7 @@ using MongoDB.Bson.Serialization;
 
 namespace DomainBlocks.Serialization.MongoDB.Bson;
 
-public sealed class RawBsonObjectSerializer : IObjectSerializer<byte[]>, IContentTypeSource
+public sealed class RawBsonObjectSerde : IObjectSerde<byte[]>, IContentTypeSource
 {
     public string ContentType => "application/bson";
 

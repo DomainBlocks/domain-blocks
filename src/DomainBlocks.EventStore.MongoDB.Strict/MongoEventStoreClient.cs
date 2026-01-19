@@ -11,7 +11,7 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
 
     private readonly IMongoCollection<StreamCommit> _commitsCollection;
     private readonly SequenceAllocator _sequenceAllocator;
-    private readonly IEventCodec<TEvent, BsonValue, BsonValue> _eventCodec;
+    private readonly EventCodec<TEvent, BsonValue, BsonValue> _eventCodec;
 
     public MongoEventStoreClient(IMongoClient mongoClient, MongoEventStoreClientOptions<TEvent> options)
     {
@@ -153,7 +153,7 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
                             continue;
                     }
 
-                    var (@event, metadata) = _eventCodec.Decode(
+                    var (@event, metadata) = _eventCodec.Decoder.Decode(
                         eventDoc.EventName,
                         eventDoc.EventData,
                         eventDoc.Metadata);
@@ -210,11 +210,11 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
 
     private IEnumerable<EventDocument> ToEventDocuments(IEnumerable<AppendEvent<TEvent>> events)
     {
-        var encoder = _eventCodec.CreateEncoder();
+        var encodingSession = _eventCodec.Encoder.CreateSession();
 
         foreach (var @event in events)
         {
-            var (eventName, eventData, metadata) = encoder.Encode(@event);
+            var (eventName, eventData, metadata) = encodingSession.Encode(@event);
 
             yield return new EventDocument
             {

@@ -3,7 +3,7 @@ using DomainBlocks.Serialization.Abstractions;
 
 namespace DomainBlocks.Serialization.SystemTextJson;
 
-public sealed class SystemTextJsonStringSerializer(JsonSerializerOptions? options = null) : IObjectSerializer<string>
+public sealed class JsonObjectSerde(JsonSerializerOptions? options = null) : IObjectSerde<string>
 {
     public string Serialize(object value)
     {

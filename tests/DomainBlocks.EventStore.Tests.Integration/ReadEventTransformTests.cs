@@ -1,6 +1,6 @@
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB.Generic;
-using DomainBlocks.EventStore.Read;
+using DomainBlocks.EventStore.Transforms;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Testing.Integration.MongoDB;
@@ -61,8 +61,8 @@ public class ReadEventTransformTests
         var codecOptions = new EventCodecOptions<object, BsonValue, BsonValue>
         {
             TypeMap = eventTypeMap,
-            EventSerializer = new BsonDocumentSerializer(),
-            MetadataSerializer = new BsonDocumentMetadataSerializer()
+            EventSerde = new BsonDocumentObjectSerde(),
+            MetadataSerde = new BsonDocumentMetadataSerde()
         };
 
         var options = new MongoEventStoreClientOptions<object, EventDocument>

@@ -5,9 +5,9 @@ using Shouldly;
 
 namespace DomainBlocks.Serialization.Google.Protobuf.Tests;
 
-public class ProtobufBytesSerializerTest
+public class ProtobufBytesObjectSerdeTest
 {
-    private readonly ProtobufBytesSerializer _bytesSerializer = new();
+    private readonly ProtobufBytesObjectSerde _serde = new();
 
     [Test]
     public void Should_serialize_and_deserialize()
@@ -18,8 +18,8 @@ public class ProtobufBytesSerializerTest
             Name = "Alice"
         };
 
-        var bytes = _bytesSerializer.Serialize(original);
-        var deserialized = (Proto.UserCreated?)_bytesSerializer.Deserialize(bytes, typeof(Proto.UserCreated));
+        var bytes = _serde.Serialize(original);
+        var deserialized = (Proto.UserCreated?)_serde.Deserialize(bytes, typeof(Proto.UserCreated));
 
         deserialized.ShouldNotBeNull();
         deserialized.UserId.ShouldBe(original.UserId);
@@ -31,7 +31,7 @@ public class ProtobufBytesSerializerTest
     {
         var nonMessage = new { Id = 1 };
 
-        Should.Throw<ArgumentException>(() => _bytesSerializer.Serialize(nonMessage));
+        Should.Throw<ArgumentException>(() => _serde.Serialize(nonMessage));
     }
 
     [Test]
@@ -39,7 +39,7 @@ public class ProtobufBytesSerializerTest
     {
         var bytes = "junk"u8.ToArray();
 
-        Should.Throw<ArgumentException>(() => _bytesSerializer.Deserialize(bytes, typeof(string)));
+        Should.Throw<ArgumentException>(() => _serde.Deserialize(bytes, typeof(string)));
     }
 
     [Test]
@@ -47,13 +47,13 @@ public class ProtobufBytesSerializerTest
     {
         var bytes = "junk"u8.ToArray();
 
-        Should.Throw<ArgumentException>(() => _bytesSerializer.Deserialize(bytes, typeof(FakeWithoutParser)));
+        Should.Throw<ArgumentException>(() => _serde.Deserialize(bytes, typeof(FakeWithoutParser)));
     }
 
     [Test]
     public void Serialize_should_throw_when_value_is_null()
     {
-        Should.Throw<ArgumentNullException>(() => _bytesSerializer.Serialize(null!));
+        Should.Throw<ArgumentNullException>(() => _serde.Serialize(null!));
     }
 
     [Test]
@@ -61,7 +61,7 @@ public class ProtobufBytesSerializerTest
     {
         var bytes = new byte[] { 0x01, 0x02 };
 
-        Should.Throw<ArgumentNullException>(() => _bytesSerializer.Deserialize(bytes, null!));
+        Should.Throw<ArgumentNullException>(() => _serde.Deserialize(bytes, null!));
     }
 
     // Dummy type without a Parser property to simulate error

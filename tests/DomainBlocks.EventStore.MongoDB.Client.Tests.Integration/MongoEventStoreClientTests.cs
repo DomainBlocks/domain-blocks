@@ -29,25 +29,25 @@ public class MongoEventStoreClientTests : EventStoreClientTests
             .MapType<TestEvent>()
             .Build();
 
-        var writeCodecOptions = new EventCodecOptions<IDomainEvent, byte[], byte[]>
+        var encoderOptions = new EventEncoderOptions<IDomainEvent, byte[], byte[]>
         {
-            TypeMap = eventTypeMap,
-            EventSerializer = new RawBsonObjectSerializer(),
-            MetadataSerializer = new RawBsonMetadataSerializer()
+            TypeMap = eventTypeMap.Append,
+            EventSerializer = new RawBsonObjectSerde(),
+            MetadataSerializer = new RawBsonMetadataSerde()
         };
 
-        var readCodecOptions = new EventCodecOptions<IDomainEvent, BsonValue, BsonValue>
+        var decoderOptions = new EventDecoderOptions<IDomainEvent, BsonValue, BsonValue>
         {
-            TypeMap = eventTypeMap,
-            EventSerializer = new BsonDocumentSerializer(),
-            MetadataSerializer = new BsonDocumentMetadataSerializer()
+            TypeMap = eventTypeMap.Read,
+            EventDeserializer = new BsonDocumentObjectSerde(),
+            MetadataDeserializer = new BsonDocumentMetadataSerde()
         };
 
-        var writeCodec = EventCodec.Create(writeCodecOptions);
-        var readCodec = EventCodec.Create(readCodecOptions);
+        var encoderFactory = EventEncoder.CreateFactory(encoderOptions);
+        var decoder = EventDecoder.Create(decoderOptions);
 
         _mongoClient = new MongoClient(MongoConnectionStrings.Default);
-        _client = new MongoEventStoreClient<IDomainEvent>(_mongoClient, appenderClient, writeCodec, readCodec);
+        _client = new MongoEventStoreClient<IDomainEvent>(_mongoClient, appenderClient, encoderFactory, decoder);
 
         await MongoEventStoreAdmin.EnsureIndexesAsync(_mongoClient, EventStoreCollectionOptions.Default);
     }

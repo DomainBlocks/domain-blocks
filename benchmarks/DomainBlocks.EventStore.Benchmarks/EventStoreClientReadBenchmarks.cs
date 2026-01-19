@@ -12,8 +12,8 @@ public class EventStoreClientReadBenchmarks
 {
     private const string StreamId = "test-stream";
 
-    private static readonly SystemTextJsonBytesSerializer EventSerializer = new();
-    private static readonly SystemTextJsonBytesMetadataSerializer MetadataSerializer = new();
+    private static readonly JsonUtf8BytesObjectSerde EventSerde = new();
+    private static readonly JsonUtf8BytesMetadataSerde MetadataSerde = new();
 
     private FakeKurrentDBEventStoreClient<IDomainEvent> _client = null!;
     private ReadStreamOptions _readStreamOptions = null!;
@@ -37,11 +37,11 @@ public class EventStoreClientReadBenchmarks
         var codecOptions = new EventCodecOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
             TypeMap = typeMap,
-            EventSerializer = EventSerializer,
-            MetadataSerializer = MetadataSerializer
+            EventSerde = EventSerde,
+            MetadataSerde = MetadataSerde
         };
 
-        var eventCodec = new EventCodec<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>(codecOptions);
+        var eventCodec = EventCodec.Create(codecOptions);
         _client = new FakeKurrentDBEventStoreClient<IDomainEvent>(kurrentEvents, eventCodec);
         _readStreamOptions = new ReadStreamOptions { IncludeMetadata = IncludeMetadata };
     }
@@ -81,8 +81,8 @@ public class EventStoreClientReadBenchmarks
                 { "Value2", $"value2-{i}" },
             };
 
-            var serializedEvent = EventSerializer.Serialize(@event);
-            var serializedMetadata = MetadataSerializer.Serialize(metadata);
+            var serializedEvent = EventSerde.Serialize(@event);
+            var serializedMetadata = MetadataSerde.Serialize(metadata);
 
             var eventRecord = new EventRecord(
                 StreamId,
@@ -109,7 +109,7 @@ public class EventStoreClientReadBenchmarks
 
     private sealed class FakeKurrentDBEventStoreClient<TEvent>(
         ResolvedEvent[] kurrentEvents,
-        IEventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec) :
+        EventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec) :
         IEventStoreClient<TEvent>
         where TEvent : notnull
     {
@@ -137,7 +137,10 @@ public class EventStoreClientReadBenchmarks
                 var originalEventRecord = resolvedEvent.OriginalEvent;
                 var metadataBytes = options.IncludeMetadata ? eventRecord.Metadata : default;
 
-                var (@event, metadata) = eventCodec.Decode(eventRecord.EventType, eventRecord.Data, metadataBytes);
+                var (@event, metadata) = eventCodec.Decoder.Decode(
+                    eventRecord.EventType,
+                    eventRecord.Data,
+                    metadataBytes);
 
                 var context = new ReadEventContext(
                     streamId,
