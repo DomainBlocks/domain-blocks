@@ -21,9 +21,6 @@ public class EventStoreClientWriteBenchmarks
     [Params(10_000)]
     public int EventCount { get; set; }
 
-    [Params(false, true)]
-    public bool SharedMetadataBuffer { get; set; }
-
     [GlobalSetup]
     public void GlobalSetup()
     {
@@ -43,7 +40,7 @@ public class EventStoreClientWriteBenchmarks
 
         var eventCodec = EventCodec.Create(codecOptions);
 
-        _client = new FakeKurrentDBEventStoreClient<IDomainEvent>(eventCodec, consumer, SharedMetadataBuffer);
+        _client = new FakeKurrentDBEventStoreClient<IDomainEvent>(eventCodec, consumer);
 
         _appendEvents = CreateAppendEvents(EventCount);
     }
@@ -82,8 +79,7 @@ public class EventStoreClientWriteBenchmarks
 
     private sealed class FakeKurrentDBEventStoreClient<TEvent>(
         EventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec,
-        Consumer consumer,
-        bool sharedMetadataBuffer) :
+        Consumer consumer) :
         IEventStoreClient<TEvent>
         where TEvent : notnull
     {
@@ -93,27 +89,11 @@ public class EventStoreClientWriteBenchmarks
             AppendToStreamOptions? options = null,
             CancellationToken cancellationToken = default)
         {
-            if (sharedMetadataBuffer)
+            foreach (var (eventName, eventData, metadata) in eventCodec.Encoder.Encode(events))
             {
-                var encodingSession = eventCodec.Encoder.CreateSession();
-
-                foreach (var e in events)
-                {
-                    var (eventName, eventData, metadata) = encodingSession.Encode(e);
-                    consumer.Consume(eventName);
-                    consumer.Consume(eventData);
-                    consumer.Consume(metadata);
-                }
-            }
-            else
-            {
-                foreach (var e in events)
-                {
-                    var (eventName, eventData, metadata) = eventCodec.Encoder.CreateSession().Encode(e);
-                    consumer.Consume(eventName);
-                    consumer.Consume(eventData);
-                    consumer.Consume(metadata);
-                }
+                consumer.Consume(eventName);
+                consumer.Consume(eventData);
+                consumer.Consume(metadata);
             }
 
             return Task.CompletedTask;

@@ -18,9 +18,28 @@ public sealed class EventDocumentCodec<TEvent>(
     IEventDocumentCodec<TEvent, EventDocument>
     where TEvent : notnull
 {
-    public IEventDocumentEncoder<TEvent, EventDocument> CreateEncoder()
+    public IEnumerable<EventDocument> Encode(
+        IEnumerable<AppendEvent<TEvent>> events,
+        string streamId,
+        StreamVersion? currentStreamVersion)
     {
-        return new EventDocumentEncoder<TEvent>(eventCodec.Encoder.CreateSession());
+        var nextVersionValue = (currentStreamVersion?.Value + 1) ?? 0;
+        var createdAtUtc = DateTime.UtcNow;
+
+        foreach (var (eventName, eventData, metadata) in eventCodec.Encoder.Encode(events))
+        {
+            var streamVersion = new StreamVersion(nextVersionValue++);
+
+            yield return new EventDocument
+            {
+                StreamId = streamId,
+                StreamVersion = streamVersion.ToInt64(),
+                EventName = eventName,
+                CreatedAtUtc = createdAtUtc,
+                EventData = eventData,
+                Metadata = metadata ?? BsonNull.Value
+            };
+        }
     }
 
     public ReadEvent<TEvent> Decode(EventDocument document)

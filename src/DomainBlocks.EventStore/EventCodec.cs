@@ -28,7 +28,7 @@ public static class EventCodec
 
         return new EventCodec<TEvent, TEventData, TMetadata>
         {
-            Encoder = EventEncoder.CreateFactory(encoderOptions),
+            Encoder = EventEncoder.Create(encoderOptions),
             Decoder = EventDecoder.Create(decoderOptions)
         };
     }

@@ -141,7 +141,8 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
         if (totalEventCount == 0 && readOptions.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw)
             throw new StreamNotFoundException(streamId);
 
-        static IEnumerable<(Schema.EventDocument, int)> EnumerateEvents(Schema.EventDocument[] events,
+        static IEnumerable<(Schema.EventDocument, int)> EnumerateEvents(
+            Schema.EventDocument[] events,
             StreamReadDirection direction)
         {
             if (direction == StreamReadDirection.Forward)
@@ -165,19 +166,14 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
             MetadataContentType = "application/bson"
         };
 
-        var encodingSession = _eventEncoder.CreateSession();
-
-        var grpcEvents = events.Select(x =>
-        {
-            var (eventName, eventData, metadata) = encodingSession.Encode(x);
-
-            return new Api.Appender.V0.AppendEvent
+        var grpcEvents = _eventEncoder
+            .Encode(events)
+            .Select(x => new Api.Appender.V0.AppendEvent
             {
-                EventName = eventName,
-                EventData = UnsafeByteOperations.UnsafeWrap(eventData),
-                Metadata = metadata == null ? ByteString.Empty : UnsafeByteOperations.UnsafeWrap(metadata)
-            };
-        });
+                EventName = x.EventName,
+                EventData = UnsafeByteOperations.UnsafeWrap(x.EventData),
+                Metadata = x.Metadata == null ? ByteString.Empty : UnsafeByteOperations.UnsafeWrap(x.Metadata)
+            });
 
         batch.Events.AddRange(grpcEvents);
 

@@ -23,7 +23,10 @@ public class KurrentDBEventStoreClient<TEvent>(
     {
         options ??= AppendToStreamOptions.Default;
         var kurrentExpectedState = ToKurrentStreamState(options.ExpectedState);
-        var eventData = EncodeEvents(events, eventEncoder.CreateSession());
+
+        var eventData = eventEncoder
+            .Encode(events)
+            .Select(x => new EventData(Uuid.NewUuid(), x.EventName, x.EventData, x.Metadata));
 
         try
         {
@@ -39,19 +42,6 @@ public class KurrentDBEventStoreClient<TEvent>(
         {
             var actualState = ToStreamState(ex.ActualStreamState);
             throw new StreamAppendConflictException(streamId, options.ExpectedState, actualState, ex);
-        }
-
-        return;
-
-        static IEnumerable<EventData> EncodeEvents(
-            IEnumerable<AppendEvent<TEvent>> sourceEvents,
-            IEventEncodingSession<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> encodingSession)
-        {
-            foreach (var e in sourceEvents)
-            {
-                var (eventName, eventData, metadata) = encodingSession.Encode(e);
-                yield return new EventData(Uuid.NewUuid(), eventName, eventData, metadata);
-            }
         }
     }
 

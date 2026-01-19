@@ -43,11 +43,11 @@ public class MongoEventStoreClientTests : EventStoreClientTests
             MetadataDeserializer = new BsonDocumentMetadataSerde()
         };
 
-        var encoderFactory = EventEncoder.CreateFactory(encoderOptions);
+        var encoder = EventEncoder.Create(encoderOptions);
         var decoder = EventDecoder.Create(decoderOptions);
 
         _mongoClient = new MongoClient(MongoConnectionStrings.Default);
-        _client = new MongoEventStoreClient<IDomainEvent>(_mongoClient, appenderClient, encoderFactory, decoder);
+        _client = new MongoEventStoreClient<IDomainEvent>(_mongoClient, appenderClient, encoder, decoder);
 
         await MongoEventStoreAdmin.EnsureIndexesAsync(_mongoClient, EventStoreCollectionOptions.Default);
     }

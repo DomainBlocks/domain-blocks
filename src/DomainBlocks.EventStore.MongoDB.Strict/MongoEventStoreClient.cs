@@ -210,12 +210,8 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
 
     private IEnumerable<EventDocument> ToEventDocuments(IEnumerable<AppendEvent<TEvent>> events)
     {
-        var encodingSession = _eventCodec.Encoder.CreateSession();
-
-        foreach (var @event in events)
+        foreach (var (eventName, eventData, metadata) in _eventCodec.Encoder.Encode(events))
         {
-            var (eventName, eventData, metadata) = encodingSession.Encode(@event);
-
             yield return new EventDocument
             {
                 EventName = eventName,

@@ -39,7 +39,7 @@ public class MongoEventStoreClient<TEvent, TEventDocument> : IEventStoreClient<T
         if (!expectedState.Matches(currentState))
             throw new StreamAppendConflictException(streamId, expectedState, currentState);
 
-        var documents = ToEventDocuments(events, streamId, currentState.Version);
+        var documents = _eventDocumentCodec.Encode(events, streamId, currentState.Version);
 
         try
         {
@@ -143,21 +143,5 @@ public class MongoEventStoreClient<TEvent, TEventDocument> : IEventStoreClient<T
     {
         var streamState = await GetStreamStateAsync(streamId, cancellationToken).ConfigureAwait(false);
         return streamState.IsStreamExists;
-    }
-
-    private IEnumerable<TEventDocument> ToEventDocuments(
-        IEnumerable<AppendEvent<TEvent>> events,
-        string streamId,
-        StreamVersion? currentStreamVersion)
-    {
-        var nextVersionValue = (currentStreamVersion?.Value + 1) ?? 0;
-        var createdAtUtc = DateTime.UtcNow;
-        var encoder = _eventDocumentCodec.CreateEncoder();
-
-        foreach (var @event in events)
-        {
-            var streamVersion = new StreamVersion(nextVersionValue++);
-            yield return encoder.Encode(@event, streamId, streamVersion, createdAtUtc);
-        }
     }
 }
