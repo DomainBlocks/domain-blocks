@@ -26,13 +26,9 @@ public class EventStoreClientWriteBenchmarks
     {
         var consumer = new Consumer();
 
-        var typeMap = new EventTypeMapBuilder()
-            .MapType<TestEvent>()
-            .Build();
-
         var codecOptions = new EventCodecOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
-            TypeMap = typeMap,
+            TypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>()),
             EventSerde = EventSerde,
             MetadataSerde = MetadataSerde,
             MetadataContributors = [new MetadataContributor(EventCount)]

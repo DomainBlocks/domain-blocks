@@ -54,13 +54,9 @@ public class ReadEventTransformTests
                 Destination: "Madrid, ES")
         };
 
-        var eventTypeMap = new EventTypeMapBuilder()
-            .MapType<ShipmentDispatched>()
-            .Build();
-
         var codecOptions = new EventCodecOptions<object, BsonValue, BsonValue>
         {
-            TypeMap = eventTypeMap,
+            TypeMap = EventTypeMap.Create(x => x.MapType<ShipmentDispatched>()),
             EventSerde = new BsonDocumentObjectSerde(),
             MetadataSerde = new BsonDocumentMetadataSerde()
         };
@@ -81,7 +77,7 @@ public class ReadEventTransformTests
         var readEvents = await client
             .ReadStreamAsync(streamId)
             .Transform([new ShipmentDispatchedTransform()])
-            .Select(x => x.Event)
+            .Unwrap()
             .ToArrayAsync();
 
         readEvents.ShouldBe(expectedEvents);

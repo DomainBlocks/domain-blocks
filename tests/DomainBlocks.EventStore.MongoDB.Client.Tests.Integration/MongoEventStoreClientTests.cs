@@ -25,20 +25,18 @@ public class MongoEventStoreClientTests : EventStoreClientTests
         _grpcChannel = GrpcChannel.ForAddress("http://localhost:50051");
         var appenderClient = new Api.Appender.V0.AppenderService.AppenderServiceClient(_grpcChannel);
 
-        var eventTypeMap = new EventTypeMapBuilder()
-            .MapType<TestEvent>()
-            .Build();
+        var eventTypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>());
 
         var encoderOptions = new EventEncoderOptions<IDomainEvent, byte[], byte[]>
         {
-            TypeMap = eventTypeMap.Append,
+            TypeMap = eventTypeMap.Appends,
             EventSerializer = new RawBsonObjectSerde(),
             MetadataSerializer = new RawBsonMetadataSerde()
         };
 
         var decoderOptions = new EventDecoderOptions<IDomainEvent, BsonValue, BsonValue>
         {
-            TypeMap = eventTypeMap.Read,
+            TypeMap = eventTypeMap.Reads,
             EventDeserializer = new BsonDocumentObjectSerde(),
             MetadataDeserializer = new BsonDocumentMetadataSerde()
         };

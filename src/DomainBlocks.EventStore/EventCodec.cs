@@ -11,7 +11,7 @@ public static class EventCodec
     {
         var encoderOptions = new EventEncoderOptions<TEvent, TEventData, TMetadata>
         {
-            TypeMap = options.TypeMap.Append,
+            TypeMap = options.TypeMap.Appends,
             EventSerializer = options.EventSerde,
             MetadataSerializer = options.MetadataSerde,
             MetadataContributors = options.MetadataContributors,
@@ -20,7 +20,7 @@ public static class EventCodec
 
         var decoderOptions = new EventDecoderOptions<TEvent, TEventData, TMetadata>
         {
-            TypeMap = options.TypeMap.Read,
+            TypeMap = options.TypeMap.Reads,
             EventDeserializer = options.EventSerde,
             MetadataDeserializer = options.MetadataSerde,
             ContractMappers = options.ContractMappers

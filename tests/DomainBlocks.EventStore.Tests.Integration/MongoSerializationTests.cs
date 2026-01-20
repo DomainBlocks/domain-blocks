@@ -89,10 +89,9 @@ public class MongoSerializationTests
         MongoClient mongoClient,
         IObjectSerde<BsonValue> serde)
     {
-        var eventTypeMap = new EventTypeMapBuilder()
+        var eventTypeMap = EventTypeMap.Create(builder => builder
             .MapType<UserCreated>()
-            .MapType<Proto.UserCreated>("ProtoUserCreated")
-            .Build();
+            .MapType<Proto.UserCreated>(m => m.WithName("ProtoUserCreated")));
 
         var codecOptions = new EventCodecOptions<object, BsonValue, BsonValue>
         {

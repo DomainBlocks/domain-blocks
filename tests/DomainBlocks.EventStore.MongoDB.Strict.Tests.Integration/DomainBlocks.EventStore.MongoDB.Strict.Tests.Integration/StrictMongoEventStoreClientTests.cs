@@ -22,7 +22,7 @@ public class StrictMongoEventStoreClientTests : EventStoreClientTests
     {
         var codecOptions = new EventCodecOptions<IDomainEvent, BsonValue, BsonValue>
         {
-            TypeMap = new EventTypeMapBuilder().MapType<TestEvent>().Build(),
+            TypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>()),
             EventSerde = new BsonDocumentObjectSerde(),
             MetadataSerde = new BsonDocumentMetadataSerde()
         };

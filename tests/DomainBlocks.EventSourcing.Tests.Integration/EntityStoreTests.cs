@@ -23,11 +23,10 @@ public class EntityStoreTests
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
     {
-        var eventTypeMap = new EventTypeMapBuilder()
+        var eventTypeMap = EventTypeMap.Create(builder => builder
             .MapType<ShoppingSessionStarted>()
             .MapType<ItemAddedToShoppingCart>()
-            .MapType<ItemRemovedFromShoppingCart>()
-            .Build();
+            .MapType<ItemRemovedFromShoppingCart>());
 
         var codecOptions = new EventCodecOptions<IDomainEvent, BsonValue, BsonValue>
         {

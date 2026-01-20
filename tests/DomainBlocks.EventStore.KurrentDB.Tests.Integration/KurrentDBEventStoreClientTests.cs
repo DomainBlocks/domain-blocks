@@ -18,9 +18,7 @@ public class KurrentDBEventStoreClientTests : EventStoreClientTests
     [OneTimeSetUp]
     public void OneTimeSetUp()
     {
-        var eventTypeMap = new EventTypeMapBuilder()
-            .MapType<TestEvent>()
-            .Build();
+        var eventTypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>());
 
         var codecOptions = new EventCodecOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {

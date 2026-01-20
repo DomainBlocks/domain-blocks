@@ -52,7 +52,7 @@ public abstract class EventStoreClientTests
             .ToArrayAsync(cancellationToken);
 
         readEvents.ShouldAllBe(x => x.Context.StreamId == streamId);
-        readEvents.Select(x => x.Event).ShouldBe(events.Select(x => x.Event));
+        readEvents.Unwrap().ShouldBe(events.Select(x => x.Event));
     }
 
     [Test]
@@ -86,7 +86,7 @@ public abstract class EventStoreClientTests
         readEvents.ShouldAllBe(x => x.Context.StreamId == streamId);
 
         readEvents
-            .Select(x => x.Event)
+            .Unwrap()
             .ShouldBe(events1.Concat(events2).Select(x => x.Event));
     }
 
@@ -304,7 +304,7 @@ public abstract class EventStoreClientTests
                         Direction = direction
                     },
                     cancellationToken)
-                .Select(x => x.Event)
+                .Unwrap()
                 .ToArrayAsync(cancellationToken);
         }
     }

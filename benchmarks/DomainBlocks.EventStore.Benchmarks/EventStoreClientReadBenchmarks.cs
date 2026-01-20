@@ -30,13 +30,9 @@ public class EventStoreClientReadBenchmarks
     {
         var kurrentEvents = CreateKurrentEvents(EventCount);
 
-        var typeMap = new EventTypeMapBuilder()
-            .MapType<TestEvent>()
-            .Build();
-
         var codecOptions = new EventCodecOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
-            TypeMap = typeMap,
+            TypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>()),
             EventSerde = EventSerde,
             MetadataSerde = MetadataSerde
         };

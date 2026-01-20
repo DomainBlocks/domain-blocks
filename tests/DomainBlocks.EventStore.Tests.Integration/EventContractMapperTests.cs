@@ -17,11 +17,9 @@ public class EventContractMapperTests
         const string connectionString = "kurrentdb://admin:changeit@localhost:2113?tls=false&tlsVerifyCert=false";
         await using var kurrentClient = new KurrentDBClient(KurrentDBClientSettings.Create(connectionString));
 
-        var eventTypeMap = new EventTypeMapBuilder()
-            .MapType<Proto.UserCreated>()
-            .Build();
+        var eventTypeMap = EventTypeMap.Create(x => x.MapType<Proto.UserCreated>());
 
-        var codecOptions = new EventCodecOptions<object, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
+        var codecOptions = new EventCodecOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
             TypeMap = eventTypeMap,
             EventSerde = new ProtobufBytesObjectSerde(),
@@ -30,7 +28,7 @@ public class EventContractMapperTests
         };
 
         var codec = EventCodec.Create(codecOptions);
-        var client = new KurrentDBEventStoreClient<object>(kurrentClient, codec.Encoder, codec.Decoder);
+        var client = new KurrentDBEventStoreClient<IDomainEvent>(kurrentClient, codec.Encoder, codec.Decoder);
 
         var originalEvent = new UserCreated
         {
@@ -42,22 +40,23 @@ public class EventContractMapperTests
 
         await client.AppendToStreamAsync(streamId, [originalEvent]);
 
-        var readEvents = await client.ReadStreamAsync(streamId).ToArrayAsync();
+        var readEvents = await client.ReadStreamAsync(streamId).Unwrap().ToArrayAsync();
 
         readEvents
             .ShouldHaveSingleItem()
-            .Event
             .ShouldBeOfType<UserCreated>()
             .ShouldBe(originalEvent);
     }
 
-    private record UserCreated
+    private interface IDomainEvent;
+
+    private record UserCreated : IDomainEvent
     {
         public required string UserId { get; init; }
         public required string Name { get; init; }
     }
 
-    private class UserCreatedProtoMapper : EventContractMapper<object, UserCreated, Proto.UserCreated>
+    private class UserCreatedProtoMapper : EventContractMapper<IDomainEvent, UserCreated, Proto.UserCreated>
     {
         protected override Proto.UserCreated ToContract(UserCreated @event)
         {
