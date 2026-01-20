@@ -166,16 +166,15 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
             MetadataContentType = "application/bson"
         };
 
-        var grpcEvents = _eventEncoder
-            .Encode(events)
-            .Select(x => new Api.Appender.V0.AppendEvent
+        foreach (var (eventName, eventData, metadata) in _eventEncoder.Encode(events))
+        {
+            batch.Events.Add(new Api.Appender.V0.AppendEvent
             {
-                EventName = x.EventName,
-                EventData = UnsafeByteOperations.UnsafeWrap(x.EventData),
-                Metadata = x.Metadata == null ? ByteString.Empty : UnsafeByteOperations.UnsafeWrap(x.Metadata)
+                EventName = eventName,
+                EventData = UnsafeByteOperations.UnsafeWrap(eventData),
+                Metadata = metadata == null ? ByteString.Empty : UnsafeByteOperations.UnsafeWrap(metadata)
             });
-
-        batch.Events.AddRange(grpcEvents);
+        }
 
         return batch;
     }
