@@ -22,7 +22,7 @@ public class EventStoreClientTests
     }
 
     [Test]
-    public async Task Should_read_multiple_events_common_type()
+    public async Task Should_read_multiple_events_as_common_type()
     {
         var eventTypeMap = EventTypeMap.Create(builder => builder
             .ForAppends(appends => appends
