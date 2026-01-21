@@ -18,7 +18,6 @@
   <Folder Name="/src/">
     <Project Path="src/DomainBlocks.EventStore.MongoDB.Appender.Host/DomainBlocks.EventStore.MongoDB.Appender.Host.csproj" />
     <Project Path="src/DomainBlocks.EventStore.MongoDB.Client/DomainBlocks.EventStore.MongoDB.Client.csproj" />
-    <Project Path="src/DomainBlocks.EventStore.MongoDB.Strict/DomainBlocks.EventStore.MongoDB.Strict.csproj" />
     <Project Path="src\DomainBlocks.Core\DomainBlocks.Core.csproj" />
     <Project Path="src\DomainBlocks.EventSourcing\DomainBlocks.EventSourcing.csproj" />
     <Project Path="src\DomainBlocks.EventStore.Abstractions\DomainBlocks.EventStore.Abstractions.csproj" />
@@ -38,7 +37,6 @@
     <Project Path="tests\DomainBlocks.EventStore.Abstractions.Tests.Unit\DomainBlocks.EventStore.Abstractions.Tests.Unit.csproj" />
     <Project Path="tests\DomainBlocks.EventStore.KurrentDB.Tests.Integration\DomainBlocks.EventStore.KurrentDB.Tests.Integration.csproj" />
     <Project Path="tests\DomainBlocks.EventStore.MongoDB.Generic.Tests.Integration\DomainBlocks.EventStore.MongoDB.Generic.Tests.Integration.csproj" />
-    <Project Path="tests\DomainBlocks.EventStore.MongoDB.Strict.Tests.Integration\DomainBlocks.EventStore.MongoDB.Strict.Tests.Integration\DomainBlocks.EventStore.MongoDB.Strict.Tests.Integration.csproj" />
     <Project Path="tests\DomainBlocks.EventStore.Tests.Integration\DomainBlocks.EventStore.Tests.Integration.csproj" />
     <Project Path="tests\DomainBlocks.EventStore.Tests.Unit\DomainBlocks.EventStore.Tests.Unit.csproj" />
     <Project Path="tests\DomainBlocks.Serialization.Google.Protobuf.Tests\DomainBlocks.Serialization.Google.Protobuf.Tests.csproj" />
