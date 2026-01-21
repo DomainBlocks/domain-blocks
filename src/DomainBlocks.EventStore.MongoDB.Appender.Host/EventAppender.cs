@@ -1,6 +1,7 @@
 ﻿using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using DomainBlocks.EventStore.Abstractions;
+using Microsoft.Extensions.Options;
 using MongoDB.Bson;
 using MongoDB.Bson.IO;
 using MongoDB.Driver;
@@ -19,21 +20,21 @@ public class EventAppender
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _consumeTask;
 
-    public EventAppender(IMongoClient mongoClient)
+    public EventAppender(IMongoClient mongoClient, IOptions<EventAppenderOptions> options)
     {
-        var db = mongoClient.GetDatabase("domainblocks");
+        var db = mongoClient.GetDatabase(options.Value.Mongo.DatabaseName);
 
         var sequencesCollection = db
-            .GetCollection<BsonDocument>("es_sequences")
+            .GetCollection<BsonDocument>(options.Value.Mongo.SequencesCollectionName)
             .WithWriteConcern(WriteConcern.WMajority.With(journal: true));
 
         _sequenceAllocator = new SequenceAllocator(sequencesCollection);
 
         _commitsCollection = db
-            .GetCollection<Schema.StreamCommit>("es_stream_commits")
+            .GetCollection<Schema.StreamCommit>(options.Value.Mongo.StreamCommitsCollectionName)
             .WithWriteConcern(WriteConcern.WMajority.With(journal: true));
 
-        var boundedChannelOptions = new BoundedChannelOptions(capacity: 10_000)
+        var boundedChannelOptions = new BoundedChannelOptions(capacity: options.Value.QueueSize)
         {
             FullMode = BoundedChannelFullMode.Wait,
             SingleWriter = false,

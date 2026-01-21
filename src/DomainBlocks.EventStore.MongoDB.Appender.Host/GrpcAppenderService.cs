@@ -7,7 +7,7 @@ using ExpectedStreamState = DomainBlocks.EventStore.Abstractions.ExpectedStreamS
 
 namespace DomainBlocks.EventStore.MongoDB.Appender.Host;
 
-public sealed class AppenderServiceImpl(EventAppender appender) : AppenderService.AppenderServiceBase
+public sealed class GrpcAppenderService(EventAppender appender) : AppenderService.AppenderServiceBase
 {
     public override async Task<AppendToStreamResponse> AppendToStream(
         AppendToStreamRequest request,

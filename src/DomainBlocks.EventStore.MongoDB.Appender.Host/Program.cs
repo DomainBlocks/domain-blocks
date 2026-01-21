@@ -8,10 +8,16 @@ builder.Services.AddGrpc();
 var connectionString = builder.Configuration.GetConnectionString("Mongo");
 builder.Services.AddSingleton<IMongoClient>(new MongoClient(connectionString));
 
+builder.Services
+    .AddOptions<EventAppenderOptions>()
+    .Bind(builder.Configuration.GetSection(EventAppenderOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
 builder.Services.AddSingleton<EventAppender>();
 
 var app = builder.Build();
 
-app.MapGrpcService<AppenderServiceImpl>();
+app.MapGrpcService<GrpcAppenderService>();
 
 app.Run();
