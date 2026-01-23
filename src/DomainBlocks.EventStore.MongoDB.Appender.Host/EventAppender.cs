@@ -10,15 +10,17 @@ namespace DomainBlocks.EventStore.MongoDB.Appender.Host;
 
 using EncodedEvent = EncodedEvent<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>;
 
-public class EventAppender
+public class EventAppender : IAsyncDisposable
 {
     private const string GlobalPositionSequenceId = "global_position";
 
+    private readonly IOptions<EventAppenderOptions> _options;
     private readonly SequenceAllocator _sequenceAllocator;
     private readonly IMongoCollection<Schema.StreamCommit> _commitsCollection;
     private readonly Channel<AppendWorkItem> _channel;
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _consumeTask;
+    private int _disposed;
 
     public EventAppender(IMongoClient mongoClient, IOptions<EventAppenderOptions> options)
     {
@@ -26,12 +28,6 @@ public class EventAppender
 
         var sequencesCollection = db
             .GetCollection<BsonDocument>(options.Value.Mongo.SequencesCollectionName)
-            .WithWriteConcern(WriteConcern.WMajority.With(journal: true));
-
-        _sequenceAllocator = new SequenceAllocator(sequencesCollection);
-
-        _commitsCollection = db
-            .GetCollection<Schema.StreamCommit>(options.Value.Mongo.StreamCommitsCollectionName)
             .WithWriteConcern(WriteConcern.WMajority.With(journal: true));
 
         var boundedChannelOptions = new BoundedChannelOptions(capacity: options.Value.QueueSize)
@@ -42,8 +38,44 @@ public class EventAppender
             AllowSynchronousContinuations = false
         };
 
+        _options = options;
+        _sequenceAllocator = new SequenceAllocator(sequencesCollection);
+
+        _commitsCollection = db
+            .GetCollection<Schema.StreamCommit>(options.Value.Mongo.StreamCommitsCollectionName)
+            .WithWriteConcern(WriteConcern.WMajority.With(journal: true));
+
         _channel = Channel.CreateBounded<AppendWorkItem>(boundedChannelOptions);
         _consumeTask = ConsumeAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+
+        // Stop producers first
+        _channel.Writer.TryComplete();
+
+        try
+        {
+            // Graceful drain
+            await _consumeTask.WaitAsync(_options.Value.ShutdownTimeout);
+        }
+        catch (TimeoutException)
+        {
+            // Escalate: force-stop the consumer loop
+            await _cts.CancelAsync();
+            await _consumeTask;
+        }
+        catch (Exception)
+        {
+            // CancelAsync or Consumer task failed
+        }
+        finally
+        {
+            _cts.Dispose();
+        }
     }
 
     public async Task AppendToStreamAsync(
@@ -84,10 +116,8 @@ public class EventAppender
 
     private static IEnumerable<Schema.EventDocument> ToEventDocuments(IEnumerable<EncodedEvent> events)
     {
-        foreach (var @event in events)
+        foreach (var (eventName, eventData, metadata) in events)
         {
-            var (eventName, eventData, metadata) = @event;
-
             yield return new Schema.EventDocument
             {
                 EventName = eventName,
@@ -145,13 +175,13 @@ public class EventAppender
                     continue;
                 }
 
-                var commit = item.Commit;
-
                 try
                 {
                     using var linkedCt = CancellationTokenSource.CreateLinkedTokenSource(
-                        _cts.Token,
-                        item.CancellationToken);
+                        item.CancellationToken,
+                        _cts.Token);
+
+                    var commit = item.Commit;
 
                     var globalPositionAllocation = await _sequenceAllocator
                         .AllocateNextAsync(GlobalPositionSequenceId, commit.Events.Length, linkedCt.Token)
@@ -165,9 +195,14 @@ public class EventAppender
 
                     item.Ack.SetResult();
                 }
-                catch (OperationCanceledException)
+                catch (OperationCanceledException) when (item.CancellationToken.IsCancellationRequested ||
+                                                         _cts.IsCancellationRequested)
                 {
-                    item.Ack.TrySetCanceled();
+                    var token = item.CancellationToken.IsCancellationRequested
+                        ? item.CancellationToken
+                        : _cts.Token;
+
+                    item.Ack.TrySetCanceled(token);
                 }
                 catch (Exception ex)
                 {
@@ -175,13 +210,16 @@ public class EventAppender
                 }
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
         {
             // Normal during shutdown
+
+            // DisposeAsync completes the writer before canceling _cts, so this is usually redundant — but kept for
+            // robustness in case _cts is ever canceled via another path.
             _channel.Writer.TryComplete();
 
             while (_channel.Reader.TryRead(out var nextItem))
-                nextItem.Ack.TrySetCanceled();
+                nextItem.Ack.TrySetCanceled(_cts.Token);
         }
         catch (Exception ex)
         {

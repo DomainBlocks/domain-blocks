@@ -20,4 +20,4 @@ var app = builder.Build();
 
 app.MapGrpcService<GrpcAppenderService>();
 
-app.Run();
+await app.RunAsync();
