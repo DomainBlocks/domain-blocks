@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using DomainBlocks.EventStore.Abstractions;
 using Microsoft.Extensions.Options;
@@ -10,7 +11,8 @@ namespace DomainBlocks.EventStore.MongoDB.Appender.Host;
 
 using EncodedEvent = EncodedEvent<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>;
 
-public class EventAppender : IAsyncDisposable
+[SuppressMessage("ReSharper", "InconsistentlySynchronizedField")] // OK for logging
+public sealed class EventAppender : IAsyncDisposable
 {
     private const string GlobalPositionSequenceId = "global_position";
 
@@ -18,11 +20,17 @@ public class EventAppender : IAsyncDisposable
     private readonly SequenceAllocator _sequenceAllocator;
     private readonly IMongoCollection<Schema.StreamCommit> _commitsCollection;
     private readonly Channel<AppendWorkItem> _channel;
-    private readonly CancellationTokenSource _cts = new();
-    private readonly Task _consumeTask;
+    private readonly ILogger<EventAppender> _logger;
+    private readonly CancellationTokenSource _stopCts = new();
+    private readonly Lock _lock = new();
+    private Task? _consumerLoopTask;
+    private bool _isStopped;
     private int _disposed;
 
-    public EventAppender(IMongoClient mongoClient, IOptions<EventAppenderOptions> options)
+    public EventAppender(
+        IMongoClient mongoClient,
+        IOptions<EventAppenderOptions> options,
+        ILogger<EventAppender> logger)
     {
         var db = mongoClient.GetDatabase(options.Value.Mongo.DatabaseName);
 
@@ -46,36 +54,7 @@ public class EventAppender : IAsyncDisposable
             .WithWriteConcern(WriteConcern.WMajority.With(journal: true));
 
         _channel = Channel.CreateBounded<AppendWorkItem>(boundedChannelOptions);
-        _consumeTask = ConsumeAsync();
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0)
-            return;
-
-        // Stop producers first
-        _channel.Writer.TryComplete();
-
-        try
-        {
-            // Graceful drain
-            await _consumeTask.WaitAsync(_options.Value.ShutdownTimeout);
-        }
-        catch (TimeoutException)
-        {
-            // Escalate: force-stop the consumer loop
-            await _cts.CancelAsync();
-            await _consumeTask;
-        }
-        catch (Exception)
-        {
-            // CancelAsync or Consumer task failed
-        }
-        finally
-        {
-            _cts.Dispose();
-        }
+        _logger = logger;
     }
 
     public async Task AppendToStreamAsync(
@@ -165,9 +144,11 @@ public class EventAppender : IAsyncDisposable
 
     private async Task ConsumeAsync()
     {
+        _logger.LogInformation("Consumer loop started");
+
         try
         {
-            await foreach (var item in _channel.Reader.ReadAllAsync(_cts.Token))
+            await foreach (var item in _channel.Reader.ReadAllAsync(_stopCts.Token))
             {
                 if (item.CancellationToken.IsCancellationRequested)
                 {
@@ -179,7 +160,7 @@ public class EventAppender : IAsyncDisposable
                 {
                     using var linkedCt = CancellationTokenSource.CreateLinkedTokenSource(
                         item.CancellationToken,
-                        _cts.Token);
+                        _stopCts.Token);
 
                     var commit = item.Commit;
 
@@ -196,39 +177,136 @@ public class EventAppender : IAsyncDisposable
                     item.Ack.SetResult();
                 }
                 catch (OperationCanceledException) when (item.CancellationToken.IsCancellationRequested ||
-                                                         _cts.IsCancellationRequested)
+                                                         _stopCts.IsCancellationRequested)
                 {
                     var token = item.CancellationToken.IsCancellationRequested
                         ? item.CancellationToken
-                        : _cts.Token;
+                        : _stopCts.Token;
 
                     item.Ack.TrySetCanceled(token);
                 }
                 catch (Exception ex)
                 {
+                    _logger.LogError(ex, "Append failed");
                     item.Ack.TrySetException(ex);
                 }
             }
         }
-        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        catch (OperationCanceledException) when (_stopCts.IsCancellationRequested)
         {
-            // Normal during shutdown
+            // Expected during shutdown
+            _logger.LogDebug("Consumer loop canceled by stop token");
 
-            // DisposeAsync completes the writer before canceling _cts, so this is usually redundant — but kept for
-            // robustness in case _cts is ever canceled via another path.
             _channel.Writer.TryComplete();
 
             while (_channel.Reader.TryRead(out var nextItem))
-                nextItem.Ack.TrySetCanceled(_cts.Token);
+                nextItem.Ack.TrySetCanceled(_stopCts.Token);
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Consumer loop failed");
+
             _channel.Writer.TryComplete(ex);
 
             while (_channel.Reader.TryRead(out var nextItem))
                 nextItem.Ack.TrySetException(ex);
 
             throw;
+        }
+        finally
+        {
+            _logger.LogInformation("Consumer loop stopped");
+        }
+    }
+
+    public void Start()
+    {
+        lock (_lock)
+        {
+            if (_isStopped)
+            {
+                _logger.LogWarning("Start ignored because the consumer loop is stopped");
+                return;
+            }
+
+            if (_consumerLoopTask is not null)
+            {
+                _logger.LogDebug("Start ignored because the consumer loop is already running");
+                return;
+            }
+
+            _logger.LogInformation("Starting consumer loop");
+            _consumerLoopTask = Task.Run(ConsumeAsync);
+        }
+    }
+
+    public async Task StopAsync(CancellationToken cancellationToken)
+    {
+        Task? consumerLoopTask;
+
+        lock (_lock)
+        {
+            if (_isStopped)
+            {
+                _logger.LogDebug("Stop ignored; consumer loop already stopped");
+                return;
+            }
+
+            _isStopped = true;
+            consumerLoopTask = _consumerLoopTask;
+        }
+
+        _logger.LogInformation("Stopping consumer loop");
+
+        // Stop producers first
+        _channel.Writer.TryComplete();
+
+        if (consumerLoopTask is null)
+        {
+            _logger.LogDebug("Stop ignored; consumer loop not started");
+            return;
+        }
+
+        try
+        {
+            // Attempt graceful drain
+            await consumerLoopTask.WaitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Stop canceled (game over). Force-stop the consumer loop and don't wait.
+            _logger.LogWarning("Consumer loop stop canceled");
+            await _stopCts.CancelAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Consumer loop stop failed");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            _logger.LogDebug("Dispose ignored; already disposed");
+            return;
+        }
+
+        _logger.LogInformation("Disposing");
+
+        try
+        {
+            using var disposeCts = new CancellationTokenSource(_options.Value.DisposeTimeout);
+            await StopAsync(disposeCts.Token);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Dispose failed");
+        }
+        finally
+        {
+            _stopCts.Dispose();
+            _logger.LogDebug("Disposed");
         }
     }
 

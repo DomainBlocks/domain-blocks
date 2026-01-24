@@ -15,6 +15,7 @@ builder.Services
     .ValidateOnStart();
 
 builder.Services.AddSingleton<EventAppender>();
+builder.Services.AddHostedService<EventAppenderHostedService>();
 
 var app = builder.Build();
 
