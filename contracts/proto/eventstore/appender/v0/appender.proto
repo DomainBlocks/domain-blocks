@@ -20,7 +20,7 @@ message AppendEventBatch {
 }
 
 message AppendEvent {
-  string eventName = 1;
+  string event_name = 1;
   bytes event_data = 2;
   bytes metadata = 3;
 }
