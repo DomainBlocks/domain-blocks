@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 
 namespace DomainBlocks.EventStore.Abstractions;
 
@@ -7,6 +8,8 @@ namespace DomainBlocks.EventStore.Abstractions;
 /// </summary>
 public readonly record struct StreamState
 {
+    private const string VersionPrefix = "Version=";
+
     /// <summary>
     /// Represents a stream state indicating that the stream does not exist (i.e. has no events).
     /// </summary>
@@ -45,9 +48,28 @@ public readonly record struct StreamState
     /// </summary>
     public static StreamState StreamExists(StreamVersion version) => new(StreamStateKind.StreamExists, version);
 
+    public static bool TryParse(string input, [NotNullWhen(true)] out StreamState? result)
+    {
+        result = null;
+
+        if (string.Equals(input, StreamDoesNotExist.ToString(), StringComparison.OrdinalIgnoreCase))
+        {
+            result = StreamDoesNotExist;
+        }
+        else if (input.StartsWith(VersionPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            var raw = input[VersionPrefix.Length..];
+
+            if (ulong.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v))
+                result = StreamExists(new StreamVersion(v));
+        }
+
+        return result.HasValue;
+    }
+
     public override string ToString() => Kind switch
     {
         StreamStateKind.StreamDoesNotExist => nameof(StreamDoesNotExist),
-        _ => $"Version={Version?.Value}"
+        _ => $"{VersionPrefix}{Version?.Value}"
     };
 }

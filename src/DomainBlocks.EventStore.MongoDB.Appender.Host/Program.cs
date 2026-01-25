@@ -3,7 +3,7 @@ using MongoDB.Driver;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddGrpc();
+builder.Services.AddGrpc(opt => opt.Interceptors.Add<ExceptionInterceptor>());
 
 var connectionString = builder.Configuration.GetConnectionString("Mongo");
 builder.Services.AddSingleton<IMongoClient>(new MongoClient(connectionString));

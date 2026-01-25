@@ -37,7 +37,7 @@ public sealed class EventAppender : IAsyncDisposable
         _options = options;
         _sequenceAllocator = new SequenceAllocator(sequences);
         _commits = CreateCommitsCollection(db, options.Value.Mongo);
-        _workItemPool = CreateWorkItemPool(maximumRetained: 256);
+        _workItemPool = CreateWorkItemPool(maximumRetained: options.Value.QueueSize);
         _channel = CreateChannel(options.Value.QueueSize);
         _logger = logger;
     }
@@ -240,12 +240,20 @@ public sealed class EventAppender : IAsyncDisposable
     {
         if (item.CancellationToken.IsCancellationRequested)
         {
+            _logger.LogDebug("Append canceled before start for stream '{StreamId}'", item.StreamId);
             item.SetCanceled(item.CancellationToken);
             return;
         }
 
         var streamId = item.StreamId;
         var expectedState = item.Options.ExpectedState;
+        var eventCount = item.Events.Count;
+
+        _logger.LogDebug(
+            "Starting append for stream '{StreamId}' with expected state {ExpectedState} and {EventCount} events",
+            streamId,
+            expectedState,
+            eventCount);
 
         try
         {
@@ -259,6 +267,12 @@ public sealed class EventAppender : IAsyncDisposable
 
             if (!expectedState.Matches(currentState))
             {
+                _logger.LogDebug(
+                    "Append conflict for stream '{StreamId}'; expected {ExpectedState}, actual {ActualState}",
+                    streamId,
+                    expectedState,
+                    currentState);
+
                 item.SetException(new StreamAppendConflictException(streamId, expectedState, currentState));
                 return;
             }
@@ -285,11 +299,29 @@ public sealed class EventAppender : IAsyncDisposable
 
             await _commits.InsertOneAsync(commit, cancellationToken: ct);
 
+            _logger.LogInformation(
+                "Committed {EventCount} events to stream '{StreamId}' " +
+                "(versions {StartVersion}-{EndVersion}, global positions {StartGlobalPosition}-{EndGlobalPosition})",
+                eventCount,
+                streamId,
+                commit.StartStreamVersion,
+                commit.EndStreamVersion,
+                commit.StartGlobalPosition,
+                commit.EndGlobalPosition);
+
             item.SetResult(new AppendResult());
         }
         catch (MongoWriteException ex) when (ex.WriteError.Category == ServerErrorCategory.DuplicateKey)
         {
             // Consider automatically retrying if the original expectation was Any/StreamExists.
+            // Update: Consider if this is even still possible.
+
+            _logger.LogWarning(
+                ex,
+                "Duplicate key conflict while appending to stream '{StreamId}' with expected state {ExpectedState}",
+                streamId,
+                expectedState);
+
             item.SetException(new StreamAppendConflictException(streamId, expectedState, innerException: ex));
         }
         catch (OperationCanceledException) when (item.CancellationToken.IsCancellationRequested ||
@@ -299,11 +331,12 @@ public sealed class EventAppender : IAsyncDisposable
                 ? item.CancellationToken
                 : _stopCts.Token;
 
+            _logger.LogDebug("Append canceled for stream '{StreamId}'", streamId);
             item.SetCanceled(token);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Append failed");
+            _logger.LogError(ex, "Append failed for stream '{StreamId}'", streamId);
             item.SetException(ex);
         }
     }

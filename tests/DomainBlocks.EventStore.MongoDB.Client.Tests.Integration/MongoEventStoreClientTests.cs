@@ -3,6 +3,7 @@ using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Testing.Integration;
 using DomainBlocks.Testing.Integration.MongoDB;
+using Grpc.Core.Interceptors;
 using Grpc.Net.Client;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -39,7 +40,8 @@ public class MongoEventStoreClientTests : EventStoreClientTests
                 DisposeHttpClient = true
             });
 
-        var appenderClient = new Api.Appender.V0.AppenderService.AppenderServiceClient(_grpcChannel);
+        var callInvoker = _grpcChannel.Intercept(new ExceptionInterceptor());
+        var appenderClient = new Api.Appender.V0.AppenderService.AppenderServiceClient(callInvoker);
 
         var eventTypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>());
 
