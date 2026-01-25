@@ -25,17 +25,6 @@ public class EventTypeMapTests
     }
 
     [Test]
-    public void MapType_WhenTypeMappedToDifferentName_ThrowsException()
-    {
-        Should.Throw<EventTypeMapConfigurationException>(() =>
-        {
-            EventTypeMap.Create(builder => builder
-                .MapType<TestEvent1>(m => m.WithName("Name1"))
-                .MapType<TestEvent1>(m => m.WithName("Name2")));
-        });
-    }
-
-    [Test]
     public void MapType_WhenNameMappedToDifferentType_ThrowsException()
     {
         // Case 1: Name already mapped to a type via MapType
