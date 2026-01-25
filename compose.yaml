@@ -58,7 +58,6 @@
       - KURRENTDB_LOG_LEVEL=VERBOSE
 
 volumes:
-  mongo-data:
   mongo1-data:
   mongo2-data:
   mongo3-data:
