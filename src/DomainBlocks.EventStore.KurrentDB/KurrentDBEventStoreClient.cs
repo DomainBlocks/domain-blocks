@@ -10,7 +10,8 @@ namespace DomainBlocks.EventStore.KurrentDB;
 
 public class KurrentDBEventStoreClient<TEvent>(
     KurrentDBClient client,
-    IEventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec) :
+    IEventEncoder<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventEncoder,
+    IEventDecoder<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventDecoder) :
     IEventStoreClient<TEvent>
     where TEvent : notnull
 {
@@ -22,7 +23,10 @@ public class KurrentDBEventStoreClient<TEvent>(
     {
         options ??= AppendToStreamOptions.Default;
         var kurrentExpectedState = ToKurrentStreamState(options.ExpectedState);
-        var eventData = EncodeEvents(events, eventCodec.CreateEncoder());
+
+        var eventData = eventEncoder
+            .Encode(events)
+            .Select(x => new EventData(Uuid.NewUuid(), x.EventName, x.EventData, x.Metadata));
 
         try
         {
@@ -38,19 +42,6 @@ public class KurrentDBEventStoreClient<TEvent>(
         {
             var actualState = ToStreamState(ex.ActualStreamState);
             throw new StreamAppendConflictException(streamId, options.ExpectedState, actualState, ex);
-        }
-
-        return;
-
-        static IEnumerable<EventData> EncodeEvents(
-            IEnumerable<AppendEvent<TEvent>> sourceEvents,
-            IEventEncoder<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> encoder)
-        {
-            foreach (var e in sourceEvents)
-            {
-                var (eventName, eventData, metadata) = encoder.Encode(e);
-                yield return new EventData(Uuid.NewUuid(), eventName, eventData, metadata);
-            }
         }
     }
 
@@ -96,7 +87,7 @@ public class KurrentDBEventStoreClient<TEvent>(
             var originalRecord = resolvedEvent.OriginalEvent;
             var metadataBytes = options.IncludeMetadata ? record.Metadata : default;
 
-            var (@event, metadata) = eventCodec.Decode(record.EventType, record.Data, metadataBytes);
+            var (@event, metadata) = eventDecoder.Decode(record.EventType, record.Data, metadataBytes);
 
             var streamVersion = new StreamVersion(originalRecord.EventNumber.ToUInt64());
             var globalPosition = new GlobalPosition(originalRecord.Position.CommitPosition);

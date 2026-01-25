@@ -4,7 +4,10 @@ namespace DomainBlocks.EventStore.MongoDB.Generic;
 
 public interface IEventDocumentCodec<TEvent, TEventDocument> where TEvent : notnull
 {
-    IEventDocumentEncoder<TEvent, TEventDocument> CreateEncoder();
+    IEnumerable<TEventDocument> Encode(
+        IEnumerable<AppendEvent<TEvent>> events,
+        string streamId,
+        StreamVersion? currentStreamVersion);
 
     ReadEvent<TEvent> Decode(TEventDocument document);
 }

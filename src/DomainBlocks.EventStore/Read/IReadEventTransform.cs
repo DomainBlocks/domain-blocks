@@ -1,9 +1,0 @@
-using DomainBlocks.EventStore.Abstractions;
-
-namespace DomainBlocks.EventStore.Read;
-
-public interface IReadEventTransform<TEventBase> where TEventBase : class
-{
-    Type SourceEventType { get; }
-    IEnumerable<TEventBase> Apply(ReadEvent<TEventBase> sourceEvent);
-}

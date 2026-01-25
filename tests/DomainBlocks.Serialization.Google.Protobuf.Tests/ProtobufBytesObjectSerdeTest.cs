@@ -1,0 +1,78 @@
+﻿using Google.Protobuf;
+using Google.Protobuf.Reflection;
+using NUnit.Framework;
+using Shouldly;
+
+namespace DomainBlocks.Serialization.Google.Protobuf.Tests;
+
+public class ProtobufBytesObjectSerdeTest
+{
+    private readonly ProtobufBytesObjectSerde _serde = new();
+
+    [Test]
+    public void Should_serialize_and_deserialize()
+    {
+        var original = new Proto.UserCreated
+        {
+            UserId = "user-123",
+            Name = "Alice"
+        };
+
+        var bytes = _serde.Serialize(original);
+        var deserialized = (Proto.UserCreated?)_serde.Deserialize(bytes, typeof(Proto.UserCreated));
+
+        deserialized.ShouldNotBeNull();
+        deserialized.UserId.ShouldBe(original.UserId);
+        deserialized.Name.ShouldBe(original.Name);
+    }
+
+    [Test]
+    public void Serialize_Should_throw_when_value_is_not_IMessage()
+    {
+        var nonMessage = new { Id = 1 };
+
+        Should.Throw<ArgumentException>(() => _serde.Serialize(nonMessage));
+    }
+
+    [Test]
+    public void Deserialize_should_throw_when_type_is_not_IMessage()
+    {
+        var bytes = "junk"u8.ToArray();
+
+        Should.Throw<ArgumentException>(() => _serde.Deserialize(bytes, typeof(string)));
+    }
+
+    [Test]
+    public void Deserialize_should_throw_when_type_has_no_parser()
+    {
+        var bytes = "junk"u8.ToArray();
+
+        Should.Throw<ArgumentException>(() => _serde.Deserialize(bytes, typeof(FakeWithoutParser)));
+    }
+
+    [Test]
+    public void Serialize_should_throw_when_value_is_null()
+    {
+        Should.Throw<ArgumentNullException>(() => _serde.Serialize(null!));
+    }
+
+    [Test]
+    public void Deserialize_should_throw_when_type_is_null()
+    {
+        var bytes = new byte[] { 0x01, 0x02 };
+
+        Should.Throw<ArgumentNullException>(() => _serde.Deserialize(bytes, null!));
+    }
+
+    // Dummy type without a Parser property to simulate error
+    private sealed class FakeWithoutParser : IMessage<FakeWithoutParser>
+    {
+        public MessageDescriptor Descriptor => throw new NotImplementedException();
+        public int CalculateSize() => throw new NotImplementedException();
+        public FakeWithoutParser Clone() => throw new NotImplementedException();
+        public bool Equals(FakeWithoutParser? other) => throw new NotImplementedException();
+        public void MergeFrom(FakeWithoutParser message) => throw new NotImplementedException();
+        public void MergeFrom(CodedInputStream input) => throw new NotImplementedException();
+        public void WriteTo(CodedOutputStream output) => throw new NotImplementedException();
+    }
+}

@@ -1,6 +1,6 @@
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB.Generic;
-using DomainBlocks.EventStore.Read;
+using DomainBlocks.EventStore.Transforms;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Testing.Integration.MongoDB;
@@ -54,15 +54,11 @@ public class ReadEventTransformTests
                 Destination: "Madrid, ES")
         };
 
-        var eventTypeMap = new EventTypeMapBuilder()
-            .MapType<ShipmentDispatched>()
-            .Build();
-
         var codecOptions = new EventCodecOptions<object, BsonValue, BsonValue>
         {
-            TypeMap = eventTypeMap,
-            EventSerializer = new BsonDocumentSerializer(),
-            MetadataSerializer = new BsonDocumentMetadataSerializer()
+            TypeMap = EventTypeMap.Create(x => x.MapType<ShipmentDispatched>()),
+            EventSerde = new BsonDocumentObjectSerde(),
+            MetadataSerde = new BsonDocumentMetadataSerde()
         };
 
         var options = new MongoEventStoreClientOptions<object, EventDocument>
@@ -81,7 +77,7 @@ public class ReadEventTransformTests
         var readEvents = await client
             .ReadStreamAsync(streamId)
             .Transform([new ShipmentDispatchedTransform()])
-            .Select(x => x.Event)
+            .Unwrap()
             .ToArrayAsync();
 
         readEvents.ShouldBe(expectedEvents);

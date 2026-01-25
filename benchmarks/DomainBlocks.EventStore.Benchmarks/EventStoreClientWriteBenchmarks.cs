@@ -11,8 +11,8 @@ public class EventStoreClientWriteBenchmarks
 {
     private const string StreamId = "test-stream";
 
-    private static readonly SystemTextJsonBytesSerializer EventSerializer = new();
-    private static readonly SystemTextJsonBytesMetadataSerializer MetadataSerializer = new();
+    private static readonly JsonUtf8BytesObjectSerde EventSerde = new();
+    private static readonly JsonUtf8BytesMetadataSerde MetadataSerde = new();
 
     private FakeKurrentDBEventStoreClient<IDomainEvent> _client = null!;
     private AppendEvent<IDomainEvent>[] _appendEvents = null!;
@@ -21,29 +21,22 @@ public class EventStoreClientWriteBenchmarks
     [Params(10_000)]
     public int EventCount { get; set; }
 
-    [Params(false, true)]
-    public bool SharedMetadataBuffer { get; set; }
-
     [GlobalSetup]
     public void GlobalSetup()
     {
         var consumer = new Consumer();
 
-        var typeMap = new EventTypeMapBuilder()
-            .MapType<TestEvent>()
-            .Build();
-
         var codecOptions = new EventCodecOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
-            TypeMap = typeMap,
-            EventSerializer = EventSerializer,
-            MetadataSerializer = MetadataSerializer,
+            TypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>()),
+            EventSerde = EventSerde,
+            MetadataSerde = MetadataSerde,
             MetadataContributors = [new MetadataContributor(EventCount)]
         };
 
-        var eventCodec = new EventCodec<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>(codecOptions);
+        var eventCodec = EventCodec.Create(codecOptions);
 
-        _client = new FakeKurrentDBEventStoreClient<IDomainEvent>(eventCodec, consumer, SharedMetadataBuffer);
+        _client = new FakeKurrentDBEventStoreClient<IDomainEvent>(eventCodec, consumer);
 
         _appendEvents = CreateAppendEvents(EventCount);
     }
@@ -81,9 +74,8 @@ public class EventStoreClientWriteBenchmarks
     }
 
     private sealed class FakeKurrentDBEventStoreClient<TEvent>(
-        IEventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec,
-        Consumer consumer,
-        bool sharedMetadataBuffer) :
+        EventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec,
+        Consumer consumer) :
         IEventStoreClient<TEvent>
         where TEvent : notnull
     {
@@ -93,27 +85,11 @@ public class EventStoreClientWriteBenchmarks
             AppendToStreamOptions? options = null,
             CancellationToken cancellationToken = default)
         {
-            if (sharedMetadataBuffer)
+            foreach (var (eventName, eventData, metadata) in eventCodec.Encoder.Encode(events))
             {
-                var eventEncoder = eventCodec.CreateEncoder();
-
-                foreach (var e in events)
-                {
-                    var (eventName, eventData, metadata) = eventEncoder.Encode(e);
-                    consumer.Consume(eventName);
-                    consumer.Consume(eventData);
-                    consumer.Consume(metadata);
-                }
-            }
-            else
-            {
-                foreach (var e in events)
-                {
-                    var (eventName, eventData, metadata) = eventCodec.CreateEncoder().Encode(e);
-                    consumer.Consume(eventName);
-                    consumer.Consume(eventData);
-                    consumer.Consume(metadata);
-                }
+                consumer.Consume(eventName);
+                consumer.Consume(eventData);
+                consumer.Consume(metadata);
             }
 
             return Task.CompletedTask;

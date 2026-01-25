@@ -29,52 +29,46 @@ public class MongoSerializationTests
     [Test]
     public async Task Should_write_and_read_event_as_bson_document()
     {
-        await Should_write_and_read_event(TestEvent, new BsonDocumentSerializer());
-    }
-
-    [Test]
-    public async Task Should_write_and_read_event_as_bson_bytes()
-    {
-        await Should_write_and_read_event(TestEvent, new BsonBytesSerializer());
+        await Should_write_and_read_event(TestEvent, new BsonDocumentObjectSerde());
     }
 
     [Test]
     public async Task Should_write_and_read_event_as_proto_bytes()
     {
-        var serializer = new ProtobufBytesSerializer().AsBsonValueSerializer();
-        await Should_write_and_read_event(TestProtoEvent, serializer);
+        var serde = new ProtobufBytesObjectSerde().AsBsonValueSerde();
+        await Should_write_and_read_event(TestProtoEvent, serde);
     }
 
     [Test]
     public async Task Should_write_and_read_event_as_proto_json_string()
     {
-        var serializer = new ProtobufJsonStringSerializer().AsBsonValueSerializer();
-        await Should_write_and_read_event(TestProtoEvent, serializer);
+        var serde = new ProtobufJsonObjectSerde().AsBsonValueSerde();
+        await Should_write_and_read_event(TestProtoEvent, serde);
     }
 
     [Test]
     public async Task Should_write_and_read_event_as_json_bytes()
     {
-        var serializer = new SystemTextJsonBytesSerializer().AsBsonValueSerializer();
-        await Should_write_and_read_event(TestEvent, serializer);
+        var serde = new JsonUtf8BytesObjectSerde().AsBsonValueSerde();
+        await Should_write_and_read_event(TestEvent, serde);
     }
 
     [Test]
     public async Task Should_write_and_read_event_as_json_string()
     {
-        var serializer = new SystemTextJsonStringSerializer().AsBsonValueSerializer();
-        await Should_write_and_read_event(TestEvent, serializer);
+        var serde = new JsonObjectSerde().AsBsonValueSerde();
+        await Should_write_and_read_event(TestEvent, serde);
     }
 
     private static async Task Should_write_and_read_event<TEvent>(
         TEvent @event,
-        IObjectSerializer<BsonValue> serializer) where TEvent : class
+        IObjectSerde<BsonValue> serde) where TEvent : class
     {
         using var mongoClient = new MongoClient(MongoConnectionStrings.Default);
 
-        var client = CreateEventStoreClient(mongoClient, serializer);
+        var client = CreateEventStoreClient(mongoClient, serde);
 
-        var streamId = $"test-{serializer.GetType().Name}-{Guid.NewGuid()}";
+        var streamId = $"test-{serde.GetType().Name}-{Guid.NewGuid()}";
         await client.AppendToStreamAsync(streamId, [@event]);
         var readEvents = await client.ReadStreamAsync(streamId).ToArrayAsync();
 
@@ -87,18 +81,17 @@ public class MongoSerializationTests
 
     private static MongoEventStoreClient<object, EventDocument> CreateEventStoreClient(
         MongoClient mongoClient,
-        IObjectSerializer<BsonValue> serializer)
+        IObjectSerde<BsonValue> serde)
     {
-        var eventTypeMap = new EventTypeMapBuilder()
+        var eventTypeMap = EventTypeMap.Create(builder => builder
             .MapType<UserCreated>()
-            .MapType<Proto.UserCreated>("ProtoUserCreated")
-            .Build();
+            .MapType<Proto.UserCreated>(m => m.WithName("ProtoUserCreated")));
 
         var codecOptions = new EventCodecOptions<object, BsonValue, BsonValue>
         {
             TypeMap = eventTypeMap,
-            EventSerializer = serializer,
-            MetadataSerializer = new BsonDocumentMetadataSerializer()
+            EventSerde = serde,
+            MetadataSerde = new BsonDocumentMetadataSerde()
         };
 
         var options = new MongoEventStoreClientOptions<object, EventDocument>

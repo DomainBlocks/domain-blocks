@@ -22,54 +22,38 @@ public class EventStoreClientTests
     }
 
     [Test]
-    public async Task Should_allow_reading_multiple_events_as_common_type()
+    public async Task Should_read_multiple_events_as_common_type()
     {
-        var writeEventTypeMap = new EventTypeMapBuilder()
-            .MapType<LimitOrderSubmitted>()
-            .MapType<LimitOrderAmended>()
-            .MapType<LimitOrderFilled>()
-            .Build();
+        var eventTypeMap = EventTypeMap.Create(builder => builder
+            .ForAppends(appends => appends
+                .MapType<LimitOrderSubmitted>()
+                .MapType<LimitOrderAmended>()
+                .MapType<LimitOrderFilled>())
+            .ForReads(reads => reads
+                .MapType<LimitOrderEvent>(mapping => mapping
+                    .FromNames(
+                        nameof(LimitOrderSubmitted),
+                        nameof(LimitOrderAmended),
+                        nameof(LimitOrderFilled)))));
 
-        var readEventTypeMap = new EventTypeMapBuilder()
-            .MapReadType<LimitOrderEvent>(
-                nameof(LimitOrderSubmitted),
-                nameof(LimitOrderAmended),
-                nameof(LimitOrderFilled))
-            .Build();
-
-        var writeCodecOptions = new EventCodecOptions<object, BsonValue, BsonValue>
+        var codecOptions = new EventCodecOptions<object, BsonValue, BsonValue>
         {
-            TypeMap = writeEventTypeMap,
-            EventSerializer = new BsonDocumentSerializer(),
-            MetadataSerializer = new BsonDocumentMetadataSerializer()
-        };
-
-        var readCodecOptions = new EventCodecOptions<object, BsonValue, BsonValue>
-        {
-            TypeMap = readEventTypeMap,
-            EventSerializer = new BsonDocumentSerializer(),
-            MetadataSerializer = new BsonDocumentMetadataSerializer()
+            TypeMap = eventTypeMap,
+            EventSerde = new BsonDocumentObjectSerde(),
+            MetadataSerde = new BsonDocumentMetadataSerde()
         };
 
         var collectionOptions = EventStoreCollectionOptions.Default;
 
-        var writeOptions = new MongoEventStoreClientOptions<object, EventDocument>
+        var clientOptions = new MongoEventStoreClientOptions<object, EventDocument>
         {
             CollectionOptions = collectionOptions,
             EventDocumentSchema = EventDocumentSchema.Default,
-            EventDocumentCodec = EventDocumentCodec.Create(EventCodec.Create(writeCodecOptions))
-        };
-
-        var readOptions = new MongoEventStoreClientOptions<object, EventDocument>
-        {
-            CollectionOptions = collectionOptions,
-            EventDocumentSchema = EventDocumentSchema.Default,
-            EventDocumentCodec = EventDocumentCodec.Create(EventCodec.Create(readCodecOptions))
+            EventDocumentCodec = EventDocumentCodec.Create(EventCodec.Create(codecOptions))
         };
 
         using var mongoClient = new MongoClient(MongoConnectionStrings.Default);
-        var writeClient = new MongoEventStoreClient<object, EventDocument>(mongoClient, writeOptions);
-        var readClient = new MongoEventStoreClient<object, EventDocument>(mongoClient, readOptions);
+        var client = new MongoEventStoreClient<object, EventDocument>(mongoClient, clientOptions);
 
         var orderId = Guid.NewGuid();
         var streamId = $"order-{orderId}";
@@ -101,11 +85,11 @@ public class EventStoreClientTests
             FilledAt = amended.AmendedAt.AddHours(1)
         };
 
-        await writeClient.AppendToStreamAsync(streamId, [submitted, amended, filled]);
+        await client.AppendToStreamAsync(streamId, [submitted, amended, filled]);
 
-        var orderEvents = await readClient
+        var orderEvents = await client
             .ReadStreamAsync(streamId)
-            .Select(x => x.Event)
+            .Unwrap()
             .OfType<LimitOrderEvent>()
             .ToArrayAsync();
 

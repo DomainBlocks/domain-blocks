@@ -15,14 +15,16 @@ public class GenericMongoEventStoreClientTests : EventStoreClientTests
     private MongoClient _mongoClient = null!;
     private MongoEventStoreClient<IDomainEvent, EventDocument> _client = null!;
 
+    protected override IEventStoreClient<IDomainEvent> Client => _client;
+
     [OneTimeSetUp]
     public async Task OneTimeSetup()
     {
         var codecOptions = new EventCodecOptions<IDomainEvent, BsonValue, BsonValue>
         {
-            TypeMap = new EventTypeMapBuilder().MapType<TestEvent>().Build(),
-            EventSerializer = new BsonDocumentSerializer(),
-            MetadataSerializer = new BsonDocumentMetadataSerializer()
+            TypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>()),
+            EventSerde = new BsonDocumentObjectSerde(),
+            MetadataSerde = new BsonDocumentMetadataSerde()
         };
 
         var options = new MongoEventStoreClientOptions<IDomainEvent, EventDocument>
@@ -46,6 +48,4 @@ public class GenericMongoEventStoreClientTests : EventStoreClientTests
     {
         _mongoClient.Dispose();
     }
-
-    protected override IEventStoreClient<IDomainEvent> Client => _client;
 }

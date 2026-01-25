@@ -3,7 +3,7 @@ using DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 using DomainBlocks.EventSourcing.Tests.Integration.EntityDefinitions;
 using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.MongoDB.Strict;
+using DomainBlocks.EventStore.MongoDB.Generic;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Testing.Integration.MongoDB;
@@ -23,27 +23,27 @@ public class EntityStoreTests
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
     {
-        var eventTypeMap = new EventTypeMapBuilder()
+        var eventTypeMap = EventTypeMap.Create(builder => builder
             .MapType<ShoppingSessionStarted>()
             .MapType<ItemAddedToShoppingCart>()
-            .MapType<ItemRemovedFromShoppingCart>()
-            .Build();
+            .MapType<ItemRemovedFromShoppingCart>());
 
         var codecOptions = new EventCodecOptions<IDomainEvent, BsonValue, BsonValue>
         {
             TypeMap = eventTypeMap,
-            EventSerializer = new BsonDocumentSerializer(),
-            MetadataSerializer = new BsonDocumentMetadataSerializer()
+            EventSerde = new BsonDocumentObjectSerde(),
+            MetadataSerde = new BsonDocumentMetadataSerde()
         };
 
-        var options = new MongoEventStoreClientOptions<IDomainEvent>
+        var options = new MongoEventStoreClientOptions<IDomainEvent, EventDocument>
         {
             CollectionOptions = EventStoreCollectionOptions.Default,
-            EventCodec = EventCodec.Create(codecOptions)
+            EventDocumentSchema = EventDocumentSchema.Default,
+            EventDocumentCodec = EventDocumentCodec.Create(EventCodec.Create(codecOptions))
         };
 
         _mongoClient = new MongoClient(MongoConnectionStrings.Default);
-        var eventStoreClient = new MongoEventStoreClient<IDomainEvent>(_mongoClient, options);
+        var eventStoreClient = new MongoEventStoreClient<IDomainEvent, EventDocument>(_mongoClient, options);
 
         var entityDefinitionProvider = new CompositeEntityDefinitionProvider<IDomainEvent>(
         [
@@ -55,7 +55,10 @@ public class EntityStoreTests
 
         _entityStore = new EntityStore<IDomainEvent>(eventStoreClient, entityDefinitionProvider);
 
-        await MongoEventStoreAdmin.EnsureIndexesAsync(_mongoClient, options.CollectionOptions);
+        await MongoEventStoreAdmin.EnsureIndexesAsync(
+            _mongoClient,
+            options.CollectionOptions,
+            options.EventDocumentSchema);
     }
 
     [OneTimeTearDown]

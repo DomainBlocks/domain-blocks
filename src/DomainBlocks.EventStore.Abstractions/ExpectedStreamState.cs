@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 
 namespace DomainBlocks.EventStore.Abstractions;
 
@@ -8,6 +9,8 @@ namespace DomainBlocks.EventStore.Abstractions;
 /// </summary>
 public readonly record struct ExpectedStreamState
 {
+    private const string VersionPrefix = "Version=";
+
     /// <summary>
     /// Any state; stream may exist at any version or may not exist.
     /// </summary>
@@ -68,6 +71,33 @@ public readonly record struct ExpectedStreamState
         return new ExpectedStreamState(ExpectedStreamStateKind.SpecificVersion, version);
     }
 
+    public static bool TryParse(string input, [NotNullWhen(true)] out ExpectedStreamState? result)
+    {
+        result = null;
+
+        if (string.Equals(input, Any.ToString(), StringComparison.OrdinalIgnoreCase))
+        {
+            result = Any;
+        }
+        else if (string.Equals(input, StreamDoesNotExist.ToString(), StringComparison.OrdinalIgnoreCase))
+        {
+            result = StreamDoesNotExist;
+        }
+        else if (string.Equals(input, StreamExists.ToString(), StringComparison.OrdinalIgnoreCase))
+        {
+            result = StreamExists;
+        }
+        else if (input.StartsWith(VersionPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            var raw = input[VersionPrefix.Length..];
+
+            if (ulong.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v))
+                result = SpecificVersion(new StreamVersion(v));
+        }
+
+        return result.HasValue;
+    }
+
     /// <summary>
     /// Returns <c>true</c> if this expected state matches the given actual state.
     /// </summary>
@@ -97,6 +127,6 @@ public readonly record struct ExpectedStreamState
         ExpectedStreamStateKind.Any => nameof(Any),
         ExpectedStreamStateKind.StreamDoesNotExist => nameof(StreamDoesNotExist),
         ExpectedStreamStateKind.StreamExists => nameof(StreamExists),
-        _ => $"Version={Version?.Value}"
+        _ => $"{VersionPrefix}{Version?.Value}"
     };
 }

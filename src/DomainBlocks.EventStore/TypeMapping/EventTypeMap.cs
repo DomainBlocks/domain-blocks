@@ -1,5 +1,3 @@
-using System.Collections.Frozen;
-
 namespace DomainBlocks.EventStore.TypeMapping;
 
 /// <summary>
@@ -14,26 +12,74 @@ namespace DomainBlocks.EventStore.TypeMapping;
 /// deserialize events with a shared structure into a common CLR type.
 /// </para>
 /// </remarks>
-public sealed class EventTypeMap
+public class EventTypeMap
 {
-    private readonly FrozenDictionary<Type, string> _writeMap;
-    private readonly FrozenDictionary<string, Type> _readMap;
-
-    internal EventTypeMap(EventTypeToNameMappingSet writeMappings, EventNameToTypeMappingSet readMappings)
+    private EventTypeMap(AppendEventTypeMap appends, ReadEventTypeMap reads)
     {
-        _writeMap = writeMappings.ToFrozenDictionary();
-        _readMap = readMappings.ToFrozenDictionary();
+        Appends = appends;
+        Reads = reads;
+    }
+
+    public AppendEventTypeMap Appends { get; }
+    public ReadEventTypeMap Reads { get; }
+
+    public static EventTypeMap Create(Action<Builder> configure)
+    {
+        var builder = new Builder();
+        configure(builder);
+        return builder.Build();
     }
 
     /// <summary>
-    /// Gets the event name associated with an event type.
+    /// Builds an <see cref="EventTypeMap"/> by registering mappings between event CLR types and string names.
     /// </summary>
-    public string GetEventName(Type eventType) => _writeMap.GetValueOrDefault(eventType) ??
-                                                  throw new EventTypeToNameMappingNotFoundException(eventType);
+    public class Builder
+    {
+        private readonly AppendEventTypeMap.Builder _appendMapBuilder = new();
+        private readonly ReadEventTypeMap.Builder _readMapBuilder = new();
 
-    /// <summary>
-    /// Gets the event type associated with an event name.
-    /// </summary>
-    public Type GetEventType(string eventName) => _readMap.GetValueOrDefault(eventName) ??
-                                                  throw new EventNameToTypeMappingNotFoundException(eventName);
+        internal Builder()
+        {
+        }
+
+        public Builder MapType<TEvent>(Action<Mapping>? configure = null)
+        {
+            var mapping = new Mapping(typeof(TEvent));
+            configure?.Invoke(mapping);
+
+            _appendMapBuilder.MapType<TEvent>(m => m.ToName(mapping.EventName));
+            _readMapBuilder.MapType<TEvent>(m => m.FromNames(mapping.EventName));
+
+            return this;
+        }
+
+        public Builder ForAppends(Action<AppendEventTypeMap.Builder> configure)
+        {
+            configure(_appendMapBuilder);
+            return this;
+        }
+
+        public Builder ForReads(Action<ReadEventTypeMap.Builder> configure)
+        {
+            configure(_readMapBuilder);
+            return this;
+        }
+
+        internal EventTypeMap Build() => new(_appendMapBuilder.Build(), _readMapBuilder.Build());
+
+        public sealed class Mapping
+        {
+            internal Mapping(Type eventType)
+            {
+                EventName = eventType.Name;
+            }
+
+            public void WithName(string name)
+            {
+                EventName = name;
+            }
+
+            internal string EventName { get; private set; }
+        }
+    }
 }
