@@ -80,7 +80,7 @@ public class ExceptionInterceptor : Interceptor
 
         _ = StreamState.TryParse(metadata["actualState"], out var actualState);
 
-        throw new StreamAppendConflictException(streamId, expectedState.Value, actualState, rpcException);
+        return new StreamAppendConflictException(streamId, expectedState.Value, actualState, rpcException);
     }
 
     private delegate Exception? RpcErrorMapper(ErrorInfo errorInfo, RpcException rpcException);
