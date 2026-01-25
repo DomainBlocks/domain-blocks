@@ -15,6 +15,9 @@
   <Folder Name="/examples/">
     <Project Path="examples\DomainBlocks.Examples.TodoList.Domain\DomainBlocks.Examples.TodoList.Domain.csproj" />
   </Folder>
+  <Folder Name="/scripts/">
+    <File Path="scripts\init-mongo-replica-set.sh" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/DomainBlocks.EventStore.MongoDB.Appender.Host/DomainBlocks.EventStore.MongoDB.Appender.Host.csproj" />
     <Project Path="src/DomainBlocks.EventStore.MongoDB.Client/DomainBlocks.EventStore.MongoDB.Client.csproj" />
