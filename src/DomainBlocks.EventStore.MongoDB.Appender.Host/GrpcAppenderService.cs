@@ -1,7 +1,11 @@
 ﻿using System.Diagnostics;
+using System.Runtime.InteropServices;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Api.Appender.V0;
+using Google.Protobuf.Collections;
 using Grpc.Core;
+using MongoDB.Bson;
+using MongoDB.Bson.IO;
 using AppendToStreamOptions = DomainBlocks.EventStore.Abstractions.AppendToStreamOptions;
 using ExpectedStreamState = DomainBlocks.EventStore.Abstractions.ExpectedStreamState;
 
@@ -13,9 +17,7 @@ public sealed class GrpcAppenderService(EventAppender appender) : AppenderServic
         AppendToStreamRequest request,
         ServerCallContext context)
     {
-        var events = request.Batch.Events
-            .Select(x => EncodedEvent.Create(x.EventName, x.EventData.Memory, x.Metadata.Memory));
-
+        var events = ToEventDocuments(request.Batch.Events);
         var options = MapOptions(request.Options);
 
         await appender.AppendToStreamAsync(request.StreamId, events, options, context.CancellationToken);
@@ -23,6 +25,45 @@ public sealed class GrpcAppenderService(EventAppender appender) : AppenderServic
         var response = new AppendToStreamResponse();
 
         return response;
+    }
+
+    private static List<Schema.EventDocument> ToEventDocuments(RepeatedField<Api.Appender.V0.AppendEvent> events)
+    {
+        var documents = new List<Schema.EventDocument>(events.Count);
+
+        foreach (var e in events)
+        {
+            documents.Add(new Schema.EventDocument
+            {
+                EventName = e.EventName,
+                EventData = ToRawBsonDocument(e.EventData.Memory),
+                Metadata = e.Metadata.IsEmpty ? BsonNull.Value : ToRawBsonDocument(e.Metadata.Memory)
+            });
+        }
+
+        return documents;
+    }
+
+    private static RawBsonDocument ToRawBsonDocument(ReadOnlyMemory<byte> memory)
+    {
+        if (!MemoryMarshal.TryGetArray(memory, out var segment) || segment.Array is null)
+            return new RawBsonDocument(memory.ToArray());
+
+        // Profile this
+        switch (segment.Offset)
+        {
+            case 0 when segment.Count == segment.Array.Length:
+                // Full array: simplest path (driver wraps internally)
+                return new RawBsonDocument(segment.Array);
+            case 0:
+                // Prefix of array: avoid ByteBufferSlice by using length-limited buffer
+                return new RawBsonDocument(new ByteArrayBuffer(segment.Array, segment.Count, isReadOnly: true));
+            default:
+                // True slice: need buffer + slice
+                var buffer = new ByteArrayBuffer(segment.Array, isReadOnly: true);
+                var slice = new ByteBufferSlice(buffer, segment.Offset, segment.Count);
+                return new RawBsonDocument(slice);
+        }
     }
 
     private static AppendToStreamOptions MapOptions(Api.Appender.V0.AppendToStreamOptions grpcOptions)

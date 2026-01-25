@@ -13,6 +13,12 @@ namespace DomainBlocks.EventStore.MongoDB.Client.Tests.Integration;
 [TestFixture]
 public class MongoEventStoreClientTests : EventStoreClientTests
 {
+#if DEBUG
+    private static readonly TimeSpan HttpClientTimeout = TimeSpan.FromMinutes(10);
+#else
+    private static readonly TimeSpan HttpClientTimeout = TimeSpan.FromSeconds(5);
+#endif
+
     private GrpcChannel _grpcChannel = null!;
     private MongoClient _mongoClient = null!;
     private MongoEventStoreClient<IDomainEvent> _client = null!;
@@ -22,7 +28,17 @@ public class MongoEventStoreClientTests : EventStoreClientTests
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
     {
-        _grpcChannel = GrpcChannel.ForAddress("http://localhost:50051");
+        _grpcChannel = GrpcChannel.ForAddress(
+            "http://localhost:50051",
+            new GrpcChannelOptions
+            {
+                HttpClient = new HttpClient
+                {
+                    Timeout = HttpClientTimeout
+                },
+                DisposeHttpClient = true
+            });
+
         var appenderClient = new Api.Appender.V0.AppenderService.AppenderServiceClient(_grpcChannel);
 
         var eventTypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>());

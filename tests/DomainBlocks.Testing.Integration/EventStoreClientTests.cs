@@ -7,7 +7,12 @@ namespace DomainBlocks.Testing.Integration;
 
 public abstract class EventStoreClientTests
 {
-    private const int TestTimeoutMillis = 5_000;
+    // Set a longer timeout when debugging.
+#if DEBUG
+    private const int TestTimeoutMillis = 10 * 60 * 1_000;
+#else
+    private const int TestTimeoutMillis = 5 * 1_000;
+#endif
 
     private static IEnumerable<TestCaseData> PositionAndDirectionCases
     {

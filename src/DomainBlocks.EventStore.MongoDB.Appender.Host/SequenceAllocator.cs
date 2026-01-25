@@ -3,7 +3,7 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Appender.Host;
 
-internal sealed class SequenceAllocator(IMongoCollection<BsonDocument> sequencesCollection)
+internal sealed class SequenceAllocator(IMongoCollection<BsonDocument> sequences)
 {
     private const string NextValueFieldName = "nextValue";
 
@@ -24,7 +24,7 @@ internal sealed class SequenceAllocator(IMongoCollection<BsonDocument> sequences
         var filter = new BsonDocument("_id", sequenceId);
         var update = new BsonDocument("$inc", new BsonDocument(NextValueFieldName, count));
 
-        var previous = await sequencesCollection
+        var previous = await sequences
             .FindOneAndUpdateAsync(filter, update, FindOneAndUpdateOptions, cancellationToken)
             .ConfigureAwait(false);
 

@@ -10,10 +10,10 @@ public static class Schema
         public required string StreamId { get; init; }
         public required long StartStreamVersion { get; init; }
         public required long EndStreamVersion { get; init; }
-        public long StartGlobalPosition { get; set; }
-        public long EndGlobalPosition { get; set; }
-        public DateTime CommittedAtUtc { get; set; }
-        public required EventDocument[] Events { get; init; }
+        public required long StartGlobalPosition { get; set; }
+        public required long EndGlobalPosition { get; set; }
+        public required DateTime CommittedAtUtc { get; set; }
+        public required List<EventDocument> Events { get; init; }
     }
 
     public sealed class EventDocument
