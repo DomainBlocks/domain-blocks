@@ -39,23 +39,25 @@ public class ExceptionInterceptor : Interceptor
             if (status is null)
                 throw;
 
-            foreach (var any in status.Details)
-            {
-                if (!any.Is(ErrorInfo.Descriptor))
-                    continue;
-
-                var errorInfo = any.Unpack<ErrorInfo>();
-
-                foreach (var mapper in ErrorMappers)
-                {
-                    var mappedException = mapper(errorInfo, ex);
-                    if (mappedException != null)
-                        throw mappedException;
-                }
-            }
+            var mappedException = MapException(status, ex);
+            if (mappedException is not null)
+                throw mappedException;
 
             throw;
         }
+    }
+
+    private static Exception? MapException(Google.Rpc.Status status, RpcException ex)
+    {
+        return status.Details
+            .Where(x => x.Is(ErrorInfo.Descriptor))
+            .SelectMany(x =>
+            {
+                var errorInfo = x.Unpack<ErrorInfo>();
+                return ErrorMappers.Select(mapper => mapper(errorInfo, ex));
+            })
+            .OfType<Exception>()
+            .FirstOrDefault();
     }
 
     private static StreamAppendConflictException? MapStreamAppendConflict(
