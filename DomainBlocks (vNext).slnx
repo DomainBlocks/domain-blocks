@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/.solution/">
     <File Path="compose.yaml" />
+    <File Path=".gitattributes" />
     <File Path=".gitignore" />
     <File Path=".editorconfig" />
     <File Path="Directory.Build.props" />
