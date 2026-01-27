@@ -1,6 +1,6 @@
 ﻿using MongoDB.Bson;
 
-namespace DomainBlocks.EventStore.MongoDB.Appender.Host;
+namespace DomainBlocks.EventStore.MongoDB.Appender;
 
 public static class Schema
 {
@@ -10,10 +10,10 @@ public static class Schema
         public required string StreamId { get; init; }
         public required long StartStreamVersion { get; init; }
         public required long EndStreamVersion { get; init; }
-        public required long StartGlobalPosition { get; set; }
-        public required long EndGlobalPosition { get; set; }
+        public required long StartGlobalPosition { get; init; }
+        public required long EndGlobalPosition { get; init; }
         public required DateTime CommittedAtUtc { get; set; }
-        public required List<EventDocument> Events { get; init; }
+        public required IReadOnlyList<EventDocument> Events { get; init; }
     }
 
     public sealed class EventDocument

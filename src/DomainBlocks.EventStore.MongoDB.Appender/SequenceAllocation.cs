@@ -1,4 +1,4 @@
-﻿namespace DomainBlocks.EventStore.MongoDB.Appender.Host;
+﻿namespace DomainBlocks.EventStore.MongoDB.Appender;
 
 internal readonly record struct SequenceAllocation(long Start, long Count)
 {

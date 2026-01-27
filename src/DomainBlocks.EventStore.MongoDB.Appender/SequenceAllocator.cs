@@ -1,7 +1,7 @@
 ﻿using MongoDB.Bson;
 using MongoDB.Driver;
 
-namespace DomainBlocks.EventStore.MongoDB.Appender.Host;
+namespace DomainBlocks.EventStore.MongoDB.Appender;
 
 internal sealed class SequenceAllocator(IMongoCollection<BsonDocument> sequences)
 {
