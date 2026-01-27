@@ -1,4 +1,5 @@
-﻿using DomainBlocks.EventStore.MongoDB.Appender.Host;
+﻿using DomainBlocks.EventStore.MongoDB.Appender;
+using DomainBlocks.EventStore.MongoDB.Appender.Host;
 using MongoDB.Driver;
 
 var builder = WebApplication.CreateBuilder(args);

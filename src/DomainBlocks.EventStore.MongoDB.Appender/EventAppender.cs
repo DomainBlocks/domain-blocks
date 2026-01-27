@@ -2,12 +2,13 @@
 using System.Threading.Channels;
 using System.Threading.Tasks.Sources;
 using DomainBlocks.EventStore.Abstractions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.ObjectPool;
 using Microsoft.Extensions.Options;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
-namespace DomainBlocks.EventStore.MongoDB.Appender.Host;
+namespace DomainBlocks.EventStore.MongoDB.Appender;
 
 [SuppressMessage("ReSharper", "InconsistentlySynchronizedField")] // OK for logging
 public sealed class EventAppender : IAsyncDisposable
@@ -44,7 +45,7 @@ public sealed class EventAppender : IAsyncDisposable
 
     public async Task AppendToStreamAsync(
         string streamId,
-        List<Schema.EventDocument> events,
+        IReadOnlyList<Schema.EventDocument> events,
         AppendToStreamOptions options,
         CancellationToken cancellationToken = default)
     {
@@ -87,7 +88,7 @@ public sealed class EventAppender : IAsyncDisposable
         }
     }
 
-    public async Task StopAsync(CancellationToken cancellationToken)
+    public async Task StopAsync(CancellationToken cancellationToken = default)
     {
         Task? consumerLoopTask;
 
@@ -362,13 +363,13 @@ public sealed class EventAppender : IAsyncDisposable
         };
 
         public string StreamId { get; private set; } = null!;
-        public List<Schema.EventDocument> Events { get; private set; } = null!;
+        public IReadOnlyList<Schema.EventDocument> Events { get; private set; } = null!;
         public AppendToStreamOptions Options { get; private set; } = null!;
         public CancellationToken CancellationToken { get; private set; }
 
         public void Init(
             string streamId,
-            List<Schema.EventDocument> eventDocuments,
+            IReadOnlyList<Schema.EventDocument> eventDocuments,
             AppendToStreamOptions options,
             CancellationToken cancellationToken)
         {

@@ -21,6 +21,7 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/DomainBlocks.EventStore.MongoDB.Appender.Host/DomainBlocks.EventStore.MongoDB.Appender.Host.csproj" />
+    <Project Path="src/DomainBlocks.EventStore.MongoDB.Appender/DomainBlocks.EventStore.MongoDB.Appender.csproj" />
     <Project Path="src/DomainBlocks.EventStore.MongoDB.Client/DomainBlocks.EventStore.MongoDB.Client.csproj" />
     <Project Path="src\DomainBlocks.Core\DomainBlocks.Core.csproj" />
     <Project Path="src\DomainBlocks.EventSourcing\DomainBlocks.EventSourcing.csproj" />

@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
-namespace DomainBlocks.EventStore.MongoDB.Appender.Host;
+namespace DomainBlocks.EventStore.MongoDB.Appender;
 
 public sealed class EventAppenderOptions
 {
