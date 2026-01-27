@@ -55,7 +55,7 @@ public class EventAppenderBenchmark
     }
 
     [Benchmark(OperationsPerInvoke = TotalOps)]
-    public async Task Append_1Event_Concurrent()
+    public async Task AppendEvents_Concurrent()
     {
         var tasks = new Task[Producers];
 
