@@ -1,0 +1,75 @@
+﻿using Microsoft.Extensions.Logging;
+
+namespace DomainBlocks.EventStore.MongoDB.Appender.Coordination;
+
+public sealed class LeaseProvider(
+    ILeaseStore leaseStore,
+    ILogger<LeaseProvider> logger,
+    TimeProvider? timeProvider = null) : ILeaseProvider
+{
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+
+    public async Task<ILease?> AcquireLeaseAsync(
+        string resourceId,
+        AcquireLeaseOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        options ??= AcquireLeaseOptions.Default;
+
+        logger.LogInformation("Attempting to acquire lease for resource {ResourceId}", resourceId);
+
+        var deadline = options.AcquireRetryDelay == Timeout.InfiniteTimeSpan
+            ? DateTimeOffset.MaxValue
+            : _timeProvider.GetUtcNow() + options.AcquireTimeout;
+
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var lease = await AcquireOnceAsync(resourceId, options, cancellationToken);
+            if (lease is not null)
+            {
+                logger.LogInformation(
+                    "Lease for resource {ResourceId} acquired by holder {HolderId}",
+                    resourceId,
+                    lease.HolderId);
+
+                return lease;
+            }
+
+            if (options.AcquireTimeout == TimeSpan.Zero)
+            {
+                logger.LogInformation("Failed to acquire lease for resource {ResourceId} (zero timeout)", resourceId);
+                return null;
+            }
+
+            if (_timeProvider.GetUtcNow() >= deadline)
+            {
+                logger.LogInformation(
+                    "Failed to acquire lease for resource {ResourceId} (timeout reached)",
+                    resourceId);
+
+                return null;
+            }
+
+            logger.LogDebug(
+                "Retrying to acquire lease for resource {ResourceId} after delay {AcquireRetryDelay}",
+                resourceId,
+                options.AcquireRetryDelay);
+
+            await _timeProvider.Delay(options.AcquireRetryDelay, cancellationToken);
+        }
+    }
+
+    private async Task<ILease?> AcquireOnceAsync(
+        string resourceId,
+        AcquireLeaseOptions options,
+        CancellationToken cancellationToken)
+    {
+        var leaseState = await leaseStore.AcquireAsync(resourceId, options, cancellationToken);
+
+        return leaseState is not null
+            ? new Lease(resourceId, leaseState.HolderId, leaseState.Epoch, options, leaseStore, logger)
+            : null;
+    }
+}
