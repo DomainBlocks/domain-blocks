@@ -193,7 +193,8 @@ public class LeaseProviderTests
                 lease.ShouldNotBeNull();
 
                 // Simulate work
-                await Task.Delay(20, ct);
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, lease.LeaseLostToken);
+                await Task.Delay(20, linkedCts.Token);
             });
 
         // If all contenders complete successfully before the test timeout, the test succeeds.

@@ -16,7 +16,7 @@ public sealed class LeaseProvider(
     {
         options ??= AcquireLeaseOptions.Default;
 
-        logger.LogInformation("Attempting to acquire lease for resource {ResourceId}", resourceId);
+        logger.LogInformation("Attempting to acquire lease for resource '{ResourceId}'", resourceId);
 
         var deadline = options.AcquireTimeout == Timeout.InfiniteTimeSpan
             ? DateTimeOffset.MaxValue
@@ -30,7 +30,7 @@ public sealed class LeaseProvider(
             if (lease is not null)
             {
                 logger.LogInformation(
-                    "Lease for resource {ResourceId} acquired by holder {HolderId}",
+                    "Lease for resource '{ResourceId}' acquired by holder '{HolderId}'",
                     resourceId,
                     lease.HolderId);
 
@@ -39,21 +39,21 @@ public sealed class LeaseProvider(
 
             if (options.AcquireTimeout == TimeSpan.Zero)
             {
-                logger.LogInformation("Failed to acquire lease for resource {ResourceId} (zero timeout)", resourceId);
+                logger.LogInformation("Failed to acquire lease for resource '{ResourceId}' (zero timeout)", resourceId);
                 return null;
             }
 
             if (_timeProvider.GetUtcNow() >= deadline)
             {
                 logger.LogInformation(
-                    "Failed to acquire lease for resource {ResourceId} (timeout reached)",
+                    "Failed to acquire lease for resource '{ResourceId}' (timeout reached)",
                     resourceId);
 
                 return null;
             }
 
             logger.LogDebug(
-                "Lease for resource {ResourceId} already held; retrying after {AcquireRetryDelay}",
+                "Lease for resource '{ResourceId}' is held elsewhere; retrying in {AcquireRetryDelay}",
                 resourceId,
                 options.AcquireRetryDelay);
 

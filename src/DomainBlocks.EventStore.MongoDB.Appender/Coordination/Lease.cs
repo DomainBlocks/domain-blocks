@@ -63,7 +63,7 @@ public sealed class Lease : ILease
             return;
 
         _logger.LogInformation(
-            "Disposing lease for resource {ResourceId} held by {HolderId}",
+            "Disposing lease for resource '{ResourceId}' held by '{HolderId}'",
             ResourceId,
             HolderId);
 
@@ -126,7 +126,8 @@ public sealed class Lease : ILease
         Volatile.Write(ref _leaseState, state);
 
         _logger.LogDebug(
-            "Holder {HolderId} renewed lease for resource {ResourceId}; expires at {ExpiresAtUtc:yyyy-MM-ddTHH:mm:ssZ}",
+            "Holder '{HolderId}' renewed lease for resource '{ResourceId}'; " +
+            "expires at {ExpiresAtUtc:yyyy-MM-ddTHH:mm:ssZ}",
             HolderId,
             ResourceId,
             state.ExpiresAtUtc);
@@ -144,14 +145,14 @@ public sealed class Lease : ILease
             if (succeeded)
             {
                 _logger.LogInformation(
-                    "Holder {HolderId} released lease for resource {ResourceId}",
+                    "Holder '{HolderId}' released lease for resource '{ResourceId}'",
                     HolderId,
                     ResourceId);
             }
             else
             {
                 _logger.LogInformation(
-                    "Holder {HolderId} unable to release lease for resource {ResourceId} (may no longer hold it)",
+                    "Holder '{HolderId}' unable to release lease for resource '{ResourceId}' (no longer held)",
                     HolderId,
                     ResourceId);
             }
@@ -160,7 +161,7 @@ public sealed class Lease : ILease
         {
             _logger.LogError(
                 ex,
-                "Holder {HolderId} failed to release lease for resource {ResourceId}",
+                "Holder '{HolderId}' failed to release lease for resource '{ResourceId}'",
                 HolderId,
                 ResourceId);
         }
@@ -171,7 +172,7 @@ public sealed class Lease : ILease
         _logger.Log(
             exception is null ? LogLevel.Information : LogLevel.Error,
             exception,
-            "Holder {HolderId} lost lease for resource {ResourceId} (reason: {Reason})",
+            "Holder '{HolderId}' lost lease for resource '{ResourceId}' (reason: {Reason})",
             HolderId,
             ResourceId,
             reason);
