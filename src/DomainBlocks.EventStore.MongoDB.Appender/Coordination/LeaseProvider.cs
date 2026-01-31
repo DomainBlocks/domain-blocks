@@ -18,7 +18,7 @@ public sealed class LeaseProvider(
 
         logger.LogInformation("Attempting to acquire lease for resource {ResourceId}", resourceId);
 
-        var deadline = options.AcquireRetryDelay == Timeout.InfiniteTimeSpan
+        var deadline = options.AcquireTimeout == Timeout.InfiniteTimeSpan
             ? DateTimeOffset.MaxValue
             : _timeProvider.GetUtcNow() + options.AcquireTimeout;
 
@@ -53,7 +53,7 @@ public sealed class LeaseProvider(
             }
 
             logger.LogDebug(
-                "Retrying to acquire lease for resource {ResourceId} after delay {AcquireRetryDelay}",
+                "Lease for resource {ResourceId} already held; retrying after {AcquireRetryDelay}",
                 resourceId,
                 options.AcquireRetryDelay);
 

@@ -190,6 +190,8 @@ public class LeaseProviderTests
 
                 await using var lease = await leaseProvider.AcquireLeaseAsync(_resourceId, options, ct);
 
+                lease.ShouldNotBeNull();
+
                 // Simulate work
                 await Task.Delay(20, ct);
             });
