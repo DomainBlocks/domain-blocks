@@ -45,9 +45,9 @@ public sealed class Lease : ILease
     public string HolderId { get; }
     public long Epoch { get; }
     public int ContentionPriority => Volatile.Read(ref _leaseState).ContentionPriority;
-    public DateTime UpdatedAtUtc => Volatile.Read(ref _leaseState).UpdatedAtUtc;
-    public DateTime HeldSinceUtc => Volatile.Read(ref _leaseState).HeldSinceUtc;
-    public DateTime ExpiresAtUtc => Volatile.Read(ref _leaseState).ExpiresAtUtc;
+    public DateTimeOffset UpdatedAt => Volatile.Read(ref _leaseState).UpdatedAtUtc;
+    public DateTimeOffset HeldSince => Volatile.Read(ref _leaseState).HeldSinceUtc;
+    public DateTimeOffset ExpiresAt => Volatile.Read(ref _leaseState).ExpiresAtUtc;
     public CancellationToken LeaseLostToken => _leaseLostCts.Token;
     public Task<LeaseLostInfo> LeaseLostTask => _leaseLostTcs.Task;
 

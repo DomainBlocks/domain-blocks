@@ -10,11 +10,11 @@ public interface ILease : IAsyncDisposable
 
     int ContentionPriority { get; }
 
-    DateTime UpdatedAtUtc { get; }
+    DateTimeOffset UpdatedAt { get; }
 
-    DateTime HeldSinceUtc { get; }
+    DateTimeOffset HeldSince { get; }
 
-    DateTime ExpiresAtUtc { get; }
+    DateTimeOffset ExpiresAt { get; }
 
     CancellationToken LeaseLostToken { get; }
 

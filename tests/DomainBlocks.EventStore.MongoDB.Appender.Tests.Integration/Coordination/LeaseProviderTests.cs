@@ -52,11 +52,19 @@ public class LeaseProviderTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task AcquireLeaseAsync_WhenNotAlreadyHeld_ReturnsLease(CancellationToken ct)
     {
+        var utcNow = _fakeTimeProvider.GetUtcNow();
+        var expectedExpiresAt = utcNow + AcquireLeaseOptions.Default.Duration;
+
         await using var lease = await _leaseProvider.AcquireLeaseAsync(_resourceId, cancellationToken: ct);
 
         lease.ShouldNotBeNull();
         lease.ResourceId.ShouldBe(_resourceId);
         lease.HolderId.ShouldStartWith(AcquireLeaseOptions.Default.HolderIdPrefix);
+        lease.Epoch.ShouldBe(1);
+        lease.ContentionPriority.ShouldBe(AcquireLeaseOptions.Default.ContentionPriority);
+        lease.UpdatedAt.ShouldBe(utcNow);
+        lease.HeldSince.ShouldBe(utcNow);
+        lease.ExpiresAt.ShouldBe(expectedExpiresAt);
     }
 
     [Test]
@@ -90,13 +98,19 @@ public class LeaseProviderTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task AcquireLeaseAsync_AfterLeaseReleased_AllowsNewHolderToAcquire(CancellationToken ct)
     {
+        string lease1HolderId;
+
         await using (var lease1 = await _leaseProvider.AcquireLeaseAsync(_resourceId, cancellationToken: ct))
         {
             lease1.ShouldNotBeNull();
+            lease1.Epoch.ShouldBe(1);
+            lease1HolderId = lease1.HolderId;
         }
 
         await using var lease2 = await _leaseProvider.AcquireLeaseAsync(_resourceId, cancellationToken: ct);
         lease2.ShouldNotBeNull();
+        lease2.HolderId.ShouldNotBe(lease1HolderId);
+        lease2.Epoch.ShouldBe(2); // We expect epoch to increment on a new acquisition
     }
 
     [Test]
@@ -105,16 +119,19 @@ public class LeaseProviderTests
     {
         await using var lease = await _leaseProvider.AcquireLeaseAsync(_resourceId, cancellationToken: ct);
         lease.ShouldNotBeNull();
+        lease.Epoch.ShouldBe(1);
 
-        var initialExpiry = lease.ExpiresAtUtc;
+        var initialExpiry = lease.ExpiresAt;
 
         _fakeTimeProvider.Advance(AcquireLeaseOptions.Default.RenewInterval);
 
-        while (lease.ExpiresAtUtc <= initialExpiry)
+        while (lease.ExpiresAt <= initialExpiry)
         {
             ct.ThrowIfCancellationRequested();
             await Task.Yield();
         }
+
+        lease.Epoch.ShouldBe(1); // Epoch should not change on renewal
     }
 
     [Test]
@@ -128,11 +145,11 @@ public class LeaseProviderTests
         lease.ScheduleContentionPriorityChange(newPriority);
         lease.ContentionPriority.ShouldBe(0);
 
-        var initialExpiry = lease.ExpiresAtUtc;
+        var initialExpiry = lease.ExpiresAt;
 
         _fakeTimeProvider.Advance(AcquireLeaseOptions.Default.RenewInterval);
 
-        while (lease.ExpiresAtUtc <= initialExpiry)
+        while (lease.ExpiresAt <= initialExpiry)
         {
             ct.ThrowIfCancellationRequested();
             await Task.Yield();

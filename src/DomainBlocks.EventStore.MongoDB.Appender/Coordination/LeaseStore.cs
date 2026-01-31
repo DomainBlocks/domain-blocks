@@ -34,8 +34,8 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
         var update = Builders<LeaseState>.Update
             .SetOnInsert(x => x.ResourceId, resourceId)
             .Set(x => x.HolderId, holderId)
-            .Set(x => x.ContentionPriority, options.ContentionPriority)
             .Inc(x => x.Epoch, 1)
+            .Set(x => x.ContentionPriority, options.ContentionPriority)
             .Set(x => x.UpdatedAtUtc, now)
             .Set(x => x.HeldSinceUtc, now)
             .Set(x => x.ExpiresAtUtc, expiresAt);
