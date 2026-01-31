@@ -67,9 +67,6 @@ public sealed class LeaseProvider(
         CancellationToken cancellationToken)
     {
         var leaseState = await leaseStore.AcquireAsync(resourceId, options, cancellationToken);
-
-        return leaseState is not null
-            ? new Lease(resourceId, leaseState.HolderId, leaseState.Epoch, options, leaseStore, logger)
-            : null;
+        return leaseState is not null ? new Lease(leaseState, options, leaseStore, logger, _timeProvider) : null;
     }
 }

@@ -4,42 +4,45 @@ namespace DomainBlocks.EventStore.MongoDB.Appender.Coordination;
 
 public sealed class Lease : ILease
 {
+    private LeaseState _leaseState;
     private readonly AcquireLeaseOptions _acquireOptions;
     private readonly ILeaseStore _leaseStore;
     private readonly ILogger _logger;
     private readonly TimeProvider _timeProvider;
+    private readonly Task _heartbeatTask;
+
     private readonly CancellationTokenSource _leaseLostCts = new();
 
     private readonly TaskCompletionSource<LeaseLostInfo> _leaseLostTcs =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    private readonly Task _heartbeatTask;
     private int _disposed;
 
     public Lease(
-        string resourceId,
-        string holderId,
-        long epoch,
+        LeaseState leaseState,
         AcquireLeaseOptions acquireOptions,
         ILeaseStore leaseStore,
         ILogger logger,
-        TimeProvider? timeProvider = null)
+        TimeProvider timeProvider)
     {
-        ResourceId = resourceId;
-        HolderId = holderId;
-        Epoch = epoch;
+        ResourceId = leaseState.ResourceId;
+        HolderId = leaseState.HolderId;
         HolderPriority = acquireOptions.HolderPriority;
+        Epoch = leaseState.Epoch;
 
+        _leaseState = leaseState;
         _acquireOptions = acquireOptions;
         _leaseStore = leaseStore;
         _logger = logger;
-        _timeProvider = timeProvider ?? TimeProvider.System;
-        _heartbeatTask = Task.Run(HeartbeatAsync);
+        _timeProvider = timeProvider;
+
+        // Intentionally not Task.Run: calling HeartbeatAsync() executes synchronously up to the first incomplete await.
+        // This schedules the initial TimeProvider.Delay before returning, avoiding startup races in tests.
+        _heartbeatTask = HeartbeatAsync();
     }
 
     public string ResourceId { get; }
     public string HolderId { get; }
-    public long Epoch { get; }
 
     public int HolderPriority
     {
@@ -47,6 +50,10 @@ public sealed class Lease : ILease
         set => Interlocked.Exchange(ref field, value);
     }
 
+    public long Epoch { get; }
+    public DateTime UpdatedAtUtc => Volatile.Read(ref _leaseState).UpdatedAtUtc;
+    public DateTime HeldSinceUtc => Volatile.Read(ref _leaseState).HeldSinceUtc;
+    public DateTime ExpiresAtUtc => Volatile.Read(ref _leaseState).ExpiresAtUtc;
     public CancellationToken LeaseLostToken => _leaseLostCts.Token;
     public Task<LeaseLostInfo> LeaseLostTask => _leaseLostTcs.Task;
 
@@ -77,9 +84,7 @@ public sealed class Lease : ILease
         {
             while (true)
             {
-                _leaseLostCts.Token.ThrowIfCancellationRequested();
-
-                await _timeProvider.Delay(_acquireOptions.RenewInterval, _leaseLostCts.Token);
+                await _timeProvider.Delay(_acquireOptions.RenewInterval, _leaseLostCts.Token).ConfigureAwait(false);
 
                 if (await TryRenewAsync())
                     continue;
@@ -118,10 +123,12 @@ public sealed class Lease : ILease
         if (state is null)
             return false;
 
+        Volatile.Write(ref _leaseState, state);
+
         _logger.LogDebug(
-            "Lease for resource {ResourceId} renewed by holder {HolderId}; expires at {ExpiresAtUtc}",
-            ResourceId,
+            "Holder {HolderId} renewed lease for resource {ResourceId}; expires at {ExpiresAtUtc:yyyy-MM-ddTHH:mm:ssZ}",
             HolderId,
+            ResourceId,
             state.ExpiresAtUtc);
 
         return true;

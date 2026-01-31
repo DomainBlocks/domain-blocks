@@ -6,9 +6,15 @@ public interface ILease : IAsyncDisposable
 
     string HolderId { get; }
 
+    int HolderPriority { get; set; }
+
     long Epoch { get; }
 
-    int HolderPriority { get; set; }
+    DateTime UpdatedAtUtc { get; }
+
+    DateTime HeldSinceUtc { get; }
+
+    DateTime ExpiresAtUtc { get; }
 
     CancellationToken LeaseLostToken { get; }
 
