@@ -6,7 +6,7 @@ public sealed class AcquireLeaseOptions
 
     public string HolderIdPrefix { get; init; } = Environment.MachineName;
 
-    public int HolderPriority { get; init; }
+    public int ContentionPriority { get; init; }
 
     public TimeSpan Duration { get; init; } = TimeSpan.FromSeconds(30);
 

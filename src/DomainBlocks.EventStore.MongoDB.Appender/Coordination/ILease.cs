@@ -8,7 +8,7 @@ public interface ILease : IAsyncDisposable
 
     long Epoch { get; }
 
-    int HolderPriority { get; }
+    int ContentionPriority { get; }
 
     DateTime UpdatedAtUtc { get; }
 
@@ -20,5 +20,5 @@ public interface ILease : IAsyncDisposable
 
     Task<LeaseLostInfo> LeaseLostTask { get; }
 
-    void ScheduleHolderPriorityChange(int priority);
+    void ScheduleContentionPriorityChange(int priority);
 }

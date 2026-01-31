@@ -4,22 +4,19 @@ namespace DomainBlocks.EventStore.MongoDB.Appender.Coordination;
 
 public sealed class Lease : ILease
 {
-    private const int NoScheduledPriority = int.MinValue;
-
     private LeaseState _leaseState;
     private readonly AcquireLeaseOptions _acquireOptions;
     private readonly ILeaseStore _leaseStore;
     private readonly ILogger _logger;
     private readonly TimeProvider _timeProvider;
     private readonly Task _heartbeatTask;
-
     private readonly CancellationTokenSource _leaseLostCts = new();
 
     private readonly TaskCompletionSource<LeaseLostInfo> _leaseLostTcs =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    private int _scheduledPriority = NoScheduledPriority;
-
+    private readonly Lock _scheduledPriorityLock = new();
+    private int? _scheduledPriority;
     private int _disposed;
 
     public Lease(
@@ -47,17 +44,17 @@ public sealed class Lease : ILease
     public string ResourceId { get; }
     public string HolderId { get; }
     public long Epoch { get; }
-    public int HolderPriority => Volatile.Read(ref _leaseState).HolderPriority;
+    public int ContentionPriority => Volatile.Read(ref _leaseState).ContentionPriority;
     public DateTime UpdatedAtUtc => Volatile.Read(ref _leaseState).UpdatedAtUtc;
     public DateTime HeldSinceUtc => Volatile.Read(ref _leaseState).HeldSinceUtc;
     public DateTime ExpiresAtUtc => Volatile.Read(ref _leaseState).ExpiresAtUtc;
     public CancellationToken LeaseLostToken => _leaseLostCts.Token;
     public Task<LeaseLostInfo> LeaseLostTask => _leaseLostTcs.Task;
 
-    public void ScheduleHolderPriorityChange(int priority)
+    public void ScheduleContentionPriorityChange(int priority)
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(priority);
-        Interlocked.Exchange(ref _scheduledPriority, priority);
+        lock (_scheduledPriorityLock)
+            _scheduledPriority = priority;
     }
 
     public async ValueTask DisposeAsync()
@@ -118,12 +115,15 @@ public sealed class Lease : ILease
     {
         RenewLeaseOptions? renewOptions = null;
 
-        var scheduledPriority = Volatile.Read(ref _scheduledPriority);
-        if (scheduledPriority != NoScheduledPriority)
+        int? scheduledPriority;
+        lock (_scheduledPriorityLock)
+            scheduledPriority = _scheduledPriority;
+
+        if (scheduledPriority.HasValue)
         {
             renewOptions = new RenewLeaseOptions
             {
-                HolderPriority = scheduledPriority,
+                ContentionPriority = scheduledPriority,
                 Duration = _acquireOptions.Duration
             };
         }
@@ -132,11 +132,17 @@ public sealed class Lease : ILease
         if (state is null)
             return false;
 
-        // Clear scheduled priority after a successful renewal only if it matches the value we applied.
-        if (scheduledPriority != NoScheduledPriority)
-            Interlocked.CompareExchange(ref _scheduledPriority, NoScheduledPriority, scheduledPriority);
-
         Volatile.Write(ref _leaseState, state);
+
+        // Clear scheduled priority after a successful renewal only if it matches the value we applied.
+        if (scheduledPriority.HasValue)
+        {
+            lock (_scheduledPriorityLock)
+            {
+                if (_scheduledPriority == scheduledPriority)
+                    _scheduledPriority = null;
+            }
+        }
 
         _logger.LogDebug(
             "Holder '{HolderId}' renewed lease for resource '{ResourceId}'; " +

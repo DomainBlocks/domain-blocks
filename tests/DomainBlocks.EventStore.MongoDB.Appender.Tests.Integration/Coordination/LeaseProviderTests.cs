@@ -125,8 +125,8 @@ public class LeaseProviderTests
         lease.ShouldNotBeNull();
 
         const int newPriority = 10;
-        lease.ScheduleHolderPriorityChange(newPriority);
-        lease.HolderPriority.ShouldBe(0);
+        lease.ScheduleContentionPriorityChange(newPriority);
+        lease.ContentionPriority.ShouldBe(0);
 
         var initialExpiry = lease.ExpiresAtUtc;
 
@@ -138,7 +138,7 @@ public class LeaseProviderTests
             await Task.Yield();
         }
 
-        lease.HolderPriority.ShouldBe(newPriority);
+        lease.ContentionPriority.ShouldBe(newPriority);
     }
 
     [Test]

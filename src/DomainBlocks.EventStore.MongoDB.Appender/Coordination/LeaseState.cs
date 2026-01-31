@@ -11,7 +11,7 @@ public sealed class LeaseState
 
     public required long Epoch { get; set; }
 
-    public required int HolderPriority { get; init; }
+    public required int ContentionPriority { get; init; }
 
     public required DateTime UpdatedAtUtc { get; init; }
 

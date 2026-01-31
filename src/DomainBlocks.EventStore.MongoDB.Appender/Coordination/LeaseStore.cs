@@ -20,8 +20,8 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
         var holderId = $"{options.HolderIdPrefix}:{Guid.CreateVersion7():N}";
 
         var existingIsExpired = filterBuilder.Lte(x => x.ExpiresAtUtc, now);
-        var existingHasLowerPriority = filterBuilder.Lt(x => x.HolderPriority, options.HolderPriority);
-        var existingHasEqualPriority = filterBuilder.Eq(x => x.HolderPriority, options.HolderPriority);
+        var existingHasLowerPriority = filterBuilder.Lt(x => x.ContentionPriority, options.ContentionPriority);
+        var existingHasEqualPriority = filterBuilder.Eq(x => x.ContentionPriority, options.ContentionPriority);
         var weWinTiebreak = filterBuilder.Lt(x => x.HolderId, holderId);
         var existingIsPastMinAge = filterBuilder.Lte(x => x.HeldSinceUtc, now - options.MinHolderAge);
         var existingIsNearExpiry = filterBuilder.Lte(x => x.ExpiresAtUtc, now + options.PreemptWindow);
@@ -34,7 +34,7 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
         var update = Builders<LeaseState>.Update
             .SetOnInsert(x => x.ResourceId, resourceId)
             .Set(x => x.HolderId, holderId)
-            .Set(x => x.HolderPriority, options.HolderPriority)
+            .Set(x => x.ContentionPriority, options.ContentionPriority)
             .Inc(x => x.Epoch, 1)
             .Set(x => x.UpdatedAtUtc, now)
             .Set(x => x.HeldSinceUtc, now)
@@ -87,8 +87,8 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
             .Set(x => x.ExpiresAtUtc, expiresAt)
             .Set(x => x.UpdatedAtUtc, now);
 
-        if (options.HolderPriority.HasValue)
-            update = update.Set(x => x.HolderPriority, options.HolderPriority.Value);
+        if (options.ContentionPriority.HasValue)
+            update = update.Set(x => x.ContentionPriority, options.ContentionPriority.Value);
 
         var findOneAndUpdatedOptions = new FindOneAndUpdateOptions<LeaseState>
         {
