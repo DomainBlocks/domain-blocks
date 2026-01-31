@@ -9,9 +9,9 @@ public sealed class LeaseState
 
     public required string HolderId { get; init; }
 
-    public required int HolderPriority { get; init; }
-
     public required long Epoch { get; set; }
+
+    public required int HolderPriority { get; init; }
 
     public required DateTime UpdatedAtUtc { get; init; }
 

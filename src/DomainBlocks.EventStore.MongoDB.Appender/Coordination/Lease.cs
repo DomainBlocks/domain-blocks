@@ -4,6 +4,8 @@ namespace DomainBlocks.EventStore.MongoDB.Appender.Coordination;
 
 public sealed class Lease : ILease
 {
+    private const int NoScheduledPriority = int.MinValue;
+
     private LeaseState _leaseState;
     private readonly AcquireLeaseOptions _acquireOptions;
     private readonly ILeaseStore _leaseStore;
@@ -16,6 +18,8 @@ public sealed class Lease : ILease
     private readonly TaskCompletionSource<LeaseLostInfo> _leaseLostTcs =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+    private int _scheduledPriority = NoScheduledPriority;
+
     private int _disposed;
 
     public Lease(
@@ -27,7 +31,6 @@ public sealed class Lease : ILease
     {
         ResourceId = leaseState.ResourceId;
         HolderId = leaseState.HolderId;
-        HolderPriority = acquireOptions.HolderPriority;
         Epoch = leaseState.Epoch;
 
         _leaseState = leaseState;
@@ -43,19 +46,19 @@ public sealed class Lease : ILease
 
     public string ResourceId { get; }
     public string HolderId { get; }
-
-    public int HolderPriority
-    {
-        get => Volatile.Read(ref field);
-        set => Interlocked.Exchange(ref field, value);
-    }
-
     public long Epoch { get; }
+    public int HolderPriority => Volatile.Read(ref _leaseState).HolderPriority;
     public DateTime UpdatedAtUtc => Volatile.Read(ref _leaseState).UpdatedAtUtc;
     public DateTime HeldSinceUtc => Volatile.Read(ref _leaseState).HeldSinceUtc;
     public DateTime ExpiresAtUtc => Volatile.Read(ref _leaseState).ExpiresAtUtc;
     public CancellationToken LeaseLostToken => _leaseLostCts.Token;
     public Task<LeaseLostInfo> LeaseLostTask => _leaseLostTcs.Task;
+
+    public void ScheduleHolderPriorityChange(int priority)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(priority);
+        Interlocked.Exchange(ref _scheduledPriority, priority);
+    }
 
     public async ValueTask DisposeAsync()
     {
@@ -113,15 +116,25 @@ public sealed class Lease : ILease
 
     private async Task<bool> TryRenewAsync()
     {
-        var renewOptions = new RenewLeaseOptions
+        RenewLeaseOptions? renewOptions = null;
+
+        var scheduledPriority = Volatile.Read(ref _scheduledPriority);
+        if (scheduledPriority != NoScheduledPriority)
         {
-            HolderPriority = HolderPriority,
-            Duration = _acquireOptions.Duration
-        };
+            renewOptions = new RenewLeaseOptions
+            {
+                HolderPriority = scheduledPriority,
+                Duration = _acquireOptions.Duration
+            };
+        }
 
         var state = await _leaseStore.RenewAsync(ResourceId, HolderId, Epoch, renewOptions, _leaseLostCts.Token);
         if (state is null)
             return false;
+
+        // Clear scheduled priority after a successful renewal only if it matches the value we applied.
+        if (scheduledPriority != NoScheduledPriority)
+            Interlocked.CompareExchange(ref _scheduledPriority, NoScheduledPriority, scheduledPriority);
 
         Volatile.Write(ref _leaseState, state);
 

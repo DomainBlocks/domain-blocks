@@ -6,9 +6,9 @@ public interface ILease : IAsyncDisposable
 
     string HolderId { get; }
 
-    int HolderPriority { get; set; }
-
     long Epoch { get; }
+
+    int HolderPriority { get; }
 
     DateTime UpdatedAtUtc { get; }
 
@@ -19,4 +19,6 @@ public interface ILease : IAsyncDisposable
     CancellationToken LeaseLostToken { get; }
 
     Task<LeaseLostInfo> LeaseLostTask { get; }
+
+    void ScheduleHolderPriorityChange(int priority);
 }

@@ -115,8 +115,30 @@ public class LeaseProviderTests
             ct.ThrowIfCancellationRequested();
             await Task.Yield();
         }
+    }
 
-        lease.ExpiresAtUtc.ShouldBeGreaterThan(initialExpiry);
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task SchedulePriority_WhenRenewIntervalElapsed_UpdatesPriority(CancellationToken ct)
+    {
+        await using var lease = await _leaseProvider.AcquireLeaseAsync(_resourceId, cancellationToken: ct);
+        lease.ShouldNotBeNull();
+
+        const int newPriority = 10;
+        lease.ScheduleHolderPriorityChange(newPriority);
+        lease.HolderPriority.ShouldBe(0);
+
+        var initialExpiry = lease.ExpiresAtUtc;
+
+        _fakeTimeProvider.Advance(AcquireLeaseOptions.Default.RenewInterval);
+
+        while (lease.ExpiresAtUtc <= initialExpiry)
+        {
+            ct.ThrowIfCancellationRequested();
+            await Task.Yield();
+        }
+
+        lease.HolderPriority.ShouldBe(newPriority);
     }
 
     [Test]
