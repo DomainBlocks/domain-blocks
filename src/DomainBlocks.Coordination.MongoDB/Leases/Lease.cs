@@ -1,12 +1,13 @@
 ﻿using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 
-namespace DomainBlocks.EventStore.MongoDB.Appender.Coordination;
+namespace DomainBlocks.Coordination.MongoDB.Leases;
 
 public sealed class Lease : ILease
 {
     private LeaseState _leaseState;
     private readonly AcquireLeaseOptions _acquireOptions;
+    private readonly RenewLeaseOptions _renewOptions;
     private readonly ILeaseStore _leaseStore;
     private readonly ILogger _logger;
     private readonly TimeProvider _timeProvider;
@@ -32,13 +33,11 @@ public sealed class Lease : ILease
 
         _leaseState = leaseState;
         _acquireOptions = acquireOptions;
+        _renewOptions = new RenewLeaseOptions { Duration = acquireOptions.Duration };
         _leaseStore = leaseStore;
         _logger = logger;
         _timeProvider = timeProvider;
-
-        // Intentionally not Task.Run: calling HeartbeatAsync() executes synchronously up to the first incomplete await.
-        // This schedules the initial TimeProvider.Delay before returning, avoiding startup races in tests.
-        _heartbeatTask = HeartbeatAsync();
+        _heartbeatTask = Task.Run(HeartbeatAsync);
     }
 
     public string ResourceId { get; }
@@ -109,12 +108,7 @@ public sealed class Lease : ILease
     private async Task<bool> TryRenewAsync()
     {
         var priority = Volatile.Read(ref _scheduledPriority);
-
-        var renewOptions = new RenewLeaseOptions
-        {
-            ContentionPriority = priority?.Value,
-            Duration = _acquireOptions.Duration
-        };
+        var renewOptions = _renewOptions.With(x => x.ContentionPriority = priority?.Value);
 
         var state = await _leaseStore
             .RenewAsync(ResourceId, HolderId, Epoch, renewOptions, _leaseLostCts.Token)

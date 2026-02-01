@@ -1,6 +1,6 @@
 ﻿using MongoDB.Bson.Serialization.Attributes;
 
-namespace DomainBlocks.EventStore.MongoDB.Appender.Coordination;
+namespace DomainBlocks.Coordination.MongoDB.Leases;
 
 public sealed class LeaseState
 {

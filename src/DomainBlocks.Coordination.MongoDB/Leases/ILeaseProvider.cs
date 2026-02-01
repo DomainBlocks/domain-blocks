@@ -1,4 +1,4 @@
-﻿namespace DomainBlocks.EventStore.MongoDB.Appender.Coordination;
+﻿namespace DomainBlocks.Coordination.MongoDB.Leases;
 
 public interface ILeaseProvider
 {

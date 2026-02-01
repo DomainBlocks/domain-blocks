@@ -9,7 +9,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\DomainBlocks.EventStore.MongoDB.Appender\DomainBlocks.EventStore.MongoDB.Appender.csproj" />
+    <ProjectReference Include="..\..\src\DomainBlocks.Coordination.MongoDB\DomainBlocks.Coordination.MongoDB.csproj" />
     <ProjectReference Include="..\DomainBlocks.Testing.Integration.MongoDB\DomainBlocks.Testing.Integration.MongoDB.csproj" />
   </ItemGroup>
 

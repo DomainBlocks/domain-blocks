@@ -1,6 +1,6 @@
 ﻿using MongoDB.Driver;
 
-namespace DomainBlocks.EventStore.MongoDB.Appender.Coordination;
+namespace DomainBlocks.Coordination.MongoDB.Leases;
 
 public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimeProvider? timeProvider = null) :
     ILeaseStore
@@ -23,11 +23,9 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
         var existingHasLowerPriority = filterBuilder.Lt(x => x.ContentionPriority, options.ContentionPriority);
         var existingHasEqualPriority = filterBuilder.Eq(x => x.ContentionPriority, options.ContentionPriority);
         var weWinTiebreak = filterBuilder.Lt(x => x.HolderId, holderId);
-        var existingIsPastMinAge = filterBuilder.Lte(x => x.HeldSinceUtc, now - options.MinHolderAge);
-        var existingIsNearExpiry = filterBuilder.Lte(x => x.ExpiresAtUtc, now + options.PreemptWindow);
+        var existingHasMinTenure = filterBuilder.Lte(x => x.HeldSinceUtc, now - options.MinTenure);
         var priorityAllowsPreemption = existingHasLowerPriority | (existingHasEqualPriority & weWinTiebreak);
-        var timingAllowsPreemption = existingIsPastMinAge & existingIsNearExpiry;
-        var canPreempt = priorityAllowsPreemption & timingAllowsPreemption;
+        var canPreempt = priorityAllowsPreemption & existingHasMinTenure;
 
         var filter = filterBuilder.Eq(x => x.ResourceId, resourceId) & (existingIsExpired | canPreempt);
 
