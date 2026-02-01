@@ -26,7 +26,7 @@ public sealed class LeaseProvider(
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var lease = await AcquireOnceAsync(resourceId, options, cancellationToken);
+            var lease = await AcquireOnceAsync(resourceId, options, cancellationToken).ConfigureAwait(false);
             if (lease is not null)
             {
                 logger.LogInformation(
@@ -57,7 +57,7 @@ public sealed class LeaseProvider(
                 resourceId,
                 options.AcquireRetryDelay);
 
-            await _timeProvider.Delay(options.AcquireRetryDelay, cancellationToken);
+            await _timeProvider.Delay(options.AcquireRetryDelay, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -66,7 +66,7 @@ public sealed class LeaseProvider(
         AcquireLeaseOptions options,
         CancellationToken cancellationToken)
     {
-        var leaseState = await leaseStore.AcquireAsync(resourceId, options, cancellationToken);
+        var leaseState = await leaseStore.AcquireAsync(resourceId, options, cancellationToken).ConfigureAwait(false);
         return leaseState is not null ? new Lease(leaseState, options, leaseStore, logger, _timeProvider) : null;
     }
 }

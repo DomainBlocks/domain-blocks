@@ -16,7 +16,7 @@ public sealed class Lease : ILease
     private readonly TaskCompletionSource<LeaseLostInfo> _leaseLostTcs =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    private volatile StrongBox<int>? _scheduledPriority;
+    private StrongBox<int>? _scheduledPriority;
     private int _disposed;
 
     public Lease(
@@ -53,7 +53,7 @@ public sealed class Lease : ILease
 
     public void ScheduleContentionPriorityChange(int priority)
     {
-        _scheduledPriority = new StrongBox<int>(priority);
+        Volatile.Write(ref _scheduledPriority, new StrongBox<int>(priority));
     }
 
     public async ValueTask DisposeAsync()
@@ -68,8 +68,8 @@ public sealed class Lease : ILease
 
         using (_leaseLostCts)
         {
-            await _leaseLostCts.CancelAsync();
-            await _heartbeatTask;
+            await _leaseLostCts.CancelAsync().ConfigureAwait(false);
+            await _heartbeatTask.ConfigureAwait(false);
         }
     }
 
@@ -81,11 +81,11 @@ public sealed class Lease : ILease
             {
                 await _timeProvider.Delay(_acquireOptions.RenewInterval, _leaseLostCts.Token).ConfigureAwait(false);
 
-                if (await TryRenewAsync())
+                if (await TryRenewAsync().ConfigureAwait(false))
                     continue;
 
                 LogLeaseLost(LeaseLostReason.Revoked);
-                await _leaseLostCts.CancelAsync();
+                await _leaseLostCts.CancelAsync().ConfigureAwait(false);
                 _leaseLostTcs.TrySetResult(new LeaseLostInfo(LeaseLostReason.Revoked));
 
                 return;
@@ -93,22 +93,22 @@ public sealed class Lease : ILease
         }
         catch (OperationCanceledException) when (_leaseLostCts.IsCancellationRequested)
         {
-            await ReleaseLeaseAsync();
+            await ReleaseLeaseAsync().ConfigureAwait(false);
             LogLeaseLost(LeaseLostReason.Released);
             _leaseLostTcs.TrySetResult(new LeaseLostInfo(LeaseLostReason.Released));
         }
         catch (Exception ex)
         {
-            await ReleaseLeaseAsync();
+            await ReleaseLeaseAsync().ConfigureAwait(false);
             LogLeaseLost(LeaseLostReason.Error, ex);
-            await _leaseLostCts.CancelAsync();
+            await _leaseLostCts.CancelAsync().ConfigureAwait(false);
             _leaseLostTcs.TrySetResult(new LeaseLostInfo(LeaseLostReason.Error, ex));
         }
     }
 
     private async Task<bool> TryRenewAsync()
     {
-        var priority = _scheduledPriority;
+        var priority = Volatile.Read(ref _scheduledPriority);
 
         var renewOptions = new RenewLeaseOptions
         {
@@ -116,15 +116,18 @@ public sealed class Lease : ILease
             Duration = _acquireOptions.Duration
         };
 
-        var state = await _leaseStore.RenewAsync(ResourceId, HolderId, Epoch, renewOptions, _leaseLostCts.Token);
+        var state = await _leaseStore
+            .RenewAsync(ResourceId, HolderId, Epoch, renewOptions, _leaseLostCts.Token)
+            .ConfigureAwait(false);
+
         if (state is null)
             return false;
-
-        Volatile.Write(ref _leaseState, state);
 
         // Clear scheduled priority after a successful renewal only if it matches what we applied.
         if (priority is not null)
             Interlocked.CompareExchange(ref _scheduledPriority, null, priority);
+
+        Volatile.Write(ref _leaseState, state);
 
         _logger.LogDebug(
             "Holder '{HolderId}' renewed lease for resource '{ResourceId}'; " +
@@ -142,7 +145,10 @@ public sealed class Lease : ILease
         {
             using var cts = _timeProvider.CreateCancellationTokenSource(TimeSpan.FromSeconds(10));
 
-            var succeeded = await _leaseStore.TryReleaseAsync(ResourceId, HolderId, Epoch, cts.Token);
+            var succeeded = await _leaseStore
+                .TryReleaseAsync(ResourceId, HolderId, Epoch, cts.Token)
+                .ConfigureAwait(false);
+
             if (succeeded)
             {
                 _logger.LogInformation(

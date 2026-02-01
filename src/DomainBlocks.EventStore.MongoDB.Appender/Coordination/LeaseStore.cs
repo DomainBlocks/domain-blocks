@@ -50,11 +50,13 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
 
         try
         {
-            leaseState = await leaseStates.FindOneAndUpdateAsync(
-                filter,
-                update,
-                findOneAndUpdatedOptions,
-                cancellationToken);
+            leaseState = await leaseStates
+                .FindOneAndUpdateAsync(
+                    filter,
+                    update,
+                    findOneAndUpdatedOptions,
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (MongoCommandException ex) when (ex.Code == 11000) // duplicate key
         {
@@ -96,11 +98,13 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
             ReturnDocument = ReturnDocument.After
         };
 
-        var leaseState = await leaseStates.FindOneAndUpdateAsync(
-            filter,
-            update,
-            findOneAndUpdatedOptions,
-            cancellationToken);
+        var leaseState = await leaseStates
+            .FindOneAndUpdateAsync(
+                filter,
+                update,
+                findOneAndUpdatedOptions,
+                cancellationToken)
+            .ConfigureAwait(false);
 
         return leaseState;
     }
@@ -122,7 +126,9 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
             .Set(x => x.ExpiresAtUtc, now)
             .Set(x => x.UpdatedAtUtc, now);
 
-        var result = await leaseStates.UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
+        var result = await leaseStates
+            .UpdateOneAsync(filter, update, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
 
         return result.ModifiedCount == 1;
     }
@@ -130,6 +136,6 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
     public async Task<LeaseState?> GetStateAsync(string resourceId, CancellationToken cancellationToken = default)
     {
         var filter = Builders<LeaseState>.Filter.Eq(x => x.ResourceId, resourceId);
-        return await leaseStates.Find(filter).FirstOrDefaultAsync(cancellationToken);
+        return await leaseStates.Find(filter).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
     }
 }
