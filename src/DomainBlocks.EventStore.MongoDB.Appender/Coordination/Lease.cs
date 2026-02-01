@@ -66,14 +66,10 @@ public sealed class Lease : ILease
             ResourceId,
             HolderId);
 
-        try
+        using (_leaseLostCts)
         {
             await _leaseLostCts.CancelAsync();
             await _heartbeatTask;
-        }
-        finally
-        {
-            _leaseLostCts.Dispose();
         }
     }
 
