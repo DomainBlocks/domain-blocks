@@ -12,20 +12,21 @@ public class LeaseProviderTests
 {
     private const int TestTimeoutMillis = 30 * 1000;
 
-    private FakeTimeProvider _fakeTimeProvider = null!;
+    private MongoClient _mongoClient = null!;
     private IMongoCollection<LeaseState> _leaseStates = null!;
     private ILeaseProvider _leaseProvider = null!;
+    private FakeTimeProvider _fakeTimeProvider = null!;
     private string _resourceId = null!;
     private ILogger<LeaseProvider> _logger = null!;
 
     [SetUp]
     public void SetUp()
     {
-        var fakeTimeProvider = new FakeTimeProvider();
-
         var mongoClient = new MongoClient(MongoConnectionStrings.Default);
         var db = mongoClient.GetDatabase("domainblocks");
         var leaseStates = db.GetCollection<LeaseState>("es_leases");
+
+        var fakeTimeProvider = new FakeTimeProvider();
 
         var leaseStore = new LeaseStore(leaseStates, fakeTimeProvider);
 
@@ -35,9 +36,10 @@ public class LeaseProviderTests
 
         var logger = loggerFactory.CreateLogger<LeaseProvider>();
 
-        _fakeTimeProvider = fakeTimeProvider;
+        _mongoClient = mongoClient;
         _leaseStates = leaseStates;
         _leaseProvider = new LeaseProvider(leaseStore, logger, fakeTimeProvider);
+        _fakeTimeProvider = fakeTimeProvider;
         _resourceId = $"test_resource_{Guid.CreateVersion7():N}";
         _logger = logger;
     }
@@ -46,6 +48,7 @@ public class LeaseProviderTests
     public async Task OneTimeTearDown()
     {
         await _leaseStates.Database.DropCollectionAsync("es_leases");
+        _mongoClient.Dispose();
     }
 
     [Test]
