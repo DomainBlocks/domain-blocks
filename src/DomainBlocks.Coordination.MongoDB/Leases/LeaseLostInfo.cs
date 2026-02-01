@@ -1,4 +1,4 @@
-﻿namespace DomainBlocks.EventStore.MongoDB.Appender.Coordination;
+﻿namespace DomainBlocks.Coordination.MongoDB.Leases;
 
 public sealed class LeaseLostInfo(LeaseLostReason reason, Exception? exception = null)
 {

@@ -1,6 +1,6 @@
 ﻿using MongoDB.Driver;
 
-namespace DomainBlocks.EventStore.MongoDB.Appender.Coordination;
+namespace DomainBlocks.Coordination.MongoDB.Leases;
 
 public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimeProvider? timeProvider = null) :
     ILeaseStore
@@ -23,11 +23,9 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
         var existingHasLowerPriority = filterBuilder.Lt(x => x.ContentionPriority, options.ContentionPriority);
         var existingHasEqualPriority = filterBuilder.Eq(x => x.ContentionPriority, options.ContentionPriority);
         var weWinTiebreak = filterBuilder.Lt(x => x.HolderId, holderId);
-        var existingIsPastMinAge = filterBuilder.Lte(x => x.HeldSinceUtc, now - options.MinHolderAge);
-        var existingIsNearExpiry = filterBuilder.Lte(x => x.ExpiresAtUtc, now + options.PreemptWindow);
+        var existingHasMinTenure = filterBuilder.Lte(x => x.HeldSinceUtc, now - options.MinTenure);
         var priorityAllowsPreemption = existingHasLowerPriority | (existingHasEqualPriority & weWinTiebreak);
-        var timingAllowsPreemption = existingIsPastMinAge & existingIsNearExpiry;
-        var canPreempt = priorityAllowsPreemption & timingAllowsPreemption;
+        var canPreempt = priorityAllowsPreemption & existingHasMinTenure;
 
         var filter = filterBuilder.Eq(x => x.ResourceId, resourceId) & (existingIsExpired | canPreempt);
 
@@ -50,11 +48,13 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
 
         try
         {
-            leaseState = await leaseStates.FindOneAndUpdateAsync(
-                filter,
-                update,
-                findOneAndUpdatedOptions,
-                cancellationToken);
+            leaseState = await leaseStates
+                .FindOneAndUpdateAsync(
+                    filter,
+                    update,
+                    findOneAndUpdatedOptions,
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (MongoCommandException ex) when (ex.Code == 11000) // duplicate key
         {
@@ -96,11 +96,13 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
             ReturnDocument = ReturnDocument.After
         };
 
-        var leaseState = await leaseStates.FindOneAndUpdateAsync(
-            filter,
-            update,
-            findOneAndUpdatedOptions,
-            cancellationToken);
+        var leaseState = await leaseStates
+            .FindOneAndUpdateAsync(
+                filter,
+                update,
+                findOneAndUpdatedOptions,
+                cancellationToken)
+            .ConfigureAwait(false);
 
         return leaseState;
     }
@@ -122,7 +124,9 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
             .Set(x => x.ExpiresAtUtc, now)
             .Set(x => x.UpdatedAtUtc, now);
 
-        var result = await leaseStates.UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
+        var result = await leaseStates
+            .UpdateOneAsync(filter, update, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
 
         return result.ModifiedCount == 1;
     }
@@ -130,6 +134,6 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
     public async Task<LeaseState?> GetStateAsync(string resourceId, CancellationToken cancellationToken = default)
     {
         var filter = Builders<LeaseState>.Filter.Eq(x => x.ResourceId, resourceId);
-        return await leaseStates.Find(filter).FirstOrDefaultAsync(cancellationToken);
+        return await leaseStates.Find(filter).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
     }
 }
