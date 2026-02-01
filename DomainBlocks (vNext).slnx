@@ -11,6 +11,7 @@
   </Folder>
   <Folder Name="/docs/">
     <File Path="docs\vision.md" />
+    <File Path="docs/mongo-event-store-design.md" />
     <File Path="docs\architecture.md" />
   </Folder>
   <Folder Name="/examples/">
