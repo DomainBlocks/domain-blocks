@@ -56,7 +56,7 @@ Provides the single **causally ordered log** that defines:
 
 - Leadership epochs (fencing boundary)
 - Commit outcomes (confirmed / rejected)
-- global ordering (via monotonically assigned positions)
+- Global ordering (via monotonically assigned positions)
 
 This collection is the only collection that projections and subscriptions must tail.
 
@@ -71,7 +71,7 @@ This collection is the only collection that projections and subscriptions must t
 
 ### Documents
 
-- `LeaderElected` event (epoch boundary): Defines the active epoch for subsequence commit outcomes.
+- `LeaderElected` event (epoch boundary): Defines the active epoch for subsequent commit outcomes.
 - `CommitConfirmed` event: Marks a commit as canonical and assigns global position range.
 - `CommitRejected` event: Marks a commit as not canonical.
 
@@ -95,7 +95,8 @@ automatically invalid.
     - Epoch is atomically incremented to `E` on successful acquisition
 2. Within a transaction:
     1. Read current lease state with `readConcern: majority`
-    2. Assert `epoch == E && holderId == me`
+    2. Assert `epoch == E && holderId == me` via a conditional lease “touch” (CAS) so the transaction cannot commit
+       successfully if the lease is concurrently modified.
     3. Reserve the next position `P` atomically (CAS sequences document)
     4. Insert `LeaderElected(epoch=E, position=P, holderId=me)` into commits
     5. Commit
