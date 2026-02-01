@@ -81,7 +81,7 @@ public class LeaseProviderTests
 
         _fakeTimeProvider.Advance(AcquireLeaseOptions.Default.AcquireTimeout);
 
-        await using var lease2 = await lease2Task;
+        await using var lease2 = await lease2Task.WaitAsync(ct);
         lease2.ShouldBeNull();
     }
 
@@ -183,11 +183,10 @@ public class LeaseProviderTests
 
         var initialExpiry = lease.ExpiresAt;
 
-        _fakeTimeProvider.Advance(AcquireLeaseOptions.Default.RenewInterval);
-
         while (lease.ExpiresAt <= initialExpiry)
         {
             ct.ThrowIfCancellationRequested();
+            _fakeTimeProvider.Advance(TimeSpan.FromSeconds(1));
             await Task.Yield();
         }
 
@@ -204,11 +203,12 @@ public class LeaseProviderTests
         await using var lease = await _leaseProvider.AcquireLeaseAsync(_resourceId, options, cancellationToken: ct);
         lease.ShouldNotBeNull();
 
-        _fakeTimeProvider.Advance(options.RenewInterval);
-
-        var tcs = new TaskCompletionSource();
-        await using var registration = lease.LeaseLostToken.Register(tcs.SetResult);
-        await tcs.Task.WaitAsync(ct);
+        while (!lease.LeaseLostToken.IsCancellationRequested)
+        {
+            ct.ThrowIfCancellationRequested();
+            _fakeTimeProvider.Advance(TimeSpan.FromSeconds(1));
+            await Task.Yield();
+        }
     }
 
     [Test]
@@ -221,7 +221,12 @@ public class LeaseProviderTests
         await using var lease = await _leaseProvider.AcquireLeaseAsync(_resourceId, options, cancellationToken: ct);
         lease.ShouldNotBeNull();
 
-        _fakeTimeProvider.Advance(options.RenewInterval);
+        while (!lease.LeaseLostTask.IsCompleted)
+        {
+            ct.ThrowIfCancellationRequested();
+            _fakeTimeProvider.Advance(TimeSpan.FromSeconds(1));
+            await Task.Yield();
+        }
 
         var lostInfo = await lease.LeaseLostTask.WaitAsync(ct);
         lostInfo.Reason.ShouldBe(LeaseLostReason.Revoked);
@@ -248,7 +253,7 @@ public class LeaseProviderTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task AcquireLeaseAsync_WithMultipleContenders_AllAcquireAndComplete(CancellationToken ct)
     {
-        // We use real time for this test.
+        // Don't use FakeTimeProvider - we use real time for this test.
         var leaseStore = new LeaseStore(_leaseStates);
         var leaseProvider = new LeaseProvider(leaseStore, _logger);
 
@@ -260,6 +265,7 @@ public class LeaseProviderTests
                 {
                     HolderIdPrefix = $"contender{i}",
                     AcquireTimeout = Timeout.InfiniteTimeSpan,
+                    // Retry more aggressively so the test is fast
                     AcquireRetryDelay = TimeSpan.FromMilliseconds(100)
                 };
 
@@ -273,6 +279,6 @@ public class LeaseProviderTests
             });
 
         // If all contenders complete successfully before the test timeout, the test succeeds.
-        await Task.WhenAll(contenders);
+        await Task.WhenAll(contenders).WaitAsync(ct);
     }
 }
