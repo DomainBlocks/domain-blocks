@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using System.Runtime.CompilerServices;
+using Microsoft.Extensions.Logging;
 
 namespace DomainBlocks.EventStore.MongoDB.Appender.Coordination;
 
@@ -15,8 +16,7 @@ public sealed class Lease : ILease
     private readonly TaskCompletionSource<LeaseLostInfo> _leaseLostTcs =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    private readonly Lock _scheduledPriorityLock = new();
-    private int? _scheduledPriority;
+    private volatile StrongBox<int>? _scheduledPriority;
     private int _disposed;
 
     public Lease(
@@ -53,8 +53,7 @@ public sealed class Lease : ILease
 
     public void ScheduleContentionPriorityChange(int priority)
     {
-        lock (_scheduledPriorityLock)
-            _scheduledPriority = priority;
+        _scheduledPriority = new StrongBox<int>(priority);
     }
 
     public async ValueTask DisposeAsync()
@@ -113,20 +112,13 @@ public sealed class Lease : ILease
 
     private async Task<bool> TryRenewAsync()
     {
-        RenewLeaseOptions? renewOptions = null;
+        var priority = _scheduledPriority;
 
-        int? scheduledPriority;
-        lock (_scheduledPriorityLock)
-            scheduledPriority = _scheduledPriority;
-
-        if (scheduledPriority.HasValue)
+        var renewOptions = new RenewLeaseOptions
         {
-            renewOptions = new RenewLeaseOptions
-            {
-                ContentionPriority = scheduledPriority,
-                Duration = _acquireOptions.Duration
-            };
-        }
+            ContentionPriority = priority?.Value,
+            Duration = _acquireOptions.Duration
+        };
 
         var state = await _leaseStore.RenewAsync(ResourceId, HolderId, Epoch, renewOptions, _leaseLostCts.Token);
         if (state is null)
@@ -134,15 +126,9 @@ public sealed class Lease : ILease
 
         Volatile.Write(ref _leaseState, state);
 
-        // Clear scheduled priority after a successful renewal only if it matches the value we applied.
-        if (scheduledPriority.HasValue)
-        {
-            lock (_scheduledPriorityLock)
-            {
-                if (_scheduledPriority == scheduledPriority)
-                    _scheduledPriority = null;
-            }
-        }
+        // Clear scheduled priority after a successful renewal only if it matches what we applied.
+        if (priority is not null)
+            Interlocked.CompareExchange(ref _scheduledPriority, null, priority);
 
         _logger.LogDebug(
             "Holder '{HolderId}' renewed lease for resource '{ResourceId}'; " +
