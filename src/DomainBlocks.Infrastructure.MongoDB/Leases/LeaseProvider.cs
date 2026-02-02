@@ -1,6 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 
-namespace DomainBlocks.Coordination.MongoDB.Leases;
+namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 
 public sealed class LeaseProvider(
     ILeaseStore leaseStore,

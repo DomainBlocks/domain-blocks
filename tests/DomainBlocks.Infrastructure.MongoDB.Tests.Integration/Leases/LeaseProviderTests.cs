@@ -1,4 +1,4 @@
-﻿using DomainBlocks.Coordination.MongoDB.Leases;
+﻿using DomainBlocks.Infrastructure.MongoDB.Leases;
 using DomainBlocks.Testing.Integration.MongoDB;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
@@ -6,7 +6,7 @@ using MongoDB.Driver;
 using NUnit.Framework;
 using Shouldly;
 
-namespace DomainBlocks.Coordination.MongoDB.Tests.Integration.Leases;
+namespace DomainBlocks.Infrastructure.MongoDB.Tests.Integration.Leases;
 
 public class LeaseProviderTests
 {

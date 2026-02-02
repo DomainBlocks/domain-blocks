@@ -21,10 +21,10 @@
     <File Path="scripts\init-mongo-replica-set.sh" />
   </Folder>
   <Folder Name="/src/">
-    <Project Path="src/DomainBlocks.Coordination.MongoDB/DomainBlocks.Coordination.MongoDB.csproj" />
     <Project Path="src/DomainBlocks.EventStore.MongoDB.Appender.Host/DomainBlocks.EventStore.MongoDB.Appender.Host.csproj" />
     <Project Path="src/DomainBlocks.EventStore.MongoDB.Appender/DomainBlocks.EventStore.MongoDB.Appender.csproj" />
     <Project Path="src/DomainBlocks.EventStore.MongoDB.Client/DomainBlocks.EventStore.MongoDB.Client.csproj" />
+    <Project Path="src/DomainBlocks.Infrastructure.MongoDB/DomainBlocks.Infrastructure.MongoDB.csproj" />
     <Project Path="src\DomainBlocks.Core\DomainBlocks.Core.csproj" />
     <Project Path="src\DomainBlocks.EventSourcing\DomainBlocks.EventSourcing.csproj" />
     <Project Path="src\DomainBlocks.EventStore.Abstractions\DomainBlocks.EventStore.Abstractions.csproj" />
@@ -37,8 +37,8 @@
     <Project Path="src\DomainBlocks.Serialization.SystemTextJson\DomainBlocks.Serialization.SystemTextJson.csproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/DomainBlocks.Coordination.MongoDB.Tests.Integration/DomainBlocks.Coordination.MongoDB.Tests.Integration.csproj" />
     <Project Path="tests/DomainBlocks.EventStore.MongoDB.Client.Tests.Integration/DomainBlocks.EventStore.MongoDB.Client.Tests.Integration.csproj" />
+    <Project Path="tests/DomainBlocks.Infrastructure.MongoDB.Tests.Integration/DomainBlocks.Infrastructure.MongoDB.Tests.Integration.csproj" />
     <Project Path="tests/DomainBlocks.Testing.Integration/DomainBlocks.Testing.Integration.csproj" />
     <Project Path="tests\DomainBlocks.EventSourcing.Tests.Integration\DomainBlocks.EventSourcing.Tests.Integration.csproj" />
     <Project Path="tests\DomainBlocks.EventSourcing.Tests.Unit\DomainBlocks.EventSourcing.Tests.Unit.csproj" />

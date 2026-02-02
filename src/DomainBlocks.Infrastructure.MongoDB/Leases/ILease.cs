@@ -1,4 +1,4 @@
-﻿namespace DomainBlocks.Coordination.MongoDB.Leases;
+﻿namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 
 public interface ILease : IAsyncDisposable
 {

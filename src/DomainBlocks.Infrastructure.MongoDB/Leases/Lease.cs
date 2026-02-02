@@ -1,7 +1,7 @@
 ﻿using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 
-namespace DomainBlocks.Coordination.MongoDB.Leases;
+namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 
 public sealed class Lease : ILease
 {

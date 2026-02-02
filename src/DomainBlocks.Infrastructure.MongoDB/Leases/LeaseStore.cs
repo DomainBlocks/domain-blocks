@@ -1,6 +1,6 @@
 ﻿using MongoDB.Driver;
 
-namespace DomainBlocks.Coordination.MongoDB.Leases;
+namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 
 public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimeProvider? timeProvider = null) :
     ILeaseStore
