@@ -23,8 +23,8 @@ public class LeaseProviderTests
     public void SetUp()
     {
         var mongoClient = new MongoClient(MongoConnectionStrings.Default);
-        var db = mongoClient.GetDatabase("domainblocks");
-        var leaseStates = db.GetCollection<LeaseState>("es_leases");
+        var db = mongoClient.GetDatabase("domainblocks_tests");
+        var leaseStates = db.GetCollection<LeaseState>("test_leases");
 
         var fakeTimeProvider = new FakeTimeProvider();
 
@@ -47,7 +47,7 @@ public class LeaseProviderTests
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _leaseStates.Database.DropCollectionAsync("es_leases");
+        await _leaseStates.Database.DropCollectionAsync("test_leases");
         _mongoClient.Dispose();
     }
 

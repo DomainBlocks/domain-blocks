@@ -39,6 +39,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/DomainBlocks.EventStore.MongoDB.Client.Tests.Integration/DomainBlocks.EventStore.MongoDB.Client.Tests.Integration.csproj" />
     <Project Path="tests/DomainBlocks.Infrastructure.MongoDB.Tests.Integration/DomainBlocks.Infrastructure.MongoDB.Tests.Integration.csproj" />
+    <Project Path="tests/DomainBlocks.Infrastructure.MongoDB.Tests.Unit/DomainBlocks.Infrastructure.MongoDB.Tests.Unit.csproj" />
     <Project Path="tests/DomainBlocks.Testing.Integration/DomainBlocks.Testing.Integration.csproj" />
     <Project Path="tests\DomainBlocks.EventSourcing.Tests.Integration\DomainBlocks.EventSourcing.Tests.Integration.csproj" />
     <Project Path="tests\DomainBlocks.EventSourcing.Tests.Unit\DomainBlocks.EventSourcing.Tests.Unit.csproj" />
