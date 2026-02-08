@@ -110,16 +110,12 @@ public sealed class ChangeStreamSubscription<TDocument, TResult> : IChangeStream
 
         _logger?.LogDebug("Disposing");
 
-        try
+        using (_stopCts)
         {
             if (!_stopCts.IsCancellationRequested)
                 await _stopCts.CancelAsync().ConfigureAwait(false);
 
             await _producerTask.ConfigureAwait(false);
-        }
-        finally
-        {
-            _stopCts.Dispose();
         }
     }
 
