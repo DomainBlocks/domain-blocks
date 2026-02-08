@@ -98,7 +98,7 @@ public class EventAppenderBenchmark
         var encoder = EventEncoder.Create(encoderOptions);
         var documents = new List<Schema.EventDocument>(count);
 
-        foreach (var (_, eventName, eventData, metadata) in encoder.Encode(Guid.NewGuid(), appendEvents))
+        foreach (var (eventName, eventData, metadata) in encoder.Encode(appendEvents))
         {
             documents.Add(new Schema.EventDocument
             {

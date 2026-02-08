@@ -7,7 +7,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\DomainBlocks.Core\DomainBlocks.Core.csproj"/>
+    <ProjectReference Include="..\..\src\DomainBlocks.EventStore.Primitives\DomainBlocks.EventStore.Primitives.csproj"/>
   </ItemGroup>
 
 </Project>

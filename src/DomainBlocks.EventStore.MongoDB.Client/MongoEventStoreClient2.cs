@@ -1,4 +1,5 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.Primitives.Identity;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
@@ -20,7 +21,7 @@ public class MongoEventStoreClient2<TEvent> : IEventStoreClient<TEvent> where TE
         _eventDecoder = options.EventCodec.Decoder;
     }
 
-    public Task AppendToStreamAsync(
+    public async Task AppendToStreamAsync(
         string streamId,
         IEnumerable<AppendEvent<TEvent>> events,
         AppendToStreamOptions? options = null,
@@ -28,7 +29,50 @@ public class MongoEventStoreClient2<TEvent> : IEventStoreClient<TEvent> where TE
     {
         options ??= AppendToStreamOptions.Default;
 
-        throw new NotImplementedException();
+        var eventDocuments = new List<Schema.EventDocument2>();
+        var commitId = Guid.NewGuid();
+        var index = 0;
+        var createdAtUtc = DateTime.UtcNow;
+
+        foreach (var (eventName, eventData, metadata) in _eventEncoder.Encode(events))
+        {
+            eventDocuments.Add(new Schema.EventDocument2
+            {
+                StreamId = streamId,
+                CommitId = commitId,
+                CommitIndex = index++,
+                EventId = EventIdGenerator.Generate(streamId, commitId, index),
+                EventName = eventName,
+                EventData = eventData,
+                Metadata = metadata ?? BsonNull.Value,
+                CreatedAtUtc = createdAtUtc
+            });
+        }
+
+        var commitProposed = new Schema.CommitProposed
+        {
+            EventCount = eventDocuments.Count,
+            ExpectedStreamState = options.ExpectedState
+        };
+
+        var sysStreamId = GetCommitStreamId(streamId);
+
+        eventDocuments.Add(new Schema.EventDocument2
+        {
+            StreamId = sysStreamId,
+            CommitId = commitId,
+            CommitIndex = 0,
+            EventId = EventIdGenerator.Generate(sysStreamId, commitId, 0),
+            EventName = "$dbx.sys.CommitProposed",
+            EventData = commitProposed.ToBsonDocument(),
+            Metadata = BsonNull.Value,
+            CreatedAtUtc = createdAtUtc
+        });
+
+        await _eventsCollection.InsertManyAsync(
+            eventDocuments,
+            new InsertManyOptions { IsOrdered = false },
+            cancellationToken);
     }
 
     public IAsyncEnumerable<ReadEvent<TEvent>> ReadStreamAsync(
@@ -37,5 +81,11 @@ public class MongoEventStoreClient2<TEvent> : IEventStoreClient<TEvent> where TE
         CancellationToken cancellationToken = default)
     {
         throw new NotImplementedException();
+    }
+
+    private static string GetCommitStreamId(string streamId)
+    {
+        var escapedStreamId = Uri.EscapeDataString(streamId);
+        return $"$dbx.sys/coord/commits/{escapedStreamId}";
     }
 }

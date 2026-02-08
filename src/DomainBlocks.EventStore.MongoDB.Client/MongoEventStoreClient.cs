@@ -166,7 +166,7 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
             MetadataContentType = "application/bson"
         };
 
-        foreach (var (_, eventName, eventData, metadata) in _eventEncoder.Encode(Guid.NewGuid(), events))
+        foreach (var (eventName, eventData, metadata) in _eventEncoder.Encode(events))
         {
             batch.Events.Add(new Api.Appender.V0.AppendEvent
             {

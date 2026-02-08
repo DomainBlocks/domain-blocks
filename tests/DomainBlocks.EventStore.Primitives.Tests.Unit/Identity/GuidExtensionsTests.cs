@@ -1,8 +1,8 @@
-﻿using DomainBlocks.Core.Identity;
+﻿using DomainBlocks.EventStore.Primitives.Identity;
 using NUnit.Framework;
 using Shouldly;
 
-namespace DomainBlocks.Core.Tests.Unit.Identity;
+namespace DomainBlocks.EventStore.Primitives.Tests.Unit.Identity;
 
 public class GuidExtensionsTests
 {

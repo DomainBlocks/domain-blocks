@@ -1,4 +1,4 @@
-﻿namespace DomainBlocks.Core.Identity;
+﻿namespace DomainBlocks.EventStore.Primitives.Identity;
 
 public static class NamespaceIds
 {

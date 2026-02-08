@@ -85,7 +85,7 @@ public class EventStoreClientWriteBenchmarks
             AppendToStreamOptions? options = null,
             CancellationToken cancellationToken = default)
         {
-            foreach (var (_, eventName, eventData, metadata) in eventCodec.Encoder.Encode(Guid.NewGuid(), events))
+            foreach (var (eventName, eventData, metadata) in eventCodec.Encoder.Encode(events))
             {
                 consumer.Consume(eventName);
                 consumer.Consume(eventData);

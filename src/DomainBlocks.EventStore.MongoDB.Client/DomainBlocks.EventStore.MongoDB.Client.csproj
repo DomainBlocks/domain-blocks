@@ -19,6 +19,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DomainBlocks.EventStore.Abstractions\DomainBlocks.EventStore.Abstractions.csproj" />
+    <ProjectReference Include="..\DomainBlocks.EventStore.Primitives\DomainBlocks.EventStore.Primitives.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Infrastructure.MongoDB\DomainBlocks.Infrastructure.MongoDB.csproj" />
   </ItemGroup>
 
 </Project>

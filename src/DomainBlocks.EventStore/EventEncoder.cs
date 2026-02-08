@@ -1,5 +1,4 @@
 using System.Collections.Frozen;
-using DomainBlocks.Core.Identity;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.ContractMapping;
 using DomainBlocks.EventStore.TypeMapping;
@@ -32,17 +31,12 @@ public sealed class EventEncoder<TEvent, TEventData, TMetadata>(
     private readonly FrozenDictionary<Type, IAppendEventContractMapper<TEvent>> _contractMappers =
         options.ContractMappers.ToFrozenDictionary(x => x.EventType);
 
-    public IEnumerable<EncodedEvent<TEventData, TMetadata>> Encode(
-        Guid commitId,
-        IEnumerable<AppendEvent<TEvent>> events)
+    public IEnumerable<EncodedEvent<TEventData, TMetadata>> Encode(IEnumerable<AppendEvent<TEvent>> events)
     {
         var metadataBuffer = new Dictionary<string, string>();
-        var eventIndex = 0;
 
         foreach (var appendEvent in events)
         {
-            var eventId = CreateEventId(commitId, eventIndex++);
-
             var @event = appendEvent.Event;
             object? contract = null;
             string eventName;
@@ -72,13 +66,7 @@ public sealed class EventEncoder<TEvent, TEventData, TMetadata>(
                 ? _metadataSerializer.Serialize(metadataBuffer)
                 : default;
 
-            yield return EncodedEvent.Create(eventId, eventName, serializedEventData, serializedMetadata);
+            yield return EncodedEvent.Create(eventName, serializedEventData, serializedMetadata);
         }
-    }
-
-    private static Guid CreateEventId(Guid commitId, int eventIndex)
-    {
-        var name = $"commit:{commitId:N}/i:{eventIndex}/v1";
-        return Guid.CreateVersion5(NamespaceIds.Events, name);
     }
 }

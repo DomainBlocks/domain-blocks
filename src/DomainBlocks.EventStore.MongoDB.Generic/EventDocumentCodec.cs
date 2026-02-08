@@ -26,7 +26,7 @@ public sealed class EventDocumentCodec<TEvent>(
         var nextVersionValue = (currentStreamVersion?.Value + 1) ?? 0;
         var createdAtUtc = DateTime.UtcNow;
 
-        foreach (var (_, eventName, eventData, metadata) in eventCodec.Encoder.Encode(Guid.NewGuid(), events))
+        foreach (var (eventName, eventData, metadata) in eventCodec.Encoder.Encode(events))
         {
             var streamVersion = new StreamVersion(nextVersionValue++);
 
