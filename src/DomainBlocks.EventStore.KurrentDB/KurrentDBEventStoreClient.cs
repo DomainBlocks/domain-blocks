@@ -25,8 +25,8 @@ public class KurrentDBEventStoreClient<TEvent>(
         var kurrentExpectedState = ToKurrentStreamState(options.ExpectedState);
 
         var eventData = eventEncoder
-            .Encode(events)
-            .Select(x => new EventData(Uuid.NewUuid(), x.EventName, x.EventData, x.Metadata));
+            .Encode(Guid.NewGuid(), events)
+            .Select(x => new EventData(Uuid.FromGuid(x.EventId), x.EventName, x.EventData, x.Metadata));
 
         try
         {

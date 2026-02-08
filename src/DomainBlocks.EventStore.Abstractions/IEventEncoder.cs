@@ -2,5 +2,5 @@
 
 public interface IEventEncoder<TEvent, TEventData, TMetadata> where TEvent : notnull where TEventData : notnull
 {
-    IEnumerable<EncodedEvent<TEventData, TMetadata>> Encode(IEnumerable<AppendEvent<TEvent>> events);
+    IEnumerable<EncodedEvent<TEventData, TMetadata>> Encode(Guid commitId, IEnumerable<AppendEvent<TEvent>> events);
 }

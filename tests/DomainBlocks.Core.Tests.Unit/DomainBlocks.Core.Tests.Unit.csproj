@@ -1,0 +1,13 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1"/>
+    <PackageReference Include="NUnit" Version="4.4.0"/>
+    <PackageReference Include="Shouldly" Version="4.3.0"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DomainBlocks.Core\DomainBlocks.Core.csproj"/>
+  </ItemGroup>
+
+</Project>

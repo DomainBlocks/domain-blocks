@@ -28,11 +28,11 @@ public class MongoEventStoreClient<TEvent, TEventDocument> : IEventStoreClient<T
     public async Task AppendToStreamAsync(
         string streamId,
         IEnumerable<AppendEvent<TEvent>> events,
-        AppendToStreamOptions? appendOptions = null,
+        AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        appendOptions ??= AppendToStreamOptions.Default;
-        var expectedState = appendOptions.ExpectedState;
+        options ??= AppendToStreamOptions.Default;
+        var expectedState = options.ExpectedState;
 
         var currentState = await GetStreamStateAsync(streamId, cancellationToken).ConfigureAwait(false);
 
@@ -59,18 +59,18 @@ public class MongoEventStoreClient<TEvent, TEventDocument> : IEventStoreClient<T
 
     public async IAsyncEnumerable<ReadEvent<TEvent>> ReadStreamAsync(
         string streamId,
-        ReadStreamOptions? readOptions = null,
+        ReadStreamOptions? options = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        readOptions ??= ReadStreamOptions.Default;
-        var position = readOptions.Position;
-        var direction = readOptions.Direction;
+        options ??= ReadStreamOptions.Default;
+        var position = options.Position;
+        var direction = options.Direction;
 
         // Edge cases that represent an empty sequence of events.
         if (position.IsStart && direction == StreamReadDirection.Backward ||
             position.IsEnd && direction == StreamReadDirection.Forward)
         {
-            if (readOptions.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw &&
+            if (options.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw &&
                 !await StreamExistsAsync(streamId, cancellationToken).ConfigureAwait(false))
             {
                 throw new StreamNotFoundException(streamId);
@@ -99,7 +99,7 @@ public class MongoEventStoreClient<TEvent, TEventDocument> : IEventStoreClient<T
         using var cursor = await _eventsCollection
             .Find(filter)
             .Sort(sort)
-            .Limit(readOptions.MaxCount)
+            .Limit(options.MaxCount)
             .ToCursorAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -114,7 +114,7 @@ public class MongoEventStoreClient<TEvent, TEventDocument> : IEventStoreClient<T
             }
         }
 
-        if (isEmpty && readOptions.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw)
+        if (isEmpty && options.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw)
             throw new StreamNotFoundException(streamId);
     }
 

@@ -1,0 +1,10 @@
+using DomainBlocks.EventStore.Abstractions;
+using MongoDB.Bson;
+
+namespace DomainBlocks.EventStore.MongoDB.Client;
+
+public sealed class MongoEventStoreClientOptions<TEvent> where TEvent : notnull
+{
+    public required EventStoreCollectionOptions CollectionOptions { get; init; }
+    public required EventCodec<TEvent, BsonValue, BsonValue> EventCodec { get; init; }
+}

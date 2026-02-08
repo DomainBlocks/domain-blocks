@@ -1,4 +1,5 @@
 ﻿using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace DomainBlocks.EventStore.MongoDB.Client;
 
@@ -20,6 +21,23 @@ public static class Schema
     {
         public required string EventName { get; init; }
         public required BsonValue EventData { get; init; }
+        public required BsonValue Metadata { get; init; }
+    }
+
+    public sealed class EventDocument2
+    {
+        [BsonId]
+        [BsonGuidRepresentation(GuidRepresentation.Standard)]
+        public required Guid EventId { get; init; }
+
+        public required Guid CommitId { get; init; }
+
+        public required string StreamId { get; init; }
+
+        public required string EventName { get; init; }
+
+        public required BsonValue EventData { get; init; }
+
         public required BsonValue Metadata { get; init; }
     }
 }

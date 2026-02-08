@@ -37,6 +37,7 @@
     <Project Path="src\DomainBlocks.Serialization.SystemTextJson\DomainBlocks.Serialization.SystemTextJson.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/DomainBlocks.Core.Tests.Unit/DomainBlocks.Core.Tests.Unit.csproj" />
     <Project Path="tests/DomainBlocks.EventStore.MongoDB.Client.Tests.Integration/DomainBlocks.EventStore.MongoDB.Client.Tests.Integration.csproj" />
     <Project Path="tests/DomainBlocks.Infrastructure.MongoDB.Tests.Integration/DomainBlocks.Infrastructure.MongoDB.Tests.Integration.csproj" />
     <Project Path="tests/DomainBlocks.Infrastructure.MongoDB.Tests.Unit/DomainBlocks.Infrastructure.MongoDB.Tests.Unit.csproj" />
