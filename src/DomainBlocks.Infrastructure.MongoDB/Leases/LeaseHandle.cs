@@ -1,9 +1,10 @@
 ﻿using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
+using MongoDB.Driver;
 
 namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 
-public sealed class Lease : ILease
+public sealed class LeaseHandle : ILeaseHandle
 {
     private LeaseState _leaseState;
     private readonly AcquireLeaseOptions _acquireOptions;
@@ -20,7 +21,7 @@ public sealed class Lease : ILease
     private StrongBox<int>? _scheduledPriority;
     private int _disposed;
 
-    public Lease(
+    public LeaseHandle(
         LeaseState leaseState,
         AcquireLeaseOptions acquireOptions,
         ILeaseStore leaseStore,
@@ -49,6 +50,11 @@ public sealed class Lease : ILease
     public DateTimeOffset ExpiresAt => Volatile.Read(ref _leaseState).ExpiresAtUtc;
     public CancellationToken LeaseLostToken => _leaseLostCts.Token;
     public Task<LeaseLostInfo> LeaseLostTask => _leaseLostTcs.Task;
+
+    public Task<bool> TryFenceAsync(IClientSessionHandle session, CancellationToken cancellationToken = default)
+    {
+        return _leaseStore.TryFenceAsync(session, ResourceId, HolderId, Epoch, cancellationToken);
+    }
 
     public void ScheduleContentionPriorityChange(int priority)
     {

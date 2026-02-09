@@ -49,6 +49,7 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
         _mongoClient = new MongoClient(MongoConnectionStrings.Default);
         _client = new MongoEventStoreClient2<IDomainEvent>(_mongoClient, options);
 
+        // TODO: Configure indexes correctly
         await MongoEventStoreAdmin.EnsureIndexesAsync(_mongoClient, EventStoreCollectionOptions.Default);
     }
 

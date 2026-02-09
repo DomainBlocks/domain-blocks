@@ -2,7 +2,7 @@
 
 public interface ILeaseProvider
 {
-    Task<ILease?> AcquireLeaseAsync(
+    Task<LeaseAcquisition> AcquireLeaseAsync(
         string resourceId,
         AcquireLeaseOptions? options = null,
         CancellationToken cancellationToken = default);

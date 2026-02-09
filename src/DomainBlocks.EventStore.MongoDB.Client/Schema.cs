@@ -66,10 +66,14 @@ public static class Schema
 
     public sealed class CommitConfirmed
     {
+        public required long Epoch { get; init; }
         public required long StartStreamVersion { get; init; }
         public required long StartGlobalPosition { get; init; }
         public required int EventCount { get; init; }
     }
 
-    public sealed class CommitRejected;
+    public sealed class CommitRejected
+    {
+        public required long Epoch { get; init; }
+    }
 }

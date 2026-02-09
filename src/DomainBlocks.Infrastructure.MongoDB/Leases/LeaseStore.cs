@@ -21,11 +21,8 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
 
         var existingIsExpired = filterBuilder.Lte(x => x.ExpiresAtUtc, now);
         var existingHasLowerPriority = filterBuilder.Lt(x => x.ContentionPriority, options.ContentionPriority);
-        var existingHasEqualPriority = filterBuilder.Eq(x => x.ContentionPriority, options.ContentionPriority);
-        var weWinTiebreak = filterBuilder.Lt(x => x.HolderId, holderId);
         var existingHasMinTenure = filterBuilder.Lte(x => x.HeldSinceUtc, now - options.MinTenure);
-        var priorityAllowsPreemption = existingHasLowerPriority | (existingHasEqualPriority & weWinTiebreak);
-        var canPreempt = priorityAllowsPreemption & existingHasMinTenure;
+        var canPreempt = existingHasLowerPriority & existingHasMinTenure;
 
         var filter = filterBuilder.Eq(x => x.ResourceId, resourceId) & (existingIsExpired | canPreempt);
 
@@ -131,9 +128,31 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
         return result.ModifiedCount == 1;
     }
 
-    public async Task<LeaseState?> GetStateAsync(string resourceId, CancellationToken cancellationToken = default)
+    public async Task<bool> TryFenceAsync(
+        IClientSessionHandle session,
+        string resourceId,
+        string holderId,
+        long epoch,
+        CancellationToken cancellationToken = default)
     {
-        var filter = Builders<LeaseState>.Filter.Eq(x => x.ResourceId, resourceId);
-        return await leaseStates.Find(filter).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        var filterBuilder = Builders<LeaseState>.Filter;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        var filter = filterBuilder.Eq(x => x.ResourceId, resourceId) &
+                     filterBuilder.Eq(x => x.HolderId, holderId) &
+                     filterBuilder.Eq(x => x.Epoch, epoch) &
+                     filterBuilder.Gt(x => x.ExpiresAtUtc, now);
+
+        var update = Builders<LeaseState>.Update.Set(x => x.UpdatedAtUtc, now);
+
+        var result = await leaseStates
+            .UpdateOneAsync(
+                session,
+                filter,
+                update,
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.MatchedCount == 1;
     }
 }

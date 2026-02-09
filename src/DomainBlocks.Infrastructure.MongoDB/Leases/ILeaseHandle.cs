@@ -1,6 +1,8 @@
-﻿namespace DomainBlocks.Infrastructure.MongoDB.Leases;
+﻿using MongoDB.Driver;
 
-public interface ILease : IAsyncDisposable
+namespace DomainBlocks.Infrastructure.MongoDB.Leases;
+
+public interface ILeaseHandle : IAsyncDisposable
 {
     string ResourceId { get; }
 
@@ -19,6 +21,8 @@ public interface ILease : IAsyncDisposable
     CancellationToken LeaseLostToken { get; }
 
     Task<LeaseLostInfo> LeaseLostTask { get; }
+
+    Task<bool> TryFenceAsync(IClientSessionHandle session, CancellationToken cancellationToken = default);
 
     void ScheduleContentionPriorityChange(int priority);
 }

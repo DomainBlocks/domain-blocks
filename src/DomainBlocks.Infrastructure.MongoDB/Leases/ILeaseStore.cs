@@ -1,4 +1,6 @@
-﻿namespace DomainBlocks.Infrastructure.MongoDB.Leases;
+﻿using MongoDB.Driver;
+
+namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 
 public interface ILeaseStore
 {
@@ -20,5 +22,10 @@ public interface ILeaseStore
         long epoch,
         CancellationToken cancellationToken = default);
 
-    Task<LeaseState?> GetStateAsync(string resourceId, CancellationToken cancellationToken = default);
+    Task<bool> TryFenceAsync(
+        IClientSessionHandle session,
+        string resourceId,
+        string holderId,
+        long epoch,
+        CancellationToken cancellationToken = default);
 }
