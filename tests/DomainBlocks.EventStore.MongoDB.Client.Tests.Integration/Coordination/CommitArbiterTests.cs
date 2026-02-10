@@ -38,7 +38,7 @@ public class CommitArbiterTests
 
         var leaseProvider = new LeaseProvider(leaseStore, loggerFactory.CreateLogger<LeaseProvider>());
         var sequences = db.GetCollection<BsonDocument>("dbx_sequences");
-        var sequenceAllocator = new SequenceAllocator(sequences);
+        var sequenceAllocator = new SequenceStore(sequences);
 
         var commitArbiter = new CommitArbiter(
             _mongoClient,

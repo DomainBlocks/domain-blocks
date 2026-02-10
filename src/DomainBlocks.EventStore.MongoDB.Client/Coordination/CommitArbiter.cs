@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using DomainBlocks.EventStore.Primitives.Identity;
+using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
 using DomainBlocks.Infrastructure.MongoDB.Sequences;
 using Microsoft.Extensions.Logging;
@@ -16,22 +17,22 @@ public class CommitArbiter
 
     private readonly IMongoClient _mongoClient;
     private readonly ILeaseProvider _leaseProvider;
-    private readonly ISequenceAllocator _sequenceAllocator;
-    private readonly IMongoCollection<Schema.EventDocument2> _eventsCollection;
+    private readonly ISequenceStore _sequenceStore;
+    private readonly IMongoCollection<EventDocument2> _eventsCollection;
     private readonly ILogger<CommitArbiter> _logger;
 
     public CommitArbiter(
         IMongoClient mongoClient,
         ILeaseProvider leaseProvider,
-        ISequenceAllocator sequenceAllocator,
+        ISequenceStore sequenceStore,
         ILogger<CommitArbiter> logger)
     {
         var db = mongoClient.GetDatabase("domainblocks");
 
         _mongoClient = mongoClient;
         _leaseProvider = leaseProvider;
-        _sequenceAllocator = sequenceAllocator;
-        _eventsCollection = db.GetCollection<Schema.EventDocument2>("dbx_events");
+        _sequenceStore = sequenceStore;
+        _eventsCollection = db.GetCollection<EventDocument2>("dbx_events");
         _logger = logger;
     }
 
@@ -45,7 +46,11 @@ public class CommitArbiter
                 LeaseResourceId,
                 new AcquireLeaseOptions
                 {
-                    AcquireTimeout = Timeout.InfiniteTimeSpan
+                    Duration = TimeSpan.FromSeconds(10),
+                    MinTenure = TimeSpan.FromSeconds(2),
+                    AcquireTimeout = Timeout.InfiniteTimeSpan,
+                    AcquireRetryDelay = TimeSpan.FromSeconds(1),
+                    RenewInterval = TimeSpan.FromSeconds(3)
                 },
                 cancellationToken);
 
@@ -56,38 +61,33 @@ public class CommitArbiter
             if (!isLeader)
                 continue;
 
-            var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
                 cancellationToken,
                 lease.Handle.LeaseLostToken);
 
-            await Task.Delay(Timeout.InfiniteTimeSpan, linkedCts.Token);
+            await RunAsLeaderAsync(lease.Handle.Epoch, linkedCts.Token);
         }
     }
 
     private async Task<bool> TryEmitLeaderElectedAsync(ILeaseHandle lease, CancellationToken cancellationToken)
     {
         var txnOptions = new TransactionOptions(
-            ReadConcern.Majority,
+            ReadConcern.Snapshot,
             ReadPreference.Primary,
             WriteConcern.WMajority);
 
-        using var session = await _mongoClient.StartSessionAsync(
-            new ClientSessionOptions { CausalConsistency = true },
-            cancellationToken);
+        using var session = await _mongoClient.StartSessionAsync(cancellationToken: cancellationToken);
 
         return await session.WithTransactionAsync(
             async (s, ct) =>
             {
                 var isLeader = await lease.TryFenceAsync(s, ct);
                 if (!isLeader)
-                {
-                    await s.AbortTransactionAsync(ct);
                     return false;
-                }
 
-                var globalPosition = await _sequenceAllocator.AllocateNextAsync(s, GlobalPositionSequenceId, ct);
+                var globalPosition = await _sequenceStore.NextAsync(s, GlobalPositionSequenceId, ct);
 
-                var leaderElected = new Schema.LeaderElected
+                var leaderElected = new SystemEvents.LeaderElected
                 {
                     HolderId = lease.HolderId,
                     Epoch = lease.Epoch,
@@ -96,13 +96,13 @@ public class CommitArbiter
 
                 var commitId = Guid.NewGuid();
 
-                var eventDocument = new Schema.EventDocument2
+                var eventDocument = new EventDocument2
                 {
                     StreamId = LeadershipStreamId,
                     CommitId = commitId,
                     CommitIndex = 0,
                     EventId = EventIdGenerator.Generate(LeadershipStreamId, commitId, 0),
-                    EventName = "$dbx.sys.LeaderElected",
+                    EventName = SystemEvents.LeaderElected.Name,
                     EventData = leaderElected.ToBsonDocument(),
                     Metadata = BsonNull.Value,
                     CreatedAtUtc = DateTime.UtcNow
@@ -113,6 +113,26 @@ public class CommitArbiter
                 return true;
             },
             txnOptions,
+            cancellationToken);
+    }
+
+    private async Task RunAsLeaderAsync(long epoch, CancellationToken cancellationToken)
+    {
+        await using var subscription = _eventsCollection.SubscribeToChangeStream();
+
+        // Or establish an anchor rather than buffer everything
+        await subscription.WaitUntilLiveAsync(cancellationToken);
+
+        // Catch up
+        // - Figure out all pending requests
+        // - Build up state about pending requests by commit ID
+        // - Goal: all commits eventually have a terminal event
+        //
+        // LeaderElected  100
+        // CommitAccepted 99
+
+        await subscription.ForEachAsync(
+            (doc, ct) => { return default; },
             cancellationToken);
     }
 }

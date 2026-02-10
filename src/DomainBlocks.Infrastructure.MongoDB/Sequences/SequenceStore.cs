@@ -3,7 +3,7 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.Infrastructure.MongoDB.Sequences;
 
-public sealed class SequenceAllocator(IMongoCollection<BsonDocument> sequences) : ISequenceAllocator
+public sealed class SequenceStore(IMongoCollection<BsonDocument> sequences) : ISequenceStore
 {
     private const string NextValueFieldName = "nextValue";
 
@@ -13,7 +13,7 @@ public sealed class SequenceAllocator(IMongoCollection<BsonDocument> sequences) 
         ReturnDocument = ReturnDocument.Before
     };
 
-    public Task<SequenceRange> AllocateNextRangeAsync(
+    public Task<SequenceRange> NextRangeAsync(
         string sequenceId,
         long count,
         CancellationToken cancellationToken = default)
@@ -21,7 +21,7 @@ public sealed class SequenceAllocator(IMongoCollection<BsonDocument> sequences) 
         return AllocateNextRangeCoreAsync(sequenceId, count, cancellationToken: cancellationToken);
     }
 
-    public Task<SequenceRange> AllocateNextRangeAsync(
+    public Task<SequenceRange> NextRangeAsync(
         IClientSessionHandle session,
         string sequenceId,
         long count,
