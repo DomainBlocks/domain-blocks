@@ -18,7 +18,7 @@ public sealed class SequenceStore(IMongoCollection<BsonDocument> sequences) : IS
         long count,
         CancellationToken cancellationToken = default)
     {
-        return AllocateNextRangeCoreAsync(sequenceId, count, cancellationToken: cancellationToken);
+        return NextRangeCoreAsync(sequenceId, count, cancellationToken: cancellationToken);
     }
 
     public Task<SequenceRange> NextRangeAsync(
@@ -27,17 +27,16 @@ public sealed class SequenceStore(IMongoCollection<BsonDocument> sequences) : IS
         long count,
         CancellationToken cancellationToken = default)
     {
-        return AllocateNextRangeCoreAsync(sequenceId, count, session, cancellationToken);
+        return NextRangeCoreAsync(sequenceId, count, session, cancellationToken);
     }
 
-    private async Task<SequenceRange> AllocateNextRangeCoreAsync(
+    private async Task<SequenceRange> NextRangeCoreAsync(
         string sequenceId,
         long count,
         IClientSessionHandle? session = null,
         CancellationToken cancellationToken = default)
     {
-        if (count < 1)
-            throw new ArgumentOutOfRangeException(nameof(count), "Count must be positive.");
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
 
         var filter = new BsonDocument("_id", sequenceId);
         var update = new BsonDocument("$inc", new BsonDocument(NextValueFieldName, count));

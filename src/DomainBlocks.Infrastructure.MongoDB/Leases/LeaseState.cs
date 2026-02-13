@@ -9,7 +9,9 @@ public sealed class LeaseState
 
     public required string HolderId { get; init; }
 
-    public required long Epoch { get; set; }
+    public required long Epoch { get; init; }
+
+    public required long NextSequence { get; init; }
 
     public required int ContentionPriority { get; init; }
 
@@ -18,4 +20,7 @@ public sealed class LeaseState
     public required DateTime HeldSinceUtc { get; init; }
 
     public required DateTime ExpiresAtUtc { get; init; }
+
+    [BsonIgnore]
+    public LeaseToken Token => new(ResourceId, HolderId, Epoch);
 }

@@ -61,9 +61,9 @@ public class LeaseProviderTests
         await using var lease = await _leaseProvider.AcquireLeaseAsync(_resourceId, cancellationToken: ct);
 
         lease.IsAcquired.ShouldBeTrue();
-        lease.Handle.ResourceId.ShouldBe(_resourceId);
-        lease.Handle.HolderId.ShouldStartWith(AcquireLeaseOptions.Default.HolderIdPrefix);
-        lease.Handle.Epoch.ShouldBe(1);
+        lease.Handle.Token.ResourceId.ShouldBe(_resourceId);
+        lease.Handle.Token.HolderId.ShouldStartWith(AcquireLeaseOptions.Default.HolderIdPrefix);
+        lease.Handle.Token.Epoch.ShouldBe(1);
         lease.Handle.ContentionPriority.ShouldBe(AcquireLeaseOptions.Default.ContentionPriority);
         lease.Handle.UpdatedAt.ShouldBe(utcNow);
         lease.Handle.HeldSince.ShouldBe(utcNow);
@@ -72,29 +72,29 @@ public class LeaseProviderTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task AcquireLeaseAsync_WhenAlreadyHeldAndAcquireTimeoutElapsed_ReturnsNull(CancellationToken ct)
+    public async Task AcquireLeaseAsync_WhenAlreadyHeldAndAcquireTimeoutElapsed_IsNotAcquired(CancellationToken ct)
     {
         await using var lease1 = await _leaseProvider.AcquireLeaseAsync(_resourceId, cancellationToken: ct);
-        lease1.ShouldNotBeNull();
+        lease1.IsAcquired.ShouldBeTrue();
 
         var lease2Task = _leaseProvider.AcquireLeaseAsync(_resourceId, cancellationToken: ct);
 
         _fakeTimeProvider.Advance(AcquireLeaseOptions.Default.AcquireTimeout);
 
         await using var lease2 = await lease2Task.WaitAsync(ct);
-        lease2.ShouldBeNull();
+        lease2.IsAcquired.ShouldBeFalse();
     }
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task AcquireLeaseAsync_WhenAlreadyHeldWhenAcquireTimeoutIsZero_ReturnsNull(CancellationToken ct)
+    public async Task AcquireLeaseAsync_WhenAlreadyHeldWhenAcquireTimeoutIsZero_IsNotAcquired(CancellationToken ct)
     {
         await using var lease1 = await _leaseProvider.AcquireLeaseAsync(_resourceId, cancellationToken: ct);
-        lease1.ShouldNotBeNull();
+        lease1.IsAcquired.ShouldBeTrue();
 
         var options = new AcquireLeaseOptions { AcquireTimeout = TimeSpan.Zero };
         await using var lease2 = await _leaseProvider.AcquireLeaseAsync(_resourceId, options, ct);
-        lease2.ShouldBeNull();
+        lease2.IsAcquired.ShouldBeFalse();
     }
 
     [Test]
@@ -106,14 +106,14 @@ public class LeaseProviderTests
         await using (var lease1 = await _leaseProvider.AcquireLeaseAsync(_resourceId, cancellationToken: ct))
         {
             lease1.IsAcquired.ShouldBeTrue();
-            lease1.Handle.Epoch.ShouldBe(1);
-            lease1HolderId = lease1.Handle.HolderId;
+            lease1.Handle.Token.Epoch.ShouldBe(1);
+            lease1HolderId = lease1.Handle.Token.HolderId;
         }
 
         await using var lease2 = await _leaseProvider.AcquireLeaseAsync(_resourceId, cancellationToken: ct);
         lease2.IsAcquired.ShouldBeTrue();
-        lease2.Handle.HolderId.ShouldNotBe(lease1HolderId);
-        lease2.Handle.Epoch.ShouldBe(2); // We expect epoch to increment on a new acquisition
+        lease2.Handle.Token.HolderId.ShouldNotBe(lease1HolderId);
+        lease2.Handle.Token.Epoch.ShouldBe(2); // We expect epoch to increment on a new acquisition
     }
 
     [Test]
@@ -134,7 +134,7 @@ public class LeaseProviderTests
         var lease2Options = lease1Options.With(x => x.ContentionPriority++);
 
         await using var lease2 = await _leaseProvider.AcquireLeaseAsync(_resourceId, lease2Options, ct);
-        lease2.ShouldNotBeNull();
+        lease2.IsAcquired.ShouldBeTrue();
 
         // Advance time so original holder eventually attempts renewal and observes it has lost the lease.
         while (!lease1.Handle.LeaseLostTask.IsCompleted)
@@ -156,7 +156,7 @@ public class LeaseProviderTests
     {
         await using var lease = await _leaseProvider.AcquireLeaseAsync(_resourceId, cancellationToken: ct);
         lease.IsAcquired.ShouldBeTrue();
-        lease.Handle.Epoch.ShouldBe(1);
+        lease.Handle.Token.Epoch.ShouldBe(1);
 
         var initialExpiry = lease.Handle.ExpiresAt;
 
@@ -167,7 +167,7 @@ public class LeaseProviderTests
             await Task.Yield();
         }
 
-        lease.Handle.Epoch.ShouldBe(1); // Epoch should not change on renewal
+        lease.Handle.Token.Epoch.ShouldBe(1); // Epoch should not change on renewal
     }
 
     [Test]

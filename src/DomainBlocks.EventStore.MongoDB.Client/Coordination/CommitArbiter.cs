@@ -65,7 +65,7 @@ public class CommitArbiter
                 cancellationToken,
                 lease.Handle.LeaseLostToken);
 
-            await RunAsLeaderAsync(lease.Handle.Epoch, linkedCts.Token);
+            await RunAsLeaderAsync(lease.Handle.Token.Epoch, linkedCts.Token);
         }
     }
 
@@ -89,8 +89,8 @@ public class CommitArbiter
 
                 var leaderElected = new SystemEvents.LeaderElected
                 {
-                    HolderId = lease.HolderId,
-                    Epoch = lease.Epoch,
+                    HolderId = lease.Token.HolderId,
+                    Epoch = lease.Token.Epoch,
                     GlobalPosition = globalPosition
                 };
 
@@ -126,10 +126,10 @@ public class CommitArbiter
         // Catch up
         // - Figure out all pending requests
         // - Build up state about pending requests by commit ID
-        // - Goal: all commits eventually have a terminal event
-        //
-        // LeaderElected  100
-        // CommitAccepted 99
+        // - Goal: all commits eventually have a terminal event (?)
+
+        // Requirements per commit
+        // Per-stream OCC
 
         await subscription.ForEachAsync(
             (doc, ct) => { return default; },
