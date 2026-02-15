@@ -42,11 +42,11 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
             ReturnDocument = ReturnDocument.After
         };
 
-        LeaseState? leaseState = null;
+        LeaseState? state = null;
 
         try
         {
-            leaseState = await leaseStates
+            state = await leaseStates
                 .FindOneAndUpdateAsync(
                     filter,
                     update,
@@ -59,7 +59,7 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
             // Another contender acquired the lease.
         }
 
-        return leaseState;
+        return state;
     }
 
     public async Task<LeaseState?> RenewAsync(
@@ -86,7 +86,7 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
             ReturnDocument = ReturnDocument.After
         };
 
-        var leaseState = await leaseStates
+        var state = await leaseStates
             .FindOneAndUpdateAsync(
                 filter,
                 update,
@@ -94,7 +94,7 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
                 cancellationToken)
             .ConfigureAwait(false);
 
-        return leaseState;
+        return state;
     }
 
     public async Task<bool> TryFenceAsync(

@@ -7,7 +7,7 @@ namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 
 public sealed class LeaseHandle : ILeaseHandle
 {
-    private LeaseState _leaseState;
+    private LeaseState _state;
     private readonly AcquireLeaseOptions _acquireOptions;
     private readonly RenewLeaseOptions _renewOptions;
     private readonly ILeaseStore _leaseStore;
@@ -23,15 +23,15 @@ public sealed class LeaseHandle : ILeaseHandle
     private int _disposed;
 
     public LeaseHandle(
-        LeaseState leaseState,
+        LeaseState state,
         AcquireLeaseOptions acquireOptions,
         ILeaseStore leaseStore,
         ILogger logger,
         TimeProvider timeProvider)
     {
-        Token = leaseState.Token;
+        Token = state.Token;
 
-        _leaseState = leaseState;
+        _state = state;
         _acquireOptions = acquireOptions;
         _renewOptions = new RenewLeaseOptions { Duration = acquireOptions.Duration };
         _leaseStore = leaseStore;
@@ -41,10 +41,10 @@ public sealed class LeaseHandle : ILeaseHandle
     }
 
     public LeaseToken Token { get; }
-    public int ContentionPriority => Volatile.Read(ref _leaseState).ContentionPriority;
-    public DateTimeOffset UpdatedAt => Volatile.Read(ref _leaseState).UpdatedAtUtc;
-    public DateTimeOffset HeldSince => Volatile.Read(ref _leaseState).HeldSinceUtc;
-    public DateTimeOffset ExpiresAt => Volatile.Read(ref _leaseState).ExpiresAtUtc;
+    public int ContentionPriority => Volatile.Read(ref _state).ContentionPriority;
+    public DateTimeOffset UpdatedAt => Volatile.Read(ref _state).UpdatedAtUtc;
+    public DateTimeOffset HeldSince => Volatile.Read(ref _state).HeldSinceUtc;
+    public DateTimeOffset ExpiresAt => Volatile.Read(ref _state).ExpiresAtUtc;
     public CancellationToken LeaseLostToken => _leaseLostCts.Token;
     public Task<LeaseLostInfo> LeaseLostTask => _leaseLostTcs.Task;
 
@@ -134,7 +134,7 @@ public sealed class LeaseHandle : ILeaseHandle
         if (priority is not null)
             Interlocked.CompareExchange(ref _scheduledPriority, null, priority);
 
-        Volatile.Write(ref _leaseState, state);
+        Volatile.Write(ref _state, state);
 
         _logger.LogDebug(
             "Holder '{HolderId}' renewed lease for resource '{ResourceId}'; " +
