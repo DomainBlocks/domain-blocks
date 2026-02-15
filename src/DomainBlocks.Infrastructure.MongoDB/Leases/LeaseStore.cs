@@ -2,10 +2,17 @@
 
 namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 
-public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimeProvider? timeProvider = null) :
-    ILeaseStore
+public sealed class LeaseStore : ILeaseStore
 {
-    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+    private readonly IMongoCollection<LeaseState> _leaseStates;
+    private readonly TimeProvider _timeProvider;
+
+    // ReSharper disable once ConvertToPrimaryConstructor - hide leaseStates
+    public LeaseStore(IMongoCollection<LeaseState> leaseStates, TimeProvider? timeProvider = null)
+    {
+        _leaseStates = leaseStates.WithWriteConcern(WriteConcern.WMajority.With(journal: true));
+        _timeProvider = timeProvider ?? TimeProvider.System;
+    }
 
     public async Task<LeaseState?> AcquireAsync(
         string resourceId,
@@ -28,6 +35,7 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
 
         var update = Builders<LeaseState>.Update
             .SetOnInsert(x => x.ResourceId, resourceId)
+            .SetOnInsert(x => x.Data, [])
             .Set(x => x.HolderId, holderId)
             .Inc(x => x.Epoch, 1)
             .Set(x => x.ContentionPriority, options.ContentionPriority)
@@ -38,14 +46,14 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
         var findOneAndUpdatedOptions = new FindOneAndUpdateOptions<LeaseState>
         {
             IsUpsert = true,
-            ReturnDocument = ReturnDocument.After
+            ReturnDocument = ReturnDocument.After,
         };
 
         LeaseState? state = null;
 
         try
         {
-            state = await leaseStates
+            state = await _leaseStates
                 .FindOneAndUpdateAsync(
                     filter,
                     update,
@@ -62,14 +70,14 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
     }
 
     public async Task<LeaseState?> RenewAsync(
-        LeaseToken token,
+        LeaseClaim claim,
         RenewLeaseOptions? options = null,
         CancellationToken cancellationToken = default)
     {
         options ??= RenewLeaseOptions.Default;
 
         var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
-        var filter = GetHeldLeaseFilter(token, utcNow);
+        var filter = GetLeaseMatchesClaimFilter(claim, utcNow);
         var expiresAt = utcNow + options.Duration;
 
         var update = Builders<LeaseState>.Update
@@ -85,7 +93,7 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
             ReturnDocument = ReturnDocument.After
         };
 
-        var state = await leaseStates
+        var state = await _leaseStates
             .FindOneAndUpdateAsync(
                 filter,
                 update,
@@ -96,35 +104,29 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
         return state;
     }
 
-    public async Task<bool> TryReleaseAsync(
-        LeaseToken token,
-        CancellationToken cancellationToken = default)
+    public async Task<bool> TryReleaseAsync(LeaseClaim claim, CancellationToken cancellationToken = default)
     {
         var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
-        var filter = GetHeldLeaseFilter(token, utcNow);
+        var filter = GetLeaseMatchesClaimFilter(claim, utcNow);
 
         var update = Builders<LeaseState>.Update
             .Set(x => x.ExpiresAtUtc, utcNow)
             .Set(x => x.UpdatedAtUtc, utcNow);
 
-        var result = await leaseStates
+        var result = await _leaseStates
             .UpdateOneAsync(filter, update, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
         return result.ModifiedCount == 1;
     }
 
-    private static FilterDefinition<LeaseState> GetHeldLeaseFilter(LeaseToken token, DateTime? utcNow = null)
+    private static FilterDefinition<LeaseState> GetLeaseMatchesClaimFilter(LeaseClaim claim, DateTime utcNow)
     {
         var filterBuilder = Builders<LeaseState>.Filter;
 
-        var filter = filterBuilder.Eq(x => x.ResourceId, token.ResourceId) &
-                     filterBuilder.Eq(x => x.HolderId, token.HolderId) &
-                     filterBuilder.Eq(x => x.Epoch, token.Epoch);
-
-        if (utcNow.HasValue)
-            filter &= filterBuilder.Gt(x => x.ExpiresAtUtc, utcNow);
-
-        return filter;
+        return filterBuilder.Eq(x => x.ResourceId, claim.ResourceId) &
+               filterBuilder.Eq(x => x.HolderId, claim.HolderId) &
+               filterBuilder.Eq(x => x.Epoch, claim.Epoch) &
+               filterBuilder.Gt(x => x.ExpiresAtUtc, utcNow);
     }
 }

@@ -8,9 +8,9 @@ public interface ILeaseStore
         CancellationToken cancellationToken = default);
 
     Task<LeaseState?> RenewAsync(
-        LeaseToken token,
+        LeaseClaim claim,
         RenewLeaseOptions? options = null,
         CancellationToken cancellationToken = default);
 
-    Task<bool> TryReleaseAsync(LeaseToken token, CancellationToken cancellationToken = default);
+    Task<bool> TryReleaseAsync(LeaseClaim claim, CancellationToken cancellationToken = default);
 }

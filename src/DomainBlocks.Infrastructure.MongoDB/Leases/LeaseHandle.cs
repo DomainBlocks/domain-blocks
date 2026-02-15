@@ -27,7 +27,7 @@ public sealed class LeaseHandle : ILeaseHandle
         ILogger logger,
         TimeProvider timeProvider)
     {
-        Token = state.Token;
+        Claim = state.Claim;
 
         _state = state;
         _acquireOptions = acquireOptions;
@@ -38,7 +38,7 @@ public sealed class LeaseHandle : ILeaseHandle
         _heartbeatTask = Task.Run(HeartbeatAsync);
     }
 
-    public LeaseToken Token { get; }
+    public LeaseClaim Claim { get; }
     public int ContentionPriority => Volatile.Read(ref _state).ContentionPriority;
     public DateTimeOffset UpdatedAt => Volatile.Read(ref _state).UpdatedAtUtc;
     public DateTimeOffset HeldSince => Volatile.Read(ref _state).HeldSinceUtc;
@@ -58,8 +58,8 @@ public sealed class LeaseHandle : ILeaseHandle
 
         _logger.LogInformation(
             "Disposing lease for resource '{ResourceId}' held by '{HolderId}'",
-            Token.ResourceId,
-            Token.HolderId);
+            Claim.ResourceId,
+            Claim.HolderId);
 
         using (_leaseLostCts)
         {
@@ -106,7 +106,7 @@ public sealed class LeaseHandle : ILeaseHandle
         var priority = Volatile.Read(ref _scheduledPriority);
         var renewOptions = _renewOptions.With(x => x.ContentionPriority = priority?.Value);
 
-        var state = await _leaseStore.RenewAsync(Token, renewOptions, _leaseLostCts.Token).ConfigureAwait(false);
+        var state = await _leaseStore.RenewAsync(Claim, renewOptions, _leaseLostCts.Token).ConfigureAwait(false);
         if (state is null)
             return false;
 
@@ -119,8 +119,8 @@ public sealed class LeaseHandle : ILeaseHandle
         _logger.LogDebug(
             "Holder '{HolderId}' renewed lease for resource '{ResourceId}'; " +
             "expires at {ExpiresAtUtc:yyyy-MM-ddTHH:mm:ssZ}",
-            Token.HolderId,
-            Token.ResourceId,
+            Claim.HolderId,
+            Claim.ResourceId,
             state.ExpiresAtUtc);
 
         return true;
@@ -132,20 +132,20 @@ public sealed class LeaseHandle : ILeaseHandle
         {
             using var cts = _timeProvider.CreateCancellationTokenSource(TimeSpan.FromSeconds(10));
 
-            var succeeded = await _leaseStore.TryReleaseAsync(Token, cts.Token).ConfigureAwait(false);
+            var succeeded = await _leaseStore.TryReleaseAsync(Claim, cts.Token).ConfigureAwait(false);
             if (succeeded)
             {
                 _logger.LogInformation(
                     "Holder '{HolderId}' released lease for resource '{ResourceId}'",
-                    Token.HolderId,
-                    Token.ResourceId);
+                    Claim.HolderId,
+                    Claim.ResourceId);
             }
             else
             {
                 _logger.LogInformation(
                     "Holder '{HolderId}' unable to release lease for resource '{ResourceId}' (no longer held)",
-                    Token.HolderId,
-                    Token.ResourceId);
+                    Claim.HolderId,
+                    Claim.ResourceId);
             }
         }
         catch (Exception ex)
@@ -153,8 +153,8 @@ public sealed class LeaseHandle : ILeaseHandle
             _logger.LogError(
                 ex,
                 "Holder '{HolderId}' failed to release lease for resource '{ResourceId}'",
-                Token.HolderId,
-                Token.ResourceId);
+                Claim.HolderId,
+                Claim.ResourceId);
         }
     }
 
@@ -164,8 +164,8 @@ public sealed class LeaseHandle : ILeaseHandle
             exception is null ? LogLevel.Information : LogLevel.Error,
             exception,
             "Holder '{HolderId}' lost lease for resource '{ResourceId}' (reason: {Reason})",
-            Token.HolderId,
-            Token.ResourceId,
+            Claim.HolderId,
+            Claim.ResourceId,
             reason);
     }
 }

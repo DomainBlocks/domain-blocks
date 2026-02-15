@@ -2,7 +2,7 @@
 
 public interface ILeaseHandle : IAsyncDisposable
 {
-    LeaseToken Token { get; }
+    LeaseClaim Claim { get; }
 
     int ContentionPriority { get; }
 

@@ -32,7 +32,7 @@ public sealed class LeaseProvider(
                 logger.LogInformation(
                     "Lease for resource '{ResourceId}' acquired by holder '{HolderId}'",
                     resourceId,
-                    handle.Token.HolderId);
+                    handle.Claim.HolderId);
 
                 return LeaseAcquisition.From(handle);
             }

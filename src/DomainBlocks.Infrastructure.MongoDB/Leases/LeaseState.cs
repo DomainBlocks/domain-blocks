@@ -1,4 +1,5 @@
-﻿using MongoDB.Bson.Serialization.Attributes;
+﻿using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 
@@ -21,6 +22,8 @@ public sealed class LeaseState
 
     public required DateTime ExpiresAtUtc { get; init; }
 
+    public required BsonDocument Data { get; init; }
+
     [BsonIgnore]
-    public LeaseToken Token => new(ResourceId, HolderId, Epoch);
+    public LeaseClaim Claim => new(ResourceId, HolderId, Epoch);
 }
