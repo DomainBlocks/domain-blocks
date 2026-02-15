@@ -1,7 +1,5 @@
 ﻿using System.Runtime.CompilerServices;
-using DomainBlocks.Infrastructure.MongoDB.Sequences;
 using Microsoft.Extensions.Logging;
-using MongoDB.Driver;
 
 namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 
@@ -47,24 +45,6 @@ public sealed class LeaseHandle : ILeaseHandle
     public DateTimeOffset ExpiresAt => Volatile.Read(ref _state).ExpiresAtUtc;
     public CancellationToken LeaseLostToken => _leaseLostCts.Token;
     public Task<LeaseLostInfo> LeaseLostTask => _leaseLostTcs.Task;
-
-    public Task<bool> TryFenceAsync(IClientSessionHandle session, CancellationToken cancellationToken = default)
-    {
-        return _leaseStore.TryFenceAsync(session, Token, cancellationToken);
-    }
-
-    public Task<SequenceRange?> NextSequenceRangeAsync(long count, CancellationToken cancellationToken = default)
-    {
-        return _leaseStore.NextSequenceRangeAsync(Token, count, cancellationToken);
-    }
-
-    public Task<SequenceRange?> NextSequenceRangeAsync(
-        IClientSessionHandle session,
-        long count,
-        CancellationToken cancellationToken = default)
-    {
-        return _leaseStore.NextSequenceRangeAsync(session, Token, count, cancellationToken);
-    }
 
     public void ScheduleContentionPriorityChange(int priority)
     {

@@ -1,7 +1,4 @@
-﻿using DomainBlocks.Infrastructure.MongoDB.Sequences;
-using MongoDB.Driver;
-
-namespace DomainBlocks.Infrastructure.MongoDB.Leases;
+﻿namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 
 public interface ILeaseHandle : IAsyncDisposable
 {
@@ -18,17 +15,6 @@ public interface ILeaseHandle : IAsyncDisposable
     CancellationToken LeaseLostToken { get; }
 
     Task<LeaseLostInfo> LeaseLostTask { get; }
-
-    Task<bool> TryFenceAsync(IClientSessionHandle session, CancellationToken cancellationToken = default);
-
-    Task<SequenceRange?> NextSequenceRangeAsync(
-        long count,
-        CancellationToken cancellationToken = default);
-
-    Task<SequenceRange?> NextSequenceRangeAsync(
-        IClientSessionHandle session,
-        long count,
-        CancellationToken cancellationToken = default);
 
     void ScheduleContentionPriorityChange(int priority);
 }

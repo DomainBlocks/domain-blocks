@@ -1,5 +1,4 @@
-﻿using DomainBlocks.Infrastructure.MongoDB.Sequences;
-using MongoDB.Driver;
+﻿using MongoDB.Driver;
 
 namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 
@@ -70,7 +69,7 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
         options ??= RenewLeaseOptions.Default;
 
         var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
-        var filter = GetActiveLeaseFilter(token, utcNow);
+        var filter = GetHeldLeaseFilter(token, utcNow);
         var expiresAt = utcNow + options.Duration;
 
         var update = Builders<LeaseState>.Update
@@ -97,50 +96,12 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
         return state;
     }
 
-    public async Task<bool> TryFenceAsync(
-        IClientSessionHandle session,
-        LeaseToken token,
-        CancellationToken cancellationToken = default)
-    {
-        var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
-        var filter = GetActiveLeaseFilter(token, utcNow);
-
-        var update = Builders<LeaseState>.Update.Set(x => x.UpdatedAtUtc, utcNow);
-
-        var result = await leaseStates
-            .UpdateOneAsync(
-                session,
-                filter,
-                update,
-                cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
-
-        return result.MatchedCount == 1;
-    }
-
-    public Task<SequenceRange?> NextSequenceRangeAsync(
-        LeaseToken token,
-        long count,
-        CancellationToken cancellationToken = default)
-    {
-        return NextSequenceRangeCoreAsync(token, count, cancellationToken: cancellationToken);
-    }
-
-    public Task<SequenceRange?> NextSequenceRangeAsync(
-        IClientSessionHandle session,
-        LeaseToken token,
-        long count,
-        CancellationToken cancellationToken = default)
-    {
-        return NextSequenceRangeCoreAsync(token, count, session, cancellationToken);
-    }
-
     public async Task<bool> TryReleaseAsync(
         LeaseToken token,
         CancellationToken cancellationToken = default)
     {
         var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
-        var filter = GetActiveLeaseFilter(token, utcNow);
+        var filter = GetHeldLeaseFilter(token, utcNow);
 
         var update = Builders<LeaseState>.Update
             .Set(x => x.ExpiresAtUtc, utcNow)
@@ -153,47 +114,7 @@ public sealed class LeaseStore(IMongoCollection<LeaseState> leaseStates, TimePro
         return result.ModifiedCount == 1;
     }
 
-    private async Task<SequenceRange?> NextSequenceRangeCoreAsync(
-        LeaseToken token,
-        long count,
-        IClientSessionHandle? session = null,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(count);
-
-        var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
-        var filter = GetActiveLeaseFilter(token, utcNow);
-        var update = Builders<LeaseState>.Update.Inc(x => x.NextSequence, count);
-
-        var findOneAndUpdateOptions = new FindOneAndUpdateOptions<LeaseState>
-        {
-            IsUpsert = false,
-            ReturnDocument = ReturnDocument.Before
-        };
-
-        LeaseState? previous;
-
-        if (session is null)
-        {
-            previous = await leaseStates
-                .FindOneAndUpdateAsync(filter, update, findOneAndUpdateOptions, cancellationToken)
-                .ConfigureAwait(false);
-        }
-        else
-        {
-            previous = await leaseStates
-                .FindOneAndUpdateAsync(session, filter, update, findOneAndUpdateOptions, cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        if (previous is null)
-            return null;
-
-        var start = previous.NextSequence;
-        return new SequenceRange(start, count);
-    }
-
-    private static FilterDefinition<LeaseState> GetActiveLeaseFilter(LeaseToken token, DateTime? utcNow = null)
+    private static FilterDefinition<LeaseState> GetHeldLeaseFilter(LeaseToken token, DateTime? utcNow = null)
     {
         var filterBuilder = Builders<LeaseState>.Filter;
 
