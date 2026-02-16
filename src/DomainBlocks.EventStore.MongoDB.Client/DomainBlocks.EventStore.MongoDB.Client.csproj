@@ -23,4 +23,8 @@
     <ProjectReference Include="..\DomainBlocks.Infrastructure.MongoDB\DomainBlocks.Infrastructure.MongoDB.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Coordination\" />
+  </ItemGroup>
+
 </Project>

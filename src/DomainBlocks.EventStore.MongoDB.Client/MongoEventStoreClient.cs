@@ -12,7 +12,7 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
     private readonly Api.Appender.V0.AppenderService.AppenderServiceClient _appenderClient;
     private readonly IEventEncoder<TEvent, byte[], byte[]> _eventEncoder;
     private readonly IEventDecoder<TEvent, BsonValue, BsonValue> _eventDecoder;
-    private readonly IMongoCollection<Schema.StreamCommit> _commitsCollection;
+    private readonly IMongoCollection<Schema1.StreamCommit> _commitsCollection;
 
     public MongoEventStoreClient(
         IMongoClient mongoClient,
@@ -25,7 +25,7 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
         _appenderClient = appenderClient;
         _eventEncoder = eventEncoder;
         _eventDecoder = eventDecoder;
-        _commitsCollection = db.GetCollection<Schema.StreamCommit>("es_stream_commits");
+        _commitsCollection = db.GetCollection<Schema1.StreamCommit>("es_stream_commits");
     }
 
     public async Task AppendToStreamAsync(
@@ -69,22 +69,22 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
             yield break;
         }
 
-        var filter = Builders<Schema.StreamCommit>.Filter.Eq(x => x.StreamId, streamId);
+        var filter = Builders<Schema1.StreamCommit>.Filter.Eq(x => x.StreamId, streamId);
 
         if (readPosition.IsSpecificVersion)
         {
             var versionValue = readPosition.Version.Value.ToInt64();
 
             var versionFilter = direction == StreamReadDirection.Forward
-                ? Builders<Schema.StreamCommit>.Filter.Gte(x => x.EndStreamVersion, versionValue)
-                : Builders<Schema.StreamCommit>.Filter.Lte(x => x.StartStreamVersion, versionValue);
+                ? Builders<Schema1.StreamCommit>.Filter.Gte(x => x.EndStreamVersion, versionValue)
+                : Builders<Schema1.StreamCommit>.Filter.Lte(x => x.StartStreamVersion, versionValue);
 
-            filter = Builders<Schema.StreamCommit>.Filter.And(filter, versionFilter);
+            filter = Builders<Schema1.StreamCommit>.Filter.And(filter, versionFilter);
         }
 
         var sort = direction == StreamReadDirection.Forward
-            ? Builders<Schema.StreamCommit>.Sort.Ascending(x => x.StartStreamVersion)
-            : Builders<Schema.StreamCommit>.Sort.Descending(x => x.StartStreamVersion);
+            ? Builders<Schema1.StreamCommit>.Sort.Ascending(x => x.StartStreamVersion)
+            : Builders<Schema1.StreamCommit>.Sort.Descending(x => x.StartStreamVersion);
 
         using var cursor = await _commitsCollection
             .Find(filter)
@@ -141,8 +141,8 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
         if (totalEventCount == 0 && readOptions.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw)
             throw new StreamNotFoundException(streamId);
 
-        static IEnumerable<(Schema.EventDocument, int)> EnumerateEvents(
-            Schema.EventDocument[] events,
+        static IEnumerable<(Schema1.EventDocument, int)> EnumerateEvents(
+            Schema1.EventDocument[] events,
             StreamReadDirection direction)
         {
             if (direction == StreamReadDirection.Forward)
@@ -207,8 +207,8 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
     private async Task<StreamState> GetStreamStateAsync(string streamId, CancellationToken cancellationToken)
     {
         var latestVersion = await _commitsCollection
-            .Find(Builders<Schema.StreamCommit>.Filter.Eq(x => x.StreamId, streamId))
-            .Sort(Builders<Schema.StreamCommit>.Sort.Descending(x => x.EndStreamVersion))
+            .Find(Builders<Schema1.StreamCommit>.Filter.Eq(x => x.StreamId, streamId))
+            .Sort(Builders<Schema1.StreamCommit>.Sort.Descending(x => x.EndStreamVersion))
             .Project(x => (long?)x.EndStreamVersion)
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);

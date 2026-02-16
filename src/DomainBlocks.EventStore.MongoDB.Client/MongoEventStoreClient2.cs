@@ -1,5 +1,5 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.Primitives.Identity;
+using DomainBlocks.EventStore.MongoDB.Client.Schema;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
@@ -7,7 +7,7 @@ namespace DomainBlocks.EventStore.MongoDB.Client;
 
 public class MongoEventStoreClient2<TEvent> : IEventStoreClient<TEvent> where TEvent : notnull
 {
-    private readonly IMongoCollection<EventDocument2> _eventsCollection;
+    private readonly IMongoCollection<LoggedEvent> _eventsCollection;
     private readonly IEventEncoder<TEvent, BsonValue, BsonValue> _eventEncoder;
     private readonly IEventDecoder<TEvent, BsonValue, BsonValue> _eventDecoder;
 
@@ -16,7 +16,7 @@ public class MongoEventStoreClient2<TEvent> : IEventStoreClient<TEvent> where TE
         var collectionOptions = options.CollectionOptions;
         var db = mongoClient.GetDatabase(collectionOptions.DatabaseName);
 
-        _eventsCollection = db.GetCollection<EventDocument2>(collectionOptions.EventsCollectionName);
+        _eventsCollection = db.GetCollection<LoggedEvent>(collectionOptions.EventsCollectionName);
 
         _eventEncoder = options.EventCodec.Encoder;
         _eventDecoder = options.EventCodec.Decoder;
@@ -29,51 +29,6 @@ public class MongoEventStoreClient2<TEvent> : IEventStoreClient<TEvent> where TE
         CancellationToken cancellationToken = default)
     {
         options ??= AppendToStreamOptions.Default;
-
-        var eventDocuments = new List<EventDocument2>();
-        var commitId = Guid.NewGuid();
-        var index = 0;
-        var createdAtUtc = DateTime.UtcNow;
-
-        foreach (var (eventName, eventData, metadata) in _eventEncoder.Encode(events))
-        {
-            eventDocuments.Add(new EventDocument2
-            {
-                StreamId = streamId,
-                CommitId = commitId,
-                CommitIndex = index++,
-                EventId = EventIdGenerator.Generate(streamId, commitId, index),
-                EventName = eventName,
-                EventData = eventData,
-                Metadata = metadata ?? BsonNull.Value,
-                CreatedAtUtc = createdAtUtc
-            });
-        }
-
-        var commitRequested = new SystemEvents.CommitRequested
-        {
-            EventCount = eventDocuments.Count,
-            ExpectedStreamState = options.ExpectedState
-        };
-
-        var sysStreamId = GetCommitStreamId(streamId);
-
-        eventDocuments.Add(new EventDocument2
-        {
-            StreamId = sysStreamId,
-            CommitId = commitId,
-            CommitIndex = 0,
-            EventId = EventIdGenerator.Generate(sysStreamId, commitId, 0),
-            EventName = SystemEvents.CommitRequested.Name,
-            EventData = commitRequested.ToBsonDocument(),
-            Metadata = BsonNull.Value,
-            CreatedAtUtc = createdAtUtc
-        });
-
-        await _eventsCollection.InsertManyAsync(
-            eventDocuments,
-            new InsertManyOptions { IsOrdered = false },
-            cancellationToken);
     }
 
     public IAsyncEnumerable<ReadEvent<TEvent>> ReadStreamAsync(
