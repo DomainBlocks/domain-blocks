@@ -10,7 +10,8 @@ public static class MongoEventStoreAdmin
         CancellationToken cancellationToken = default)
     {
         var db = mongoClient.GetDatabase(collectionOptions.DatabaseName);
-        var streamCommitsCollection = db.GetCollection<Schema1.StreamCommit>(collectionOptions.StreamCommitsCollectionName);
+        var streamCommitsCollection =
+            db.GetCollection<Schema1.StreamCommit>(collectionOptions.StreamCommitsCollectionName);
 
         await EnsureStreamCommitsCollectionIndexesAsync(streamCommitsCollection, cancellationToken);
     }

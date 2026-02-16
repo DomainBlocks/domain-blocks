@@ -14,7 +14,7 @@ public sealed class AppendRequest
     public required string StreamId { get; init; }
 
     [BsonSerializer(typeof(ExpectedStreamStateBsonSerializer))]
-    public required ExpectedStreamState ExpectedState { get; init; }
+    public required ExpectedStreamState ExpectedStreamState { get; init; }
 
     public required Event[] Events { get; init; }
 

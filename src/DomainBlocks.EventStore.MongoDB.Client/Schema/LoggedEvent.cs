@@ -3,8 +3,8 @@ using MongoDB.Bson.Serialization.Attributes;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Schema;
 
-// We'll need a CommitStarted system event as the idempotency gate, along with an ordered BulkWrite (?)
-// Either use a special CommitIndex = -1, or partial index on 'CommitStarted'.
+// We'll need a CommitDeclared system event as the idempotency gate, along with an ordered BulkWrite (?)
+// Either use a special CommitIndex = -1, or partial index on 'CommitDeclared'.
 // This may not need to be ordered to be correct, given this is above the HW mark.
 public sealed class LoggedEvent
 {
