@@ -1,4 +1,4 @@
-using DomainBlocks.EventStore.MongoDB.Client.Schema;
+using DomainBlocks.EventStore.MongoDB.Client.Schema2;
 using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Client;

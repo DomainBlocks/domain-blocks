@@ -17,8 +17,4 @@
     <ProjectReference Include="..\DomainBlocks.Testing.Integration\DomainBlocks.Testing.Integration.csproj"/>
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Coordination\" />
-  </ItemGroup>
-
 </Project>

@@ -1,8 +1,10 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.MongoDB.Client.Coordination;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Testing.Integration;
 using DomainBlocks.Testing.Integration.MongoDB;
+using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using NUnit.Framework;
@@ -36,9 +38,9 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
             MetadataDeserializer = new BsonDocumentMetadataSerde()
         };
 
-        var options = new MongoEventStoreClientOptions<IDomainEvent>
+        var options = new MongoEventStoreClientOptions2<IDomainEvent>
         {
-            CollectionOptions = EventStoreCollectionOptions.Default,
+            CollectionOptions = EventStoreCollectionOptions2.Default,
             EventCodec = new EventCodec<IDomainEvent, BsonValue, BsonValue>
             {
                 Encoder = EventEncoder.Create(encoderOptions),
@@ -49,12 +51,47 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
         _mongoClient = new MongoClient(MongoConnectionStrings.Default);
         _client = new MongoEventStoreClient2<IDomainEvent>(_mongoClient, options);
 
-        await MongoEventStoreAdmin2.EnsureIndexesAsync(_mongoClient, EventStoreCollectionOptions2.Default);
+        await MongoEventStoreAdmin2.EnsureIndexesAsync(_mongoClient, options.CollectionOptions);
     }
 
     [OneTimeTearDown]
     public void OneTimeTearDown()
     {
         _mongoClient.Dispose();
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task AppendToStreamAsync_WithSameCommitId_IsIdempotent(CancellationToken ct)
+    {
+        using var loggerFactory = LoggerFactory.Create(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug));
+        var logger = loggerFactory.CreateLogger<CommitCoordinator>();
+
+        var commitCoordinator = new CommitCoordinator(
+            _mongoClient,
+            EventStoreCollectionOptions2.Default,
+            logger);
+
+        var commitCoordTask = commitCoordinator.RunAsync(ct);
+
+        var streamId = $"test-{Guid.NewGuid():N}";
+
+        AppendEvent<IDomainEvent>[] events =
+        [
+            CreateTestEvent("TestEvent1"),
+            CreateTestEvent("TestEvent2"),
+            CreateTestEvent("TestEvent3")
+        ];
+
+        var options = new AppendToStreamOptions
+        {
+            ExpectedState = ExpectedStreamState.Any,
+            CommitId = Guid.CreateVersion7()
+        };
+
+        await Client.AppendToStreamAsync(streamId, events, options, ct);
+        await Client.AppendToStreamAsync(streamId, events, options, ct);
+
+        await commitCoordTask.WaitAsync(ct);
     }
 }

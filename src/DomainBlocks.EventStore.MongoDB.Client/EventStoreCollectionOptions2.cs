@@ -6,10 +6,12 @@ public sealed class EventStoreCollectionOptions2
     {
         DatabaseName = "domainblocks",
         AppendRequestsCollectionName = "dbx.append_requests",
-        LoggedEventsCollectionName = "dbx.logged_events"
+        LoggedEventsCollectionName = "dbx.logged_events",
+        LeasesCollectionName = "dbx.leases"
     };
 
     public required string DatabaseName { get; init; }
     public required string AppendRequestsCollectionName { get; init; }
     public required string LoggedEventsCollectionName { get; init; }
+    public required string LeasesCollectionName { get; init; }
 }

@@ -11,7 +11,7 @@ namespace DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 
 public sealed class ChangeStreamSubscription<TDocument, TResult> : IChangeStreamSubscription<TResult>
 {
-    private readonly IMongoCollection<TDocument> _collection;
+    private readonly WatchChangeStreamAsync<TDocument, TResult> _watchAsync;
     private readonly PipelineDefinition<ChangeStreamDocument<TDocument>, TResult> _pipeline;
     private readonly Func<TResult, BsonDocument> _resumeTokenSelector;
     private readonly ChangeStreamSubscriptionOptions _options;
@@ -25,13 +25,13 @@ public sealed class ChangeStreamSubscription<TDocument, TResult> : IChangeStream
     private int _disposed;
 
     public ChangeStreamSubscription(
-        IMongoCollection<TDocument> collection,
+        WatchChangeStreamAsync<TDocument, TResult> watchAsync,
         PipelineDefinition<ChangeStreamDocument<TDocument>, TResult> pipeline,
         Func<TResult, BsonDocument> resumeTokenSelector,
         ChangeStreamSubscriptionOptions? options,
         ILogger? logger)
     {
-        _collection = collection;
+        _watchAsync = watchAsync;
         _pipeline = pipeline;
         _resumeTokenSelector = resumeTokenSelector;
         _options = options ?? new ChangeStreamSubscriptionOptions();
@@ -206,7 +206,7 @@ public sealed class ChangeStreamSubscription<TDocument, TResult> : IChangeStream
 
             var cursor = await GetResiliencePipeline()
                 .ExecuteAsync(
-                    async ct => await _collection.WatchAsync(_pipeline, mongoOptions, ct).ConfigureAwait(false),
+                    async ct => await _watchAsync(_pipeline, mongoOptions, ct).ConfigureAwait(false),
                     _stopCts.Token)
                 .ConfigureAwait(false);
 

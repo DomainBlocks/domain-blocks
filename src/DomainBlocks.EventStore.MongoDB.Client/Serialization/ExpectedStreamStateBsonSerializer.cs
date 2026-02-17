@@ -13,10 +13,10 @@ public sealed class ExpectedStreamStateBsonSerializer : StructSerializerBase<Exp
     private const string VersionField = "version";
 
     // Wire tokens – keep stable forever once shipped
-    private const string Any = "Any";
-    private const string StreamExists = "StreamExists";
-    private const string StreamDoesNotExist = "StreamDoesNotExist";
-    private const string Version = "Version";
+    private const string Any = "any";
+    private const string StreamExists = "streamExists";
+    private const string StreamDoesNotExist = "streamDoesNotExist";
+    private const string Version = "version";
 
     public override void Serialize(
         BsonSerializationContext context,

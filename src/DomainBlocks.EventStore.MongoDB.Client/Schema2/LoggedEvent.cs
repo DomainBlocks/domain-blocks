@@ -1,7 +1,7 @@
 ﻿using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 
-namespace DomainBlocks.EventStore.MongoDB.Client.Schema;
+namespace DomainBlocks.EventStore.MongoDB.Client.Schema2;
 
 // We'll need a CommitDeclared system event as the idempotency gate, along with an ordered BulkWrite (?)
 // Either use a special CommitIndex = -1, or partial index on 'CommitDeclared'.

@@ -2,7 +2,7 @@
 
 namespace DomainBlocks.EventStore.MongoDB.Client;
 
-public static class Schema1
+public static class Schema
 {
     public sealed class StreamCommit
     {

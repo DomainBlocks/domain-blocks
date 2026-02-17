@@ -9,9 +9,9 @@ public abstract class EventStoreClientTests
 {
     // Set a longer timeout when debugging.
 #if DEBUG
-    private const int TestTimeoutMillis = 10 * 60 * 1_000;
+    protected const int TestTimeoutMillis = 10 * 60 * 1_000;
 #else
-    private const int TestTimeoutMillis = 5 * 1_000;
+    protected const int TestTimeoutMillis = 5 * 1_000;
 #endif
 
     private static IEnumerable<TestCaseData> PositionAndDirectionCases
@@ -314,7 +314,7 @@ public abstract class EventStoreClientTests
         }
     }
 
-    private static AppendEvent<IDomainEvent> CreateTestEvent(string value)
+    protected static AppendEvent<IDomainEvent> CreateTestEvent(string value)
     {
         return new AppendEvent<IDomainEvent>(new TestEvent { Value = value });
     }

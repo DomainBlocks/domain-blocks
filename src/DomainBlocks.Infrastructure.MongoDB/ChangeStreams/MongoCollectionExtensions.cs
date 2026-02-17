@@ -34,7 +34,7 @@ public static class MongoCollectionExtensions
         ILogger? logger = null)
     {
         return new ChangeStreamSubscription<TDocument, TResult>(
-            collection,
+            collection.WatchAsync,
             pipeline,
             resumeTokenSelector,
             options,

@@ -11,16 +11,16 @@ public static class MongoEventStoreAdmin
     {
         var db = mongoClient.GetDatabase(collectionOptions.DatabaseName);
         var streamCommitsCollection =
-            db.GetCollection<Schema1.StreamCommit>(collectionOptions.StreamCommitsCollectionName);
+            db.GetCollection<Schema.StreamCommit>(collectionOptions.StreamCommitsCollectionName);
 
         await EnsureStreamCommitsCollectionIndexesAsync(streamCommitsCollection, cancellationToken);
     }
 
     private static Task EnsureStreamCommitsCollectionIndexesAsync(
-        IMongoCollection<Schema1.StreamCommit> streamCommitsCollection,
+        IMongoCollection<Schema.StreamCommit> streamCommitsCollection,
         CancellationToken cancellationToken = default)
     {
-        var indexBuilder = Builders<Schema1.StreamCommit>.IndexKeys;
+        var indexBuilder = Builders<Schema.StreamCommit>.IndexKeys;
 
         var streamStart = indexBuilder
             .Ascending(x => x.StreamId)
@@ -34,7 +34,7 @@ public static class MongoEventStoreAdmin
         var globalEnd = indexBuilder.Ascending(x => x.EndGlobalPosition);
         var committedAtUtc = indexBuilder.Descending(x => x.CommittedAtUtc);
 
-        CreateIndexModel<Schema1.StreamCommit>[] indexModels =
+        CreateIndexModel<Schema.StreamCommit>[] indexModels =
         [
             new(streamStart, new CreateIndexOptions { Unique = true }),
             new(streamEnd),
