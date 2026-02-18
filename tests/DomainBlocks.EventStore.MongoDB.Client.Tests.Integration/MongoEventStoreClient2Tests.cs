@@ -62,7 +62,7 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task AppendToStreamAsync_WithSameCommitId_IsIdempotent(CancellationToken ct)
+    public async Task AppendToStreamAsync_ScratchTest(CancellationToken ct)
     {
         using var loggerFactory = LoggerFactory.Create(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug));
         var logger = loggerFactory.CreateLogger<CommitCoordinator>();

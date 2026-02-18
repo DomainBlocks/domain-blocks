@@ -23,12 +23,18 @@ public static class MongoEventStoreAdmin2
         CancellationToken cancellationToken = default)
     {
         var indexBuilder = Builders<AppendRequest>.IndexKeys;
-
         var createdAtUtc = indexBuilder.Ascending(x => x.CreatedAtUtc);
+        var lastSeenAtUtc = indexBuilder.Ascending(x => x.LastSeenAtUtc);
+
+        var lastSeenAtUtcOptions = new CreateIndexOptions
+        {
+            ExpireAfter = TimeSpan.FromSeconds(5) // TODO: think about how long
+        };
 
         CreateIndexModel<AppendRequest>[] indexModels =
         [
-            new(createdAtUtc)
+            new(createdAtUtc),
+            new(lastSeenAtUtc, lastSeenAtUtcOptions)
         ];
 
         return appendRequests.Indexes.CreateManyAsync(indexModels, cancellationToken);
