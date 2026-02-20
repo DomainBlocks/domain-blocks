@@ -5,6 +5,6 @@ namespace DomainBlocks.EventStore.MongoDB.Client;
 
 public sealed class MongoEventStoreClientOptions2<TEvent> where TEvent : notnull
 {
-    public required EventStoreCollectionOptions2 CollectionOptions { get; init; }
+    public required EventStoreNamespaceOptions CollectionOptions { get; init; }
     public required EventCodec<TEvent, BsonValue, BsonValue> EventCodec { get; init; }
 }

@@ -11,31 +11,31 @@ public sealed class AppendRequest
     [BsonGuidRepresentation(GuidRepresentation.Standard)]
     public required Guid CommitId { get; init; }
 
-    [BsonElement("streamId")]
+    [BsonElement(AppendRequestFieldNames.StreamId)]
     public required string StreamId { get; init; }
 
-    [BsonElement("expectedStreamState")]
+    [BsonElement(AppendRequestFieldNames.ExpectedStreamState)]
     [BsonSerializer(typeof(ExpectedStreamStateBsonSerializer))]
     public required ExpectedStreamState ExpectedStreamState { get; init; }
 
-    [BsonElement("events")]
+    [BsonElement(AppendRequestFieldNames.Events)]
     public required Event[] Events { get; init; }
 
-    [BsonElement("createdAtUtc")]
+    [BsonElement(AppendRequestFieldNames.CreatedAtUtc)]
     public required DateTime CreatedAtUtc { get; init; }
 
-    [BsonElement("lastSeenAtUtc")]
+    [BsonElement(AppendRequestFieldNames.LastSeenAtUtc)]
     public required DateTime LastSeenAtUtc { get; init; }
 
     public sealed class Event
     {
-        [BsonElement("eventName")]
+        [BsonElement(AppendRequestFieldNames.Event.EventName)]
         public required string EventName { get; init; }
 
-        [BsonElement("eventData")]
+        [BsonElement(AppendRequestFieldNames.Event.EventData)]
         public required BsonValue EventData { get; init; }
 
-        [BsonElement("metadata")]
+        [BsonElement(AppendRequestFieldNames.Event.Metadata)]
         public required BsonValue Metadata { get; init; }
     }
 }

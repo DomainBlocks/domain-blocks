@@ -40,7 +40,7 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
 
         var options = new MongoEventStoreClientOptions2<IDomainEvent>
         {
-            CollectionOptions = EventStoreCollectionOptions2.Default,
+            CollectionOptions = EventStoreNamespaceOptions.Default,
             EventCodec = new EventCodec<IDomainEvent, BsonValue, BsonValue>
             {
                 Encoder = EventEncoder.Create(encoderOptions),
@@ -67,12 +67,12 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
         using var loggerFactory = LoggerFactory.Create(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug));
         var logger = loggerFactory.CreateLogger<CommitCoordinator>();
 
-        var commitCoordinator = new CommitCoordinator(
+        var commitCoordinatorService = new CommitCoordinator(
             _mongoClient,
-            EventStoreCollectionOptions2.Default,
+            EventStoreNamespaceOptions.Default,
             logger);
 
-        var commitCoordTask = commitCoordinator.RunAsync(ct);
+        var commitCoordTask = commitCoordinatorService.RunAsync(ct);
 
         var streamId = $"test-{Guid.NewGuid():N}";
 

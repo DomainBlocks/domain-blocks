@@ -7,7 +7,7 @@ public static class MongoEventStoreAdmin2
 {
     public static async Task EnsureIndexesAsync(
         IMongoClient mongoClient,
-        EventStoreCollectionOptions2 collectionOptions,
+        EventStoreNamespaceOptions collectionOptions,
         CancellationToken cancellationToken = default)
     {
         var db = mongoClient.GetDatabase(collectionOptions.DatabaseName);
@@ -24,17 +24,10 @@ public static class MongoEventStoreAdmin2
     {
         var indexBuilder = Builders<AppendRequest>.IndexKeys;
         var createdAtUtc = indexBuilder.Ascending(x => x.CreatedAtUtc);
-        var lastSeenAtUtc = indexBuilder.Ascending(x => x.LastSeenAtUtc);
-
-        var lastSeenAtUtcOptions = new CreateIndexOptions
-        {
-            ExpireAfter = TimeSpan.FromSeconds(5) // TODO: think about how long
-        };
 
         CreateIndexModel<AppendRequest>[] indexModels =
         [
-            new(createdAtUtc),
-            new(lastSeenAtUtc, lastSeenAtUtcOptions)
+            new(createdAtUtc)
         ];
 
         return appendRequests.Indexes.CreateManyAsync(indexModels, cancellationToken);
