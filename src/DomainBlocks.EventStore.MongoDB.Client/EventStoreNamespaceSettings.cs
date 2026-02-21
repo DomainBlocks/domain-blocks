@@ -2,9 +2,9 @@
 
 namespace DomainBlocks.EventStore.MongoDB.Client;
 
-public sealed class EventStoreNamespaceOptions
+public sealed class EventStoreNamespaceSettings
 {
-    public static readonly EventStoreNamespaceOptions Default = new()
+    public static readonly EventStoreNamespaceSettings Default = new()
     {
         DatabaseName = "domainblocks",
         AppendRequestsCollectionName = "dbx.append_requests",

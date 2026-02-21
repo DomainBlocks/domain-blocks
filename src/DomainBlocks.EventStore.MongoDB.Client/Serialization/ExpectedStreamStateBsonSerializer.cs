@@ -9,6 +9,7 @@ namespace DomainBlocks.EventStore.MongoDB.Client.Serialization;
 
 public sealed class ExpectedStreamStateBsonSerializer : StructSerializerBase<ExpectedStreamState>
 {
+    public static readonly ExpectedStreamStateBsonSerializer Shared = new();
     private const string KindField = "kind";
     private const string VersionField = "version";
 

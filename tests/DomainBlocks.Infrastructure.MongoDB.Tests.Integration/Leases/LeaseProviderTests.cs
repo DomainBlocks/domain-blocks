@@ -1,4 +1,5 @@
 ﻿using DomainBlocks.Infrastructure.MongoDB.Leases;
+using DomainBlocks.Infrastructure.MongoDB.Leases.Schema;
 using DomainBlocks.Testing.Integration.MongoDB;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;

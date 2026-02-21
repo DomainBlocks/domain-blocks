@@ -17,4 +17,9 @@ public interface ILeaseHandle : IAsyncDisposable
     Task<LeaseLostInfo> LeaseLostTask { get; }
 
     void ScheduleContentionPriorityChange(int priority);
+
+    Task<bool> TryIncrementCounterAsync(
+        string counterName,
+        long delta,
+        CancellationToken cancellationToken = default);
 }

@@ -1,5 +1,7 @@
-﻿using DomainBlocks.EventStore.MongoDB.Client.Schema2;
+﻿using DomainBlocks.EventStore.MongoDB.Client.Coordination.State;
+using DomainBlocks.EventStore.MongoDB.Client.Schema2;
 using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
+using DomainBlocks.Infrastructure.MongoDB.Leases;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -9,22 +11,25 @@ namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 public sealed class CommitCoordinator
 {
     private readonly IMongoDatabase _database;
-    private readonly EventStoreNamespaceOptions _namespaceOptions;
+    private readonly EventStoreNamespaceSettings _namespaceSettings;
+    private readonly ILeaseProvider _leaseProvider;
     private readonly IMongoCollection<LoggedEvent> _loggedEvents;
     private readonly ILogger<CommitCoordinator> _logger;
     private readonly CancellationTokenSource _stopCts = new();
 
     public CommitCoordinator(
         IMongoClient mongoClient,
-        EventStoreNamespaceOptions namespaceOptions,
+        EventStoreNamespaceSettings namespaceSettings,
+        ILeaseProvider leaseProvider,
         ILogger<CommitCoordinator> logger)
     {
-        _database = mongoClient.GetDatabase(namespaceOptions.DatabaseName)
+        _database = mongoClient.GetDatabase(namespaceSettings.DatabaseName)
             .WithReadConcern(ReadConcern.Majority)
             .WithWriteConcern(WriteConcern.WMajority.With(journal: true));
 
-        _namespaceOptions = namespaceOptions;
-        _loggedEvents = _database.GetCollection<LoggedEvent>(namespaceOptions.LoggedEventsCollectionName);
+        _namespaceSettings = namespaceSettings;
+        _leaseProvider = leaseProvider;
+        _loggedEvents = _database.GetCollection<LoggedEvent>(namespaceSettings.LoggedEventsCollectionName);
         _logger = logger;
     }
 
@@ -34,7 +39,8 @@ public sealed class CommitCoordinator
         {
             MongoOptions = new ChangeStreamOptions
             {
-                FullDocument = ChangeStreamFullDocumentOption.WhenAvailable
+                FullDocument = ChangeStreamFullDocumentOption.WhenAvailable,
+                FullDocumentBeforeChange = ChangeStreamFullDocumentBeforeChangeOption.WhenAvailable
             }
         };
 
@@ -43,67 +49,44 @@ public sealed class CommitCoordinator
         var subscription = _database.SubscribeToChangeStream(subscriptionOptions, _logger);
         await subscription.WaitUntilLiveAsync(linkedCt.Token);
 
-        var requests = await LoadRequestsAsync(cancellationToken);
+        var state = new CommitCoordinatorState(_namespaceSettings);
+        await state.LoadAsync(_database, linkedCt.Token);
 
-        // Everything to be controlled from here
+        var leaseTask = RunLeaseContenderAsync(cancellationToken);
+
         await subscription.ForEachAsync(
             (change, _) =>
             {
-                ApplyRequestsChange(change, requests);
+                if (state.TryApply(change, out var @event))
+                {
+                    return default;
+                }
+
                 return default;
             },
             linkedCt.Token);
     }
 
-    private async Task<Dictionary<BsonValue, BsonDocument>> LoadRequestsAsync(CancellationToken cancellationToken)
+    private async Task RunLeaseContenderAsync(CancellationToken cancellationToken)
     {
-        var collectionName = _namespaceOptions.AppendRequestsCollectionName;
-        var appendRequests = _database.GetCollection<BsonDocument>(collectionName);
-
-        using var appendRequestsCursor = await appendRequests.FindAsync(
-            Builders<BsonDocument>.Filter.Empty,
-            cancellationToken: cancellationToken);
-
-        var requests = new Dictionary<BsonValue, BsonDocument>();
-
-        while (await appendRequestsCursor.MoveNextAsync(cancellationToken))
+        var options = new AcquireLeaseOptions
         {
-            foreach (var appendRequest in appendRequestsCursor.Current)
-                requests.Add(appendRequest["_id"], appendRequest);
-        }
+            AcquireTimeout = Timeout.InfiniteTimeSpan
+        };
 
-        return requests;
-    }
-
-    private void ApplyRequestsChange(
-        ChangeStreamDocument<BsonDocument> change,
-        Dictionary<BsonValue, BsonDocument> requests)
-    {
-        if (!change.CollectionNamespace.Equals(_namespaceOptions.AppendRequestsCollectionNamespace))
-            return;
-
-        var commitId = change.DocumentKey["_id"];
-
-        switch (change.OperationType)
+        while (!cancellationToken.IsCancellationRequested)
         {
-            case ChangeStreamOperationType.Insert:
-                requests.Add(commitId, change.FullDocument);
-                break;
-            case ChangeStreamOperationType.Update:
-            {
-                if (!requests.TryGetValue(commitId, out var request))
-                    return;
+            await using var lease =
+                await _leaseProvider.AcquireLeaseAsync(LogLeaseState.ResourceId, options, cancellationToken);
 
-                var updatedFields = change.UpdateDescription.UpdatedFields;
-                if (!updatedFields.TryGetValue(AppendRequestFieldNames.LastSeenAtUtc, out var lastSeenAtUtc))
-                    return;
+            if (!lease.IsAcquired)
+                continue; // Shouldn't happen with infinite timeout
 
-                request[AppendRequestFieldNames.LastSeenAtUtc] = lastSeenAtUtc;
-                break;
-            }
-            case ChangeStreamOperationType.Delete:
-                requests.Remove(commitId);
-                break;
+            await lease.Handle.TryIncrementCounterAsync(CounterNames.CommitPosition, 1, cancellationToken);
+            await Task.Delay(1000, cancellationToken);
+            await lease.Handle.TryIncrementCounterAsync(CounterNames.CommitPosition, 2, cancellationToken);
+
+            await lease.Handle.LeaseLostTask.WaitAsync(cancellationToken);
         }
     }
 }

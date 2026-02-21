@@ -1,4 +1,5 @@
 ﻿using System.Runtime.CompilerServices;
+using DomainBlocks.Infrastructure.MongoDB.Leases.Schema;
 using Microsoft.Extensions.Logging;
 
 namespace DomainBlocks.Infrastructure.MongoDB.Leases;
@@ -40,7 +41,7 @@ public sealed class LeaseHandle : ILeaseHandle
 
     public LeaseClaim Claim { get; }
     public int ContentionPriority => Volatile.Read(ref _state).ContentionPriority;
-    public DateTimeOffset UpdatedAt => Volatile.Read(ref _state).UpdatedAtUtc;
+    public DateTimeOffset UpdatedAt => Volatile.Read(ref _state).LastMutation.MutatedAtUtc;
     public DateTimeOffset HeldSince => Volatile.Read(ref _state).HeldSinceUtc;
     public DateTimeOffset ExpiresAt => Volatile.Read(ref _state).ExpiresAtUtc;
     public CancellationToken LeaseLostToken => _leaseLostCts.Token;
@@ -49,6 +50,14 @@ public sealed class LeaseHandle : ILeaseHandle
     public void ScheduleContentionPriorityChange(int priority)
     {
         Volatile.Write(ref _scheduledPriority, new StrongBox<int>(priority));
+    }
+
+    public Task<bool> TryIncrementCounterAsync(
+        string counterName,
+        long delta,
+        CancellationToken cancellationToken = default)
+    {
+        return _leaseStore.TryIncrementCounterAsync(Claim, counterName, delta, cancellationToken);
     }
 
     public async ValueTask DisposeAsync()

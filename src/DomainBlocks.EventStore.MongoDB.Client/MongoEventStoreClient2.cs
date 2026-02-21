@@ -14,7 +14,7 @@ public class MongoEventStoreClient2<TEvent> : IEventStoreClient<TEvent> where TE
 
     public MongoEventStoreClient2(IMongoClient mongoClient, MongoEventStoreClientOptions2<TEvent> options)
     {
-        var collectionOptions = options.CollectionOptions;
+        var collectionOptions = options.NamespaceSettings;
         var db = mongoClient.GetDatabase(collectionOptions.DatabaseName);
 
         _appendRequests = db

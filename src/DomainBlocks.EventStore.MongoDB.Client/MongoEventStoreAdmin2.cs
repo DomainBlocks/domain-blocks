@@ -5,17 +5,28 @@ namespace DomainBlocks.EventStore.MongoDB.Client;
 
 public static class MongoEventStoreAdmin2
 {
-    public static async Task EnsureIndexesAsync(
+    public static async Task EnsureInitializedAsync(
         IMongoClient mongoClient,
-        EventStoreNamespaceOptions collectionOptions,
+        EventStoreNamespaceSettings namespaceSettings,
         CancellationToken cancellationToken = default)
     {
-        var db = mongoClient.GetDatabase(collectionOptions.DatabaseName);
-        var appendRequests = db.GetCollection<AppendRequest>(collectionOptions.AppendRequestsCollectionName);
-        var loggedEvents = db.GetCollection<LoggedEvent>(collectionOptions.LoggedEventsCollectionName);
+        var db = mongoClient.GetDatabase(namespaceSettings.DatabaseName);
+        var appendRequests = db.GetCollection<AppendRequest>(namespaceSettings.AppendRequestsCollectionName);
+        var loggedEvents = db.GetCollection<LoggedEvent>(namespaceSettings.LoggedEventsCollectionName);
 
         await EnsureAppendRequestsIndexesAsync(appendRequests, cancellationToken);
         await EnsureLoggedEventsIndexesAsync(loggedEvents, cancellationToken);
+
+        await db.CreateCollectionAsync(
+            namespaceSettings.LeasesCollectionName,
+            new CreateCollectionOptions
+            {
+                ChangeStreamPreAndPostImagesOptions = new ChangeStreamPreAndPostImagesOptions
+                {
+                    Enabled = true
+                }
+            },
+            cancellationToken);
     }
 
     private static Task EnsureAppendRequestsIndexesAsync(

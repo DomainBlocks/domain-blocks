@@ -2,6 +2,7 @@
 
 public static class AppendRequestFieldNames
 {
+    public const string CommitId = "_id";
     public const string StreamId = "streamId";
     public const string ExpectedStreamState = "expectedStreamState";
     public const string Events = "events";
