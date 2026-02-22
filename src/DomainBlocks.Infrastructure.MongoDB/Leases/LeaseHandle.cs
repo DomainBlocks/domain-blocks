@@ -1,15 +1,14 @@
 ﻿using System.Runtime.CompilerServices;
-using DomainBlocks.Infrastructure.MongoDB.Leases.Schema;
 using Microsoft.Extensions.Logging;
 
 namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 
 public sealed class LeaseHandle : ILeaseHandle
 {
-    private LeaseState _state;
+    private LeaseDocument _leaseDocument;
     private readonly AcquireLeaseOptions _acquireOptions;
+    private readonly ILeaseManager _leaseManager;
     private readonly RenewLeaseOptions _renewOptions;
-    private readonly ILeaseStore _leaseStore;
     private readonly ILogger _logger;
     private readonly TimeProvider _timeProvider;
     private readonly Task _heartbeatTask;
@@ -22,42 +21,34 @@ public sealed class LeaseHandle : ILeaseHandle
     private int _disposed;
 
     public LeaseHandle(
-        LeaseState state,
+        LeaseDocument leaseDocument,
         AcquireLeaseOptions acquireOptions,
-        ILeaseStore leaseStore,
+        ILeaseManager leaseManager,
         ILogger logger,
         TimeProvider timeProvider)
     {
-        Claim = state.Claim;
+        Claim = leaseDocument.Claim;
 
-        _state = state;
+        _leaseDocument = leaseDocument;
         _acquireOptions = acquireOptions;
+        _leaseManager = leaseManager;
         _renewOptions = new RenewLeaseOptions { Duration = acquireOptions.Duration };
-        _leaseStore = leaseStore;
         _logger = logger;
         _timeProvider = timeProvider;
         _heartbeatTask = Task.Run(HeartbeatAsync);
     }
 
     public LeaseClaim Claim { get; }
-    public int ContentionPriority => Volatile.Read(ref _state).ContentionPriority;
-    public DateTimeOffset UpdatedAt => Volatile.Read(ref _state).LastMutation.MutatedAtUtc;
-    public DateTimeOffset HeldSince => Volatile.Read(ref _state).HeldSinceUtc;
-    public DateTimeOffset ExpiresAt => Volatile.Read(ref _state).ExpiresAtUtc;
+    public int ContentionPriority => Volatile.Read(ref _leaseDocument).ContentionPriority;
+    public DateTimeOffset HeldSince => Volatile.Read(ref _leaseDocument).HeldSinceUtc;
+    public DateTimeOffset ExpiresAt => Volatile.Read(ref _leaseDocument).ExpiresAtUtc;
+    public DateTimeOffset UpdatedAt => Volatile.Read(ref _leaseDocument).LastUpdatedAtUtc;
     public CancellationToken LeaseLostToken => _leaseLostCts.Token;
     public Task<LeaseLostInfo> LeaseLostTask => _leaseLostTcs.Task;
 
     public void ScheduleContentionPriorityChange(int priority)
     {
         Volatile.Write(ref _scheduledPriority, new StrongBox<int>(priority));
-    }
-
-    public Task<bool> TryIncrementCounterAsync(
-        string counterName,
-        long delta,
-        CancellationToken cancellationToken = default)
-    {
-        return _leaseStore.TryIncrementCounterAsync(Claim, counterName, delta, cancellationToken);
     }
 
     public async ValueTask DisposeAsync()
@@ -115,7 +106,7 @@ public sealed class LeaseHandle : ILeaseHandle
         var priority = Volatile.Read(ref _scheduledPriority);
         var renewOptions = _renewOptions.With(x => x.ContentionPriority = priority?.Value);
 
-        var state = await _leaseStore.RenewAsync(Claim, renewOptions, _leaseLostCts.Token).ConfigureAwait(false);
+        var state = await _leaseManager.RenewAsync(Claim, renewOptions, _leaseLostCts.Token).ConfigureAwait(false);
         if (state is null)
             return false;
 
@@ -123,7 +114,7 @@ public sealed class LeaseHandle : ILeaseHandle
         if (priority is not null)
             Interlocked.CompareExchange(ref _scheduledPriority, null, priority);
 
-        Volatile.Write(ref _state, state);
+        Volatile.Write(ref _leaseDocument, state);
 
         _logger.LogDebug(
             "Holder '{HolderId}' renewed lease for resource '{ResourceId}'; " +
@@ -141,7 +132,7 @@ public sealed class LeaseHandle : ILeaseHandle
         {
             using var cts = _timeProvider.CreateCancellationTokenSource(TimeSpan.FromSeconds(10));
 
-            var succeeded = await _leaseStore.TryReleaseAsync(Claim, cts.Token).ConfigureAwait(false);
+            var succeeded = await _leaseManager.TryReleaseAsync(Claim, cts.Token).ConfigureAwait(false);
             if (succeeded)
             {
                 _logger.LogInformation(
@@ -176,5 +167,27 @@ public sealed class LeaseHandle : ILeaseHandle
             Claim.HolderId,
             Claim.ResourceId,
             reason);
+    }
+}
+
+public sealed class LeaseHandle<TState>(ILeaseHandle inner, ILeaseManager leaseManager) : ILeaseHandle<TState>
+{
+    public LeaseClaim Claim => inner.Claim;
+    public int ContentionPriority => inner.ContentionPriority;
+    public DateTimeOffset HeldSince => inner.HeldSince;
+    public DateTimeOffset ExpiresAt => inner.ExpiresAt;
+    public DateTimeOffset UpdatedAt => inner.UpdatedAt;
+    public CancellationToken LeaseLostToken => inner.LeaseLostToken;
+    public Task<LeaseLostInfo> LeaseLostTask => inner.LeaseLostTask;
+
+    public ValueTask DisposeAsync() => inner.DisposeAsync();
+
+    public void ScheduleContentionPriorityChange(int priority) => inner.ScheduleContentionPriorityChange(priority);
+
+    public Task<bool> TryUpdateStateAsync(
+        Action<IScopedUpdateBuilder<TState>> updateState,
+        CancellationToken cancellationToken = default)
+    {
+        return leaseManager.TryUpdateStateAsync(inner.Claim, updateState, cancellationToken);
     }
 }

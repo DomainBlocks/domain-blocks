@@ -6,20 +6,22 @@ public interface ILeaseHandle : IAsyncDisposable
 
     int ContentionPriority { get; }
 
-    DateTimeOffset UpdatedAt { get; }
-
     DateTimeOffset HeldSince { get; }
 
     DateTimeOffset ExpiresAt { get; }
+
+    DateTimeOffset UpdatedAt { get; }
 
     CancellationToken LeaseLostToken { get; }
 
     Task<LeaseLostInfo> LeaseLostTask { get; }
 
     void ScheduleContentionPriorityChange(int priority);
+}
 
-    Task<bool> TryIncrementCounterAsync(
-        string counterName,
-        long delta,
+public interface ILeaseHandle<TState> : ILeaseHandle
+{
+    Task<bool> TryUpdateStateAsync(
+        Action<IScopedUpdateBuilder<TState>> updateState,
         CancellationToken cancellationToken = default);
 }

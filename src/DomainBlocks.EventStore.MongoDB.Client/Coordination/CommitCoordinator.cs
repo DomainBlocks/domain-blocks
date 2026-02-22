@@ -1,18 +1,19 @@
-﻿using DomainBlocks.EventStore.MongoDB.Client.Coordination.State;
+﻿using DomainBlocks.EventStore.MongoDB.Client.Coordination.ChangeEvents;
 using DomainBlocks.EventStore.MongoDB.Client.Schema2;
 using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
 using Microsoft.Extensions.Logging;
-using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 
 public sealed class CommitCoordinator
 {
+    public const string LeaseResourceId = "dbx_LogLease";
+
     private readonly IMongoDatabase _database;
     private readonly EventStoreNamespaceSettings _namespaceSettings;
-    private readonly ILeaseProvider _leaseProvider;
+    private readonly ILeaseClient _leaseClient;
     private readonly IMongoCollection<LoggedEvent> _loggedEvents;
     private readonly ILogger<CommitCoordinator> _logger;
     private readonly CancellationTokenSource _stopCts = new();
@@ -20,7 +21,7 @@ public sealed class CommitCoordinator
     public CommitCoordinator(
         IMongoClient mongoClient,
         EventStoreNamespaceSettings namespaceSettings,
-        ILeaseProvider leaseProvider,
+        ILeaseClient leaseClient,
         ILogger<CommitCoordinator> logger)
     {
         _database = mongoClient.GetDatabase(namespaceSettings.DatabaseName)
@@ -28,7 +29,7 @@ public sealed class CommitCoordinator
             .WithWriteConcern(WriteConcern.WMajority.With(journal: true));
 
         _namespaceSettings = namespaceSettings;
-        _leaseProvider = leaseProvider;
+        _leaseClient = leaseClient;
         _loggedEvents = _database.GetCollection<LoggedEvent>(namespaceSettings.LoggedEventsCollectionName);
         _logger = logger;
     }
@@ -49,19 +50,14 @@ public sealed class CommitCoordinator
         var subscription = _database.SubscribeToChangeStream(subscriptionOptions, _logger);
         await subscription.WaitUntilLiveAsync(linkedCt.Token);
 
-        var state = new CommitCoordinatorState(_namespaceSettings);
-        await state.LoadAsync(_database, linkedCt.Token);
-
         var leaseTask = RunLeaseContenderAsync(cancellationToken);
+
+        var changeEventResolver = new ChangeEventResolver(_namespaceSettings);
 
         await subscription.ForEachAsync(
             (change, _) =>
             {
-                if (state.TryApply(change, out var @event))
-                {
-                    return default;
-                }
-
+                var hasChangeEvent = changeEventResolver.TryResolve(change, out var changeEvent);
                 return default;
             },
             linkedCt.Token);
@@ -76,17 +72,19 @@ public sealed class CommitCoordinator
 
         while (!cancellationToken.IsCancellationRequested)
         {
-            await using var lease =
-                await _leaseProvider.AcquireLeaseAsync(LogLeaseState.ResourceId, options, cancellationToken);
+            var result = await _leaseClient.AcquireLeaseAsync<LogLeaseState>(
+                LeaseResourceId,
+                options,
+                cancellationToken);
 
-            if (!lease.IsAcquired)
+            if (!result.IsAcquired)
                 continue; // Shouldn't happen with infinite timeout
 
-            await lease.Handle.TryIncrementCounterAsync(CounterNames.CommitPosition, 1, cancellationToken);
-            await Task.Delay(1000, cancellationToken);
-            await lease.Handle.TryIncrementCounterAsync(CounterNames.CommitPosition, 2, cancellationToken);
+            await using var handle = result.Handle;
 
-            await lease.Handle.LeaseLostTask.WaitAsync(cancellationToken);
+            await handle.TryAdvanceCommitPositionAsync(2, cancellationToken);
+
+            await handle.LeaseLostTask.WaitAsync(cancellationToken);
         }
     }
 }

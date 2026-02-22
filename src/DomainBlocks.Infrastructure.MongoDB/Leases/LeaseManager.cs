@@ -1,29 +1,28 @@
-﻿using DomainBlocks.Infrastructure.MongoDB.Leases.Schema;
-using MongoDB.Bson;
+﻿using DomainBlocks.Infrastructure.MongoDB.Errors;
 using MongoDB.Driver;
 
 namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 
-public sealed class LeaseStore : ILeaseStore
+public class LeaseManager : ILeaseManager
 {
-    private readonly IMongoCollection<LeaseState> _leaseStates;
+    private readonly IMongoCollection<LeaseDocument> _leaseDocuments;
     private readonly TimeProvider _timeProvider;
 
     // ReSharper disable once ConvertToPrimaryConstructor - hide leaseStates
-    public LeaseStore(IMongoCollection<LeaseState> leaseStates, TimeProvider? timeProvider = null)
+    public LeaseManager(IMongoCollection<LeaseDocument> leaseStates, TimeProvider? timeProvider = null)
     {
-        _leaseStates = leaseStates.WithWriteConcern(WriteConcern.WMajority.With(journal: true));
+        _leaseDocuments = leaseStates.WithWriteConcern(WriteConcern.WMajority.With(journal: true));
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
-    public async Task<LeaseState?> AcquireAsync(
+    public async Task<LeaseDocument?> AcquireAsync(
         string resourceId,
         AcquireLeaseOptions? options = null,
         CancellationToken cancellationToken = default)
     {
         options ??= AcquireLeaseOptions.Default;
 
-        var filterBuilder = Builders<LeaseState>.Filter;
+        var filterBuilder = Builders<LeaseDocument>.Filter;
         var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
         var expiresAt = utcNow + options.Duration;
         var holderId = $"{options.HolderIdPrefix}:{Guid.CreateVersion7():N}";
@@ -35,28 +34,28 @@ public sealed class LeaseStore : ILeaseStore
 
         var filter = filterBuilder.Eq(x => x.ResourceId, resourceId) & (existingIsExpired | canPreempt);
 
-        var update = Builders<LeaseState>.Update
+        var update = Builders<LeaseDocument>.Update
             .SetOnInsert(x => x.ResourceId, resourceId)
-            .SetOnInsert(x => x.Counters, [])
             .Set(x => x.HolderId, holderId)
             .Inc(x => x.Epoch, 1)
             .Set(x => x.ContentionPriority, options.ContentionPriority)
             .Set(x => x.HeldSinceUtc, utcNow)
             .Set(x => x.ExpiresAtUtc, expiresAt)
-            .Set(x => x.LastMutation.MutationKind, LeaseStateMutationKind.Acquire)
-            .Set(x => x.LastMutation.MutatedAtUtc, utcNow);
+            .SetOnInsert(x => x.State, [])
+            .Set(x => x.LastUpdatedAtUtc, utcNow)
+            .Set(x => x.LastUpdateKind, LeaseUpdateKind.Acquired);
 
-        var findOneAndUpdatedOptions = new FindOneAndUpdateOptions<LeaseState>
+        var findOneAndUpdatedOptions = new FindOneAndUpdateOptions<LeaseDocument>
         {
             IsUpsert = true,
             ReturnDocument = ReturnDocument.After,
         };
 
-        LeaseState? state = null;
+        LeaseDocument? state = null;
 
         try
         {
-            state = await _leaseStates
+            state = await _leaseDocuments
                 .FindOneAndUpdateAsync(
                     filter,
                     update,
@@ -64,7 +63,7 @@ public sealed class LeaseStore : ILeaseStore
                     cancellationToken)
                 .ConfigureAwait(false);
         }
-        catch (MongoCommandException ex) when (ex.Code == 11000) // duplicate key
+        catch (MongoCommandException ex) when (ex.Code == ErrorCodes.DuplicateKey)
         {
             // Another contender acquired the lease.
         }
@@ -72,7 +71,7 @@ public sealed class LeaseStore : ILeaseStore
         return state;
     }
 
-    public async Task<LeaseState?> RenewAsync(
+    public async Task<LeaseDocument?> RenewAsync(
         LeaseClaim claim,
         RenewLeaseOptions? options = null,
         CancellationToken cancellationToken = default)
@@ -80,24 +79,24 @@ public sealed class LeaseStore : ILeaseStore
         options ??= RenewLeaseOptions.Default;
 
         var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
-        var filter = GetLeaseMatchesClaimFilter(claim, utcNow);
+        var filter = GetMatchesClaimFilter(claim, utcNow);
         var expiresAt = utcNow + options.Duration;
 
-        var update = Builders<LeaseState>.Update
+        var update = Builders<LeaseDocument>.Update
             .Set(x => x.ExpiresAtUtc, expiresAt)
-            .Set(x => x.LastMutation.MutationKind, LeaseStateMutationKind.Renew)
-            .Set(x => x.LastMutation.MutatedAtUtc, utcNow);
+            .Set(x => x.LastUpdatedAtUtc, utcNow)
+            .Set(x => x.LastUpdateKind, LeaseUpdateKind.Renewed);
 
         if (options.ContentionPriority.HasValue)
             update = update.Set(x => x.ContentionPriority, options.ContentionPriority.Value);
 
-        var findOneAndUpdatedOptions = new FindOneAndUpdateOptions<LeaseState>
+        var findOneAndUpdatedOptions = new FindOneAndUpdateOptions<LeaseDocument>
         {
             IsUpsert = false,
             ReturnDocument = ReturnDocument.After
         };
 
-        var state = await _leaseStates
+        var state = await _leaseDocuments
             .FindOneAndUpdateAsync(
                 filter,
                 update,
@@ -108,54 +107,49 @@ public sealed class LeaseStore : ILeaseStore
         return state;
     }
 
-    public async Task<bool> TryIncrementCounterAsync(
-        LeaseClaim claim,
-        string counterName,
-        long delta,
-        CancellationToken cancellationToken = default)
-    {
-        if (counterName.Contains('.'))
-        {
-            throw new ArgumentException(
-                $"Invalid counter name '{counterName}'. Counter names must not contain '.' (dot).",
-                nameof(counterName));
-        }
-
-        var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
-        var filter = GetLeaseMatchesClaimFilter(claim, utcNow);
-
-        var update = Builders<LeaseState>.Update
-            .Inc($"{LeaseStateFieldNames.Counters}.{counterName}", delta)
-            .Set(x => x.LastMutation.MutationKind, LeaseStateMutationKind.IncrementCounter)
-            .Set(x => x.LastMutation.MutatedAtUtc, utcNow);
-
-        var result = await _leaseStates
-            .UpdateOneAsync(filter, update, cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
-
-        return result.MatchedCount == 1;
-    }
-
     public async Task<bool> TryReleaseAsync(LeaseClaim claim, CancellationToken cancellationToken = default)
     {
         var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
-        var filter = GetLeaseMatchesClaimFilter(claim, utcNow);
+        var filter = GetMatchesClaimFilter(claim, utcNow);
 
-        var update = Builders<LeaseState>.Update
+        var update = Builders<LeaseDocument>.Update
             .Set(x => x.ExpiresAtUtc, utcNow)
-            .Set(x => x.LastMutation.MutationKind, LeaseStateMutationKind.Release)
-            .Set(x => x.LastMutation.MutatedAtUtc, utcNow);
+            .Set(x => x.LastUpdatedAtUtc, utcNow)
+            .Set(x => x.LastUpdateKind, LeaseUpdateKind.Released);
 
-        var result = await _leaseStates
+        var result = await _leaseDocuments
             .UpdateOneAsync(filter, update, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
         return result.MatchedCount == 1;
     }
 
-    private static FilterDefinition<LeaseState> GetLeaseMatchesClaimFilter(LeaseClaim claim, DateTime utcNow)
+    public async Task<bool> TryUpdateStateAsync<TState>(
+        LeaseClaim claim,
+        Action<IScopedUpdateBuilder<TState>> updateState,
+        CancellationToken cancellationToken = default)
     {
-        var filterBuilder = Builders<LeaseState>.Filter;
+        var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
+        var filter = GetMatchesClaimFilter(claim, utcNow);
+
+        var scopedUpdateBuilder = ScopedUpdate.At<LeaseDocument, TState>(x => x.State);
+        updateState(scopedUpdateBuilder);
+
+        var updateDefinition = scopedUpdateBuilder
+            .Build()
+            .Set(x => x.LastUpdatedAtUtc, utcNow)
+            .Set(x => x.LastUpdateKind, LeaseUpdateKind.StateUpdated);
+
+        var result = await _leaseDocuments
+            .UpdateOneAsync(filter, updateDefinition, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.MatchedCount == 1;
+    }
+
+    private static FilterDefinition<LeaseDocument> GetMatchesClaimFilter(LeaseClaim claim, DateTime utcNow)
+    {
+        var filterBuilder = Builders<LeaseDocument>.Filter;
 
         return filterBuilder.Eq(x => x.ResourceId, claim.ResourceId) &
                filterBuilder.Eq(x => x.HolderId, claim.HolderId) &

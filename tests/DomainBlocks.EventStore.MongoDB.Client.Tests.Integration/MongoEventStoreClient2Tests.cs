@@ -2,7 +2,6 @@
 using DomainBlocks.EventStore.MongoDB.Client.Coordination;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
-using DomainBlocks.Infrastructure.MongoDB.Leases.Schema;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Testing.Integration;
 using DomainBlocks.Testing.Integration.MongoDB;
@@ -67,13 +66,15 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
     public async Task AppendToStreamAsync_ScratchTest(CancellationToken ct)
     {
         var db = _mongoClient.GetDatabase(EventStoreNamespaceSettings.Default.DatabaseName);
-        var leaseStates = db.GetCollection<LeaseState>(EventStoreNamespaceSettings.Default.LeasesCollectionName);
+        var leaseStates = db.GetCollection<LeaseDocument>(EventStoreNamespaceSettings.Default.LeasesCollectionName);
 
         using var loggerFactory = LoggerFactory.Create(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug));
-        var commitCoordinatorLogger = loggerFactory.CreateLogger<CommitCoordinator>();
-        var leaseProviderLogger = loggerFactory.CreateLogger<LeaseProvider>();
 
-        var leaseProvider = new LeaseProvider(new LeaseStore(leaseStates), leaseProviderLogger);
+        var leaseManager = new LeaseManager(leaseStates);
+        var leaseProviderLogger = loggerFactory.CreateLogger<LeaseClient>();
+        var leaseProvider = new LeaseClient(leaseManager, leaseProviderLogger);
+
+        var commitCoordinatorLogger = loggerFactory.CreateLogger<CommitCoordinator>();
 
         var commitCoordinatorService = new CommitCoordinator(
             _mongoClient,
