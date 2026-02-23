@@ -11,31 +11,28 @@ public sealed class AppendRequest
     [BsonGuidRepresentation(GuidRepresentation.Standard)]
     public required Guid CommitId { get; init; }
 
-    [BsonElement(AppendRequestFieldNames.StreamId)]
+    [BsonElement(FieldNames.StreamId)]
     public required string StreamId { get; init; }
 
-    [BsonElement(AppendRequestFieldNames.ExpectedStreamState)]
+    [BsonElement(FieldNames.ExpectedStreamState)]
     [BsonSerializer(typeof(ExpectedStreamStateBsonSerializer))]
     public required ExpectedStreamState ExpectedStreamState { get; init; }
 
-    [BsonElement(AppendRequestFieldNames.Events)]
-    public required Event[] Events { get; init; }
+    [BsonElement(FieldNames.Events)]
+    public required AppendRequestEvent[] Events { get; init; }
 
-    [BsonElement(AppendRequestFieldNames.CreatedAtUtc)]
+    [BsonElement(FieldNames.CreatedAtUtc)]
     public required DateTime CreatedAtUtc { get; init; }
 
-    [BsonElement(AppendRequestFieldNames.LastSeenAtUtc)]
+    [BsonElement(FieldNames.LastSeenAtUtc)]
     public required DateTime LastSeenAtUtc { get; init; }
 
-    public sealed class Event
+    public static class FieldNames
     {
-        [BsonElement(AppendRequestFieldNames.Event.EventName)]
-        public required string EventName { get; init; }
-
-        [BsonElement(AppendRequestFieldNames.Event.EventData)]
-        public required BsonValue EventData { get; init; }
-
-        [BsonElement(AppendRequestFieldNames.Event.Metadata)]
-        public required BsonValue Metadata { get; init; }
+        public const string StreamId = "streamId";
+        public const string ExpectedStreamState = "expectedStreamState";
+        public const string Events = "events";
+        public const string CreatedAtUtc = "createdAtUtc";
+        public const string LastSeenAtUtc = "lastSeenAtUtc";
     }
 }

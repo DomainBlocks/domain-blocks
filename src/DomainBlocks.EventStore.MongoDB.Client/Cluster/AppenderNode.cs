@@ -19,9 +19,10 @@ public sealed class AppenderNode
     private readonly ILogger<AppenderNode> _logger;
     private readonly Channel<IAppenderEvent> _channel;
     private readonly CancellationTokenSource _stopCts = new();
+    private readonly AppenderProcess _appenderProcess = new();
     private Task? _changeStreamIngressTask;
-    private Task? _leaseContenderLoopTask;
-    private Task? _eventConsumerLoopTask;
+    private Task? _leaseContenderTask;
+    private Task? _eventConsumerTask;
 
     public AppenderNode(
         IMongoClient mongoClient,
@@ -47,12 +48,12 @@ public sealed class AppenderNode
         _channel = Channel.CreateUnbounded<IAppenderEvent>(channelOptions);
     }
 
-    [MemberNotNull(nameof(_changeStreamIngressTask), nameof(_leaseContenderLoopTask), nameof(_eventConsumerLoopTask))]
+    [MemberNotNull(nameof(_changeStreamIngressTask), nameof(_leaseContenderTask), nameof(_eventConsumerTask))]
     public void Start()
     {
         _changeStreamIngressTask = RunChangeStreamIngressAsync();
-        _leaseContenderLoopTask = RunLeaseContenderLoopAsync();
-        _eventConsumerLoopTask = RunEventConsumerLoopAsync();
+        _leaseContenderTask = RunLeaseContenderAsync();
+        _eventConsumerTask = RunEventConsumerAsync();
     }
 
     public async Task RunAsync(CancellationToken cancellationToken = default)
@@ -62,14 +63,14 @@ public sealed class AppenderNode
         Start();
 
         await Task
-            .WhenAny(_changeStreamIngressTask, _leaseContenderLoopTask, _eventConsumerLoopTask)
+            .WhenAny(_changeStreamIngressTask, _leaseContenderTask, _eventConsumerTask)
             .ConfigureAwait(false);
 
         if (!_stopCts.IsCancellationRequested)
             await _stopCts.CancelAsync().ConfigureAwait(false);
 
         await Task
-            .WhenAll(_changeStreamIngressTask, _leaseContenderLoopTask, _eventConsumerLoopTask)
+            .WhenAll(_changeStreamIngressTask, _leaseContenderTask, _eventConsumerTask)
             .ConfigureAwait(false);
     }
 
@@ -103,7 +104,7 @@ public sealed class AppenderNode
         }
     }
 
-    private async Task RunLeaseContenderLoopAsync()
+    private async Task RunLeaseContenderAsync()
     {
         var options = new AcquireLeaseOptions
         {
@@ -130,11 +131,11 @@ public sealed class AppenderNode
         }
     }
 
-    private async Task RunEventConsumerLoopAsync()
+    private async Task RunEventConsumerAsync()
     {
         await foreach (var @event in _channel.Reader.ReadAllAsync(_stopCts.Token).ConfigureAwait(false))
         {
-            continue;
+            _appenderProcess.Handle(@event);
         }
     }
 }

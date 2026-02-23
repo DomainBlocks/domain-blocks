@@ -46,7 +46,7 @@ public sealed class ChangeStreamEventResolver(EventStoreNamespaceSettings namesp
             {
                 var updatedFields = change.UpdateDescription.UpdatedFields;
 
-                if (!updatedFields.TryGetValue(AppendRequestFieldNames.LastSeenAtUtc, out var lastSeenAtUtc) ||
+                if (!updatedFields.TryGetValue(AppendRequest.FieldNames.LastSeenAtUtc, out var lastSeenAtUtc) ||
                     !lastSeenAtUtc.IsBsonDateTime)
                 {
                     return false;

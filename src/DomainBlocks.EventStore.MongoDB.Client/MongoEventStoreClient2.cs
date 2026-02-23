@@ -39,9 +39,9 @@ public class MongoEventStoreClient2<TEvent> : IEventStoreClient<TEvent> where TE
             .Encode(events)
             .Select(x => new BsonDocument
             {
-                [AppendRequestFieldNames.Event.EventName] = x.EventName,
-                [AppendRequestFieldNames.Event.EventData] = x.EventData,
-                [AppendRequestFieldNames.Event.Metadata] = x.Metadata ?? BsonNull.Value
+                [AppendRequestEvent.FieldNames.EventName] = x.EventName,
+                [AppendRequestEvent.FieldNames.EventData] = x.EventData,
+                [AppendRequestEvent.FieldNames.Metadata] = x.Metadata ?? BsonNull.Value
             });
 
         var pipeline = new[]
@@ -50,39 +50,39 @@ public class MongoEventStoreClient2<TEvent> : IEventStoreClient<TEvent> where TE
             {
                 ["$set"] = new BsonDocument
                 {
-                    [AppendRequestFieldNames.StreamId] = new BsonDocument
+                    [AppendRequest.FieldNames.StreamId] = new BsonDocument
                     {
                         ["$ifNull"] = new BsonArray
                         {
-                            $"${AppendRequestFieldNames.StreamId}",
+                            $"${AppendRequest.FieldNames.StreamId}",
                             streamId
                         }
                     },
-                    [AppendRequestFieldNames.ExpectedStreamState] = new BsonDocument
+                    [AppendRequest.FieldNames.ExpectedStreamState] = new BsonDocument
                     {
                         ["$ifNull"] = new BsonArray
                         {
-                            $"${AppendRequestFieldNames.ExpectedStreamState}",
+                            $"${AppendRequest.FieldNames.ExpectedStreamState}",
                             options.ExpectedState.ToBsonDocument(new ExpectedStreamStateBsonSerializer())
                         }
                     },
-                    [AppendRequestFieldNames.Events] = new BsonDocument
+                    [AppendRequest.FieldNames.Events] = new BsonDocument
                     {
                         ["$ifNull"] = new BsonArray
                         {
-                            $"${AppendRequestFieldNames.Events}",
+                            $"${AppendRequest.FieldNames.Events}",
                             new BsonArray(requestEvents)
                         }
                     },
-                    [AppendRequestFieldNames.CreatedAtUtc] = new BsonDocument
+                    [AppendRequest.FieldNames.CreatedAtUtc] = new BsonDocument
                     {
                         ["$ifNull"] = new BsonArray
                         {
-                            $"${AppendRequestFieldNames.CreatedAtUtc}",
+                            $"${AppendRequest.FieldNames.CreatedAtUtc}",
                             "$$NOW"
                         }
                     },
-                    [AppendRequestFieldNames.LastSeenAtUtc] = "$$NOW",
+                    [AppendRequest.FieldNames.LastSeenAtUtc] = "$$NOW",
                 }
             }
         };

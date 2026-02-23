@@ -9,7 +9,7 @@ namespace DomainBlocks.EventStore.MongoDB.Client.Schema2;
 public sealed class LoggedEvent
 {
     [BsonId]
-    public required long LogPosition { get; init; }
+    public required long Position { get; init; }
 
     public required long Epoch { get; init; }
 
