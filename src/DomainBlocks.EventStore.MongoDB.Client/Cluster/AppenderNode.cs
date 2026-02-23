@@ -61,24 +61,16 @@ public sealed class AppenderNode
 
         Start();
 
-        var allTasks = Task.WhenAll(_changeStreamIngressTask, _leaseContenderLoopTask, _eventConsumerLoopTask);
+        await Task
+            .WhenAny(_changeStreamIngressTask, _leaseContenderLoopTask, _eventConsumerLoopTask)
+            .ConfigureAwait(false);
 
-        await Task.WhenAny(allTasks).ConfigureAwait(false);
-
-        if (!allTasks.IsCompleted)
+        if (!_stopCts.IsCancellationRequested)
             await _stopCts.CancelAsync().ConfigureAwait(false);
 
-        try
-        {
-            await allTasks.ConfigureAwait(false);
-        }
-        catch
-        {
-            if (!_stopCts.IsCancellationRequested)
-                await _stopCts.CancelAsync().ConfigureAwait(false);
-
-            throw;
-        }
+        await Task
+            .WhenAll(_changeStreamIngressTask, _leaseContenderLoopTask, _eventConsumerLoopTask)
+            .ConfigureAwait(false);
     }
 
     private async Task RunChangeStreamIngressAsync()
@@ -93,11 +85,10 @@ public sealed class AppenderNode
         };
 
         var subscription = _database.SubscribeToChangeStream(subscriptionOptions, _logger);
+        var eventResolver = new ChangeStreamEventResolver(_namespaceSettings);
 
         await using (subscription.ConfigureAwait(false))
         {
-            var eventResolver = new ChangeStreamEventResolver(_namespaceSettings);
-
             await subscription
                 .ForEachAsync(
                     async (change, ct) =>
@@ -130,7 +121,7 @@ public sealed class AppenderNode
 
             var handle = result.Handle;
 
-            await _channel.Writer.WriteAsync(new LeaseLocallyAcquired(handle.Claim));
+            await _channel.Writer.WriteAsync(new LeaseLocallyAcquired(handle.Claim)).ConfigureAwait(false);
 
             await using (handle.ConfigureAwait(false))
             {
