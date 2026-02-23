@@ -1,6 +1,6 @@
 ﻿namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 
-public interface ILeaseManager
+public interface ILeaseStore
 {
     Task<LeaseDocument?> AcquireAsync(
         string resourceId,

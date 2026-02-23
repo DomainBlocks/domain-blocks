@@ -3,15 +3,15 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 
-public class LeaseManager : ILeaseManager
+public class LeaseStore : ILeaseStore
 {
-    private readonly IMongoCollection<LeaseDocument> _leaseDocuments;
+    private readonly IMongoCollection<LeaseDocument> _leases;
     private readonly TimeProvider _timeProvider;
 
-    // ReSharper disable once ConvertToPrimaryConstructor - hide leaseStates
-    public LeaseManager(IMongoCollection<LeaseDocument> leaseStates, TimeProvider? timeProvider = null)
+    // ReSharper disable once ConvertToPrimaryConstructor - hide leases arg
+    public LeaseStore(IMongoCollection<LeaseDocument> leases, TimeProvider? timeProvider = null)
     {
-        _leaseDocuments = leaseStates.WithWriteConcern(WriteConcern.WMajority.With(journal: true));
+        _leases = leases.WithWriteConcern(WriteConcern.WMajority.With(journal: true));
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
@@ -55,7 +55,7 @@ public class LeaseManager : ILeaseManager
 
         try
         {
-            state = await _leaseDocuments
+            state = await _leases
                 .FindOneAndUpdateAsync(
                     filter,
                     update,
@@ -96,7 +96,7 @@ public class LeaseManager : ILeaseManager
             ReturnDocument = ReturnDocument.After
         };
 
-        var state = await _leaseDocuments
+        var state = await _leases
             .FindOneAndUpdateAsync(
                 filter,
                 update,
@@ -117,7 +117,7 @@ public class LeaseManager : ILeaseManager
             .Set(x => x.LastUpdatedAtUtc, utcNow)
             .Set(x => x.LastUpdateKind, LeaseUpdateKind.Released);
 
-        var result = await _leaseDocuments
+        var result = await _leases
             .UpdateOneAsync(filter, update, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
@@ -132,7 +132,11 @@ public class LeaseManager : ILeaseManager
         var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
         var filter = GetMatchesClaimFilter(claim, utcNow);
 
-        var scopedUpdateBuilder = ScopedUpdate.At<LeaseDocument, TState>(x => x.State);
+        var scopedUpdateBuilder = ScopedUpdate
+            .For<LeaseDocument>()
+            .At(x => x.State)
+            .As<TState>();
+
         updateState(scopedUpdateBuilder);
 
         var updateDefinition = scopedUpdateBuilder
@@ -140,7 +144,7 @@ public class LeaseManager : ILeaseManager
             .Set(x => x.LastUpdatedAtUtc, utcNow)
             .Set(x => x.LastUpdateKind, LeaseUpdateKind.StateUpdated);
 
-        var result = await _leaseDocuments
+        var result = await _leases
             .UpdateOneAsync(filter, updateDefinition, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 

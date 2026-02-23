@@ -13,7 +13,7 @@ public class LeaseClientTests
     private const int TestTimeoutMillis = 30 * 1000;
 
     private MongoClient _mongoClient = null!;
-    private IMongoCollection<LeaseDocument> _leaseStates = null!;
+    private IMongoCollection<LeaseDocument> _leases = null!;
     private ILeaseClient _leaseClient = null!;
     private FakeTimeProvider _fakeTimeProvider = null!;
     private string _resourceId = null!;
@@ -24,11 +24,11 @@ public class LeaseClientTests
     {
         var mongoClient = new MongoClient(MongoConnectionStrings.Default);
         var db = mongoClient.GetDatabase("domainblocks_tests");
-        var leaseStates = db.GetCollection<LeaseDocument>("test_leases");
+        var leases = db.GetCollection<LeaseDocument>("test_leases");
 
         var fakeTimeProvider = new FakeTimeProvider();
 
-        var leaseStore = new LeaseManager(leaseStates, fakeTimeProvider);
+        var leaseStore = new LeaseStore(leases, fakeTimeProvider);
 
         using var loggerFactory = LoggerFactory.Create(x => x
             .AddConsole()
@@ -37,7 +37,7 @@ public class LeaseClientTests
         var logger = loggerFactory.CreateLogger<LeaseClient>();
 
         _mongoClient = mongoClient;
-        _leaseStates = leaseStates;
+        _leases = leases;
         _leaseClient = new LeaseClient(leaseStore, logger, fakeTimeProvider);
         _fakeTimeProvider = fakeTimeProvider;
         _resourceId = $"test_resource_{Guid.CreateVersion7():N}";
@@ -47,7 +47,7 @@ public class LeaseClientTests
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _leaseStates.Database.DropCollectionAsync("test_leases");
+        await _leases.Database.DropCollectionAsync("test_leases");
         _mongoClient.Dispose();
     }
 
@@ -265,8 +265,8 @@ public class LeaseClientTests
     public async Task AcquireLeaseAsync_WithMultipleContenders_AllAcquireAndComplete(CancellationToken ct)
     {
         // Don't use FakeTimeProvider - we use real time for this test.
-        var leaseStore = new LeaseManager(_leaseStates);
-        var leaseProvider = new LeaseClient(leaseStore, _logger);
+        var leaseStore = new LeaseStore(_leases);
+        var leaseClient = new LeaseClient(leaseStore, _logger);
 
         var contenders = Enumerable
             .Range(0, 5)
@@ -280,7 +280,7 @@ public class LeaseClientTests
                     AcquireRetryDelay = TimeSpan.FromMilliseconds(100)
                 };
 
-                var result = await leaseProvider.AcquireLeaseAsync(_resourceId, options, ct);
+                var result = await leaseClient.AcquireLeaseAsync(_resourceId, options, ct);
                 result.IsAcquired.ShouldBeTrue();
                 await using var handle = result.Handle;
 

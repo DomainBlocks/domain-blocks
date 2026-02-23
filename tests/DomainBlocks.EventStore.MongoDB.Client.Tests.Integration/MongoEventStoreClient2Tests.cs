@@ -1,5 +1,5 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.MongoDB.Client.Coordination;
+using DomainBlocks.EventStore.MongoDB.Client.Cluster;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
 using DomainBlocks.Serialization.MongoDB.Bson;
@@ -66,23 +66,23 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
     public async Task AppendToStreamAsync_ScratchTest(CancellationToken ct)
     {
         var db = _mongoClient.GetDatabase(EventStoreNamespaceSettings.Default.DatabaseName);
-        var leaseStates = db.GetCollection<LeaseDocument>(EventStoreNamespaceSettings.Default.LeasesCollectionName);
+        var leases = db.GetCollection<LeaseDocument>(EventStoreNamespaceSettings.Default.LeasesCollectionName);
 
         using var loggerFactory = LoggerFactory.Create(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug));
 
-        var leaseManager = new LeaseManager(leaseStates);
-        var leaseProviderLogger = loggerFactory.CreateLogger<LeaseClient>();
-        var leaseProvider = new LeaseClient(leaseManager, leaseProviderLogger);
+        var leaseStore = new LeaseStore(leases);
+        var leaseClientLogger = loggerFactory.CreateLogger<LeaseClient>();
+        var leaseClient = new LeaseClient(leaseStore, leaseClientLogger);
 
-        var commitCoordinatorLogger = loggerFactory.CreateLogger<CommitCoordinator>();
+        var commitCoordinatorLogger = loggerFactory.CreateLogger<AppenderNode>();
 
-        var commitCoordinatorService = new CommitCoordinator(
+        var appenderNode = new AppenderNode(
             _mongoClient,
             EventStoreNamespaceSettings.Default,
-            leaseProvider,
+            leaseClient,
             commitCoordinatorLogger);
 
-        var commitCoordTask = commitCoordinatorService.RunAsync(ct);
+        var appenderNodeTask = appenderNode.RunAsync(ct);
 
         var streamId = $"test-{Guid.NewGuid():N}";
 
@@ -102,6 +102,6 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
         await Client.AppendToStreamAsync(streamId, events, options, ct);
         await Client.AppendToStreamAsync(streamId, events, options, ct);
 
-        await commitCoordTask.WaitAsync(ct);
+        await appenderNodeTask.WaitAsync(ct);
     }
 }

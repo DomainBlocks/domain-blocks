@@ -3,7 +3,7 @@
 namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 
 public sealed class LeaseClient(
-    ILeaseManager leaseManager,
+    ILeaseStore leaseStore,
     ILogger<LeaseClient> logger,
     TimeProvider? timeProvider = null) : ILeaseClient
 {
@@ -69,7 +69,7 @@ public sealed class LeaseClient(
         var result = await AcquireLeaseAsync(resourceId, options, cancellationToken);
 
         return result.IsAcquired
-            ? new AcquireLeaseResult<ILeaseHandle<TState>>(new LeaseHandle<TState>(result.Handle, leaseManager))
+            ? new AcquireLeaseResult<ILeaseHandle<TState>>(new LeaseHandle<TState>(result.Handle, leaseStore))
             : AcquireLeaseResult<ILeaseHandle<TState>>.NotAcquired;
     }
 
@@ -78,7 +78,7 @@ public sealed class LeaseClient(
         AcquireLeaseOptions options,
         CancellationToken cancellationToken)
     {
-        var state = await leaseManager.AcquireAsync(resourceId, options, cancellationToken).ConfigureAwait(false);
-        return state is not null ? new LeaseHandle(state, options, leaseManager, logger, _timeProvider) : null;
+        var state = await leaseStore.AcquireAsync(resourceId, options, cancellationToken).ConfigureAwait(false);
+        return state is not null ? new LeaseHandle(state, options, leaseStore, logger, _timeProvider) : null;
     }
 }

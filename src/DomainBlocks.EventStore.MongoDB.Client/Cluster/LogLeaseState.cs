@@ -1,6 +1,6 @@
 ﻿using MongoDB.Bson.Serialization.Attributes;
 
-namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
+namespace DomainBlocks.EventStore.MongoDB.Client.Cluster;
 
 public sealed class LogLeaseState
 {

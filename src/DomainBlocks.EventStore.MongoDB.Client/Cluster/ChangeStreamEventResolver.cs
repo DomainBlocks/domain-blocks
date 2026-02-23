@@ -1,21 +1,30 @@
-﻿using DomainBlocks.EventStore.MongoDB.Client.Schema2;
+﻿using System.Diagnostics.CodeAnalysis;
+using DomainBlocks.EventStore.MongoDB.Client.Cluster.Events.ChangeStream;
+using DomainBlocks.EventStore.MongoDB.Client.Schema2;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 
-namespace DomainBlocks.EventStore.MongoDB.Client.Coordination.ChangeEvents;
+namespace DomainBlocks.EventStore.MongoDB.Client.Cluster;
 
-public sealed class ChangeEventResolver(EventStoreNamespaceSettings namespaceSettings)
+public sealed class ChangeStreamEventResolver(EventStoreNamespaceSettings namespaceSettings)
 {
-    public bool TryResolve(ChangeStreamDocument<BsonDocument> change, out IChangeEvent? changeEvent)
+    private const string CommitPositionFieldPath =
+        $"{LeaseDocument.FieldNames.State}.{LogLeaseState.FieldNames.CommitPosition}";
+
+    public bool TryResolve(
+        ChangeStreamDocument<BsonDocument> change,
+        [NotNullWhen(true)] out IChangeStreamEvent? changeEvent)
     {
         if (TryResolveAppendRequestEvent(change, out changeEvent)) return true;
         if (TryResolveLeaseEvent(change, out changeEvent)) return true;
         return false;
     }
 
-    private bool TryResolveAppendRequestEvent(ChangeStreamDocument<BsonDocument> change, out IChangeEvent? changeEvent)
+    private bool TryResolveAppendRequestEvent(
+        ChangeStreamDocument<BsonDocument> change,
+        [NotNullWhen(true)] out IChangeStreamEvent? changeEvent)
     {
         changeEvent = null;
 
@@ -51,7 +60,9 @@ public sealed class ChangeEventResolver(EventStoreNamespaceSettings namespaceSet
         }
     }
 
-    private bool TryResolveLeaseEvent(ChangeStreamDocument<BsonDocument> change, out IChangeEvent? changeEvent)
+    private bool TryResolveLeaseEvent(
+        ChangeStreamDocument<BsonDocument> change,
+        [NotNullWhen(true)] out IChangeStreamEvent? changeEvent)
     {
         changeEvent = null;
 
@@ -63,7 +74,7 @@ public sealed class ChangeEventResolver(EventStoreNamespaceSettings namespaceSet
             return false;
 
         var resourceId = id.AsString;
-        if (resourceId != CommitCoordinator.LeaseResourceId)
+        if (resourceId != AppenderNode.LeaseResourceId)
             return false;
 
         if (change.FullDocument is null)
@@ -84,10 +95,7 @@ public sealed class ChangeEventResolver(EventStoreNamespaceSettings namespaceSet
                 changeEvent = new LeaseRenewed(lease.Claim);
                 return true;
             case LeaseUpdateKind.StateUpdated:
-                const string commitPositionFieldPath =
-                    $"{LeaseDocument.FieldNames.State}.{LogLeaseState.FieldNames.CommitPosition}";
-
-                if (!change.UpdateDescription.UpdatedFields.Contains(commitPositionFieldPath))
+                if (!change.UpdateDescription.UpdatedFields.Contains(CommitPositionFieldPath))
                     return false;
 
                 var commitPosition = lease.State[LogLeaseState.FieldNames.CommitPosition].AsInt64;

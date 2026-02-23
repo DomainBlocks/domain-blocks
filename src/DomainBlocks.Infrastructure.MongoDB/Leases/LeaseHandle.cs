@@ -7,7 +7,7 @@ public sealed class LeaseHandle : ILeaseHandle
 {
     private LeaseDocument _leaseDocument;
     private readonly AcquireLeaseOptions _acquireOptions;
-    private readonly ILeaseManager _leaseManager;
+    private readonly ILeaseStore _leaseStore;
     private readonly RenewLeaseOptions _renewOptions;
     private readonly ILogger _logger;
     private readonly TimeProvider _timeProvider;
@@ -23,7 +23,7 @@ public sealed class LeaseHandle : ILeaseHandle
     public LeaseHandle(
         LeaseDocument leaseDocument,
         AcquireLeaseOptions acquireOptions,
-        ILeaseManager leaseManager,
+        ILeaseStore leaseStore,
         ILogger logger,
         TimeProvider timeProvider)
     {
@@ -31,7 +31,7 @@ public sealed class LeaseHandle : ILeaseHandle
 
         _leaseDocument = leaseDocument;
         _acquireOptions = acquireOptions;
-        _leaseManager = leaseManager;
+        _leaseStore = leaseStore;
         _renewOptions = new RenewLeaseOptions { Duration = acquireOptions.Duration };
         _logger = logger;
         _timeProvider = timeProvider;
@@ -106,7 +106,7 @@ public sealed class LeaseHandle : ILeaseHandle
         var priority = Volatile.Read(ref _scheduledPriority);
         var renewOptions = _renewOptions.With(x => x.ContentionPriority = priority?.Value);
 
-        var state = await _leaseManager.RenewAsync(Claim, renewOptions, _leaseLostCts.Token).ConfigureAwait(false);
+        var state = await _leaseStore.RenewAsync(Claim, renewOptions, _leaseLostCts.Token).ConfigureAwait(false);
         if (state is null)
             return false;
 
@@ -132,7 +132,7 @@ public sealed class LeaseHandle : ILeaseHandle
         {
             using var cts = _timeProvider.CreateCancellationTokenSource(TimeSpan.FromSeconds(10));
 
-            var succeeded = await _leaseManager.TryReleaseAsync(Claim, cts.Token).ConfigureAwait(false);
+            var succeeded = await _leaseStore.TryReleaseAsync(Claim, cts.Token).ConfigureAwait(false);
             if (succeeded)
             {
                 _logger.LogInformation(
@@ -170,7 +170,7 @@ public sealed class LeaseHandle : ILeaseHandle
     }
 }
 
-public sealed class LeaseHandle<TState>(ILeaseHandle inner, ILeaseManager leaseManager) : ILeaseHandle<TState>
+public sealed class LeaseHandle<TState>(ILeaseHandle inner, ILeaseStore leaseStore) : ILeaseHandle<TState>
 {
     public LeaseClaim Claim => inner.Claim;
     public int ContentionPriority => inner.ContentionPriority;
@@ -188,6 +188,6 @@ public sealed class LeaseHandle<TState>(ILeaseHandle inner, ILeaseManager leaseM
         Action<IScopedUpdateBuilder<TState>> updateState,
         CancellationToken cancellationToken = default)
     {
-        return leaseManager.TryUpdateStateAsync(inner.Claim, updateState, cancellationToken);
+        return leaseStore.TryUpdateStateAsync(inner.Claim, updateState, cancellationToken);
     }
 }

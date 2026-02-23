@@ -3,6 +3,21 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 
+public class ScopedUpdateBuilder<TRootDocument>
+{
+    private readonly string _rootPath;
+
+    internal ScopedUpdateBuilder(string rootPath)
+    {
+        _rootPath = rootPath;
+    }
+
+    public ScopedUpdateBuilder<TRootDocument, TDocument> As<TDocument>()
+    {
+        return new ScopedUpdateBuilder<TRootDocument, TDocument>(_rootPath);
+    }
+}
+
 public class ScopedUpdateBuilder<TRootDocument, TSubDocument> : IScopedUpdateBuilder<TSubDocument>
 {
     private readonly string _rootPath;
