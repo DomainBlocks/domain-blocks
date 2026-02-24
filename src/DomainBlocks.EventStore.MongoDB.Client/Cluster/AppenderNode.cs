@@ -5,6 +5,7 @@ using DomainBlocks.EventStore.MongoDB.Client.Cluster.Events.Local;
 using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
 using Microsoft.Extensions.Logging;
+using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Cluster;
@@ -48,33 +49,29 @@ public sealed class AppenderNode
         _channel = Channel.CreateUnbounded<IAppenderEvent>(channelOptions);
     }
 
-    [MemberNotNull(nameof(_changeStreamIngressTask), nameof(_leaseContenderTask), nameof(_eventConsumerTask))]
-    public void Start()
-    {
-        _changeStreamIngressTask = RunChangeStreamIngressAsync();
-        _leaseContenderTask = RunLeaseContenderAsync();
-        _eventConsumerTask = RunEventConsumerAsync();
-    }
-
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
-        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stopCts.Token);
+        await StartAsync(cancellationToken).ConfigureAwait(false);
 
-        Start();
-
+        // Wait the first task to complete.
         await Task
             .WhenAny(_changeStreamIngressTask, _leaseContenderTask, _eventConsumerTask)
+            .WaitAsync(cancellationToken)
             .ConfigureAwait(false);
 
+        // Stop everything if not already done so.
         if (!_stopCts.IsCancellationRequested)
             await _stopCts.CancelAsync().ConfigureAwait(false);
 
+        // Await all tasks to surface any errors.
         await Task
             .WhenAll(_changeStreamIngressTask, _leaseContenderTask, _eventConsumerTask)
+            .WaitAsync(cancellationToken)
             .ConfigureAwait(false);
     }
 
-    private async Task RunChangeStreamIngressAsync()
+    [MemberNotNull(nameof(_changeStreamIngressTask), nameof(_leaseContenderTask), nameof(_eventConsumerTask))]
+    public async Task StartAsync(CancellationToken cancellationToken = default)
     {
         var subscriptionOptions = new ChangeStreamSubscriptionOptions
         {
@@ -86,6 +83,21 @@ public sealed class AppenderNode
         };
 
         var subscription = _database.SubscribeToChangeStream(subscriptionOptions, _logger);
+
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stopCts.Token);
+
+        await subscription.WaitUntilLiveAsync(linkedCts.Token).ConfigureAwait(false);
+
+        // Catch-up here
+
+        _changeStreamIngressTask = RunChangeStreamIngressAsync(subscription);
+        _leaseContenderTask = RunLeaseContenderAsync();
+        _eventConsumerTask = RunEventConsumerAsync();
+    }
+
+    private async Task RunChangeStreamIngressAsync(
+        IChangeStreamSubscription<ChangeStreamDocument<BsonDocument>> subscription)
+    {
         var eventResolver = new ChangeStreamEventResolver(_namespaceSettings);
 
         await using (subscription.ConfigureAwait(false))

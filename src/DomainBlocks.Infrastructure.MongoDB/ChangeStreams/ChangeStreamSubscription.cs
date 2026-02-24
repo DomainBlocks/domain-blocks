@@ -49,8 +49,8 @@ public sealed class ChangeStreamSubscription<TDocument, TResult> : IChangeStream
 
     public async Task WaitUntilLiveAsync(CancellationToken cancellationToken = default)
     {
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stopCts.Token);
-        await _liveTcs.Task.WaitAsync(cts.Token);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stopCts.Token);
+        await _liveTcs.Task.WaitAsync(linkedCts.Token);
     }
 
     public async Task ForEachAsync(
