@@ -1,7 +1,9 @@
-﻿using MongoDB.Bson.Serialization.Attributes;
+﻿using System.Diagnostics.CodeAnalysis;
+using MongoDB.Bson.Serialization.Attributes;
 
-namespace DomainBlocks.EventStore.MongoDB.Client.Cluster;
+namespace DomainBlocks.EventStore.MongoDB.Client.Appender;
 
+[SuppressMessage("ReSharper", "ClassNeverInstantiated.Global")]
 public sealed class LogLeaseState
 {
     [BsonElement(FieldNames.CommitPosition)]

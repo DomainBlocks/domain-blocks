@@ -1,6 +1,6 @@
 ﻿using System.Linq.Expressions;
 
-namespace DomainBlocks.Infrastructure.MongoDB.Leases;
+namespace DomainBlocks.Infrastructure.MongoDB.Utilities;
 
 public interface IScopedUpdateBuilder<TDocument>
 {

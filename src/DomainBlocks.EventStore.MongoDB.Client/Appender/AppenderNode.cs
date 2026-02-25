@@ -1,14 +1,14 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 using System.Threading.Channels;
-using DomainBlocks.EventStore.MongoDB.Client.Cluster.Events;
-using DomainBlocks.EventStore.MongoDB.Client.Cluster.Events.Local;
+using DomainBlocks.EventStore.MongoDB.Client.Appender.Events;
+using DomainBlocks.EventStore.MongoDB.Client.Schema2;
 using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
-namespace DomainBlocks.EventStore.MongoDB.Client.Cluster;
+namespace DomainBlocks.EventStore.MongoDB.Client.Appender;
 
 public sealed class AppenderNode
 {
@@ -18,12 +18,12 @@ public sealed class AppenderNode
     private readonly EventStoreNamespaceSettings _namespaceSettings;
     private readonly ILeaseClient _leaseClient;
     private readonly ILogger<AppenderNode> _logger;
-    private readonly Channel<IAppenderEvent> _channel;
+    private readonly Channel<AppenderEventEnvelope> _channel;
     private readonly CancellationTokenSource _stopCts = new();
     private readonly AppenderProcess _appenderProcess = new();
+    private Task? _eventConsumerTask;
     private Task? _changeStreamIngressTask;
     private Task? _leaseContenderTask;
-    private Task? _eventConsumerTask;
 
     public AppenderNode(
         IMongoClient mongoClient,
@@ -46,7 +46,7 @@ public sealed class AppenderNode
             SingleReader = true
         };
 
-        _channel = Channel.CreateUnbounded<IAppenderEvent>(channelOptions);
+        _channel = Channel.CreateUnbounded<AppenderEventEnvelope>(channelOptions);
     }
 
     public async Task RunAsync(CancellationToken cancellationToken = default)
@@ -88,11 +88,59 @@ public sealed class AppenderNode
 
         await subscription.WaitUntilLiveAsync(linkedCts.Token).ConfigureAwait(false);
 
-        // Catch-up here
+        _eventConsumerTask = RunEventConsumerAsync();
+
+        await InitializeAsync(linkedCts.Token).ConfigureAwait(false);
 
         _changeStreamIngressTask = RunChangeStreamIngressAsync(subscription);
         _leaseContenderTask = RunLeaseContenderAsync();
-        _eventConsumerTask = RunEventConsumerAsync();
+    }
+
+    private async Task InitializeAsync(CancellationToken cancellationToken)
+    {
+    }
+
+    private async Task ReplayRequestsAsync(CancellationToken cancellationToken)
+    {
+        var appendRequests = _database.GetCollection<BsonDocument>(_namespaceSettings.AppendRequestsCollectionName);
+
+        using var cursor = await appendRequests
+            .Find(Builders<BsonDocument>.Filter.Empty)
+            .ToCursorAsync(cancellationToken);
+
+        while (await cursor.MoveNextAsync(cancellationToken))
+        {
+            foreach (var request in cursor.Current)
+            {
+                var commitId = request["_id"].AsGuid;
+                var @event = new AppendRequestObserved(commitId, request);
+                var envelope = new AppenderEventEnvelope(@event, AppenderEventSource.Replay);
+                await _channel.Writer.WriteAsync(envelope, cancellationToken);
+            }
+        }
+    }
+
+    private async Task ReplayCommitEvents(CancellationToken cancellationToken)
+    {
+        var loggedEvents = _database.GetCollection<LoggedEvent>(_namespaceSettings.AppendRequestsCollectionName);
+
+        var filter = Builders<LoggedEvent>.Filter.In(x => x.EventName, ["CommitRecorded", "CommitRejected"]);
+        var sort = Builders<LoggedEvent>.Sort.Ascending(x => x.Position);
+
+        using var cursor = await loggedEvents
+            .Find(filter)
+            .Sort(sort)
+            .ToCursorAsync(cancellationToken);
+
+        while (await cursor.MoveNextAsync(cancellationToken))
+        {
+            foreach (var loggedEvent in cursor.Current)
+            {
+                // var commitId = loggedEvent.CommitId;
+                // var envelope = new AppenderEventEnvelope(@event, AppenderEventSource.Replay);
+                // await _channel.Writer.WriteAsync(@envelope, cancellationToken);
+            }
+        }
     }
 
     private async Task RunChangeStreamIngressAsync(
@@ -109,7 +157,8 @@ public sealed class AppenderNode
                         if (!eventResolver.TryResolve(change, out var @event))
                             return;
 
-                        await _channel.Writer.WriteAsync(@event, ct).ConfigureAwait(false);
+                        var envelope = new AppenderEventEnvelope(@event, AppenderEventSource.ChangeStream);
+                        await _channel.Writer.WriteAsync(envelope, ct).ConfigureAwait(false);
                     },
                     _stopCts.Token)
                 .ConfigureAwait(false);
@@ -132,9 +181,13 @@ public sealed class AppenderNode
             if (!result.IsAcquired)
                 continue; // Shouldn't happen with infinite timeout
 
-            var handle = result.Handle;
+            var envelope = new AppenderEventEnvelope(
+                new LeaseUpdateObserved(result.InitialSnapshot),
+                AppenderEventSource.LocalNode);
 
-            await _channel.Writer.WriteAsync(new LeaseLocallyAcquired(handle.Claim)).ConfigureAwait(false);
+            await _channel.Writer.WriteAsync(envelope).ConfigureAwait(false);
+
+            var handle = result.Handle;
 
             await using (handle.ConfigureAwait(false))
             {
@@ -145,9 +198,9 @@ public sealed class AppenderNode
 
     private async Task RunEventConsumerAsync()
     {
-        await foreach (var @event in _channel.Reader.ReadAllAsync(_stopCts.Token).ConfigureAwait(false))
+        await foreach (var envelope in _channel.Reader.ReadAllAsync(_stopCts.Token).ConfigureAwait(false))
         {
-            _appenderProcess.Handle(@event);
+            _appenderProcess.Apply(envelope);
         }
     }
 }

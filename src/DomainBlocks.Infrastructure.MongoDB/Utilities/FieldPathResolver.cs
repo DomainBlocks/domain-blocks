@@ -2,9 +2,9 @@
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 
-namespace DomainBlocks.Infrastructure.MongoDB.Leases;
+namespace DomainBlocks.Infrastructure.MongoDB.Utilities;
 
-internal static class MongoFieldPathResolver
+public static class FieldPathResolver
 {
     public static string Resolve<TDocument, TField>(Expression<Func<TDocument, TField>> expression)
     {

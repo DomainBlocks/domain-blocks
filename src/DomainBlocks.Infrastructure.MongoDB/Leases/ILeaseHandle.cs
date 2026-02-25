@@ -1,19 +1,12 @@
-﻿namespace DomainBlocks.Infrastructure.MongoDB.Leases;
+﻿using DomainBlocks.Infrastructure.MongoDB.Utilities;
+
+namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 
 public interface ILeaseHandle : IAsyncDisposable
 {
     LeaseClaim Claim { get; }
-
-    int ContentionPriority { get; }
-
-    DateTimeOffset HeldSince { get; }
-
-    DateTimeOffset ExpiresAt { get; }
-
-    DateTimeOffset UpdatedAt { get; }
-
+    ILeaseSnapshot CurrentSnapshot { get; }
     CancellationToken LeaseLostToken { get; }
-
     Task<LeaseLostInfo> LeaseLostTask { get; }
 
     void ScheduleContentionPriorityChange(int priority);

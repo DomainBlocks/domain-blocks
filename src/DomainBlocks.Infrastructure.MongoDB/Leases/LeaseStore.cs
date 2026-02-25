@@ -1,10 +1,18 @@
 ﻿using DomainBlocks.Infrastructure.MongoDB.Errors;
+using DomainBlocks.Infrastructure.MongoDB.Utilities;
+using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 
 public class LeaseStore : ILeaseStore
 {
+    private static readonly FindOneAndUpdateOptions<LeaseDocument, RawBsonDocument> UpsertOptions =
+        CreateFindOneAndUpdateOptions(isUpsert: true);
+
+    private static readonly FindOneAndUpdateOptions<LeaseDocument, RawBsonDocument> UpdateOptions =
+        CreateFindOneAndUpdateOptions(isUpsert: false);
+
     private readonly IMongoCollection<LeaseDocument> _leases;
     private readonly TimeProvider _timeProvider;
 
@@ -15,7 +23,7 @@ public class LeaseStore : ILeaseStore
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
-    public async Task<LeaseDocument?> AcquireAsync(
+    public async Task<LeaseWriteResult> AcquireAsync(
         string resourceId,
         AcquireLeaseOptions? options = null,
         CancellationToken cancellationToken = default)
@@ -45,33 +53,24 @@ public class LeaseStore : ILeaseStore
             .Set(x => x.LastUpdatedAtUtc, utcNow)
             .Set(x => x.LastUpdateKind, LeaseUpdateKind.Acquired);
 
-        var findOneAndUpdatedOptions = new FindOneAndUpdateOptions<LeaseDocument>
-        {
-            IsUpsert = true,
-            ReturnDocument = ReturnDocument.After,
-        };
-
-        LeaseDocument? state = null;
-
         try
         {
-            state = await _leases
-                .FindOneAndUpdateAsync(
-                    filter,
-                    update,
-                    findOneAndUpdatedOptions,
-                    cancellationToken)
+            var doc = await _leases
+                .FindOneAndUpdateAsync(filter, update, UpsertOptions, cancellationToken)
                 .ConfigureAwait(false);
+
+            if (doc is not null)
+                return LeaseWriteResult.Success(new LeaseSnapshotView(doc));
         }
         catch (MongoCommandException ex) when (ex.Code == ErrorCodes.DuplicateKey)
         {
             // Another contender acquired the lease.
         }
 
-        return state;
+        return LeaseWriteResult.NotHeld();
     }
 
-    public async Task<LeaseDocument?> RenewAsync(
+    public async Task<LeaseWriteResult> RenewAsync(
         LeaseClaim claim,
         RenewLeaseOptions? options = null,
         CancellationToken cancellationToken = default)
@@ -90,24 +89,14 @@ public class LeaseStore : ILeaseStore
         if (options.ContentionPriority.HasValue)
             update = update.Set(x => x.ContentionPriority, options.ContentionPriority.Value);
 
-        var findOneAndUpdatedOptions = new FindOneAndUpdateOptions<LeaseDocument>
-        {
-            IsUpsert = false,
-            ReturnDocument = ReturnDocument.After
-        };
-
-        var state = await _leases
-            .FindOneAndUpdateAsync(
-                filter,
-                update,
-                findOneAndUpdatedOptions,
-                cancellationToken)
+        var doc = await _leases
+            .FindOneAndUpdateAsync(filter, update, UpdateOptions, cancellationToken)
             .ConfigureAwait(false);
 
-        return state;
+        return doc is not null ? LeaseWriteResult.Success(new LeaseSnapshotView(doc)) : LeaseWriteResult.NotHeld();
     }
 
-    public async Task<bool> TryReleaseAsync(LeaseClaim claim, CancellationToken cancellationToken = default)
+    public async Task<LeaseWriteResult> ReleaseAsync(LeaseClaim claim, CancellationToken cancellationToken = default)
     {
         var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
         var filter = GetMatchesClaimFilter(claim, utcNow);
@@ -117,14 +106,14 @@ public class LeaseStore : ILeaseStore
             .Set(x => x.LastUpdatedAtUtc, utcNow)
             .Set(x => x.LastUpdateKind, LeaseUpdateKind.Released);
 
-        var result = await _leases
-            .UpdateOneAsync(filter, update, cancellationToken: cancellationToken)
+        var doc = await _leases
+            .FindOneAndUpdateAsync(filter, update, UpdateOptions, cancellationToken)
             .ConfigureAwait(false);
 
-        return result.MatchedCount == 1;
+        return doc is not null ? LeaseWriteResult.Success(new LeaseSnapshotView(doc)) : LeaseWriteResult.NotHeld();
     }
 
-    public async Task<bool> TryUpdateStateAsync<TState>(
+    public async Task<LeaseWriteResult> UpdateStateAsync<TState>(
         LeaseClaim claim,
         Action<IScopedUpdateBuilder<TState>> updateState,
         CancellationToken cancellationToken = default)
@@ -144,11 +133,21 @@ public class LeaseStore : ILeaseStore
             .Set(x => x.LastUpdatedAtUtc, utcNow)
             .Set(x => x.LastUpdateKind, LeaseUpdateKind.StateUpdated);
 
-        var result = await _leases
-            .UpdateOneAsync(filter, updateDefinition, cancellationToken: cancellationToken)
+        var doc = await _leases
+            .FindOneAndUpdateAsync(filter, updateDefinition, UpdateOptions, cancellationToken)
             .ConfigureAwait(false);
 
-        return result.MatchedCount == 1;
+        return doc is not null ? LeaseWriteResult.Success(new LeaseSnapshotView(doc)) : LeaseWriteResult.NotHeld();
+    }
+
+    private static FindOneAndUpdateOptions<LeaseDocument, RawBsonDocument> CreateFindOneAndUpdateOptions(bool isUpsert)
+    {
+        return new FindOneAndUpdateOptions<LeaseDocument, RawBsonDocument>
+        {
+            IsUpsert = isUpsert,
+            Projection = Builders<LeaseDocument>.Projection.As<RawBsonDocument>(),
+            ReturnDocument = ReturnDocument.After
+        };
     }
 
     private static FilterDefinition<LeaseDocument> GetMatchesClaimFilter(LeaseClaim claim, DateTime utcNow)

@@ -1,8 +1,11 @@
-﻿using MongoDB.Bson;
+﻿using System.Diagnostics.CodeAnalysis;
+using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 
 namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 
+[SuppressMessage("ReSharper", "ClassNeverInstantiated.Global")]
+[SuppressMessage("ReSharper", "UnusedAutoPropertyAccessor.Global")]
 public sealed class LeaseDocument
 {
     [BsonId]
@@ -32,9 +35,6 @@ public sealed class LeaseDocument
     [BsonElement(FieldNames.LastUpdateKind)]
     [BsonRepresentation(BsonType.String)]
     public required LeaseUpdateKind LastUpdateKind { get; init; }
-
-    [BsonIgnore]
-    public LeaseClaim Claim => new(ResourceId, HolderId, Epoch);
 
     public static class FieldNames
     {

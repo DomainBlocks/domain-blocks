@@ -1,11 +1,12 @@
 ﻿using System.Runtime.CompilerServices;
+using DomainBlocks.Infrastructure.MongoDB.Utilities;
 using Microsoft.Extensions.Logging;
 
 namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 
-public sealed class LeaseHandle : ILeaseHandle
+public class LeaseHandle : ILeaseHandle
 {
-    private LeaseDocument _leaseDocument;
+    private ILeaseSnapshot _initialSnapshot;
     private readonly AcquireLeaseOptions _acquireOptions;
     private readonly ILeaseStore _leaseStore;
     private readonly RenewLeaseOptions _renewOptions;
@@ -20,29 +21,21 @@ public sealed class LeaseHandle : ILeaseHandle
     private StrongBox<int>? _scheduledPriority;
     private int _disposed;
 
-    public LeaseHandle(
-        LeaseDocument leaseDocument,
-        AcquireLeaseOptions acquireOptions,
-        ILeaseStore leaseStore,
-        ILogger logger,
-        TimeProvider timeProvider)
+    public LeaseHandle(LeaseHandleContext context)
     {
-        Claim = leaseDocument.Claim;
-
-        _leaseDocument = leaseDocument;
-        _acquireOptions = acquireOptions;
-        _leaseStore = leaseStore;
-        _renewOptions = new RenewLeaseOptions { Duration = acquireOptions.Duration };
-        _logger = logger;
-        _timeProvider = timeProvider;
+        _initialSnapshot = context.InitialSnapshot;
+        _acquireOptions = context.AcquireOptions;
+        _leaseStore = context.LeaseStore;
+        _renewOptions = new RenewLeaseOptions { Duration = context.AcquireOptions.Duration };
+        _logger = context.Logger;
+        _timeProvider = context.TimeProvider;
         _heartbeatTask = Task.Run(HeartbeatAsync);
+
+        Claim = context.InitialSnapshot.Claim;
     }
 
     public LeaseClaim Claim { get; }
-    public int ContentionPriority => Volatile.Read(ref _leaseDocument).ContentionPriority;
-    public DateTimeOffset HeldSince => Volatile.Read(ref _leaseDocument).HeldSinceUtc;
-    public DateTimeOffset ExpiresAt => Volatile.Read(ref _leaseDocument).ExpiresAtUtc;
-    public DateTimeOffset UpdatedAt => Volatile.Read(ref _leaseDocument).LastUpdatedAtUtc;
+    public ILeaseSnapshot CurrentSnapshot => Volatile.Read(ref _initialSnapshot);
     public CancellationToken LeaseLostToken => _leaseLostCts.Token;
     public Task<LeaseLostInfo> LeaseLostTask => _leaseLostTcs.Task;
 
@@ -66,6 +59,17 @@ public sealed class LeaseHandle : ILeaseHandle
             await _leaseLostCts.CancelAsync().ConfigureAwait(false);
             await _heartbeatTask.ConfigureAwait(false);
         }
+    }
+
+    protected async Task<bool> TryUpdateStateAsync<TState>(
+        Action<IScopedUpdateBuilder<TState>> updateState,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _leaseStore.UpdateStateAsync(Claim, updateState, cancellationToken);
+        if (result.IsSuccess)
+            Volatile.Write(ref _initialSnapshot, result.Snapshot);
+
+        return result.IsSuccess;
     }
 
     private async Task HeartbeatAsync()
@@ -106,22 +110,22 @@ public sealed class LeaseHandle : ILeaseHandle
         var priority = Volatile.Read(ref _scheduledPriority);
         var renewOptions = _renewOptions.With(x => x.ContentionPriority = priority?.Value);
 
-        var state = await _leaseStore.RenewAsync(Claim, renewOptions, _leaseLostCts.Token).ConfigureAwait(false);
-        if (state is null)
+        var result = await _leaseStore.RenewAsync(Claim, renewOptions, _leaseLostCts.Token).ConfigureAwait(false);
+        if (!result.IsSuccess)
             return false;
 
         // Clear scheduled priority after a successful renewal only if it matches what we applied.
         if (priority is not null)
             Interlocked.CompareExchange(ref _scheduledPriority, null, priority);
 
-        Volatile.Write(ref _leaseDocument, state);
+        Volatile.Write(ref _initialSnapshot, result.Snapshot);
 
         _logger.LogDebug(
             "Holder '{HolderId}' renewed lease for resource '{ResourceId}'; " +
             "expires at {ExpiresAtUtc:yyyy-MM-ddTHH:mm:ssZ}",
             Claim.HolderId,
             Claim.ResourceId,
-            state.ExpiresAtUtc);
+            result.Snapshot.ExpiresAt);
 
         return true;
     }
@@ -132,9 +136,11 @@ public sealed class LeaseHandle : ILeaseHandle
         {
             using var cts = _timeProvider.CreateCancellationTokenSource(TimeSpan.FromSeconds(10));
 
-            var succeeded = await _leaseStore.TryReleaseAsync(Claim, cts.Token).ConfigureAwait(false);
-            if (succeeded)
+            var result = await _leaseStore.ReleaseAsync(Claim, cts.Token).ConfigureAwait(false);
+            if (result.IsSuccess)
             {
+                Volatile.Write(ref _initialSnapshot, result.Snapshot);
+
                 _logger.LogInformation(
                     "Holder '{HolderId}' released lease for resource '{ResourceId}'",
                     Claim.HolderId,
@@ -170,24 +176,12 @@ public sealed class LeaseHandle : ILeaseHandle
     }
 }
 
-public sealed class LeaseHandle<TState>(ILeaseHandle inner, ILeaseStore leaseStore) : ILeaseHandle<TState>
+public sealed class LeaseHandle<TState>(LeaseHandleContext context) : LeaseHandle(context), ILeaseHandle<TState>
 {
-    public LeaseClaim Claim => inner.Claim;
-    public int ContentionPriority => inner.ContentionPriority;
-    public DateTimeOffset HeldSince => inner.HeldSince;
-    public DateTimeOffset ExpiresAt => inner.ExpiresAt;
-    public DateTimeOffset UpdatedAt => inner.UpdatedAt;
-    public CancellationToken LeaseLostToken => inner.LeaseLostToken;
-    public Task<LeaseLostInfo> LeaseLostTask => inner.LeaseLostTask;
-
-    public ValueTask DisposeAsync() => inner.DisposeAsync();
-
-    public void ScheduleContentionPriorityChange(int priority) => inner.ScheduleContentionPriorityChange(priority);
-
     public Task<bool> TryUpdateStateAsync(
         Action<IScopedUpdateBuilder<TState>> updateState,
         CancellationToken cancellationToken = default)
     {
-        return leaseStore.TryUpdateStateAsync(inner.Claim, updateState, cancellationToken);
+        return base.TryUpdateStateAsync(updateState, cancellationToken);
     }
 }

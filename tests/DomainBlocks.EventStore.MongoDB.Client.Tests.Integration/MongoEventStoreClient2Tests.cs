@@ -1,5 +1,5 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.MongoDB.Client.Cluster;
+using DomainBlocks.EventStore.MongoDB.Client.Appender;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
 using DomainBlocks.Serialization.MongoDB.Bson;

@@ -1,7 +1,7 @@
 ﻿using System.Linq.Expressions;
 using MongoDB.Driver;
 
-namespace DomainBlocks.Infrastructure.MongoDB.Leases;
+namespace DomainBlocks.Infrastructure.MongoDB.Utilities;
 
 public class ScopedUpdateBuilder<TRootDocument>
 {
@@ -44,10 +44,10 @@ public class ScopedUpdateBuilder<TRootDocument, TSubDocument> : IScopedUpdateBui
         return this;
     }
 
-    internal UpdateDefinition<TRootDocument> Build() => Builders<TRootDocument>.Update.Combine(_updates);
+    public UpdateDefinition<TRootDocument> Build() => Builders<TRootDocument>.Update.Combine(_updates);
 
     private string GetFieldPath<TField>(Expression<Func<TSubDocument, TField>> field)
     {
-        return $"{_rootPath}.{MongoFieldPathResolver.Resolve(field)}";
+        return $"{_rootPath}.{FieldPathResolver.Resolve(field)}";
     }
 }

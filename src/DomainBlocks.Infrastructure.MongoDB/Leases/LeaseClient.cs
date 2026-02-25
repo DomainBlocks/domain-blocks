@@ -5,7 +5,8 @@ namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 public sealed class LeaseClient(
     ILeaseStore leaseStore,
     ILogger<LeaseClient> logger,
-    TimeProvider? timeProvider = null) : ILeaseClient
+    TimeProvider? timeProvider = null) :
+    ILeaseClient
 {
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
@@ -13,6 +14,30 @@ public sealed class LeaseClient(
         string resourceId,
         AcquireLeaseOptions? options = null,
         CancellationToken cancellationToken = default)
+    {
+        var context = await AcquireLeaseCoreAsync(resourceId, options, cancellationToken);
+
+        return context is not null
+            ? new AcquireLeaseResult<ILeaseHandle>(new LeaseHandle(context), context.InitialSnapshot)
+            : AcquireLeaseResult<ILeaseHandle>.NotAcquired;
+    }
+
+    public async Task<AcquireLeaseResult<ILeaseHandle<TState>>> AcquireLeaseAsync<TState>(
+        string resourceId,
+        AcquireLeaseOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        var context = await AcquireLeaseCoreAsync(resourceId, options, cancellationToken);
+
+        return context is not null
+            ? new AcquireLeaseResult<ILeaseHandle<TState>>(new LeaseHandle<TState>(context), context.InitialSnapshot)
+            : AcquireLeaseResult<ILeaseHandle<TState>>.NotAcquired;
+    }
+
+    private async Task<LeaseHandleContext?> AcquireLeaseCoreAsync(
+        string resourceId,
+        AcquireLeaseOptions? options,
+        CancellationToken cancellationToken)
     {
         options ??= AcquireLeaseOptions.Default;
 
@@ -26,21 +51,21 @@ public sealed class LeaseClient(
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var handle = await AcquireOnceAsync(resourceId, options, cancellationToken).ConfigureAwait(false);
-            if (handle is not null)
+            var result = await leaseStore.AcquireAsync(resourceId, options, cancellationToken).ConfigureAwait(false);
+            if (result.IsSuccess)
             {
                 logger.LogInformation(
                     "Lease for resource '{ResourceId}' acquired by holder '{HolderId}'",
                     resourceId,
-                    handle.Claim.HolderId);
+                    result.Snapshot.HolderId);
 
-                return new AcquireLeaseResult<ILeaseHandle>(handle);
+                return CreateHandleContext(result.Snapshot, options);
             }
 
             if (options.AcquireTimeout == TimeSpan.Zero)
             {
                 logger.LogInformation("Failed to acquire lease for resource '{ResourceId}' (zero timeout)", resourceId);
-                return AcquireLeaseResult<ILeaseHandle>.NotAcquired;
+                return null;
             }
 
             if (_timeProvider.GetUtcNow() >= deadline)
@@ -49,7 +74,7 @@ public sealed class LeaseClient(
                     "Failed to acquire lease for resource '{ResourceId}' (timeout reached)",
                     resourceId);
 
-                return AcquireLeaseResult<ILeaseHandle>.NotAcquired;
+                return null;
             }
 
             logger.LogDebug(
@@ -61,24 +86,15 @@ public sealed class LeaseClient(
         }
     }
 
-    public async Task<AcquireLeaseResult<ILeaseHandle<TState>>> AcquireLeaseAsync<TState>(
-        string resourceId,
-        AcquireLeaseOptions? options = null,
-        CancellationToken cancellationToken = default)
+    private LeaseHandleContext CreateHandleContext(ILeaseSnapshot snapshot, AcquireLeaseOptions options)
     {
-        var result = await AcquireLeaseAsync(resourceId, options, cancellationToken);
-
-        return result.IsAcquired
-            ? new AcquireLeaseResult<ILeaseHandle<TState>>(new LeaseHandle<TState>(result.Handle, leaseStore))
-            : AcquireLeaseResult<ILeaseHandle<TState>>.NotAcquired;
-    }
-
-    private async Task<ILeaseHandle?> AcquireOnceAsync(
-        string resourceId,
-        AcquireLeaseOptions options,
-        CancellationToken cancellationToken)
-    {
-        var state = await leaseStore.AcquireAsync(resourceId, options, cancellationToken).ConfigureAwait(false);
-        return state is not null ? new LeaseHandle(state, options, leaseStore, logger, _timeProvider) : null;
+        return new LeaseHandleContext
+        {
+            InitialSnapshot = snapshot,
+            AcquireOptions = options,
+            LeaseStore = leaseStore,
+            Logger = logger,
+            TimeProvider = _timeProvider
+        };
     }
 }
