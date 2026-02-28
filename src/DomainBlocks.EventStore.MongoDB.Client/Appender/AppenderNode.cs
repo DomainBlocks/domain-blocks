@@ -24,6 +24,7 @@ public sealed class AppenderNode
     private Task? _eventConsumerTask;
     private Task? _changeStreamIngressTask;
     private Task? _leaseContenderTask;
+    private LeaderLease? _leaderLease;
 
     public AppenderNode(
         IMongoClient mongoClient,
@@ -98,17 +99,34 @@ public sealed class AppenderNode
 
     private async Task InitializeAsync(CancellationToken cancellationToken)
     {
+        await Task
+            .WhenAll(
+                ReplayRequestsAsync(cancellationToken),
+                ReplayCommitEvents(cancellationToken))
+            .ConfigureAwait(false);
     }
 
     private async Task ReplayRequestsAsync(CancellationToken cancellationToken)
     {
-        var appendRequests = _database.GetCollection<BsonDocument>(_namespaceSettings.AppendRequestsCollectionName);
+        var appendRequests = _database.GetCollection<AppendRequest>(_namespaceSettings.AppendRequestsCollectionName);
+
+        var filter = Builders<AppendRequest>.Filter.Empty;
+        var sort = Builders<AppendRequest>.Sort.Ascending(x => x.CreatedAtUtc);
+        var projection = Builders<AppendRequest>.Projection.As<BsonDocument>();
 
         using var cursor = await appendRequests
-            .Find(Builders<BsonDocument>.Filter.Empty)
-            .ToCursorAsync(cancellationToken);
+            .Find(filter)
+            .Sort(sort)
+            .Project(projection)
+            .ToCursorAsync(cancellationToken)
+            .ConfigureAwait(false);
 
-        while (await cursor.MoveNextAsync(cancellationToken))
+        // Claim request by with epoch
+        // Write events to log
+        // Mark request as done, epoch fenced with CAS
+        // Higher epochs can reclaim if leadership lost
+
+        while (await cursor.MoveNextAsync(cancellationToken).ConfigureAwait(false))
         {
             foreach (var request in cursor.Current)
             {
@@ -130,13 +148,14 @@ public sealed class AppenderNode
         using var cursor = await loggedEvents
             .Find(filter)
             .Sort(sort)
-            .ToCursorAsync(cancellationToken);
+            .ToCursorAsync(cancellationToken)
+            .ConfigureAwait(false);
 
-        while (await cursor.MoveNextAsync(cancellationToken))
+        while (await cursor.MoveNextAsync(cancellationToken).ConfigureAwait(false))
         {
             foreach (var loggedEvent in cursor.Current)
             {
-                // var commitId = loggedEvent.CommitId;
+                var commitId = loggedEvent.CommitId;
                 // var envelope = new AppenderEventEnvelope(@event, AppenderEventSource.Replay);
                 // await _channel.Writer.WriteAsync(@envelope, cancellationToken);
             }
@@ -191,7 +210,18 @@ public sealed class AppenderNode
 
             await using (handle.ConfigureAwait(false))
             {
-                await handle.LeaseLostTask.WaitAsync(_stopCts.Token).ConfigureAwait(false);
+                var leaderLease = new LeaderLease(handle, _stopCts.Token);
+                Volatile.Write(ref _leaderLease, leaderLease);
+
+                try
+                {
+                    await handle.LeaseLostTask.WaitAsync(_stopCts.Token).ConfigureAwait(false);
+                }
+                finally
+                {
+                    Volatile.Write(ref _leaderLease, null);
+                    leaderLease.Dispose();
+                }
             }
         }
     }
@@ -200,7 +230,15 @@ public sealed class AppenderNode
     {
         await foreach (var envelope in _channel.Reader.ReadAllAsync(_stopCts.Token).ConfigureAwait(false))
         {
-            _appenderProcess.Apply(envelope);
+            _ = _appenderProcess.HandleEvent(envelope);
         }
+    }
+
+    private sealed class LeaderLease(ILeaseHandle<LogLeaseState> handle, CancellationToken stopToken) : IDisposable
+    {
+        public CancellationTokenSource LinkedTokenSource { get; } =
+            CancellationTokenSource.CreateLinkedTokenSource(handle.LeaseLostToken, stopToken);
+
+        public void Dispose() => LinkedTokenSource.Dispose();
     }
 }

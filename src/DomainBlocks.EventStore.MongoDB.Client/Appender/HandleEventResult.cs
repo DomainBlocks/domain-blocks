@@ -1,5 +1,5 @@
 ﻿namespace DomainBlocks.EventStore.MongoDB.Client.Appender;
 
-public class AppenderState
+public sealed class HandleEventResult
 {
 }

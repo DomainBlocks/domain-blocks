@@ -4,7 +4,8 @@ namespace DomainBlocks.EventStore.MongoDB.Client.Appender;
 
 public sealed class AppenderProcess
 {
-    public void Apply(AppenderEventEnvelope envelope)
+    public HandleEventResult HandleEvent(AppenderEventEnvelope envelope)
     {
+        return new HandleEventResult();
     }
 }
