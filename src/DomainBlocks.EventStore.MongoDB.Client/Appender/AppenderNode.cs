@@ -142,7 +142,9 @@ public sealed class AppenderNode
     {
         var loggedEvents = _database.GetCollection<LoggedEvent>(_namespaceSettings.AppendRequestsCollectionName);
 
-        var filter = Builders<LoggedEvent>.Filter.In(x => x.EventName, ["CommitRecorded", "CommitRejected"]);
+        // First event is successful ack. Rejections not logged as events.
+        var filter = Builders<LoggedEvent>.Filter.Eq(x => x.CommitIndex, 0);
+
         var sort = Builders<LoggedEvent>.Sort.Ascending(x => x.Position);
 
         using var cursor = await loggedEvents
@@ -241,4 +243,75 @@ public sealed class AppenderNode
 
         public void Dispose() => LinkedTokenSource.Dispose();
     }
+}
+
+// IAppenderCoordinator (?)
+// IAppenderObserver
+// IAppenderWorkScheduler
+
+// Implementation is decision-maker / state machine
+public interface INodeListener
+{
+    // Invoke AckRequests to acknowledge all locally completed requests. Have a sensible TTL on Succeeded/Rejected
+    // status so completed requests are self-purging.
+    // Client may attempt to re-request when already Succeeded/Rejected. Detect and immediately complete directly.
+    // Client may attempt to re-request after TTL and request purged. Let it flow through the pipeline and have
+    // idempotency mark it as succeeded. Might be hard to detect this.
+    void OnStarted();
+
+    void OnLeadershipAcquired();
+
+    void OnLeadershipLost();
+
+    void OnLeaderCaughtUp();
+
+    void OnRequestSubmitted();
+
+    void OnRequestOutcomeRecorded();
+
+    void OnCommitBatchRecorded();
+
+    void OnCommitPositionAdvanced();
+}
+
+public interface INodeScheduler
+{
+    void AckRequests();
+
+    void AckRequest();
+}
+
+public interface ILeaderScheduler
+{
+    // - Play through log from checkpoint position to HW mark
+    // - For normal events with commit index zero, consider that as "commit succeeded"
+    // - Or, alternatively, we could record a CommitAccepted event
+    // - CommitRejected signals that a given commit is permanently rejected, i.e. OCC failed for expected state
+    // - Mark request document with appropriate status, e.g. Pending -> Committed/Rejected
+    // Scenario 1: Leader crashes before HW mark advances - requests are retried by new leader, maybe overwriting slots
+    // Scenario 2: Leader crashes after HW mark but before requests are marked as completed - next leader runs this
+    // catch-up phase to ensure relevant requests are marked as completed.
+    // This implies commitId cannot be unique in the dbx_logged_events collection, as we need slots above HW mark to be
+    // overwritable. So, completed request status is idempotency guard. Downside: inbox retention is needed forever.
+    // Once done:
+    // - Schedule pending requests for fulfilment from HW+1. Bug if HW+2 or more - advancement never happens (not
+    //   contiguous). Bug if HW+0 or less - dangerous because greater epoch and overwrite. Must be careful here.
+    void StepUp();
+
+    // E=42, HW=10 (expected on lease acq. observation)
+    // E=43, HW=20 (actual - I never got the chance to write)
+    // What are the implications?
+    // I start catching up on pending requests, attempting to write into pos >= 11.
+    // I know I can't overwrite my own slots.
+    // I can't overwrite because 42 < 43.
+
+    // Include epoch and HW mark. Listener should have this information.
+    // Or, where does the HW mark come from when fulfilling one or more requests? Via a read on lease state?
+    // We might need to be append-only within an epoch. Fix partial failures in-place - retry or abort with filler
+    // records. Base nextPos in memory from HW mark known at leader acquisition.
+    // This allows safe HW advancement in the background. Better guarantees. We can't overwrite what we've already
+    // written.
+    // HW-mark background advancer halts if there is a gap (perhaps due to bug). We can detect with timeout and step
+    // down, e.g. via a watchdog.
+    void FulfilRequest();
 }
