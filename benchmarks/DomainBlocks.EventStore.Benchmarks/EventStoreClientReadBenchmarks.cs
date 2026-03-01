@@ -142,7 +142,7 @@ public class EventStoreClientReadBenchmarks
                     streamId,
                     new StreamVersion(originalEventRecord.EventNumber.ToUInt64()),
                     eventRecord.Created,
-                    new GlobalPosition(originalEventRecord.Position.CommitPosition));
+                    new LogPosition(originalEventRecord.Position.CommitPosition));
 
                 yield return ReadEvent.Create(@event, metadata, context);
             }

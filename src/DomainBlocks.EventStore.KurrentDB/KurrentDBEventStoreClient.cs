@@ -90,7 +90,7 @@ public class KurrentDBEventStoreClient<TEvent>(
             var (@event, metadata) = eventDecoder.Decode(record.EventType, record.Data, metadataBytes);
 
             var streamVersion = new StreamVersion(originalRecord.EventNumber.ToUInt64());
-            var globalPosition = new GlobalPosition(originalRecord.Position.CommitPosition);
+            var globalPosition = new LogPosition(originalRecord.Position.CommitPosition);
 
             var context = new ReadEventContext(streamId, streamVersion, record.Created, globalPosition);
 

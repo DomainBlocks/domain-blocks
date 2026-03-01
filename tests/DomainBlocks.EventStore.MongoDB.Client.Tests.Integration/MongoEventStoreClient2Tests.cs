@@ -1,5 +1,6 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB.Client.Appender;
+using DomainBlocks.EventStore.MongoDB.Client.Appender.LeaderElection;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
 using DomainBlocks.Serialization.MongoDB.Bson;
@@ -65,6 +66,8 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task AppendToStreamAsync_ScratchTest(CancellationToken ct)
     {
+        var stateMachine = new AppenderStateMachine();
+
         var db = _mongoClient.GetDatabase(EventStoreNamespaceSettings.Default.DatabaseName);
         var leases = db.GetCollection<LeaseDocument>(EventStoreNamespaceSettings.Default.LeasesCollectionName);
 
@@ -73,13 +76,15 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
         var leaseStore = new LeaseStore(leases);
         var leaseClientLogger = loggerFactory.CreateLogger<LeaseClient>();
         var leaseClient = new LeaseClient(leaseStore, leaseClientLogger);
+        var leaderLeaseContender = new LeaderLeaseContender(leaseClient);
 
         var commitCoordinatorLogger = loggerFactory.CreateLogger<AppenderNode>();
 
         var appenderNode = new AppenderNode(
             _mongoClient,
+            stateMachine,
+            leaderLeaseContender,
             EventStoreNamespaceSettings.Default,
-            leaseClient,
             commitCoordinatorLogger);
 
         var appenderNodeTask = appenderNode.RunAsync(ct);

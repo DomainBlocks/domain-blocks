@@ -5,7 +5,7 @@ namespace DomainBlocks.EventStore.MongoDB.Client.Appender;
 public static class LeaseHandleExtensions
 {
     public static Task<bool> TryAdvanceCommitPositionAsync(
-        this ILeaseHandle<LogLeaseState> handle,
+        this ILeaseHandle<LeaseState> handle,
         long amount,
         CancellationToken cancellationToken = default)
     {

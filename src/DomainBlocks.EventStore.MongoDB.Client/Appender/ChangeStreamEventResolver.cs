@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 using DomainBlocks.EventStore.MongoDB.Client.Appender.Events;
+using DomainBlocks.EventStore.MongoDB.Client.Appender.LeaderElection;
 using DomainBlocks.EventStore.MongoDB.Client.Schema2;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
 using MongoDB.Bson;
@@ -70,7 +71,7 @@ public sealed class ChangeStreamEventResolver(EventStoreNamespaceSettings namesp
             return false;
 
         var resourceId = id.AsString;
-        if (resourceId != AppenderNode.LeaseResourceId)
+        if (resourceId != LeaderLeaseContender.ResourceId)
             return false;
 
         var doc = change.FullDocument ?? throw new InvalidOperationException(

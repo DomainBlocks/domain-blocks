@@ -127,7 +127,7 @@ public class MongoEventStoreClient<TEvent> : IEventStoreClient<TEvent> where TEv
                         eventDoc.Metadata);
 
                     var version = StreamVersion.FromInt64(versionValue);
-                    var position = GlobalPosition.FromInt64(commit.StartGlobalPosition + index);
+                    var position = LogPosition.FromInt64(commit.StartGlobalPosition + index);
                     var context = new ReadEventContext(streamId, version, commit.CommittedAtUtc, position);
 
                     yield return ReadEvent.Create(@event, metadata, context);
