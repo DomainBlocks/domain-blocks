@@ -7,16 +7,16 @@ namespace DomainBlocks.EventStore.MongoDB.Client.Appender;
 
 public sealed class AppenderStateMachine : IAppenderEventSink
 {
+    private readonly INodeWorkScheduler _nodeWorkScheduler = null!;
     private readonly ILeaderWorkScheduler _leaderWorkScheduler = null!;
-    private LeaseClaim? _lastAcquiredLeaseClaim;
-    private ILeaseHandle<LeaseState>? _leaseHandle;
+    private readonly LeaderTracker _leaderTracker = new();
 
-    [MemberNotNullWhen(true, nameof(_lastAcquiredLeaseClaim))]
-    [MemberNotNullWhen(true, nameof(_leaseHandle))]
-    private bool IsLeader => _lastAcquiredLeaseClaim is not null &&
-                             _leaseHandle is not null &&
-                             _lastAcquiredLeaseClaim == _leaseHandle.Claim;
+    public ValueTask InitializeAsync(CancellationToken cancellationToken = default)
+    {
+        return ValueTask.CompletedTask;
+    }
 
+    // Guarantee that we observe no events until InitializeAsync completes (?)
     public ValueTask OnEventAsync(AppenderEventEnvelope envelope, CancellationToken cancellationToken = default)
     {
         var task = envelope.Event switch
@@ -35,34 +35,101 @@ public sealed class AppenderStateMachine : IAppenderEventSink
 
     private ValueTask OnLeaderLeaseAcquiredAsync(LeaderLeaseAcquired @event, CancellationToken cancellationToken)
     {
-        _leaseHandle = @event.Handle;
-        return ScheduleStepUpIfLeaderAsync(cancellationToken);
+        var transition = _leaderTracker.SetHandle(@event.Handle);
+        return OnLeaderTransitionAsync(transition, cancellationToken);
     }
 
     private ValueTask OnLeaderLeaseLostAsync(LeaderLeaseLost @event, CancellationToken cancellationToken)
     {
-        _leaseHandle = null;
-        return ValueTask.CompletedTask;
+        var transition = _leaderTracker.Clear();
+        return OnLeaderTransitionAsync(transition, cancellationToken);
     }
 
     private ValueTask OnLeaseUpdateObservedAsync(LeaseUpdateObserved @event, CancellationToken cancellationToken)
     {
         if (@event.Snapshot.LastUpdateKind is LeaseUpdateKind.Acquired or LeaseUpdateKind.Renewed)
         {
-            _lastAcquiredLeaseClaim = @event.Snapshot.Claim;
-            return ScheduleStepUpIfLeaderAsync(cancellationToken);
+            var transition = _leaderTracker.SetClaim(@event.Snapshot.Claim);
+            return OnLeaderTransitionAsync(transition, cancellationToken);
         }
 
         if (@event.Snapshot.LastUpdateKind is LeaseUpdateKind.Released)
-            _lastAcquiredLeaseClaim = null;
+        {
+            var transition = _leaderTracker.ClearClaim(@event.Snapshot.Claim);
+            return OnLeaderTransitionAsync(transition, cancellationToken);
+        }
 
         return ValueTask.CompletedTask;
     }
 
-    private ValueTask ScheduleStepUpIfLeaderAsync(CancellationToken cancellationToken)
+    private ValueTask OnLeaderTransitionAsync(LeaderTransition transition, CancellationToken cancellationToken)
     {
-        return IsLeader
-            ? _leaderWorkScheduler.ScheduleStepUpAsync(_leaseHandle, cancellationToken)
-            : ValueTask.CompletedTask;
+        return transition switch
+        {
+            LeaderTransition.LeadershipAcquired => _leaderWorkScheduler.ScheduleStepUpAsync(
+                _leaderTracker.Handle,
+                cancellationToken),
+
+            LeaderTransition.LeadershipLost => _leaderWorkScheduler.ScheduleStepDownAsync(
+                _leaderTracker.Handle,
+                cancellationToken),
+
+            _ => ValueTask.CompletedTask
+        };
+    }
+
+    private sealed class LeaderTracker
+    {
+        private LeaseClaim? _claim;
+        private ILeaseHandle<LeaseState>? _handle;
+        private bool _prevIsLeader;
+
+        public ILeaseHandle<LeaseState> Handle => IsLeader
+            ? _handle
+            : throw new InvalidOperationException("Lease handle is not available when not leader.");
+
+        [MemberNotNullWhen(true, nameof(_claim))]
+        [MemberNotNullWhen(true, nameof(_handle))]
+        private bool IsLeader => _claim is not null && _handle is not null && _claim == _handle.Claim;
+
+        public LeaderTransition SetClaim(LeaseClaim claim)
+        {
+            _claim = claim;
+            return EvaluateTransition();
+        }
+
+        public LeaderTransition SetHandle(ILeaseHandle<LeaseState> handle)
+        {
+            _handle = handle;
+            return EvaluateTransition();
+        }
+
+        public LeaderTransition Clear()
+        {
+            _claim = null;
+            _handle = null;
+            return EvaluateTransition();
+        }
+
+        public LeaderTransition ClearClaim(LeaseClaim claim)
+        {
+            return _claim == claim ? Clear() : LeaderTransition.None;
+        }
+
+        private LeaderTransition EvaluateTransition()
+        {
+            if (IsLeader == _prevIsLeader)
+                return LeaderTransition.None;
+
+            _prevIsLeader = IsLeader;
+            return IsLeader ? LeaderTransition.LeadershipAcquired : LeaderTransition.LeadershipLost;
+        }
+    }
+
+    private enum LeaderTransition
+    {
+        None,
+        LeadershipAcquired,
+        LeadershipLost
     }
 }
