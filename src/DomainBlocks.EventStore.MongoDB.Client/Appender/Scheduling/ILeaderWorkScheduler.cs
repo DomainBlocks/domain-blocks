@@ -26,7 +26,7 @@ public interface ILeaderWorkScheduler
     // - We can write over any lower epoch slot above our known HW mark
     ValueTask ScheduleStepUpAsync(ILeaseHandle<LeaseState> handle, CancellationToken cancellationToken = default);
 
-    ValueTask ScheduleStepDownAsync(ILeaseHandle<LeaseState> handle, CancellationToken cancellationToken = default);
+    ValueTask ScheduleStepDownAsync(CancellationToken cancellationToken = default);
 
     // E=42, HW=10 (expected on lease acq. observation)
     // E=43, HW=20 (actual - I never got the chance to write)

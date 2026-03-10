@@ -9,7 +9,12 @@ public sealed class AppenderStateMachine : IAppenderEventSink
 {
     private readonly INodeWorkScheduler _nodeWorkScheduler = null!;
     private readonly ILeaderWorkScheduler _leaderWorkScheduler = null!;
-    private readonly LeaderTracker _leaderTracker = new();
+    private readonly LeaderTracker _leaderTracker;
+
+    public AppenderStateMachine()
+    {
+        _leaderTracker = new LeaderTracker(OnLeadershipAcquiredAsync, OnLeadershipLostAsync);
+    }
 
     public ValueTask InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -24,8 +29,8 @@ public sealed class AppenderStateMachine : IAppenderEventSink
             AppendRequestObserved => ValueTask.CompletedTask,
             AppendRequestRetried => ValueTask.CompletedTask,
             CommitOutcomeObserved => ValueTask.CompletedTask,
-            LeaderLeaseAcquired e => OnLeaderLeaseAcquiredAsync(e, cancellationToken),
-            LeaderLeaseLost e => OnLeaderLeaseLostAsync(e, cancellationToken),
+            LocalLeaseAcquired e => OnLocalLeaseAcquiredAsync(e, cancellationToken),
+            LocalLeaseLost => OnLocalLeaseLostAsync(cancellationToken),
             LeaseUpdateObserved e => OnLeaseUpdateObservedAsync(e, cancellationToken),
             _ => ValueTask.CompletedTask
         };
@@ -33,103 +38,84 @@ public sealed class AppenderStateMachine : IAppenderEventSink
         return task;
     }
 
-    private ValueTask OnLeaderLeaseAcquiredAsync(LeaderLeaseAcquired @event, CancellationToken cancellationToken)
+    private ValueTask OnLocalLeaseAcquiredAsync(LocalLeaseAcquired @event, CancellationToken cancellationToken)
     {
-        var transition = _leaderTracker.SetHandle(@event.Handle);
-        return OnLeaderTransitionAsync(transition, cancellationToken);
+        return _leaderTracker.SetHandleAsync(@event.Handle, cancellationToken);
     }
 
-    private ValueTask OnLeaderLeaseLostAsync(LeaderLeaseLost @event, CancellationToken cancellationToken)
+    private ValueTask OnLocalLeaseLostAsync(CancellationToken cancellationToken)
     {
-        var transition = _leaderTracker.Clear();
-        return OnLeaderTransitionAsync(transition, cancellationToken);
+        return _leaderTracker.ClearAllAsync(cancellationToken);
     }
 
     private ValueTask OnLeaseUpdateObservedAsync(LeaseUpdateObserved @event, CancellationToken cancellationToken)
     {
-        if (@event.Snapshot.LastUpdateKind is LeaseUpdateKind.Acquired or LeaseUpdateKind.Renewed)
+        return @event.Snapshot.LastUpdateKind switch
         {
-            var transition = _leaderTracker.SetClaim(@event.Snapshot.Claim);
-            return OnLeaderTransitionAsync(transition, cancellationToken);
-        }
-
-        if (@event.Snapshot.LastUpdateKind is LeaseUpdateKind.Released)
-        {
-            var transition = _leaderTracker.ClearClaim(@event.Snapshot.Claim);
-            return OnLeaderTransitionAsync(transition, cancellationToken);
-        }
-
-        return ValueTask.CompletedTask;
-    }
-
-    private ValueTask OnLeaderTransitionAsync(LeaderTransition transition, CancellationToken cancellationToken)
-    {
-        return transition switch
-        {
-            LeaderTransition.LeadershipAcquired => _leaderWorkScheduler.ScheduleStepUpAsync(
-                _leaderTracker.Handle,
-                cancellationToken),
-
-            LeaderTransition.LeadershipLost => _leaderWorkScheduler.ScheduleStepDownAsync(
-                _leaderTracker.Handle,
-                cancellationToken),
-
+            LeaseUpdateKind.Acquired => _leaderTracker.SetClaimAsync(@event.Snapshot.Claim, cancellationToken),
+            LeaseUpdateKind.Renewed => _leaderTracker.SetClaimAsync(@event.Snapshot.Claim, cancellationToken),
+            LeaseUpdateKind.Released => _leaderTracker.ClearClaimAsync(@event.Snapshot.Claim, cancellationToken),
             _ => ValueTask.CompletedTask
         };
     }
 
-    private sealed class LeaderTracker
+    private ValueTask OnLeadershipAcquiredAsync(ILeaseHandle<LeaseState> handle, CancellationToken cancellationToken)
+    {
+        return _leaderWorkScheduler.ScheduleStepUpAsync(handle, cancellationToken);
+    }
+
+    private ValueTask OnLeadershipLostAsync(CancellationToken cancellationToken)
+    {
+        return _leaderWorkScheduler.ScheduleStepDownAsync(cancellationToken);
+    }
+
+    private sealed class LeaderTracker(
+        Func<ILeaseHandle<LeaseState>, CancellationToken, ValueTask> onLeadershipAcquired,
+        Func<CancellationToken, ValueTask> onLeadershipLost)
     {
         private LeaseClaim? _claim;
         private ILeaseHandle<LeaseState>? _handle;
         private bool _prevIsLeader;
 
-        public ILeaseHandle<LeaseState> Handle => IsLeader
-            ? _handle
-            : throw new InvalidOperationException("Lease handle is not available when not leader.");
-
         [MemberNotNullWhen(true, nameof(_claim))]
         [MemberNotNullWhen(true, nameof(_handle))]
         private bool IsLeader => _claim is not null && _handle is not null && _claim == _handle.Claim;
 
-        public LeaderTransition SetClaim(LeaseClaim claim)
+        public ValueTask SetClaimAsync(LeaseClaim claim, CancellationToken cancellationToken)
         {
             _claim = claim;
-            return EvaluateTransition();
+            return EvaluateAsync(cancellationToken);
         }
 
-        public LeaderTransition SetHandle(ILeaseHandle<LeaseState> handle)
+        public ValueTask SetHandleAsync(ILeaseHandle<LeaseState> handle, CancellationToken cancellationToken)
         {
             _handle = handle;
-            return EvaluateTransition();
+            return EvaluateAsync(cancellationToken);
         }
 
-        public LeaderTransition Clear()
+        public ValueTask ClearClaimAsync(LeaseClaim claim, CancellationToken cancellationToken)
+        {
+            if (claim != _claim)
+                return ValueTask.CompletedTask;
+
+            _claim = null;
+            return EvaluateAsync(cancellationToken);
+        }
+
+        public ValueTask ClearAllAsync(CancellationToken cancellationToken)
         {
             _claim = null;
             _handle = null;
-            return EvaluateTransition();
+            return EvaluateAsync(cancellationToken);
         }
 
-        public LeaderTransition ClearClaim(LeaseClaim claim)
-        {
-            return _claim == claim ? Clear() : LeaderTransition.None;
-        }
-
-        private LeaderTransition EvaluateTransition()
+        private ValueTask EvaluateAsync(CancellationToken cancellationToken)
         {
             if (IsLeader == _prevIsLeader)
-                return LeaderTransition.None;
+                return ValueTask.CompletedTask;
 
             _prevIsLeader = IsLeader;
-            return IsLeader ? LeaderTransition.LeadershipAcquired : LeaderTransition.LeadershipLost;
+            return IsLeader ? onLeadershipAcquired(_handle, cancellationToken) : onLeadershipLost(cancellationToken);
         }
-    }
-
-    private enum LeaderTransition
-    {
-        None,
-        LeadershipAcquired,
-        LeadershipLost
     }
 }

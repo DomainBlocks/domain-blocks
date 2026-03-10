@@ -101,7 +101,7 @@ public sealed class AppenderNode : ILeaderLeaseObserver
         ILeaseHandle<LeaseState> handle,
         CancellationToken cancellationToken)
     {
-        var @event = new LeaderLeaseAcquired(handle);
+        var @event = new LocalLeaseAcquired(handle);
         var envelope = new AppenderEventEnvelope(@event, AppenderEventSource.LocalNode);
         await _channel.Writer.WriteAsync(envelope, cancellationToken);
     }
@@ -111,7 +111,7 @@ public sealed class AppenderNode : ILeaderLeaseObserver
         LeaseLostInfo leaseLostInfo,
         CancellationToken cancellationToken)
     {
-        var @event = new LeaderLeaseLost(leaseClaim, leaseLostInfo);
+        var @event = new LocalLeaseLost(leaseClaim, leaseLostInfo);
         var envelope = new AppenderEventEnvelope(@event, AppenderEventSource.LocalNode);
         await _channel.Writer.WriteAsync(envelope, cancellationToken);
     }
