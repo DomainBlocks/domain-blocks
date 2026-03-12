@@ -8,7 +8,7 @@ public sealed class LeaderLeaseContender(ILeaseClient leaseClient) : ILeaderLeas
 
     private ILeaseHandle<LeaseState>? _handle;
 
-    public async Task RunAsync(ILeaderLeaseObserver observer, CancellationToken stopToken = default)
+    public async Task RunAsync(ILocalLeaseObserver observer, CancellationToken stopToken = default)
     {
         var options = new AcquireLeaseOptions
         {
@@ -29,12 +29,12 @@ public sealed class LeaderLeaseContender(ILeaseClient leaseClient) : ILeaderLeas
             await using (handle.ConfigureAwait(false))
             {
                 Volatile.Write(ref _handle, handle);
-                await observer.OnLeaderLeaseAcquired(handle, stopToken).ConfigureAwait(false);
+                await observer.OnLocalLeaseAcquired(handle, stopToken).ConfigureAwait(false);
 
                 try
                 {
                     var leaseLostInfo = await handle.LeaseLostTask.WaitAsync(stopToken).ConfigureAwait(false);
-                    await observer.OnLeaderLeaseLost(handle.Claim, leaseLostInfo, stopToken).ConfigureAwait(false);
+                    await observer.OnLocalLeaseLost(handle.Claim, leaseLostInfo, stopToken).ConfigureAwait(false);
                 }
                 finally
                 {

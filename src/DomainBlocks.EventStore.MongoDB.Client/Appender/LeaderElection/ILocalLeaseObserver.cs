@@ -2,11 +2,11 @@ using DomainBlocks.Infrastructure.MongoDB.Leases;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Appender.LeaderElection;
 
-public interface ILeaderLeaseObserver
+public interface ILocalLeaseObserver
 {
-    Task OnLeaderLeaseAcquired(ILeaseHandle<LeaseState> handle, CancellationToken cancellationToken = default);
+    Task OnLocalLeaseAcquired(ILeaseHandle<LeaseState> handle, CancellationToken cancellationToken = default);
 
-    Task OnLeaderLeaseLost(
+    Task OnLocalLeaseLost(
         LeaseClaim leaseClaim,
         LeaseLostInfo leaseLostInfo,
         CancellationToken cancellationToken = default);

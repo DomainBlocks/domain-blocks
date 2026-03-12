@@ -11,7 +11,7 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Appender;
 
-public sealed class AppenderNode : ILeaderLeaseObserver
+public sealed class AppenderNode : ILocalLeaseObserver
 {
     private readonly IMongoDatabase _database;
     private readonly IAppenderEventSink _eventSink;
@@ -97,7 +97,7 @@ public sealed class AppenderNode : ILeaderLeaseObserver
         _leaderLeaseContenderTask = _leaderLeaseContender.RunAsync(this, _stopCts.Token);
     }
 
-    async Task ILeaderLeaseObserver.OnLeaderLeaseAcquired(
+    async Task ILocalLeaseObserver.OnLocalLeaseAcquired(
         ILeaseHandle<LeaseState> handle,
         CancellationToken cancellationToken)
     {
@@ -106,7 +106,7 @@ public sealed class AppenderNode : ILeaderLeaseObserver
         await _channel.Writer.WriteAsync(envelope, cancellationToken);
     }
 
-    async Task ILeaderLeaseObserver.OnLeaderLeaseLost(
+    async Task ILocalLeaseObserver.OnLocalLeaseLost(
         LeaseClaim leaseClaim,
         LeaseLostInfo leaseLostInfo,
         CancellationToken cancellationToken)

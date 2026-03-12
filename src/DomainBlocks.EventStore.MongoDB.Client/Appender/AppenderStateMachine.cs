@@ -30,7 +30,7 @@ public sealed class AppenderStateMachine : IAppenderEventSink
             AppendRequestRetried => ValueTask.CompletedTask,
             CommitOutcomeObserved => ValueTask.CompletedTask,
             LocalLeaseAcquired e => OnLocalLeaseAcquiredAsync(e, cancellationToken),
-            LocalLeaseLost => OnLocalLeaseLostAsync(cancellationToken),
+            LocalLeaseLost e => OnLocalLeaseLostAsync(e, cancellationToken),
             LeaseUpdateObserved e => OnLeaseUpdateObservedAsync(e, cancellationToken),
             _ => ValueTask.CompletedTask
         };
@@ -43,18 +43,20 @@ public sealed class AppenderStateMachine : IAppenderEventSink
         return _leaderTracker.SetHandleAsync(@event.Handle, cancellationToken);
     }
 
-    private ValueTask OnLocalLeaseLostAsync(CancellationToken cancellationToken)
+    private ValueTask OnLocalLeaseLostAsync(LocalLeaseLost @event, CancellationToken cancellationToken)
     {
-        return _leaderTracker.ClearAllAsync(cancellationToken);
+        return _leaderTracker.ClearHandleAsync(@event.Claim, cancellationToken);
     }
 
     private ValueTask OnLeaseUpdateObservedAsync(LeaseUpdateObserved @event, CancellationToken cancellationToken)
     {
+        var claim = @event.Snapshot.Claim;
+
         return @event.Snapshot.LastUpdateKind switch
         {
-            LeaseUpdateKind.Acquired => _leaderTracker.SetClaimAsync(@event.Snapshot.Claim, cancellationToken),
-            LeaseUpdateKind.Renewed => _leaderTracker.SetClaimAsync(@event.Snapshot.Claim, cancellationToken),
-            LeaseUpdateKind.Released => _leaderTracker.ClearClaimAsync(@event.Snapshot.Claim, cancellationToken),
+            LeaseUpdateKind.Acquired => _leaderTracker.SetObservedClaimAsync(claim, cancellationToken),
+            LeaseUpdateKind.Renewed => _leaderTracker.SetObservedClaimAsync(claim, cancellationToken),
+            LeaseUpdateKind.Released => _leaderTracker.ClearObservedClaimAsync(claim, cancellationToken),
             _ => ValueTask.CompletedTask
         };
     }
@@ -73,17 +75,17 @@ public sealed class AppenderStateMachine : IAppenderEventSink
         Func<ILeaseHandle<LeaseState>, CancellationToken, ValueTask> onLeadershipAcquired,
         Func<CancellationToken, ValueTask> onLeadershipLost)
     {
-        private LeaseClaim? _claim;
+        private LeaseClaim? _observedClaim;
         private ILeaseHandle<LeaseState>? _handle;
         private bool _prevIsLeader;
 
-        [MemberNotNullWhen(true, nameof(_claim))]
+        [MemberNotNullWhen(true, nameof(_observedClaim))]
         [MemberNotNullWhen(true, nameof(_handle))]
-        private bool IsLeader => _claim is not null && _handle is not null && _claim == _handle.Claim;
+        private bool IsLeader => _observedClaim is not null && _handle is not null && _observedClaim == _handle.Claim;
 
-        public ValueTask SetClaimAsync(LeaseClaim claim, CancellationToken cancellationToken)
+        public ValueTask SetObservedClaimAsync(LeaseClaim observedClaim, CancellationToken cancellationToken)
         {
-            _claim = claim;
+            _observedClaim = observedClaim;
             return EvaluateAsync(cancellationToken);
         }
 
@@ -93,18 +95,20 @@ public sealed class AppenderStateMachine : IAppenderEventSink
             return EvaluateAsync(cancellationToken);
         }
 
-        public ValueTask ClearClaimAsync(LeaseClaim claim, CancellationToken cancellationToken)
+        public ValueTask ClearObservedClaimAsync(LeaseClaim observedClaim, CancellationToken cancellationToken)
         {
-            if (claim != _claim)
+            if (observedClaim != _observedClaim)
                 return ValueTask.CompletedTask;
 
-            _claim = null;
+            _observedClaim = null;
             return EvaluateAsync(cancellationToken);
         }
 
-        public ValueTask ClearAllAsync(CancellationToken cancellationToken)
+        public ValueTask ClearHandleAsync(LeaseClaim claim, CancellationToken cancellationToken)
         {
-            _claim = null;
+            if (claim != _handle?.Claim)
+                return ValueTask.CompletedTask;
+
             _handle = null;
             return EvaluateAsync(cancellationToken);
         }
