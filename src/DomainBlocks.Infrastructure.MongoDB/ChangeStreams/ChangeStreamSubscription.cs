@@ -255,8 +255,8 @@ public sealed class ChangeStreamSubscription<TDocument, TResult> : IChangeStream
                 ShouldHandle = args =>
                 {
                     var ex = args.Outcome.Exception;
-                    var canResume = ex is not null && CanResume(ex);
-                    return ValueTask.FromResult(canResume);
+                    var shouldRetry = ex is not null && CanResume(ex);
+                    return ValueTask.FromResult(shouldRetry);
                 },
                 OnRetry = args =>
                 {
