@@ -2,5 +2,5 @@
 
 public interface IChangeStreamObserver<in TDocument>
 {
-    ValueTask OnNextAsync(TDocument document, CancellationToken cancellationToken = default);
+    ValueTask OnNextAsync(TDocument change, CancellationToken cancellationToken);
 }

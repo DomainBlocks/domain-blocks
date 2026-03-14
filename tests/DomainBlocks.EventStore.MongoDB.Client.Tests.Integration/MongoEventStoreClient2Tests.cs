@@ -1,8 +1,7 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.MongoDB.Client.Appender;
-using DomainBlocks.EventStore.MongoDB.Client.Appender.LeaderElection;
+using DomainBlocks.EventStore.MongoDB.Client.Coordination;
 using DomainBlocks.EventStore.TypeMapping;
-using DomainBlocks.Infrastructure.MongoDB.Leases;
+using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Testing.Integration;
 using DomainBlocks.Testing.Integration.MongoDB;
@@ -17,6 +16,7 @@ namespace DomainBlocks.EventStore.MongoDB.Client.Tests.Integration;
 public class MongoEventStoreClient2Tests : EventStoreClientTests
 {
     private MongoClient _mongoClient = null!;
+    private IChangeStreamConnection _changeStreamConnection = null!;
     private MongoEventStoreClient2<IDomainEvent> _client = null!;
 
     protected override IEventStoreClient<IDomainEvent> Client => _client;
@@ -51,43 +51,32 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
         };
 
         _mongoClient = new MongoClient(MongoConnectionStrings.Default);
-        _client = new MongoEventStoreClient2<IDomainEvent>(_mongoClient, options);
+
+        var namespaceSettings = options.NamespaceSettings;
+        var db = _mongoClient.GetDatabase(namespaceSettings.DatabaseName);
+
+        var requestTracker = new AppendRequestTracker(namespaceSettings.AppendRequestsCollectionNamespace);
+        var changeStreamSubject = await db.CreateSubjectAsync();
+        changeStreamSubject.Attach(requestTracker);
+        _changeStreamConnection = changeStreamSubject.Connect();
+
+        _client = new MongoEventStoreClient2<IDomainEvent>(_mongoClient, requestTracker, options);
 
         await MongoEventStoreAdmin2.EnsureInitializedAsync(_mongoClient, options.NamespaceSettings);
     }
 
     [OneTimeTearDown]
-    public void OneTimeTearDown()
+    public async Task OneTimeTearDown()
     {
         _mongoClient.Dispose();
+        await _changeStreamConnection.DisposeAsync();
     }
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
     public async Task AppendToStreamAsync_ScratchTest(CancellationToken ct)
     {
-        var stateMachine = new AppenderStateMachine();
-
-        var db = _mongoClient.GetDatabase(EventStoreNamespaceSettings.Default.DatabaseName);
-        var leases = db.GetCollection<LeaseDocument>(EventStoreNamespaceSettings.Default.LeasesCollectionName);
-
         using var loggerFactory = LoggerFactory.Create(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug));
-
-        var leaseStore = new LeaseStore(leases);
-        var leaseClientLogger = loggerFactory.CreateLogger<LeaseClient>();
-        var leaseClient = new LeaseClient(leaseStore, leaseClientLogger);
-        var leaderLeaseContender = new LeaderLeaseContender(leaseClient);
-
-        var commitCoordinatorLogger = loggerFactory.CreateLogger<AppenderNode>();
-
-        var appenderNode = new AppenderNode(
-            _mongoClient,
-            stateMachine,
-            leaderLeaseContender,
-            EventStoreNamespaceSettings.Default,
-            commitCoordinatorLogger);
-
-        var appenderNodeTask = appenderNode.RunAsync(ct);
 
         var streamId = $"test-{Guid.NewGuid():N}";
 
@@ -106,7 +95,5 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
 
         await Client.AppendToStreamAsync(streamId, events, options, ct);
         await Client.AppendToStreamAsync(streamId, events, options, ct);
-
-        await appenderNodeTask.WaitAsync(ct);
     }
 }

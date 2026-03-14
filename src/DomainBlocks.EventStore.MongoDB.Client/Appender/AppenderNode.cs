@@ -41,7 +41,7 @@ public sealed class AppenderNode : ILocalLeaseObserver
         _logger = logger;
 
         // TODO: use bounded
-        var channelOptions = new UnboundedChannelOptions()
+        var channelOptions = new UnboundedChannelOptions
         {
             SingleWriter = false,
             SingleReader = true

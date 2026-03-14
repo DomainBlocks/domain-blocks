@@ -77,10 +77,10 @@ public class ChangeStreamSubjectTests
         public Task Completion => _tcs.Task;
 
         public ValueTask OnNextAsync(
-            ChangeStreamDocument<BsonDocument> document,
+            ChangeStreamDocument<BsonDocument> change,
             CancellationToken cancellationToken = default)
         {
-            ObservedDocuments.Add(document.FullDocument);
+            ObservedDocuments.Add(change.FullDocument);
 
             if (ObservedDocuments.Count == expectedCount)
                 _tcs.SetResult();
