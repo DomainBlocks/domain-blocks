@@ -72,7 +72,7 @@ internal sealed class ChangeStreamSubject<TDocument, TResult>(
         private readonly ILogger? _logger;
         private readonly Task _producerTask;
         private readonly CancellationTokenSource _stopCts = new();
-        private readonly TaskCompletionSource _completionTcs = new();
+        private readonly TaskCompletionSource _completionTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private BsonDocument? _lastResumeToken;
         private int _disposed;
 
@@ -125,18 +125,7 @@ internal sealed class ChangeStreamSubject<TDocument, TResult>(
                 {
                     _stopCts.Token.ThrowIfCancellationRequested();
 
-                    var mongoOptions = _options.MongoOptions;
-
-                    if (_lastResumeToken is not null)
-                    {
-                        mongoOptions = mongoOptions.Copy();
-                        mongoOptions.ResumeAfter = _lastResumeToken;
-                        mongoOptions.StartAfter = null;
-                        mongoOptions.StartAtOperationTime = null;
-                    }
-
-                    using var cursor = await _cursorFactory(_pipeline, mongoOptions, _stopCts.Token)
-                        .ConfigureAwait(false);
+                    using var cursor = await GetChangeStreamCursorAsync().ConfigureAwait(false);
 
                     try
                     {
@@ -152,10 +141,12 @@ internal sealed class ChangeStreamSubject<TDocument, TResult>(
                             if (batchResumeToken is not null)
                                 _lastResumeToken = batchResumeToken;
                         }
+
+                        _logger?.LogWarning("Change stream cursor ended unexpectedly; reconnecting");
                     }
                     catch (Exception ex) when (ChangeStreamResumePolicy.CanResume(ex))
                     {
-                        _logger?.LogWarning(ex, "Connection lost; will reconnect");
+                        _logger?.LogWarning(ex, "Connection lost; reconnecting");
                         // Continue outer loop (reconnect)
                     }
                 }
@@ -170,6 +161,25 @@ internal sealed class ChangeStreamSubject<TDocument, TResult>(
                 _logger?.LogError(ex, "Producer failed");
                 _completionTcs.TrySetException(ex);
             }
+            finally
+            {
+                _logger?.LogInformation("Producer stopped");
+            }
+        }
+
+        private async Task<IChangeStreamCursor<TResult>> GetChangeStreamCursorAsync()
+        {
+            var options = _options.MongoOptions;
+
+            if (_lastResumeToken is not null)
+            {
+                options = options.Copy();
+                options.ResumeAfter = _lastResumeToken;
+                options.StartAfter = null;
+                options.StartAtOperationTime = null;
+            }
+
+            return await _cursorFactory(_pipeline, options, _stopCts.Token).ConfigureAwait(false);
         }
 
         private async Task NotifyObserversAsync(TResult result)
