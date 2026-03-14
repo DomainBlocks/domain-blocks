@@ -4,7 +4,7 @@ namespace DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 
 public class ChangeStreamSubscriptionOptions
 {
-    public ChangeStreamOptions? MongoOptions { get; set; }
+    public ChangeStreamOptions MongoOptions { get; set; } = new();
 
     public int QueueSize { get; set; } = 1_000;
 
