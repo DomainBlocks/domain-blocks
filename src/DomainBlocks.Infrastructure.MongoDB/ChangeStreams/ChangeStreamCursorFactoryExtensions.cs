@@ -4,7 +4,7 @@ using Polly.Retry;
 
 namespace DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 
-public static class ChangeStreamCursorFactoryExtensions
+internal static class ChangeStreamCursorFactoryExtensions
 {
     extension<TDocument, TResult>(ChangeStreamCursorFactory<TDocument, TResult> factory)
     {

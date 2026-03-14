@@ -5,7 +5,7 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 
-public sealed class ChangeStreamSubject<TDocument, TResult>(
+internal sealed class ChangeStreamSubject<TDocument, TResult>(
     ChangeStreamCursorFactory<TDocument, TResult> cursorFactory,
     PipelineDefinition<ChangeStreamDocument<TDocument>, TResult> pipeline,
     Func<TResult, BsonDocument> resumeTokenSelector,

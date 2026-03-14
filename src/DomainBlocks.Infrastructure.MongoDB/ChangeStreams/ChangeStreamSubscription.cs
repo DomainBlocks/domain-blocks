@@ -9,7 +9,7 @@ using Polly.Retry;
 
 namespace DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 
-public sealed class ChangeStreamSubscription<TDocument, TResult> : IChangeStreamSubscription<TResult>
+internal sealed class ChangeStreamSubscription<TDocument, TResult> : IChangeStreamSubscription<TResult>
 {
     private readonly ChangeStreamCursorFactory<TDocument, TResult> _cursorFactory;
     private readonly PipelineDefinition<ChangeStreamDocument<TDocument>, TResult> _pipeline;

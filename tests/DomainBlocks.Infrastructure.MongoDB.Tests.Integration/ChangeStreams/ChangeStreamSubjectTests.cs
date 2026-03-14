@@ -45,15 +45,12 @@ public class ChangeStreamSubjectTests
         using var loggerFactory = LoggerFactory.Create(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug));
         var logger = loggerFactory.CreateLogger<ChangeStreamSubjectTests>();
 
-        var subject = await ChangeStreamSubjectFactory.CreateAsync(
-            _collection.WatchAsync,
-            pipeline,
-            x => x.ResumeToken,
-            logger: logger,
-            cancellationToken: ct);
+        var subject = await _collection.CreateSubjectAsync(pipeline, logger: logger, cancellationToken: ct);
 
-        var observer = new TestChangeStreamObserver(expectedCount: insertCount);
-        using var attachment = subject.Attach(observer);
+        var observer1 = new TestChangeStreamObserver(expectedCount: insertCount);
+        var observer2 = new TestChangeStreamObserver(expectedCount: insertCount);
+        using var attachment1 = subject.Attach(observer1);
+        using var attachment2 = subject.Attach(observer2);
 
         var insertedDocs = Enumerable
             .Range(1, insertCount)
@@ -64,9 +61,10 @@ public class ChangeStreamSubjectTests
 
         await using var connection = subject.Connect();
 
-        await observer.Completion.WaitAsync(ct);
+        await Task.WhenAll(observer1.Completion, observer2.Completion).WaitAsync(ct);
 
-        observer.ObservedDocuments.ShouldBe(insertedDocs);
+        observer1.ObservedDocuments.ShouldBe(insertedDocs);
+        observer2.ObservedDocuments.ShouldBe(insertedDocs);
     }
 
     private sealed class TestChangeStreamObserver(int expectedCount) :

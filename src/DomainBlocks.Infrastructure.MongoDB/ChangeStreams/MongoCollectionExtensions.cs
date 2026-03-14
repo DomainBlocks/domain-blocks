@@ -6,38 +6,83 @@ namespace DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 
 public static class MongoCollectionExtensions
 {
-    public static IChangeStreamSubscription<ChangeStreamDocument<TDocument>> SubscribeToChangeStream<TDocument>(
-        this IMongoCollection<TDocument> collection,
-        ChangeStreamSubscriptionOptions? options = null,
-        ILogger? logger = null)
+    extension<TDocument>(IMongoCollection<TDocument> collection)
     {
-        return collection.SubscribeToChangeStream(
-            new EmptyPipelineDefinition<ChangeStreamDocument<TDocument>>(),
-            options,
-            logger);
-    }
+        public IChangeStreamSubscription<ChangeStreamDocument<TDocument>> SubscribeToChangeStream(
+            ChangeStreamSubscriptionOptions? options = null,
+            ILogger? logger = null)
+        {
+            return collection.SubscribeToChangeStream(
+                new EmptyPipelineDefinition<ChangeStreamDocument<TDocument>>(),
+                options,
+                logger);
+        }
 
-    public static IChangeStreamSubscription<ChangeStreamDocument<TDocument>> SubscribeToChangeStream<TDocument>(
-        this IMongoCollection<TDocument> collection,
-        PipelineDefinition<ChangeStreamDocument<TDocument>, ChangeStreamDocument<TDocument>> pipeline,
-        ChangeStreamSubscriptionOptions? options = null,
-        ILogger? logger = null)
-    {
-        return collection.SubscribeToChangeStream(pipeline, x => x.ResumeToken, options, logger);
-    }
+        public IChangeStreamSubscription<ChangeStreamDocument<TDocument>> SubscribeToChangeStream(
+            PipelineDefinition<ChangeStreamDocument<TDocument>, ChangeStreamDocument<TDocument>> pipeline,
+            ChangeStreamSubscriptionOptions? options = null,
+            ILogger? logger = null)
+        {
+            return collection.SubscribeToChangeStream(pipeline, x => x.ResumeToken, options, logger);
+        }
 
-    public static IChangeStreamSubscription<TResult> SubscribeToChangeStream<TDocument, TResult>(
-        this IMongoCollection<TDocument> collection,
-        PipelineDefinition<ChangeStreamDocument<TDocument>, TResult> pipeline,
-        Func<TResult, BsonDocument> resumeTokenSelector,
-        ChangeStreamSubscriptionOptions? options = null,
-        ILogger? logger = null)
-    {
-        return new ChangeStreamSubscription<TDocument, TResult>(
-            collection.WatchAsync,
-            pipeline,
-            resumeTokenSelector,
-            options,
-            logger);
+        public IChangeStreamSubscription<TResult> SubscribeToChangeStream<TResult>(
+            PipelineDefinition<ChangeStreamDocument<TDocument>, TResult> pipeline,
+            Func<TResult, BsonDocument> resumeTokenSelector,
+            ChangeStreamSubscriptionOptions? options = null,
+            ILogger? logger = null)
+        {
+            return new ChangeStreamSubscription<TDocument, TResult>(
+                collection.WatchAsync,
+                pipeline,
+                resumeTokenSelector,
+                options,
+                logger);
+        }
+
+        public Task<IChangeStreamSubject<ChangeStreamDocument<TDocument>>> CreateSubjectAsync(
+            ChangeStreamSubjectOptions? options = null,
+            ILogger? logger = null,
+            CancellationToken cancellationToken = default)
+        {
+            return ChangeStreamSubjectFactory.CreateAsync(
+                collection.WatchAsync,
+                new EmptyPipelineDefinition<ChangeStreamDocument<TDocument>>(),
+                x => x.ResumeToken,
+                options,
+                logger,
+                cancellationToken);
+        }
+
+        public Task<IChangeStreamSubject<ChangeStreamDocument<TDocument>>> CreateSubjectAsync(
+            PipelineDefinition<ChangeStreamDocument<TDocument>, ChangeStreamDocument<TDocument>> pipeline,
+            ChangeStreamSubjectOptions? options = null,
+            ILogger? logger = null,
+            CancellationToken cancellationToken = default)
+        {
+            return ChangeStreamSubjectFactory.CreateAsync(
+                collection.WatchAsync,
+                pipeline,
+                x => x.ResumeToken,
+                options,
+                logger,
+                cancellationToken);
+        }
+
+        public Task<IChangeStreamSubject<TResult>> CreateSubjectAsync<TResult>(
+            PipelineDefinition<ChangeStreamDocument<TDocument>, TResult> pipeline,
+            Func<TResult, BsonDocument> resumeTokenSelector,
+            ChangeStreamSubjectOptions? options = null,
+            ILogger? logger = null,
+            CancellationToken cancellationToken = default)
+        {
+            return ChangeStreamSubjectFactory.CreateAsync(
+                collection.WatchAsync,
+                pipeline,
+                resumeTokenSelector,
+                options,
+                logger,
+                cancellationToken);
+        }
     }
 }

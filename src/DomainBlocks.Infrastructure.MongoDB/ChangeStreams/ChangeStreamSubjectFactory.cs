@@ -4,9 +4,9 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 
-public static class ChangeStreamSubjectFactory
+internal static class ChangeStreamSubjectFactory
 {
-    public static async Task<ChangeStreamSubject<TDocument, TResult>> CreateAsync<TDocument, TResult>(
+    public static async Task<IChangeStreamSubject<TResult>> CreateAsync<TDocument, TResult>(
         ChangeStreamCursorFactory<TDocument, TResult> cursorFactory,
         PipelineDefinition<ChangeStreamDocument<TDocument>, TResult> pipeline,
         Func<TResult, BsonDocument> resumeTokenSelector,
