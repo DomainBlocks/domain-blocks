@@ -7,9 +7,9 @@ public sealed class EventStoreNamespaceSettings
     public static readonly EventStoreNamespaceSettings Default = new()
     {
         DatabaseName = "domainblocks",
-        AppendRequestsCollectionName = "dbx.append_requests",
-        LoggedEventsCollectionName = "dbx.logged_events",
-        LeasesCollectionName = "dbx.leases"
+        AppendRequestsCollectionName = "dbx_append_requests",
+        LoggedEventsCollectionName = "dbx_logged_events",
+        LeasesCollectionName = "dbx_leases"
     };
 
     public required string DatabaseName { get; init; }

@@ -6,7 +6,7 @@ namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 
 public class LeaseHandle : ILeaseHandle
 {
-    private ILeaseSnapshot _initialSnapshot;
+    private ILeaseSnapshot _snapshot;
     private readonly AcquireLeaseOptions _acquireOptions;
     private readonly ILeaseStore _leaseStore;
     private readonly RenewLeaseOptions _renewOptions;
@@ -23,7 +23,7 @@ public class LeaseHandle : ILeaseHandle
 
     public LeaseHandle(LeaseHandleContext context)
     {
-        _initialSnapshot = context.InitialSnapshot;
+        _snapshot = context.InitialSnapshot;
         _acquireOptions = context.AcquireOptions;
         _leaseStore = context.LeaseStore;
         _renewOptions = new RenewLeaseOptions { Duration = context.AcquireOptions.Duration };
@@ -35,7 +35,7 @@ public class LeaseHandle : ILeaseHandle
     }
 
     public LeaseClaim Claim { get; }
-    public ILeaseSnapshot CurrentSnapshot => Volatile.Read(ref _initialSnapshot);
+    public ILeaseSnapshot CurrentSnapshot => Volatile.Read(ref _snapshot);
     public CancellationToken LeaseLostToken => _leaseLostCts.Token;
     public Task<LeaseLostInfo> LeaseLostTask => _leaseLostTcs.Task;
 
@@ -67,7 +67,7 @@ public class LeaseHandle : ILeaseHandle
     {
         var result = await _leaseStore.UpdateStateAsync(Claim, updateState, cancellationToken);
         if (result.IsSuccess)
-            Volatile.Write(ref _initialSnapshot, result.Snapshot);
+            Volatile.Write(ref _snapshot, result.Snapshot);
 
         return result.IsSuccess;
     }
@@ -118,7 +118,7 @@ public class LeaseHandle : ILeaseHandle
         if (priority is not null)
             Interlocked.CompareExchange(ref _scheduledPriority, null, priority);
 
-        Volatile.Write(ref _initialSnapshot, result.Snapshot);
+        Volatile.Write(ref _snapshot, result.Snapshot);
 
         _logger.LogDebug(
             "Holder '{HolderId}' renewed lease for resource '{ResourceId}'; " +
@@ -139,7 +139,7 @@ public class LeaseHandle : ILeaseHandle
             var result = await _leaseStore.ReleaseAsync(Claim, cts.Token).ConfigureAwait(false);
             if (result.IsSuccess)
             {
-                Volatile.Write(ref _initialSnapshot, result.Snapshot);
+                Volatile.Write(ref _snapshot, result.Snapshot);
 
                 _logger.LogInformation(
                     "Holder '{HolderId}' released lease for resource '{ResourceId}'",

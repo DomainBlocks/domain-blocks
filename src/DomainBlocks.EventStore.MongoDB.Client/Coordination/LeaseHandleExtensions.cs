@@ -1,6 +1,6 @@
 ﻿using DomainBlocks.Infrastructure.MongoDB.Leases;
 
-namespace DomainBlocks.EventStore.MongoDB.Client.Appender;
+namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 
 public static class LeaseHandleExtensions
 {

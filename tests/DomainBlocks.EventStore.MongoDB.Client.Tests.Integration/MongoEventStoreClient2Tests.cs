@@ -1,5 +1,6 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB.Client.Coordination;
+using DomainBlocks.EventStore.MongoDB.Client.Schema2;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
@@ -16,9 +17,9 @@ namespace DomainBlocks.EventStore.MongoDB.Client.Tests.Integration;
 [TestFixture]
 public class MongoEventStoreClient2Tests : EventStoreClientTests
 {
+    private MongoClient _mongoClient = null!;
     private ILoggerFactory _loggerFactory = null!;
     private CancellationTokenSource _stopCts = null!;
-    private MongoClient _mongoClient = null!;
     private IChangeStreamConnection _changeStreamConnection = null!;
     private Task _leaseContenderTask = null!;
     private MongoEventStoreClient2<IDomainEvent> _client = null!;
@@ -28,31 +29,31 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
     {
+        _mongoClient = new MongoClient(MongoConnectionStrings.Default);
         _loggerFactory = LoggerFactory.Create(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug));
         _stopCts = new CancellationTokenSource();
-        _mongoClient = new MongoClient(MongoConnectionStrings.Default);
 
         var options = GetEventStoreClientOptions();
-        var nsSettings = options.NamespaceSettings;
-        var db = _mongoClient.GetDatabase(nsSettings.DatabaseName);
+        var ns = options.NamespaceSettings;
+        var db = _mongoClient.GetDatabase(ns.DatabaseName);
+
+        await MongoEventStoreAdmin2.EnsureInitializedAsync(_mongoClient, ns);
 
         var changeStreamSubject = await db.CreateSubjectAsync();
 
         // Set up AppendRequestTracker
-        var requestTracker = new AppendRequestTracker(nsSettings.AppendRequestsCollectionNamespace);
+        var requestTracker = new AppendRequestTracker(ns.AppendRequestsCollectionNamespace);
         changeStreamSubject.Attach(requestTracker);
 
         // Set up LeaseContender
-        var leasesCollection = db.GetCollection<LeaseDocument>(nsSettings.LeasesCollectionName);
-        var leaseStore = new LeaseStore(leasesCollection);
-        var leaseClientLogger = _loggerFactory.CreateLogger<LeaseClient>();
-        var leaseClient = new LeaseClient(leaseStore, leaseClientLogger);
-        var leaseContenderLogger = _loggerFactory.CreateLogger<LeaseContender>();
-        var leaseContender = new LeaseContender(leaseClient, leaseContenderLogger);
+        var leaseStore = new LeaseStore(db.GetCollection<LeaseDocument>(ns.LeasesCollectionName));
+        var leaseClient = new LeaseClient(leaseStore, _loggerFactory.CreateLogger<LeaseClient>());
+        var leaseContender = new LeaseContender(leaseClient, _loggerFactory.CreateLogger<LeaseContender>());
 
         // Set up LeaderWorkerRunner
-        var eventAppenderFactory = new EventAppenderFactory(
-            nsSettings.AppendRequestsCollectionNamespace,
+        var eventAppenderFactory = new EventAppenderWorkerFactory(
+            db.GetCollection<AppendRequest>(ns.AppendRequestsCollectionName),
+            db.GetCollection<LoggedEvent>(ns.LoggedEventsCollectionName),
             _loggerFactory);
 
         var leaderWorkerRunner = new LeaderWorkerRunner([eventAppenderFactory], changeStreamSubject);
@@ -64,8 +65,6 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
         _leaseContenderTask = leaseContender.RunAsync([leaderWorkerRunner], _stopCts.Token);
 
         _client = new MongoEventStoreClient2<IDomainEvent>(_mongoClient, requestTracker, options);
-
-        await MongoEventStoreAdmin2.EnsureInitializedAsync(_mongoClient, nsSettings);
     }
 
     [OneTimeTearDown]
@@ -74,8 +73,8 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
         await _changeStreamConnection.DisposeAsync();
         await _stopCts.CancelAsync();
         await _leaseContenderTask;
-        _loggerFactory.Dispose();
         _mongoClient.Dispose();
+        _loggerFactory.Dispose();
     }
 
     [Test]
@@ -101,7 +100,7 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
         await Client.AppendToStreamAsync(streamId, events, options, ct);
     }
 
-    private MongoEventStoreClientOptions2<IDomainEvent> GetEventStoreClientOptions()
+    private static MongoEventStoreClientOptions2<IDomainEvent> GetEventStoreClientOptions()
     {
         var eventTypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>());
 

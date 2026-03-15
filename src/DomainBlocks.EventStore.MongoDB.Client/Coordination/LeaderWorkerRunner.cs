@@ -1,5 +1,4 @@
-﻿using DomainBlocks.EventStore.MongoDB.Client.Appender;
-using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
+﻿using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
 using MongoDB.Bson;
 using MongoDB.Driver;

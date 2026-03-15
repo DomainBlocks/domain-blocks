@@ -1,4 +1,3 @@
-using DomainBlocks.EventStore.MongoDB.Client.Appender;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
 using Microsoft.Extensions.Logging;
 

@@ -1,5 +1,4 @@
-﻿using DomainBlocks.EventStore.MongoDB.Client.Appender;
-using DomainBlocks.Infrastructure.MongoDB.Leases;
+﻿using DomainBlocks.Infrastructure.MongoDB.Leases;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 

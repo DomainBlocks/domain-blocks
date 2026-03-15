@@ -1,4 +1,5 @@
 using DomainBlocks.EventStore.MongoDB.Client.Schema2;
+using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Client;
@@ -27,6 +28,14 @@ public static class MongoEventStoreAdmin2
                 }
             },
             cancellationToken);
+
+        // var command = new BsonDocument
+        // {
+        //     { "collMod", namespaceSettings.LeasesCollectionName },
+        //     { "changeStreamPreAndPostImages", new BsonDocument("enabled", true) }
+        // };
+        //
+        // await db.RunCommandAsync<BsonDocument>(command, cancellationToken: cancellationToken);
     }
 
     private static Task EnsureAppendRequestsIndexesAsync(
@@ -54,8 +63,8 @@ public static class MongoEventStoreAdmin2
 
         CreateIndexModel<LoggedEvent>[] indexModels =
         [
-            new(streamKey, new CreateIndexOptions { Unique = true }),
-            new(commitKey, new CreateIndexOptions { Unique = true })
+            new(streamKey, new CreateIndexOptions { Unique = false }),
+            new(commitKey, new CreateIndexOptions { Unique = false })
         ];
 
         return appendRequests.Indexes.CreateManyAsync(indexModels, cancellationToken);
