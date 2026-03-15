@@ -1,5 +1,4 @@
-﻿using System.Collections.Immutable;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
@@ -13,10 +12,18 @@ internal sealed class ChangeStreamSubject<TDocument, TResult>(
     ILogger? logger) :
     IChangeStreamSubject<TResult>
 {
-    private readonly ObserverRegistry _observers = new();
+    private readonly ObserverRegistry<IChangeStreamObserver<TResult>> _observers = new();
     private int _connected;
 
-    public IDisposable Attach(IChangeStreamObserver<TResult> observer) => _observers.Attach(observer);
+    public IDisposable Attach(IChangeStreamObserver<TResult> observer)
+    {
+        return _observers.Attach(observer);
+    }
+
+    public IDisposable AttachGroup(IEnumerable<IChangeStreamObserver<TResult>> observers)
+    {
+        return _observers.AttachGroup(observers);
+    }
 
     public IChangeStreamConnection Connect()
     {
@@ -25,49 +32,12 @@ internal sealed class ChangeStreamSubject<TDocument, TResult>(
             : throw new InvalidOperationException("ConnectAsync may only be called once.");
     }
 
-    private sealed class ObserverRegistry
-    {
-        private ImmutableArray<IChangeStreamObserver<TResult>> _observers = [];
-
-        public IDisposable Attach(IChangeStreamObserver<TResult> observer)
-        {
-            ImmutableInterlocked.Update(
-                ref _observers,
-                (observers, o) => observers.Add(o),
-                observer);
-
-            return new ObserverAttachment(this, observer);
-        }
-
-        public void Detach(IChangeStreamObserver<TResult> observer)
-        {
-            ImmutableInterlocked.Update(
-                ref _observers,
-                (observers, o) => observers.Remove(o),
-                observer);
-        }
-
-        public ImmutableArray<IChangeStreamObserver<TResult>> Snapshot() => _observers;
-    }
-
-    private sealed class ObserverAttachment(ObserverRegistry registry, IChangeStreamObserver<TResult> observer) :
-        IDisposable
-    {
-        private int _disposed;
-
-        public void Dispose()
-        {
-            if (Interlocked.Exchange(ref _disposed, 1) == 0)
-                registry.Detach(observer);
-        }
-    }
-
     private sealed class Connection : IChangeStreamConnection
     {
         private readonly ChangeStreamCursorFactory<TDocument, TResult> _cursorFactory;
         private readonly PipelineDefinition<ChangeStreamDocument<TDocument>, TResult> _pipeline;
         private readonly Func<TResult, BsonDocument> _resumeTokenSelector;
-        private readonly ObserverRegistry _observers;
+        private readonly ObserverRegistry<IChangeStreamObserver<TResult>> _observers;
         private readonly ChangeStreamSubjectOptions _options;
         private readonly ILogger? _logger;
         private readonly Task _producerTask;
@@ -80,7 +50,7 @@ internal sealed class ChangeStreamSubject<TDocument, TResult>(
             ChangeStreamCursorFactory<TDocument, TResult> cursorFactory,
             PipelineDefinition<ChangeStreamDocument<TDocument>, TResult> pipeline,
             Func<TResult, BsonDocument> resumeTokenSelector,
-            ObserverRegistry observers,
+            ObserverRegistry<IChangeStreamObserver<TResult>> observers,
             ChangeStreamSubjectOptions options,
             ILogger? logger)
         {
@@ -196,7 +166,7 @@ internal sealed class ChangeStreamSubject<TDocument, TResult>(
                 {
                     _logger?.LogError(
                         ex,
-                        "OnNextAsync for observer '{ObserverType}' failed",
+                        "OnNextAsync failed for observer '{ObserverType}'",
                         observer.GetType().FullName);
                 }
             }

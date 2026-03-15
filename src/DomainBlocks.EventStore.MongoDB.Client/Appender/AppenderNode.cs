@@ -1,7 +1,7 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 using System.Threading.Channels;
 using DomainBlocks.EventStore.MongoDB.Client.Appender.Events;
-using DomainBlocks.EventStore.MongoDB.Client.Appender.LeaderElection;
+using DomainBlocks.EventStore.MongoDB.Client.Coordination;
 using DomainBlocks.EventStore.MongoDB.Client.Schema2;
 using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
@@ -11,11 +11,11 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Appender;
 
-public sealed class AppenderNode : ILocalLeaseObserver
+public sealed class AppenderNode : ILeaseObserver
 {
     private readonly IMongoDatabase _database;
     private readonly IAppenderEventSink _eventSink;
-    private readonly ILeaderLeaseContender _leaderLeaseContender;
+    private readonly ILeaseContender _leaseContender;
     private readonly EventStoreNamespaceSettings _namespaceSettings;
     private readonly ILogger<AppenderNode> _logger;
     private readonly Channel<AppenderEventEnvelope> _channel;
@@ -27,7 +27,7 @@ public sealed class AppenderNode : ILocalLeaseObserver
     public AppenderNode(
         IMongoClient mongoClient,
         IAppenderEventSink eventSink,
-        ILeaderLeaseContender leaderLeaseContender,
+        ILeaseContender leaseContender,
         EventStoreNamespaceSettings namespaceSettings,
         ILogger<AppenderNode> logger)
     {
@@ -36,7 +36,7 @@ public sealed class AppenderNode : ILocalLeaseObserver
             .WithWriteConcern(WriteConcern.WMajority.With(journal: true));
 
         _eventSink = eventSink;
-        _leaderLeaseContender = leaderLeaseContender;
+        _leaseContender = leaseContender;
         _namespaceSettings = namespaceSettings;
         _logger = logger;
 
@@ -94,10 +94,10 @@ public sealed class AppenderNode : ILocalLeaseObserver
         await InitializeAsync(linkedCts.Token).ConfigureAwait(false);
 
         _changeStreamIngressTask = RunChangeStreamIngressAsync(subscription);
-        _leaderLeaseContenderTask = _leaderLeaseContender.RunAsync(this, _stopCts.Token);
+        _leaderLeaseContenderTask = _leaseContender.RunAsync([this], _stopCts.Token);
     }
 
-    async Task ILocalLeaseObserver.OnLocalLeaseAcquired(
+    async Task ILeaseObserver.OnLeaseAcquiredAsync(
         ILeaseHandle<LeaseState> handle,
         CancellationToken cancellationToken)
     {
@@ -106,9 +106,9 @@ public sealed class AppenderNode : ILocalLeaseObserver
         await _channel.Writer.WriteAsync(envelope, cancellationToken);
     }
 
-    async Task ILocalLeaseObserver.OnLocalLeaseLost(
+    async Task ILeaseObserver.OnLeaseLostAsync(
         LeaseClaim leaseClaim,
-        LeaseLostInfo leaseLostInfo,
+        LeaseLostInfo? leaseLostInfo,
         CancellationToken cancellationToken)
     {
         var @event = new LocalLeaseLost(leaseClaim, leaseLostInfo);
