@@ -8,16 +8,16 @@ public sealed class EventStoreNamespaceSettings
     {
         DatabaseName = "domainblocks",
         AppendRequestsCollectionName = "dbx_append_requests",
-        LoggedEventsCollectionName = "dbx_logged_events",
+        EventLogCollectionName = "dbx_event_log",
         LeasesCollectionName = "dbx_leases"
     };
 
     public required string DatabaseName { get; init; }
     public required string AppendRequestsCollectionName { get; init; }
-    public required string LoggedEventsCollectionName { get; init; }
+    public required string EventLogCollectionName { get; init; }
     public required string LeasesCollectionName { get; init; }
 
     public CollectionNamespace AppendRequestsCollectionNamespace => new(DatabaseName, AppendRequestsCollectionName);
-    public CollectionNamespace LoggedEventsCollectionNamespace => new(DatabaseName, LoggedEventsCollectionName);
+    public CollectionNamespace EventLogCollectionNamespace => new(DatabaseName, EventLogCollectionName);
     public CollectionNamespace LeasesCollectionNamespace => new(DatabaseName, LeasesCollectionName);
 }

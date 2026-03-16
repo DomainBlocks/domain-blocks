@@ -12,7 +12,7 @@ public sealed class EventAppenderWorker : ILeaderWorker
 {
     private readonly ILeaseHandle<LeaseState> _handle;
     private readonly IMongoCollection<AppendRequest> _appendRequests;
-    private readonly IMongoCollection<LoggedEvent> _loggedEvents;
+    private readonly IMongoCollection<EventLogEntry> _eventLog;
     private readonly ILogger<EventAppenderWorker> _logger;
     private readonly Channel<ChangeStreamDocument<BsonDocument>> _channel;
     private readonly CancellationTokenSource _stopCts;
@@ -22,12 +22,12 @@ public sealed class EventAppenderWorker : ILeaderWorker
     public EventAppenderWorker(
         ILeaseHandle<LeaseState> handle,
         IMongoCollection<AppendRequest> appendRequests,
-        IMongoCollection<LoggedEvent> loggedEvents,
+        IMongoCollection<EventLogEntry> eventLog,
         ILogger<EventAppenderWorker> logger)
     {
         _handle = handle;
         _appendRequests = appendRequests;
-        _loggedEvents = loggedEvents;
+        _eventLog = eventLog;
         _logger = logger;
 
         var channelOptions = new UnboundedChannelOptions

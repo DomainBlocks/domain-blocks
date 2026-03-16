@@ -53,7 +53,7 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
         // Set up LeaderWorkerRunner
         var eventAppenderFactory = new EventAppenderWorkerFactory(
             db.GetCollection<AppendRequest>(ns.AppendRequestsCollectionName),
-            db.GetCollection<LoggedEvent>(ns.LoggedEventsCollectionName),
+            db.GetCollection<EventLogEntry>(ns.EventLogCollectionName),
             _loggerFactory);
 
         var leaderWorkerRunner = new LeaderWorkerRunner([eventAppenderFactory], changeStreamSubject);

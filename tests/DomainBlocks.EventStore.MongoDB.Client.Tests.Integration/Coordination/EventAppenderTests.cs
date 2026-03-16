@@ -12,7 +12,7 @@ public class EventAppenderTests
     private MongoClient _mongoClient = null!;
     private ILoggerFactory _loggerFactory = null!;
     private IMongoCollection<AppendRequest> _appendRequests = null!;
-    private IMongoCollection<LoggedEvent> _loggedEvents = null!;
+    private IMongoCollection<EventLogEntry> _eventLog = null!;
     private EventAppender _eventAppender = null!;
 
     [OneTimeSetUp]
@@ -25,10 +25,10 @@ public class EventAppenderTests
         var db = _mongoClient.GetDatabase(ns.DatabaseName);
 
         _appendRequests = db.GetCollection<AppendRequest>(ns.AppendRequestsCollectionName);
-        _loggedEvents = db.GetCollection<LoggedEvent>(ns.LoggedEventsCollectionName);
+        _eventLog = db.GetCollection<EventLogEntry>(ns.EventLogCollectionName);
 
         _eventAppender = new EventAppender(
-            _loggedEvents,
+            _eventLog,
             epoch: 1,
             initialCommitPosition: null,
             _loggerFactory.CreateLogger<EventAppender>());

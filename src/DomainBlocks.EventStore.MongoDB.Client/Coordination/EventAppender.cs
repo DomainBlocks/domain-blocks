@@ -5,63 +5,66 @@ using MongoDB.Driver;
 namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 
 public sealed class EventAppender(
-    IMongoCollection<LoggedEvent> loggedEvents,
+    IMongoCollection<EventLogEntry> eventLog,
     long epoch,
     long? initialCommitPosition,
     ILogger<EventAppender> logger)
 {
     // Committed events from any epoch, plus our own uncommitted writes.
-    private readonly FilterDefinition<LoggedEvent> _visibilityFilter = initialCommitPosition.HasValue
-        ? Builders<LoggedEvent>.Filter.Lte(x => x.Position, initialCommitPosition.Value) |
-          Builders<LoggedEvent>.Filter.Eq(x => x.Epoch, epoch)
-        : Builders<LoggedEvent>.Filter.Eq(x => x.Epoch, epoch);
+    private readonly FilterDefinition<EventLogEntry> _visibilityFilter = initialCommitPosition.HasValue
+        ? Builders<EventLogEntry>.Filter.Lte(x => x.Position, initialCommitPosition.Value) |
+          Builders<EventLogEntry>.Filter.Eq(x => x.Epoch, epoch)
+        : Builders<EventLogEntry>.Filter.Eq(x => x.Epoch, epoch);
 
     private long _nextPosition = initialCommitPosition.HasValue ? initialCommitPosition.Value + 1 : 0;
 
-    // Solving idempotency:
-    // - When any leader steps up, first ensure that request statuses are reconciled and up-to-date based on event log.
-    // - Do not process any pending requests until this has happened, i.e. all requests must be genuinely pending.
-    // - Via the change stream, only process inserted requests.
-    // - This assumes exactly-once semantics via the change stream.
-    // - Live overlap with catch-up may be an issue - keep a HashSet of processed commit IDs from catch-up.
     public async Task AppendEventsAsync(
         IEnumerable<AppendRequest> requests,
         CancellationToken cancellationToken = default)
     {
-        var models = new List<WriteModel<LoggedEvent>>();
+        var requestArray = requests as AppendRequest[] ?? [.. requests];
+        var allCommitIds = requestArray.Select(x => x.CommitId).Distinct();
+        var allStreamIds = requestArray.Select(x => x.StreamId).Distinct();
 
-        foreach (var request in requests)
+        var batchContext = await GetBatchContextAsync(allCommitIds, allStreamIds, cancellationToken)
+            .ConfigureAwait(false);
+
+        var models = new List<WriteModel<EventLogEntry>>();
+
+        foreach (var request in requestArray)
         {
-            // if (await IsCommitAlreadyWrittenAsync(request.CommitId, cancellationToken).ConfigureAwait(false))
-            //     continue;
+            if (request.Events.Length == 0)
+                continue;
 
-            // TODO: Cache
-            var nextStreamVersion = await GetNextStreamVersionAsync(request.StreamId, cancellationToken)
-                .ConfigureAwait(false);
+            if (!batchContext.CommitIds.Add(request.CommitId))
+                continue;
+
+            var streamVersion = batchContext.StreamVersions.GetValueOrDefault(request.StreamId, -1);
 
             for (var i = 0; i < request.Events.Length; i++)
             {
-                var evt = request.Events[i];
-
                 var position = _nextPosition++;
 
-                var filter = Builders<LoggedEvent>.Filter.Eq(x => x.Position, position) &
-                             Builders<LoggedEvent>.Filter.Lt(x => x.Epoch, epoch);
+                var filter = Builders<EventLogEntry>.Filter.Eq(x => x.Position, position) &
+                             Builders<EventLogEntry>.Filter.Lt(x => x.Epoch, epoch);
 
-                var update = Builders<LoggedEvent>.Update
+                var @event = request.Events[i];
+
+                var update = Builders<EventLogEntry>.Update
                     .Set(x => x.Position, position)
                     .Set(x => x.Epoch, epoch)
                     .Set(x => x.StreamId, request.StreamId)
-                    .Set(x => x.StreamVersion, nextStreamVersion++)
+                    .Set(x => x.StreamVersion, ++streamVersion)
                     .Set(x => x.CommitId, request.CommitId)
-                    .Set(x => x.CommitIndex, i)
-                    .Set(x => x.EventName, evt.EventName)
-                    .Set(x => x.EventData, evt.EventData)
-                    .Set(x => x.Metadata, evt.Metadata)
+                    .Set(x => x.EventName, @event.EventName)
+                    .Set(x => x.EventData, @event.EventData)
+                    .Set(x => x.Metadata, @event.Metadata)
                     .CurrentDate(x => x.WrittenAtUtc);
 
-                models.Add(new UpdateOneModel<LoggedEvent>(filter, update) { IsUpsert = true });
+                models.Add(new UpdateOneModel<EventLogEntry>(filter, update) { IsUpsert = true });
             }
+
+            batchContext.StreamVersions[request.StreamId] = streamVersion;
         }
 
         if (models.Count == 0)
@@ -84,11 +87,11 @@ public sealed class EventAppender(
 
         var bulkWriteOptions = new BulkWriteOptions { IsOrdered = true };
 
-        var result = await loggedEvents
+        var result = await eventLog
             .BulkWriteAsync(models, bulkWriteOptions, cancellationToken)
             .ConfigureAwait(false);
 
-        // Success = every model matched (upserted or replaced). The count includes sentinel.
+        // Success = every model matched (upserted or replaced). The count includes EventBatchAppended.
         var totalExpected = models.Count;
         var totalWritten = result.Upserts.Count + result.ModifiedCount;
 
@@ -102,37 +105,37 @@ public sealed class EventAppender(
         }
     }
 
-    private async Task<bool> IsCommitAlreadyWrittenAsync(
-        Guid commitId,
+    private async Task<BatchContext> GetBatchContextAsync(
+        IEnumerable<Guid> commitIds,
+        IEnumerable<string> streamIds,
         CancellationToken cancellationToken)
     {
-        var commitFilter = Builders<LoggedEvent>.Filter.Eq(x => x.CommitId, commitId);
+        var commitIdsTask = eventLog
+            .Distinct(
+                x => x.CommitId,
+                Builders<EventLogEntry>.Filter.In(x => x.CommitId, commitIds) & _visibilityFilter,
+                cancellationToken: cancellationToken)
+            .ToListAsync(cancellationToken);
 
-        return await loggedEvents
-            .Find(commitFilter & _visibilityFilter)
-            .Limit(1)
-            .AnyAsync(cancellationToken)
-            .ConfigureAwait(false);
+        var streamVersionsTask = eventLog
+            .Aggregate()
+            .Match(Builders<EventLogEntry>.Filter.In(x => x.StreamId, streamIds) & _visibilityFilter)
+            .Group(x => x.StreamId, g => new { StreamId = g.Key, MaxVersion = g.Max(x => x.StreamVersion) })
+            .ToListAsync(cancellationToken);
+
+        await Task.WhenAll(commitIdsTask, streamVersionsTask).ConfigureAwait(false);
+
+        var commitIdSet = (await commitIdsTask.ConfigureAwait(false)).ToHashSet();
+
+        var streamVersions = (await streamVersionsTask.ConfigureAwait(false))
+            .ToDictionary(x => x.StreamId, x => x.MaxVersion);
+
+        return new BatchContext(commitIdSet, streamVersions);
     }
 
-    private async Task<long> GetNextStreamVersionAsync(
-        string streamId,
-        CancellationToken cancellationToken)
+    private readonly struct BatchContext(HashSet<Guid> commitIds, Dictionary<string, long> streamVersions)
     {
-        var streamFilter = Builders<LoggedEvent>.Filter.Eq(x => x.StreamId, streamId);
-
-        // Stream version correctness:
-        // Committed events (Position <= initialCommitPosition): canonical, immutable - correct by definition.
-        // Our epoch's events (Epoch == epoch): we assigned versions sequentially - correct by construction.
-
-        var latestVersion = await loggedEvents
-            .Find(streamFilter & _visibilityFilter)
-            .Sort(Builders<LoggedEvent>.Sort.Descending(x => x.StreamVersion))
-            .Limit(1)
-            .Project(x => (long?)x.StreamVersion)
-            .FirstOrDefaultAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        return latestVersion.HasValue ? latestVersion.Value + 1 : 0;
+        public HashSet<Guid> CommitIds { get; } = commitIds;
+        public Dictionary<string, long> StreamVersions { get; } = streamVersions;
     }
 }
