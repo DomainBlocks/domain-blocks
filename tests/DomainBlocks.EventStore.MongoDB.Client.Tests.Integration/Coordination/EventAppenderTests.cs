@@ -29,7 +29,7 @@ public class EventAppenderTests
 
         _eventAppender = new EventAppender(
             _eventLog,
-            epoch: 1,
+            epoch: 2,
             initialCommitPosition: null,
             _loggerFactory.CreateLogger<EventAppender>());
     }
@@ -41,13 +41,12 @@ public class EventAppenderTests
         var sort = Builders<AppendRequest>.Sort.Ascending(x => x.CreatedAtUtc);
 
         using var cursor = await _appendRequests
-            .Find(filter, new FindOptions { BatchSize = 1 })
+            .Find(filter, new FindOptions { BatchSize = 10 })
             .Sort(sort)
             .ToCursorAsync();
 
         while (await cursor.MoveNextAsync())
         {
-            await _eventAppender.AppendEventsAsync(cursor.Current);
             await _eventAppender.AppendEventsAsync(cursor.Current);
             break;
         }

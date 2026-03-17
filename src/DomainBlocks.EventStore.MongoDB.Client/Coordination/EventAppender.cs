@@ -1,6 +1,7 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB.Client.Schema2;
 using Microsoft.Extensions.Logging;
+using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
@@ -27,8 +28,10 @@ public sealed class EventAppender(
         var allCommitIds = requestArray.Select(x => x.CommitId).Distinct();
         var allStreamIds = requestArray.Select(x => x.StreamId).Distinct();
 
-        var batchContext = await GetBatchContextAsync(allCommitIds, allStreamIds, cancellationToken)
+        var (commitIds, streamStates) = await GetBatchContextAsync(allCommitIds, allStreamIds, cancellationToken)
             .ConfigureAwait(false);
+
+        var nextPosition = _nextPosition;
 
         var models = new List<WriteModel<EventLogEntry>>();
 
@@ -37,73 +40,66 @@ public sealed class EventAppender(
             if (request.Events.Length == 0)
                 continue;
 
-            if (!batchContext.CommitIds.Add(request.CommitId))
+            if (!commitIds.Add(request.CommitId))
                 continue;
 
-            var streamState = batchContext.StreamStates.GetValueOrDefault(request.StreamId);
+            var streamState = streamStates.GetValueOrDefault(request.StreamId);
             var streamVersionValue = streamState.IsStreamExists ? streamState.Version.Value.ToInt64() : -1;
 
             foreach (var @event in request.Events)
             {
-                var position = _nextPosition++;
+                var position = nextPosition++;
+                var filter = CreateEventLogFilter(position);
 
-                var filter = Builders<EventLogEntry>.Filter.Eq(x => x.Position, position) &
-                             Builders<EventLogEntry>.Filter.Lt(x => x.Epoch, epoch);
-
-                var update = Builders<EventLogEntry>.Update
-                    .Set(x => x.Position, position)
-                    .Set(x => x.Epoch, epoch)
-                    .Set(x => x.StreamId, request.StreamId)
-                    .Set(x => x.StreamVersion, ++streamVersionValue)
-                    .Set(x => x.CommitId, request.CommitId)
-                    .Set(x => x.EventName, @event.EventName)
-                    .Set(x => x.EventData, @event.EventData)
-                    .Set(x => x.Metadata, @event.Metadata)
-                    .CurrentDate(x => x.WrittenAtUtc);
+                var update = CreateEventLogUpdate(
+                    position,
+                    request.StreamId,
+                    ++streamVersionValue,
+                    request.CommitId,
+                    @event.EventName,
+                    @event.EventData,
+                    @event.Metadata);
 
                 models.Add(new UpdateOneModel<EventLogEntry>(filter, update) { IsUpsert = true });
             }
 
             var streamVersion = StreamVersion.FromInt64(streamVersionValue);
-            batchContext.StreamStates[request.StreamId] = StreamState.StreamExists(streamVersion);
+            streamStates[request.StreamId] = StreamState.StreamExists(streamVersion);
         }
 
         if (models.Count == 0)
             return;
 
-        // Marks the end of the batch so another process can advance the commit position.
-        // var batchMarker = Builders<LoggedEvent>.Update
-        //     .Set(x => x.Position, nextPosition++)
-        //     .Set(x => x.Epoch, epoch)
-        //     .Set(x => x.StreamId, string.Empty)
-        //     .Set(x => x.StreamVersion, 0)
-        //     .Set(x => x.CommitId, Guid.Empty)
-        //     .Set(x => x.CommitIndex, 0)
-        //     .Set(x => x.EventName, "EventBatchAppended")
-        //     .Set(x => x.EventData, BsonNull.Value)
-        //     .Set(x => x.Metadata, BsonNull.Value)
-        //     .CurrentDate(x => x.WrittenAtUtc);
-        //
-        // models.Add(new UpdateOneModel<LoggedEvent>(filter, batchMarker) { IsUpsert = true });
+        // Mark the end of the batch so another process can advance the commit position.
+        {
+            var position = nextPosition++;
+            var filter = CreateEventLogFilter(position);
 
-        var bulkWriteOptions = new BulkWriteOptions { IsOrdered = true };
+            var update = CreateEventLogUpdate(
+                position,
+                string.Empty,
+                0,
+                Guid.Empty,
+                "EventBatchRecorded",
+                BsonNull.Value,
+                BsonNull.Value);
+
+            models.Add(new UpdateOneModel<EventLogEntry>(filter, update) { IsUpsert = true });
+        }
 
         var result = await eventLog
-            .BulkWriteAsync(models, bulkWriteOptions, cancellationToken)
+            .BulkWriteAsync(models, new BulkWriteOptions { IsOrdered = true }, cancellationToken)
             .ConfigureAwait(false);
 
-        // Success = every model matched (upserted or replaced). The count includes EventBatchAppended.
-        var totalExpected = models.Count;
-        var totalWritten = result.Upserts.Count + result.ModifiedCount;
+        // Success = every model matched (upserted or replaced).
+        var expected = models.Count;
+        var written = result.Upserts.Count + result.ModifiedCount;
 
-        if (totalWritten != totalExpected)
-        {
-            logger.LogWarning(
-                "Batch partially written: expected {Expected}, written {Written}. " +
-                "A higher epoch may have claimed these positions",
-                totalExpected,
-                totalWritten);
-        }
+        // TODO: Tidy this up. What should the behaviour be?
+        if (written != expected)
+            throw new Exception($"Batch partially written: expected {expected}, written {written}.");
+
+        _nextPosition = nextPosition;
     }
 
     private async Task<BatchContext> GetBatchContextAsync(
@@ -140,9 +136,42 @@ public sealed class EventAppender(
         return new BatchContext(commitIdSet, streamStates);
     }
 
+    private FilterDefinition<EventLogEntry> CreateEventLogFilter(long position)
+    {
+        return Builders<EventLogEntry>.Filter.Eq(x => x.Position, position) &
+               Builders<EventLogEntry>.Filter.Lt(x => x.Epoch, epoch);
+    }
+
+    private UpdateDefinition<EventLogEntry> CreateEventLogUpdate(
+        long position,
+        string streamId,
+        long streamVersion,
+        Guid commitId,
+        string eventName,
+        BsonValue eventData,
+        BsonValue metadata)
+    {
+        return Builders<EventLogEntry>.Update
+            .Set(x => x.Position, position)
+            .Set(x => x.Epoch, epoch)
+            .Set(x => x.StreamId, streamId)
+            .Set(x => x.StreamVersion, streamVersion)
+            .Set(x => x.CommitId, commitId)
+            .Set(x => x.EventName, eventName)
+            .Set(x => x.EventData, eventData)
+            .Set(x => x.Metadata, metadata)
+            .CurrentDate(x => x.WrittenAtUtc);
+    }
+
     private readonly struct BatchContext(HashSet<Guid> commitIds, Dictionary<string, StreamState> streamStates)
     {
         public HashSet<Guid> CommitIds { get; } = commitIds;
         public Dictionary<string, StreamState> StreamStates { get; } = streamStates;
+
+        public void Deconstruct(out HashSet<Guid> commitIds, out Dictionary<string, StreamState> streamStates)
+        {
+            commitIds = CommitIds;
+            streamStates = StreamStates;
+        }
     }
 }
