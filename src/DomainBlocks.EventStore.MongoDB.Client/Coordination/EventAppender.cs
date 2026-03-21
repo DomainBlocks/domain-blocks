@@ -27,7 +27,7 @@ public sealed class EventAppender(
     private readonly Dictionary<string, long> _streamVersions = [];
     private readonly List<WriteModel<EventLogEntry>> _writeModels = [];
 
-    public async Task AppendBatchAsync(
+    public async Task<AppendBatchResult> AppendBatchAsync(
         IEnumerable<AppendRequest> requests,
         CancellationToken cancellationToken = default)
     {
@@ -35,7 +35,7 @@ public sealed class EventAppender(
 
         _requests.AddRange(requests);
         if (_requests.Count == 0)
-            return;
+            return new AppendBatchResult(_nextPosition, _nextPosition);
 
         logger.LogDebug("Appending batch of {RequestCount} request(s) at epoch {Epoch}", _requests.Count, epoch);
 
@@ -46,7 +46,7 @@ public sealed class EventAppender(
         if (_writeModels.Count == 0)
         {
             logger.LogDebug("Batch produced no write models; skipping");
-            return;
+            return new AppendBatchResult(_nextPosition, _nextPosition);
         }
 
         await eventLog
@@ -65,6 +65,8 @@ public sealed class EventAppender(
             _appendedCommitIds.Count,
             _duplicateCommitIds.Count,
             _rejections.Count);
+
+        return new AppendBatchResult(startPosition, nextPosition);
     }
 
     private static FilterDefinition<EventLogEntry> CreateVisibilityFilter(long epoch, long? initialCommitPosition)
@@ -119,7 +121,7 @@ public sealed class EventAppender(
 
     private long BuildWriteModels()
     {
-        var position = _nextPosition;
+        var nextPosition = _nextPosition;
 
         foreach (var request in _requests)
         {
@@ -158,16 +160,16 @@ public sealed class EventAppender(
             }
 
             foreach (var e in request.Events)
-                _writeModels.Add(CreateEventWrite(position++, request, ++streamVersion, e));
+                _writeModels.Add(CreateEventWrite(nextPosition++, request, ++streamVersion, e));
 
             _streamVersions[request.StreamId] = streamVersion;
             _appendedCommitIds.Add(request.CommitId);
         }
 
         if (HasCommits())
-            _writeModels.Add(CreateBatchCompletedWrite(position++));
+            _writeModels.Add(CreateBatchCompletedWrite(nextPosition++));
 
-        return position;
+        return nextPosition;
 
         bool IsProcessed(Guid commitId) =>
             _appendedCommitIds.Contains(commitId) ||
