@@ -67,6 +67,7 @@ public class EventAppenderTests
         result.StartPosition.ShouldBe(0);
         result.NextPosition.ShouldBe(4);
         result.PositionCount.ShouldBe(4);
+        result.IsEmpty.ShouldBeFalse();
 
         var entries = await ReadEventEntries();
         entries.Count.ShouldBe(3);
@@ -114,6 +115,7 @@ public class EventAppenderTests
         result.StartPosition.ShouldBe(0);
         result.NextPosition.ShouldBe(4);
         result.PositionCount.ShouldBe(4);
+        result.IsEmpty.ShouldBeFalse();
 
         var entries = await ReadEventEntries();
         entries.Count.ShouldBe(3);
@@ -272,9 +274,11 @@ public class EventAppenderTests
         var commitId = Guid.CreateVersion7();
         var streamId = CreateStreamId();
 
-        await appender.AppendBatchAsync(
+        var result = await appender.AppendBatchAsync(
             [CreateRequest(commitId, streamId, ExpectedStreamState.StreamDoesNotExist, "E1")],
             ct);
+
+        result.PositionCount.ShouldBe(2);
 
         var entries = await ReadEventEntries();
         entries.Count.ShouldBe(1);
@@ -295,9 +299,11 @@ public class EventAppenderTests
         // Second: attempt with StreamDoesNotExist — should be rejected.
         var rejectedCommitId = Guid.CreateVersion7();
 
-        await appender.AppendBatchAsync(
+        var result = await appender.AppendBatchAsync(
             [CreateRequest(rejectedCommitId, streamId, ExpectedStreamState.StreamDoesNotExist, "E2")],
             ct);
+
+        result.PositionCount.ShouldBe(1);
 
         // Only the first event should exist.
         var entries = await ReadEventEntries();
@@ -328,9 +334,11 @@ public class EventAppenderTests
 
         var commitId = Guid.CreateVersion7();
 
-        await appender.AppendBatchAsync(
+        var result = await appender.AppendBatchAsync(
             [CreateRequest(commitId, streamId, ExpectedStreamState.StreamExists, "E2")],
             ct);
+
+        result.PositionCount.ShouldBe(2);
 
         var entries = await ReadEventEntries();
         entries.Count.ShouldBe(2);
@@ -345,9 +353,11 @@ public class EventAppenderTests
         var rejectedCommitId = Guid.CreateVersion7();
         var streamId = CreateStreamId();
 
-        await appender.AppendBatchAsync(
+        var result = await appender.AppendBatchAsync(
             [CreateRequest(rejectedCommitId, streamId, ExpectedStreamState.StreamExists, "E1")],
             ct);
+
+        result.PositionCount.ShouldBe(1);
 
         var entries = await ReadEventEntries();
         entries.ShouldBeEmpty();
@@ -379,9 +389,11 @@ public class EventAppenderTests
         // Expect version 1 — should succeed.
         var commitId = Guid.CreateVersion7();
 
-        await appender.AppendBatchAsync(
+        var result = await appender.AppendBatchAsync(
             [CreateRequest(commitId, streamId, ExpectedStreamState.SpecificVersion(new StreamVersion(1)), "E3")],
             ct);
+
+        result.PositionCount.ShouldBe(2);
 
         var entries = await ReadEventEntries();
         entries.Count.ShouldBe(3);
@@ -404,7 +416,7 @@ public class EventAppenderTests
         // Expect version 0 (stale) — should be rejected.
         var rejectedCommitId = Guid.CreateVersion7();
 
-        await appender.AppendBatchAsync(
+        var result = await appender.AppendBatchAsync(
             [
                 CreateRequest(
                     rejectedCommitId,
@@ -413,6 +425,8 @@ public class EventAppenderTests
                     "E3")
             ],
             ct);
+
+        result.PositionCount.ShouldBe(1);
 
         var entries = await ReadEventEntries();
         entries.Count.ShouldBe(2); // Only the original two.
@@ -433,7 +447,7 @@ public class EventAppenderTests
         var streamId = CreateStreamId();
         var rejectedCommitId = Guid.CreateVersion7();
 
-        await appender.AppendBatchAsync(
+        var result = await appender.AppendBatchAsync(
             [
                 CreateRequest(
                     rejectedCommitId,
@@ -442,6 +456,8 @@ public class EventAppenderTests
                     "E1")
             ],
             ct);
+
+        result.PositionCount.ShouldBe(1);
 
         var entries = await ReadEventEntries();
         entries.ShouldBeEmpty();
@@ -469,7 +485,9 @@ public class EventAppenderTests
             CreateRequest(Guid.CreateVersion7(), streamId, ExpectedStreamState.StreamExists, "E2")
         };
 
-        await appender.AppendBatchAsync(requests, ct);
+        var result = await appender.AppendBatchAsync(requests, ct);
+
+        result.PositionCount.ShouldBe(3);
 
         var entries = await ReadEventEntries();
         entries.Count.ShouldBe(2);
@@ -496,7 +514,9 @@ public class EventAppenderTests
                 "E2")
         };
 
-        await appender.AppendBatchAsync(requests, ct);
+        var result = await appender.AppendBatchAsync(requests, ct);
+
+        result.PositionCount.ShouldBe(3);
 
         var entries = await ReadEventEntries();
         entries.Count.ShouldBe(2);
@@ -572,13 +592,93 @@ public class EventAppenderTests
         entries[0].Position.ShouldBe(5);
     }
 
+    // Epoch fencing
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task AppendBatchAsync_HigherEpoch_OverwritesLowerEpochEntries(CancellationToken ct)
+    {
+        // Seed two events at epoch 1, occupying positions 0 and 1.
+        await SeedEventLogEntry(position: 0, epoch: 1);
+        await SeedEventLogEntry(position: 1, epoch: 1);
+
+        // Appender at epoch 2 targets the same positions — should overwrite both.
+        var appender = CreateAppender(epoch: 2);
+        var commitId = Guid.CreateVersion7();
+
+        var result = await appender.AppendBatchAsync(
+            [CreateRequest(commitId, CreateStreamId(), ExpectedStreamState.Any, "New1", "New2")],
+            ct);
+
+        result.StartPosition.ShouldBe(0);
+        result.NextPosition.ShouldBe(3); // 2 events + 1 marker
+        result.PositionCount.ShouldBe(3);
+
+        var entries = await ReadEventEntries();
+        entries.Count.ShouldBe(2);
+        entries[0].Position.ShouldBe(0);
+        entries[0].Epoch.ShouldBe(2);
+        entries[0].EventName.ShouldBe("New1");
+        entries[1].Position.ShouldBe(1);
+        entries[1].Epoch.ShouldBe(2);
+        entries[1].EventName.ShouldBe("New2");
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task AppendBatchAsync_SameEpoch_CannotOverwriteExistingEntries(CancellationToken ct)
+    {
+        // Seed position 0 at epoch 2.
+        await SeedEventLogEntry(position: 0, epoch: 2);
+
+        // Appender also at epoch 2 — guard requires epoch < 2, won't match.
+        var appender = CreateAppender(epoch: 2);
+
+        await appender
+            .AppendBatchAsync(
+                [CreateRequest(Guid.CreateVersion7(), CreateStreamId(), ExpectedStreamState.Any, "E1")],
+                ct)
+            .ShouldThrowAsync<MongoBulkWriteException<EventLogEntry>>();
+
+        // Original entry untouched.
+        var entries = await ReadAllEntries();
+        entries.Count.ShouldBe(1);
+        entries[0].Position.ShouldBe(0);
+        entries[0].Epoch.ShouldBe(2);
+        entries[0].EventName.ShouldBe("SeededEvent");
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task AppendBatchAsync_LowerEpoch_CannotOverwriteHigherEpochEntries(CancellationToken ct)
+    {
+        // Seed position 0 at epoch 3.
+        await SeedEventLogEntry(position: 0, epoch: 3);
+
+        // Appender at epoch 2 — guard requires epoch < 2, won't match epoch 3.
+        var appender = CreateAppender(epoch: 2);
+
+        await appender
+            .AppendBatchAsync(
+                [CreateRequest(Guid.CreateVersion7(), CreateStreamId(), ExpectedStreamState.Any, "E1")],
+                ct)
+            .ShouldThrowAsync<MongoBulkWriteException<EventLogEntry>>();
+
+        // Original entry untouched.
+        var entries = await ReadAllEntries();
+        entries.Count.ShouldBe(1);
+        entries[0].Position.ShouldBe(0);
+        entries[0].Epoch.ShouldBe(3);
+        entries[0].EventName.ShouldBe("SeededEvent");
+    }
+
     private static string CreateStreamId() => $"stream-{Guid.CreateVersion7():N}";
 
-    private EventAppender CreateAppender(long? initialCommitPosition = null)
+    private EventAppender CreateAppender(long epoch = Epoch, long? initialCommitPosition = null)
     {
         return new EventAppender(
             _eventLog,
-            Epoch,
+            epoch,
             initialCommitPosition,
             _loggerFactory.CreateLogger<EventAppender>());
     }
@@ -607,6 +707,22 @@ public class EventAppenderTests
             CreatedAtUtc = now,
             LastSeenAtUtc = now
         };
+    }
+
+    private async Task SeedEventLogEntry(long position, long epoch)
+    {
+        await _eventLog.InsertOneAsync(new EventLogEntry
+        {
+            Position = position,
+            Epoch = epoch,
+            StreamId = CreateStreamId(),
+            StreamVersion = 0,
+            CommitId = Guid.CreateVersion7(),
+            EventName = "SeededEvent",
+            EventData = BsonNull.Value,
+            Metadata = BsonNull.Value,
+            WrittenAtUtc = DateTime.UtcNow
+        });
     }
 
     private async Task<List<EventLogEntry>> ReadEventEntries()
