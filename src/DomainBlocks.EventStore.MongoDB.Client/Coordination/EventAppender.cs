@@ -25,6 +25,9 @@ public sealed class EventAppender(
         CancellationToken cancellationToken = default)
     {
         var requestArray = requests as AppendRequest[] ?? [.. requests];
+        if (requestArray.Length == 0)
+            return;
+
         var allCommitIds = requestArray.Select(x => x.CommitId).Distinct();
         var allStreamIds = requestArray.Select(x => x.StreamId).Distinct();
 
@@ -34,6 +37,9 @@ public sealed class EventAppender(
         var nextPosition = _nextPosition;
 
         var models = new List<WriteModel<EventLogEntry>>();
+        var appendedCommitIds = new List<Guid>();
+        var rejectedCommitIds = new List<Guid>();
+        var duplicateCommitIds = new List<Guid>();
 
         foreach (var request in requestArray)
         {
@@ -41,12 +47,16 @@ public sealed class EventAppender(
                 continue;
 
             if (!commitIds.Add(request.CommitId))
+            {
+                duplicateCommitIds.Add(request.CommitId);
                 continue;
+            }
 
+            // TODO: Check expected state matches
             var streamState = streamStates.GetValueOrDefault(request.StreamId);
             var streamVersionValue = streamState.IsStreamExists ? streamState.Version.Value.ToInt64() : -1;
 
-            foreach (var @event in request.Events)
+            foreach (var e in request.Events)
             {
                 var position = nextPosition++;
                 var filter = CreateEventLogFilter(position);
@@ -56,18 +66,20 @@ public sealed class EventAppender(
                     request.StreamId,
                     ++streamVersionValue,
                     request.CommitId,
-                    @event.EventName,
-                    @event.EventData,
-                    @event.Metadata);
+                    e.EventName,
+                    e.EventData,
+                    e.Metadata);
 
                 models.Add(new UpdateOneModel<EventLogEntry>(filter, update) { IsUpsert = true });
             }
 
             var streamVersion = StreamVersion.FromInt64(streamVersionValue);
             streamStates[request.StreamId] = StreamState.StreamExists(streamVersion);
+
+            appendedCommitIds.Add(request.CommitId);
         }
 
-        if (models.Count == 0)
+        if (appendedCommitIds.Count == 0 && rejectedCommitIds.Count == 0 && duplicateCommitIds.Count == 0)
             return;
 
         // Mark the end of the batch so another process can advance the commit position.
@@ -75,13 +87,20 @@ public sealed class EventAppender(
             var position = nextPosition++;
             var filter = CreateEventLogFilter(position);
 
+            var batchCompleted = new AppendBatchCompleted
+            {
+                AppendedCommitIds = appendedCommitIds,
+                RejectedCommitIds = rejectedCommitIds,
+                DuplicateCommitIds = duplicateCommitIds
+            };
+
             var update = CreateEventLogUpdate(
                 position,
                 string.Empty,
                 0,
                 Guid.Empty,
-                "EventBatchRecorded",
-                BsonNull.Value,
+                "AppendBatchCompleted",
+                batchCompleted.ToBsonDocument(),
                 BsonNull.Value);
 
             models.Add(new UpdateOneModel<EventLogEntry>(filter, update) { IsUpsert = true });
@@ -163,15 +182,5 @@ public sealed class EventAppender(
             .CurrentDate(x => x.WrittenAtUtc);
     }
 
-    private readonly struct BatchContext(HashSet<Guid> commitIds, Dictionary<string, StreamState> streamStates)
-    {
-        public HashSet<Guid> CommitIds { get; } = commitIds;
-        public Dictionary<string, StreamState> StreamStates { get; } = streamStates;
-
-        public void Deconstruct(out HashSet<Guid> commitIds, out Dictionary<string, StreamState> streamStates)
-        {
-            commitIds = CommitIds;
-            streamStates = StreamStates;
-        }
-    }
+    private record BatchContext(HashSet<Guid> CommitIds, Dictionary<string, StreamState> StreamStates);
 }

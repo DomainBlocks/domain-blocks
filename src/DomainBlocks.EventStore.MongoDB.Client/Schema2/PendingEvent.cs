@@ -3,7 +3,7 @@ using MongoDB.Bson.Serialization.Attributes;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Schema2;
 
-public sealed class AppendRequestEvent
+public sealed class PendingEvent
 {
     [BsonElement(FieldNames.EventName)]
     public required string EventName { get; init; }

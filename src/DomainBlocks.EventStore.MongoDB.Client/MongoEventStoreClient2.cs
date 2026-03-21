@@ -45,9 +45,9 @@ public class MongoEventStoreClient2<TEvent> : IEventStoreClient<TEvent> where TE
             .Encode(events)
             .Select(x => new BsonDocument
             {
-                [AppendRequestEvent.FieldNames.EventName] = x.EventName,
-                [AppendRequestEvent.FieldNames.EventData] = x.EventData,
-                [AppendRequestEvent.FieldNames.Metadata] = x.Metadata ?? BsonNull.Value
+                [PendingEvent.FieldNames.EventName] = x.EventName,
+                [PendingEvent.FieldNames.EventData] = x.EventData,
+                [PendingEvent.FieldNames.Metadata] = x.Metadata ?? BsonNull.Value
             });
 
         var pipeline = new[]

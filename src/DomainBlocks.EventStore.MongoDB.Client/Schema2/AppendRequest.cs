@@ -19,7 +19,7 @@ public sealed class AppendRequest
     public required ExpectedStreamState ExpectedStreamState { get; init; }
 
     [BsonElement(FieldNames.Events)]
-    public required AppendRequestEvent[] Events { get; init; }
+    public required PendingEvent[] Events { get; init; }
 
     [BsonElement(FieldNames.CreatedAtUtc)]
     public required DateTime CreatedAtUtc { get; init; }
