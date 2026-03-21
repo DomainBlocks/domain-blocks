@@ -2,7 +2,7 @@
 
 namespace DomainBlocks.EventStore.MongoDB.Client;
 
-public sealed class EventStoreNamespaceSettings
+public sealed record EventStoreNamespaceSettings
 {
     public static readonly EventStoreNamespaceSettings Default = new()
     {

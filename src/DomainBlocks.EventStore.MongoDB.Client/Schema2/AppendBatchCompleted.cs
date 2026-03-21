@@ -7,20 +7,19 @@ public sealed class AppendBatchCompleted
 {
     [BsonElement(FieldNames.AppendedCommitIds)]
     [BsonGuidRepresentation(GuidRepresentation.Standard)]
-    public required IReadOnlyList<Guid> AppendedCommitIds { get; init; }
-
-    [BsonElement(FieldNames.RejectedCommitIds)]
-    [BsonGuidRepresentation(GuidRepresentation.Standard)]
-    public required IReadOnlyList<Guid> RejectedCommitIds { get; init; }
+    public required IReadOnlyCollection<Guid> Appends { get; init; }
 
     [BsonElement(FieldNames.DuplicateCommitIds)]
     [BsonGuidRepresentation(GuidRepresentation.Standard)]
-    public required IReadOnlyList<Guid> DuplicateCommitIds { get; init; }
+    public required IReadOnlyCollection<Guid> Duplicates { get; init; }
+
+    [BsonElement(FieldNames.Rejections)]
+    public required IReadOnlyCollection<CommitRejection> Rejections { get; init; }
 
     public static class FieldNames
     {
-        public const string AppendedCommitIds = "appendedCommitIds";
-        public const string RejectedCommitIds = "rejectedCommitIds";
-        public const string DuplicateCommitIds = "duplicateCommitIds";
+        public const string AppendedCommitIds = "appends";
+        public const string DuplicateCommitIds = "duplicates";
+        public const string Rejections = "rejections";
     }
 }

@@ -12,175 +12,224 @@ public sealed class EventAppender(
     long? initialCommitPosition,
     ILogger<EventAppender> logger)
 {
-    // Committed events from any epoch, plus our own uncommitted writes.
-    private readonly FilterDefinition<EventLogEntry> _visibilityFilter = initialCommitPosition.HasValue
-        ? Builders<EventLogEntry>.Filter.Lte(x => x.Position, initialCommitPosition.Value) |
-          Builders<EventLogEntry>.Filter.Eq(x => x.Epoch, epoch)
-        : Builders<EventLogEntry>.Filter.Eq(x => x.Epoch, epoch);
+    private long _nextPosition = initialCommitPosition.HasValue
+        ? initialCommitPosition.Value + 1
+        : 0;
 
-    private long _nextPosition = initialCommitPosition.HasValue ? initialCommitPosition.Value + 1 : 0;
+    private readonly FilterDefinition<EventLogEntry> _visibilityFilter =
+        CreateVisibilityFilter(epoch, initialCommitPosition);
 
-    public async Task AppendEventsAsync(
+    // Reusable per-batch buffers - cleared each batch, never reallocated.
+    private readonly List<AppendRequest> _requests = [];
+    private readonly HashSet<Guid> _appendedCommitIds = [];
+    private readonly HashSet<Guid> _duplicateCommitIds = [];
+    private readonly Dictionary<Guid, CommitRejection> _rejections = [];
+    private readonly Dictionary<string, long> _streamVersions = [];
+    private readonly List<WriteModel<EventLogEntry>> _writeModels = [];
+
+    public async Task AppendBatchAsync(
         IEnumerable<AppendRequest> requests,
         CancellationToken cancellationToken = default)
     {
-        var requestArray = requests as AppendRequest[] ?? [.. requests];
-        if (requestArray.Length == 0)
+        ClearBuffers();
+
+        _requests.AddRange(requests);
+        if (_requests.Count == 0)
             return;
 
-        var allCommitIds = requestArray.Select(x => x.CommitId).Distinct();
-        var allStreamIds = requestArray.Select(x => x.StreamId).Distinct();
+        logger.LogDebug("Appending batch of {RequestCount} request(s) at epoch {Epoch}", _requests.Count, epoch);
 
-        var (commitIds, streamStates) = await GetBatchContextAsync(allCommitIds, allStreamIds, cancellationToken)
+        await PrefetchAsync(cancellationToken).ConfigureAwait(false);
+
+        var nextPosition = BuildWriteModels();
+
+        if (_writeModels.Count == 0)
+        {
+            logger.LogDebug("Batch produced no write models; skipping");
+            return;
+        }
+
+        await eventLog
+            .BulkWriteAsync(_writeModels, new BulkWriteOptions { IsOrdered = true }, cancellationToken)
             .ConfigureAwait(false);
 
-        var nextPosition = _nextPosition;
+        // Only advance after a successful write.
+        var startPosition = _nextPosition;
+        _nextPosition = nextPosition;
 
-        var models = new List<WriteModel<EventLogEntry>>();
-        var appendedCommitIds = new List<Guid>();
-        var rejectedCommitIds = new List<Guid>();
-        var duplicateCommitIds = new List<Guid>();
+        logger.LogInformation(
+            "Batch appended: positions {StartPosition}–{EndPosition}, " +
+            "{AppendCount} appended, {DuplicateCount} duplicate(s), {RejectionCount} rejected, ",
+            startPosition,
+            nextPosition - 1,
+            _appendedCommitIds.Count,
+            _duplicateCommitIds.Count,
+            _rejections.Count);
+    }
 
-        foreach (var request in requestArray)
+    private static FilterDefinition<EventLogEntry> CreateVisibilityFilter(long epoch, long? initialCommitPosition)
+    {
+        return initialCommitPosition.HasValue
+            ? Builders<EventLogEntry>.Filter.Eq(x => x.Epoch, epoch) |
+              Builders<EventLogEntry>.Filter.Lte(x => x.Position, initialCommitPosition.Value)
+            : Builders<EventLogEntry>.Filter.Eq(x => x.Epoch, epoch);
+    }
+
+    private void ClearBuffers()
+    {
+        _requests.Clear();
+        _appendedCommitIds.Clear();
+        _duplicateCommitIds.Clear();
+        _rejections.Clear();
+        _streamVersions.Clear();
+        _writeModels.Clear();
+    }
+
+    private async Task PrefetchAsync(CancellationToken ct)
+    {
+        var allCommitIds = _requests.Select(r => r.CommitId).Distinct();
+        var allStreamIds = _requests.Select(r => r.StreamId).Distinct();
+
+        var duplicatesTask = eventLog
+            .Distinct(
+                x => x.CommitId,
+                Builders<EventLogEntry>.Filter.In(x => x.CommitId, allCommitIds) & _visibilityFilter,
+                cancellationToken: ct)
+            .ToListAsync(ct);
+
+        var versionsTask = eventLog
+            .Aggregate()
+            .Match(Builders<EventLogEntry>.Filter.In(x => x.StreamId, allStreamIds) & _visibilityFilter)
+            .Group(x => x.StreamId, g => new { StreamId = g.Key, MaxVersion = g.Max(x => x.StreamVersion) })
+            .ToListAsync(ct);
+
+        await Task.WhenAll(duplicatesTask, versionsTask).ConfigureAwait(false);
+
+        foreach (var id in await duplicatesTask.ConfigureAwait(false))
+            _duplicateCommitIds.Add(id);
+
+        foreach (var v in await versionsTask.ConfigureAwait(false))
+            _streamVersions.Add(v.StreamId, v.MaxVersion);
+
+        logger.LogDebug(
+            "Prefetch complete: {DuplicateCount} duplicate(s) found, {StreamCount} stream version(s) loaded",
+            _duplicateCommitIds.Count,
+            _streamVersions.Count);
+    }
+
+    private long BuildWriteModels()
+    {
+        var position = _nextPosition;
+
+        foreach (var request in _requests)
         {
             if (request.Events.Length == 0)
                 continue;
 
-            if (!commitIds.Add(request.CommitId))
+            if (IsProcessed(request.CommitId))
+                continue;
+
+            var streamVersion = _streamVersions.GetValueOrDefault(request.StreamId, -1);
+
+            // OCC check: convert the raw long to a StreamState and use the existing Matches logic.
+            var actualStreamState = streamVersion < 0
+                ? StreamState.StreamDoesNotExist
+                : StreamState.StreamExists(StreamVersion.FromInt64(streamVersion));
+
+            if (!request.ExpectedStreamState.Matches(actualStreamState))
             {
-                duplicateCommitIds.Add(request.CommitId);
+                logger.LogWarning(
+                    "Commit {CommitId} rejected for stream '{StreamId}': " +
+                    "expected {ExpectedState}, actual {ActualState}",
+                    request.CommitId,
+                    request.StreamId,
+                    request.ExpectedStreamState,
+                    actualStreamState);
+
+                _rejections.Add(request.CommitId, new CommitRejection
+                {
+                    CommitId = request.CommitId,
+                    StreamId = request.StreamId,
+                    ExpectedStreamState = request.ExpectedStreamState,
+                    ActualStreamState = actualStreamState
+                });
+
                 continue;
             }
 
-            // TODO: Check expected state matches
-            var streamState = streamStates.GetValueOrDefault(request.StreamId);
-            var streamVersionValue = streamState.IsStreamExists ? streamState.Version.Value.ToInt64() : -1;
-
             foreach (var e in request.Events)
-            {
-                var position = nextPosition++;
-                var filter = CreateEventLogFilter(position);
+                _writeModels.Add(CreateEventWrite(position++, request, ++streamVersion, e));
 
-                var update = CreateEventLogUpdate(
-                    position,
-                    request.StreamId,
-                    ++streamVersionValue,
-                    request.CommitId,
-                    e.EventName,
-                    e.EventData,
-                    e.Metadata);
-
-                models.Add(new UpdateOneModel<EventLogEntry>(filter, update) { IsUpsert = true });
-            }
-
-            var streamVersion = StreamVersion.FromInt64(streamVersionValue);
-            streamStates[request.StreamId] = StreamState.StreamExists(streamVersion);
-
-            appendedCommitIds.Add(request.CommitId);
+            _streamVersions[request.StreamId] = streamVersion;
+            _appendedCommitIds.Add(request.CommitId);
         }
 
-        if (appendedCommitIds.Count == 0 && rejectedCommitIds.Count == 0 && duplicateCommitIds.Count == 0)
-            return;
+        if (HasCommits())
+            _writeModels.Add(CreateBatchCompletedWrite(position++));
 
-        // Mark the end of the batch so another process can advance the commit position.
-        {
-            var position = nextPosition++;
-            var filter = CreateEventLogFilter(position);
+        return position;
 
-            var batchCompleted = new AppendBatchCompleted
-            {
-                AppendedCommitIds = appendedCommitIds,
-                RejectedCommitIds = rejectedCommitIds,
-                DuplicateCommitIds = duplicateCommitIds
-            };
+        bool IsProcessed(Guid commitId) =>
+            _appendedCommitIds.Contains(commitId) ||
+            _duplicateCommitIds.Contains(commitId) ||
+            _rejections.ContainsKey(commitId);
 
-            var update = CreateEventLogUpdate(
-                position,
-                string.Empty,
-                0,
-                Guid.Empty,
-                "AppendBatchCompleted",
-                batchCompleted.ToBsonDocument(),
-                BsonNull.Value);
-
-            models.Add(new UpdateOneModel<EventLogEntry>(filter, update) { IsUpsert = true });
-        }
-
-        var result = await eventLog
-            .BulkWriteAsync(models, new BulkWriteOptions { IsOrdered = true }, cancellationToken)
-            .ConfigureAwait(false);
-
-        // Success = every model matched (upserted or replaced).
-        var expected = models.Count;
-        var written = result.Upserts.Count + result.ModifiedCount;
-
-        // TODO: Tidy this up. What should the behaviour be?
-        if (written != expected)
-            throw new Exception($"Batch partially written: expected {expected}, written {written}.");
-
-        _nextPosition = nextPosition;
+        bool HasCommits() =>
+            _appendedCommitIds.Count > 0 ||
+            _duplicateCommitIds.Count > 0 ||
+            _rejections.Count > 0;
     }
 
-    private async Task<BatchContext> GetBatchContextAsync(
-        IEnumerable<Guid> commitIds,
-        IEnumerable<string> streamIds,
-        CancellationToken cancellationToken)
-    {
-        var commitIdsTask = eventLog
-            .Distinct(
-                x => x.CommitId,
-                Builders<EventLogEntry>.Filter.In(x => x.CommitId, commitIds) & _visibilityFilter,
-                cancellationToken: cancellationToken)
-            .ToListAsync(cancellationToken);
-
-        var maxVersionsTask = eventLog
-            .Aggregate()
-            .Match(Builders<EventLogEntry>.Filter.In(x => x.StreamId, streamIds) & _visibilityFilter)
-            .Group(x => x.StreamId, g => new { StreamId = g.Key, MaxVersion = g.Max(x => x.StreamVersion) })
-            .ToListAsync(cancellationToken);
-
-        await Task.WhenAll(commitIdsTask, maxVersionsTask).ConfigureAwait(false);
-
-        var commitIdSet = (await commitIdsTask.ConfigureAwait(false)).ToHashSet();
-
-        var streamStates = (await maxVersionsTask.ConfigureAwait(false))
-            .ToDictionary(
-                x => x.StreamId,
-                x =>
-                {
-                    var version = StreamVersion.FromInt64(x.MaxVersion);
-                    return StreamState.StreamExists(version);
-                });
-
-        return new BatchContext(commitIdSet, streamStates);
-    }
-
-    private FilterDefinition<EventLogEntry> CreateEventLogFilter(long position)
-    {
-        return Builders<EventLogEntry>.Filter.Eq(x => x.Position, position) &
-               Builders<EventLogEntry>.Filter.Lt(x => x.Epoch, epoch);
-    }
-
-    private UpdateDefinition<EventLogEntry> CreateEventLogUpdate(
+    private WriteModel<EventLogEntry> CreateEventWrite(
         long position,
-        string streamId,
+        AppendRequest request,
         long streamVersion,
-        Guid commitId,
-        string eventName,
-        BsonValue eventData,
-        BsonValue metadata)
+        PendingEvent @event)
     {
-        return Builders<EventLogEntry>.Update
+        var filter = CreateEpochGuardFilter(position);
+
+        var update = Builders<EventLogEntry>.Update
             .Set(x => x.Position, position)
             .Set(x => x.Epoch, epoch)
-            .Set(x => x.StreamId, streamId)
+            .Set(x => x.StreamId, request.StreamId)
             .Set(x => x.StreamVersion, streamVersion)
-            .Set(x => x.CommitId, commitId)
-            .Set(x => x.EventName, eventName)
-            .Set(x => x.EventData, eventData)
-            .Set(x => x.Metadata, metadata)
+            .Set(x => x.CommitId, request.CommitId)
+            .Set(x => x.EventName, @event.EventName)
+            .Set(x => x.EventData, @event.EventData)
+            .Set(x => x.Metadata, @event.Metadata)
             .CurrentDate(x => x.WrittenAtUtc);
+
+        return new UpdateOneModel<EventLogEntry>(filter, update) { IsUpsert = true };
     }
 
-    private record BatchContext(HashSet<Guid> CommitIds, Dictionary<string, StreamState> StreamStates);
+    private WriteModel<EventLogEntry> CreateBatchCompletedWrite(long position)
+    {
+        var filter = CreateEpochGuardFilter(position);
+
+        var batchCompleted = new AppendBatchCompleted
+        {
+            Appends = _appendedCommitIds,
+            Duplicates = _duplicateCommitIds,
+            Rejections = _rejections.Values,
+        };
+
+        var update = Builders<EventLogEntry>.Update
+            .Set(x => x.Position, position)
+            .Set(x => x.Epoch, epoch)
+            .Set(x => x.StreamId, string.Empty)
+            .Set(x => x.StreamVersion, 0L)
+            .Set(x => x.CommitId, Guid.Empty)
+            .Set(x => x.EventName, "AppendBatchCompleted")
+            .Set(x => x.EventData, batchCompleted.ToBsonDocument())
+            .Set(x => x.Metadata, BsonNull.Value)
+            .CurrentDate(x => x.WrittenAtUtc);
+
+        return new UpdateOneModel<EventLogEntry>(filter, update) { IsUpsert = true };
+    }
+
+    private FilterDefinition<EventLogEntry> CreateEpochGuardFilter(long position)
+    {
+        return Builders<EventLogEntry>.Filter.Lt(x => x.Epoch, epoch) &
+               Builders<EventLogEntry>.Filter.Eq(x => x.Position, position);
+    }
 }
