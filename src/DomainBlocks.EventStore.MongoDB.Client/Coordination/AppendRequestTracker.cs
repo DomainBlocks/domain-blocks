@@ -3,13 +3,16 @@ using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB.Client.Schema2;
 using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
+using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 
-public sealed class AppendRequestTracker(EventStoreNamespaceSettings namespaceSettings) :
+public sealed class AppendRequestTracker(
+    EventStoreNamespaceSettings namespaceSettings,
+    ILogger<AppendRequestTracker> logger) :
     IAppendRequestTracker,
     IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>
 {
@@ -105,7 +108,10 @@ public sealed class AppendRequestTracker(EventStoreNamespaceSettings namespaceSe
             foreach (var commitId in batch.Committed)
             {
                 if (_waiters.TryRemove(commitId, out var tcs))
+                {
                     tcs.TrySetResult();
+                    logger.LogDebug("Acked commit {CommitId}", commitId);
+                }
             }
 
             foreach (var rejection in batch.Rejections)

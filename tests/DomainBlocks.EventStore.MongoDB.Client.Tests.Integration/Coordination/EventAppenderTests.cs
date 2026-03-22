@@ -694,8 +694,7 @@ public class EventAppenderTests
                     Metadata = BsonNull.Value
                 })
                 .ToArray(),
-            CreatedAtUtc = now,
-            LastSeenAtUtc = now
+            CreatedAtUtc = now
         };
     }
 

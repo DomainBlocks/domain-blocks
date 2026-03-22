@@ -17,7 +17,11 @@ public sealed class EventAppenderLeaseObserver(
 {
     private EventAppenderSession? _session;
 
-    public Task OnLeaseAcquiredAsync(ILeaseHandle<LeaseState> handle, CancellationToken ct)
+    private readonly TaskCompletionSource _livelinessTcs = new();
+
+    public Task Liveliness => _livelinessTcs.Task;
+
+    public async Task OnLeaseAcquiredAsync(ILeaseHandle<LeaseState> handle, CancellationToken ct)
     {
         var leaseState = BsonSerializer.Deserialize<LeaseState>(handle.CurrentSnapshot.State);
 
@@ -43,7 +47,9 @@ public sealed class EventAppenderLeaseObserver(
 
         _session.Start();
 
-        return Task.CompletedTask;
+        await _session.Liveliness.WaitAsync(ct).ConfigureAwait(false);
+
+        _livelinessTcs.TrySetResult();
     }
 
     public async Task OnLeaseLostAsync(LeaseClaim claim, LeaseLostInfo? info, CancellationToken ct)

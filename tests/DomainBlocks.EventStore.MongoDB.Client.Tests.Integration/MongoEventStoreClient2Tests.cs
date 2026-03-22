@@ -21,6 +21,7 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
     private MongoClient _mongoClient = null!;
     private ILoggerFactory _loggerFactory = null!;
     private CancellationTokenSource _stopCts = null!;
+    private MongoEventStoreClientOptions2<IDomainEvent> _options = null!;
     private IChangeStreamConnection _changeStreamConnection = null!;
     private Task _leaseContenderTask = null!;
     private MongoEventStoreClient2<IDomainEvent> _client = null!;
@@ -31,19 +32,29 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
     public async Task OneTimeSetUp()
     {
         _mongoClient = new MongoClient(MongoConnectionStrings.Default);
-        _loggerFactory = LoggerFactory.Create(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug));
+
+        _loggerFactory = LoggerFactory.Create(x => x
+            .AddSimpleConsole(o => o.TimestampFormat = "HH:mm:ss.fff ")
+            .SetMinimumLevel(LogLevel.Debug));
+
         _stopCts = new CancellationTokenSource();
 
-        var options = GetEventStoreClientOptions();
-        var ns = options.NamespaceSettings;
+        _options = GetEventStoreClientOptions();
+        var ns = _options.NamespaceSettings;
         var db = _mongoClient.GetDatabase(ns.DatabaseName);
 
         await MongoEventStoreAdmin2.EnsureInitializedAsync(_mongoClient, ns);
 
-        var changeStreamSubject = await db.CreateSubjectAsync();
+        var changeStreamSubject = await db.CreateSubjectAsync(new ChangeStreamSubjectOptions
+        {
+            MongoOptions = new ChangeStreamOptions
+            {
+                //BatchSize = 1000
+            }
+        });
 
         // Set up AppendRequestTracker
-        var requestTracker = new AppendRequestTracker(ns);
+        var requestTracker = new AppendRequestTracker(ns, _loggerFactory.CreateLogger<AppendRequestTracker>());
         changeStreamSubject.Attach(requestTracker);
 
         // Set up LeaseContender
@@ -51,8 +62,10 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
         var leaseClient = new LeaseClient(leaseStore, _loggerFactory.CreateLogger<LeaseClient>());
         var leaseContender = new LeaseContender(leaseClient, _loggerFactory.CreateLogger<LeaseContender>());
 
+        var requests = db.GetCollection<AppendRequest>(ns.AppendRequestsCollectionName);
+
         var leaseObserver = new EventAppenderLeaseObserver(
-            db.GetCollection<AppendRequest>(ns.AppendRequestsCollectionName),
+            requests,
             db.GetCollection<EventLogEntry>(ns.EventLogCollectionName),
             changeStreamSubject,
             _loggerFactory);
@@ -63,7 +76,9 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
         // Run LeaseContender
         _leaseContenderTask = leaseContender.RunAsync([leaseObserver], _stopCts.Token);
 
-        _client = new MongoEventStoreClient2<IDomainEvent>(_mongoClient, requestTracker, options);
+        _client = new MongoEventStoreClient2<IDomainEvent>(requests, requestTracker, _options);
+
+        await leaseObserver.Liveliness;
     }
 
     [OneTimeTearDown]
@@ -72,6 +87,9 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
         await _changeStreamConnection.DisposeAsync();
         await _stopCts.CancelAsync();
         await _leaseContenderTask;
+
+        await _mongoClient.DropDatabaseAsync(_options.NamespaceSettings.DatabaseName);
+
         _mongoClient.Dispose();
         _loggerFactory.Dispose();
     }
@@ -106,6 +124,40 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
         return;
 
         int Percentile(double p) => (int)Math.Ceiling(sorted.Count * p) - 1;
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task AppendToStreamAsync_ConcurrentAppends_MeasureThroughput(CancellationToken ct)
+    {
+        const int concurrency = 100;
+        const int opsPerProducer = 100;
+        const int totalOps = concurrency * opsPerProducer;
+
+        // Warm up
+        await Task.WhenAll(
+            Enumerable.Range(0, concurrency)
+                .Select(_ => Task.Run(() => DoAppend($"warmup-{Guid.NewGuid():N}", ct), ct)));
+
+        var sw = Stopwatch.StartNew();
+
+        await Task.WhenAll(
+            Enumerable
+                .Range(0, concurrency)
+                .Select(_ => Task.Run(async () =>
+                    {
+                        for (var i = 0; i < opsPerProducer; i++)
+                            await DoAppend($"test-{Guid.NewGuid():N}", ct);
+                    },
+                    ct)));
+
+        sw.Stop();
+
+        var opsPerSecond = totalOps / sw.Elapsed.TotalSeconds;
+        await TestContext.Out.WriteLineAsync($"concurrency: {concurrency}");
+        await TestContext.Out.WriteLineAsync($"total ops:   {totalOps}");
+        await TestContext.Out.WriteLineAsync($"elapsed:     {sw.Elapsed.TotalMilliseconds:F0} ms");
+        await TestContext.Out.WriteLineAsync($"throughput:  {opsPerSecond:F1} ops/sec");
     }
 
     private async Task DoAppend(string streamId, CancellationToken ct)

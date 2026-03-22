@@ -11,6 +11,9 @@ namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 
 public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>, IAsyncDisposable
 {
+    private const int MaxCatchUpBatchSize = 100;
+    private const int MaxLiveBatchSize = 100;
+
     private readonly ILeaseHandle<LeaseState> _handle;
     private long? _currentPosition;
     private readonly IMongoCollection<AppendRequest> _requests;
@@ -23,6 +26,7 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
     private readonly Channel<AppendRequest> _channel;
     private IDisposable? _changeStreamAttachment;
     private Task? _runTask;
+    private readonly TaskCompletionSource _livelinessTcs = new();
 
     public EventAppenderSession(
         ILeaseHandle<LeaseState> handle,
@@ -53,6 +57,8 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
         _channel = Channel.CreateUnbounded<AppendRequest>(channelOptions);
     }
 
+    public Task Liveliness => _livelinessTcs.Task;
+
     public void Start()
     {
         // Attach before starting work so inserts during catch-up are buffered.
@@ -68,32 +74,6 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
         if (change.OperationType == ChangeStreamOperationType.Insert)
         {
             var request = BsonSerializer.Deserialize<AppendRequest>(change.FullDocument);
-            await _channel.Writer.WriteAsync(request, ct).ConfigureAwait(false);
-            return;
-        }
-
-        if (change.OperationType == ChangeStreamOperationType.Update)
-        {
-            // Only handle client retries (lastSeenAtUtc updated).
-            // Ignore completer updates (completedAtUtc set).
-            var updatedFields = change.UpdateDescription?.UpdatedFields;
-            if (updatedFields is null || !updatedFields.Contains(AppendRequest.FieldNames.LastSeenAtUtc))
-                return;
-
-            var commitId = change.DocumentKey["_id"].AsGuid;
-
-            var request = await _requests
-                .Find(Builders<AppendRequest>.Filter.Eq(x => x.CommitId, commitId))
-                .FirstOrDefaultAsync(ct)
-                .ConfigureAwait(false);
-
-            if (request is null)
-            {
-                _logger.LogDebug(
-                    "Change stream update for missing request; CommitId={CommitId}", commitId);
-                return;
-            }
-
             await _channel.Writer.WriteAsync(request, ct).ConfigureAwait(false);
         }
     }
@@ -153,7 +133,7 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
             var batch = await _requests
                 .Find(filter)
                 .Sort(Builders<AppendRequest>.Sort.Ascending(x => x.CreatedAtUtc))
-                .Limit(100)
+                .Limit(MaxCatchUpBatchSize)
                 .ToListAsync(ct)
                 .ConfigureAwait(false);
 
@@ -211,17 +191,21 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
     {
         _logger.LogInformation("Switching to live mode");
 
-        var batch = new List<AppendRequest>();
+        _livelinessTcs.TrySetResult();
+
+        var batch = new List<AppendRequest>(MaxLiveBatchSize);
 
         while (await _channel.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
         {
             batch.Clear();
 
-            while (_channel.Reader.TryRead(out var request))
+            while (batch.Count < MaxLiveBatchSize && _channel.Reader.TryRead(out var request))
                 batch.Add(request);
 
             if (batch.Count == 0)
                 continue;
+
+            _logger.LogDebug("Processing batch of {BatchSize} request(s)", batch.Count);
 
             var result = await _appender.AppendBatchAsync(batch, ct).ConfigureAwait(false);
 
