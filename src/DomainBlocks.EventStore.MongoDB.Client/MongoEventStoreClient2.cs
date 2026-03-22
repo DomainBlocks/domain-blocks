@@ -13,6 +13,9 @@ public class MongoEventStoreClient2<TEvent>(
     IEventStoreClient<TEvent>
     where TEvent : notnull
 {
+    private readonly IMongoCollection<AppendRequest> _requests = requests
+        .WithWriteConcern(WriteConcern.W1.With(journal: false));
+
     private readonly IEventEncoder<TEvent, BsonValue, BsonValue> _eventEncoder = options.EventCodec.Encoder;
     private readonly IEventDecoder<TEvent, BsonValue, BsonValue> _eventDecoder = options.EventCodec.Decoder;
 
@@ -43,7 +46,7 @@ public class MongoEventStoreClient2<TEvent>(
 
         var commitTask = requestTracker.WaitAsync(options.CommitId, cancellationToken);
 
-        await requests.InsertOneAsync(request, cancellationToken: cancellationToken).ConfigureAwait(false);
+        await _requests.InsertOneAsync(request, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         await commitTask.WaitAsync(cancellationToken).ConfigureAwait(false);
     }

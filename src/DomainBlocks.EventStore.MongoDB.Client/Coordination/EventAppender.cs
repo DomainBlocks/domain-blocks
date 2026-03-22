@@ -13,6 +13,9 @@ public sealed class EventAppender(
     ILogger<EventAppender> logger) :
     IEventAppender
 {
+    private readonly IMongoCollection<EventLogEntry> _eventLog = eventLog
+        .WithWriteConcern(WriteConcern.WMajority.With(journal: true));
+
     private long _nextPosition = initialCommitPosition.HasValue
         ? initialCommitPosition.Value + 1
         : 0;
@@ -50,7 +53,7 @@ public sealed class EventAppender(
             return new AppendBatchResult(_nextPosition, _nextPosition);
         }
 
-        await eventLog
+        await _eventLog
             .BulkWriteAsync(_writeModels, new BulkWriteOptions { IsOrdered = true }, cancellationToken)
             .ConfigureAwait(false);
 
@@ -93,14 +96,14 @@ public sealed class EventAppender(
         var allCommitIds = _requests.Select(r => r.CommitId).Distinct();
         var allStreamIds = _requests.Select(r => r.StreamId).Distinct();
 
-        var duplicatesTask = eventLog
+        var duplicatesTask = _eventLog
             .Distinct(
                 x => x.CommitId,
                 Builders<EventLogEntry>.Filter.In(x => x.CommitId, allCommitIds) & _visibilityFilter,
                 cancellationToken: ct)
             .ToListAsync(ct);
 
-        var versionsTask = eventLog
+        var versionsTask = _eventLog
             .Aggregate()
             .Match(Builders<EventLogEntry>.Filter.In(x => x.StreamId, allStreamIds) & _visibilityFilter)
             .Group(x => x.StreamId, g => new { StreamId = g.Key, MaxVersion = g.Max(x => x.StreamVersion) })

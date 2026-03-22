@@ -5,7 +5,7 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 
-public class LeaseStore : ILeaseStore
+public class LeaseStore(IMongoCollection<LeaseDocument> leases, TimeProvider? timeProvider = null) : ILeaseStore
 {
     private static readonly FindOneAndUpdateOptions<LeaseDocument, RawBsonDocument> UpsertOptions =
         CreateFindOneAndUpdateOptions(isUpsert: true);
@@ -13,15 +13,10 @@ public class LeaseStore : ILeaseStore
     private static readonly FindOneAndUpdateOptions<LeaseDocument, RawBsonDocument> UpdateOptions =
         CreateFindOneAndUpdateOptions(isUpsert: false);
 
-    private readonly IMongoCollection<LeaseDocument> _leases;
-    private readonly TimeProvider _timeProvider;
+    private readonly IMongoCollection<LeaseDocument> _leases =
+        leases.WithWriteConcern(WriteConcern.WMajority.With(journal: true));
 
-    // ReSharper disable once ConvertToPrimaryConstructor - hide leases arg
-    public LeaseStore(IMongoCollection<LeaseDocument> leases, TimeProvider? timeProvider = null)
-    {
-        _leases = leases.WithWriteConcern(WriteConcern.WMajority.With(journal: true));
-        _timeProvider = timeProvider ?? TimeProvider.System;
-    }
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     public async Task<LeaseWriteResult> AcquireAsync(
         string resourceId,

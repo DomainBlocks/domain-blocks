@@ -16,25 +16,6 @@ public static class MongoEventStoreAdmin2
 
         await EnsureAppendRequestsIndexesAsync(appendRequests, cancellationToken);
         await EnsureEventLogIndexesAsync(eventLog, cancellationToken);
-
-        await db.CreateCollectionAsync(
-            namespaceSettings.LeasesCollectionName,
-            new CreateCollectionOptions
-            {
-                ChangeStreamPreAndPostImagesOptions = new ChangeStreamPreAndPostImagesOptions
-                {
-                    Enabled = true
-                }
-            },
-            cancellationToken);
-
-        // var command = new BsonDocument
-        // {
-        //     { "collMod", namespaceSettings.LeasesCollectionName },
-        //     { "changeStreamPreAndPostImages", new BsonDocument("enabled", true) }
-        // };
-        //
-        // await db.RunCommandAsync<BsonDocument>(command, cancellationToken: cancellationToken);
     }
 
     private static Task EnsureAppendRequestsIndexesAsync(

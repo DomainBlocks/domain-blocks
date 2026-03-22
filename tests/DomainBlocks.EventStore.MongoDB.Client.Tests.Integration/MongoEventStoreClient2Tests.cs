@@ -45,13 +45,33 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
 
         await MongoEventStoreAdmin2.EnsureInitializedAsync(_mongoClient, ns);
 
-        var changeStreamSubject = await db.CreateSubjectAsync(new ChangeStreamSubjectOptions
-        {
-            MongoOptions = new ChangeStreamOptions
+        var filterBuilder = Builders<ChangeStreamDocument<BsonDocument>>.Filter;
+
+        var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>()
+            .Match(filterBuilder.Or(
+                // AppendRequest inserts only — excludes completer's UpdateManyAsync events
+                filterBuilder.And(
+                    filterBuilder.Eq("ns.coll", ns.AppendRequestsCollectionName),
+                    filterBuilder.Eq("operationType", "insert")),
+
+                // AppendBatchCompleted entries only — excludes the ~100 regular event writes
+                filterBuilder.And(
+                    filterBuilder.Eq("ns.coll", ns.EventLogCollectionName),
+                    filterBuilder.Eq("fullDocument.eventName", "AppendBatchCompleted")),
+
+                // All lease events — commit position updates
+                filterBuilder.Eq("ns.coll", ns.LeasesCollectionName)
+            ));
+
+        var changeStreamSubject = await db.CreateSubjectAsync(
+            pipeline,
+            new ChangeStreamSubjectOptions
             {
-                //BatchSize = 1000
-            }
-        });
+                MongoOptions = new ChangeStreamOptions
+                {
+                    //BatchSize = 1000
+                }
+            });
 
         // Set up AppendRequestTracker
         var requestTracker = new AppendRequestTracker(ns, _loggerFactory.CreateLogger<AppendRequestTracker>());
