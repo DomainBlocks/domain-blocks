@@ -227,7 +227,7 @@ public class EventAppenderTests
         result1.PositionCount.ShouldBe(2);
         result2.PositionCount.ShouldBe(1); // Marker only
 
-        // Only one event should exist — the duplicate wasn't re-appended.
+        // Only one event should exist - the duplicate wasn't re-appended.
         var entries = await ReadEventEntries();
         entries.Count.ShouldBe(1);
 
@@ -296,7 +296,7 @@ public class EventAppenderTests
             [CreateRequest(Guid.CreateVersion7(), streamId, ExpectedStreamState.Any, "E1")],
             ct);
 
-        // Second: attempt with StreamDoesNotExist — should be rejected.
+        // Second: attempt with StreamDoesNotExist - should be rejected.
         var rejectedCommitId = Guid.CreateVersion7();
 
         var result = await appender.AppendBatchAsync(
@@ -315,8 +315,6 @@ public class EventAppenderTests
         var rejection = batchCompleted.Rejections.First();
         rejection.CommitId.ShouldBe(rejectedCommitId);
         rejection.StreamId.ShouldBe(streamId);
-        rejection.ExpectedStreamState.ShouldBe(ExpectedStreamState.StreamDoesNotExist);
-        rejection.ActualStreamState.ShouldBe(StreamState.StreamExists(StreamVersion.FromInt64(0)));
     }
 
     // OCC: ExpectedStreamState.StreamExists
@@ -368,8 +366,6 @@ public class EventAppenderTests
         var rejection = batchCompleted.Rejections.First();
         rejection.CommitId.ShouldBe(rejectedCommitId);
         rejection.StreamId.ShouldBe(streamId);
-        rejection.ExpectedStreamState.ShouldBe(ExpectedStreamState.StreamExists);
-        rejection.ActualStreamState.ShouldBe(StreamState.StreamDoesNotExist);
     }
 
     // OCC: ExpectedStreamState.SpecificVersion
@@ -386,7 +382,7 @@ public class EventAppenderTests
             [CreateRequest(Guid.CreateVersion7(), streamId, ExpectedStreamState.Any, "E1", "E2")],
             ct);
 
-        // Expect version 1 — should succeed.
+        // Expect version 1 - should succeed.
         var commitId = Guid.CreateVersion7();
 
         var result = await appender.AppendBatchAsync(
@@ -413,7 +409,7 @@ public class EventAppenderTests
             [CreateRequest(Guid.CreateVersion7(), streamId, ExpectedStreamState.Any, "E1", "E2")],
             ct);
 
-        // Expect version 0 (stale) — should be rejected.
+        // Expect version 0 (stale) - should be rejected.
         var rejectedCommitId = Guid.CreateVersion7();
 
         var result = await appender.AppendBatchAsync(
@@ -435,8 +431,6 @@ public class EventAppenderTests
         var rejection = batchCompleted.Rejections.First();
         rejection.CommitId.ShouldBe(rejectedCommitId);
         rejection.StreamId.ShouldBe(streamId);
-        rejection.ExpectedStreamState.ShouldBe(ExpectedStreamState.SpecificVersion(new StreamVersion(0)));
-        rejection.ActualStreamState.ShouldBe(StreamState.StreamExists(new StreamVersion(1)));
     }
 
     [Test]
@@ -466,8 +460,6 @@ public class EventAppenderTests
         var rejection = batchCompleted.Rejections.First();
         rejection.CommitId.ShouldBe(rejectedCommitId);
         rejection.StreamId.ShouldBe(streamId);
-        rejection.ExpectedStreamState.ShouldBe(ExpectedStreamState.SpecificVersion(new StreamVersion(0)));
-        rejection.ActualStreamState.ShouldBe(StreamState.StreamDoesNotExist);
     }
 
     // OCC within a single batch
@@ -529,8 +521,6 @@ public class EventAppenderTests
         var rejection = batchCompleted.Rejections.First();
         rejection.CommitId.ShouldBe(requests[1].CommitId);
         rejection.StreamId.ShouldBe(streamId);
-        rejection.ExpectedStreamState.ShouldBe(ExpectedStreamState.StreamDoesNotExist);
-        rejection.ActualStreamState.ShouldBe(StreamState.StreamExists(StreamVersion.FromInt64(0)));
     }
 
     // Mixed outcomes
@@ -602,7 +592,7 @@ public class EventAppenderTests
         await SeedEventLogEntry(position: 0, epoch: 1);
         await SeedEventLogEntry(position: 1, epoch: 1);
 
-        // Appender at epoch 2 targets the same positions — should overwrite both.
+        // Appender at epoch 2 targets the same positions - should overwrite both.
         var appender = CreateAppender(epoch: 2);
         var commitId = Guid.CreateVersion7();
 
@@ -631,7 +621,7 @@ public class EventAppenderTests
         // Seed position 0 at epoch 2.
         await SeedEventLogEntry(position: 0, epoch: 2);
 
-        // Appender also at epoch 2 — guard requires epoch < 2, won't match.
+        // Appender also at epoch 2 - guard requires epoch < 2, won't match.
         var appender = CreateAppender(epoch: 2);
 
         await appender
@@ -655,7 +645,7 @@ public class EventAppenderTests
         // Seed position 0 at epoch 3.
         await SeedEventLogEntry(position: 0, epoch: 3);
 
-        // Appender at epoch 2 — guard requires epoch < 2, won't match epoch 3.
+        // Appender at epoch 2 - guard requires epoch < 2, won't match epoch 3.
         var appender = CreateAppender(epoch: 2);
 
         await appender

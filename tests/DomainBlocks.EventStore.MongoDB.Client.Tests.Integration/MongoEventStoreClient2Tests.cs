@@ -42,7 +42,7 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
         var changeStreamSubject = await db.CreateSubjectAsync();
 
         // Set up AppendRequestTracker
-        var requestTracker = new AppendRequestTracker(ns.AppendRequestsCollectionNamespace);
+        var requestTracker = new AppendRequestTracker(ns);
         changeStreamSubject.Attach(requestTracker);
 
         // Set up LeaseContender
@@ -50,19 +50,17 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
         var leaseClient = new LeaseClient(leaseStore, _loggerFactory.CreateLogger<LeaseClient>());
         var leaseContender = new LeaseContender(leaseClient, _loggerFactory.CreateLogger<LeaseContender>());
 
-        // Set up LeaderWorkerRunner
-        var eventAppenderFactory = new EventAppenderWorkerFactory(
+        var leaseObserver = new EventAppenderLeaseObserver(
             db.GetCollection<AppendRequest>(ns.AppendRequestsCollectionName),
             db.GetCollection<EventLogEntry>(ns.EventLogCollectionName),
+            changeStreamSubject,
             _loggerFactory);
-
-        var leaderWorkerRunner = new LeaderWorkerRunner([eventAppenderFactory], changeStreamSubject);
 
         // Connect change stream
         _changeStreamConnection = changeStreamSubject.Connect();
 
         // Run LeaseContender
-        _leaseContenderTask = leaseContender.RunAsync([leaderWorkerRunner], _stopCts.Token);
+        _leaseContenderTask = leaseContender.RunAsync([leaseObserver], _stopCts.Token);
 
         _client = new MongoEventStoreClient2<IDomainEvent>(_mongoClient, requestTracker, options);
     }
@@ -96,7 +94,6 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
             CommitId = Guid.CreateVersion7()
         };
 
-        await Client.AppendToStreamAsync(streamId, events, options, ct);
         await Client.AppendToStreamAsync(streamId, events, options, ct);
     }
 

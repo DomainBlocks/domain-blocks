@@ -27,6 +27,10 @@ public sealed class AppendRequest
     [BsonElement(FieldNames.LastSeenAtUtc)]
     public required DateTime LastSeenAtUtc { get; init; }
 
+    [BsonElement(FieldNames.CompletedAtUtc)]
+    [BsonIgnoreIfNull]
+    public DateTime? CompletedAtUtc { get; init; }
+
     public static class FieldNames
     {
         public const string StreamId = "streamId";
@@ -34,5 +38,6 @@ public sealed class AppendRequest
         public const string Events = "events";
         public const string CreatedAtUtc = "createdAtUtc";
         public const string LastSeenAtUtc = "lastSeenAtUtc";
+        public const string CompletedAtUtc = "completedAtUtc";
     }
 }

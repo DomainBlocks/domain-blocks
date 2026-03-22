@@ -5,7 +5,7 @@ namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 
 public sealed class LeaseContender(ILeaseClient leaseClient, ILogger<LeaseContender> logger) : ILeaseContender
 {
-    public const string ResourceId = "dbx_LogLease";
+    public const string ResourceId = "dbx_event_log_lease";
 
     public async Task RunAsync(
         IReadOnlyCollection<ILeaseObserver> observers,

@@ -10,7 +10,8 @@ public sealed class EventAppender(
     IMongoCollection<EventLogEntry> eventLog,
     long epoch,
     long? initialCommitPosition,
-    ILogger<EventAppender> logger)
+    ILogger<EventAppender> logger) :
+    IEventAppender
 {
     private long _nextPosition = initialCommitPosition.HasValue
         ? initialCommitPosition.Value + 1
@@ -141,7 +142,7 @@ public sealed class EventAppender(
             if (!request.ExpectedStreamState.Matches(actualStreamState))
             {
                 logger.LogWarning(
-                    "Commit {CommitId} rejected for stream '{StreamId}': " +
+                    "Append rejected for commit ID {CommitId}, stream '{StreamId}': " +
                     "expected {ExpectedState}, actual {ActualState}",
                     request.CommitId,
                     request.StreamId,
