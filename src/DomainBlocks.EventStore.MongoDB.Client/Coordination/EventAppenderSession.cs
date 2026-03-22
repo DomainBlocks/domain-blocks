@@ -68,7 +68,7 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
         if (change.OperationType == ChangeStreamOperationType.Insert)
         {
             var request = BsonSerializer.Deserialize<AppendRequest>(change.FullDocument);
-            await _channel.Writer.WriteAsync(request, ct);
+            await _channel.Writer.WriteAsync(request, ct).ConfigureAwait(false);
             return;
         }
 
@@ -84,7 +84,8 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
 
             var request = await _requests
                 .Find(Builders<AppendRequest>.Filter.Eq(x => x.CommitId, commitId))
-                .FirstOrDefaultAsync(ct);
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
 
             if (request is null)
             {
@@ -93,7 +94,7 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
                 return;
             }
 
-            await _channel.Writer.WriteAsync(request, ct);
+            await _channel.Writer.WriteAsync(request, ct).ConfigureAwait(false);
         }
     }
 
@@ -110,9 +111,9 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
         {
             if (_runTask is not null)
             {
-                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                timeoutCts.Token.Register(_stopCts.Cancel);
+                _stopCts.CancelAfter(TimeSpan.FromSeconds(10));
                 await _runTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                await _stopCts.CancelAsync().ConfigureAwait(false);
             }
         }
     }
@@ -123,9 +124,9 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
 
         try
         {
-            var success = await CatchUpAsync(ct);
+            var success = await CatchUpAsync(ct).ConfigureAwait(false);
             if (success)
-                await RunLiveAsync(ct);
+                await RunLiveAsync(ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -153,14 +154,15 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
                 .Find(filter)
                 .Sort(Builders<AppendRequest>.Sort.Ascending(x => x.CreatedAtUtc))
                 .Limit(100)
-                .ToListAsync(ct);
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
 
             if (batch.Count == 0)
                 break;
 
             // Of these, which are already committed in the event log?
             var batchCommitIds = batch.Select(r => r.CommitId);
-            var alreadyCommitted = await GetCommittedIdsAsync(batchCommitIds, ct);
+            var alreadyCommitted = await GetCommittedIdsAsync(batchCommitIds, ct).ConfigureAwait(false);
 
             // Track them so subsequent iterations skip them in the query too.
             allAlreadyCommitted.UnionWith(alreadyCommitted);
@@ -175,9 +177,9 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
             if (pending.Count == 0)
                 continue;
 
-            var result = await _appender.AppendBatchAsync(pending, ct);
+            var result = await _appender.AppendBatchAsync(pending, ct).ConfigureAwait(false);
 
-            if (!await TryAdvanceCommitPositionAsync(result, ct))
+            if (!await TryAdvanceCommitPositionAsync(result, ct).ConfigureAwait(false))
                 return false; // Step down - don't mark as complete
 
             // The newly appended ones are now committed too.
@@ -199,7 +201,8 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
 
         var ids = await _eventLog
             .Distinct(x => x.CommitId, filter, cancellationToken: ct)
-            .ToListAsync(ct);
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
 
         return [.. ids];
     }
@@ -210,7 +213,7 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
 
         var batch = new List<AppendRequest>();
 
-        while (await _channel.Reader.WaitToReadAsync(ct))
+        while (await _channel.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
         {
             batch.Clear();
 
@@ -220,9 +223,9 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
             if (batch.Count == 0)
                 continue;
 
-            var result = await _appender.AppendBatchAsync(batch, ct);
+            var result = await _appender.AppendBatchAsync(batch, ct).ConfigureAwait(false);
 
-            if (!await TryAdvanceCommitPositionAsync(result, ct))
+            if (!await TryAdvanceCommitPositionAsync(result, ct).ConfigureAwait(false))
                 return; // Step down - don't mark as complete
 
             _requestCompleter.Complete([..batch.Select(x => x.CommitId)]);
@@ -234,7 +237,7 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
         if (result.IsEmpty)
             return true;
 
-        var success = await _handle.TryAdvanceCommitPositionAsync(result.PositionCount, ct);
+        var success = await _handle.TryAdvanceCommitPositionAsync(result.PositionCount, ct).ConfigureAwait(false);
         if (success)
         {
             _currentPosition = result.EndPosition;
