@@ -1,4 +1,5 @@
-﻿using DomainBlocks.EventStore.Abstractions;
+﻿using System.Diagnostics;
+using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB.Client.Coordination;
 using DomainBlocks.EventStore.MongoDB.Client.Schema2;
 using DomainBlocks.EventStore.TypeMapping;
@@ -77,16 +78,39 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task AppendToStreamAsync_ScratchTest(CancellationToken ct)
+    public async Task AppendToStreamAsync_SingleAppend_MeasureLatency(CancellationToken ct)
     {
-        var streamId = $"test-{Guid.NewGuid():N}";
+        // Warm up: first request pays connection/change-stream setup costs.
+        await DoAppend("warmup", ct);
 
-        AppendEvent<IDomainEvent>[] events =
-        [
-            CreateTestEvent("TestEvent1"),
-            CreateTestEvent("TestEvent2"),
-            CreateTestEvent("TestEvent3")
-        ];
+        const int iterations = 200;
+        var latencies = new List<double>(iterations);
+
+        for (var i = 0; i < iterations; i++)
+        {
+            var streamId = $"test-{Guid.NewGuid():N}";
+            var sw = Stopwatch.StartNew();
+            await DoAppend(streamId, ct);
+            sw.Stop();
+            latencies.Add(sw.Elapsed.TotalMilliseconds);
+        }
+
+        var sorted = latencies.OrderBy(x => x).ToList();
+        await TestContext.Out.WriteLineAsync($"p50:  {sorted[Percentile(0.50)]:F1} ms");
+        await TestContext.Out.WriteLineAsync($"p90:  {sorted[Percentile(0.90)]:F1} ms");
+        await TestContext.Out.WriteLineAsync($"p99:  {sorted[Percentile(0.99)]:F1} ms");
+        await TestContext.Out.WriteLineAsync($"min:  {sorted[0]:F1} ms");
+        await TestContext.Out.WriteLineAsync($"max:  {sorted[^1]:F1} ms");
+        await TestContext.Out.WriteLineAsync($"mean: {latencies.Average():F1} ms");
+
+        return;
+
+        int Percentile(double p) => (int)Math.Ceiling(sorted.Count * p) - 1;
+    }
+
+    private async Task DoAppend(string streamId, CancellationToken ct)
+    {
+        AppendEvent<IDomainEvent>[] events = [CreateTestEvent("Evt1")];
 
         var options = new AppendToStreamOptions
         {
