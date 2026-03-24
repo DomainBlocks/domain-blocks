@@ -1,5 +1,4 @@
-﻿using DomainBlocks.EventStore.MongoDB.Client.Schema2;
-using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
+﻿using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
@@ -9,8 +8,8 @@ using MongoDB.Driver;
 namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 
 public sealed class EventAppenderLeaseObserver(
-    IMongoCollection<AppendRequest> requests,
-    IMongoCollection<EventLogEntry> eventLog,
+    IMongoCollection<BsonDocument> requests,
+    IMongoCollection<BsonDocument> eventLog,
     IChangeStreamSubject<ChangeStreamDocument<BsonDocument>> changeStreamSubject,
     ILoggerFactory loggerFactory) :
     ILeaseObserver
@@ -25,11 +24,11 @@ public sealed class EventAppenderLeaseObserver(
     {
         var leaseState = BsonSerializer.Deserialize<LeaseState>(handle.CurrentSnapshot.State);
 
-        var appender = new EventAppender(
+        var appender = new FastEventAppender(
             eventLog,
             handle.CurrentSnapshot.Epoch,
             leaseState.CommitPosition,
-            loggerFactory.CreateLogger<EventAppender>());
+            loggerFactory.CreateLogger<FastEventAppender>());
 
         var requestCompleter = new AppendRequestCompleter(
             requests,

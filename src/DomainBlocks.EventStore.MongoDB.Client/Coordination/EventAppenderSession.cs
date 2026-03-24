@@ -16,14 +16,14 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
 
     private readonly ILeaseHandle<LeaseState> _handle;
     private long? _currentPosition;
-    private readonly IMongoCollection<AppendRequest> _requests;
-    private readonly IMongoCollection<EventLogEntry> _eventLog;
-    private readonly IEventAppender _appender;
+    private readonly IMongoCollection<BsonDocument> _requests;
+    private readonly IMongoCollection<BsonDocument> _eventLog;
+    private readonly IFastEventAppender _appender;
     private readonly IChangeStreamSubject<ChangeStreamDocument<BsonDocument>> _changeStreamSubject;
     private readonly IAppendRequestCompleter _requestCompleter;
     private readonly ILogger _logger;
     private readonly CancellationTokenSource _stopCts;
-    private readonly Channel<AppendRequest> _channel;
+    private readonly Channel<BsonDocument> _channel;
     private IDisposable? _changeStreamAttachment;
     private Task? _runTask;
     private readonly TaskCompletionSource _livelinessTcs = new();
@@ -31,9 +31,9 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
     public EventAppenderSession(
         ILeaseHandle<LeaseState> handle,
         long? currentPosition,
-        IEventAppender appender,
-        IMongoCollection<AppendRequest> requests,
-        IMongoCollection<EventLogEntry> eventLog,
+        IFastEventAppender appender,
+        IMongoCollection<BsonDocument> requests,
+        IMongoCollection<BsonDocument> eventLog,
         IChangeStreamSubject<ChangeStreamDocument<BsonDocument>> changeStreamSubject,
         IAppendRequestCompleter requestCompleter,
         ILoggerFactory loggerFactory)
@@ -54,7 +54,7 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
             SingleReader = true
         };
 
-        _channel = Channel.CreateUnbounded<AppendRequest>(channelOptions);
+        _channel = Channel.CreateUnbounded<BsonDocument>(channelOptions);
     }
 
     public Task Liveliness => _livelinessTcs.Task;
@@ -73,8 +73,7 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
 
         if (change.OperationType == ChangeStreamOperationType.Insert)
         {
-            var request = BsonSerializer.Deserialize<AppendRequest>(change.FullDocument);
-            await _channel.Writer.WriteAsync(request, ct).ConfigureAwait(false);
+            await _channel.Writer.WriteAsync(change.FullDocument, ct).ConfigureAwait(false);
         }
     }
 
@@ -104,9 +103,9 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
 
         try
         {
-            var success = await CatchUpAsync(ct).ConfigureAwait(false);
-            if (success)
-                await RunLiveAsync(ct).ConfigureAwait(false);
+            // var success = await CatchUpAsync(ct).ConfigureAwait(false);
+            // if (success)
+            await RunLiveAsync(ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -114,78 +113,78 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
         }
     }
 
-    private async Task<bool> CatchUpAsync(CancellationToken ct)
-    {
-        _logger.LogInformation("Catch-up phase starting");
+    // private async Task<bool> CatchUpAsync(CancellationToken ct)
+    // {
+    //     _logger.LogInformation("Catch-up phase starting");
+    //
+    //     var allAlreadyCommitted = new HashSet<Guid>();
+    //
+    //     while (true)
+    //     {
+    //         ct.ThrowIfCancellationRequested();
+    //
+    //         // Exclude commit IDs we've already identified as committed.
+    //         var filter = allAlreadyCommitted.Count > 0
+    //             ? Builders<AppendRequest>.Filter.Eq(x => x.CompletedAtUtc, null) &
+    //               Builders<AppendRequest>.Filter.Nin(x => x.CommitId, allAlreadyCommitted)
+    //             : Builders<AppendRequest>.Filter.Eq(x => x.CompletedAtUtc, null);
+    //
+    //         var batch = await _requests
+    //             .Find(filter)
+    //             .Sort(Builders<AppendRequest>.Sort.Ascending(x => x.CreatedAtUtc))
+    //             .Limit(MaxCatchUpBatchSize)
+    //             .ToListAsync(ct)
+    //             .ConfigureAwait(false);
+    //
+    //         if (batch.Count == 0)
+    //             break;
+    //
+    //         // Of these, which are already committed in the event log?
+    //         var batchCommitIds = batch.Select(r => r.CommitId);
+    //         var alreadyCommitted = await GetCommittedIdsAsync(batchCommitIds, ct).ConfigureAwait(false);
+    //
+    //         // Track them so subsequent iterations skip them in the query too.
+    //         allAlreadyCommitted.UnionWith(alreadyCommitted);
+    //
+    //         // Mark committed requests as completed (off the hot path).
+    //         if (alreadyCommitted.Count > 0)
+    //             _requestCompleter.Complete(alreadyCommitted);
+    //
+    //         // Only send uncommitted requests to the appender.
+    //         var pending = batch.Where(r => !alreadyCommitted.Contains(r.CommitId)).ToList();
+    //
+    //         if (pending.Count == 0)
+    //             continue;
+    //
+    //         var result = await _appender.AppendBatchAsync(pending, ct).ConfigureAwait(false);
+    //
+    //         if (!await TryAdvanceCommitPositionAsync(result, ct).ConfigureAwait(false))
+    //             return false; // Step down - don't mark as complete
+    //
+    //         // The newly appended ones are now committed too.
+    //         _requestCompleter.Complete([.. pending.Select(r => r.CommitId)]);
+    //     }
+    //
+    //     _logger.LogInformation("Catch-up phase complete");
+    //     return true;
+    // }
 
-        var allAlreadyCommitted = new HashSet<Guid>();
-
-        while (true)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            // Exclude commit IDs we've already identified as committed.
-            var filter = allAlreadyCommitted.Count > 0
-                ? Builders<AppendRequest>.Filter.Eq(x => x.CompletedAtUtc, null) &
-                  Builders<AppendRequest>.Filter.Nin(x => x.CommitId, allAlreadyCommitted)
-                : Builders<AppendRequest>.Filter.Eq(x => x.CompletedAtUtc, null);
-
-            var batch = await _requests
-                .Find(filter)
-                .Sort(Builders<AppendRequest>.Sort.Ascending(x => x.CreatedAtUtc))
-                .Limit(MaxCatchUpBatchSize)
-                .ToListAsync(ct)
-                .ConfigureAwait(false);
-
-            if (batch.Count == 0)
-                break;
-
-            // Of these, which are already committed in the event log?
-            var batchCommitIds = batch.Select(r => r.CommitId);
-            var alreadyCommitted = await GetCommittedIdsAsync(batchCommitIds, ct).ConfigureAwait(false);
-
-            // Track them so subsequent iterations skip them in the query too.
-            allAlreadyCommitted.UnionWith(alreadyCommitted);
-
-            // Mark committed requests as completed (off the hot path).
-            if (alreadyCommitted.Count > 0)
-                _requestCompleter.Complete(alreadyCommitted);
-
-            // Only send uncommitted requests to the appender.
-            var pending = batch.Where(r => !alreadyCommitted.Contains(r.CommitId)).ToList();
-
-            if (pending.Count == 0)
-                continue;
-
-            var result = await _appender.AppendBatchAsync(pending, ct).ConfigureAwait(false);
-
-            if (!await TryAdvanceCommitPositionAsync(result, ct).ConfigureAwait(false))
-                return false; // Step down - don't mark as complete
-
-            // The newly appended ones are now committed too.
-            _requestCompleter.Complete([.. pending.Select(r => r.CommitId)]);
-        }
-
-        _logger.LogInformation("Catch-up phase complete");
-        return true;
-    }
-
-    private async Task<HashSet<Guid>> GetCommittedIdsAsync(IEnumerable<Guid> candidateIds, CancellationToken ct)
-    {
-        if (_currentPosition is null)
-            return [];
-
-        var filter =
-            Builders<EventLogEntry>.Filter.In(x => x.CommitId, candidateIds) &
-            Builders<EventLogEntry>.Filter.Lte(x => x.Position, _currentPosition.Value);
-
-        var ids = await _eventLog
-            .Distinct(x => x.CommitId, filter, cancellationToken: ct)
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
-
-        return [.. ids];
-    }
+    // private async Task<HashSet<Guid>> GetCommittedIdsAsync(IEnumerable<Guid> candidateIds, CancellationToken ct)
+    // {
+    //     if (_currentPosition is null)
+    //         return [];
+    //
+    //     var filter =
+    //         Builders<EventLogEntry>.Filter.In(x => x.CommitId, candidateIds) &
+    //         Builders<EventLogEntry>.Filter.Lte(x => x.Position, _currentPosition.Value);
+    //
+    //     var ids = await _eventLog
+    //         .Distinct(x => x.CommitId, filter, cancellationToken: ct)
+    //         .ToListAsync(ct)
+    //         .ConfigureAwait(false);
+    //
+    //     return [.. ids];
+    // }
 
     private async Task RunLiveAsync(CancellationToken ct)
     {
@@ -193,7 +192,7 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
 
         _livelinessTcs.TrySetResult();
 
-        var batch = new List<AppendRequest>(MaxLiveBatchSize);
+        var batch = new List<BsonDocument>(MaxLiveBatchSize);
 
         while (await _channel.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
         {
@@ -212,7 +211,7 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
             if (!await TryAdvanceCommitPositionAsync(result, ct).ConfigureAwait(false))
                 return; // Step down - don't mark as complete
 
-            _requestCompleter.Complete([..batch.Select(x => x.CommitId)]);
+            _requestCompleter.Complete([..batch.Select(x => x[AppendRequest.FieldNames.CommitId].AsGuid)]);
         }
     }
 

@@ -82,11 +82,11 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
         var leaseClient = new LeaseClient(leaseStore, _loggerFactory.CreateLogger<LeaseClient>());
         var leaseContender = new LeaseContender(leaseClient, _loggerFactory.CreateLogger<LeaseContender>());
 
-        var requests = db.GetCollection<AppendRequest>(ns.AppendRequestsCollectionName);
+        var requests = db.GetCollection<BsonDocument>(ns.AppendRequestsCollectionName);
 
         var leaseObserver = new EventAppenderLeaseObserver(
             requests,
-            db.GetCollection<EventLogEntry>(ns.EventLogCollectionName),
+            db.GetCollection<BsonDocument>(ns.EventLogCollectionName),
             changeStreamSubject,
             _loggerFactory);
 

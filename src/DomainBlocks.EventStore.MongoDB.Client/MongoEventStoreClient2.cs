@@ -7,13 +7,13 @@ using MongoDB.Driver;
 namespace DomainBlocks.EventStore.MongoDB.Client;
 
 public class MongoEventStoreClient2<TEvent>(
-    IMongoCollection<AppendRequest> requests,
+    IMongoCollection<BsonDocument> requests,
     IAppendRequestTracker requestTracker,
     MongoEventStoreClientOptions2<TEvent> options) :
     IEventStoreClient<TEvent>
     where TEvent : notnull
 {
-    private readonly IMongoCollection<AppendRequest> _requests = requests
+    private readonly IMongoCollection<BsonDocument> _requests = requests
         .WithWriteConcern(WriteConcern.W1.With(journal: false));
 
     private readonly IEventEncoder<TEvent, BsonValue, BsonValue> _eventEncoder = options.EventCodec.Encoder;
@@ -27,21 +27,24 @@ public class MongoEventStoreClient2<TEvent>(
     {
         options ??= AppendToStreamOptions.Default;
 
-        var request = new AppendRequest
-        {
-            CommitId = options.CommitId,
-            StreamId = streamId,
-            ExpectedStreamState = options.ExpectedState,
-            Events = _eventEncoder
+        var eventsArray = new BsonArray(
+            _eventEncoder
                 .Encode(events)
-                .Select(x => new PendingEvent
+                .Select(x => new BsonDocument
                 {
-                    EventName = x.EventName,
-                    EventData = x.EventData,
-                    Metadata = x.Metadata ?? BsonNull.Value
-                })
-                .ToArray(),
-            CreatedAtUtc = DateTime.UtcNow
+                    { PendingEvent.FieldNames.EventName, x.EventName },
+                    { PendingEvent.FieldNames.EventData, x.EventData },
+                    { PendingEvent.FieldNames.Metadata, x.Metadata ?? BsonNull.Value }
+                }));
+
+        var request = new BsonDocument
+        {
+            { AppendRequest.FieldNames.CommitId, new BsonBinaryData(options.CommitId, GuidRepresentation.Standard) },
+            { AppendRequest.FieldNames.StreamId, streamId },
+            { AppendRequest.FieldNames.ExpectedStreamState, SerializeExpectedStreamState(options.ExpectedState) },
+            { AppendRequest.FieldNames.Events, eventsArray },
+            { AppendRequest.FieldNames.CreatedAtUtc, DateTime.UtcNow }
+            // CompletedAtUtc omitted — absent field matches [BsonIgnoreIfNull] on the schema
         };
 
         var commitTask = requestTracker.WaitAsync(options.CommitId, cancellationToken);
@@ -59,9 +62,23 @@ public class MongoEventStoreClient2<TEvent>(
         throw new NotImplementedException();
     }
 
-    // private static string GetCommitStreamId(string streamId)
-    // {
-    //     var escapedStreamId = Uri.EscapeDataString(streamId);
-    //     return $"$dbx.sys/coord/commits/{escapedStreamId}";
-    // }
+    private static BsonDocument SerializeExpectedStreamState(ExpectedStreamState value) =>
+        value.Kind switch
+        {
+            ExpectedStreamStateKind.Any => new BsonDocument("kind", "any"),
+
+            ExpectedStreamStateKind.StreamExists => new BsonDocument("kind", "streamExists"),
+
+            ExpectedStreamStateKind.StreamDoesNotExist => new BsonDocument("kind", "streamDoesNotExist"),
+
+            ExpectedStreamStateKind.SpecificVersion => new BsonDocument
+            {
+                { "kind", "version" },
+                { "version", checked((long)value.Version!.Value.Value) }
+            },
+
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(value),
+                $"Unknown {nameof(ExpectedStreamStateKind)}: {value.Kind}")
+        };
 }
