@@ -5,7 +5,6 @@ using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
-using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
@@ -25,7 +24,7 @@ public sealed class AppendRequestTracker(
 
     // Buffer: AppendBatchCompleted position → batch details (including epoch).
     // Only accessed from OnNextAsync (single writer from change stream producer).
-    private readonly SortedDictionary<long, BufferedBatch> _bufferedBatches = [];
+    private readonly SortedDictionary<long, AppendBatch> _appendBatches = [];
 
     // The current epoch as observed from lease changes. Null until the first lease update is seen.
     private long? _currentEpoch;
@@ -72,20 +71,18 @@ public sealed class AppendRequestTracker(
             return;
 
         var eventData = doc[EventLogEntry.FieldNames.EventData].AsBsonDocument;
-        var batchCompleted = BsonSerializer.Deserialize<AppendBatchCompleted>(eventData);
+        var batch = new AppendBatch(epoch);
 
-        var batch = new BufferedBatch(epoch);
+        foreach (var value in eventData[AppendBatchCompleted.FieldNames.AppendedCommitIds].AsBsonArray)
+            batch.Committed.Add(value.AsGuid);
 
-        foreach (var id in batchCompleted.Appends)
-            batch.Committed.Add(id);
+        foreach (var value in eventData[AppendBatchCompleted.FieldNames.DuplicateCommitIds].AsBsonArray)
+            batch.Committed.Add(value.AsGuid);
 
-        foreach (var id in batchCompleted.Duplicates)
-            batch.Committed.Add(id);
+        foreach (var value in eventData[AppendBatchCompleted.FieldNames.Rejections].AsBsonArray)
+            batch.Rejections.Add(value.AsBsonDocument);
 
-        foreach (var rejection in batchCompleted.Rejections)
-            batch.Rejections.Add(rejection);
-
-        _bufferedBatches[position] = batch;
+        _appendBatches[position] = batch;
     }
 
     private void HandleLeaseChange(ChangeStreamDocument<BsonDocument> change)
@@ -110,7 +107,7 @@ public sealed class AppendRequestTracker(
             if (!_currentEpoch.HasValue || epoch > _currentEpoch.Value)
             {
                 _currentEpoch = epoch;
-                PurgeStaleBufferedBatches(epoch);
+                PurgeStaleBatches(epoch);
             }
         }
 
@@ -123,30 +120,30 @@ public sealed class AppendRequestTracker(
         FlushUpTo(commitPosition);
     }
 
-    private void PurgeStaleBufferedBatches(long currentEpoch)
+    private void PurgeStaleBatches(long currentEpoch)
     {
         var toRemove = new List<long>();
 
-        foreach (var (position, batch) in _bufferedBatches)
+        foreach (var (position, batch) in _appendBatches)
         {
             if (batch.Epoch < currentEpoch)
                 toRemove.Add(position);
         }
 
         foreach (var position in toRemove)
-            _bufferedBatches.Remove(position);
+            _appendBatches.Remove(position);
     }
 
     private void FlushUpTo(long commitPosition)
     {
         var toRemove = new List<long>();
 
-        foreach (var (position, batch) in _bufferedBatches)
+        foreach (var (position, batch) in _appendBatches)
         {
             if (position > commitPosition)
                 break; // SortedDictionary - everything after is also above
 
-            // Final guard: skip batches from stale epochs that slipped through.
+            // Skip batches from stale epochs that slipped through.
             if (_currentEpoch.HasValue && batch.Epoch < _currentEpoch.Value)
             {
                 toRemove.Add(position);
@@ -159,14 +156,18 @@ public sealed class AppendRequestTracker(
                     tcs.TrySetResult();
             }
 
-            foreach (var rejection in batch.Rejections)
+            foreach (var rejDoc in batch.Rejections)
             {
-                if (_waiters.TryRemove(rejection.CommitId, out var tcs))
+                var commitId = rejDoc[CommitRejection.FieldNames.CommitId].AsGuid;
+
+                if (_waiters.TryRemove(commitId, out var tcs))
                 {
                     tcs.TrySetException(new StreamAppendConflictException(
-                        rejection.StreamId,
-                        rejection.ExpectedStreamState,
-                        rejection.ActualStreamState));
+                        streamId: rejDoc[CommitRejection.FieldNames.StreamId].AsString,
+                        expectedState: ParseExpectedStreamState(
+                            rejDoc[CommitRejection.FieldNames.ExpectedStreamState].AsBsonDocument),
+                        actualState: ParseStreamState(
+                            rejDoc[CommitRejection.FieldNames.ActualStreamState].AsBsonDocument)));
                 }
             }
 
@@ -174,13 +175,35 @@ public sealed class AppendRequestTracker(
         }
 
         foreach (var position in toRemove)
-            _bufferedBatches.Remove(position);
+            _appendBatches.Remove(position);
     }
 
-    private sealed class BufferedBatch(long epoch)
+    private static ExpectedStreamState ParseExpectedStreamState(BsonDocument doc)
+    {
+        return doc["kind"].AsString switch
+        {
+            "any" => ExpectedStreamState.Any,
+            "streamExists" => ExpectedStreamState.StreamExists,
+            "streamDoesNotExist" => ExpectedStreamState.StreamDoesNotExist,
+            "version" => ExpectedStreamState.SpecificVersion(StreamVersion.FromInt64(doc["version"].AsInt64)),
+            var k => throw new InvalidOperationException($"Unknown expected stream state kind: '{k}'")
+        };
+    }
+
+    private static StreamState ParseStreamState(BsonDocument doc)
+    {
+        return doc["kind"].AsString switch
+        {
+            "streamDoesNotExist" => StreamState.StreamDoesNotExist,
+            "streamExists" => StreamState.StreamExists(StreamVersion.FromInt64(doc["version"].AsInt64)),
+            var k => throw new InvalidOperationException($"Unknown stream state kind: '{k}'")
+        };
+    }
+
+    private sealed class AppendBatch(long epoch)
     {
         public long Epoch { get; } = epoch;
         public HashSet<Guid> Committed { get; } = [];
-        public List<CommitRejection> Rejections { get; } = [];
+        public List<BsonDocument> Rejections { get; } = [];
     }
 }
