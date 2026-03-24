@@ -20,7 +20,7 @@ public sealed class AppendRequestCompleter : IAsyncDisposable, IAppendRequestCom
         IMongoCollection<BsonDocument> appendRequests,
         ILogger<AppendRequestCompleter> logger)
     {
-        _appendRequests = appendRequests;
+        _appendRequests = appendRequests.WithWriteConcern(WriteConcern.Unacknowledged);
         _logger = logger;
 
         _channel = Channel.CreateUnbounded<IReadOnlyCollection<Guid>>(
