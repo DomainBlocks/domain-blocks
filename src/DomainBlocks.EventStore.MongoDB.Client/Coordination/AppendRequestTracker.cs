@@ -19,11 +19,16 @@ public sealed class AppendRequestTracker(
     private const string CommitPositionFieldPath =
         $"{LeaseDocument.FieldNames.State}.{LeaseState.FieldNames.CommitPosition}";
 
+    private const string EpochFieldPath = LeaseDocument.FieldNames.Epoch;
+
     private readonly ConcurrentDictionary<Guid, TaskCompletionSource> _waiters = [];
 
-    // Buffer: AppendBatchCompleted position → commit IDs from that batch.
+    // Buffer: AppendBatchCompleted position → batch details (including epoch).
     // Only accessed from OnNextAsync (single writer from change stream producer).
     private readonly SortedDictionary<long, BufferedBatch> _bufferedBatches = [];
+
+    // The current epoch as observed from lease changes. Null until the first lease update is seen.
+    private long? _currentEpoch;
 
     public Task WaitAsync(Guid commitId, CancellationToken cancellationToken = default)
     {
@@ -54,15 +59,22 @@ public sealed class AppendRequestTracker(
         if (doc is null)
             return;
 
+        var position = doc["_id"].AsInt64;
         var eventName = doc.GetValue(EventLogEntry.FieldNames.EventName, BsonNull.Value);
+
         if (eventName.AsString != "AppendBatchCompleted")
             return;
 
-        var position = doc["_id"].AsInt64;
+        var epoch = doc[EventLogEntry.FieldNames.Epoch].AsInt64;
+
+        // Ignore batches from epochs we know are stale.
+        if (epoch < _currentEpoch)
+            return;
+
         var eventData = doc[EventLogEntry.FieldNames.EventData].AsBsonDocument;
         var batchCompleted = BsonSerializer.Deserialize<AppendBatchCompleted>(eventData);
 
-        var batch = new BufferedBatch();
+        var batch = new BufferedBatch(epoch);
 
         foreach (var id in batchCompleted.Appends)
             batch.Committed.Add(id);
@@ -86,14 +98,43 @@ public sealed class AppendRequestTracker(
         if (resourceId != LeaseContender.ResourceId)
             return;
 
-        // Extract the new commit position from the updated fields.
         var updatedFields = change.UpdateDescription?.UpdatedFields;
-        if (updatedFields is null || !updatedFields.Contains(CommitPositionFieldPath))
+        if (updatedFields is null)
+            return;
+
+        // Detect epoch transitions and purge stale buffered batches.
+        if (updatedFields.Contains(EpochFieldPath))
+        {
+            var epoch = updatedFields[EpochFieldPath].AsInt64;
+
+            if (!_currentEpoch.HasValue || epoch > _currentEpoch.Value)
+            {
+                _currentEpoch = epoch;
+                PurgeStaleBufferedBatches(epoch);
+            }
+        }
+
+        // Advance commit position if present.
+        if (!updatedFields.Contains(CommitPositionFieldPath))
             return;
 
         var commitPosition = updatedFields[CommitPositionFieldPath].AsInt64;
 
         FlushUpTo(commitPosition);
+    }
+
+    private void PurgeStaleBufferedBatches(long currentEpoch)
+    {
+        var toRemove = new List<long>();
+
+        foreach (var (position, batch) in _bufferedBatches)
+        {
+            if (batch.Epoch < currentEpoch)
+                toRemove.Add(position);
+        }
+
+        foreach (var position in toRemove)
+            _bufferedBatches.Remove(position);
     }
 
     private void FlushUpTo(long commitPosition)
@@ -103,15 +144,19 @@ public sealed class AppendRequestTracker(
         foreach (var (position, batch) in _bufferedBatches)
         {
             if (position > commitPosition)
-                break; // SortedDictionary — everything after is also above
+                break; // SortedDictionary - everything after is also above
+
+            // Final guard: skip batches from stale epochs that slipped through.
+            if (_currentEpoch.HasValue && batch.Epoch < _currentEpoch.Value)
+            {
+                toRemove.Add(position);
+                continue;
+            }
 
             foreach (var commitId in batch.Committed)
             {
                 if (_waiters.TryRemove(commitId, out var tcs))
-                {
                     tcs.TrySetResult();
-                    logger.LogDebug("Acked commit {CommitId}", commitId);
-                }
             }
 
             foreach (var rejection in batch.Rejections)
@@ -132,8 +177,9 @@ public sealed class AppendRequestTracker(
             _bufferedBatches.Remove(position);
     }
 
-    private sealed class BufferedBatch
+    private sealed class BufferedBatch(long epoch)
     {
+        public long Epoch { get; } = epoch;
         public HashSet<Guid> Committed { get; } = [];
         public List<CommitRejection> Rejections { get; } = [];
     }

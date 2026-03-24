@@ -49,7 +49,7 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
 
         var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>()
             .Match(filterBuilder.Or(
-                // AppendRequest inserts only — excludes completer's UpdateManyAsync events
+                // AppendRequest inserts only - excludes completer's UpdateManyAsync events
                 filterBuilder.And(
                     filterBuilder.Eq("ns.coll", ns.AppendRequestsCollectionName),
                     filterBuilder.Eq("operationType", "insert")),
@@ -150,8 +150,8 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task AppendToStreamAsync_ConcurrentAppends_MeasureThroughput(CancellationToken ct)
     {
-        const int concurrency = 100;
-        const int opsPerProducer = 100;
+        const int concurrency = 200;
+        const int opsPerProducer = 250;
         const int totalOps = concurrency * opsPerProducer;
 
         // Warm up
