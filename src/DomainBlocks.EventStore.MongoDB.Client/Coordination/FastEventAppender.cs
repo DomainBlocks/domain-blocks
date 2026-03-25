@@ -10,7 +10,8 @@ public sealed class FastEventAppender(
     IMongoCollection<BsonDocument> eventLog,
     long epoch,
     long? initialCommitPosition,
-    ILogger<FastEventAppender> logger) : IFastEventAppender
+    ILogger<FastEventAppender> logger) :
+    IFastEventAppender
 {
     private static readonly BsonDocument GroupByStreamStage = new("$group", new BsonDocument
     {
@@ -27,6 +28,8 @@ public sealed class FastEventAppender(
 
     private readonly BsonDocument _visibilityFilter = CreateVisibilityFilter(epoch, initialCommitPosition);
 
+    private Task _prefetchTask = Task.CompletedTask;
+
     // Reusable per-batch buffers - cleared each batch, never reallocated.
     private readonly List<BsonDocument> _requests = [];
     private readonly HashSet<Guid> _appendedCommitIds = [];
@@ -35,19 +38,19 @@ public sealed class FastEventAppender(
     private readonly Dictionary<string, long> _streamVersions = [];
     private readonly List<WriteModel<BsonDocument>> _writeModels = [];
 
-    public async Task<AppendBatchResult> AppendBatchAsync(
-        IEnumerable<BsonDocument> requests,
-        CancellationToken cancellationToken = default)
+    public void StartPrefetch(IEnumerable<BsonDocument> requests, CancellationToken ct)
     {
         ClearBuffers();
-
         _requests.AddRange(requests);
+        _prefetchTask = _requests.Count == 0 ? Task.CompletedTask : PrefetchAsync(ct);
+    }
+
+    public async Task<AppendBatchResult> FlushAsync(CancellationToken ct)
+    {
         if (_requests.Count == 0)
             return new AppendBatchResult(_nextPosition, _nextPosition);
 
-        logger.LogDebug("Appending batch of {RequestCount} request(s) at epoch {Epoch}", _requests.Count, epoch);
-
-        await PrefetchAsync(cancellationToken).ConfigureAwait(false);
+        await _prefetchTask.ConfigureAwait(false);
 
         var nextPosition = BuildWriteModels();
 
@@ -58,16 +61,15 @@ public sealed class FastEventAppender(
         }
 
         await _eventLog
-            .BulkWriteAsync(_writeModels, new BulkWriteOptions { IsOrdered = true }, cancellationToken)
+            .BulkWriteAsync(_writeModels, new BulkWriteOptions { IsOrdered = true }, ct)
             .ConfigureAwait(false);
 
-        // Only advance after a successful write.
         var startPosition = _nextPosition;
         _nextPosition = nextPosition;
 
         logger.LogInformation(
             "Batch appended: positions {StartPosition}–{EndPosition}, " +
-            "{AppendCount} appended, {DuplicateCount} duplicate(s), {RejectionCount} rejected, ",
+            "{AppendCount} appended, {DuplicateCount} duplicate(s), {RejectionCount} rejected",
             startPosition,
             nextPosition - 1,
             _appendedCommitIds.Count,
@@ -76,6 +78,48 @@ public sealed class FastEventAppender(
 
         return new AppendBatchResult(startPosition, nextPosition);
     }
+
+    // public async Task<AppendBatchResult> AppendBatchAsync(
+    //     IEnumerable<BsonDocument> requests,
+    //     CancellationToken cancellationToken = default)
+    // {
+    //     ClearBuffers();
+    //
+    //     _requests.AddRange(requests);
+    //     if (_requests.Count == 0)
+    //         return new AppendBatchResult(_nextPosition, _nextPosition);
+    //
+    //     logger.LogDebug("Appending batch of {RequestCount} request(s) at epoch {Epoch}", _requests.Count, epoch);
+    //
+    //     await PrefetchAsync(cancellationToken).ConfigureAwait(false);
+    //
+    //     var nextPosition = BuildWriteModels();
+    //
+    //     if (_writeModels.Count == 0)
+    //     {
+    //         logger.LogDebug("Batch produced no write models; skipping");
+    //         return new AppendBatchResult(_nextPosition, _nextPosition);
+    //     }
+    //
+    //     await _eventLog
+    //         .BulkWriteAsync(_writeModels, new BulkWriteOptions { IsOrdered = true }, cancellationToken)
+    //         .ConfigureAwait(false);
+    //
+    //     // Only advance after a successful write.
+    //     var startPosition = _nextPosition;
+    //     _nextPosition = nextPosition;
+    //
+    //     logger.LogInformation(
+    //         "Batch appended: positions {StartPosition}–{EndPosition}, " +
+    //         "{AppendCount} appended, {DuplicateCount} duplicate(s), {RejectionCount} rejected, ",
+    //         startPosition,
+    //         nextPosition - 1,
+    //         _appendedCommitIds.Count,
+    //         _duplicateCommitIds.Count,
+    //         _rejections.Count);
+    //
+    //     return new AppendBatchResult(startPosition, nextPosition);
+    // }
 
     private static BsonDocument CreateVisibilityFilter(long epoch, long? initialCommitPosition)
     {

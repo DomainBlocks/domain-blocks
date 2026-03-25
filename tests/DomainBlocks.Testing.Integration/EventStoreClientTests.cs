@@ -11,7 +11,7 @@ public abstract class EventStoreClientTests
 #if DEBUG
     protected const int TestTimeoutMillis = 10 * 60 * 1_000;
 #else
-    protected const int TestTimeoutMillis = 60 * 1_000;
+    protected const int TestTimeoutMillis = 120 * 1_000;
 #endif
 
     private static IEnumerable<TestCaseData> PositionAndDirectionCases

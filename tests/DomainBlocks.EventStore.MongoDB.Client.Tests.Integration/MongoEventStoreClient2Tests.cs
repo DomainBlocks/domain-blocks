@@ -1,7 +1,6 @@
 ﻿using System.Diagnostics;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB.Client.Coordination;
-using DomainBlocks.EventStore.MongoDB.Client.Schema2;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
@@ -150,7 +149,7 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task AppendToStreamAsync_ConcurrentAppends_MeasureThroughput(CancellationToken ct)
     {
-        const int concurrency = 200;
+        const int concurrency = 500;
         const int opsPerProducer = 250;
         const int totalOps = concurrency * opsPerProducer;
 

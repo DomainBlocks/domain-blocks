@@ -12,7 +12,7 @@ namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>, IAsyncDisposable
 {
     private const int MaxCatchUpBatchSize = 100;
-    private const int MaxLiveBatchSize = 100;
+    private const int MaxLiveBatchSize = 500;
 
     private readonly ILeaseHandle<LeaseState> _handle;
     private long? _currentPosition;
@@ -186,6 +186,35 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
     //     return [.. ids];
     // }
 
+    // private async Task RunLiveAsync(CancellationToken ct)
+    // {
+    //     _logger.LogInformation("Switching to live mode");
+    //
+    //     _livelinessTcs.TrySetResult();
+    //
+    //     var batch = new List<BsonDocument>(MaxLiveBatchSize);
+    //
+    //     while (await _channel.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
+    //     {
+    //         batch.Clear();
+    //
+    //         while (batch.Count < MaxLiveBatchSize && _channel.Reader.TryRead(out var request))
+    //             batch.Add(request);
+    //
+    //         if (batch.Count == 0)
+    //             continue;
+    //
+    //         _logger.LogDebug("Processing batch of {BatchSize} request(s)", batch.Count);
+    //
+    //         var result = await _appender.AppendBatchAsync(batch, ct).ConfigureAwait(false);
+    //
+    //         if (!await TryAdvanceCommitPositionAsync(result, ct).ConfigureAwait(false))
+    //             return; // Step down - don't mark as complete
+    //
+    //         _requestCompleter.Complete([..batch.Select(x => x[AppendRequest.FieldNames.CommitId].AsGuid)]);
+    //     }
+    // }
+
     private async Task RunLiveAsync(CancellationToken ct)
     {
         _logger.LogInformation("Switching to live mode");
@@ -193,6 +222,7 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
         _livelinessTcs.TrySetResult();
 
         var batch = new List<BsonDocument>(MaxLiveBatchSize);
+        var advanceTask = Task.FromResult(true);
 
         while (await _channel.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
         {
@@ -204,15 +234,26 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
             if (batch.Count == 0)
                 continue;
 
+            // Fire prefetch immediately - runs concurrently with the previous advance.
+            _appender.StartPrefetch(batch, ct);
+
+            // Await the previous advance before writing.
+            if (!await advanceTask.ConfigureAwait(false))
+                return;
+
             _logger.LogDebug("Processing batch of {BatchSize} request(s)", batch.Count);
 
-            var result = await _appender.AppendBatchAsync(batch, ct).ConfigureAwait(false);
+            // Awaits the prefetch (may already be done), then builds and writes.
+            var result = await _appender.FlushAsync(ct).ConfigureAwait(false);
 
-            if (!await TryAdvanceCommitPositionAsync(result, ct).ConfigureAwait(false))
-                return; // Step down - don't mark as complete
+            // Fire without awaiting — next iteration awaits before writing.
+            advanceTask = TryAdvanceCommitPositionAsync(result, ct);
 
             _requestCompleter.Complete([..batch.Select(x => x[AppendRequest.FieldNames.CommitId].AsGuid)]);
         }
+
+        // Ensure the last batch's advance completes before exiting.
+        await advanceTask.ConfigureAwait(false);
     }
 
     private async Task<bool> TryAdvanceCommitPositionAsync(AppendBatchResult result, CancellationToken ct)
