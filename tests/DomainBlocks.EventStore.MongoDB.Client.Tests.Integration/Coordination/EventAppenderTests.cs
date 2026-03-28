@@ -19,6 +19,7 @@ public class EventAppenderTests
     private MongoClient _mongoClient = null!;
     private ILoggerFactory _loggerFactory = null!;
     private IMongoCollection<EventLogEntry> _eventLog = null!;
+    private IMongoCollection<BsonDocument> _eventLogAsBson = null!;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -31,7 +32,9 @@ public class EventAppenderTests
         await MongoEventStoreAdmin2.EnsureInitializedAsync(_mongoClient, ns);
 
         var db = _mongoClient.GetDatabase(ns.DatabaseName);
+
         _eventLog = db.GetCollection<EventLogEntry>(ns.EventLogCollectionName);
+        _eventLogAsBson = db.GetCollection<BsonDocument>(ns.EventLogCollectionName);
     }
 
     [TearDown]
@@ -62,7 +65,8 @@ public class EventAppenderTests
             CreateRequest(commitId, streamId, ExpectedStreamState.Any, "EventA", "EventB", "EventC")
         };
 
-        var result = await appender.AppendBatchAsync(requests, ct);
+        appender.StartPrefetch(requests, ct);
+        var result = await appender.FlushAsync(ct);
 
         result.StartPosition.ShouldBe(0);
         result.NextPosition.ShouldBe(4);
@@ -110,7 +114,8 @@ public class EventAppenderTests
             CreateRequest(commitB, streamB, ExpectedStreamState.Any, "B1")
         };
 
-        var result = await appender.AppendBatchAsync(requests, ct);
+        appender.StartPrefetch(requests, ct);
+        var result = await appender.FlushAsync(ct);
 
         result.StartPosition.ShouldBe(0);
         result.NextPosition.ShouldBe(4);
@@ -148,13 +153,21 @@ public class EventAppenderTests
         var appender = CreateAppender();
         var streamId = CreateStreamId();
 
-        var result1 = await appender.AppendBatchAsync(
-            [CreateRequest(Guid.CreateVersion7(), streamId, ExpectedStreamState.Any, "E1", "E2")],
-            ct);
+        BsonDocument[] requests1 =
+        [
+            CreateRequest(Guid.CreateVersion7(), streamId, ExpectedStreamState.Any, "E1", "E2")
+        ];
 
-        var result2 = await appender.AppendBatchAsync(
-            [CreateRequest(Guid.CreateVersion7(), streamId, ExpectedStreamState.Any, "E3")],
-            ct);
+        BsonDocument[] requests2 =
+        [
+            CreateRequest(Guid.CreateVersion7(), streamId, ExpectedStreamState.Any, "E3")
+        ];
+
+        appender.StartPrefetch(requests1, ct);
+        var result1 = await appender.FlushAsync(ct);
+
+        appender.StartPrefetch(requests2, ct);
+        var result2 = await appender.FlushAsync(ct);
 
         result2.StartPosition.ShouldBe(result1.NextPosition);
 
@@ -179,7 +192,8 @@ public class EventAppenderTests
     {
         var appender = CreateAppender();
 
-        var result = await appender.AppendBatchAsync([], ct);
+        appender.StartPrefetch([], ct);
+        var result = await appender.FlushAsync(ct);
 
         result.IsEmpty.ShouldBeTrue();
 
@@ -198,7 +212,8 @@ public class EventAppenderTests
             CreateRequest(Guid.CreateVersion7(), CreateStreamId(), ExpectedStreamState.Any)
         };
 
-        var result = await appender.AppendBatchAsync(requests, ct);
+        appender.StartPrefetch(requests, ct);
+        var result = await appender.FlushAsync(ct);
 
         result.IsEmpty.ShouldBeTrue();
 
@@ -216,13 +231,21 @@ public class EventAppenderTests
         var commitId = Guid.CreateVersion7();
         var streamId = CreateStreamId();
 
-        var result1 = await appender.AppendBatchAsync(
-            [CreateRequest(commitId, streamId, ExpectedStreamState.Any, "E1")],
-            ct);
+        BsonDocument[] requests1 =
+        [
+            CreateRequest(commitId, streamId, ExpectedStreamState.Any, "E1")
+        ];
 
-        var result2 = await appender.AppendBatchAsync(
-            [CreateRequest(commitId, streamId, ExpectedStreamState.Any, "E1")],
-            ct);
+        BsonDocument[] requests2 =
+        [
+            CreateRequest(commitId, streamId, ExpectedStreamState.Any, "E1")
+        ];
+
+        appender.StartPrefetch(requests1, ct);
+        var result1 = await appender.FlushAsync(ct);
+
+        appender.StartPrefetch(requests2, ct);
+        var result2 = await appender.FlushAsync(ct);
 
         result1.PositionCount.ShouldBe(2);
         result2.PositionCount.ShouldBe(1); // Marker only
@@ -256,7 +279,8 @@ public class EventAppenderTests
             CreateRequest(commitId, streamId, ExpectedStreamState.Any, "E1")
         };
 
-        var result = await appender.AppendBatchAsync(requests, ct);
+        appender.StartPrefetch(requests, ct);
+        var result = await appender.FlushAsync(ct);
 
         result.PositionCount.ShouldBe(2);
 
@@ -274,9 +298,13 @@ public class EventAppenderTests
         var commitId = Guid.CreateVersion7();
         var streamId = CreateStreamId();
 
-        var result = await appender.AppendBatchAsync(
-            [CreateRequest(commitId, streamId, ExpectedStreamState.StreamDoesNotExist, "E1")],
-            ct);
+        BsonDocument[] requests =
+        [
+            CreateRequest(commitId, streamId, ExpectedStreamState.StreamDoesNotExist, "E1")
+        ];
+
+        appender.StartPrefetch(requests, ct);
+        var result = await appender.FlushAsync(ct);
 
         result.PositionCount.ShouldBe(2);
 
@@ -292,16 +320,20 @@ public class EventAppenderTests
         var streamId = CreateStreamId();
 
         // First: create the stream.
-        await appender.AppendBatchAsync(
+        appender.StartPrefetch(
             [CreateRequest(Guid.CreateVersion7(), streamId, ExpectedStreamState.Any, "E1")],
             ct);
+
+        await appender.FlushAsync(ct);
 
         // Second: attempt with StreamDoesNotExist - should be rejected.
         var rejectedCommitId = Guid.CreateVersion7();
 
-        var result = await appender.AppendBatchAsync(
+        appender.StartPrefetch(
             [CreateRequest(rejectedCommitId, streamId, ExpectedStreamState.StreamDoesNotExist, "E2")],
             ct);
+
+        var result = await appender.FlushAsync(ct);
 
         result.PositionCount.ShouldBe(1);
 
@@ -326,15 +358,19 @@ public class EventAppenderTests
         var appender = CreateAppender();
         var streamId = CreateStreamId();
 
-        await appender.AppendBatchAsync(
+        appender.StartPrefetch(
             [CreateRequest(Guid.CreateVersion7(), streamId, ExpectedStreamState.Any, "E1")],
             ct);
 
+        await appender.FlushAsync(ct);
+
         var commitId = Guid.CreateVersion7();
 
-        var result = await appender.AppendBatchAsync(
+        appender.StartPrefetch(
             [CreateRequest(commitId, streamId, ExpectedStreamState.StreamExists, "E2")],
             ct);
+
+        var result = await appender.FlushAsync(ct);
 
         result.PositionCount.ShouldBe(2);
 
@@ -351,9 +387,11 @@ public class EventAppenderTests
         var rejectedCommitId = Guid.CreateVersion7();
         var streamId = CreateStreamId();
 
-        var result = await appender.AppendBatchAsync(
+        appender.StartPrefetch(
             [CreateRequest(rejectedCommitId, streamId, ExpectedStreamState.StreamExists, "E1")],
             ct);
+
+        var result = await appender.FlushAsync(ct);
 
         result.PositionCount.ShouldBe(1);
 
@@ -378,16 +416,20 @@ public class EventAppenderTests
         var streamId = CreateStreamId();
 
         // Append two events → stream at version 1.
-        await appender.AppendBatchAsync(
+        appender.StartPrefetch(
             [CreateRequest(Guid.CreateVersion7(), streamId, ExpectedStreamState.Any, "E1", "E2")],
             ct);
+
+        await appender.FlushAsync(ct);
 
         // Expect version 1 - should succeed.
         var commitId = Guid.CreateVersion7();
 
-        var result = await appender.AppendBatchAsync(
+        appender.StartPrefetch(
             [CreateRequest(commitId, streamId, ExpectedStreamState.SpecificVersion(new StreamVersion(1)), "E3")],
             ct);
+
+        var result = await appender.FlushAsync(ct);
 
         result.PositionCount.ShouldBe(2);
 
@@ -405,14 +447,16 @@ public class EventAppenderTests
         var streamId = CreateStreamId();
 
         // Append two events → stream at version 1.
-        await appender.AppendBatchAsync(
+        appender.StartPrefetch(
             [CreateRequest(Guid.CreateVersion7(), streamId, ExpectedStreamState.Any, "E1", "E2")],
             ct);
+
+        await appender.FlushAsync(ct);
 
         // Expect version 0 (stale) - should be rejected.
         var rejectedCommitId = Guid.CreateVersion7();
 
-        var result = await appender.AppendBatchAsync(
+        appender.StartPrefetch(
             [
                 CreateRequest(
                     rejectedCommitId,
@@ -421,6 +465,8 @@ public class EventAppenderTests
                     "E3")
             ],
             ct);
+
+        var result = await appender.FlushAsync(ct);
 
         result.PositionCount.ShouldBe(1);
 
@@ -441,7 +487,7 @@ public class EventAppenderTests
         var streamId = CreateStreamId();
         var rejectedCommitId = Guid.CreateVersion7();
 
-        var result = await appender.AppendBatchAsync(
+        appender.StartPrefetch(
             [
                 CreateRequest(
                     rejectedCommitId,
@@ -450,6 +496,8 @@ public class EventAppenderTests
                     "E1")
             ],
             ct);
+
+        var result = await appender.FlushAsync(ct);
 
         result.PositionCount.ShouldBe(1);
 
@@ -477,7 +525,8 @@ public class EventAppenderTests
             CreateRequest(Guid.CreateVersion7(), streamId, ExpectedStreamState.StreamExists, "E2")
         };
 
-        var result = await appender.AppendBatchAsync(requests, ct);
+        appender.StartPrefetch(requests, ct);
+        var result = await appender.FlushAsync(ct);
 
         result.PositionCount.ShouldBe(3);
 
@@ -506,7 +555,8 @@ public class EventAppenderTests
                 "E2")
         };
 
-        var result = await appender.AppendBatchAsync(requests, ct);
+        appender.StartPrefetch(requests, ct);
+        var result = await appender.FlushAsync(ct);
 
         result.PositionCount.ShouldBe(3);
 
@@ -519,7 +569,7 @@ public class EventAppenderTests
 
         var batchCompleted = await ReadLastBatchCompleted();
         var rejection = batchCompleted.Rejections.First();
-        rejection.CommitId.ShouldBe(requests[1].CommitId);
+        rejection.CommitId.ShouldBe(requests[1][AppendRequest.FieldNames.CommitId].AsGuid);
         rejection.StreamId.ShouldBe(streamId);
     }
 
@@ -535,21 +585,25 @@ public class EventAppenderTests
         // Seed the stream.
         var seedCommitId = Guid.CreateVersion7();
 
-        await appender.AppendBatchAsync(
+        appender.StartPrefetch(
             [CreateRequest(seedCommitId, streamId, ExpectedStreamState.Any, "E1")],
             ct);
+
+        await appender.FlushAsync(ct);
 
         // Batch with: one good append, one rejection (wrong version), one duplicate (seedCommitId).
         var goodCommitId = Guid.CreateVersion7();
         var badCommitId = Guid.CreateVersion7();
 
-        var result = await appender.AppendBatchAsync(
+        appender.StartPrefetch(
             [
                 CreateRequest(goodCommitId, streamId, ExpectedStreamState.SpecificVersion(new StreamVersion(0)), "E2"),
                 CreateRequest(badCommitId, streamId, ExpectedStreamState.StreamDoesNotExist, "Nope"),
                 CreateRequest(seedCommitId, streamId, ExpectedStreamState.Any, "E1") // duplicate
             ],
             ct);
+
+        var result = await appender.FlushAsync(ct);
 
         result.PositionCount.ShouldBe(2); // 1 event + marker
 
@@ -569,9 +623,11 @@ public class EventAppenderTests
         // Simulate resuming after position 4 (next position should be 5).
         var appender = CreateAppender(initialCommitPosition: 4);
 
-        var result = await appender.AppendBatchAsync(
+        appender.StartPrefetch(
             [CreateRequest(Guid.CreateVersion7(), CreateStreamId(), ExpectedStreamState.Any, "E1")],
             ct);
+
+        var result = await appender.FlushAsync(ct);
 
         result.StartPosition.ShouldBe(5);
         result.NextPosition.ShouldBe(7);
@@ -596,9 +652,11 @@ public class EventAppenderTests
         var appender = CreateAppender(epoch: 2);
         var commitId = Guid.CreateVersion7();
 
-        var result = await appender.AppendBatchAsync(
+        appender.StartPrefetch(
             [CreateRequest(commitId, CreateStreamId(), ExpectedStreamState.Any, "New1", "New2")],
             ct);
+
+        var result = await appender.FlushAsync(ct);
 
         result.StartPosition.ShouldBe(0);
         result.NextPosition.ShouldBe(3); // 2 events + 1 marker
@@ -624,11 +682,11 @@ public class EventAppenderTests
         // Appender also at epoch 2 - guard requires epoch < 2, won't match.
         var appender = CreateAppender(epoch: 2);
 
-        await appender
-            .AppendBatchAsync(
-                [CreateRequest(Guid.CreateVersion7(), CreateStreamId(), ExpectedStreamState.Any, "E1")],
-                ct)
-            .ShouldThrowAsync<MongoBulkWriteException<EventLogEntry>>();
+        appender.StartPrefetch(
+            [CreateRequest(Guid.CreateVersion7(), CreateStreamId(), ExpectedStreamState.Any, "E1")],
+            ct);
+
+        await appender.FlushAsync(ct).ShouldThrowAsync<MongoBulkWriteException<BsonDocument>>();
 
         // Original entry untouched.
         var entries = await ReadAllEntries();
@@ -648,11 +706,11 @@ public class EventAppenderTests
         // Appender at epoch 2 - guard requires epoch < 2, won't match epoch 3.
         var appender = CreateAppender(epoch: 2);
 
-        await appender
-            .AppendBatchAsync(
-                [CreateRequest(Guid.CreateVersion7(), CreateStreamId(), ExpectedStreamState.Any, "E1")],
-                ct)
-            .ShouldThrowAsync<MongoBulkWriteException<EventLogEntry>>();
+        appender.StartPrefetch(
+            [CreateRequest(Guid.CreateVersion7(), CreateStreamId(), ExpectedStreamState.Any, "E1")],
+            ct);
+
+        await appender.FlushAsync(ct).ShouldThrowAsync<MongoBulkWriteException<BsonDocument>>();
 
         // Original entry untouched.
         var entries = await ReadAllEntries();
@@ -664,16 +722,16 @@ public class EventAppenderTests
 
     private static string CreateStreamId() => $"stream-{Guid.CreateVersion7():N}";
 
-    private EventAppender CreateAppender(long epoch = Epoch, long? initialCommitPosition = null)
+    private FastEventAppender CreateAppender(long epoch = Epoch, long? initialCommitPosition = null)
     {
-        return new EventAppender(
-            _eventLog,
+        return new FastEventAppender(
+            _eventLogAsBson,
             epoch,
             initialCommitPosition,
-            _loggerFactory.CreateLogger<EventAppender>());
+            _loggerFactory.CreateLogger<FastEventAppender>());
     }
 
-    private static AppendRequest CreateRequest(
+    private static BsonDocument CreateRequest(
         Guid commitId,
         string streamId,
         ExpectedStreamState expectedState,
@@ -681,7 +739,7 @@ public class EventAppenderTests
     {
         var now = DateTime.UtcNow;
 
-        return new AppendRequest
+        var request = new AppendRequest
         {
             CommitId = commitId,
             StreamId = streamId,
@@ -696,6 +754,8 @@ public class EventAppenderTests
                 .ToArray(),
             CreatedAtUtc = now
         };
+
+        return request.ToBsonDocument();
     }
 
     private async Task SeedEventLogEntry(long position, long epoch)

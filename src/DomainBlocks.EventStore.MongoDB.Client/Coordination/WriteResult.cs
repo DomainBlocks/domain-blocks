@@ -1,6 +1,6 @@
 ﻿namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 
-public readonly record struct AppendBatchResult(long StartPosition, long NextPosition)
+public readonly record struct WriteResult(long StartPosition, long NextPosition)
 {
     public long EndPosition => StartPosition + PositionCount - 1;
 

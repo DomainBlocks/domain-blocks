@@ -48,13 +48,13 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
         _logger = loggerFactory.CreateLogger<EventAppenderSession>();
         _stopCts = CancellationTokenSource.CreateLinkedTokenSource(handle.LeaseLostToken);
 
-        var channelOptions = new UnboundedChannelOptions
+        var channelOptions = new BoundedChannelOptions(capacity: MaxLiveBatchSize)
         {
             SingleWriter = true,
             SingleReader = true
         };
 
-        _channel = Channel.CreateUnbounded<BsonDocument>(channelOptions);
+        _channel = Channel.CreateBounded<BsonDocument>(channelOptions);
     }
 
     public Task Liveliness => _livelinessTcs.Task;
@@ -249,14 +249,14 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
             // Fire without awaiting — next iteration awaits before writing.
             advanceTask = TryAdvanceCommitPositionAsync(result, ct);
 
-            _requestCompleter.Complete([..batch.Select(x => x[AppendRequest.FieldNames.CommitId].AsGuid)]);
+            //_requestCompleter.Complete([..batch.Select(x => x[AppendRequest.FieldNames.CommitId].AsGuid)]);
         }
 
         // Ensure the last batch's advance completes before exiting.
         await advanceTask.ConfigureAwait(false);
     }
 
-    private async Task<bool> TryAdvanceCommitPositionAsync(AppendBatchResult result, CancellationToken ct)
+    private async Task<bool> TryAdvanceCommitPositionAsync(WriteResult result, CancellationToken ct)
     {
         if (result.IsEmpty)
             return true;

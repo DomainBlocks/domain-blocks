@@ -4,7 +4,7 @@ namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 
 public interface IEventAppender
 {
-    Task<AppendBatchResult> AppendBatchAsync(
+    Task<WriteResult> AppendBatchAsync(
         IEnumerable<AppendRequest> requests,
         CancellationToken cancellationToken = default);
 }

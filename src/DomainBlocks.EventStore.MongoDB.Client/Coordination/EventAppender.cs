@@ -31,7 +31,7 @@ public sealed class EventAppender(
     private readonly Dictionary<string, long> _streamVersions = [];
     private readonly List<WriteModel<EventLogEntry>> _writeModels = [];
 
-    public async Task<AppendBatchResult> AppendBatchAsync(
+    public async Task<WriteResult> AppendBatchAsync(
         IEnumerable<AppendRequest> requests,
         CancellationToken cancellationToken = default)
     {
@@ -39,7 +39,7 @@ public sealed class EventAppender(
 
         _requests.AddRange(requests);
         if (_requests.Count == 0)
-            return new AppendBatchResult(_nextPosition, _nextPosition);
+            return new WriteResult(_nextPosition, _nextPosition);
 
         logger.LogDebug("Appending batch of {RequestCount} request(s) at epoch {Epoch}", _requests.Count, epoch);
 
@@ -50,7 +50,7 @@ public sealed class EventAppender(
         if (_writeModels.Count == 0)
         {
             logger.LogDebug("Batch produced no write models; skipping");
-            return new AppendBatchResult(_nextPosition, _nextPosition);
+            return new WriteResult(_nextPosition, _nextPosition);
         }
 
         await _eventLog
@@ -70,7 +70,7 @@ public sealed class EventAppender(
             _duplicateCommitIds.Count,
             _rejections.Count);
 
-        return new AppendBatchResult(startPosition, nextPosition);
+        return new WriteResult(startPosition, nextPosition);
     }
 
     private static FilterDefinition<EventLogEntry> CreateVisibilityFilter(long epoch, long? initialCommitPosition)

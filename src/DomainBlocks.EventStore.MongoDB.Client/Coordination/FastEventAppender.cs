@@ -10,45 +10,47 @@ public sealed class FastEventAppender(
     IMongoCollection<BsonDocument> eventLog,
     long epoch,
     long? initialCommitPosition,
-    ILogger<FastEventAppender> logger) :
-    IFastEventAppender
+    ILogger<FastEventAppender> logger) : IFastEventAppender
 {
-    private static readonly BsonDocument GroupByStreamStage = new("$group", new BsonDocument
-    {
-        { "_id", $"${EventLogEntry.FieldNames.StreamId}" },
-        { "maxVersion", new BsonDocument("$max", $"${EventLogEntry.FieldNames.StreamVersion}") }
-    });
+    private static readonly BulkWriteOptions OrderedBulkWriteOptions = new() { IsOrdered = true };
+    private static readonly BsonBinaryData BsonEmptyGuid = new(Guid.Empty, GuidRepresentation.Standard);
 
     private readonly IMongoCollection<BsonDocument> _eventLog = eventLog
+        .WithReadConcern(ReadConcern.Majority)
+        .WithReadPreference(ReadPreference.Primary)
         .WithWriteConcern(WriteConcern.WMajority.With(journal: true));
 
-    private long _nextPosition = initialCommitPosition.HasValue
-        ? initialCommitPosition.Value + 1
-        : 0;
+    private long _nextPosition = initialCommitPosition.HasValue ? initialCommitPosition.Value + 1 : 0;
 
-    private readonly BsonDocument _visibilityFilter = CreateVisibilityFilter(epoch, initialCommitPosition);
-
+    private readonly PrefetchQuery _prefetchQuery = new(epoch, initialCommitPosition);
     private Task _prefetchTask = Task.CompletedTask;
 
-    // Reusable per-batch buffers - cleared each batch, never reallocated.
+    private readonly NonConcurrentPool<CommitRejectionSlot> _commitRejectionPool =
+        NonConcurrentPool.Create<CommitRejectionSlot>();
+
+    private readonly NonConcurrentPool<EventWriteSlot> _eventWritePool =
+        NonConcurrentPool.Create(() => new EventWriteSlot(epoch));
+
+    private readonly AppendBatchCompletedEventSlot _completedEventSlot = new();
+
     private readonly List<BsonDocument> _requests = [];
     private readonly HashSet<Guid> _appendedCommitIds = [];
     private readonly HashSet<Guid> _duplicateCommitIds = [];
-    private readonly Dictionary<Guid, BsonDocument> _rejections = [];
+    private readonly Dictionary<Guid, BsonDocument> _commitRejections = [];
     private readonly Dictionary<string, long> _streamVersions = [];
     private readonly List<WriteModel<BsonDocument>> _writeModels = [];
 
-    public void StartPrefetch(IEnumerable<BsonDocument> requests, CancellationToken ct)
+    public void StartPrefetch(IEnumerable<BsonDocument> requests, CancellationToken cancellationToken)
     {
         ClearBuffers();
         _requests.AddRange(requests);
-        _prefetchTask = _requests.Count == 0 ? Task.CompletedTask : PrefetchAsync(ct);
+        _prefetchTask = _requests.Count == 0 ? Task.CompletedTask : PrefetchAsync(cancellationToken);
     }
 
-    public async Task<AppendBatchResult> FlushAsync(CancellationToken ct)
+    public async Task<WriteResult> FlushAsync(CancellationToken cancellationToken)
     {
         if (_requests.Count == 0)
-            return new AppendBatchResult(_nextPosition, _nextPosition);
+            return new WriteResult(_nextPosition, _nextPosition);
 
         await _prefetchTask.ConfigureAwait(false);
 
@@ -57,11 +59,11 @@ public sealed class FastEventAppender(
         if (_writeModels.Count == 0)
         {
             logger.LogDebug("Batch produced no write models; skipping");
-            return new AppendBatchResult(_nextPosition, _nextPosition);
+            return new WriteResult(_nextPosition, _nextPosition);
         }
 
         await _eventLog
-            .BulkWriteAsync(_writeModels, new BulkWriteOptions { IsOrdered = true }, ct)
+            .BulkWriteAsync(_writeModels, OrderedBulkWriteOptions, cancellationToken)
             .ConfigureAwait(false);
 
         var startPosition = _nextPosition;
@@ -74,62 +76,9 @@ public sealed class FastEventAppender(
             nextPosition - 1,
             _appendedCommitIds.Count,
             _duplicateCommitIds.Count,
-            _rejections.Count);
+            _commitRejections.Count);
 
-        return new AppendBatchResult(startPosition, nextPosition);
-    }
-
-    // public async Task<AppendBatchResult> AppendBatchAsync(
-    //     IEnumerable<BsonDocument> requests,
-    //     CancellationToken cancellationToken = default)
-    // {
-    //     ClearBuffers();
-    //
-    //     _requests.AddRange(requests);
-    //     if (_requests.Count == 0)
-    //         return new AppendBatchResult(_nextPosition, _nextPosition);
-    //
-    //     logger.LogDebug("Appending batch of {RequestCount} request(s) at epoch {Epoch}", _requests.Count, epoch);
-    //
-    //     await PrefetchAsync(cancellationToken).ConfigureAwait(false);
-    //
-    //     var nextPosition = BuildWriteModels();
-    //
-    //     if (_writeModels.Count == 0)
-    //     {
-    //         logger.LogDebug("Batch produced no write models; skipping");
-    //         return new AppendBatchResult(_nextPosition, _nextPosition);
-    //     }
-    //
-    //     await _eventLog
-    //         .BulkWriteAsync(_writeModels, new BulkWriteOptions { IsOrdered = true }, cancellationToken)
-    //         .ConfigureAwait(false);
-    //
-    //     // Only advance after a successful write.
-    //     var startPosition = _nextPosition;
-    //     _nextPosition = nextPosition;
-    //
-    //     logger.LogInformation(
-    //         "Batch appended: positions {StartPosition}–{EndPosition}, " +
-    //         "{AppendCount} appended, {DuplicateCount} duplicate(s), {RejectionCount} rejected, ",
-    //         startPosition,
-    //         nextPosition - 1,
-    //         _appendedCommitIds.Count,
-    //         _duplicateCommitIds.Count,
-    //         _rejections.Count);
-    //
-    //     return new AppendBatchResult(startPosition, nextPosition);
-    // }
-
-    private static BsonDocument CreateVisibilityFilter(long epoch, long? initialCommitPosition)
-    {
-        return initialCommitPosition.HasValue
-            ? new BsonDocument("$or", new BsonArray
-            {
-                new BsonDocument(EventLogEntry.FieldNames.Epoch, epoch),
-                new BsonDocument("_id", new BsonDocument("$lte", initialCommitPosition.Value))
-            })
-            : new BsonDocument(EventLogEntry.FieldNames.Epoch, epoch);
+        return new WriteResult(startPosition, nextPosition);
     }
 
     private void ClearBuffers()
@@ -137,49 +86,23 @@ public sealed class FastEventAppender(
         _requests.Clear();
         _appendedCommitIds.Clear();
         _duplicateCommitIds.Clear();
-        _rejections.Clear();
+        _commitRejections.Clear();
         _streamVersions.Clear();
         _writeModels.Clear();
+
+        _commitRejectionPool.ReturnAll();
+        _eventWritePool.ReturnAll();
     }
 
     private async Task PrefetchAsync(CancellationToken ct)
     {
-        var allCommitIds = _requests.Select(r => r[AppendRequest.FieldNames.CommitId]).Distinct();
-        var allStreamIds = _requests.Select(r => r[AppendRequest.FieldNames.StreamId]).Distinct();
+        var result = await _prefetchQuery.ExecuteAsync(_eventLog, _requests, ct).ConfigureAwait(false);
 
-        var commitIdsArray = new BsonArray(allCommitIds);
-        var streamIdsArray = new BsonArray(allStreamIds);
-
-        var commitMatchFilter = new BsonDocument("$and", new BsonArray
-        {
-            new BsonDocument(EventLogEntry.FieldNames.CommitId, new BsonDocument("$in", commitIdsArray)),
-            _visibilityFilter
-        });
-
-        var streamMatchStage = new BsonDocument("$match", new BsonDocument("$and", new BsonArray
-        {
-            new BsonDocument(EventLogEntry.FieldNames.StreamId, new BsonDocument("$in", streamIdsArray)),
-            _visibilityFilter
-        }));
-
-        var duplicatesTask = _eventLog
-            .Distinct<BsonValue>(
-                EventLogEntry.FieldNames.CommitId,
-                commitMatchFilter,
-                cancellationToken: ct)
-            .ToListAsync(ct);
-
-        var versionsTask = _eventLog
-            .Aggregate<BsonDocument>(new[] { streamMatchStage, GroupByStreamStage })
-            .ToListAsync(ct);
-
-        await Task.WhenAll(duplicatesTask, versionsTask).ConfigureAwait(false);
-
-        foreach (var value in await duplicatesTask.ConfigureAwait(false))
+        foreach (var value in result.ExistingCommitIds)
             _duplicateCommitIds.Add(value.AsGuid);
 
-        foreach (var doc in await versionsTask.ConfigureAwait(false))
-            _streamVersions.Add(doc["_id"].AsString, doc["maxVersion"].AsInt64);
+        foreach (var doc in result.HeadStreamVersions)
+            _streamVersions.Add(doc["_id"].AsString, doc["version"].AsInt64);
 
         logger.LogDebug(
             "Prefetch complete: {DuplicateCount} duplicate(s) found, {StreamCount} stream version(s) loaded",
@@ -197,19 +120,22 @@ public sealed class FastEventAppender(
             if (events.Count == 0)
                 continue;
 
-            var commitId = request[AppendRequest.FieldNames.CommitId].AsGuid;
+            var bsonCommitId = request[AppendRequest.FieldNames.CommitId];
+            var bsonStreamId = request[AppendRequest.FieldNames.StreamId];
+            var bsonExpectedStreamState = request[AppendRequest.FieldNames.ExpectedStreamState];
+
+            var commitId = bsonCommitId.AsGuid;
             if (IsProcessed(commitId))
                 continue;
 
-            var streamId = request[AppendRequest.FieldNames.StreamId].AsString;
+            var streamId = bsonStreamId.AsString;
             var streamVersion = _streamVersions.GetValueOrDefault(streamId, -1);
 
-            // OCC check: convert the raw long to a StreamState and use the existing Matches logic.
             var actualStreamState = streamVersion < 0
                 ? StreamState.StreamDoesNotExist
                 : StreamState.StreamExists(StreamVersion.FromInt64(streamVersion));
 
-            var expectedStreamState = ToExpectedStreamState(request[AppendRequest.FieldNames.ExpectedStreamState]);
+            var expectedStreamState = ToExpectedStreamState(bsonExpectedStreamState);
 
             if (!expectedStreamState.Matches(actualStreamState))
             {
@@ -221,43 +147,63 @@ public sealed class FastEventAppender(
                     expectedStreamState,
                     actualStreamState);
 
-                var rejection = new BsonDocument
-                {
-                    { CommitRejection.FieldNames.CommitId, new BsonBinaryData(commitId, GuidRepresentation.Standard) },
-                    { CommitRejection.FieldNames.StreamId, streamId },
-                    {
-                        CommitRejection.FieldNames.ExpectedStreamState,
-                        request[AppendRequest.FieldNames.ExpectedStreamState]
-                    },
-                    { CommitRejection.FieldNames.ActualStreamState, SerializeStreamState(actualStreamState) }
-                };
+                var rejection = _commitRejectionPool.RentOne().Fill(
+                    commitId,
+                    bsonStreamId,
+                    bsonExpectedStreamState,
+                    actualStreamState);
 
-                _rejections.Add(commitId, rejection);
+                _commitRejections.Add(commitId, rejection);
 
                 continue;
             }
 
-            foreach (var e in events)
-                _writeModels.Add(CreateEventWrite(nextPosition++, request, ++streamVersion, e.AsBsonDocument));
+            var eventWriteSlots = _eventWritePool.RentMany(events.Count);
+
+            for (var i = 0; i < events.Count; i++)
+            {
+                var writeModel = eventWriteSlots[i].Fill(
+                    nextPosition++,
+                    bsonStreamId,
+                    ++streamVersion,
+                    bsonCommitId,
+                    events[i].AsBsonDocument);
+
+                _writeModels.Add(writeModel);
+            }
 
             _streamVersions[streamId] = streamVersion;
             _appendedCommitIds.Add(commitId);
         }
 
         if (HasCommits())
-            _writeModels.Add(CreateBatchCompletedWrite(nextPosition++));
+        {
+            var @event = _completedEventSlot.Fill(
+                _appendedCommitIds,
+                _duplicateCommitIds,
+                _commitRejections.Values);
+
+            var writeModel = _eventWritePool.RentOne().Fill(
+                nextPosition++,
+                BsonString.Empty,
+                0,
+                BsonEmptyGuid,
+                @event);
+
+            _writeModels.Add(writeModel);
+        }
 
         return nextPosition;
 
-        bool IsProcessed(Guid commitId) =>
-            _appendedCommitIds.Contains(commitId) ||
-            _duplicateCommitIds.Contains(commitId) ||
-            _rejections.ContainsKey(commitId);
+        bool IsProcessed(Guid id) =>
+            _appendedCommitIds.Contains(id) ||
+            _duplicateCommitIds.Contains(id) ||
+            _commitRejections.ContainsKey(id);
 
         bool HasCommits() =>
             _appendedCommitIds.Count > 0 ||
             _duplicateCommitIds.Count > 0 ||
-            _rejections.Count > 0;
+            _commitRejections.Count > 0;
     }
 
     private static ExpectedStreamState ToExpectedStreamState(BsonValue bsonValue)
@@ -272,100 +218,5 @@ public sealed class FastEventAppender(
             "version" => ExpectedStreamState.SpecificVersion(StreamVersion.FromInt64(doc["version"].AsInt64)),
             var k => throw new InvalidOperationException($"Unknown expected stream state kind: '{k}'")
         };
-    }
-
-    private static BsonDocument SerializeStreamState(StreamState value)
-    {
-        return value.Kind switch
-        {
-            StreamStateKind.StreamDoesNotExist => new BsonDocument("kind", "streamDoesNotExist"),
-
-            StreamStateKind.StreamExists => new BsonDocument
-            {
-                { "kind", "streamExists" },
-                { "version", checked((long)value.Version!.Value.Value) }
-            },
-
-            _ => throw new ArgumentOutOfRangeException(
-                nameof(value),
-                $"Unknown {nameof(StreamStateKind)}: {value.Kind}")
-        };
-    }
-
-    private WriteModel<BsonDocument> CreateEventWrite(
-        long position,
-        BsonDocument request,
-        long streamVersion,
-        BsonDocument @event)
-    {
-        var filter = new BsonDocument
-        {
-            { "_id", position },
-            { EventLogEntry.FieldNames.Epoch, new BsonDocument("$lt", epoch) }
-        };
-
-        var update = new BsonDocument
-        {
-            {
-                "$set", new BsonDocument
-                {
-                    { "_id", position },
-                    { EventLogEntry.FieldNames.Epoch, epoch },
-                    { EventLogEntry.FieldNames.StreamId, request[AppendRequest.FieldNames.StreamId] },
-                    { EventLogEntry.FieldNames.StreamVersion, streamVersion },
-                    { EventLogEntry.FieldNames.CommitId, request[AppendRequest.FieldNames.CommitId] },
-                    { EventLogEntry.FieldNames.EventName, @event[PendingEvent.FieldNames.EventName] },
-                    { EventLogEntry.FieldNames.EventData, @event[PendingEvent.FieldNames.EventData] },
-                    { EventLogEntry.FieldNames.Metadata, @event[PendingEvent.FieldNames.Metadata] }
-                }
-            },
-            { "$currentDate", new BsonDocument(EventLogEntry.FieldNames.WrittenAtUtc, true) }
-        };
-
-        return new UpdateOneModel<BsonDocument>(filter, update) { IsUpsert = true };
-    }
-
-    private WriteModel<BsonDocument> CreateBatchCompletedWrite(long position)
-    {
-        var filter = new BsonDocument
-        {
-            { "_id", position },
-            { EventLogEntry.FieldNames.Epoch, new BsonDocument("$lt", epoch) }
-        };
-
-        var appendsArray = new BsonArray(
-            _appendedCommitIds.Select(id => new BsonBinaryData(id, GuidRepresentation.Standard)));
-
-        var duplicatesArray = new BsonArray(
-            _duplicateCommitIds.Select(id => new BsonBinaryData(id, GuidRepresentation.Standard)));
-
-        var rejectionsArray = new BsonArray(_rejections.Values);
-
-        var batchCompleted = new BsonDocument
-        {
-            { AppendBatchCompleted.FieldNames.AppendedCommitIds, appendsArray },
-            { AppendBatchCompleted.FieldNames.DuplicateCommitIds, duplicatesArray },
-            { AppendBatchCompleted.FieldNames.Rejections, rejectionsArray }
-        };
-
-        var update = new BsonDocument
-        {
-            {
-                "$set", new BsonDocument
-                {
-                    { "_id", position },
-                    { EventLogEntry.FieldNames.Epoch, epoch },
-                    { EventLogEntry.FieldNames.StreamId, string.Empty },
-                    { EventLogEntry.FieldNames.StreamVersion, 0L },
-                    { EventLogEntry.FieldNames.CommitId, new BsonBinaryData(Guid.Empty, GuidRepresentation.Standard) },
-                    { EventLogEntry.FieldNames.EventName, "AppendBatchCompleted" },
-                    { EventLogEntry.FieldNames.EventData, batchCompleted },
-                    { EventLogEntry.FieldNames.Metadata, BsonNull.Value },
-                }
-            },
-            { "$currentDate", new BsonDocument(EventLogEntry.FieldNames.WrittenAtUtc, true) }
-        };
-
-        return new UpdateOneModel<BsonDocument>(filter, update) { IsUpsert = true };
     }
 }
