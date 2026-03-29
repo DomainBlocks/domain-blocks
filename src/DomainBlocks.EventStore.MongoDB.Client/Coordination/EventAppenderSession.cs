@@ -12,13 +12,13 @@ namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>, IAsyncDisposable
 {
     private const int MaxCatchUpBatchSize = 100;
-    private const int MaxLiveBatchSize = 500;
+    private const int MaxLiveBatchSize = 1000;
 
     private readonly ILeaseHandle<LeaseState> _handle;
     private long? _currentPosition;
     private readonly IMongoCollection<BsonDocument> _requests;
     private readonly IMongoCollection<BsonDocument> _eventLog;
-    private readonly IFastEventAppender _appender;
+    private readonly IEventAppender _appender;
     private readonly IChangeStreamSubject<ChangeStreamDocument<BsonDocument>> _changeStreamSubject;
     private readonly IAppendRequestCompleter _requestCompleter;
     private readonly ILogger _logger;
@@ -31,7 +31,7 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
     public EventAppenderSession(
         ILeaseHandle<LeaseState> handle,
         long? currentPosition,
-        IFastEventAppender appender,
+        IEventAppender appender,
         IMongoCollection<BsonDocument> requests,
         IMongoCollection<BsonDocument> eventLog,
         IChangeStreamSubject<ChangeStreamDocument<BsonDocument>> changeStreamSubject,

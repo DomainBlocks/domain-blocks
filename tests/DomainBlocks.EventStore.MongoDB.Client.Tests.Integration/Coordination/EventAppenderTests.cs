@@ -722,13 +722,13 @@ public class EventAppenderTests
 
     private static string CreateStreamId() => $"stream-{Guid.CreateVersion7():N}";
 
-    private FastEventAppender CreateAppender(long epoch = Epoch, long? initialCommitPosition = null)
+    private EventAppender CreateAppender(long epoch = Epoch, long? initialCommitPosition = null)
     {
-        return new FastEventAppender(
+        return new EventAppender(
             _eventLogAsBson,
             epoch,
             initialCommitPosition,
-            _loggerFactory.CreateLogger<FastEventAppender>());
+            _loggerFactory.CreateLogger<EventAppender>());
     }
 
     private static BsonDocument CreateRequest(

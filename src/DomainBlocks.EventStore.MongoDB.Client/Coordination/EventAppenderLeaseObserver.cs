@@ -24,11 +24,11 @@ public sealed class EventAppenderLeaseObserver(
     {
         var leaseState = BsonSerializer.Deserialize<LeaseState>(handle.CurrentSnapshot.State);
 
-        var appender = new FastEventAppender(
+        var appender = new EventAppender(
             eventLog,
             handle.CurrentSnapshot.Epoch,
             leaseState.CommitPosition,
-            loggerFactory.CreateLogger<FastEventAppender>());
+            loggerFactory.CreateLogger<EventAppender>());
 
         var requestCompleter = new AppendRequestCompleter(
             requests,

@@ -1,4 +1,6 @@
-﻿using System.Diagnostics;
+﻿using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB.Client.Coordination;
 using DomainBlocks.EventStore.TypeMapping;
@@ -68,9 +70,10 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
             {
                 MongoOptions = new ChangeStreamOptions
                 {
-                    //BatchSize = 1000
+                    BatchSize = 1000
                 }
-            });
+            },
+            _loggerFactory.CreateLogger("ChangeStream"));
 
         // Set up AppendRequestTracker
         var requestTracker = new AppendRequestTracker(ns, _loggerFactory.CreateLogger<AppendRequestTracker>());
@@ -95,7 +98,11 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
         // Run LeaseContender
         _leaseContenderTask = leaseContender.RunAsync([leaseObserver], _stopCts.Token);
 
-        _client = new MongoEventStoreClient2<IDomainEvent>(requests, requestTracker, _options);
+        _client = new MongoEventStoreClient2<IDomainEvent>(
+            requests,
+            requestTracker,
+            _options,
+            _loggerFactory.CreateLogger<MongoEventStoreClient2<IDomainEvent>>());
 
         await leaseObserver.Liveliness;
     }
@@ -109,6 +116,7 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
 
         await _mongoClient.DropDatabaseAsync(_options.NamespaceSettings.DatabaseName);
 
+        await _client.DisposeAsync();
         _mongoClient.Dispose();
         _loggerFactory.Dispose();
     }
@@ -145,38 +153,156 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
         int Percentile(double p) => (int)Math.Ceiling(sorted.Count * p) - 1;
     }
 
+    // [Test]
+    // [CancelAfter(TestTimeoutMillis)]
+    // public async Task AppendToStreamAsync_ConcurrentAppends_MeasureThroughput(CancellationToken ct)
+    // {
+    //     const int concurrency = 20;
+    //     const int opsPerProducer = 1000;
+    //     const int totalOps = concurrency * opsPerProducer;
+    //     const int maxInFlight = 500;
+    //
+    //     var semaphore = new SemaphoreSlim(maxInFlight);
+    //
+    //     // Warm up
+    //     await Task.WhenAll(Enumerable
+    //         .Range(0, concurrency)
+    //         .Select(_ => Task.Run(() => DoAppend($"warmup-{Guid.NewGuid():N}", ct), ct)));
+    //
+    //     var sw = Stopwatch.StartNew();
+    //
+    //     await Task.WhenAll(
+    //         Enumerable
+    //             .Range(0, concurrency)
+    //             .Select(_ => Task.Run(async () =>
+    //                 {
+    //                     var pending = new List<Task>(opsPerProducer);
+    //
+    //                     for (var i = 0; i < opsPerProducer; i++)
+    //                     {
+    //                         await semaphore.WaitAsync(ct);
+    //
+    //                         pending.Add(Append());
+    //
+    //                         continue;
+    //
+    //                         async Task Append()
+    //                         {
+    //                             try
+    //                             {
+    //                                 await DoAppend($"test-{Guid.NewGuid():N}", ct);
+    //                             }
+    //                             finally
+    //                             {
+    //                                 semaphore.Release();
+    //                             }
+    //                         }
+    //                     }
+    //
+    //                     await Task.WhenAll(pending);
+    //                 },
+    //                 ct)));
+    //
+    //     sw.Stop();
+    //     var opsPerSecond = totalOps / sw.Elapsed.TotalSeconds;
+    //
+    //     await TestContext.Out.WriteLineAsync($"concurrency: {concurrency}");
+    //     await TestContext.Out.WriteLineAsync($"maxInFlight: {maxInFlight}");
+    //     await TestContext.Out.WriteLineAsync($"total ops:   {totalOps}");
+    //     await TestContext.Out.WriteLineAsync($"elapsed:     {sw.Elapsed.TotalMilliseconds:F0} ms");
+    //     await TestContext.Out.WriteLineAsync($"throughput:  {opsPerSecond:F1} ops/sec");
+    // }
+
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task AppendToStreamAsync_ConcurrentAppends_MeasureThroughput(CancellationToken ct)
+    public async Task AppendToStreamAsync_MeasureThroughputCeiling(CancellationToken ct)
     {
-        const int concurrency = 500;
-        const int opsPerProducer = 250;
-        const int totalOps = concurrency * opsPerProducer;
+        // Finds the maximum sustainable ops/sec using a single sliding window of
+        // maxInFlight concurrent operations. Time-bounded so the measurement is taken
+        // at steady state, not as a drain of a fixed batch.
+        const int maxInFlight = 2000;
+        const int warmUpSeconds = 3;
+        const int measureSeconds = 15;
 
-        // Warm up
-        await Task.WhenAll(
-            Enumerable.Range(0, concurrency)
-                .Select(_ => Task.Run(() => DoAppend($"warmup-{Guid.NewGuid():N}", ct), ct)));
+        using var runCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        runCts.CancelAfter(TimeSpan.FromSeconds(warmUpSeconds + measureSeconds));
 
+        var semaphore = new SemaphoreSlim(maxInFlight, maxInFlight);
+        var ops = 0L;
+        var errors = 0L;
+        var isInMeasureWindow = new StrongBox<bool>(false);
+
+        var pendingTasks = new ConcurrentBag<Task>();
+
+        // Single loop: acquire slot → fire append (non-blocking) → repeat.
+        // Keeps exactly maxInFlight operations in flight at all times while running.
+        var loopTask = Task.Run(
+            async () =>
+            {
+                while (!runCts.IsCancellationRequested)
+                {
+                    try
+                    {
+                        await semaphore.WaitAsync(runCts.Token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+
+                    // Capture before firing — ContinueWith may run after the window closes.
+                    var isMeasuring = isInMeasureWindow.Value;
+
+                    var task = DoAppend($"test-{Guid.NewGuid():N}", runCts.Token)
+                        .ContinueWith(
+                            t =>
+                            {
+                                semaphore.Release();
+
+                                if (t.IsCompletedSuccessfully)
+                                {
+                                    if (isMeasuring)
+                                        Interlocked.Increment(ref ops);
+                                }
+                                else if (t.IsFaulted)
+                                {
+                                    Interlocked.Increment(ref errors);
+                                }
+                            },
+                            TaskScheduler.Default);
+
+                    pendingTasks.Add(task);
+                }
+            },
+            ct);
+
+        // Warm-up: let the system reach steady state before measuring.
+        await Task.Delay(TimeSpan.FromSeconds(warmUpSeconds), ct);
+
+        isInMeasureWindow.Value = true;
         var sw = Stopwatch.StartNew();
 
-        await Task.WhenAll(
-            Enumerable
-                .Range(0, concurrency)
-                .Select(_ => Task.Run(async () =>
-                    {
-                        for (var i = 0; i < opsPerProducer; i++)
-                            await DoAppend($"test-{Guid.NewGuid():N}", ct);
-                    },
-                    ct)));
+        await Task.Delay(TimeSpan.FromSeconds(measureSeconds), ct);
 
+        isInMeasureWindow.Value = false;
         sw.Stop();
 
-        var opsPerSecond = totalOps / sw.Elapsed.TotalSeconds;
-        await TestContext.Out.WriteLineAsync($"concurrency: {concurrency}");
-        await TestContext.Out.WriteLineAsync($"total ops:   {totalOps}");
-        await TestContext.Out.WriteLineAsync($"elapsed:     {sw.Elapsed.TotalMilliseconds:F0} ms");
-        await TestContext.Out.WriteLineAsync($"throughput:  {opsPerSecond:F1} ops/sec");
+        // Wait for the producer loop to notice cancellation, then drain all
+        // in-flight ops so the test exits cleanly.
+        await loopTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+
+        // for (var i = 0; i < maxInFlight; i++)
+        //     await semaphore.WaitAsync(ct);
+
+        await Task.WhenAll(pendingTasks);
+
+        var throughput = ops / sw.Elapsed.TotalSeconds;
+
+        await TestContext.Out.WriteLineAsync($"max in-flight: {maxInFlight}");
+        await TestContext.Out.WriteLineAsync($"ops measured:  {ops}");
+        await TestContext.Out.WriteLineAsync($"errors:        {errors}");
+        await TestContext.Out.WriteLineAsync($"elapsed:       {sw.Elapsed.TotalMilliseconds:F0} ms");
+        await TestContext.Out.WriteLineAsync($"throughput:    {throughput:F0} ops/sec");
     }
 
     private async Task DoAppend(string streamId, CancellationToken ct)

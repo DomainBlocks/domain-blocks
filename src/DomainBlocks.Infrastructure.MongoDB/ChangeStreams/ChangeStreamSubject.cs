@@ -101,11 +101,16 @@ internal sealed class ChangeStreamSubject<TDocument, TResult>(
                     {
                         while (await cursor.MoveNextAsync(_stopCts.Token).ConfigureAwait(false))
                         {
+                            var count = 0;
+
                             foreach (var result in cursor.Current)
                             {
                                 await NotifyObserversAsync(result).ConfigureAwait(false);
                                 _lastResumeToken = _resumeTokenSelector(result);
+                                count++;
                             }
+
+                            _logger?.LogDebug("Processed change stream batch size: {Count}", count);
 
                             var batchResumeToken = cursor.GetResumeToken();
                             if (batchResumeToken is not null)

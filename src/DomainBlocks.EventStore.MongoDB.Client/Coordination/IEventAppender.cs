@@ -1,10 +1,10 @@
-﻿using DomainBlocks.EventStore.MongoDB.Client.Schema2;
+using MongoDB.Bson;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 
 public interface IEventAppender
 {
-    Task<WriteResult> AppendBatchAsync(
-        IEnumerable<AppendRequest> requests,
-        CancellationToken cancellationToken = default);
+    void StartPrefetch(IEnumerable<BsonDocument> requests, CancellationToken cancellationToken);
+
+    Task<WriteResult> FlushAsync(CancellationToken cancellationToken);
 }
