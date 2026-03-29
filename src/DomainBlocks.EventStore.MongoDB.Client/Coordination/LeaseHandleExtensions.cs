@@ -5,13 +5,13 @@ namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 
 public static class LeaseHandleExtensions
 {
-    public static Task<bool> TryAdvanceCommitPositionAsync(
-        this ILeaseHandle<LeaseState> handle,
-        long count,
-        CancellationToken cancellationToken = default)
+    extension(ILeaseHandle<LeaseState> handle)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(count);
+        public Task<bool> TryAdvanceCommitPositionAsync(long count, CancellationToken cancellationToken = default)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(count);
 
-        return handle.TryUpdateStateAsync(x => x.Inc(s => s.CommitPosition, count), cancellationToken);
+            return handle.TryUpdateStateAsync(x => x.Inc(s => s.CommitPosition, count), cancellationToken);
+        }
     }
 }

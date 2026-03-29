@@ -33,16 +33,4 @@ public sealed class EventLogEntry
 
     [BsonElement(FieldNames.WrittenAtUtc)]
     public required DateTime WrittenAtUtc { get; init; }
-
-    public static class FieldNames
-    {
-        public const string Epoch = "epoch";
-        public const string StreamId = "streamId";
-        public const string StreamVersion = "streamVersion";
-        public const string CommitId = "commitId";
-        public const string EventName = "eventName";
-        public const string EventData = "eventData";
-        public const string Metadata = "metadata";
-        public const string WrittenAtUtc = "writtenAtUtc";
-    }
 }

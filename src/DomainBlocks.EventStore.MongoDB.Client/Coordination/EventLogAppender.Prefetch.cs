@@ -9,17 +9,17 @@ public partial class EventLogAppender
 {
     private static readonly BsonDocument GroupByStreamStage = new("$group", new BsonDocument
     {
-        { "_id", $"${EventLogEntry.FieldNames.StreamId}" },
-        { "version", new BsonDocument("$max", $"${EventLogEntry.FieldNames.StreamVersion}") }
+        { "_id", $"${FieldNames.StreamId}" },
+        { "version", new BsonDocument("$max", $"${FieldNames.StreamVersion}") }
     });
 
     private readonly BsonDocument _visibilityFilter = initialCommitPosition.HasValue
         ? new BsonDocument("$or", new BsonArray
         {
-            new BsonDocument(EventLogEntry.FieldNames.Epoch, epoch),
+            new BsonDocument(FieldNames.Epoch, epoch),
             new BsonDocument("_id", new BsonDocument("$lte", initialCommitPosition.Value))
         })
-        : new BsonDocument(EventLogEntry.FieldNames.Epoch, epoch);
+        : new BsonDocument(FieldNames.Epoch, epoch);
 
     private readonly HashSet<BsonValue> _prefetchDedup = [];
     private readonly BsonArray _prefetchCommitIds = [];
@@ -33,8 +33,8 @@ public partial class EventLogAppender
 
         foreach (var request in _requests)
         {
-            var commitId = request[AppendRequest.FieldNames.CommitId];
-            var streamId = request[AppendRequest.FieldNames.StreamId];
+            var commitId = request[FieldNames.CommitId];
+            var streamId = request[FieldNames.StreamId];
 
             if (_prefetchDedup.Add(commitId))
                 _prefetchCommitIds.Add(commitId);
@@ -45,7 +45,7 @@ public partial class EventLogAppender
 
         var commitIdFilter = new BsonDocument("$and", new BsonArray
         {
-            new BsonDocument(EventLogEntry.FieldNames.CommitId, new BsonDocument("$in", _prefetchCommitIds)),
+            new BsonDocument(FieldNames.CommitId, new BsonDocument("$in", _prefetchCommitIds)),
             _visibilityFilter
         });
 
@@ -54,7 +54,7 @@ public partial class EventLogAppender
             new BsonDocument("$match",
                 new BsonDocument("$and", new BsonArray
                 {
-                    new BsonDocument(EventLogEntry.FieldNames.StreamId, new BsonDocument("$in", _prefetchStreamIds)),
+                    new BsonDocument(FieldNames.StreamId, new BsonDocument("$in", _prefetchStreamIds)),
                     _visibilityFilter
                 })),
 
@@ -63,7 +63,7 @@ public partial class EventLogAppender
 
         var duplicatesTask = _eventLog
             .Distinct<BsonValue>(
-                EventLogEntry.FieldNames.CommitId,
+                FieldNames.CommitId,
                 commitIdFilter,
                 cancellationToken: cancellationToken)
             .ForEachAsync(x => _duplicateCommitIds.Add(x.AsGuid), cancellationToken);

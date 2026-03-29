@@ -14,9 +14,7 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
     private const int MaxLiveBatchSize = 1000;
 
     private readonly ILeaseHandle<LeaseState> _handle;
-    private long? _currentCommitPosition;
     private readonly IMongoCollection<BsonDocument> _requests;
-    private readonly IMongoCollection<BsonDocument> _eventLog;
     private readonly IEventLogAppender _appender;
     private readonly IChangeStreamSubject<ChangeStreamDocument<BsonDocument>> _changeStreamSubject;
     private readonly ILogger _logger;
@@ -28,18 +26,14 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
 
     public LeaderSession(
         ILeaseHandle<LeaseState> handle,
-        long? initialCommitPosition,
         IEventLogAppender appender,
         IMongoCollection<BsonDocument> requests,
-        IMongoCollection<BsonDocument> eventLog,
         IChangeStreamSubject<ChangeStreamDocument<BsonDocument>> changeStreamSubject,
         ILoggerFactory loggerFactory)
     {
         _handle = handle;
-        _currentCommitPosition = initialCommitPosition;
         _appender = appender;
         _requests = requests;
-        _eventLog = eventLog;
         _changeStreamSubject = changeStreamSubject;
         _logger = loggerFactory.CreateLogger<LeaderSession>();
         _stopCts = CancellationTokenSource.CreateLinkedTokenSource(handle.LeaseLostToken);
@@ -99,9 +93,8 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
 
         try
         {
-            // var success = await CatchUpAsync(ct).ConfigureAwait(false);
-            // if (success)
-            await RunLiveAsync(ct).ConfigureAwait(false);
+            if (await CatchUpAsync(ct).ConfigureAwait(false))
+                await RunLiveAsync(ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -109,107 +102,43 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
         }
     }
 
-    // private async Task<bool> CatchUpAsync(CancellationToken ct)
-    // {
-    //     _logger.LogInformation("Catch-up phase starting");
-    //
-    //     var allAlreadyCommitted = new HashSet<Guid>();
-    //
-    //     while (true)
-    //     {
-    //         ct.ThrowIfCancellationRequested();
-    //
-    //         // Exclude commit IDs we've already identified as committed.
-    //         var filter = allAlreadyCommitted.Count > 0
-    //             ? Builders<AppendRequest>.Filter.Eq(x => x.CompletedAtUtc, null) &
-    //               Builders<AppendRequest>.Filter.Nin(x => x.CommitId, allAlreadyCommitted)
-    //             : Builders<AppendRequest>.Filter.Eq(x => x.CompletedAtUtc, null);
-    //
-    //         var batch = await _requests
-    //             .Find(filter)
-    //             .Sort(Builders<AppendRequest>.Sort.Ascending(x => x.CreatedAtUtc))
-    //             .Limit(MaxCatchUpBatchSize)
-    //             .ToListAsync(ct)
-    //             .ConfigureAwait(false);
-    //
-    //         if (batch.Count == 0)
-    //             break;
-    //
-    //         // Of these, which are already committed in the event log?
-    //         var batchCommitIds = batch.Select(r => r.CommitId);
-    //         var alreadyCommitted = await GetCommittedIdsAsync(batchCommitIds, ct).ConfigureAwait(false);
-    //
-    //         // Track them so subsequent iterations skip them in the query too.
-    //         allAlreadyCommitted.UnionWith(alreadyCommitted);
-    //
-    //         // Mark committed requests as completed (off the hot path).
-    //         if (alreadyCommitted.Count > 0)
-    //             _requestCompleter.Complete(alreadyCommitted);
-    //
-    //         // Only send uncommitted requests to the appender.
-    //         var pending = batch.Where(r => !alreadyCommitted.Contains(r.CommitId)).ToList();
-    //
-    //         if (pending.Count == 0)
-    //             continue;
-    //
-    //         var result = await _appender.AppendBatchAsync(pending, ct).ConfigureAwait(false);
-    //
-    //         if (!await TryAdvanceCommitPositionAsync(result, ct).ConfigureAwait(false))
-    //             return false; // Step down - don't mark as complete
-    //
-    //         // The newly appended ones are now committed too.
-    //         _requestCompleter.Complete([.. pending.Select(r => r.CommitId)]);
-    //     }
-    //
-    //     _logger.LogInformation("Catch-up phase complete");
-    //     return true;
-    // }
+    private async Task<bool> CatchUpAsync(CancellationToken ct)
+    {
+        _logger.LogInformation("Catch-up phase starting");
 
-    // private async Task<HashSet<Guid>> GetCommittedIdsAsync(IEnumerable<Guid> candidateIds, CancellationToken ct)
-    // {
-    //     if (_currentPosition is null)
-    //         return [];
-    //
-    //     var filter =
-    //         Builders<EventLogEntry>.Filter.In(x => x.CommitId, candidateIds) &
-    //         Builders<EventLogEntry>.Filter.Lte(x => x.Position, _currentPosition.Value);
-    //
-    //     var ids = await _eventLog
-    //         .Distinct(x => x.CommitId, filter, cancellationToken: ct)
-    //         .ToListAsync(ct)
-    //         .ConfigureAwait(false);
-    //
-    //     return [.. ids];
-    // }
+        var sort = Builders<BsonDocument>.Sort.Ascending(FieldNames.CreatedAtUtc);
+        var seenCommitIds = new HashSet<BsonValue>();
 
-    // private async Task RunLiveAsync(CancellationToken ct)
-    // {
-    //     _logger.LogInformation("Switching to live mode");
-    //
-    //     _livelinessTcs.TrySetResult();
-    //
-    //     var batch = new List<BsonDocument>(MaxLiveBatchSize);
-    //
-    //     while (await _channel.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
-    //     {
-    //         batch.Clear();
-    //
-    //         while (batch.Count < MaxLiveBatchSize && _channel.Reader.TryRead(out var request))
-    //             batch.Add(request);
-    //
-    //         if (batch.Count == 0)
-    //             continue;
-    //
-    //         _logger.LogDebug("Processing batch of {BatchSize} request(s)", batch.Count);
-    //
-    //         var result = await _appender.AppendBatchAsync(batch, ct).ConfigureAwait(false);
-    //
-    //         if (!await TryAdvanceCommitPositionAsync(result, ct).ConfigureAwait(false))
-    //             return; // Step down - don't mark as complete
-    //
-    //         _requestCompleter.Complete([..batch.Select(x => x[AppendRequest.FieldNames.CommitId].AsGuid)]);
-    //     }
-    // }
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var filter = seenCommitIds.Count > 0
+                ? Builders<BsonDocument>.Filter.Nin(FieldNames.CommitId, seenCommitIds)
+                : FilterDefinition<BsonDocument>.Empty;
+
+            var batch = await _requests
+                .Find(filter)
+                .Sort(sort)
+                .Limit(MaxCatchUpBatchSize)
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+
+            if (batch.Count == 0)
+                break;
+
+            foreach (var doc in batch)
+                seenCommitIds.Add(doc[FieldNames.CommitId]);
+
+            var result = await _appender.AppendBatchAsync(batch, ct).ConfigureAwait(false);
+
+            if (!await TryAdvanceCommitPositionAsync(result, ct).ConfigureAwait(false))
+                return false;
+        }
+
+        _logger.LogInformation("Catch-up phase complete");
+        return true;
+    }
 
     private async Task RunLiveAsync(CancellationToken ct)
     {
@@ -233,7 +162,8 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
 
             var result = await _appender.AppendBatchAsync(batch, ct).ConfigureAwait(false);
 
-            await TryAdvanceCommitPositionAsync(result, ct).ConfigureAwait(false);
+            if (!await TryAdvanceCommitPositionAsync(result, ct).ConfigureAwait(false))
+                return;
         }
     }
 
@@ -243,13 +173,10 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
             return true;
 
         var success = await _handle.TryAdvanceCommitPositionAsync(result.PositionCount, ct).ConfigureAwait(false);
-        if (success)
-        {
-            _currentCommitPosition = result.EndPosition;
-            return true;
-        }
 
-        _logger.LogWarning("Failed to advance commit position by {Count}", result.PositionCount);
-        return false;
+        if (!success)
+            _logger.LogWarning("Failed to advance commit position by {Count}", result.PositionCount);
+
+        return success;
     }
 }

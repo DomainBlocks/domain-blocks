@@ -55,7 +55,7 @@ public class MongoEventStoreClientTests : EventStoreClientTests
         var filter = (filterBuilder.Eq("ns.coll", _options.AppendRequestsCollectionName) &
                       filterBuilder.Eq("operationType", "insert")) |
                      (filterBuilder.Eq("ns.coll", _options.EventLogCollectionName) &
-                      filterBuilder.Eq("fullDocument.eventName", nameof(AppendBatchRecorded))) |
+                      filterBuilder.Eq("fullDocument.eventName", EventNames.AppendBatchRecorded)) |
                      filterBuilder.Eq("ns.coll", _options.LeasesCollectionName);
 
         var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(filter);

@@ -1,5 +1,6 @@
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB.Client.Schema;
+using DomainBlocks.EventStore.MongoDB.Client.Serialization;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -83,13 +84,13 @@ public sealed partial class EventLogAppender(
 
         foreach (var commit in _requests)
         {
-            var events = commit[AppendRequest.FieldNames.Events].AsBsonArray;
+            var events = commit[FieldNames.Events].AsBsonArray;
             if (events.Count == 0)
                 continue;
 
-            var bsonCommitId = commit[AppendRequest.FieldNames.CommitId];
-            var bsonStreamId = commit[AppendRequest.FieldNames.StreamId];
-            var bsonExpectedStreamState = commit[AppendRequest.FieldNames.ExpectedStreamState];
+            var bsonCommitId = commit[FieldNames.CommitId];
+            var bsonStreamId = commit[FieldNames.StreamId];
+            var bsonExpectedStreamState = commit[FieldNames.ExpectedStreamState];
 
             var commitId = bsonCommitId.AsGuid;
             if (IsProcessed(commitId))
@@ -102,8 +103,7 @@ public sealed partial class EventLogAppender(
                 ? StreamState.StreamDoesNotExist
                 : StreamState.StreamExists(StreamVersion.FromInt64(streamVersion));
 
-            var expectedStreamState = ToExpectedStreamState(bsonExpectedStreamState);
-
+            var expectedStreamState = bsonExpectedStreamState.ToExpectedStreamState();
             if (!expectedStreamState.Matches(actualStreamState))
             {
                 logger.LogWarning(
@@ -150,7 +150,7 @@ public sealed partial class EventLogAppender(
                 BsonString.Empty,
                 0,
                 BsonEmptyGuid,
-                nameof(AppendBatchRecorded),
+                nameof(EventNames.AppendBatchRecorded),
                 CreateBatchRecordedEventData());
 
             _writeModels.Add(writeModel);
@@ -169,20 +169,6 @@ public sealed partial class EventLogAppender(
             _commitRejections.Count > 0;
     }
 
-    private static ExpectedStreamState ToExpectedStreamState(BsonValue bsonValue)
-    {
-        var doc = bsonValue.AsBsonDocument;
-
-        return doc["kind"].AsString switch
-        {
-            "any" => ExpectedStreamState.Any,
-            "streamExists" => ExpectedStreamState.StreamExists,
-            "streamDoesNotExist" => ExpectedStreamState.StreamDoesNotExist,
-            "version" => ExpectedStreamState.SpecificVersion(StreamVersion.FromInt64(doc["version"].AsInt64)),
-            var k => throw new InvalidOperationException($"Unknown expected stream state kind: '{k}'")
-        };
-    }
-
     private static ReplaceOneModel<BsonDocument> CreateEventWrite(
         long position,
         long epoch,
@@ -197,9 +183,9 @@ public sealed partial class EventLogAppender(
             streamId,
             streamVersion,
             commitId,
-            pendingEvent[PendingEvent.FieldNames.EventName],
-            pendingEvent[PendingEvent.FieldNames.EventData],
-            pendingEvent[PendingEvent.FieldNames.Metadata]);
+            pendingEvent[FieldNames.EventName],
+            pendingEvent[FieldNames.EventData],
+            pendingEvent[FieldNames.Metadata]);
     }
 
     private static ReplaceOneModel<BsonDocument> CreateEventWrite(
@@ -215,20 +201,20 @@ public sealed partial class EventLogAppender(
         var filter = new BsonDocument
         {
             { "_id", position },
-            { EventLogEntry.FieldNames.Epoch, new BsonDocument("$lt", epoch) }
+            { FieldNames.Epoch, new BsonDocument("$lt", epoch) }
         };
 
         var replacement = new BsonDocument
         {
             { "_id", position },
-            { EventLogEntry.FieldNames.Epoch, epoch },
-            { EventLogEntry.FieldNames.StreamId, streamId },
-            { EventLogEntry.FieldNames.StreamVersion, streamVersion },
-            { EventLogEntry.FieldNames.CommitId, commitId },
-            { EventLogEntry.FieldNames.EventName, eventName },
-            { EventLogEntry.FieldNames.EventData, eventData },
-            { EventLogEntry.FieldNames.Metadata, metadata ?? BsonNull.Value },
-            { EventLogEntry.FieldNames.WrittenAtUtc, DateTime.UtcNow }
+            { FieldNames.Epoch, epoch },
+            { FieldNames.StreamId, streamId },
+            { FieldNames.StreamVersion, streamVersion },
+            { FieldNames.CommitId, commitId },
+            { FieldNames.EventName, eventName },
+            { FieldNames.EventData, eventData },
+            { FieldNames.Metadata, metadata ?? BsonNull.Value },
+            { FieldNames.WrittenAtUtc, DateTime.UtcNow }
         };
 
         return new ReplaceOneModel<BsonDocument>(filter, replacement) { IsUpsert = true };
@@ -240,29 +226,12 @@ public sealed partial class EventLogAppender(
         BsonValue expectedStreamState,
         StreamState actualStreamState)
     {
-        var actualStreamStateDoc = new BsonDocument();
-
-        if (actualStreamState.IsStreamDoesNotExist)
-        {
-            actualStreamStateDoc["kind"] = "streamDoesNotExist";
-        }
-        else if (actualStreamState.IsStreamExists)
-        {
-            actualStreamStateDoc["kind"] = "streamExists";
-            actualStreamStateDoc["version"] = checked((long)actualStreamState.Version.Value.Value);
-        }
-        else
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(actualStreamState), $"Unknown {nameof(StreamStateKind)}: {actualStreamState.Kind}");
-        }
-
         return new BsonDocument
         {
-            { CommitRejection.FieldNames.CommitId, new BsonBinaryData(commitId, GuidRepresentation.Standard) },
-            { CommitRejection.FieldNames.StreamId, streamId },
-            { CommitRejection.FieldNames.ExpectedStreamState, expectedStreamState },
-            { CommitRejection.FieldNames.ActualStreamState, actualStreamStateDoc }
+            { FieldNames.CommitId, new BsonBinaryData(commitId, GuidRepresentation.Standard) },
+            { FieldNames.StreamId, streamId },
+            { FieldNames.ExpectedStreamState, expectedStreamState },
+            { FieldNames.ActualStreamState, BsonDocument.From(actualStreamState) }
         };
     }
 
@@ -271,14 +240,14 @@ public sealed partial class EventLogAppender(
         return new BsonDocument
         {
             {
-                AppendBatchRecorded.FieldNames.AppendedCommitIds,
+                FieldNames.AppendedCommitIds,
                 new BsonArray(_appendedCommitIds.Select(x => new BsonBinaryData(x, GuidRepresentation.Standard)))
             },
             {
-                AppendBatchRecorded.FieldNames.DuplicateCommitIds,
+                FieldNames.DuplicateCommitIds,
                 new BsonArray(_duplicateCommitIds.Select(x => new BsonBinaryData(x, GuidRepresentation.Standard)))
             },
-            { AppendBatchRecorded.FieldNames.Rejections, new BsonArray(_commitRejections.Values) }
+            { FieldNames.Rejections, new BsonArray(_commitRejections.Values) }
         };
     }
 }

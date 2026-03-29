@@ -16,11 +16,4 @@ public sealed class AppendBatchRecorded
 
     [BsonElement(FieldNames.Rejections)]
     public required IReadOnlyCollection<CommitRejection> Rejections { get; init; }
-
-    public static class FieldNames
-    {
-        public const string AppendedCommitIds = "appends";
-        public const string DuplicateCommitIds = "duplicates";
-        public const string Rejections = "rejections";
-    }
 }

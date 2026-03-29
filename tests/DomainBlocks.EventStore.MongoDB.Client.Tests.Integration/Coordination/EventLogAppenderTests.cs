@@ -251,11 +251,11 @@ public class EventLogAppenderTests
 
         // Second batch should still produce a batch-completed marker with the duplicate.
         var allEntries = await ReadAllEntries();
-        var batchCompletedEntries = allEntries.Where(e => e.EventName == nameof(AppendBatchRecorded)).ToArray();
+        var batchCompletedEntries = allEntries.Where(e => e.EventName == EventNames.AppendBatchRecorded).ToArray();
         batchCompletedEntries.Length.ShouldBe(2);
 
         var secondMarker = batchCompletedEntries.OrderBy(e => e.Position).Last();
-        var secondCompleted = BsonSerializer.Deserialize<AppendBatchRecorded>(secondMarker.EventData.AsBsonDocument);
+        var secondCompleted = new AppendBatchRecordedView(secondMarker.EventData.AsBsonDocument);
         secondCompleted.DuplicateCommitIds.ShouldContain(commitId);
         secondCompleted.AppendedCommitIds.ShouldBeEmpty();
     }
@@ -540,7 +540,7 @@ public class EventLogAppenderTests
 
         var batchCompleted = await ReadLastBatchCompleted();
         var rejection = batchCompleted.Rejections.First();
-        rejection.CommitId.ShouldBe(requests[1][AppendRequest.FieldNames.CommitId].AsGuid);
+        rejection.CommitId.ShouldBe(requests[1][FieldNames.CommitId].AsGuid);
         rejection.StreamId.ShouldBe(streamId);
     }
 
@@ -566,8 +566,7 @@ public class EventLogAppenderTests
 
         var result = await appender.AppendBatchAsync(
             [
-                CreateRequest(goodCommitId, streamId, ExpectedStreamState.SpecificVersion(new StreamVersion(0)),
-                    "E2"),
+                CreateRequest(goodCommitId, streamId, ExpectedStreamState.SpecificVersion(new StreamVersion(0)), "E2"),
                 CreateRequest(badCommitId, streamId, ExpectedStreamState.StreamDoesNotExist, "Nope"),
                 CreateRequest(seedCommitId, streamId, ExpectedStreamState.Any, "E1") // duplicate
             ],
@@ -743,7 +742,7 @@ public class EventLogAppenderTests
     private async Task<List<EventLogEntry>> ReadEventEntries()
     {
         return await _eventLog
-            .Find(Builders<EventLogEntry>.Filter.Ne(x => x.EventName, nameof(AppendBatchRecorded)))
+            .Find(Builders<EventLogEntry>.Filter.Ne(x => x.EventName, EventNames.AppendBatchRecorded))
             .SortBy(x => x.Position)
             .ToListAsync();
     }
@@ -759,7 +758,7 @@ public class EventLogAppenderTests
     private async Task<AppendBatchRecorded> ReadLastBatchCompleted()
     {
         var entry = await _eventLog
-            .Find(Builders<EventLogEntry>.Filter.Eq(x => x.EventName, nameof(AppendBatchRecorded)))
+            .Find(Builders<EventLogEntry>.Filter.Eq(x => x.EventName, EventNames.AppendBatchRecorded))
             .SortByDescending(x => x.Position)
             .FirstAsync();
 

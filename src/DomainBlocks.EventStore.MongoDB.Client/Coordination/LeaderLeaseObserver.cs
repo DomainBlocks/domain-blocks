@@ -33,10 +33,8 @@ public sealed class LeaderLeaseObserver(
 
         _session = new LeaderSession(
             handle,
-            leaseState.CommitPosition,
             appender,
             requests,
-            eventLog,
             changeStreamSubject,
             loggerFactory);
 

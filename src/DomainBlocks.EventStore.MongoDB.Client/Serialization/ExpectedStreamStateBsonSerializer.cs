@@ -10,10 +10,9 @@ namespace DomainBlocks.EventStore.MongoDB.Client.Serialization;
 public sealed class ExpectedStreamStateBsonSerializer : StructSerializerBase<ExpectedStreamState>
 {
     public static readonly ExpectedStreamStateBsonSerializer Shared = new();
-    private const string KindField = "kind";
-    private const string VersionField = "version";
 
-    // Wire tokens – keep stable forever once shipped
+    private const string KindFieldName = "kind";
+    private const string VersionFieldName = "version";
     private const string Any = "any";
     private const string StreamExists = "streamExists";
     private const string StreamDoesNotExist = "streamDoesNotExist";
@@ -27,7 +26,7 @@ public sealed class ExpectedStreamStateBsonSerializer : StructSerializerBase<Exp
         var writer = context.Writer;
 
         writer.WriteStartDocument();
-        writer.WriteName(KindField);
+        writer.WriteName(KindFieldName);
 
         switch (value.Kind)
         {
@@ -45,14 +44,8 @@ public sealed class ExpectedStreamStateBsonSerializer : StructSerializerBase<Exp
 
             case ExpectedStreamStateKind.SpecificVersion:
                 writer.WriteString(Version);
-
-                writer.WriteName(VersionField);
-
-                // Option A: Int64 (compact). Requires version <= long.MaxValue.
+                writer.WriteName(VersionFieldName);
                 writer.WriteInt64(checked((long)value.Version!.Value.Value));
-
-                // Option B: String (full ulong range, very stable):
-                // w.WriteString(value.Version!.Value.Value.ToString(CultureInfo.InvariantCulture));
                 break;
 
             default:
@@ -77,16 +70,17 @@ public sealed class ExpectedStreamStateBsonSerializer : StructSerializerBase<Exp
 
             switch (name)
             {
-                case KindField:
+                case KindFieldName:
                     kind = reader.ReadString();
                     break;
-                case VersionField:
+                case VersionFieldName:
                     version = reader.GetCurrentBsonType() switch
                     {
                         BsonType.Int64 => checked((ulong)reader.ReadInt64()),
                         BsonType.Int32 => checked((ulong)reader.ReadInt32()),
                         BsonType.String => ulong.Parse(reader.ReadString(), CultureInfo.InvariantCulture),
-                        var t => throw new BsonSerializationException($"Unexpected BSON type for '{VersionField}': {t}")
+                        var t => throw new BsonSerializationException(
+                            $"Unexpected BSON type for '{VersionFieldName}': {t}")
                     };
                     break;
                 default:
@@ -98,7 +92,7 @@ public sealed class ExpectedStreamStateBsonSerializer : StructSerializerBase<Exp
         reader.ReadEndDocument();
 
         if (kind is null)
-            throw new BsonSerializationException($"Missing '{KindField}' field.");
+            throw new BsonSerializationException($"Missing '{KindFieldName}' field.");
 
         return kind switch
         {
@@ -106,8 +100,8 @@ public sealed class ExpectedStreamStateBsonSerializer : StructSerializerBase<Exp
             StreamExists => ExpectedStreamState.StreamExists,
             StreamDoesNotExist => ExpectedStreamState.StreamDoesNotExist,
             Version when version.HasValue => ExpectedStreamState.SpecificVersion(new StreamVersion(version.Value)),
-            Version => throw new BsonSerializationException($"Missing '{VersionField}' for kind '{Version}'."),
-            _ => throw new BsonSerializationException($"Unknown expected stream state kind '{kind}'.")
+            Version => throw new BsonSerializationException($"Missing '{VersionFieldName}' for kind '{Version}'."),
+            _ => throw new BsonSerializationException($"Unknown expected kind '{kind}'.")
         };
     }
 }

@@ -2,6 +2,7 @@
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB.Client.Coordination;
 using DomainBlocks.EventStore.MongoDB.Client.Schema;
+using DomainBlocks.EventStore.MongoDB.Client.Serialization;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -62,18 +63,18 @@ public class MongoEventStoreClient<TEvent> :
                 .Encode(events)
                 .Select(x => new BsonDocument
                 {
-                    { PendingEvent.FieldNames.EventName, x.EventName },
-                    { PendingEvent.FieldNames.EventData, x.EventData },
-                    { PendingEvent.FieldNames.Metadata, x.Metadata ?? BsonNull.Value }
+                    { FieldNames.EventName, x.EventName },
+                    { FieldNames.EventData, x.EventData },
+                    { FieldNames.Metadata, x.Metadata ?? BsonNull.Value }
                 }));
 
         var request = new BsonDocument
         {
-            { AppendRequest.FieldNames.CommitId, new BsonBinaryData(options.CommitId, GuidRepresentation.Standard) },
-            { AppendRequest.FieldNames.StreamId, streamId },
-            { AppendRequest.FieldNames.ExpectedStreamState, SerializeExpectedStreamState(options.ExpectedState) },
-            { AppendRequest.FieldNames.Events, eventsArray },
-            { AppendRequest.FieldNames.CreatedAtUtc, DateTime.UtcNow }
+            { FieldNames.CommitId, new BsonBinaryData(options.CommitId, GuidRepresentation.Standard) },
+            { FieldNames.StreamId, streamId },
+            { FieldNames.ExpectedStreamState, BsonDocument.From(options.ExpectedState) },
+            { FieldNames.Events, eventsArray },
+            { FieldNames.CreatedAtUtc, DateTime.UtcNow }
         };
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -111,28 +112,6 @@ public class MongoEventStoreClient<TEvent> :
         await _stopCts.CancelAsync();
         await _consumeTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
         _stopCts.Dispose();
-    }
-
-    private static BsonDocument SerializeExpectedStreamState(ExpectedStreamState value)
-    {
-        return value.Kind switch
-        {
-            ExpectedStreamStateKind.Any => new BsonDocument("kind", "any"),
-
-            ExpectedStreamStateKind.StreamExists => new BsonDocument("kind", "streamExists"),
-
-            ExpectedStreamStateKind.StreamDoesNotExist => new BsonDocument("kind", "streamDoesNotExist"),
-
-            ExpectedStreamStateKind.SpecificVersion => new BsonDocument
-            {
-                { "kind", "version" },
-                { "version", checked((long)value.Version!.Value.Value) }
-            },
-
-            _ => throw new ArgumentOutOfRangeException(
-                nameof(value),
-                $"Unknown {nameof(ExpectedStreamStateKind)}: {value.Kind}")
-        };
     }
 
     private async Task ConsumeRequestsAsync(CancellationToken ct)

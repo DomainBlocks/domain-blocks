@@ -5,6 +5,7 @@ using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
+using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
@@ -15,22 +16,14 @@ public sealed class CommitTracker(
     ICommitTracker,
     IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>
 {
-    private const string CommitPositionFieldPath =
-        $"{LeaseDocument.FieldNames.State}.{LeaseState.FieldNames.CommitPosition}";
+    private const string CommitPositionFieldPath = $"{LeaseDocument.FieldNames.State}.{FieldNames.CommitPosition}";
 
     private const string EpochFieldPath = LeaseDocument.FieldNames.Epoch;
 
     private readonly CollectionNamespace _eventLogNs = new(options.DatabaseName, options.EventLogCollectionName);
-
     private readonly CollectionNamespace _leasesNs = new(options.DatabaseName, options.LeasesCollectionName);
-
     private readonly ConcurrentDictionary<Guid, TaskCompletionSource> _waiters = [];
-
-    // Buffer: AppendBatchCompleted position → batch details (including epoch).
-    // Only accessed from OnNextAsync (single writer from change stream producer).
     private readonly SortedDictionary<long, RecordedBatch> _recordedBatches = [];
-
-    // The current epoch as observed from lease changes. Null until the first lease update is seen.
     private long? _currentEpoch;
 
     public Task WaitAsync(Guid commitId, CancellationToken cancellationToken = default)
@@ -62,31 +55,20 @@ public sealed class CommitTracker(
         if (doc is null)
             return;
 
-        var position = doc["_id"].AsInt64;
-        var eventName = doc.GetValue(EventLogEntry.FieldNames.EventName, BsonNull.Value);
+        var entry = new EventLogEntryView(doc);
 
-        if (eventName.AsString != nameof(AppendBatchRecorded))
+        if (entry.EventName != nameof(EventNames.AppendBatchRecorded))
             return;
-
-        var epoch = doc[EventLogEntry.FieldNames.Epoch].AsInt64;
 
         // Ignore batches from epochs we know are stale.
-        if (epoch < _currentEpoch)
+        if (entry.Epoch < _currentEpoch)
             return;
 
-        var eventData = doc[EventLogEntry.FieldNames.EventData].AsBsonDocument;
-        var batch = new RecordedBatch(epoch);
+        var @event = BsonSerializer.Deserialize<AppendBatchRecorded>(entry.EventData.AsBsonDocument);
 
-        foreach (var value in eventData[AppendBatchRecorded.FieldNames.AppendedCommitIds].AsBsonArray)
-            batch.Committed.Add(value.AsGuid);
-
-        foreach (var value in eventData[AppendBatchRecorded.FieldNames.DuplicateCommitIds].AsBsonArray)
-            batch.Committed.Add(value.AsGuid);
-
-        foreach (var value in eventData[AppendBatchRecorded.FieldNames.Rejections].AsBsonArray)
-            batch.Rejections.Add(value.AsBsonDocument);
-
-        _recordedBatches[position] = batch;
+        _recordedBatches[entry.Position] = new RecordedBatch(
+            entry.Epoch,
+            @event);
     }
 
     private void HandleLeaseChange(ChangeStreamDocument<BsonDocument> change)
@@ -154,24 +136,20 @@ public sealed class CommitTracker(
                 continue;
             }
 
-            foreach (var commitId in batch.Committed)
+            foreach (var commitId in batch.Event.AppendedCommitIds.Concat(batch.Event.DuplicateCommitIds))
             {
                 if (_waiters.TryRemove(commitId, out var tcs))
                     tcs.TrySetResult();
             }
 
-            foreach (var rejDoc in batch.Rejections)
+            foreach (var rejection in batch.Event.Rejections)
             {
-                var commitId = rejDoc[CommitRejection.FieldNames.CommitId].AsGuid;
-
-                if (_waiters.TryRemove(commitId, out var tcs))
+                if (_waiters.TryRemove(rejection.CommitId, out var tcs))
                 {
                     tcs.TrySetException(new StreamAppendConflictException(
-                        streamId: rejDoc[CommitRejection.FieldNames.StreamId].AsString,
-                        expectedState: ParseExpectedStreamState(
-                            rejDoc[CommitRejection.FieldNames.ExpectedStreamState].AsBsonDocument),
-                        actualState: ParseStreamState(
-                            rejDoc[CommitRejection.FieldNames.ActualStreamState].AsBsonDocument)));
+                        rejection.StreamId,
+                        rejection.ExpectedStreamState,
+                        rejection.ActualStreamState));
                 }
             }
 
@@ -182,32 +160,9 @@ public sealed class CommitTracker(
             _recordedBatches.Remove(position);
     }
 
-    private static ExpectedStreamState ParseExpectedStreamState(BsonDocument doc)
-    {
-        return doc["kind"].AsString switch
-        {
-            "any" => ExpectedStreamState.Any,
-            "streamExists" => ExpectedStreamState.StreamExists,
-            "streamDoesNotExist" => ExpectedStreamState.StreamDoesNotExist,
-            "version" => ExpectedStreamState.SpecificVersion(StreamVersion.FromInt64(doc["version"].AsInt64)),
-            var k => throw new InvalidOperationException($"Unknown expected stream state kind: '{k}'")
-        };
-    }
-
-    private static StreamState ParseStreamState(BsonDocument doc)
-    {
-        return doc["kind"].AsString switch
-        {
-            "streamDoesNotExist" => StreamState.StreamDoesNotExist,
-            "streamExists" => StreamState.StreamExists(StreamVersion.FromInt64(doc["version"].AsInt64)),
-            var k => throw new InvalidOperationException($"Unknown stream state kind: '{k}'")
-        };
-    }
-
-    private sealed class RecordedBatch(long epoch)
+    private readonly struct RecordedBatch(long epoch, AppendBatchRecorded @event)
     {
         public long Epoch { get; } = epoch;
-        public HashSet<Guid> Committed { get; } = [];
-        public List<BsonDocument> Rejections { get; } = [];
+        public AppendBatchRecorded Event { get; } = @event;
     }
 }

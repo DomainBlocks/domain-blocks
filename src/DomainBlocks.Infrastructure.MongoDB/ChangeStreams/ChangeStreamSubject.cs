@@ -15,21 +15,13 @@ internal sealed class ChangeStreamSubject<TDocument, TResult>(
     private readonly ObserverRegistry<IChangeStreamObserver<TResult>> _observers = new();
     private int _connected;
 
-    public IDisposable Attach(IChangeStreamObserver<TResult> observer)
-    {
-        return _observers.Attach(observer);
-    }
-
-    public IDisposable AttachGroup(IEnumerable<IChangeStreamObserver<TResult>> observers)
-    {
-        return _observers.AttachGroup(observers);
-    }
+    public IDisposable Attach(IChangeStreamObserver<TResult> observer) => _observers.Attach(observer);
 
     public IChangeStreamConnection Connect()
     {
         return Interlocked.Exchange(ref _connected, 1) == 0
             ? new Connection(cursorFactory, pipeline, resumeTokenSelector, _observers, options, logger)
-            : throw new InvalidOperationException("ConnectAsync may only be called once.");
+            : throw new InvalidOperationException("Connect may only be called once.");
     }
 
     private sealed class Connection : IChangeStreamConnection

@@ -10,10 +10,9 @@ namespace DomainBlocks.EventStore.MongoDB.Client.Serialization;
 public sealed class StreamStateBsonSerializer : StructSerializerBase<StreamState>
 {
     public static readonly StreamStateBsonSerializer Shared = new();
-    private const string KindField = "kind";
-    private const string VersionField = "version";
 
-    // Wire tokens – keep stable forever once shipped
+    private const string KindFieldName = "kind";
+    private const string VersionFieldName = "version";
     private const string StreamDoesNotExist = "streamDoesNotExist";
     private const string StreamExists = "streamExists";
 
@@ -25,7 +24,7 @@ public sealed class StreamStateBsonSerializer : StructSerializerBase<StreamState
         var writer = context.Writer;
 
         writer.WriteStartDocument();
-        writer.WriteName(KindField);
+        writer.WriteName(KindFieldName);
 
         switch (value.Kind)
         {
@@ -35,7 +34,7 @@ public sealed class StreamStateBsonSerializer : StructSerializerBase<StreamState
 
             case StreamStateKind.StreamExists:
                 writer.WriteString(StreamExists);
-                writer.WriteName(VersionField);
+                writer.WriteName(VersionFieldName);
                 writer.WriteInt64(checked((long)value.Version!.Value.Value));
                 break;
 
@@ -61,17 +60,17 @@ public sealed class StreamStateBsonSerializer : StructSerializerBase<StreamState
 
             switch (name)
             {
-                case KindField:
+                case KindFieldName:
                     kind = reader.ReadString();
                     break;
-                case VersionField:
+                case VersionFieldName:
                     version = reader.GetCurrentBsonType() switch
                     {
                         BsonType.Int64 => checked((ulong)reader.ReadInt64()),
                         BsonType.Int32 => checked((ulong)reader.ReadInt32()),
                         BsonType.String => ulong.Parse(reader.ReadString(), CultureInfo.InvariantCulture),
                         var t => throw new BsonSerializationException(
-                            $"Unexpected BSON type for '{VersionField}': {t}")
+                            $"Unexpected BSON type for '{VersionFieldName}': {t}")
                     };
                     break;
                 default:
@@ -83,7 +82,7 @@ public sealed class StreamStateBsonSerializer : StructSerializerBase<StreamState
         reader.ReadEndDocument();
 
         if (kind is null)
-            throw new BsonSerializationException($"Missing '{KindField}' field.");
+            throw new BsonSerializationException($"Missing '{KindFieldName}' field.");
 
         return kind switch
         {
@@ -91,8 +90,8 @@ public sealed class StreamStateBsonSerializer : StructSerializerBase<StreamState
             StreamExists when version.HasValue =>
                 StreamState.StreamExists(new StreamVersion(version.Value)),
             StreamExists =>
-                throw new BsonSerializationException($"Missing '{VersionField}' for kind '{StreamExists}'."),
-            _ => throw new BsonSerializationException($"Unknown stream state kind '{kind}'.")
+                throw new BsonSerializationException($"Missing '{VersionFieldName}' for kind '{StreamExists}'."),
+            _ => throw new BsonSerializationException($"Unknown stream kind '{kind}'.")
         };
     }
 }
