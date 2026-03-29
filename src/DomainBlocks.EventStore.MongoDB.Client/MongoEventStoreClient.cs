@@ -19,7 +19,7 @@ public class MongoEventStoreClient<TEvent> :
 
     private readonly IEventEncoder<TEvent, BsonValue, BsonValue> _eventEncoder;
     private readonly IEventDecoder<TEvent, BsonValue, BsonValue> _eventDecoder;
-    private readonly IAppendRequestTracker _requestTracker;
+    private readonly ICommitTracker _requestTracker;
     private readonly ILogger<MongoEventStoreClient<TEvent>> _logger;
     private readonly Channel<BsonDocument> _channel;
     private readonly Task _consumeTask;
@@ -27,8 +27,8 @@ public class MongoEventStoreClient<TEvent> :
 
     public MongoEventStoreClient(
         IMongoCollection<BsonDocument> requests,
-        IAppendRequestTracker requestTracker,
-        MongoEventStoreClientOptions2<TEvent> options,
+        ICommitTracker requestTracker,
+        MongoEventStoreClientOptions<TEvent> options,
         ILogger<MongoEventStoreClient<TEvent>> logger)
     {
         _requestTracker = requestTracker;

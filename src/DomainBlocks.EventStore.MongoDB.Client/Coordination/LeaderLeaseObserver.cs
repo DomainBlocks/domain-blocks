@@ -1,4 +1,5 @@
-﻿using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
+﻿using DomainBlocks.EventStore.MongoDB.Client.Schema;
+using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
@@ -7,14 +8,14 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 
-public sealed class EventAppenderLeaseObserver(
+public sealed class LeaderLeaseObserver(
     IMongoCollection<BsonDocument> requests,
     IMongoCollection<BsonDocument> eventLog,
     IChangeStreamSubject<ChangeStreamDocument<BsonDocument>> changeStreamSubject,
     ILoggerFactory loggerFactory) :
     ILeaseObserver
 {
-    private EventAppenderSession? _session;
+    private LeaderSession? _session;
 
     private readonly TaskCompletionSource _livelinessTcs = new();
 
@@ -22,26 +23,21 @@ public sealed class EventAppenderLeaseObserver(
 
     public async Task OnLeaseAcquiredAsync(ILeaseHandle<LeaseState> handle, CancellationToken ct)
     {
-        var leaseState = BsonSerializer.Deserialize<LeaseState>(handle.CurrentSnapshot.State);
+        var leaseState = BsonSerializer.Deserialize<LeaseState>(handle.Snapshot.State);
 
-        var appender = new EventAppender(
+        var appender = new EventLogAppender(
             eventLog,
-            handle.CurrentSnapshot.Epoch,
+            handle.Snapshot.Epoch,
             leaseState.CommitPosition,
-            loggerFactory.CreateLogger<EventAppender>());
+            loggerFactory.CreateLogger<EventLogAppender>());
 
-        var requestCompleter = new AppendRequestCompleter(
-            requests,
-            loggerFactory.CreateLogger<AppendRequestCompleter>());
-
-        _session = new EventAppenderSession(
+        _session = new LeaderSession(
             handle,
             leaseState.CommitPosition,
             appender,
             requests,
             eventLog,
             changeStreamSubject,
-            requestCompleter,
             loggerFactory);
 
         _session.Start();

@@ -1,3 +1,4 @@
+using DomainBlocks.EventStore.MongoDB.Client.Schema;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
 using Microsoft.Extensions.Logging;
 
@@ -7,9 +8,7 @@ public sealed class LeaseContender(ILeaseClient leaseClient, ILogger<LeaseConten
 {
     public const string ResourceId = "dbx_event_log_lease";
 
-    public async Task RunAsync(
-        IReadOnlyCollection<ILeaseObserver> observers,
-        CancellationToken cancellationToken = default)
+    public async Task RunAsync(ILeaseObserver observer, CancellationToken cancellationToken = default)
     {
         var options = new AcquireLeaseOptions
         {
@@ -29,13 +28,13 @@ public sealed class LeaseContender(ILeaseClient leaseClient, ILogger<LeaseConten
 
             await using (handle.ConfigureAwait(false))
             {
-                await NotifyLeaseAcquiredAsync(observers, handle, cancellationToken).ConfigureAwait(false);
+                await NotifyLeaseAcquiredAsync(observer, handle, cancellationToken).ConfigureAwait(false);
 
                 try
                 {
                     var leaseLostInfo = await handle.LeaseLostTask.WaitAsync(cancellationToken).ConfigureAwait(false);
 
-                    await NotifyLeaseLostAsync(observers, handle.Claim, leaseLostInfo, cancellationToken)
+                    await NotifyLeaseLostAsync(observer, handle.Claim, leaseLostInfo, cancellationToken)
                         .ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -51,45 +50,33 @@ public sealed class LeaseContender(ILeaseClient leaseClient, ILogger<LeaseConten
     }
 
     private async Task NotifyLeaseAcquiredAsync(
-        IReadOnlyCollection<ILeaseObserver> observers,
+        ILeaseObserver observer,
         ILeaseHandle<LeaseState> handle,
         CancellationToken cancellationToken)
     {
-        foreach (var observer in observers)
+        try
         {
-            try
-            {
-                await observer.OnLeaseAcquiredAsync(handle, cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                logger?.LogError(
-                    ex,
-                    "OnLeaseAcquiredAsync failed for observer '{ObserverType}'",
-                    observer.GetType().FullName);
-            }
+            await observer.OnLeaseAcquiredAsync(handle, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error invoking OnLeaseAcquiredAsync");
         }
     }
 
     private async Task NotifyLeaseLostAsync(
-        IReadOnlyCollection<ILeaseObserver> observers,
+        ILeaseObserver observer,
         LeaseClaim leaseClaim,
         LeaseLostInfo? leaseLostInfo,
         CancellationToken cancellationToken)
     {
-        foreach (var observer in observers)
+        try
         {
-            try
-            {
-                await observer.OnLeaseLostAsync(leaseClaim, leaseLostInfo, cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                logger?.LogError(
-                    ex,
-                    "OnLeaseLostAsync failed for observer '{ObserverType}'",
-                    observer.GetType().FullName);
-            }
+            await observer.OnLeaseLostAsync(leaseClaim, leaseLostInfo, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error invoking NotifyLeaseLostAsync");
         }
     }
 }

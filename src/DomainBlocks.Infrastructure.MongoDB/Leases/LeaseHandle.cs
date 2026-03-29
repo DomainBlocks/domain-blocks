@@ -35,7 +35,7 @@ public class LeaseHandle : ILeaseHandle
     }
 
     public LeaseClaim Claim { get; }
-    public ILeaseSnapshot CurrentSnapshot => Volatile.Read(ref _snapshot);
+    public ILeaseSnapshot Snapshot => Volatile.Read(ref _snapshot);
     public CancellationToken LeaseLostToken => _leaseLostCts.Token;
     public Task<LeaseLostInfo> LeaseLostTask => _leaseLostTcs.Task;
 

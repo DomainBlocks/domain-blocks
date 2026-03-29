@@ -1,3 +1,4 @@
+using DomainBlocks.EventStore.MongoDB.Client.Schema;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;

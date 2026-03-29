@@ -1,9 +1,8 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using MongoDB.Bson.Serialization.Attributes;
+﻿using MongoDB.Bson.Serialization.Attributes;
 
-namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
+namespace DomainBlocks.EventStore.MongoDB.Client.Schema;
 
-[SuppressMessage("ReSharper", "ClassNeverInstantiated.Global")]
+// ReSharper disable all
 public sealed class LeaseState
 {
     [BsonElement(FieldNames.CommitPosition)]

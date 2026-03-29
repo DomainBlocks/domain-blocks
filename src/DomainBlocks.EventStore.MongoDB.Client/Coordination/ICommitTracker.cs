@@ -1,6 +1,6 @@
 ﻿namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 
-public interface IAppendRequestTracker
+public interface ICommitTracker
 {
     Task WaitAsync(Guid commitId, CancellationToken cancellationToken = default);
 }

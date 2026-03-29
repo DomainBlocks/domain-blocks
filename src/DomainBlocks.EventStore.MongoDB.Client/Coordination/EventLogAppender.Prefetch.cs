@@ -5,7 +5,7 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 
-public partial class EventAppender
+public partial class EventLogAppender
 {
     private static readonly BsonDocument GroupByStreamStage = new("$group", new BsonDocument
     {
@@ -22,13 +22,13 @@ public partial class EventAppender
         : new BsonDocument(EventLogEntry.FieldNames.Epoch, epoch);
 
     private readonly HashSet<BsonValue> _prefetchDedup = [];
-    private readonly BsonArray _prefectCommitIds = [];
+    private readonly BsonArray _prefetchCommitIds = [];
     private readonly BsonArray _prefetchStreamIds = [];
 
     private async Task PrefetchAsync(CancellationToken cancellationToken)
     {
         _prefetchDedup.Clear();
-        _prefectCommitIds.Clear();
+        _prefetchCommitIds.Clear();
         _prefetchStreamIds.Clear();
 
         foreach (var request in _requests)
@@ -37,7 +37,7 @@ public partial class EventAppender
             var streamId = request[AppendRequest.FieldNames.StreamId];
 
             if (_prefetchDedup.Add(commitId))
-                _prefectCommitIds.Add(commitId);
+                _prefetchCommitIds.Add(commitId);
 
             if (_prefetchDedup.Add(streamId))
                 _prefetchStreamIds.Add(streamId);
@@ -45,7 +45,7 @@ public partial class EventAppender
 
         var commitIdFilter = new BsonDocument("$and", new BsonArray
         {
-            new BsonDocument(EventLogEntry.FieldNames.CommitId, new BsonDocument("$in", _prefectCommitIds)),
+            new BsonDocument(EventLogEntry.FieldNames.CommitId, new BsonDocument("$in", _prefetchCommitIds)),
             _visibilityFilter
         });
 

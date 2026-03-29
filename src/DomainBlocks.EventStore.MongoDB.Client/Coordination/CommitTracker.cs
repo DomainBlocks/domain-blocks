@@ -9,10 +9,10 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 
-public sealed class AppendRequestTracker(
+public sealed class CommitTracker(
     EventStoreNamespaceSettings namespaceSettings,
-    ILogger<AppendRequestTracker> logger) :
-    IAppendRequestTracker,
+    ILogger<CommitTracker> logger) :
+    ICommitTracker,
     IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>
 {
     private const string CommitPositionFieldPath =
@@ -24,7 +24,7 @@ public sealed class AppendRequestTracker(
 
     // Buffer: AppendBatchCompleted position → batch details (including epoch).
     // Only accessed from OnNextAsync (single writer from change stream producer).
-    private readonly SortedDictionary<long, AppendBatch> _appendBatches = [];
+    private readonly SortedDictionary<long, RecordedBatch> _recordedBatches = [];
 
     // The current epoch as observed from lease changes. Null until the first lease update is seen.
     private long? _currentEpoch;
@@ -61,7 +61,7 @@ public sealed class AppendRequestTracker(
         var position = doc["_id"].AsInt64;
         var eventName = doc.GetValue(EventLogEntry.FieldNames.EventName, BsonNull.Value);
 
-        if (eventName.AsString != "AppendBatchCompleted")
+        if (eventName.AsString != nameof(AppendBatchRecorded))
             return;
 
         var epoch = doc[EventLogEntry.FieldNames.Epoch].AsInt64;
@@ -71,18 +71,18 @@ public sealed class AppendRequestTracker(
             return;
 
         var eventData = doc[EventLogEntry.FieldNames.EventData].AsBsonDocument;
-        var batch = new AppendBatch(epoch);
+        var batch = new RecordedBatch(epoch);
 
-        foreach (var value in eventData[AppendBatchCompleted.FieldNames.AppendedCommitIds].AsBsonArray)
+        foreach (var value in eventData[AppendBatchRecorded.FieldNames.AppendedCommitIds].AsBsonArray)
             batch.Committed.Add(value.AsGuid);
 
-        foreach (var value in eventData[AppendBatchCompleted.FieldNames.DuplicateCommitIds].AsBsonArray)
+        foreach (var value in eventData[AppendBatchRecorded.FieldNames.DuplicateCommitIds].AsBsonArray)
             batch.Committed.Add(value.AsGuid);
 
-        foreach (var value in eventData[AppendBatchCompleted.FieldNames.Rejections].AsBsonArray)
+        foreach (var value in eventData[AppendBatchRecorded.FieldNames.Rejections].AsBsonArray)
             batch.Rejections.Add(value.AsBsonDocument);
 
-        _appendBatches[position] = batch;
+        _recordedBatches[position] = batch;
     }
 
     private void HandleLeaseChange(ChangeStreamDocument<BsonDocument> change)
@@ -124,21 +124,21 @@ public sealed class AppendRequestTracker(
     {
         var toRemove = new List<long>();
 
-        foreach (var (position, batch) in _appendBatches)
+        foreach (var (position, batch) in _recordedBatches)
         {
             if (batch.Epoch < currentEpoch)
                 toRemove.Add(position);
         }
 
         foreach (var position in toRemove)
-            _appendBatches.Remove(position);
+            _recordedBatches.Remove(position);
     }
 
     private void FlushUpTo(long commitPosition)
     {
         var toRemove = new List<long>();
 
-        foreach (var (position, batch) in _appendBatches)
+        foreach (var (position, batch) in _recordedBatches)
         {
             if (position > commitPosition)
                 break; // SortedDictionary - everything after is also above
@@ -175,7 +175,7 @@ public sealed class AppendRequestTracker(
         }
 
         foreach (var position in toRemove)
-            _appendBatches.Remove(position);
+            _recordedBatches.Remove(position);
     }
 
     private static ExpectedStreamState ParseExpectedStreamState(BsonDocument doc)
@@ -200,7 +200,7 @@ public sealed class AppendRequestTracker(
         };
     }
 
-    private sealed class AppendBatch(long epoch)
+    private sealed class RecordedBatch(long epoch)
     {
         public long Epoch { get; } = epoch;
         public HashSet<Guid> Committed { get; } = [];

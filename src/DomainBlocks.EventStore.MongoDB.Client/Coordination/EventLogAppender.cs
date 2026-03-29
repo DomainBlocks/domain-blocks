@@ -6,11 +6,11 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 
-public sealed partial class EventAppender(
+public sealed partial class EventLogAppender(
     IMongoCollection<BsonDocument> eventLog,
     long epoch,
     long? initialCommitPosition,
-    ILogger<EventAppender> logger) : IEventAppender
+    ILogger<EventLogAppender> logger) : IEventLogAppender
 {
     private static readonly BulkWriteOptions OrderedBulkWriteOptions = new() { IsOrdered = true };
     private static readonly BsonBinaryData BsonEmptyGuid = new(Guid.Empty, GuidRepresentation.Standard);
@@ -28,29 +28,25 @@ public sealed partial class EventAppender(
     private readonly Dictionary<string, long> _headStreamVersions = [];
     private readonly List<WriteModel<BsonDocument>> _writeModels = [];
 
-    private Task _prefetchTask = Task.CompletedTask;
     private long _nextPosition = initialCommitPosition.HasValue ? initialCommitPosition.Value + 1 : 0;
 
-    public void StartPrefetch(IEnumerable<BsonDocument> requests, CancellationToken cancellationToken)
+    public async Task<AppendBatchResult> AppendBatchAsync(IEnumerable<BsonDocument> requests,
+        CancellationToken cancellationToken)
     {
         ClearBuffers();
+
         _requests.AddRange(requests);
-        _prefetchTask = _requests.Count == 0 ? Task.CompletedTask : PrefetchAsync(cancellationToken);
-    }
-
-    public async Task<WriteResult> FlushAsync(CancellationToken cancellationToken)
-    {
         if (_requests.Count == 0)
-            return new WriteResult(_nextPosition, _nextPosition);
+            return new AppendBatchResult(_nextPosition, _nextPosition);
 
-        await _prefetchTask.ConfigureAwait(false);
+        await PrefetchAsync(cancellationToken).ConfigureAwait(false);
 
         var nextPosition = BuildWriteModels();
 
         if (_writeModels.Count == 0)
         {
             logger.LogDebug("Batch produced no write models; skipping");
-            return new WriteResult(_nextPosition, _nextPosition);
+            return new AppendBatchResult(_nextPosition, _nextPosition);
         }
 
         await _eventLog.BulkWriteAsync(_writeModels, OrderedBulkWriteOptions, cancellationToken).ConfigureAwait(false);
@@ -67,7 +63,7 @@ public sealed partial class EventAppender(
             _duplicateCommitIds.Count,
             _commitRejections.Count);
 
-        return new WriteResult(startPosition, nextPosition);
+        return new AppendBatchResult(startPosition, nextPosition);
     }
 
     private void ClearBuffers()
@@ -84,15 +80,15 @@ public sealed partial class EventAppender(
     {
         var nextPosition = _nextPosition;
 
-        foreach (var request in _requests)
+        foreach (var commit in _requests)
         {
-            var events = request[AppendRequest.FieldNames.Events].AsBsonArray;
+            var events = commit[AppendRequest.FieldNames.Events].AsBsonArray;
             if (events.Count == 0)
                 continue;
 
-            var bsonCommitId = request[AppendRequest.FieldNames.CommitId];
-            var bsonStreamId = request[AppendRequest.FieldNames.StreamId];
-            var bsonExpectedStreamState = request[AppendRequest.FieldNames.ExpectedStreamState];
+            var bsonCommitId = commit[AppendRequest.FieldNames.CommitId];
+            var bsonStreamId = commit[AppendRequest.FieldNames.StreamId];
+            var bsonExpectedStreamState = commit[AppendRequest.FieldNames.ExpectedStreamState];
 
             var commitId = bsonCommitId.AsGuid;
             if (IsProcessed(commitId))
@@ -147,15 +143,14 @@ public sealed partial class EventAppender(
 
         if (HasCommits())
         {
-            var @event = CreateBatchCompletedEvent(_appendedCommitIds, _duplicateCommitIds, _commitRejections.Values);
-
             var writeModel = CreateEventWrite(
                 nextPosition++,
                 epoch,
                 BsonString.Empty,
                 0,
                 BsonEmptyGuid,
-                @event);
+                nameof(AppendBatchRecorded),
+                CreateBatchRecordedEventData());
 
             _writeModels.Add(writeModel);
         }
@@ -193,7 +188,28 @@ public sealed partial class EventAppender(
         BsonValue streamId,
         long streamVersion,
         BsonValue commitId,
-        BsonDocument @event)
+        BsonDocument pendingEvent)
+    {
+        return CreateEventWrite(
+            position,
+            epoch,
+            streamId,
+            streamVersion,
+            commitId,
+            pendingEvent[PendingEvent.FieldNames.EventName],
+            pendingEvent[PendingEvent.FieldNames.EventData],
+            pendingEvent[PendingEvent.FieldNames.Metadata]);
+    }
+
+    private static UpdateOneModel<BsonDocument> CreateEventWrite(
+        long position,
+        long epoch,
+        BsonValue streamId,
+        long streamVersion,
+        BsonValue commitId,
+        BsonValue eventName,
+        BsonValue eventData,
+        BsonValue? metadata = null)
     {
         var filter = new BsonDocument
         {
@@ -208,9 +224,9 @@ public sealed partial class EventAppender(
             { EventLogEntry.FieldNames.StreamId, streamId },
             { EventLogEntry.FieldNames.StreamVersion, streamVersion },
             { EventLogEntry.FieldNames.CommitId, commitId },
-            { EventLogEntry.FieldNames.EventName, @event[PendingEvent.FieldNames.EventName] },
-            { EventLogEntry.FieldNames.EventData, @event[PendingEvent.FieldNames.EventData] },
-            { EventLogEntry.FieldNames.Metadata, @event[PendingEvent.FieldNames.Metadata] }
+            { EventLogEntry.FieldNames.EventName, eventName },
+            { EventLogEntry.FieldNames.EventData, eventData },
+            { EventLogEntry.FieldNames.Metadata, metadata ?? BsonNull.Value }
         };
 
         var update = new BsonDocument
@@ -254,29 +270,19 @@ public sealed partial class EventAppender(
         };
     }
 
-    private static BsonDocument CreateBatchCompletedEvent(
-        IEnumerable<Guid> appendedCommitIds,
-        IEnumerable<Guid> duplicateCommitIds,
-        IEnumerable<BsonValue> commitRejections)
+    private BsonDocument CreateBatchRecordedEventData()
     {
-        var eventPayload = new BsonDocument
-        {
-            {
-                AppendBatchCompleted.FieldNames.AppendedCommitIds,
-                new BsonArray(appendedCommitIds.Select(x => new BsonBinaryData(x, GuidRepresentation.Standard)))
-            },
-            {
-                AppendBatchCompleted.FieldNames.DuplicateCommitIds,
-                new BsonArray(duplicateCommitIds.Select(x => new BsonBinaryData(x, GuidRepresentation.Standard)))
-            },
-            { AppendBatchCompleted.FieldNames.Rejections, new BsonArray(commitRejections) }
-        };
-
         return new BsonDocument
         {
-            { PendingEvent.FieldNames.EventName, "AppendBatchCompleted" },
-            { PendingEvent.FieldNames.EventData, eventPayload },
-            { PendingEvent.FieldNames.Metadata, BsonNull.Value }
+            {
+                AppendBatchRecorded.FieldNames.AppendedCommitIds,
+                new BsonArray(_appendedCommitIds.Select(x => new BsonBinaryData(x, GuidRepresentation.Standard)))
+            },
+            {
+                AppendBatchRecorded.FieldNames.DuplicateCommitIds,
+                new BsonArray(_duplicateCommitIds.Select(x => new BsonBinaryData(x, GuidRepresentation.Standard)))
+            },
+            { AppendBatchRecorded.FieldNames.Rejections, new BsonArray(_commitRejections.Values) }
         };
     }
 }

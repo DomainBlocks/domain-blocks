@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB.Client.Coordination;
+using DomainBlocks.EventStore.MongoDB.Client.Schema;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
@@ -22,7 +23,7 @@ public class MongoEventStoreClientTests : EventStoreClientTests
     private MongoClient _mongoClient = null!;
     private ILoggerFactory _loggerFactory = null!;
     private CancellationTokenSource _stopCts = null!;
-    private MongoEventStoreClientOptions2<IDomainEvent> _options = null!;
+    private MongoEventStoreClientOptions<IDomainEvent> _options = null!;
     private IChangeStreamConnection _changeStreamConnection = null!;
     private Task _leaseContenderTask = null!;
     private MongoEventStoreClient<IDomainEvent> _client = null!;
@@ -44,7 +45,7 @@ public class MongoEventStoreClientTests : EventStoreClientTests
         var ns = _options.NamespaceSettings;
         var db = _mongoClient.GetDatabase(ns.DatabaseName);
 
-        await MongoEventStoreAdmin2.EnsureInitializedAsync(_mongoClient, ns);
+        await MongoEventStoreAdmin.EnsureInitializedAsync(_mongoClient, ns);
 
         var filterBuilder = Builders<ChangeStreamDocument<BsonDocument>>.Filter;
 
@@ -58,7 +59,7 @@ public class MongoEventStoreClientTests : EventStoreClientTests
                 // AppendBatchCompleted entries only — excludes the ~100 regular event writes
                 filterBuilder.And(
                     filterBuilder.Eq("ns.coll", ns.EventLogCollectionName),
-                    filterBuilder.Eq("fullDocument.eventName", "AppendBatchCompleted")),
+                    filterBuilder.Eq("fullDocument.eventName", nameof(AppendBatchRecorded))),
 
                 // All lease events — commit position updates
                 filterBuilder.Eq("ns.coll", ns.LeasesCollectionName)
@@ -68,16 +69,16 @@ public class MongoEventStoreClientTests : EventStoreClientTests
             pipeline,
             new ChangeStreamSubjectOptions
             {
-                MongoOptions = new ChangeStreamOptions
-                {
-                    BatchSize = 1000
-                }
+                // MongoOptions = new ChangeStreamOptions
+                // {
+                //     BatchSize = 1000
+                // }
             },
             _loggerFactory.CreateLogger("ChangeStream"));
 
-        // Set up AppendRequestTracker
-        var requestTracker = new AppendRequestTracker(ns, _loggerFactory.CreateLogger<AppendRequestTracker>());
-        changeStreamSubject.Attach(requestTracker);
+        // Set up CommitTracker
+        var commitTracker = new CommitTracker(ns, _loggerFactory.CreateLogger<CommitTracker>());
+        changeStreamSubject.Attach(commitTracker);
 
         // Set up LeaseContender
         var leaseStore = new LeaseStore(db.GetCollection<LeaseDocument>(ns.LeasesCollectionName));
@@ -86,7 +87,7 @@ public class MongoEventStoreClientTests : EventStoreClientTests
 
         var requests = db.GetCollection<BsonDocument>(ns.AppendRequestsCollectionName);
 
-        var leaseObserver = new EventAppenderLeaseObserver(
+        var leaseObserver = new LeaderLeaseObserver(
             requests,
             db.GetCollection<BsonDocument>(ns.EventLogCollectionName),
             changeStreamSubject,
@@ -96,11 +97,11 @@ public class MongoEventStoreClientTests : EventStoreClientTests
         _changeStreamConnection = changeStreamSubject.Connect();
 
         // Run LeaseContender
-        _leaseContenderTask = leaseContender.RunAsync([leaseObserver], _stopCts.Token);
+        _leaseContenderTask = leaseContender.RunAsync(leaseObserver, _stopCts.Token);
 
         _client = new MongoEventStoreClient<IDomainEvent>(
             requests,
-            requestTracker,
+            commitTracker,
             _options,
             _loggerFactory.CreateLogger<MongoEventStoreClient<IDomainEvent>>());
 
@@ -153,66 +154,6 @@ public class MongoEventStoreClientTests : EventStoreClientTests
         int Percentile(double p) => (int)Math.Ceiling(sorted.Count * p) - 1;
     }
 
-    // [Test]
-    // [CancelAfter(TestTimeoutMillis)]
-    // public async Task AppendToStreamAsync_ConcurrentAppends_MeasureThroughput(CancellationToken ct)
-    // {
-    //     const int concurrency = 20;
-    //     const int opsPerProducer = 1000;
-    //     const int totalOps = concurrency * opsPerProducer;
-    //     const int maxInFlight = 500;
-    //
-    //     var semaphore = new SemaphoreSlim(maxInFlight);
-    //
-    //     // Warm up
-    //     await Task.WhenAll(Enumerable
-    //         .Range(0, concurrency)
-    //         .Select(_ => Task.Run(() => DoAppend($"warmup-{Guid.NewGuid():N}", ct), ct)));
-    //
-    //     var sw = Stopwatch.StartNew();
-    //
-    //     await Task.WhenAll(
-    //         Enumerable
-    //             .Range(0, concurrency)
-    //             .Select(_ => Task.Run(async () =>
-    //                 {
-    //                     var pending = new List<Task>(opsPerProducer);
-    //
-    //                     for (var i = 0; i < opsPerProducer; i++)
-    //                     {
-    //                         await semaphore.WaitAsync(ct);
-    //
-    //                         pending.Add(Append());
-    //
-    //                         continue;
-    //
-    //                         async Task Append()
-    //                         {
-    //                             try
-    //                             {
-    //                                 await DoAppend($"test-{Guid.NewGuid():N}", ct);
-    //                             }
-    //                             finally
-    //                             {
-    //                                 semaphore.Release();
-    //                             }
-    //                         }
-    //                     }
-    //
-    //                     await Task.WhenAll(pending);
-    //                 },
-    //                 ct)));
-    //
-    //     sw.Stop();
-    //     var opsPerSecond = totalOps / sw.Elapsed.TotalSeconds;
-    //
-    //     await TestContext.Out.WriteLineAsync($"concurrency: {concurrency}");
-    //     await TestContext.Out.WriteLineAsync($"maxInFlight: {maxInFlight}");
-    //     await TestContext.Out.WriteLineAsync($"total ops:   {totalOps}");
-    //     await TestContext.Out.WriteLineAsync($"elapsed:     {sw.Elapsed.TotalMilliseconds:F0} ms");
-    //     await TestContext.Out.WriteLineAsync($"throughput:  {opsPerSecond:F1} ops/sec");
-    // }
-
     [Test]
     [CancelAfter(TestTimeoutMillis)]
     public async Task AppendToStreamAsync_MeasureThroughputCeiling(CancellationToken ct)
@@ -224,37 +165,35 @@ public class MongoEventStoreClientTests : EventStoreClientTests
         const int warmUpSeconds = 3;
         const int measureSeconds = 15;
 
-        using var runCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        runCts.CancelAfter(TimeSpan.FromSeconds(warmUpSeconds + measureSeconds));
-
         var semaphore = new SemaphoreSlim(maxInFlight, maxInFlight);
-        var ops = 0L;
-        var errors = 0L;
+        var ops = 0;
+        var errors = 0;
         var isInMeasureWindow = new StrongBox<bool>(false);
+
+        var runCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        runCts.CancelAfter(TimeSpan.FromSeconds(warmUpSeconds + measureSeconds));
 
         var pendingTasks = new ConcurrentBag<Task>();
 
-        // Single loop: acquire slot → fire append (non-blocking) → repeat.
-        // Keeps exactly maxInFlight operations in flight at all times while running.
-        var loopTask = Task.Run(
+        var producerLoopTask = Task.Run(
             async () =>
             {
-                while (!runCts.IsCancellationRequested)
+                using (runCts)
                 {
-                    try
+                    while (!runCts.IsCancellationRequested)
                     {
-                        await semaphore.WaitAsync(runCts.Token);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        break;
-                    }
+                        try
+                        {
+                            await semaphore.WaitAsync(runCts.Token);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            break;
+                        }
 
-                    // Capture before firing — ContinueWith may run after the window closes.
-                    var isMeasuring = isInMeasureWindow.Value;
+                        var isMeasuring = isInMeasureWindow.Value;
 
-                    var task = DoAppend($"test-{Guid.NewGuid():N}", runCts.Token)
-                        .ContinueWith(
+                        var task = DoAppend($"test-{Guid.NewGuid():N}", runCts.Token).ContinueWith(
                             t =>
                             {
                                 semaphore.Release();
@@ -271,7 +210,8 @@ public class MongoEventStoreClientTests : EventStoreClientTests
                             },
                             TaskScheduler.Default);
 
-                    pendingTasks.Add(task);
+                        pendingTasks.Add(task);
+                    }
                 }
             },
             ct);
@@ -287,13 +227,7 @@ public class MongoEventStoreClientTests : EventStoreClientTests
         isInMeasureWindow.Value = false;
         sw.Stop();
 
-        // Wait for the producer loop to notice cancellation, then drain all
-        // in-flight ops so the test exits cleanly.
-        await loopTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
-
-        // for (var i = 0; i < maxInFlight; i++)
-        //     await semaphore.WaitAsync(ct);
-
+        await producerLoopTask;
         await Task.WhenAll(pendingTasks);
 
         var throughput = ops / sw.Elapsed.TotalSeconds;
@@ -318,7 +252,7 @@ public class MongoEventStoreClientTests : EventStoreClientTests
         await Client.AppendToStreamAsync(streamId, events, options, ct);
     }
 
-    private static MongoEventStoreClientOptions2<IDomainEvent> GetEventStoreClientOptions()
+    private static MongoEventStoreClientOptions<IDomainEvent> GetEventStoreClientOptions()
     {
         var eventTypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>());
 
@@ -336,7 +270,7 @@ public class MongoEventStoreClientTests : EventStoreClientTests
             MetadataDeserializer = new BsonDocumentMetadataSerde()
         };
 
-        return new MongoEventStoreClientOptions2<IDomainEvent>
+        return new MongoEventStoreClientOptions<IDomainEvent>
         {
             NamespaceSettings = EventStoreNamespaceSettings.Default,
             EventCodec = new EventCodec<IDomainEvent, BsonValue, BsonValue>

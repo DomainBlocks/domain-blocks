@@ -5,9 +5,9 @@ using MongoDB.Bson.Serialization.Attributes;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Schema;
 
+// ReSharper disable all
 public sealed class AppendRequest
 {
-    [BsonId]
     public ObjectId Id { get; init; }
 
     [BsonElement(FieldNames.CommitId)]
@@ -27,10 +27,6 @@ public sealed class AppendRequest
     [BsonElement(FieldNames.CreatedAtUtc)]
     public required DateTime CreatedAtUtc { get; init; }
 
-    [BsonElement(FieldNames.CompletedAtUtc)]
-    [BsonIgnoreIfNull]
-    public DateTime? CompletedAtUtc { get; init; }
-
     public static class FieldNames
     {
         public const string CommitId = "commitId";
@@ -38,6 +34,5 @@ public sealed class AppendRequest
         public const string ExpectedStreamState = "expectedStreamState";
         public const string Events = "events";
         public const string CreatedAtUtc = "createdAtUtc";
-        public const string CompletedAtUtc = "completedAtUtc";
     }
 }

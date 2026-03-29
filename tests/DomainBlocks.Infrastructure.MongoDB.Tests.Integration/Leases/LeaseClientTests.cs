@@ -66,10 +66,10 @@ public class LeaseClientTests
         handle.Claim.ResourceId.ShouldBe(_resourceId);
         handle.Claim.HolderId.ShouldStartWith(AcquireLeaseOptions.Default.HolderIdPrefix);
         handle.Claim.Epoch.ShouldBe(1);
-        handle.CurrentSnapshot.ContentionPriority.ShouldBe(AcquireLeaseOptions.Default.ContentionPriority);
-        handle.CurrentSnapshot.LastUpdatedAt.ShouldBe(utcNow);
-        handle.CurrentSnapshot.HeldSince.ShouldBe(utcNow);
-        handle.CurrentSnapshot.ExpiresAt.ShouldBe(expectedExpiresAt);
+        handle.Snapshot.ContentionPriority.ShouldBe(AcquireLeaseOptions.Default.ContentionPriority);
+        handle.Snapshot.LastUpdatedAt.ShouldBe(utcNow);
+        handle.Snapshot.HeldSince.ShouldBe(utcNow);
+        handle.Snapshot.ExpiresAt.ShouldBe(expectedExpiresAt);
     }
 
     [Test]
@@ -168,9 +168,9 @@ public class LeaseClientTests
         await using var handle = result.Handle;
         handle.Claim.Epoch.ShouldBe(1);
 
-        var initialExpiry = handle.CurrentSnapshot.ExpiresAt;
+        var initialExpiry = handle.Snapshot.ExpiresAt;
 
-        while (handle.CurrentSnapshot.ExpiresAt <= initialExpiry)
+        while (handle.Snapshot.ExpiresAt <= initialExpiry)
         {
             ct.ThrowIfCancellationRequested();
             _fakeTimeProvider.Advance(TimeSpan.FromSeconds(1));
@@ -190,18 +190,18 @@ public class LeaseClientTests
 
         const int newPriority = 10;
         handle.ScheduleContentionPriorityChange(newPriority);
-        handle.CurrentSnapshot.ContentionPriority.ShouldBe(0);
+        handle.Snapshot.ContentionPriority.ShouldBe(0);
 
-        var initialExpiry = handle.CurrentSnapshot.ExpiresAt;
+        var initialExpiry = handle.Snapshot.ExpiresAt;
 
-        while (handle.CurrentSnapshot.ExpiresAt <= initialExpiry)
+        while (handle.Snapshot.ExpiresAt <= initialExpiry)
         {
             ct.ThrowIfCancellationRequested();
             _fakeTimeProvider.Advance(TimeSpan.FromSeconds(1));
             await Task.Yield();
         }
 
-        handle.CurrentSnapshot.ContentionPriority.ShouldBe(newPriority);
+        handle.Snapshot.ContentionPriority.ShouldBe(newPriority);
     }
 
     [Test]

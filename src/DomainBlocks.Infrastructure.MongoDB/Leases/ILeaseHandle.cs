@@ -5,7 +5,7 @@ namespace DomainBlocks.Infrastructure.MongoDB.Leases;
 public interface ILeaseHandle : IAsyncDisposable
 {
     LeaseClaim Claim { get; }
-    ILeaseSnapshot CurrentSnapshot { get; }
+    ILeaseSnapshot Snapshot { get; }
     CancellationToken LeaseLostToken { get; }
     Task<LeaseLostInfo> LeaseLostTask { get; }
 

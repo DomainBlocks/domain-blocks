@@ -3,7 +3,7 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Client;
 
-public static class MongoEventStoreAdmin2
+public static class MongoEventStoreAdmin
 {
     public static async Task EnsureInitializedAsync(
         IMongoClient mongoClient,

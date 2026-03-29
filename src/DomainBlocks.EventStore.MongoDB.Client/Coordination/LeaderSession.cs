@@ -1,4 +1,5 @@
 ﻿using System.Threading.Channels;
+using DomainBlocks.EventStore.MongoDB.Client.Schema;
 using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
 using Microsoft.Extensions.Logging;
@@ -7,18 +8,17 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 
-public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>, IAsyncDisposable
+public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>, IAsyncDisposable
 {
     private const int MaxCatchUpBatchSize = 100;
     private const int MaxLiveBatchSize = 1000;
 
     private readonly ILeaseHandle<LeaseState> _handle;
-    private long? _currentPosition;
+    private long? _currentCommitPosition;
     private readonly IMongoCollection<BsonDocument> _requests;
     private readonly IMongoCollection<BsonDocument> _eventLog;
-    private readonly IEventAppender _appender;
+    private readonly IEventLogAppender _appender;
     private readonly IChangeStreamSubject<ChangeStreamDocument<BsonDocument>> _changeStreamSubject;
-    private readonly IAppendRequestCompleter _requestCompleter;
     private readonly ILogger _logger;
     private readonly CancellationTokenSource _stopCts;
     private readonly Channel<BsonDocument> _channel;
@@ -26,24 +26,22 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
     private Task? _runTask;
     private readonly TaskCompletionSource _livelinessTcs = new();
 
-    public EventAppenderSession(
+    public LeaderSession(
         ILeaseHandle<LeaseState> handle,
-        long? currentPosition,
-        IEventAppender appender,
+        long? initialCommitPosition,
+        IEventLogAppender appender,
         IMongoCollection<BsonDocument> requests,
         IMongoCollection<BsonDocument> eventLog,
         IChangeStreamSubject<ChangeStreamDocument<BsonDocument>> changeStreamSubject,
-        IAppendRequestCompleter requestCompleter,
         ILoggerFactory loggerFactory)
     {
         _handle = handle;
-        _currentPosition = currentPosition;
+        _currentCommitPosition = initialCommitPosition;
         _appender = appender;
         _requests = requests;
         _eventLog = eventLog;
         _changeStreamSubject = changeStreamSubject;
-        _requestCompleter = requestCompleter;
-        _logger = loggerFactory.CreateLogger<EventAppenderSession>();
+        _logger = loggerFactory.CreateLogger<LeaderSession>();
         _stopCts = CancellationTokenSource.CreateLinkedTokenSource(handle.LeaseLostToken);
 
         var channelOptions = new BoundedChannelOptions(capacity: MaxLiveBatchSize)
@@ -220,7 +218,6 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
         _livelinessTcs.TrySetResult();
 
         var batch = new List<BsonDocument>(MaxLiveBatchSize);
-        var advanceTask = Task.FromResult(true);
 
         while (await _channel.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
         {
@@ -232,29 +229,15 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
             if (batch.Count == 0)
                 continue;
 
-            // Fire prefetch immediately - runs concurrently with the previous advance.
-            _appender.StartPrefetch(batch, ct);
+            _logger.LogDebug("Preparing {BatchSize} commit(s)", batch.Count);
 
-            // Await the previous advance before writing.
-            if (!await advanceTask.ConfigureAwait(false))
-                return;
+            var result = await _appender.AppendBatchAsync(batch, ct).ConfigureAwait(false);
 
-            _logger.LogDebug("Processing batch of {BatchSize} request(s)", batch.Count);
-
-            // Awaits the prefetch (may already be done), then builds and writes.
-            var result = await _appender.FlushAsync(ct).ConfigureAwait(false);
-
-            // Fire without awaiting — next iteration awaits before writing.
-            advanceTask = TryAdvanceCommitPositionAsync(result, ct);
-
-            //_requestCompleter.Complete([..batch.Select(x => x[AppendRequest.FieldNames.CommitId].AsGuid)]);
+            await TryAdvanceCommitPositionAsync(result, ct).ConfigureAwait(false);
         }
-
-        // Ensure the last batch's advance completes before exiting.
-        await advanceTask.ConfigureAwait(false);
     }
 
-    private async Task<bool> TryAdvanceCommitPositionAsync(WriteResult result, CancellationToken ct)
+    private async Task<bool> TryAdvanceCommitPositionAsync(AppendBatchResult result, CancellationToken ct)
     {
         if (result.IsEmpty)
             return true;
@@ -262,7 +245,7 @@ public sealed class EventAppenderSession : IChangeStreamObserver<ChangeStreamDoc
         var success = await _handle.TryAdvanceCommitPositionAsync(result.PositionCount, ct).ConfigureAwait(false);
         if (success)
         {
-            _currentPosition = result.EndPosition;
+            _currentCommitPosition = result.EndPosition;
             return true;
         }
 

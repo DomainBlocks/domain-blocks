@@ -5,6 +5,7 @@ using MongoDB.Bson.Serialization.Attributes;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Schema;
 
+// ReSharper disable all
 public sealed class CommitRejection
 {
     [BsonElement(FieldNames.CommitId)]
