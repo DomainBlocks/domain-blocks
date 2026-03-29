@@ -17,6 +17,7 @@ public class EventLogAppenderTests
     private const long Epoch = 1;
 
     private MongoClient _mongoClient = null!;
+    private MongoEventStoreClientOptions _options = null!;
     private ILoggerFactory _loggerFactory = null!;
     private IMongoCollection<EventLogEntry> _eventLog = null!;
     private IMongoCollection<BsonDocument> _eventLogAsBson = null!;
@@ -25,16 +26,19 @@ public class EventLogAppenderTests
     public async Task OneTimeSetUp()
     {
         _mongoClient = new MongoClient(MongoConnectionStrings.Default);
+
+        _options = new MongoEventStoreClientOptions
+        {
+            DatabaseName = "domainblocks_tests"
+        };
+
         _loggerFactory = LoggerFactory.Create(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug));
 
-        var ns = EventStoreNamespaceSettings.Default with { DatabaseName = "domainblocks_tests" };
+        await MongoEventStoreAdmin.EnsureInitializedAsync(_mongoClient, _options);
 
-        await MongoEventStoreAdmin.EnsureInitializedAsync(_mongoClient, ns);
-
-        var db = _mongoClient.GetDatabase(ns.DatabaseName);
-
-        _eventLog = db.GetCollection<EventLogEntry>(ns.EventLogCollectionName);
-        _eventLogAsBson = db.GetCollection<BsonDocument>(ns.EventLogCollectionName);
+        var db = _mongoClient.GetDatabase(_options.DatabaseName);
+        _eventLog = db.GetCollection<EventLogEntry>(_options.EventLogCollectionName);
+        _eventLogAsBson = db.GetCollection<BsonDocument>(_options.EventLogCollectionName);
     }
 
     [TearDown]
@@ -44,8 +48,9 @@ public class EventLogAppenderTests
     }
 
     [OneTimeTearDown]
-    public void OneTimeTearDown()
+    public async Task OneTimeTearDown()
     {
+        await _mongoClient.DropDatabaseAsync(_options.DatabaseName);
         _mongoClient.Dispose();
         _loggerFactory.Dispose();
     }

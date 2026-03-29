@@ -30,7 +30,8 @@ public sealed partial class EventLogAppender(
 
     private long _nextPosition = initialCommitPosition.HasValue ? initialCommitPosition.Value + 1 : 0;
 
-    public async Task<AppendBatchResult> AppendBatchAsync(IEnumerable<BsonDocument> requests,
+    public async Task<AppendBatchResult> AppendBatchAsync(
+        IEnumerable<BsonDocument> requests,
         CancellationToken cancellationToken)
     {
         ClearBuffers();
@@ -182,7 +183,7 @@ public sealed partial class EventLogAppender(
         };
     }
 
-    private static UpdateOneModel<BsonDocument> CreateEventWrite(
+    private static ReplaceOneModel<BsonDocument> CreateEventWrite(
         long position,
         long epoch,
         BsonValue streamId,
@@ -201,7 +202,7 @@ public sealed partial class EventLogAppender(
             pendingEvent[PendingEvent.FieldNames.Metadata]);
     }
 
-    private static UpdateOneModel<BsonDocument> CreateEventWrite(
+    private static ReplaceOneModel<BsonDocument> CreateEventWrite(
         long position,
         long epoch,
         BsonValue streamId,
@@ -217,7 +218,7 @@ public sealed partial class EventLogAppender(
             { EventLogEntry.FieldNames.Epoch, new BsonDocument("$lt", epoch) }
         };
 
-        var set = new BsonDocument
+        var replacement = new BsonDocument
         {
             { "_id", position },
             { EventLogEntry.FieldNames.Epoch, epoch },
@@ -226,16 +227,11 @@ public sealed partial class EventLogAppender(
             { EventLogEntry.FieldNames.CommitId, commitId },
             { EventLogEntry.FieldNames.EventName, eventName },
             { EventLogEntry.FieldNames.EventData, eventData },
-            { EventLogEntry.FieldNames.Metadata, metadata ?? BsonNull.Value }
+            { EventLogEntry.FieldNames.Metadata, metadata ?? BsonNull.Value },
+            { EventLogEntry.FieldNames.WrittenAtUtc, DateTime.UtcNow }
         };
 
-        var update = new BsonDocument
-        {
-            { "$set", set },
-            { "$currentDate", new BsonDocument(EventLogEntry.FieldNames.WrittenAtUtc, true) }
-        };
-
-        return new UpdateOneModel<BsonDocument>(filter, update) { IsUpsert = true };
+        return new ReplaceOneModel<BsonDocument>(filter, replacement) { IsUpsert = true };
     }
 
     private static BsonDocument CreateCommitRejection(

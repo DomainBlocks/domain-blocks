@@ -10,7 +10,7 @@ using MongoDB.Driver;
 namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 
 public sealed class CommitTracker(
-    EventStoreNamespaceSettings namespaceSettings,
+    MongoEventStoreClientOptions options,
     ILogger<CommitTracker> logger) :
     ICommitTracker,
     IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>
@@ -19,6 +19,10 @@ public sealed class CommitTracker(
         $"{LeaseDocument.FieldNames.State}.{LeaseState.FieldNames.CommitPosition}";
 
     private const string EpochFieldPath = LeaseDocument.FieldNames.Epoch;
+
+    private readonly CollectionNamespace _eventLogNs = new(options.DatabaseName, options.EventLogCollectionName);
+
+    private readonly CollectionNamespace _leasesNs = new(options.DatabaseName, options.LeasesCollectionName);
 
     private readonly ConcurrentDictionary<Guid, TaskCompletionSource> _waiters = [];
 
@@ -40,10 +44,10 @@ public sealed class CommitTracker(
 
     public ValueTask OnNextAsync(ChangeStreamDocument<BsonDocument> change, CancellationToken cancellationToken)
     {
-        if (change.CollectionNamespace.Equals(namespaceSettings.EventLogCollectionNamespace))
+        if (change.CollectionNamespace.Equals(_eventLogNs))
             HandleEventLogChange(change);
 
-        else if (change.CollectionNamespace.Equals(namespaceSettings.LeasesCollectionNamespace))
+        else if (change.CollectionNamespace.Equals(_leasesNs))
             HandleLeaseChange(change);
 
         return ValueTask.CompletedTask;
@@ -51,7 +55,7 @@ public sealed class CommitTracker(
 
     private void HandleEventLogChange(ChangeStreamDocument<BsonDocument> change)
     {
-        if (change.OperationType is not ChangeStreamOperationType.Insert and not ChangeStreamOperationType.Update)
+        if (change.OperationType is not ChangeStreamOperationType.Insert and not ChangeStreamOperationType.Replace)
             return;
 
         var doc = change.FullDocument;

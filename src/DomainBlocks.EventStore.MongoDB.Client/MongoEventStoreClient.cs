@@ -28,13 +28,14 @@ public class MongoEventStoreClient<TEvent> :
     public MongoEventStoreClient(
         IMongoCollection<BsonDocument> requests,
         ICommitTracker requestTracker,
-        MongoEventStoreClientOptions<TEvent> options,
+        MongoEventStoreClientOptions options,
+        EventCodec<TEvent, BsonValue, BsonValue> eventCodec,
         ILogger<MongoEventStoreClient<TEvent>> logger)
     {
         _requestTracker = requestTracker;
         _requests = requests.WithWriteConcern(WriteConcern.W1.With(journal: false));
-        _eventEncoder = options.EventCodec.Encoder;
-        _eventDecoder = options.EventCodec.Decoder;
+        _eventEncoder = eventCodec.Encoder;
+        _eventDecoder = eventCodec.Decoder;
         _logger = logger;
 
         var channelOptions = new BoundedChannelOptions(capacity: MaxBatchSize)
@@ -73,16 +74,27 @@ public class MongoEventStoreClient<TEvent> :
             { AppendRequest.FieldNames.ExpectedStreamState, SerializeExpectedStreamState(options.ExpectedState) },
             { AppendRequest.FieldNames.Events, eventsArray },
             { AppendRequest.FieldNames.CreatedAtUtc, DateTime.UtcNow }
-            // CompletedAtUtc omitted — absent field matches [BsonIgnoreIfNull] on the schema
         };
 
-        var commitTask = _requestTracker.WaitAsync(options.CommitId, cancellationToken);
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(options.Timeout);
 
-        //await _requests.InsertOneAsync(request, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var commitTask = _requestTracker.WaitAsync(options.CommitId, timeoutCts.Token);
 
-        await _channel.Writer.WriteAsync(request, cancellationToken);
-
-        await commitTask.ConfigureAwait(false);
+        try
+        {
+            await _channel.Writer.WriteAsync(request, timeoutCts.Token);
+            await commitTask.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Caller canceled.
+            throw;
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
+        {
+            throw new TimeoutException($"Append request did not complete within {options.Timeout}.");
+        }
     }
 
     public IAsyncEnumerable<ReadEvent<TEvent>> ReadStreamAsync(

@@ -1,10 +1,17 @@
-﻿using DomainBlocks.EventStore.Abstractions;
-using MongoDB.Bson;
+﻿namespace DomainBlocks.EventStore.MongoDB.Client;
 
-namespace DomainBlocks.EventStore.MongoDB.Client;
-
-public sealed class MongoEventStoreClientOptions<TEvent> where TEvent : notnull
+public sealed class MongoEventStoreClientOptions
 {
-    public required EventStoreNamespaceSettings NamespaceSettings { get; init; }
-    public required EventCodec<TEvent, BsonValue, BsonValue> EventCodec { get; init; }
+    public string DatabaseName { get; set; } = "domainblocks";
+
+    public string AppendRequestsCollectionName { get; set; } = "dbx_append_requests";
+
+    public string EventLogCollectionName { get; set; } = "dbx_event_log";
+
+    public string LeasesCollectionName { get; set; } = "dbx_leases";
+
+    /// <summary>
+    /// Gets or sets how long an append request document survives in MongoDB before being automatically deleted.
+    /// </summary>
+    public TimeSpan AppendRequestTtl { get; set; } = TimeSpan.FromSeconds(120);
 }

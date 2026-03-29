@@ -23,7 +23,7 @@ public class MongoEventStoreClientTests : EventStoreClientTests
     private MongoClient _mongoClient = null!;
     private ILoggerFactory _loggerFactory = null!;
     private CancellationTokenSource _stopCts = null!;
-    private MongoEventStoreClientOptions<IDomainEvent> _options = null!;
+    private MongoEventStoreClientOptions _options = null!;
     private IChangeStreamConnection _changeStreamConnection = null!;
     private Task _leaseContenderTask = null!;
     private MongoEventStoreClient<IDomainEvent> _client = null!;
@@ -41,55 +41,43 @@ public class MongoEventStoreClientTests : EventStoreClientTests
 
         _stopCts = new CancellationTokenSource();
 
-        _options = GetEventStoreClientOptions();
-        var ns = _options.NamespaceSettings;
-        var db = _mongoClient.GetDatabase(ns.DatabaseName);
+        _options = new MongoEventStoreClientOptions
+        {
+            DatabaseName = "domainblocks_tests"
+        };
 
-        await MongoEventStoreAdmin.EnsureInitializedAsync(_mongoClient, ns);
+        var db = _mongoClient.GetDatabase(_options.DatabaseName);
+
+        await MongoEventStoreAdmin.EnsureInitializedAsync(_mongoClient, _options);
 
         var filterBuilder = Builders<ChangeStreamDocument<BsonDocument>>.Filter;
 
-        var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>()
-            .Match(filterBuilder.Or(
-                // AppendRequest inserts only - excludes completer's UpdateManyAsync events
-                filterBuilder.And(
-                    filterBuilder.Eq("ns.coll", ns.AppendRequestsCollectionName),
-                    filterBuilder.Eq("operationType", "insert")),
+        var filter = (filterBuilder.Eq("ns.coll", _options.AppendRequestsCollectionName) &
+                      filterBuilder.Eq("operationType", "insert")) |
+                     (filterBuilder.Eq("ns.coll", _options.EventLogCollectionName) &
+                      filterBuilder.Eq("fullDocument.eventName", nameof(AppendBatchRecorded))) |
+                     filterBuilder.Eq("ns.coll", _options.LeasesCollectionName);
 
-                // AppendBatchCompleted entries only — excludes the ~100 regular event writes
-                filterBuilder.And(
-                    filterBuilder.Eq("ns.coll", ns.EventLogCollectionName),
-                    filterBuilder.Eq("fullDocument.eventName", nameof(AppendBatchRecorded))),
-
-                // All lease events — commit position updates
-                filterBuilder.Eq("ns.coll", ns.LeasesCollectionName)
-            ));
+        var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(filter);
 
         var changeStreamSubject = await db.CreateSubjectAsync(
             pipeline,
-            new ChangeStreamSubjectOptions
-            {
-                // MongoOptions = new ChangeStreamOptions
-                // {
-                //     BatchSize = 1000
-                // }
-            },
-            _loggerFactory.CreateLogger("ChangeStream"));
+            logger: _loggerFactory.CreateLogger("ChangeStream"));
 
         // Set up CommitTracker
-        var commitTracker = new CommitTracker(ns, _loggerFactory.CreateLogger<CommitTracker>());
+        var commitTracker = new CommitTracker(_options, _loggerFactory.CreateLogger<CommitTracker>());
         changeStreamSubject.Attach(commitTracker);
 
         // Set up LeaseContender
-        var leaseStore = new LeaseStore(db.GetCollection<LeaseDocument>(ns.LeasesCollectionName));
+        var leaseStore = new LeaseStore(db.GetCollection<LeaseDocument>(_options.LeasesCollectionName));
         var leaseClient = new LeaseClient(leaseStore, _loggerFactory.CreateLogger<LeaseClient>());
         var leaseContender = new LeaseContender(leaseClient, _loggerFactory.CreateLogger<LeaseContender>());
 
-        var requests = db.GetCollection<BsonDocument>(ns.AppendRequestsCollectionName);
+        var requests = db.GetCollection<BsonDocument>(_options.AppendRequestsCollectionName);
 
         var leaseObserver = new LeaderLeaseObserver(
             requests,
-            db.GetCollection<BsonDocument>(ns.EventLogCollectionName),
+            db.GetCollection<BsonDocument>(_options.EventLogCollectionName),
             changeStreamSubject,
             _loggerFactory);
 
@@ -103,6 +91,7 @@ public class MongoEventStoreClientTests : EventStoreClientTests
             requests,
             commitTracker,
             _options,
+            GetEventCodec(),
             _loggerFactory.CreateLogger<MongoEventStoreClient<IDomainEvent>>());
 
         await leaseObserver.Liveliness;
@@ -115,11 +104,18 @@ public class MongoEventStoreClientTests : EventStoreClientTests
         await _stopCts.CancelAsync();
         await _leaseContenderTask;
 
-        await _mongoClient.DropDatabaseAsync(_options.NamespaceSettings.DatabaseName);
+        await _mongoClient.DropDatabaseAsync(_options.DatabaseName);
 
         await _client.DisposeAsync();
         _mongoClient.Dispose();
         _loggerFactory.Dispose();
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task AppendOneTest(CancellationToken ct)
+    {
+        await DoAppend("append-one", ct);
     }
 
     [Test]
@@ -252,7 +248,7 @@ public class MongoEventStoreClientTests : EventStoreClientTests
         await Client.AppendToStreamAsync(streamId, events, options, ct);
     }
 
-    private static MongoEventStoreClientOptions<IDomainEvent> GetEventStoreClientOptions()
+    private static EventCodec<IDomainEvent, BsonValue, BsonValue> GetEventCodec()
     {
         var eventTypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>());
 
@@ -270,14 +266,10 @@ public class MongoEventStoreClientTests : EventStoreClientTests
             MetadataDeserializer = new BsonDocumentMetadataSerde()
         };
 
-        return new MongoEventStoreClientOptions<IDomainEvent>
+        return new EventCodec<IDomainEvent, BsonValue, BsonValue>
         {
-            NamespaceSettings = EventStoreNamespaceSettings.Default,
-            EventCodec = new EventCodec<IDomainEvent, BsonValue, BsonValue>
-            {
-                Encoder = EventEncoder.Create(encoderOptions),
-                Decoder = EventDecoder.Create(decoderOptions)
-            }
+            Encoder = EventEncoder.Create(encoderOptions),
+            Decoder = EventDecoder.Create(decoderOptions)
         };
     }
 }
