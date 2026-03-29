@@ -1,6 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.MongoDB.Client.Schema2;
+using DomainBlocks.EventStore.MongoDB.Client.Schema;
 using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
 using Microsoft.Extensions.Logging;

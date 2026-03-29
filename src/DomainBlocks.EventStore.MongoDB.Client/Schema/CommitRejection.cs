@@ -3,7 +3,7 @@ using DomainBlocks.EventStore.MongoDB.Client.Serialization;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 
-namespace DomainBlocks.EventStore.MongoDB.Client.Schema2;
+namespace DomainBlocks.EventStore.MongoDB.Client.Schema;
 
 public sealed class CommitRejection
 {

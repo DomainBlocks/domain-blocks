@@ -1,6 +1,6 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB.Client.Coordination;
-using DomainBlocks.EventStore.MongoDB.Client.Schema2;
+using DomainBlocks.EventStore.MongoDB.Client.Schema;
 using DomainBlocks.Testing.Integration.MongoDB;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;

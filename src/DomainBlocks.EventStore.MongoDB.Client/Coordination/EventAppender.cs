@@ -1,5 +1,5 @@
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.MongoDB.Client.Schema2;
+using DomainBlocks.EventStore.MongoDB.Client.Schema;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
