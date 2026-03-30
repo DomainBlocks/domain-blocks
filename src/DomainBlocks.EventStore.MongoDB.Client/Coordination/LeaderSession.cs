@@ -106,7 +106,7 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
     {
         _logger.LogInformation("Catch-up phase starting");
 
-        var sort = Builders<BsonDocument>.Sort.Ascending(FieldNames.CreatedAtUtc);
+        var sort = Builders<BsonDocument>.Sort.Ascending(AppendRequest.FieldNames.CreatedAtUtc);
         var seenCommitIds = new HashSet<BsonValue>();
 
         while (true)
@@ -114,7 +114,7 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
             ct.ThrowIfCancellationRequested();
 
             var filter = seenCommitIds.Count > 0
-                ? Builders<BsonDocument>.Filter.Nin(FieldNames.CommitId, seenCommitIds)
+                ? Builders<BsonDocument>.Filter.Nin(AppendRequest.FieldNames.CommitId, seenCommitIds)
                 : FilterDefinition<BsonDocument>.Empty;
 
             var batch = await _requests
@@ -127,8 +127,8 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
             if (batch.Count == 0)
                 break;
 
-            foreach (var doc in batch)
-                seenCommitIds.Add(doc[FieldNames.CommitId]);
+            foreach (var request in batch)
+                seenCommitIds.Add(request[AppendRequest.FieldNames.CommitId]);
 
             var result = await _appender.AppendBatchAsync(batch, ct).ConfigureAwait(false);
 

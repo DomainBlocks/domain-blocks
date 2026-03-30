@@ -17,14 +17,14 @@ public readonly record struct ExpectedStreamState
     public static readonly ExpectedStreamState Any = new(ExpectedStreamStateKind.Any);
 
     /// <summary>
-    /// Stream must exist.
-    /// </summary>
-    public static readonly ExpectedStreamState StreamExists = new(ExpectedStreamStateKind.StreamExists);
-
-    /// <summary>
     /// Stream must not exist.
     /// </summary>
     public static readonly ExpectedStreamState StreamDoesNotExist = new(ExpectedStreamStateKind.StreamDoesNotExist);
+
+    /// <summary>
+    /// Stream must exist.
+    /// </summary>
+    public static readonly ExpectedStreamState StreamExists = new(ExpectedStreamStateKind.StreamExists);
 
     private ExpectedStreamState(ExpectedStreamStateKind kind, StreamVersion? version = null)
     {

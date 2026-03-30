@@ -1,6 +1,7 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB.Client.Serialization;
 using MongoDB.Bson;
+using static DomainBlocks.EventStore.MongoDB.Client.Schema.CommitRejection;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Schema;
 

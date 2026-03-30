@@ -1,31 +1,28 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
 using MongoDB.Bson;
+using static DomainBlocks.EventStore.MongoDB.Client.Schema.ExpectedStreamStateSchema;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Serialization;
 
 public static partial class BsonExtensions
 {
-    private const string KindFieldName = "kind";
-    private const string VersionFieldName = "version";
-    private const string Any = "any";
-    private const string StreamExists = "streamExists";
-    private const string StreamDoesNotExist = "streamDoesNotExist";
-    private const string Version = "version";
-
     extension(BsonDocument doc)
     {
         public static BsonDocument From(ExpectedStreamState value)
         {
             return value.Kind switch
             {
-                ExpectedStreamStateKind.Any => new BsonDocument(KindFieldName, Any),
-                ExpectedStreamStateKind.StreamExists => new BsonDocument(KindFieldName, StreamExists),
-                ExpectedStreamStateKind.StreamDoesNotExist => new BsonDocument(KindFieldName, StreamDoesNotExist),
+                ExpectedStreamStateKind.Any => new BsonDocument(FieldNames.Kind, Kinds.Any),
+
+                ExpectedStreamStateKind.StreamExists => new BsonDocument(FieldNames.Kind, Kinds.StreamExists),
+
+                ExpectedStreamStateKind.StreamDoesNotExist =>
+                    new BsonDocument(FieldNames.Kind, Kinds.StreamDoesNotExist),
 
                 ExpectedStreamStateKind.SpecificVersion => new BsonDocument
                 {
-                    { KindFieldName, Version },
-                    { VersionFieldName, checked((long)value.Version!.Value.Value) }
+                    { FieldNames.Kind, Kinds.SpecificVersion },
+                    { FieldNames.Version, checked((long)value.Version!.Value.Value) }
                 },
 
                 _ => throw new ArgumentOutOfRangeException(
@@ -41,13 +38,18 @@ public static partial class BsonExtensions
         {
             var doc = value.AsBsonDocument;
 
-            return doc[KindFieldName].AsString switch
+            return doc[FieldNames.Kind].AsString switch
             {
-                Any => ExpectedStreamState.Any,
-                StreamExists => ExpectedStreamState.StreamExists,
-                StreamDoesNotExist => ExpectedStreamState.StreamDoesNotExist,
-                Version => ExpectedStreamState.SpecificVersion(StreamVersion.FromInt64(doc[VersionFieldName].AsInt64)),
-                var k => throw new ArgumentOutOfRangeException(nameof(doc), $"Unknown kind: '{k}'")
+                Kinds.Any => ExpectedStreamState.Any,
+
+                Kinds.StreamExists => ExpectedStreamState.StreamExists,
+
+                Kinds.StreamDoesNotExist => ExpectedStreamState.StreamDoesNotExist,
+
+                Kinds.SpecificVersion =>
+                    ExpectedStreamState.SpecificVersion(StreamVersion.FromInt64(doc[FieldNames.Version].AsInt64)),
+
+                var k => throw new ArgumentOutOfRangeException(nameof(doc), $"Unknown kind: {k}")
             };
         }
     }

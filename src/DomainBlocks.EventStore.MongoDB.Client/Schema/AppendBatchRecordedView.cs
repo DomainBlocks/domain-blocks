@@ -1,4 +1,5 @@
 ﻿using MongoDB.Bson;
+using static DomainBlocks.EventStore.MongoDB.Client.Schema.AppendBatchRecorded;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Schema;
 

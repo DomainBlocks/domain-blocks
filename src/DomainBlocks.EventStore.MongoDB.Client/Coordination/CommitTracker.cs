@@ -5,7 +5,6 @@ using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
-using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
@@ -16,7 +15,8 @@ public sealed class CommitTracker(
     ICommitTracker,
     IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>
 {
-    private const string CommitPositionFieldPath = $"{LeaseDocument.FieldNames.State}.{FieldNames.CommitPosition}";
+    private const string CommitPositionFieldPath =
+        $"{LeaseDocument.FieldNames.State}.{LeaseState.FieldNames.CommitPosition}";
 
     private const string EpochFieldPath = LeaseDocument.FieldNames.Epoch;
 
@@ -64,11 +64,25 @@ public sealed class CommitTracker(
         if (entry.Epoch < _currentEpoch)
             return;
 
-        var @event = BsonSerializer.Deserialize<AppendBatchRecorded>(entry.EventData.AsBsonDocument);
+        if (_recordedBatches.TryGetValue(entry.Position, out var existing))
+        {
+            if (existing.Epoch == entry.Epoch)
+            {
+                logger.LogWarning(
+                    "Duplicate batch received for position {Position} from epoch {Epoch}.",
+                    entry.Position,
+                    entry.Epoch);
+
+                return;
+            }
+
+            if (existing.Epoch > entry.Epoch)
+                return; // Out-of-order delivery - a newer leader already claimed this position.
+        }
 
         _recordedBatches[entry.Position] = new RecordedBatch(
             entry.Epoch,
-            @event);
+            new AppendBatchRecordedView(entry.EventData.AsBsonDocument));
     }
 
     private void HandleLeaseChange(ChangeStreamDocument<BsonDocument> change)
@@ -160,9 +174,9 @@ public sealed class CommitTracker(
             _recordedBatches.Remove(position);
     }
 
-    private readonly struct RecordedBatch(long epoch, AppendBatchRecorded @event)
+    private readonly struct RecordedBatch(long epoch, AppendBatchRecordedView @event)
     {
         public long Epoch { get; } = epoch;
-        public AppendBatchRecorded Event { get; } = @event;
+        public AppendBatchRecordedView Event { get; } = @event;
     }
 }

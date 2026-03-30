@@ -63,18 +63,18 @@ public class MongoEventStoreClient<TEvent> :
                 .Encode(events)
                 .Select(x => new BsonDocument
                 {
-                    { FieldNames.EventName, x.EventName },
-                    { FieldNames.EventData, x.EventData },
-                    { FieldNames.Metadata, x.Metadata ?? BsonNull.Value }
+                    { PendingEvent.FieldNames.EventName, x.EventName },
+                    { PendingEvent.FieldNames.EventData, x.EventData },
+                    { PendingEvent.FieldNames.Metadata, x.Metadata ?? BsonNull.Value }
                 }));
 
         var request = new BsonDocument
         {
-            { FieldNames.CommitId, new BsonBinaryData(options.CommitId, GuidRepresentation.Standard) },
-            { FieldNames.StreamId, streamId },
-            { FieldNames.ExpectedStreamState, BsonDocument.From(options.ExpectedState) },
-            { FieldNames.Events, eventsArray },
-            { FieldNames.CreatedAtUtc, DateTime.UtcNow }
+            { AppendRequest.FieldNames.CommitId, new BsonBinaryData(options.CommitId, GuidRepresentation.Standard) },
+            { AppendRequest.FieldNames.StreamId, streamId },
+            { AppendRequest.FieldNames.ExpectedStreamState, BsonDocument.From(options.ExpectedState) },
+            { AppendRequest.FieldNames.Events, eventsArray },
+            { AppendRequest.FieldNames.CreatedAtUtc, DateTime.UtcNow }
         };
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

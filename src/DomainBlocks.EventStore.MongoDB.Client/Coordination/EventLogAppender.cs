@@ -82,15 +82,15 @@ public sealed partial class EventLogAppender(
     {
         var nextPosition = _nextPosition;
 
-        foreach (var commit in _requests)
+        foreach (var request in _requests)
         {
-            var events = commit[FieldNames.Events].AsBsonArray;
+            var events = request[AppendRequest.FieldNames.Events].AsBsonArray;
             if (events.Count == 0)
                 continue;
 
-            var bsonCommitId = commit[FieldNames.CommitId];
-            var bsonStreamId = commit[FieldNames.StreamId];
-            var bsonExpectedStreamState = commit[FieldNames.ExpectedStreamState];
+            var bsonCommitId = request[AppendRequest.FieldNames.CommitId];
+            var bsonStreamId = request[AppendRequest.FieldNames.StreamId];
+            var bsonExpectedStreamState = request[AppendRequest.FieldNames.ExpectedStreamState];
 
             var commitId = bsonCommitId.AsGuid;
             if (IsProcessed(commitId))
@@ -183,9 +183,9 @@ public sealed partial class EventLogAppender(
             streamId,
             streamVersion,
             commitId,
-            pendingEvent[FieldNames.EventName],
-            pendingEvent[FieldNames.EventData],
-            pendingEvent[FieldNames.Metadata]);
+            pendingEvent[PendingEvent.FieldNames.EventName],
+            pendingEvent[PendingEvent.FieldNames.EventData],
+            pendingEvent[PendingEvent.FieldNames.Metadata]);
     }
 
     private static ReplaceOneModel<BsonDocument> CreateEventWrite(
@@ -201,20 +201,20 @@ public sealed partial class EventLogAppender(
         var filter = new BsonDocument
         {
             { "_id", position },
-            { FieldNames.Epoch, new BsonDocument("$lt", epoch) }
+            { EventLogEntry.FieldNames.Epoch, new BsonDocument("$lt", epoch) }
         };
 
         var replacement = new BsonDocument
         {
             { "_id", position },
-            { FieldNames.Epoch, epoch },
-            { FieldNames.StreamId, streamId },
-            { FieldNames.StreamVersion, streamVersion },
-            { FieldNames.CommitId, commitId },
-            { FieldNames.EventName, eventName },
-            { FieldNames.EventData, eventData },
-            { FieldNames.Metadata, metadata ?? BsonNull.Value },
-            { FieldNames.WrittenAtUtc, DateTime.UtcNow }
+            { EventLogEntry.FieldNames.Epoch, epoch },
+            { EventLogEntry.FieldNames.StreamId, streamId },
+            { EventLogEntry.FieldNames.StreamVersion, streamVersion },
+            { EventLogEntry.FieldNames.CommitId, commitId },
+            { EventLogEntry.FieldNames.EventName, eventName },
+            { EventLogEntry.FieldNames.EventData, eventData },
+            { EventLogEntry.FieldNames.Metadata, metadata ?? BsonNull.Value },
+            { EventLogEntry.FieldNames.WrittenAtUtc, DateTime.UtcNow }
         };
 
         return new ReplaceOneModel<BsonDocument>(filter, replacement) { IsUpsert = true };
@@ -228,10 +228,10 @@ public sealed partial class EventLogAppender(
     {
         return new BsonDocument
         {
-            { FieldNames.CommitId, new BsonBinaryData(commitId, GuidRepresentation.Standard) },
-            { FieldNames.StreamId, streamId },
-            { FieldNames.ExpectedStreamState, expectedStreamState },
-            { FieldNames.ActualStreamState, BsonDocument.From(actualStreamState) }
+            { CommitRejection.FieldNames.CommitId, new BsonBinaryData(commitId, GuidRepresentation.Standard) },
+            { CommitRejection.FieldNames.StreamId, streamId },
+            { CommitRejection.FieldNames.ExpectedStreamState, expectedStreamState },
+            { CommitRejection.FieldNames.ActualStreamState, BsonDocument.From(actualStreamState) }
         };
     }
 
@@ -240,14 +240,14 @@ public sealed partial class EventLogAppender(
         return new BsonDocument
         {
             {
-                FieldNames.AppendedCommitIds,
+                AppendBatchRecorded.FieldNames.AppendedCommitIds,
                 new BsonArray(_appendedCommitIds.Select(x => new BsonBinaryData(x, GuidRepresentation.Standard)))
             },
             {
-                FieldNames.DuplicateCommitIds,
+                AppendBatchRecorded.FieldNames.DuplicateCommitIds,
                 new BsonArray(_duplicateCommitIds.Select(x => new BsonBinaryData(x, GuidRepresentation.Standard)))
             },
-            { FieldNames.Rejections, new BsonArray(_commitRejections.Values) }
+            { AppendBatchRecorded.FieldNames.Rejections, new BsonArray(_commitRejections.Values) }
         };
     }
 }

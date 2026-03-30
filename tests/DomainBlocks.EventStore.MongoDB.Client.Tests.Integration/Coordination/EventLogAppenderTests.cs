@@ -540,7 +540,7 @@ public class EventLogAppenderTests
 
         var batchCompleted = await ReadLastBatchCompleted();
         var rejection = batchCompleted.Rejections.First();
-        rejection.CommitId.ShouldBe(requests[1][FieldNames.CommitId].AsGuid);
+        rejection.CommitId.ShouldBe(requests[1][CommitRejection.FieldNames.CommitId].AsGuid);
         rejection.StreamId.ShouldBe(streamId);
     }
 

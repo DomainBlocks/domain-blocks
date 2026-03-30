@@ -1,21 +1,14 @@
-﻿using System.Globalization;
-using DomainBlocks.EventStore.Abstractions;
+﻿using DomainBlocks.EventStore.Abstractions;
 using MongoDB.Bson;
 using MongoDB.Bson.IO;
 using MongoDB.Bson.Serialization;
 using MongoDB.Bson.Serialization.Serializers;
+using static DomainBlocks.EventStore.MongoDB.Client.Schema.ExpectedStreamStateSchema;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Serialization;
 
 public sealed class StreamStateBsonSerializer : StructSerializerBase<StreamState>
 {
-    public static readonly StreamStateBsonSerializer Shared = new();
-
-    private const string KindFieldName = "kind";
-    private const string VersionFieldName = "version";
-    private const string StreamDoesNotExist = "streamDoesNotExist";
-    private const string StreamExists = "streamExists";
-
     public override void Serialize(
         BsonSerializationContext context,
         BsonSerializationArgs args,
@@ -24,17 +17,17 @@ public sealed class StreamStateBsonSerializer : StructSerializerBase<StreamState
         var writer = context.Writer;
 
         writer.WriteStartDocument();
-        writer.WriteName(KindFieldName);
+        writer.WriteName(FieldNames.Kind);
 
         switch (value.Kind)
         {
             case StreamStateKind.StreamDoesNotExist:
-                writer.WriteString(StreamDoesNotExist);
+                writer.WriteString(Kinds.StreamDoesNotExist);
                 break;
 
             case StreamStateKind.StreamExists:
-                writer.WriteString(StreamExists);
-                writer.WriteName(VersionFieldName);
+                writer.WriteString(Kinds.StreamExists);
+                writer.WriteName(FieldNames.Version);
                 writer.WriteInt64(checked((long)value.Version!.Value.Value));
                 break;
 
@@ -60,17 +53,16 @@ public sealed class StreamStateBsonSerializer : StructSerializerBase<StreamState
 
             switch (name)
             {
-                case KindFieldName:
+                case FieldNames.Kind:
                     kind = reader.ReadString();
                     break;
-                case VersionFieldName:
+                case FieldNames.Version:
                     version = reader.GetCurrentBsonType() switch
                     {
                         BsonType.Int64 => checked((ulong)reader.ReadInt64()),
-                        BsonType.Int32 => checked((ulong)reader.ReadInt32()),
-                        BsonType.String => ulong.Parse(reader.ReadString(), CultureInfo.InvariantCulture),
+
                         var t => throw new BsonSerializationException(
-                            $"Unexpected BSON type for '{VersionFieldName}': {t}")
+                            $"Unexpected BSON type for '{FieldNames.Version}': {t}")
                     };
                     break;
                 default:
@@ -82,16 +74,18 @@ public sealed class StreamStateBsonSerializer : StructSerializerBase<StreamState
         reader.ReadEndDocument();
 
         if (kind is null)
-            throw new BsonSerializationException($"Missing '{KindFieldName}' field.");
+            throw new BsonSerializationException($"Missing '{FieldNames.Kind}' field.");
 
         return kind switch
         {
-            StreamDoesNotExist => StreamState.StreamDoesNotExist,
-            StreamExists when version.HasValue =>
-                StreamState.StreamExists(new StreamVersion(version.Value)),
-            StreamExists =>
-                throw new BsonSerializationException($"Missing '{VersionFieldName}' for kind '{StreamExists}'."),
-            _ => throw new BsonSerializationException($"Unknown stream kind '{kind}'.")
+            Kinds.StreamDoesNotExist => StreamState.StreamDoesNotExist,
+
+            Kinds.StreamExists when version.HasValue => StreamState.StreamExists(new StreamVersion(version.Value)),
+
+            Kinds.StreamExists => throw new BsonSerializationException(
+                $"Missing '{FieldNames.Version}' for kind '{Kinds.StreamExists}'."),
+
+            _ => throw new BsonSerializationException($"Unknown kind: {kind}")
         };
     }
 }

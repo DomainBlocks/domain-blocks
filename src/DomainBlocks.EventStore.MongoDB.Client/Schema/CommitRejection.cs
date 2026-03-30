@@ -22,4 +22,12 @@ public sealed class CommitRejection
     [BsonElement(FieldNames.ActualStreamState)]
     [BsonSerializer(typeof(StreamStateBsonSerializer))]
     public required StreamState ActualStreamState { get; init; }
+
+    public static class FieldNames
+    {
+        public const string CommitId = "commitId";
+        public const string StreamId = "streamId";
+        public const string ExpectedStreamState = "expectedStreamState";
+        public const string ActualStreamState = "actualStreamState";
+    }
 }

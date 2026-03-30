@@ -1,23 +1,14 @@
-﻿using System.Globalization;
-using DomainBlocks.EventStore.Abstractions;
+﻿using DomainBlocks.EventStore.Abstractions;
 using MongoDB.Bson;
 using MongoDB.Bson.IO;
 using MongoDB.Bson.Serialization;
 using MongoDB.Bson.Serialization.Serializers;
+using static DomainBlocks.EventStore.MongoDB.Client.Schema.ExpectedStreamStateSchema;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Serialization;
 
 public sealed class ExpectedStreamStateBsonSerializer : StructSerializerBase<ExpectedStreamState>
 {
-    public static readonly ExpectedStreamStateBsonSerializer Shared = new();
-
-    private const string KindFieldName = "kind";
-    private const string VersionFieldName = "version";
-    private const string Any = "any";
-    private const string StreamExists = "streamExists";
-    private const string StreamDoesNotExist = "streamDoesNotExist";
-    private const string Version = "version";
-
     public override void Serialize(
         BsonSerializationContext context,
         BsonSerializationArgs args,
@@ -26,25 +17,25 @@ public sealed class ExpectedStreamStateBsonSerializer : StructSerializerBase<Exp
         var writer = context.Writer;
 
         writer.WriteStartDocument();
-        writer.WriteName(KindFieldName);
+        writer.WriteName(FieldNames.Kind);
 
         switch (value.Kind)
         {
             case ExpectedStreamStateKind.Any:
-                writer.WriteString(Any);
+                writer.WriteString(Kinds.Any);
                 break;
 
             case ExpectedStreamStateKind.StreamExists:
-                writer.WriteString(StreamExists);
+                writer.WriteString(Kinds.StreamExists);
                 break;
 
             case ExpectedStreamStateKind.StreamDoesNotExist:
-                writer.WriteString(StreamDoesNotExist);
+                writer.WriteString(Kinds.StreamDoesNotExist);
                 break;
 
             case ExpectedStreamStateKind.SpecificVersion:
-                writer.WriteString(Version);
-                writer.WriteName(VersionFieldName);
+                writer.WriteString(Kinds.SpecificVersion);
+                writer.WriteName(FieldNames.Version);
                 writer.WriteInt64(checked((long)value.Version!.Value.Value));
                 break;
 
@@ -70,17 +61,16 @@ public sealed class ExpectedStreamStateBsonSerializer : StructSerializerBase<Exp
 
             switch (name)
             {
-                case KindFieldName:
+                case FieldNames.Kind:
                     kind = reader.ReadString();
                     break;
-                case VersionFieldName:
+                case FieldNames.Version:
                     version = reader.GetCurrentBsonType() switch
                     {
                         BsonType.Int64 => checked((ulong)reader.ReadInt64()),
-                        BsonType.Int32 => checked((ulong)reader.ReadInt32()),
-                        BsonType.String => ulong.Parse(reader.ReadString(), CultureInfo.InvariantCulture),
+
                         var t => throw new BsonSerializationException(
-                            $"Unexpected BSON type for '{VersionFieldName}': {t}")
+                            $"Unexpected BSON type for '{FieldNames.Version}': {t}")
                     };
                     break;
                 default:
@@ -92,16 +82,23 @@ public sealed class ExpectedStreamStateBsonSerializer : StructSerializerBase<Exp
         reader.ReadEndDocument();
 
         if (kind is null)
-            throw new BsonSerializationException($"Missing '{KindFieldName}' field.");
+            throw new BsonSerializationException($"Missing '{FieldNames.Kind}' field.");
 
         return kind switch
         {
-            Any => ExpectedStreamState.Any,
-            StreamExists => ExpectedStreamState.StreamExists,
-            StreamDoesNotExist => ExpectedStreamState.StreamDoesNotExist,
-            Version when version.HasValue => ExpectedStreamState.SpecificVersion(new StreamVersion(version.Value)),
-            Version => throw new BsonSerializationException($"Missing '{VersionFieldName}' for kind '{Version}'."),
-            _ => throw new BsonSerializationException($"Unknown expected kind '{kind}'.")
+            Kinds.Any => ExpectedStreamState.Any,
+
+            Kinds.StreamExists => ExpectedStreamState.StreamExists,
+
+            Kinds.StreamDoesNotExist => ExpectedStreamState.StreamDoesNotExist,
+
+            Kinds.SpecificVersion when version.HasValue =>
+                ExpectedStreamState.SpecificVersion(new StreamVersion(version.Value)),
+
+            Kinds.SpecificVersion => throw new BsonSerializationException(
+                $"Missing '{FieldNames.Version}' for kind '{Kinds.SpecificVersion}'."),
+
+            _ => throw new BsonSerializationException($"Unknown kind: {kind}")
         };
     }
 }
