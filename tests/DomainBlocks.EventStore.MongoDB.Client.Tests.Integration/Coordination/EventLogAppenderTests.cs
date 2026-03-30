@@ -255,7 +255,7 @@ public class EventLogAppenderTests
         batchCompletedEntries.Length.ShouldBe(2);
 
         var secondMarker = batchCompletedEntries.OrderBy(e => e.Position).Last();
-        var secondCompleted = new AppendBatchRecordedView(secondMarker.EventData.AsBsonDocument);
+        var secondCompleted = BsonSerializer.Deserialize<AppendBatchRecorded>(secondMarker.EventData.AsBsonDocument);
         secondCompleted.DuplicateCommitIds.ShouldContain(commitId);
         secondCompleted.AppendedCommitIds.ShouldBeEmpty();
     }

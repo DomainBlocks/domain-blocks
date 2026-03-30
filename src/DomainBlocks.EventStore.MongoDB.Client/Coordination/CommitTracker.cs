@@ -1,6 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB.Client.Schema;
+using DomainBlocks.EventStore.MongoDB.Client.Serialization;
 using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
 using Microsoft.Extensions.Logging;
@@ -55,34 +56,36 @@ public sealed class CommitTracker(
         if (doc is null)
             return;
 
-        var entry = new EventLogEntryView(doc);
+        var position = doc["_id"].AsInt64;
+        var epoch = doc[EventLogEntry.FieldNames.Epoch].AsInt64;
+        var eventName = doc[EventLogEntry.FieldNames.EventName].AsString;
 
-        if (entry.EventName != nameof(EventNames.AppendBatchRecorded))
+        if (eventName != nameof(EventNames.AppendBatchRecorded))
             return;
 
         // Ignore batches from epochs we know are stale.
-        if (entry.Epoch < _currentEpoch)
+        if (epoch < _currentEpoch)
             return;
 
-        if (_recordedBatches.TryGetValue(entry.Position, out var existing))
+        if (_recordedBatches.TryGetValue(position, out var existing))
         {
-            if (existing.Epoch == entry.Epoch)
+            if (existing.Epoch == epoch)
             {
                 logger.LogWarning(
                     "Duplicate batch received for position {Position} from epoch {Epoch}.",
-                    entry.Position,
-                    entry.Epoch);
+                    position,
+                    epoch);
 
                 return;
             }
 
-            if (existing.Epoch > entry.Epoch)
+            if (existing.Epoch > epoch)
                 return; // Out-of-order delivery - a newer leader already claimed this position.
         }
 
-        _recordedBatches[entry.Position] = new RecordedBatch(
-            entry.Epoch,
-            new AppendBatchRecordedView(entry.EventData.AsBsonDocument));
+        _recordedBatches[position] = new RecordedBatch(
+            epoch,
+            doc[EventLogEntry.FieldNames.EventData].AsBsonDocument);
     }
 
     private void HandleLeaseChange(ChangeStreamDocument<BsonDocument> change)
@@ -150,20 +153,33 @@ public sealed class CommitTracker(
                 continue;
             }
 
-            foreach (var commitId in batch.Event.AppendedCommitIds.Concat(batch.Event.DuplicateCommitIds))
+            var appendedCommitIds = batch.EventData[AppendBatchRecorded.FieldNames.AppendedCommitIds].AsBsonArray;
+            var duplicateCommitIds = batch.EventData[AppendBatchRecorded.FieldNames.DuplicateCommitIds].AsBsonArray;
+            var rejections = batch.EventData[AppendBatchRecorded.FieldNames.Rejections].AsBsonArray;
+
+            foreach (var commitId in appendedCommitIds.Concat(duplicateCommitIds))
             {
-                if (_waiters.TryRemove(commitId, out var tcs))
+                if (_waiters.TryRemove(commitId.AsGuid, out var tcs))
                     tcs.TrySetResult();
             }
 
-            foreach (var rejection in batch.Event.Rejections)
+            foreach (var rejection in rejections)
             {
-                if (_waiters.TryRemove(rejection.CommitId, out var tcs))
+                var commitId = rejection[CommitRejection.FieldNames.CommitId].AsGuid;
+
+                if (_waiters.TryRemove(commitId, out var tcs))
                 {
+                    var streamId = rejection[CommitRejection.FieldNames.StreamId].AsString;
+
+                    var expectedStreamState =
+                        rejection[CommitRejection.FieldNames.ExpectedStreamState].ToExpectedStreamState();
+
+                    var actualStreamState = rejection[CommitRejection.FieldNames.ActualStreamState].ToStreamState();
+
                     tcs.TrySetException(new StreamAppendConflictException(
-                        rejection.StreamId,
-                        rejection.ExpectedStreamState,
-                        rejection.ActualStreamState));
+                        streamId,
+                        expectedStreamState,
+                        actualStreamState));
                 }
             }
 
@@ -174,9 +190,9 @@ public sealed class CommitTracker(
             _recordedBatches.Remove(position);
     }
 
-    private readonly struct RecordedBatch(long epoch, AppendBatchRecordedView @event)
+    private readonly struct RecordedBatch(long epoch, BsonDocument eventData)
     {
         public long Epoch { get; } = epoch;
-        public AppendBatchRecordedView Event { get; } = @event;
+        public BsonDocument EventData { get; } = eventData;
     }
 }
