@@ -79,6 +79,7 @@ public class MongoEventStoreClientTests : EventStoreClientTests
             requests,
             db.GetCollection<BsonDocument>(_options.EventLogCollectionName),
             changeStreamSubject,
+            _options.Leader,
             _loggerFactory);
 
         // Connect change stream

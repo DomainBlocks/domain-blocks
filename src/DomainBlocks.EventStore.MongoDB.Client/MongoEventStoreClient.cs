@@ -14,8 +14,6 @@ public class MongoEventStoreClient<TEvent> :
     IAsyncDisposable
     where TEvent : notnull
 {
-    private const int MaxBatchSize = 1000;
-
     private readonly IMongoCollection<BsonDocument> _requests;
 
     private readonly IEventEncoder<TEvent, BsonValue, BsonValue> _eventEncoder;
@@ -39,15 +37,14 @@ public class MongoEventStoreClient<TEvent> :
         _eventDecoder = eventCodec.Decoder;
         _logger = logger;
 
-        var channelOptions = new BoundedChannelOptions(capacity: MaxBatchSize)
+        var channelOptions = new BoundedChannelOptions(options.RequestQueueCapacity)
         {
             SingleWriter = false,
             SingleReader = true
         };
 
         _channel = Channel.CreateBounded<BsonDocument>(channelOptions);
-
-        _consumeTask = ConsumeRequestsAsync(_stopCts.Token);
+        _consumeTask = ConsumeRequestsAsync(options.RequestInsertBatchSize, _stopCts.Token);
     }
 
     public async Task AppendToStreamAsync(
@@ -114,9 +111,9 @@ public class MongoEventStoreClient<TEvent> :
         _stopCts.Dispose();
     }
 
-    private async Task ConsumeRequestsAsync(CancellationToken ct)
+    private async Task ConsumeRequestsAsync(int insertBatchSize, CancellationToken ct)
     {
-        var batch = new List<BsonDocument>(MaxBatchSize);
+        var batch = new List<BsonDocument>(insertBatchSize);
 
         try
         {
@@ -124,7 +121,7 @@ public class MongoEventStoreClient<TEvent> :
             {
                 batch.Clear();
 
-                while (batch.Count < MaxBatchSize && _channel.Reader.TryRead(out var request))
+                while (batch.Count < insertBatchSize && _channel.Reader.TryRead(out var request))
                     batch.Add(request);
 
                 _logger.LogDebug("Request batch size: {Count}", batch.Count);

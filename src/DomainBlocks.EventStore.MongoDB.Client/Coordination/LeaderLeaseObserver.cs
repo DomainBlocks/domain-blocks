@@ -12,6 +12,7 @@ public sealed class LeaderLeaseObserver(
     IMongoCollection<BsonDocument> requests,
     IMongoCollection<BsonDocument> eventLog,
     IChangeStreamSubject<ChangeStreamDocument<BsonDocument>> changeStreamSubject,
+    LeaderOptions options,
     ILoggerFactory loggerFactory) :
     ILeaseObserver
 {
@@ -32,10 +33,11 @@ public sealed class LeaderLeaseObserver(
             loggerFactory.CreateLogger<EventLogAppender>());
 
         _session = new LeaderSession(
-            handle,
-            appender,
             requests,
+            appender,
+            handle,
             changeStreamSubject,
+            options,
             loggerFactory);
 
         _session.Start();

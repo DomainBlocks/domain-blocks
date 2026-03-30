@@ -13,11 +13,11 @@ public partial class EventLogAppender
         { "version", new BsonDocument("$max", $"${EventLogEntry.FieldNames.StreamVersion}") }
     });
 
-    private readonly BsonDocument _visibilityFilter = initialCommitPosition.HasValue
+    private readonly BsonDocument _visibilityFilter = epochStartPosition.HasValue
         ? new BsonDocument("$or", new BsonArray
         {
             new BsonDocument(EventLogEntry.FieldNames.Epoch, epoch),
-            new BsonDocument("_id", new BsonDocument("$lte", initialCommitPosition.Value))
+            new BsonDocument("_id", new BsonDocument("$lte", epochStartPosition.Value))
         })
         : new BsonDocument(EventLogEntry.FieldNames.Epoch, epoch);
 

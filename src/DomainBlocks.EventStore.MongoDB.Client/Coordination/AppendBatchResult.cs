@@ -1,10 +1,10 @@
 ﻿namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 
-public sealed record AppendBatchResult(long StartPosition, long NextPosition)
+public readonly record struct AppendBatchResult(long StartPosition, long NextPosition)
 {
-    public long EndPosition => StartPosition + PositionCount - 1;
+    public long EndPosition => StartPosition + Count - 1;
 
-    public long PositionCount => NextPosition - StartPosition;
+    public long Count => NextPosition - StartPosition;
 
-    public bool IsEmpty => PositionCount == 0;
+    public bool IsEmpty => Count == 0;
 }

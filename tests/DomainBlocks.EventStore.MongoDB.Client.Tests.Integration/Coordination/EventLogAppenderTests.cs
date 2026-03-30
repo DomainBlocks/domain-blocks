@@ -74,7 +74,7 @@ public class EventLogAppenderTests
 
         result.StartPosition.ShouldBe(0);
         result.NextPosition.ShouldBe(4);
-        result.PositionCount.ShouldBe(4);
+        result.Count.ShouldBe(4);
         result.IsEmpty.ShouldBeFalse();
 
         var entries = await ReadEventEntries();
@@ -122,7 +122,7 @@ public class EventLogAppenderTests
 
         result.StartPosition.ShouldBe(0);
         result.NextPosition.ShouldBe(4);
-        result.PositionCount.ShouldBe(4);
+        result.Count.ShouldBe(4);
         result.IsEmpty.ShouldBeFalse();
 
         var entries = await ReadEventEntries();
@@ -242,8 +242,8 @@ public class EventLogAppenderTests
         var result1 = await appender.AppendBatchAsync(requests1, ct);
         var result2 = await appender.AppendBatchAsync(requests2, ct);
 
-        result1.PositionCount.ShouldBe(2);
-        result2.PositionCount.ShouldBe(1); // Marker only
+        result1.Count.ShouldBe(2);
+        result2.Count.ShouldBe(1); // Marker only
 
         // Only one event should exist - the duplicate wasn't re-appended.
         var entries = await ReadEventEntries();
@@ -276,7 +276,7 @@ public class EventLogAppenderTests
 
         var result = await appender.AppendBatchAsync(requests, ct);
 
-        result.PositionCount.ShouldBe(2);
+        result.Count.ShouldBe(2);
 
         var entries = await ReadEventEntries();
         entries.Count.ShouldBe(1);
@@ -299,7 +299,7 @@ public class EventLogAppenderTests
 
         var result = await appender.AppendBatchAsync(requests, ct);
 
-        result.PositionCount.ShouldBe(2);
+        result.Count.ShouldBe(2);
 
         var entries = await ReadEventEntries();
         entries.Count.ShouldBe(1);
@@ -324,7 +324,7 @@ public class EventLogAppenderTests
             [CreateRequest(rejectedCommitId, streamId, ExpectedStreamState.StreamDoesNotExist, "E2")],
             ct);
 
-        result.PositionCount.ShouldBe(1);
+        result.Count.ShouldBe(1);
 
         // Only the first event should exist.
         var entries = await ReadEventEntries();
@@ -357,7 +357,7 @@ public class EventLogAppenderTests
             [CreateRequest(commitId, streamId, ExpectedStreamState.StreamExists, "E2")],
             ct);
 
-        result.PositionCount.ShouldBe(2);
+        result.Count.ShouldBe(2);
 
         var entries = await ReadEventEntries();
         entries.Count.ShouldBe(2);
@@ -376,7 +376,7 @@ public class EventLogAppenderTests
             [CreateRequest(rejectedCommitId, streamId, ExpectedStreamState.StreamExists, "E1")],
             ct);
 
-        result.PositionCount.ShouldBe(1);
+        result.Count.ShouldBe(1);
 
         var entries = await ReadEventEntries();
         entries.ShouldBeEmpty();
@@ -410,7 +410,7 @@ public class EventLogAppenderTests
             [CreateRequest(commitId, streamId, ExpectedStreamState.SpecificVersion(new StreamVersion(1)), "E3")],
             ct);
 
-        result.PositionCount.ShouldBe(2);
+        result.Count.ShouldBe(2);
 
         var entries = await ReadEventEntries();
         entries.Count.ShouldBe(3);
@@ -443,7 +443,7 @@ public class EventLogAppenderTests
             ],
             ct);
 
-        result.PositionCount.ShouldBe(1);
+        result.Count.ShouldBe(1);
 
         var entries = await ReadEventEntries();
         entries.Count.ShouldBe(2); // Only the original two.
@@ -472,7 +472,7 @@ public class EventLogAppenderTests
             ],
             ct);
 
-        result.PositionCount.ShouldBe(1);
+        result.Count.ShouldBe(1);
 
         var entries = await ReadEventEntries();
         entries.ShouldBeEmpty();
@@ -500,7 +500,7 @@ public class EventLogAppenderTests
 
         var result = await appender.AppendBatchAsync(requests, ct);
 
-        result.PositionCount.ShouldBe(3);
+        result.Count.ShouldBe(3);
 
         var entries = await ReadEventEntries();
         entries.Count.ShouldBe(2);
@@ -529,7 +529,7 @@ public class EventLogAppenderTests
 
         var result = await appender.AppendBatchAsync(requests, ct);
 
-        result.PositionCount.ShouldBe(3);
+        result.Count.ShouldBe(3);
 
         var entries = await ReadEventEntries();
         entries.Count.ShouldBe(2);
@@ -572,7 +572,7 @@ public class EventLogAppenderTests
             ],
             ct);
 
-        result.PositionCount.ShouldBe(2); // 1 event + marker
+        result.Count.ShouldBe(2); // 1 event + marker
 
         var batchCompleted = await ReadLastBatchCompleted();
         batchCompleted.AppendedCommitIds.ShouldBe([goodCommitId]);
@@ -596,7 +596,7 @@ public class EventLogAppenderTests
 
         result.StartPosition.ShouldBe(5);
         result.NextPosition.ShouldBe(7);
-        result.PositionCount.ShouldBe(2);
+        result.Count.ShouldBe(2);
 
         var entries = await ReadEventEntries();
         entries.Count.ShouldBe(1);
@@ -623,7 +623,7 @@ public class EventLogAppenderTests
 
         result.StartPosition.ShouldBe(0);
         result.NextPosition.ShouldBe(3); // 2 events + 1 marker
-        result.PositionCount.ShouldBe(3);
+        result.Count.ShouldBe(3);
 
         var entries = await ReadEventEntries();
         entries.Count.ShouldBe(2);

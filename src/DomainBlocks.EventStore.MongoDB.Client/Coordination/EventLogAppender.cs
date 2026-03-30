@@ -10,7 +10,7 @@ namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 public sealed partial class EventLogAppender(
     IMongoCollection<BsonDocument> eventLog,
     long epoch,
-    long? initialCommitPosition,
+    long? epochStartPosition,
     ILogger<EventLogAppender> logger) : IEventLogAppender
 {
     private static readonly BulkWriteOptions OrderedBulkWriteOptions = new() { IsOrdered = true };
@@ -29,7 +29,7 @@ public sealed partial class EventLogAppender(
     private readonly Dictionary<string, long> _headStreamVersions = [];
     private readonly List<WriteModel<BsonDocument>> _writeModels = [];
 
-    private long _nextPosition = initialCommitPosition.HasValue ? initialCommitPosition.Value + 1 : 0;
+    private long _nextPosition = epochStartPosition.HasValue ? epochStartPosition.Value + 1 : 0;
 
     public async Task<AppendBatchResult> AppendBatchAsync(
         IEnumerable<BsonDocument> requests,

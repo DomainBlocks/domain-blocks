@@ -14,4 +14,10 @@ public sealed class MongoEventStoreClientOptions
     /// Gets or sets how long an append request document survives in MongoDB before being automatically deleted.
     /// </summary>
     public TimeSpan AppendRequestTtl { get; set; } = TimeSpan.FromSeconds(120);
+
+    public int RequestQueueCapacity { get; set; } = 1000;
+
+    public int RequestInsertBatchSize { get; set; } = 1000;
+
+    public LeaderOptions Leader { get; set; } = new();
 }

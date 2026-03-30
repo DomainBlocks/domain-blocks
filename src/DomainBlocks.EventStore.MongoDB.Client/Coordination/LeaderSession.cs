@@ -10,14 +10,13 @@ namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 
 public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>, IAsyncDisposable
 {
-    private const int MaxCatchUpBatchSize = 100;
-    private const int MaxLiveBatchSize = 1000;
-
-    private readonly ILeaseHandle<LeaseState> _handle;
     private readonly IMongoCollection<BsonDocument> _requests;
     private readonly IEventLogAppender _appender;
+    private readonly ILeaseHandle<LeaseState> _handle;
     private readonly IChangeStreamSubject<ChangeStreamDocument<BsonDocument>> _changeStreamSubject;
     private readonly ILogger _logger;
+    private readonly int _catchUpBatchSize;
+    private readonly int _liveBatchSize;
     private readonly CancellationTokenSource _stopCts;
     private readonly Channel<BsonDocument> _channel;
     private IDisposable? _changeStreamAttachment;
@@ -25,20 +24,23 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
     private readonly TaskCompletionSource _livelinessTcs = new();
 
     public LeaderSession(
-        ILeaseHandle<LeaseState> handle,
-        IEventLogAppender appender,
         IMongoCollection<BsonDocument> requests,
+        IEventLogAppender appender,
+        ILeaseHandle<LeaseState> handle,
         IChangeStreamSubject<ChangeStreamDocument<BsonDocument>> changeStreamSubject,
+        LeaderOptions options,
         ILoggerFactory loggerFactory)
     {
-        _handle = handle;
-        _appender = appender;
         _requests = requests;
+        _appender = appender;
+        _handle = handle;
         _changeStreamSubject = changeStreamSubject;
         _logger = loggerFactory.CreateLogger<LeaderSession>();
+        _catchUpBatchSize = options.CatchUpBatchSize;
+        _liveBatchSize = options.LiveBatchSize;
         _stopCts = CancellationTokenSource.CreateLinkedTokenSource(handle.LeaseLostToken);
 
-        var channelOptions = new BoundedChannelOptions(capacity: MaxLiveBatchSize)
+        var channelOptions = new BoundedChannelOptions(options.LiveQueueCapacity)
         {
             SingleWriter = true,
             SingleReader = true
@@ -120,7 +122,7 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
             var batch = await _requests
                 .Find(filter)
                 .Sort(sort)
-                .Limit(MaxCatchUpBatchSize)
+                .Limit(_catchUpBatchSize)
                 .ToListAsync(ct)
                 .ConfigureAwait(false);
 
@@ -132,7 +134,7 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
 
             var result = await _appender.AppendBatchAsync(batch, ct).ConfigureAwait(false);
 
-            if (!await TryAdvanceCommitPositionAsync(result, ct).ConfigureAwait(false))
+            if (!await TryAdvanceCommitPositionAsync(result.Count, ct).ConfigureAwait(false))
                 return false;
         }
 
@@ -146,13 +148,13 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
 
         _livelinessTcs.TrySetResult();
 
-        var batch = new List<BsonDocument>(MaxLiveBatchSize);
+        var batch = new List<BsonDocument>(_liveBatchSize);
 
         while (await _channel.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
         {
             batch.Clear();
 
-            while (batch.Count < MaxLiveBatchSize && _channel.Reader.TryRead(out var request))
+            while (batch.Count < _liveBatchSize && _channel.Reader.TryRead(out var request))
                 batch.Add(request);
 
             if (batch.Count == 0)
@@ -162,20 +164,20 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
 
             var result = await _appender.AppendBatchAsync(batch, ct).ConfigureAwait(false);
 
-            if (!await TryAdvanceCommitPositionAsync(result, ct).ConfigureAwait(false))
+            if (!await TryAdvanceCommitPositionAsync(result.Count, ct).ConfigureAwait(false))
                 return;
         }
     }
 
-    private async Task<bool> TryAdvanceCommitPositionAsync(AppendBatchResult result, CancellationToken ct)
+    private async Task<bool> TryAdvanceCommitPositionAsync(long count, CancellationToken ct)
     {
-        if (result.IsEmpty)
+        if (count == 0)
             return true;
 
-        var success = await _handle.TryAdvanceCommitPositionAsync(result.PositionCount, ct).ConfigureAwait(false);
+        var success = await _handle.TryAdvanceCommitPositionAsync(count, ct).ConfigureAwait(false);
 
         if (!success)
-            _logger.LogWarning("Failed to advance commit position by {Count}", result.PositionCount);
+            _logger.LogWarning("Failed to advance commit position by {Count}", count);
 
         return success;
     }
