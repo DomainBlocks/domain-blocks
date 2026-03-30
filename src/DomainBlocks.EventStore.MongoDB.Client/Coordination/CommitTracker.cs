@@ -11,7 +11,7 @@ using MongoDB.Driver;
 namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 
 public sealed class CommitTracker(
-    MongoEventStoreClientOptions options,
+    MongoEventStoreOptions options,
     ILogger<CommitTracker> logger) :
     ICommitTracker,
     IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>

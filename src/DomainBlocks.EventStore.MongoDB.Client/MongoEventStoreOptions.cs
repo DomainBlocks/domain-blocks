@@ -1,6 +1,6 @@
 ﻿namespace DomainBlocks.EventStore.MongoDB.Client;
 
-public sealed class MongoEventStoreClientOptions
+public sealed class MongoEventStoreOptions
 {
     public string DatabaseName { get; set; } = "domainblocks";
 

@@ -27,7 +27,7 @@ public class MongoEventStoreClient<TEvent> :
     public MongoEventStoreClient(
         IMongoCollection<BsonDocument> requests,
         ICommitTracker requestTracker,
-        MongoEventStoreClientOptions options,
+        MongoEventStoreOptions options,
         EventCodec<TEvent, BsonValue, BsonValue> eventCodec,
         ILogger<MongoEventStoreClient<TEvent>> logger)
     {
@@ -126,7 +126,7 @@ public class MongoEventStoreClient<TEvent> :
 
                 _logger.LogDebug("Request batch size: {Count}", batch.Count);
 
-                await _requests.InsertManyAsync(batch, cancellationToken: ct);
+                await _requests.InsertManyAsync(batch, new InsertManyOptions { IsOrdered = false }, ct);
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

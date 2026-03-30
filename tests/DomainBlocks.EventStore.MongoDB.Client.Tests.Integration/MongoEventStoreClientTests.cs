@@ -23,7 +23,7 @@ public class MongoEventStoreClientTests : EventStoreClientTests
     private MongoClient _mongoClient = null!;
     private ILoggerFactory _loggerFactory = null!;
     private CancellationTokenSource _stopCts = null!;
-    private MongoEventStoreClientOptions _options = null!;
+    private MongoEventStoreOptions _options = null!;
     private IChangeStreamConnection _changeStreamConnection = null!;
     private Task _leaseContenderTask = null!;
     private MongoEventStoreClient<IDomainEvent> _client = null!;
@@ -41,7 +41,7 @@ public class MongoEventStoreClientTests : EventStoreClientTests
 
         _stopCts = new CancellationTokenSource();
 
-        _options = new MongoEventStoreClientOptions
+        _options = new MongoEventStoreOptions
         {
             DatabaseName = "domainblocks_tests"
         };
