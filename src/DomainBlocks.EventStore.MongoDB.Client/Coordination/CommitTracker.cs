@@ -1,7 +1,4 @@
-﻿using System.Collections.Concurrent;
-using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.MongoDB.Client.Schema;
-using DomainBlocks.EventStore.MongoDB.Client.Serialization;
+﻿using DomainBlocks.EventStore.MongoDB.Client.Schema;
 using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
 using Microsoft.Extensions.Logging;
@@ -11,9 +8,9 @@ using MongoDB.Driver;
 namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 
 public sealed class CommitTracker(
+    ICommitListener listener,
     MongoEventStoreOptions options,
     ILogger<CommitTracker> logger) :
-    ICommitTracker,
     IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>
 {
     private const string CommitPositionFieldPath =
@@ -22,19 +19,11 @@ public sealed class CommitTracker(
     private const string EpochFieldPath = LeaseDocument.FieldNames.Epoch;
 
     private readonly CollectionNamespace _eventLogNs = new(options.DatabaseName, options.EventLogCollectionName);
+
     private readonly CollectionNamespace _leasesNs = new(options.DatabaseName, options.LeasesCollectionName);
-    private readonly ConcurrentDictionary<Guid, TaskCompletionSource> _waiters = [];
+
     private readonly SortedDictionary<long, RecordedBatch> _recordedBatches = [];
     private long? _currentEpoch;
-
-    public Task WaitAsync(Guid commitId, CancellationToken cancellationToken = default)
-    {
-        var tcs = _waiters.GetOrAdd(
-            commitId,
-            _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
-
-        return tcs.Task.WaitAsync(cancellationToken);
-    }
 
     public ValueTask OnNextAsync(ChangeStreamDocument<BsonDocument> change, CancellationToken cancellationToken)
     {
@@ -158,29 +147,12 @@ public sealed class CommitTracker(
             var rejections = batch.EventData[AppendBatchRecorded.FieldNames.Rejections].AsBsonArray;
 
             foreach (var commitId in appendedCommitIds.Concat(duplicateCommitIds))
-            {
-                if (_waiters.TryRemove(commitId.AsGuid, out var tcs))
-                    tcs.TrySetResult();
-            }
+                NotifyCommitted(commitId.AsGuid);
 
             foreach (var rejection in rejections)
             {
                 var commitId = rejection[CommitRejection.FieldNames.CommitId].AsGuid;
-
-                if (_waiters.TryRemove(commitId, out var tcs))
-                {
-                    var streamId = rejection[CommitRejection.FieldNames.StreamId].AsString;
-
-                    var expectedStreamState =
-                        rejection[CommitRejection.FieldNames.ExpectedStreamState].ToExpectedStreamState();
-
-                    var actualStreamState = rejection[CommitRejection.FieldNames.ActualStreamState].ToStreamState();
-
-                    tcs.TrySetException(new StreamAppendConflictException(
-                        streamId,
-                        expectedStreamState,
-                        actualStreamState));
-                }
+                NotifyCommitRejected(commitId, rejection);
             }
 
             toRemove.Add(position);
@@ -188,6 +160,30 @@ public sealed class CommitTracker(
 
         foreach (var position in toRemove)
             _recordedBatches.Remove(position);
+    }
+
+    private void NotifyCommitted(Guid commitId)
+    {
+        try
+        {
+            listener.OnCommitted(commitId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error invoking OnCommitted for commit ID {CommitId}", commitId);
+        }
+    }
+
+    private void NotifyCommitRejected(Guid commitId, BsonValue rejection)
+    {
+        try
+        {
+            listener.OnCommitRejected(commitId, rejection);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error invoking OnCommitRejected for commit ID {CommitId}", commitId);
+        }
     }
 
     private readonly struct RecordedBatch(long epoch, BsonDocument eventData)

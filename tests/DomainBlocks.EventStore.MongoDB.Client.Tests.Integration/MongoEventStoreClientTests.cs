@@ -47,6 +47,15 @@ public class MongoEventStoreClientTests : EventStoreClientTests
         };
 
         var db = _mongoClient.GetDatabase(_options.DatabaseName);
+        var requests = db.GetCollection<BsonDocument>(_options.AppendRequestsCollectionName);
+        var eventLog = db.GetCollection<BsonDocument>(_options.EventLogCollectionName);
+        var leases = db.GetCollection<LeaseDocument>(_options.LeasesCollectionName);
+
+        _client = new MongoEventStoreClient<IDomainEvent>(
+            requests,
+            _options,
+            GetEventCodec(),
+            _loggerFactory.CreateLogger<MongoEventStoreClient<IDomainEvent>>());
 
         await MongoEventStoreAdmin.EnsureInitializedAsync(_mongoClient, _options);
 
@@ -65,19 +74,17 @@ public class MongoEventStoreClientTests : EventStoreClientTests
             logger: _loggerFactory.CreateLogger("ChangeStream"));
 
         // Set up CommitTracker
-        var commitTracker = new CommitTracker(_options, _loggerFactory.CreateLogger<CommitTracker>());
+        var commitTracker = new CommitTracker(_client, _options, _loggerFactory.CreateLogger<CommitTracker>());
         changeStreamSubject.Attach(commitTracker);
 
         // Set up LeaseContender
-        var leaseStore = new LeaseStore(db.GetCollection<LeaseDocument>(_options.LeasesCollectionName));
+        var leaseStore = new LeaseStore(leases);
         var leaseClient = new LeaseClient(leaseStore, _loggerFactory.CreateLogger<LeaseClient>());
         var leaseContender = new LeaseContender(leaseClient, _loggerFactory.CreateLogger<LeaseContender>());
 
-        var requests = db.GetCollection<BsonDocument>(_options.AppendRequestsCollectionName);
-
         var leaseObserver = new LeaderLeaseObserver(
             requests,
-            db.GetCollection<BsonDocument>(_options.EventLogCollectionName),
+            eventLog,
             changeStreamSubject,
             _options.Leader,
             _loggerFactory);
@@ -87,13 +94,6 @@ public class MongoEventStoreClientTests : EventStoreClientTests
 
         // Run LeaseContender
         _leaseContenderTask = leaseContender.RunAsync(leaseObserver, _stopCts.Token);
-
-        _client = new MongoEventStoreClient<IDomainEvent>(
-            requests,
-            commitTracker,
-            _options,
-            GetEventCodec(),
-            _loggerFactory.CreateLogger<MongoEventStoreClient<IDomainEvent>>());
 
         await leaseObserver.Liveliness;
     }

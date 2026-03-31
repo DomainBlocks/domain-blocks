@@ -1,4 +1,5 @@
-﻿using System.Threading.Channels;
+﻿using System.Collections.Concurrent;
+using System.Threading.Channels;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB.Client.Coordination;
 using DomainBlocks.EventStore.MongoDB.Client.Schema;
@@ -11,6 +12,7 @@ namespace DomainBlocks.EventStore.MongoDB.Client;
 
 public class MongoEventStoreClient<TEvent> :
     IEventStoreClient<TEvent>,
+    ICommitListener,
     IAsyncDisposable
     where TEvent : notnull
 {
@@ -18,20 +20,18 @@ public class MongoEventStoreClient<TEvent> :
 
     private readonly IEventEncoder<TEvent, BsonValue, BsonValue> _eventEncoder;
     private readonly IEventDecoder<TEvent, BsonValue, BsonValue> _eventDecoder;
-    private readonly ICommitTracker _requestTracker;
     private readonly ILogger<MongoEventStoreClient<TEvent>> _logger;
     private readonly Channel<BsonDocument> _channel;
     private readonly Task _consumeTask;
     private readonly CancellationTokenSource _stopCts = new();
+    private readonly ConcurrentDictionary<Guid, TaskCompletionSource> _pendingCommits = [];
 
     public MongoEventStoreClient(
         IMongoCollection<BsonDocument> requests,
-        ICommitTracker requestTracker,
         MongoEventStoreOptions options,
         EventCodec<TEvent, BsonValue, BsonValue> eventCodec,
         ILogger<MongoEventStoreClient<TEvent>> logger)
     {
-        _requestTracker = requestTracker;
         _requests = requests.WithWriteConcern(WriteConcern.W1.With(journal: false));
         _eventEncoder = eventCodec.Encoder;
         _eventDecoder = eventCodec.Decoder;
@@ -77,12 +77,15 @@ public class MongoEventStoreClient<TEvent> :
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(options.Timeout);
 
-        var commitTask = _requestTracker.WaitAsync(options.CommitId, timeoutCts.Token);
+        var tcs = _pendingCommits.GetOrAdd(
+            options.CommitId,
+            _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
 
         try
         {
             await _channel.Writer.WriteAsync(request, timeoutCts.Token);
-            await commitTask.ConfigureAwait(false);
+
+            await tcs.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -101,6 +104,24 @@ public class MongoEventStoreClient<TEvent> :
         CancellationToken cancellationToken = default)
     {
         throw new NotImplementedException();
+    }
+
+    void ICommitListener.OnCommitted(Guid commitId)
+    {
+        if (_pendingCommits.TryRemove(commitId, out var tcs))
+            tcs.TrySetResult();
+    }
+
+    void ICommitListener.OnCommitRejected(Guid commitId, BsonValue rejection)
+    {
+        if (!_pendingCommits.TryRemove(commitId, out var tcs))
+            return;
+
+        var streamId = rejection[CommitRejection.FieldNames.StreamId].AsString;
+        var expectedStreamState = rejection[CommitRejection.FieldNames.ExpectedStreamState].ToExpectedStreamState();
+        var actualStreamState = rejection[CommitRejection.FieldNames.ActualStreamState].ToStreamState();
+
+        tcs.TrySetException(new StreamAppendConflictException(streamId, expectedStreamState, actualStreamState));
     }
 
     public async ValueTask DisposeAsync()
