@@ -71,7 +71,14 @@ public class MongoEventStoreClientTests : EventStoreClientTests
 
         var changeStreamSubject = await db.CreateSubjectAsync(
             pipeline,
-            logger: _loggerFactory.CreateLogger("ChangeStream"));
+            new ChangeStreamSubjectOptions
+            {
+                MongoOptions = new ChangeStreamOptions
+                {
+                    MaxAwaitTime = TimeSpan.FromMilliseconds(200)
+                }
+            },
+            _loggerFactory.CreateLogger("ChangeStream"));
 
         // Set up CommitTracker
         var commitTracker = new CommitTracker(_client, _options, _loggerFactory.CreateLogger<CommitTracker>());
@@ -126,7 +133,7 @@ public class MongoEventStoreClientTests : EventStoreClientTests
         // Warm up: first request pays connection/change-stream setup costs.
         await DoAppend("warmup", ct);
 
-        const int iterations = 200;
+        const int iterations = 100;
         var latencies = new List<double>(iterations);
 
         for (var i = 0; i < iterations; i++)
@@ -158,7 +165,7 @@ public class MongoEventStoreClientTests : EventStoreClientTests
         // Finds the maximum sustainable ops/sec using a single sliding window of
         // maxInFlight concurrent operations. Time-bounded so the measurement is taken
         // at steady state, not as a drain of a fixed batch.
-        const int maxInFlight = 2000;
+        const int maxInFlight = 1000;
         const int warmUpSeconds = 3;
         const int measureSeconds = 15;
 

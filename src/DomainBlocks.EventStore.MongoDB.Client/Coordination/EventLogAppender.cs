@@ -11,7 +11,8 @@ public sealed partial class EventLogAppender(
     IMongoCollection<BsonDocument> eventLog,
     long epoch,
     long? epochStartPosition,
-    ILogger<EventLogAppender> logger) : IEventLogAppender
+    ILogger<EventLogAppender> logger) :
+    IEventLogAppender
 {
     private static readonly BulkWriteOptions OrderedBulkWriteOptions = new() { IsOrdered = true };
     private static readonly BsonBinaryData BsonEmptyGuid = new(Guid.Empty, GuidRepresentation.Standard);
@@ -30,18 +31,21 @@ public sealed partial class EventLogAppender(
     private readonly List<WriteModel<BsonDocument>> _writeModels = [];
 
     private long _nextPosition = epochStartPosition.HasValue ? epochStartPosition.Value + 1 : 0;
+    private Task _prefetchTask = Task.CompletedTask;
 
-    public async Task<AppendBatchResult> AppendBatchAsync(
-        IEnumerable<BsonDocument> requests,
-        CancellationToken cancellationToken)
+    public void StartPrefetch(IEnumerable<BsonDocument> requests, CancellationToken cancellationToken)
     {
         ClearBuffers();
-
         _requests.AddRange(requests);
+        _prefetchTask = _requests.Count == 0 ? Task.CompletedTask : PrefetchAsync(cancellationToken);
+    }
+
+    public async Task<AppendBatchResult> FlushAsync(CancellationToken cancellationToken)
+    {
         if (_requests.Count == 0)
             return new AppendBatchResult(_nextPosition, _nextPosition);
 
-        await PrefetchAsync(cancellationToken).ConfigureAwait(false);
+        await _prefetchTask.ConfigureAwait(false);
 
         var nextPosition = BuildWriteModels();
 

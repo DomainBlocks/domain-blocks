@@ -9,6 +9,13 @@
   <Folder Name="/benchmarks/">
     <Project Path="benchmarks/DomainBlocks.EventStore.Benchmarks/DomainBlocks.EventStore.Benchmarks.csproj" />
   </Folder>
+  <Folder Name="/deploy/" />
+  <Folder Name="/deploy/k8s/">
+    <File Path="deploy/k8s/mongo-init-job.yaml" />
+    <File Path="deploy/k8s/mongo-secret.yaml" />
+    <File Path="deploy/k8s/mongo-stateful-set.yaml" />
+    <File Path="deploy/k8s/namespace.yaml" />
+  </Folder>
   <Folder Name="/docs/">
     <File Path="docs\vision.md" />
     <File Path="docs/mongo-event-store-design.md" />

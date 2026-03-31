@@ -149,6 +149,7 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
         _livelinessTcs.TrySetResult();
 
         var batch = new List<BsonDocument>(_liveBatchSize);
+        var advanceTask = Task.FromResult(true);
 
         while (await _channel.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
         {
@@ -160,12 +161,20 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
             if (batch.Count == 0)
                 continue;
 
+            // Fire prefetch immediately - runs concurrently with the previous advance.
+            _appender.StartPrefetch(batch, ct);
+
+            // Await the previous advance before writing.
+            if (!await advanceTask.ConfigureAwait(false))
+                return;
+
             _logger.LogDebug("Preparing {BatchSize} commit(s)", batch.Count);
 
-            var result = await _appender.AppendBatchAsync(batch, ct).ConfigureAwait(false);
+            // Awaits the prefetch (may already be done), then builds and writes.
+            var result = await _appender.FlushAsync(ct).ConfigureAwait(false);
 
-            if (!await TryAdvanceCommitPositionAsync(result.Count, ct).ConfigureAwait(false))
-                return;
+            // Fire without awaiting — next iteration awaits before writing.
+            advanceTask = TryAdvanceCommitPositionAsync(result.Count, ct);
         }
     }
 
