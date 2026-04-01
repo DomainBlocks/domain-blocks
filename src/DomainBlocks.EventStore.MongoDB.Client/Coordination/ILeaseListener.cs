@@ -3,7 +3,7 @@ using DomainBlocks.Infrastructure.MongoDB.Leases;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 
-public interface ILeaseObserver
+public interface ILeaseListener
 {
     Task OnLeaseAcquiredAsync(ILeaseHandle<LeaseState> handle, CancellationToken cancellationToken);
 

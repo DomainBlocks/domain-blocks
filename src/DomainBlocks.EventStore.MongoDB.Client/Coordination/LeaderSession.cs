@@ -21,7 +21,6 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
     private readonly Channel<BsonDocument> _channel;
     private IDisposable? _changeStreamAttachment;
     private Task? _runTask;
-    private readonly TaskCompletionSource _livelinessTcs = new();
 
     public LeaderSession(
         IMongoCollection<BsonDocument> requests,
@@ -49,8 +48,6 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
         _channel = Channel.CreateBounded<BsonDocument>(channelOptions);
     }
 
-    public Task Liveliness => _livelinessTcs.Task;
-
     public void Start()
     {
         // Attach before starting work so inserts during catch-up are buffered.
@@ -63,10 +60,8 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
         if (!change.CollectionNamespace.Equals(_requests.CollectionNamespace))
             return;
 
-        if (change.OperationType == ChangeStreamOperationType.Insert)
-        {
+        if (change.OperationType is ChangeStreamOperationType.Insert)
             await _channel.Writer.WriteAsync(change.FullDocument, ct).ConfigureAwait(false);
-        }
     }
 
     public async ValueTask DisposeAsync()
@@ -110,6 +105,7 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
 
         var sort = Builders<BsonDocument>.Sort.Ascending(AppendRequest.FieldNames.CreatedAtUtc);
         var seenCommitIds = new HashSet<BsonValue>();
+        var advanceTask = Task.FromResult(true);
 
         while (true)
         {
@@ -132,21 +128,26 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
             foreach (var request in batch)
                 seenCommitIds.Add(request[AppendRequest.FieldNames.CommitId]);
 
-            var result = await _appender.AppendBatchAsync(batch, ct).ConfigureAwait(false);
+            // Fire prefetch immediately - may overlap with remaining advance time.
+            _appender.StartPrefetch(batch, ct);
 
-            if (!await TryAdvanceCommitPositionAsync(result.Count, ct).ConfigureAwait(false))
+            // Await the previous advance before writing.
+            if (!await advanceTask.ConfigureAwait(false))
                 return false;
+
+            var result = await _appender.FlushAsync(ct).ConfigureAwait(false);
+
+            // Advance without awaiting.
+            advanceTask = TryAdvanceCommitPositionAsync(result.Count, ct);
         }
 
-        _logger.LogInformation("Catch-up phase complete");
-        return true;
+        // Await the final advance.
+        return await advanceTask.ConfigureAwait(false);
     }
 
     private async Task RunLiveAsync(CancellationToken ct)
     {
         _logger.LogInformation("Switching to live mode");
-
-        _livelinessTcs.TrySetResult();
 
         var batch = new List<BsonDocument>(_liveBatchSize);
         var advanceTask = Task.FromResult(true);
@@ -176,15 +177,14 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
             // Advance without awaiting.
             advanceTask = TryAdvanceCommitPositionAsync(result.Count, ct);
 
-            // If the queue is already empty, advance immediately rather than holding the commit position while waiting
-            // for the next batch.
-            if (_channel.Reader.Count == 0)
-            {
-                if (!await advanceTask.ConfigureAwait(false))
-                    return;
+            if (_channel.Reader.Count != 0)
+                continue;
 
-                advanceTask = Task.FromResult(true);
-            }
+            // Empty queue - advance immediately rather than holding the position while awaiting the next batch.
+            if (!await advanceTask.ConfigureAwait(false))
+                return;
+
+            advanceTask = Task.FromResult(true);
         }
 
         // Await the final advance after the channel drains naturally.

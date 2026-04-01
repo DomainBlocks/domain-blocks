@@ -11,5 +11,5 @@ public sealed class AppendToStreamOptions
     /// <summary>
     /// Gets or sets how long the client waits for the operation to be acknowledged before timing out.
     /// </summary>
-    public TimeSpan Timeout { get; set; } = TimeSpan.FromMinutes(30);
+    public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(30);
 }

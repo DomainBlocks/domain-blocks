@@ -8,7 +8,7 @@ public sealed class LeaseContender(ILeaseClient leaseClient, ILogger<LeaseConten
 {
     public const string ResourceId = "dbx_event_log_lease";
 
-    public async Task RunAsync(ILeaseObserver observer, CancellationToken cancellationToken = default)
+    public async Task RunAsync(ILeaseListener listener, CancellationToken cancellationToken = default)
     {
         var options = new AcquireLeaseOptions
         {
@@ -28,13 +28,13 @@ public sealed class LeaseContender(ILeaseClient leaseClient, ILogger<LeaseConten
 
             await using (handle.ConfigureAwait(false))
             {
-                await NotifyLeaseAcquiredAsync(observer, handle, cancellationToken).ConfigureAwait(false);
+                await NotifyLeaseAcquiredAsync(listener, handle, cancellationToken).ConfigureAwait(false);
 
                 try
                 {
                     var leaseLostInfo = await handle.LeaseLostTask.WaitAsync(cancellationToken).ConfigureAwait(false);
 
-                    await NotifyLeaseLostAsync(observer, handle.Claim, leaseLostInfo, cancellationToken)
+                    await NotifyLeaseLostAsync(listener, handle.Claim, leaseLostInfo, cancellationToken)
                         .ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -50,13 +50,13 @@ public sealed class LeaseContender(ILeaseClient leaseClient, ILogger<LeaseConten
     }
 
     private async Task NotifyLeaseAcquiredAsync(
-        ILeaseObserver observer,
+        ILeaseListener listener,
         ILeaseHandle<LeaseState> handle,
         CancellationToken cancellationToken)
     {
         try
         {
-            await observer.OnLeaseAcquiredAsync(handle, cancellationToken).ConfigureAwait(false);
+            await listener.OnLeaseAcquiredAsync(handle, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -65,14 +65,14 @@ public sealed class LeaseContender(ILeaseClient leaseClient, ILogger<LeaseConten
     }
 
     private async Task NotifyLeaseLostAsync(
-        ILeaseObserver observer,
+        ILeaseListener listener,
         LeaseClaim leaseClaim,
         LeaseLostInfo? leaseLostInfo,
         CancellationToken cancellationToken)
     {
         try
         {
-            await observer.OnLeaseLostAsync(leaseClaim, leaseLostInfo, cancellationToken).ConfigureAwait(false);
+            await listener.OnLeaseLostAsync(leaseClaim, leaseLostInfo, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

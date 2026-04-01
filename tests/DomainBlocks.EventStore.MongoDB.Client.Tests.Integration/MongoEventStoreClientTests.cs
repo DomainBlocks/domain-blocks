@@ -2,11 +2,7 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.MongoDB.Client.Coordination;
-using DomainBlocks.EventStore.MongoDB.Client.Schema;
 using DomainBlocks.EventStore.TypeMapping;
-using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
-using DomainBlocks.Infrastructure.MongoDB.Leases;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Testing.Integration;
 using DomainBlocks.Testing.Integration.MongoDB;
@@ -21,12 +17,10 @@ namespace DomainBlocks.EventStore.MongoDB.Client.Tests.Integration;
 public class MongoEventStoreClientTests : EventStoreClientTests
 {
     private MongoClient _mongoClient = null!;
-    private ILoggerFactory _loggerFactory = null!;
-    private CancellationTokenSource _stopCts = null!;
     private MongoEventStoreOptions _options = null!;
-    private IChangeStreamConnection _changeStreamConnection = null!;
-    private Task _leaseContenderTask = null!;
-    private MongoEventStoreClient<IDomainEvent> _client = null!;
+    private ILoggerFactory _loggerFactory = null!;
+    private IEventStoreClient<IDomainEvent> _client = null!;
+    private MongoEventStoreNode _node = null!;
 
     protected override IEventStoreClient<IDomainEvent> Client => _client;
 
@@ -35,88 +29,32 @@ public class MongoEventStoreClientTests : EventStoreClientTests
     {
         _mongoClient = new MongoClient(MongoConnectionStrings.Default);
 
+        _options = new MongoEventStoreOptions
+        {
+            DatabaseName = "domainblocks_tests"
+        };
+
         _loggerFactory = LoggerFactory.Create(x => x
             .AddSimpleConsole(o => o.TimestampFormat = "HH:mm:ss.fff ")
             .SetMinimumLevel(LogLevel.Debug));
 
-        _stopCts = new CancellationTokenSource();
+        _node = new MongoEventStoreNode(_mongoClient, _options, _loggerFactory);
 
-        _options = new MongoEventStoreOptions
-        {
-            DatabaseName = "domainblocks_tests",
-            RequestQueueCapacity = 2000,
-            RequestBatchSize = 500,
-            Leader = new LeaderOptions
-            {
-                LiveQueueCapacity = 2000,
-                LiveBatchSize = 500
-            }
-        };
+        _client = _node.CreateClient(GetEventCodec());
 
-        var db = _mongoClient.GetDatabase(_options.DatabaseName);
-        var requests = db.GetCollection<BsonDocument>(_options.AppendRequestsCollectionName);
-        var eventLog = db.GetCollection<BsonDocument>(_options.EventLogCollectionName);
-        var leases = db.GetCollection<LeaseDocument>(_options.LeasesCollectionName);
-
-        _client = new MongoEventStoreClient<IDomainEvent>(
-            requests,
-            _options,
-            GetEventCodec(),
-            _loggerFactory.CreateLogger<MongoEventStoreClient<IDomainEvent>>());
-
-        await MongoEventStoreAdmin.EnsureInitializedAsync(_mongoClient, _options);
-
-        var filterBuilder = Builders<ChangeStreamDocument<BsonDocument>>.Filter;
-
-        var filter = (filterBuilder.Eq("ns.coll", _options.AppendRequestsCollectionName) &
-                      filterBuilder.Eq("operationType", "insert")) |
-                     (filterBuilder.Eq("ns.coll", _options.EventLogCollectionName) &
-                      filterBuilder.Eq("fullDocument.eventName", EventNames.AppendBatchRecorded)) |
-                     filterBuilder.Eq("ns.coll", _options.LeasesCollectionName);
-
-        var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(filter);
-
-        var changeStreamSubject = await db.CreateSubjectAsync(
-            pipeline,
-            logger: _loggerFactory.CreateLogger("ChangeStream"));
-
-        // Set up CommitTracker
-        var commitTracker = new CommitTracker(_client, _options, _loggerFactory.CreateLogger<CommitTracker>());
-        changeStreamSubject.Attach(commitTracker);
-
-        // Set up LeaseContender
-        var leaseStore = new LeaseStore(leases);
-        var leaseClient = new LeaseClient(leaseStore, _loggerFactory.CreateLogger<LeaseClient>());
-        var leaseContender = new LeaseContender(leaseClient, _loggerFactory.CreateLogger<LeaseContender>());
-
-        var leaseObserver = new LeaderLeaseObserver(
-            requests,
-            eventLog,
-            changeStreamSubject,
-            _options.Leader,
-            _loggerFactory);
-
-        // Connect change stream
-        _changeStreamConnection = changeStreamSubject.Connect();
-
-        // Run LeaseContender
-        _leaseContenderTask = leaseContender.RunAsync(leaseObserver, _stopCts.Token);
-
-        await leaseObserver.Liveliness;
+        await _node.StartAsync();
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _changeStreamConnection.DisposeAsync();
-        await _stopCts.CancelAsync();
-        await _leaseContenderTask;
+        await _node.DisposeAsync();
 
         await _mongoClient.DropDatabaseAsync(_options.DatabaseName);
 
-        await _client.DisposeAsync();
         _mongoClient.Dispose();
         _loggerFactory.Dispose();
+        await ((IAsyncDisposable)_client).DisposeAsync();
     }
 
     [Test]
@@ -164,7 +102,7 @@ public class MongoEventStoreClientTests : EventStoreClientTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task AppendToStreamAsync_MeasureThroughputCeiling(CancellationToken ct)
     {
-        const int maxInFlight = 2000;
+        const int maxInFlight = 1000;
         const int warmUpSeconds = 3;
         const int measureSeconds = 15;
 

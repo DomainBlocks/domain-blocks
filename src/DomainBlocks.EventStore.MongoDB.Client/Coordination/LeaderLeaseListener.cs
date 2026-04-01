@@ -8,21 +8,17 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Client.Coordination;
 
-public sealed class LeaderLeaseObserver(
+public sealed class LeaderLeaseListener(
     IMongoCollection<BsonDocument> requests,
     IMongoCollection<BsonDocument> eventLog,
     IChangeStreamSubject<ChangeStreamDocument<BsonDocument>> changeStreamSubject,
     LeaderOptions options,
     ILoggerFactory loggerFactory) :
-    ILeaseObserver
+    ILeaseListener
 {
     private LeaderSession? _session;
 
-    private readonly TaskCompletionSource _livelinessTcs = new();
-
-    public Task Liveliness => _livelinessTcs.Task;
-
-    public async Task OnLeaseAcquiredAsync(ILeaseHandle<LeaseState> handle, CancellationToken ct)
+    public Task OnLeaseAcquiredAsync(ILeaseHandle<LeaseState> handle, CancellationToken ct)
     {
         var leaseState = BsonSerializer.Deserialize<LeaseState>(handle.Snapshot.State);
 
@@ -42,9 +38,7 @@ public sealed class LeaderLeaseObserver(
 
         _session.Start();
 
-        await _session.Liveliness.WaitAsync(ct).ConfigureAwait(false);
-
-        _livelinessTcs.TrySetResult();
+        return Task.CompletedTask;
     }
 
     public async Task OnLeaseLostAsync(LeaseClaim claim, LeaseLostInfo? info, CancellationToken ct)

@@ -15,9 +15,9 @@ public sealed class MongoEventStoreOptions
     /// </summary>
     public TimeSpan AppendRequestTtl { get; set; } = TimeSpan.FromSeconds(120);
 
-    public int RequestQueueCapacity { get; set; } = 1000;
+    public int RequestQueueCapacity { get; set; } = 1_000;
 
-    public int RequestBatchSize { get; set; } = 1000;
+    public int RequestBatchSize { get; set; } = 500;
 
     public LeaderOptions Leader { get; set; } = new();
 }
