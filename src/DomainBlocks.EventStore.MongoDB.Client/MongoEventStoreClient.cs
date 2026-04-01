@@ -32,7 +32,7 @@ public class MongoEventStoreClient<TEvent> :
         EventCodec<TEvent, BsonValue, BsonValue> eventCodec,
         ILogger<MongoEventStoreClient<TEvent>> logger)
     {
-        _requests = requests.WithWriteConcern(WriteConcern.W1.With(journal: false));
+        _requests = requests.WithWriteConcern(WriteConcern.WMajority.With(journal: true));
         _eventEncoder = eventCodec.Encoder;
         _eventDecoder = eventCodec.Decoder;
         _logger = logger;
@@ -44,7 +44,7 @@ public class MongoEventStoreClient<TEvent> :
         };
 
         _channel = Channel.CreateBounded<BsonDocument>(channelOptions);
-        _consumeTask = ConsumeRequestsAsync(options.RequestInsertBatchSize, _stopCts.Token);
+        _consumeTask = ConsumeRequestsAsync(options.RequestBatchSize, _stopCts.Token);
     }
 
     public async Task AppendToStreamAsync(

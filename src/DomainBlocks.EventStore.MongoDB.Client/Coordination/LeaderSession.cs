@@ -173,9 +173,22 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
             // Awaits the prefetch (may already be done), then builds and writes.
             var result = await _appender.FlushAsync(ct).ConfigureAwait(false);
 
-            // Fire without awaiting — next iteration awaits before writing.
+            // Advance without awaiting.
             advanceTask = TryAdvanceCommitPositionAsync(result.Count, ct);
+
+            // If the queue is already empty, advance immediately rather than holding the commit position while waiting
+            // for the next batch.
+            if (_channel.Reader.Count == 0)
+            {
+                if (!await advanceTask.ConfigureAwait(false))
+                    return;
+
+                advanceTask = Task.FromResult(true);
+            }
         }
+
+        // Await the final advance after the channel drains naturally.
+        await advanceTask.ConfigureAwait(false);
     }
 
     private async Task<bool> TryAdvanceCommitPositionAsync(long count, CancellationToken ct)

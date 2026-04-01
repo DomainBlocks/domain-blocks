@@ -17,7 +17,7 @@ public sealed class MongoEventStoreOptions
 
     public int RequestQueueCapacity { get; set; } = 1000;
 
-    public int RequestInsertBatchSize { get; set; } = 1000;
+    public int RequestBatchSize { get; set; } = 1000;
 
     public LeaderOptions Leader { get; set; } = new();
 }
