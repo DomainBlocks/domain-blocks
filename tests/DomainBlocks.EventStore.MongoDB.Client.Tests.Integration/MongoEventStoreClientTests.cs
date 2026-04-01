@@ -123,24 +123,26 @@ public class MongoEventStoreClientTests : EventStoreClientTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task AppendOneTest(CancellationToken ct)
     {
-        await DoAppend("append-one", ct);
+        await AppendAsync("append-one", ct);
     }
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
     public async Task AppendToStreamAsync_SingleAppend_MeasureLatency(CancellationToken ct)
     {
-        // Warm up: first request pays connection/change-stream setup costs.
-        await DoAppend("warmup", ct);
+        const int warmupIterations = 10;
+        const int iterations = 100;
 
-        const int iterations = 10;
+        for (var i = 0; i < warmupIterations; i++)
+            await AppendAsync("warmup", ct);
+
         var latencies = new List<double>(iterations);
 
         for (var i = 0; i < iterations; i++)
         {
             var streamId = $"test-{Guid.NewGuid():N}";
             var sw = Stopwatch.StartNew();
-            await DoAppend(streamId, ct);
+            await AppendAsync(streamId, ct);
             sw.Stop();
             latencies.Add(sw.Elapsed.TotalMilliseconds);
         }
@@ -162,9 +164,6 @@ public class MongoEventStoreClientTests : EventStoreClientTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task AppendToStreamAsync_MeasureThroughputCeiling(CancellationToken ct)
     {
-        // Finds the maximum sustainable ops/sec using a single sliding window of
-        // maxInFlight concurrent operations. Time-bounded so the measurement is taken
-        // at steady state, not as a drain of a fixed batch.
         const int maxInFlight = 2000;
         const int warmUpSeconds = 3;
         const int measureSeconds = 15;
@@ -197,7 +196,7 @@ public class MongoEventStoreClientTests : EventStoreClientTests
 
                         var isMeasuring = isInMeasureWindow.Value;
 
-                        var task = DoAppend($"test-{Guid.NewGuid():N}", runCts.Token).ContinueWith(
+                        var task = AppendAsync($"test-{Guid.NewGuid():N}", runCts.Token).ContinueWith(
                             t =>
                             {
                                 semaphore.Release();
@@ -220,32 +219,32 @@ public class MongoEventStoreClientTests : EventStoreClientTests
             },
             ct);
 
-        // Warm-up: let the system reach steady state before measuring.
+        // Warm-up
         await Task.Delay(TimeSpan.FromSeconds(warmUpSeconds), ct);
 
+        // Measure
         isInMeasureWindow.Value = true;
-        var sw = Stopwatch.StartNew();
-
+        var start = Stopwatch.GetTimestamp();
         await Task.Delay(TimeSpan.FromSeconds(measureSeconds), ct);
 
+        // Stop
         isInMeasureWindow.Value = false;
-        sw.Stop();
-
+        var elapsed = Stopwatch.GetElapsedTime(start);
         await producerLoopTask;
         await Task.WhenAll(pendingTasks);
 
-        var throughput = ops / sw.Elapsed.TotalSeconds;
+        var throughput = ops / elapsed.TotalSeconds;
 
         await TestContext.Out.WriteLineAsync($"max in-flight: {maxInFlight}");
         await TestContext.Out.WriteLineAsync($"ops measured:  {ops}");
         await TestContext.Out.WriteLineAsync($"errors:        {errors}");
-        await TestContext.Out.WriteLineAsync($"elapsed:       {sw.Elapsed.TotalMilliseconds:F0} ms");
+        await TestContext.Out.WriteLineAsync($"elapsed:       {elapsed.TotalMilliseconds:F0} ms");
         await TestContext.Out.WriteLineAsync($"throughput:    {throughput:F0} ops/sec");
     }
 
-    private async Task DoAppend(string streamId, CancellationToken ct)
+    private async Task AppendAsync(string streamId, CancellationToken ct)
     {
-        AppendEvent<IDomainEvent>[] events = [CreateTestEvent("Evt1")];
+        AppendEvent<IDomainEvent>[] events = [CreateTestEvent("Benchmark")];
 
         var options = new AppendToStreamOptions
         {

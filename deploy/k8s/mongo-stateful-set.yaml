@@ -6,7 +6,7 @@ metadata:
   labels:
     app: mongo
 spec:
-  clusterIP: None # Headless — each pod gets its own stable DNS name
+  clusterIP: None # Headless - each pod gets its own stable DNS name
   selector:
     app: mongo
   ports:

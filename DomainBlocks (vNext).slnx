@@ -10,7 +10,12 @@
     <Project Path="benchmarks/DomainBlocks.EventStore.Benchmarks/DomainBlocks.EventStore.Benchmarks.csproj" />
   </Folder>
   <Folder Name="/deploy/" />
+  <Folder Name="/deploy/docker/" />
+  <Folder Name="/deploy/docker/benchmarks/">
+    <File Path="deploy/docker/benchmarks/Dockerfile" />
+  </Folder>
   <Folder Name="/deploy/k8s/">
+    <File Path="deploy/k8s/mongo-benchmark-job.yaml" />
     <File Path="deploy/k8s/mongo-init-job.yaml" />
     <File Path="deploy/k8s/mongo-secret.yaml" />
     <File Path="deploy/k8s/mongo-stateful-set.yaml" />
