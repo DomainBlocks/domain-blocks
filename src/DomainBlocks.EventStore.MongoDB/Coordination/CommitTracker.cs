@@ -9,7 +9,7 @@ namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
 public sealed class CommitTracker(
     ICommitListener listener,
-    MongoEventStoreOptions options,
+    MongoEventStoreNodeOptions options,
     ILogger<CommitTracker> logger) :
     IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>
 {

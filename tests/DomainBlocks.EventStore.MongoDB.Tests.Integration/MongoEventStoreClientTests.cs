@@ -17,7 +17,7 @@ namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 public class MongoEventStoreClientTests : EventStoreClientTests
 {
     private MongoClient _mongoClient = null!;
-    private MongoEventStoreOptions _options = null!;
+    private MongoEventStoreNodeOptions _options = null!;
     private ILoggerFactory _loggerFactory = null!;
     private IEventStoreClient<IDomainEvent> _client = null!;
     private MongoEventStoreNode _node = null!;
@@ -27,9 +27,9 @@ public class MongoEventStoreClientTests : EventStoreClientTests
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
     {
-        _mongoClient = new MongoClient(MongoConnectionStrings.Default);
+        _mongoClient = new MongoClient(MongoConnectionStrings.Atlas);
 
-        _options = new MongoEventStoreOptions
+        _options = new MongoEventStoreNodeOptions
         {
             DatabaseName = "domainblocks_tests"
         };
@@ -41,6 +41,8 @@ public class MongoEventStoreClientTests : EventStoreClientTests
         _node = new MongoEventStoreNode(_mongoClient, _options, _loggerFactory);
 
         _client = _node.CreateClient(GetEventCodec());
+
+        await MongoEventStoreAdmin.EnsureInitializedAsync(_mongoClient, _options);
 
         await _node.StartAsync();
     }

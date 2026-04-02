@@ -17,7 +17,7 @@ public class EventLogAppenderTests
     private const long Epoch = 1;
 
     private MongoClient _mongoClient = null!;
-    private MongoEventStoreOptions _options = null!;
+    private MongoEventStoreNodeOptions _options = null!;
     private ILoggerFactory _loggerFactory = null!;
     private IMongoCollection<EventLogEntry> _eventLog = null!;
     private IMongoCollection<BsonDocument> _eventLogAsBson = null!;
@@ -27,7 +27,7 @@ public class EventLogAppenderTests
     {
         _mongoClient = new MongoClient(MongoConnectionStrings.Default);
 
-        _options = new MongoEventStoreOptions
+        _options = new MongoEventStoreNodeOptions
         {
             DatabaseName = "domainblocks_tests"
         };

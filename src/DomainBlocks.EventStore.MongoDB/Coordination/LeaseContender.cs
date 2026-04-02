@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
-public sealed class LeaseContender(ILeaseClient leaseClient, ILogger<LeaseContender> logger) : ILeaseContender
+public sealed class LeaseContender(ILeaseClient leaseClient, ILogger<LeaseContender> logger)
 {
     public const string ResourceId = "dbx_event_log_lease";
 

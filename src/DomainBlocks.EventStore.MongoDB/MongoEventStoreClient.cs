@@ -28,7 +28,7 @@ public class MongoEventStoreClient<TEvent> :
 
     public MongoEventStoreClient(
         IMongoCollection<BsonDocument> requests,
-        MongoEventStoreOptions options,
+        ClientOptions options,
         EventCodec<TEvent, BsonValue, BsonValue> eventCodec,
         ILogger<MongoEventStoreClient<TEvent>> logger)
     {

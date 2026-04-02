@@ -1,4 +1,5 @@
-﻿using DomainBlocks.EventStore.Abstractions;
+﻿using System.Diagnostics;
+using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB.Coordination;
 using DomainBlocks.EventStore.MongoDB.Schema;
 using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
@@ -13,12 +14,11 @@ using IChangeStreamSubject = IChangeStreamSubject<ChangeStreamDocument<BsonDocum
 
 public sealed class MongoEventStoreNode : IAsyncDisposable
 {
-    private readonly IMongoClient _mongoClient;
     private readonly IMongoDatabase _database;
     private readonly IMongoCollection<BsonDocument> _requests;
     private readonly IMongoCollection<BsonDocument> _eventLog;
     private readonly IMongoCollection<LeaseDocument> _leases;
-    private readonly MongoEventStoreOptions _options;
+    private readonly MongoEventStoreNodeOptions _options;
     private readonly ILoggerFactory _loggerFactory;
     private readonly Lock _startLock = new();
     private readonly List<CommitTracker> _pendingCommitTrackers = [];
@@ -29,11 +29,13 @@ public sealed class MongoEventStoreNode : IAsyncDisposable
     private int _started;
     private int _disposed;
 
-    public MongoEventStoreNode(IMongoClient mongoClient, MongoEventStoreOptions options, ILoggerFactory loggerFactory)
+    public MongoEventStoreNode(
+        IMongoClient mongoClient,
+        MongoEventStoreNodeOptions options,
+        ILoggerFactory loggerFactory)
     {
-        _mongoClient = mongoClient;
-        _database = _mongoClient.GetDatabase(options.DatabaseName);
-        _requests = _database.GetCollection<BsonDocument>(options.AppendRequestsCollectionName);
+        _database = mongoClient.GetDatabase(options.DatabaseName);
+        _requests = _database.GetCollection<BsonDocument>(options.RequestsCollectionName);
         _eventLog = _database.GetCollection<BsonDocument>(options.EventLogCollectionName);
         _leases = _database.GetCollection<LeaseDocument>(options.LeasesCollectionName);
         _options = options;
@@ -50,33 +52,37 @@ public sealed class MongoEventStoreNode : IAsyncDisposable
         // Link so that disposal during startup propagates as cancellation.
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stopCts.Token);
 
-        await MongoEventStoreAdmin.EnsureInitializedAsync(_mongoClient, _options, linkedCts.Token);
-
         var changeStreamSubject = await CreateChangeStreamSubjectAsync(linkedCts.Token);
 
-        lock (_startLock)
+        if (_options.NodeRole is not NodeRole.LeaderOnly)
         {
-            foreach (var commitTracker in _pendingCommitTrackers)
-                changeStreamSubject.Attach(commitTracker);
+            lock (_startLock)
+            {
+                foreach (var commitTracker in _pendingCommitTrackers)
+                    changeStreamSubject.Attach(commitTracker);
 
-            _changeStreamSubject = changeStreamSubject;
-            _pendingCommitTrackers.Clear();
+                _changeStreamSubject = changeStreamSubject;
+                _pendingCommitTrackers.Clear();
+            }
         }
 
-        var leaseStore = new LeaseStore(_leases);
-        var leaseClient = new LeaseClient(leaseStore, _loggerFactory.CreateLogger<LeaseClient>());
-        var leaseContender = new LeaseContender(leaseClient, _loggerFactory.CreateLogger<LeaseContender>());
+        if (_options.NodeRole is not NodeRole.ClientOnly)
+        {
+            var leaseStore = new LeaseStore(_leases);
+            var leaseClient = new LeaseClient(leaseStore, _loggerFactory.CreateLogger<LeaseClient>());
+            var leaseContender = new LeaseContender(leaseClient, _loggerFactory.CreateLogger<LeaseContender>());
 
-        var leaseListener = new LeaderLeaseListener(
-            _requests,
-            _eventLog,
-            changeStreamSubject,
-            _options.Leader,
-            _loggerFactory);
+            var leaseListener = new LeaderLeaseListener(
+                _requests,
+                _eventLog,
+                changeStreamSubject,
+                _options.Leader,
+                _loggerFactory);
+
+            _leaseContenderTask = leaseContender.RunAsync(leaseListener, _stopCts.Token);
+        }
 
         _changeStreamConnection = changeStreamSubject.Connect();
-
-        _leaseContenderTask = leaseContender.RunAsync(leaseListener, _stopCts.Token);
     }
 
     public IEventStoreClient<TEvent> CreateClient<TEvent>(EventCodec<TEvent, BsonValue, BsonValue> eventCodec)
@@ -84,9 +90,12 @@ public sealed class MongoEventStoreNode : IAsyncDisposable
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
 
+        if (_options.NodeRole is NodeRole.LeaderOnly)
+            throw new InvalidOperationException("Cannot create a client on a leader-only node.");
+
         var client = new MongoEventStoreClient<TEvent>(
             _requests,
-            _options,
+            _options.Client,
             eventCodec,
             _loggerFactory.CreateLogger<MongoEventStoreClient<TEvent>>());
 
@@ -122,21 +131,39 @@ public sealed class MongoEventStoreNode : IAsyncDisposable
 
     private async Task<IChangeStreamSubject> CreateChangeStreamSubjectAsync(CancellationToken cancellationToken)
     {
+        var logger = _loggerFactory.CreateLogger("ChangeStream");
+
+        // Leader only needs requests, so we can use a change stream directly on the requests collection.
+        if (_options.NodeRole is NodeRole.LeaderOnly)
+            return await _requests.CreateSubjectAsync(logger: logger, cancellationToken: cancellationToken);
+
         var filterBuilder = Builders<ChangeStreamDocument<BsonDocument>>.Filter;
 
-        var filter = (filterBuilder.Eq("ns.coll", _options.AppendRequestsCollectionName) &
-                      filterBuilder.Eq("operationType", "insert")) |
-                     (filterBuilder.Eq("ns.coll", _options.EventLogCollectionName) &
-                      filterBuilder.Eq("fullDocument.eventName", EventNames.AppendBatchRecorded)) |
-                     filterBuilder.Eq("ns.coll", _options.LeasesCollectionName);
+        var eventFilter = filterBuilder.Eq("ns.coll", _options.EventLogCollectionName) &
+                          filterBuilder.Eq("fullDocument.eventName", EventNames.AppendBatchRecorded);
 
-        var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(filter);
+        var leaseFilter = filterBuilder.Eq("ns.coll", _options.LeasesCollectionName);
+        var clientFilter = eventFilter | leaseFilter;
+        var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>();
+        FilterDefinition<ChangeStreamDocument<BsonDocument>> filter;
 
-        var changeStreamSubject = await _database.CreateSubjectAsync(
-            pipeline,
-            logger: _loggerFactory.CreateLogger("ChangeStream"),
+        if (_options.NodeRole is NodeRole.ClientLeader)
+        {
+            var leaderFilter = filterBuilder.Eq("ns.coll", _options.RequestsCollectionName) &
+                               filterBuilder.Eq("operationType", "insert");
+
+            filter = clientFilter | leaderFilter;
+        }
+        else
+        {
+            filter = _options.NodeRole is NodeRole.ClientOnly
+                ? clientFilter
+                : throw new UnreachableException($"Unknown node role '{_options.NodeRole}'.");
+        }
+
+        return await _database.CreateSubjectAsync(
+            pipeline.Match(filter),
+            logger: logger,
             cancellationToken: cancellationToken);
-
-        return changeStreamSubject;
     }
 }

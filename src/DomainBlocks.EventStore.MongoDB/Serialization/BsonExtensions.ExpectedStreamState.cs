@@ -1,5 +1,4 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.MongoDB.Schema;
 using MongoDB.Bson;
 using static DomainBlocks.EventStore.MongoDB.Schema.ExpectedStreamStateSchema;
 
@@ -13,17 +12,17 @@ public static partial class BsonExtensions
         {
             return value.Kind switch
             {
-                ExpectedStreamStateKind.Any => new BsonDocument(ExpectedStreamStateSchema.FieldNames.Kind, ExpectedStreamStateSchema.Kinds.Any),
+                ExpectedStreamStateKind.Any => new BsonDocument(FieldNames.Kind, Kinds.Any),
 
-                ExpectedStreamStateKind.StreamExists => new BsonDocument(ExpectedStreamStateSchema.FieldNames.Kind, ExpectedStreamStateSchema.Kinds.StreamExists),
+                ExpectedStreamStateKind.StreamExists => new BsonDocument(FieldNames.Kind, Kinds.StreamExists),
 
                 ExpectedStreamStateKind.StreamDoesNotExist =>
-                    new BsonDocument(ExpectedStreamStateSchema.FieldNames.Kind, ExpectedStreamStateSchema.Kinds.StreamDoesNotExist),
+                    new BsonDocument(FieldNames.Kind, Kinds.StreamDoesNotExist),
 
                 ExpectedStreamStateKind.SpecificVersion => new BsonDocument
                 {
-                    { ExpectedStreamStateSchema.FieldNames.Kind, ExpectedStreamStateSchema.Kinds.SpecificVersion },
-                    { ExpectedStreamStateSchema.FieldNames.Version, checked((long)value.Version!.Value.Value) }
+                    { FieldNames.Kind, Kinds.SpecificVersion },
+                    { FieldNames.Version, checked((long)value.Version!.Value.Value) }
                 },
 
                 _ => throw new ArgumentOutOfRangeException(
@@ -39,16 +38,16 @@ public static partial class BsonExtensions
         {
             var doc = value.AsBsonDocument;
 
-            return doc[ExpectedStreamStateSchema.FieldNames.Kind].AsString switch
+            return doc[FieldNames.Kind].AsString switch
             {
-                ExpectedStreamStateSchema.Kinds.Any => ExpectedStreamState.Any,
+                Kinds.Any => ExpectedStreamState.Any,
 
-                ExpectedStreamStateSchema.Kinds.StreamExists => ExpectedStreamState.StreamExists,
+                Kinds.StreamExists => ExpectedStreamState.StreamExists,
 
-                ExpectedStreamStateSchema.Kinds.StreamDoesNotExist => ExpectedStreamState.StreamDoesNotExist,
+                Kinds.StreamDoesNotExist => ExpectedStreamState.StreamDoesNotExist,
 
-                ExpectedStreamStateSchema.Kinds.SpecificVersion =>
-                    ExpectedStreamState.SpecificVersion(StreamVersion.FromInt64(doc[ExpectedStreamStateSchema.FieldNames.Version].AsInt64)),
+                Kinds.SpecificVersion =>
+                    ExpectedStreamState.SpecificVersion(StreamVersion.FromInt64(doc[FieldNames.Version].AsInt64)),
 
                 var k => throw new ArgumentOutOfRangeException(nameof(doc), $"Unknown kind: {k}")
             };

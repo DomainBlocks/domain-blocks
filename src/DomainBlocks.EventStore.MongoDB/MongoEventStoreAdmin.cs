@@ -7,14 +7,14 @@ public static class MongoEventStoreAdmin
 {
     public static async Task EnsureInitializedAsync(
         IMongoClient mongoClient,
-        MongoEventStoreOptions options,
+        MongoEventStoreNodeOptions options,
         CancellationToken cancellationToken = default)
     {
         var db = mongoClient.GetDatabase(options.DatabaseName);
-        var appendRequests = db.GetCollection<AppendRequest>(options.AppendRequestsCollectionName);
+        var appendRequests = db.GetCollection<AppendRequest>(options.RequestsCollectionName);
         var eventLog = db.GetCollection<EventLogEntry>(options.EventLogCollectionName);
 
-        await EnsureAppendRequestsIndexesAsync(appendRequests, options.AppendRequestTtl, cancellationToken);
+        await EnsureAppendRequestsIndexesAsync(appendRequests, options.Client.RequestTtl, cancellationToken);
         await EnsureEventLogIndexesAsync(eventLog, cancellationToken);
     }
 
