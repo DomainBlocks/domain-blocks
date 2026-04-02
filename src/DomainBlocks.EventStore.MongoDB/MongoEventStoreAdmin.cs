@@ -14,7 +14,7 @@ public static class MongoEventStoreAdmin
         var appendRequests = db.GetCollection<AppendRequest>(options.RequestsCollectionName);
         var eventLog = db.GetCollection<EventLogEntry>(options.EventLogCollectionName);
 
-        await EnsureAppendRequestsIndexesAsync(appendRequests, options.Client.RequestTtl, cancellationToken);
+        await EnsureAppendRequestsIndexesAsync(appendRequests, options.RequestDocumentTtl, cancellationToken);
         await EnsureEventLogIndexesAsync(eventLog, cancellationToken);
     }
 

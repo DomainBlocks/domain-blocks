@@ -5,7 +5,7 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
-public partial class EventLogAppender
+public partial class EventLogWriter
 {
     private static readonly BsonDocument GroupByStreamStage = new("$group", new BsonDocument
     {
@@ -21,31 +21,31 @@ public partial class EventLogAppender
         })
         : new BsonDocument(EventLogEntry.FieldNames.Epoch, epoch);
 
-    private readonly HashSet<BsonValue> _prefetchDedup = [];
-    private readonly BsonArray _prefetchCommitIds = [];
-    private readonly BsonArray _prefetchStreamIds = [];
+    private readonly HashSet<BsonValue> _prepareDedup = [];
+    private readonly BsonArray _prepareCommitIds = [];
+    private readonly BsonArray _prepareStreamIds = [];
 
-    private async Task PrefetchAsync(CancellationToken cancellationToken)
+    private async Task PrepareAsync(CancellationToken cancellationToken)
     {
-        _prefetchDedup.Clear();
-        _prefetchCommitIds.Clear();
-        _prefetchStreamIds.Clear();
+        _prepareDedup.Clear();
+        _prepareCommitIds.Clear();
+        _prepareStreamIds.Clear();
 
         foreach (var request in _requests)
         {
             var commitId = request[AppendRequest.FieldNames.CommitId];
             var streamId = request[AppendRequest.FieldNames.StreamId];
 
-            if (_prefetchDedup.Add(commitId))
-                _prefetchCommitIds.Add(commitId);
+            if (_prepareDedup.Add(commitId))
+                _prepareCommitIds.Add(commitId);
 
-            if (_prefetchDedup.Add(streamId))
-                _prefetchStreamIds.Add(streamId);
+            if (_prepareDedup.Add(streamId))
+                _prepareStreamIds.Add(streamId);
         }
 
         var commitIdFilter = new BsonDocument("$and", new BsonArray
         {
-            new BsonDocument(EventLogEntry.FieldNames.CommitId, new BsonDocument("$in", _prefetchCommitIds)),
+            new BsonDocument(EventLogEntry.FieldNames.CommitId, new BsonDocument("$in", _prepareCommitIds)),
             _visibilityFilter
         });
 
@@ -54,7 +54,7 @@ public partial class EventLogAppender
             new BsonDocument("$match",
                 new BsonDocument("$and", new BsonArray
                 {
-                    new BsonDocument(EventLogEntry.FieldNames.StreamId, new BsonDocument("$in", _prefetchStreamIds)),
+                    new BsonDocument(EventLogEntry.FieldNames.StreamId, new BsonDocument("$in", _prepareStreamIds)),
                     _visibilityFilter
                 })),
 
@@ -75,7 +75,7 @@ public partial class EventLogAppender
         await Task.WhenAll(duplicatesTask, versionsTask).ConfigureAwait(false);
 
         logger.LogDebug(
-            "Prefetch complete: {DuplicateCount} duplicate(s) found, {StreamCount} stream version(s) loaded",
+            "Prepare complete: Found {DuplicateCount} duplicate(s), loaded {StreamCount} stream version(s)",
             _duplicateCommitIds.Count,
             _headStreamVersions.Count);
     }

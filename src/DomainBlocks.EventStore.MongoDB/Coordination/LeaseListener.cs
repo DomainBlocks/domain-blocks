@@ -8,7 +8,7 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
-public sealed class LeaderLeaseListener(
+public sealed class LeaseListener(
     IMongoCollection<BsonDocument> requests,
     IMongoCollection<BsonDocument> eventLog,
     IChangeStreamSubject<ChangeStreamDocument<BsonDocument>> changeStreamSubject,
@@ -22,15 +22,15 @@ public sealed class LeaderLeaseListener(
     {
         var leaseState = BsonSerializer.Deserialize<LeaseState>(handle.Snapshot.State);
 
-        var appender = new EventLogAppender(
+        var writer = new EventLogWriter(
             eventLog,
             handle.Snapshot.Epoch,
             leaseState.CommitPosition,
-            loggerFactory.CreateLogger<EventLogAppender>());
+            loggerFactory.CreateLogger<EventLogWriter>());
 
         _session = new LeaderSession(
             requests,
-            appender,
+            writer,
             handle,
             changeStreamSubject,
             options,

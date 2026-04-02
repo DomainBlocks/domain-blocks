@@ -10,7 +10,12 @@ public sealed class MongoEventStoreNodeOptions
 
     public string LeasesCollectionName { get; set; } = "dbx_leases";
 
-    public NodeRole NodeRole { get; set; }
+    /// <summary>
+    /// Gets or sets how long request documents survives in MongoDB before being automatically deleted.
+    /// </summary>
+    public TimeSpan RequestDocumentTtl { get; set; } = TimeSpan.FromSeconds(120);
+
+    public NodeRole NodeRole { get; set; } = NodeRole.ClientLeader;
 
     public ClientOptions Client { get; set; } = new();
 

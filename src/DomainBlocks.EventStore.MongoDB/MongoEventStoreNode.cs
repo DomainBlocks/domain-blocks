@@ -12,7 +12,7 @@ namespace DomainBlocks.EventStore.MongoDB;
 
 using IChangeStreamSubject = IChangeStreamSubject<ChangeStreamDocument<BsonDocument>>;
 
-public sealed class MongoEventStoreNode : IAsyncDisposable
+public sealed class MongoEventStoreNode : IMongoEventStoreNode
 {
     private readonly IMongoDatabase _database;
     private readonly IMongoCollection<BsonDocument> _requests;
@@ -21,8 +21,8 @@ public sealed class MongoEventStoreNode : IAsyncDisposable
     private readonly MongoEventStoreNodeOptions _options;
     private readonly ILoggerFactory _loggerFactory;
     private readonly Lock _startLock = new();
-    private readonly List<CommitTracker> _pendingCommitTrackers = [];
     private readonly CancellationTokenSource _stopCts = new();
+    private List<CommitTracker>? _pendingCommitTrackers;
     private IChangeStreamSubject? _changeStreamSubject;
     private IChangeStreamConnection? _changeStreamConnection;
     private Task? _leaseContenderTask;
@@ -34,6 +34,9 @@ public sealed class MongoEventStoreNode : IAsyncDisposable
         MongoEventStoreNodeOptions options,
         ILoggerFactory loggerFactory)
     {
+        if (options.NodeRole is NodeRole.None)
+            throw new ArgumentException("NodeRole must be specified.", nameof(options));
+
         _database = mongoClient.GetDatabase(options.DatabaseName);
         _requests = _database.GetCollection<BsonDocument>(options.RequestsCollectionName);
         _eventLog = _database.GetCollection<BsonDocument>(options.EventLogCollectionName);
@@ -54,25 +57,26 @@ public sealed class MongoEventStoreNode : IAsyncDisposable
 
         var changeStreamSubject = await CreateChangeStreamSubjectAsync(linkedCts.Token);
 
-        if (_options.NodeRole is not NodeRole.LeaderOnly)
+        lock (_startLock)
         {
-            lock (_startLock)
+            _changeStreamSubject = changeStreamSubject;
+
+            if (_options.NodeRole.HasFlag(NodeRole.Client))
             {
-                foreach (var commitTracker in _pendingCommitTrackers)
+                foreach (var commitTracker in _pendingCommitTrackers ?? [])
                     changeStreamSubject.Attach(commitTracker);
 
-                _changeStreamSubject = changeStreamSubject;
-                _pendingCommitTrackers.Clear();
+                _pendingCommitTrackers = null;
             }
         }
 
-        if (_options.NodeRole is not NodeRole.ClientOnly)
+        if (_options.NodeRole.HasFlag(NodeRole.Leader))
         {
             var leaseStore = new LeaseStore(_leases);
             var leaseClient = new LeaseClient(leaseStore, _loggerFactory.CreateLogger<LeaseClient>());
             var leaseContender = new LeaseContender(leaseClient, _loggerFactory.CreateLogger<LeaseContender>());
 
-            var leaseListener = new LeaderLeaseListener(
+            var leaseListener = new LeaseListener(
                 _requests,
                 _eventLog,
                 changeStreamSubject,
@@ -90,7 +94,7 @@ public sealed class MongoEventStoreNode : IAsyncDisposable
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
 
-        if (_options.NodeRole is NodeRole.LeaderOnly)
+        if (_options.NodeRole is NodeRole.Leader)
             throw new InvalidOperationException("Cannot create a client on a leader-only node.");
 
         var client = new MongoEventStoreClient<TEvent>(
@@ -106,7 +110,7 @@ public sealed class MongoEventStoreNode : IAsyncDisposable
             if (_changeStreamSubject is not null)
                 _changeStreamSubject.Attach(commitTracker);
             else
-                _pendingCommitTrackers.Add(commitTracker);
+                (_pendingCommitTrackers ??= []).Add(commitTracker);
         }
 
         return client;
@@ -131,20 +135,24 @@ public sealed class MongoEventStoreNode : IAsyncDisposable
 
     private async Task<IChangeStreamSubject> CreateChangeStreamSubjectAsync(CancellationToken cancellationToken)
     {
+        var filterBuilder = Builders<ChangeStreamDocument<BsonDocument>>.Filter;
+        var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>();
         var logger = _loggerFactory.CreateLogger("ChangeStream");
 
-        // Leader only needs requests, so we can use a change stream directly on the requests collection.
-        if (_options.NodeRole is NodeRole.LeaderOnly)
-            return await _requests.CreateSubjectAsync(logger: logger, cancellationToken: cancellationToken);
-
-        var filterBuilder = Builders<ChangeStreamDocument<BsonDocument>>.Filter;
+        // Leader needs request inserts only, so we can use a change stream directly on the requests collection.
+        if (_options.NodeRole is NodeRole.Leader)
+        {
+            return await _requests.CreateSubjectAsync(
+                pipeline.Match(filterBuilder.Eq("operationType", "insert")),
+                logger: logger,
+                cancellationToken: cancellationToken);
+        }
 
         var eventFilter = filterBuilder.Eq("ns.coll", _options.EventLogCollectionName) &
                           filterBuilder.Eq("fullDocument.eventName", EventNames.AppendBatchRecorded);
 
         var leaseFilter = filterBuilder.Eq("ns.coll", _options.LeasesCollectionName);
         var clientFilter = eventFilter | leaseFilter;
-        var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>();
         FilterDefinition<ChangeStreamDocument<BsonDocument>> filter;
 
         if (_options.NodeRole is NodeRole.ClientLeader)
@@ -156,7 +164,7 @@ public sealed class MongoEventStoreNode : IAsyncDisposable
         }
         else
         {
-            filter = _options.NodeRole is NodeRole.ClientOnly
+            filter = _options.NodeRole is NodeRole.Client
                 ? clientFilter
                 : throw new UnreachableException($"Unknown node role '{_options.NodeRole}'.");
         }

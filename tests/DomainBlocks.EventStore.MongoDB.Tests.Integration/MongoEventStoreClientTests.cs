@@ -27,7 +27,7 @@ public class MongoEventStoreClientTests : EventStoreClientTests
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
     {
-        _mongoClient = new MongoClient(MongoConnectionStrings.Atlas);
+        _mongoClient = new MongoClient(MongoConnectionStrings.Default);
 
         _options = new MongoEventStoreNodeOptions
         {

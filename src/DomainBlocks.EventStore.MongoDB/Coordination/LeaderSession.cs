@@ -11,7 +11,7 @@ namespace DomainBlocks.EventStore.MongoDB.Coordination;
 public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>, IAsyncDisposable
 {
     private readonly IMongoCollection<BsonDocument> _requests;
-    private readonly IEventLogAppender _appender;
+    private readonly IEventLogWriter _writer;
     private readonly ILeaseHandle<LeaseState> _handle;
     private readonly IChangeStreamSubject<ChangeStreamDocument<BsonDocument>> _changeStreamSubject;
     private readonly ILogger _logger;
@@ -24,14 +24,14 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
 
     public LeaderSession(
         IMongoCollection<BsonDocument> requests,
-        IEventLogAppender appender,
+        IEventLogWriter writer,
         ILeaseHandle<LeaseState> handle,
         IChangeStreamSubject<ChangeStreamDocument<BsonDocument>> changeStreamSubject,
         LeaderOptions options,
         ILoggerFactory loggerFactory)
     {
         _requests = requests;
-        _appender = appender;
+        _writer = writer;
         _handle = handle;
         _changeStreamSubject = changeStreamSubject;
         _logger = loggerFactory.CreateLogger<LeaderSession>();
@@ -128,14 +128,14 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
             foreach (var request in batch)
                 seenCommitIds.Add(request[AppendRequest.FieldNames.CommitId]);
 
-            // Fire prefetch immediately - may overlap with remaining advance time.
-            _appender.StartPrefetch(batch, ct);
+            // Fire prepare immediately - may overlap with remaining advance time.
+            _writer.Prepare(batch, ct);
 
             // Await the previous advance before writing.
             if (!await advanceTask.ConfigureAwait(false))
                 return false;
 
-            var result = await _appender.FlushAsync(ct).ConfigureAwait(false);
+            var result = await _writer.FlushAsync(ct).ConfigureAwait(false);
 
             // Advance without awaiting.
             advanceTask = TryAdvanceCommitPositionAsync(result.Count, ct);
@@ -162,8 +162,8 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
             if (batch.Count == 0)
                 continue;
 
-            // Fire prefetch immediately - runs concurrently with the previous advance.
-            _appender.StartPrefetch(batch, ct);
+            // Fire prepare immediately - runs concurrently with the previous advance.
+            _writer.Prepare(batch, ct);
 
             // Await the previous advance before writing.
             if (!await advanceTask.ConfigureAwait(false))
@@ -171,20 +171,19 @@ public sealed class LeaderSession : IChangeStreamObserver<ChangeStreamDocument<B
 
             _logger.LogDebug("Preparing {BatchSize} commit(s)", batch.Count);
 
-            // Awaits the prefetch (may already be done), then builds and writes.
-            var result = await _appender.FlushAsync(ct).ConfigureAwait(false);
+            var result = await _writer.FlushAsync(ct).ConfigureAwait(false);
 
             // Advance without awaiting.
             advanceTask = TryAdvanceCommitPositionAsync(result.Count, ct);
 
-            if (_channel.Reader.Count != 0)
-                continue;
+            // If the queue is empty, advance immediately rather than waiting until the next batch.
+            if (_channel.Reader.Count == 0)
+            {
+                if (!await advanceTask.ConfigureAwait(false))
+                    return;
 
-            // Empty queue - advance immediately rather than holding the position while awaiting the next batch.
-            if (!await advanceTask.ConfigureAwait(false))
-                return;
-
-            advanceTask = Task.FromResult(true);
+                advanceTask = Task.FromResult(true);
+            }
         }
 
         // Await the final advance after the channel drains naturally.

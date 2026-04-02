@@ -7,12 +7,12 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
-public sealed partial class EventLogAppender(
+public sealed partial class EventLogWriter(
     IMongoCollection<BsonDocument> eventLog,
     long epoch,
     long? epochStartPosition,
-    ILogger<EventLogAppender> logger) :
-    IEventLogAppender
+    ILogger<EventLogWriter> logger) :
+    IEventLogWriter
 {
     private static readonly BulkWriteOptions OrderedBulkWriteOptions = new() { IsOrdered = true };
     private static readonly BsonBinaryData BsonEmptyGuid = new(Guid.Empty, GuidRepresentation.Standard);
@@ -30,46 +30,65 @@ public sealed partial class EventLogAppender(
     private readonly Dictionary<string, long> _headStreamVersions = [];
     private readonly List<WriteModel<BsonDocument>> _writeModels = [];
 
+    private bool _isPrepared;
+    private Task _prepareTask = Task.CompletedTask;
     private long _nextPosition = epochStartPosition.HasValue ? epochStartPosition.Value + 1 : 0;
-    private Task _prefetchTask = Task.CompletedTask;
 
-    public void StartPrefetch(IEnumerable<BsonDocument> requests, CancellationToken cancellationToken)
+    public void Prepare(IEnumerable<BsonDocument> requests, CancellationToken cancellationToken)
     {
-        ClearBuffers();
-        _requests.AddRange(requests);
-        _prefetchTask = _requests.Count == 0 ? Task.CompletedTask : PrefetchAsync(cancellationToken);
-    }
-
-    public async Task<AppendBatchResult> FlushAsync(CancellationToken cancellationToken)
-    {
-        if (_requests.Count == 0)
-            return new AppendBatchResult(_nextPosition, _nextPosition);
-
-        await _prefetchTask.ConfigureAwait(false);
-
-        var nextPosition = BuildWriteModels();
-
-        if (_writeModels.Count == 0)
+        if (_isPrepared)
         {
-            logger.LogDebug("Batch produced no write models; skipping");
-            return new AppendBatchResult(_nextPosition, _nextPosition);
+            throw new InvalidOperationException(
+                "Prepare has already been called. Call FlushAsync before calling Prepare again.");
         }
 
-        await _eventLog.BulkWriteAsync(_writeModels, OrderedBulkWriteOptions, cancellationToken).ConfigureAwait(false);
+        _requests.AddRange(requests);
+        _prepareTask = _requests.Count == 0 ? Task.CompletedTask : PrepareAsync(cancellationToken);
+        _isPrepared = true;
+    }
 
-        var startPosition = _nextPosition;
-        _nextPosition = nextPosition;
+    public async Task<EventLogWriteResult> FlushAsync(CancellationToken cancellationToken)
+    {
+        if (!_isPrepared)
+            throw new InvalidOperationException("FlushAsync called without a preceding call to Prepare.");
 
-        logger.LogInformation(
-            "Batch appended: positions {StartPosition}–{EndPosition}, " +
-            "{AppendCount} appended, {DuplicateCount} duplicate(s), {RejectionCount} rejected",
-            startPosition,
-            nextPosition - 1,
-            _appendedCommitIds.Count,
-            _duplicateCommitIds.Count,
-            _commitRejections.Count);
+        try
+        {
+            if (_requests.Count == 0)
+                return new EventLogWriteResult(_nextPosition, _nextPosition);
 
-        return new AppendBatchResult(startPosition, nextPosition);
+            await _prepareTask.ConfigureAwait(false);
+
+            var nextPosition = BuildWriteModels();
+
+            if (_writeModels.Count == 0)
+            {
+                logger.LogDebug("Batch produced no write models; skipping");
+                return new EventLogWriteResult(_nextPosition, _nextPosition);
+            }
+
+            await _eventLog.BulkWriteAsync(_writeModels, OrderedBulkWriteOptions, cancellationToken)
+                .ConfigureAwait(false);
+
+            var startPosition = _nextPosition;
+            _nextPosition = nextPosition;
+
+            logger.LogInformation(
+                "Batch appended: positions {StartPosition}–{EndPosition}, " +
+                "{AppendCount} appended, {DuplicateCount} duplicate(s), {RejectionCount} rejected",
+                startPosition,
+                nextPosition - 1,
+                _appendedCommitIds.Count,
+                _duplicateCommitIds.Count,
+                _commitRejections.Count);
+
+            return new EventLogWriteResult(startPosition, nextPosition);
+        }
+        finally
+        {
+            ClearBuffers();
+            _isPrepared = false;
+        }
     }
 
     private void ClearBuffers()
