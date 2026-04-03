@@ -18,11 +18,10 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
     private readonly IMongoCollection<BsonDocument> _requests;
     private readonly IMongoCollection<BsonDocument> _eventLog;
     private readonly IMongoCollection<LeaseDocument> _leases;
+    private readonly CommitTracker _commitTracker;
     private readonly MongoEventStoreNodeOptions _options;
     private readonly ILoggerFactory _loggerFactory;
-    private readonly Lock _startLock = new();
     private readonly CancellationTokenSource _stopCts = new();
-    private List<CommitTracker>? _pendingCommitTrackers;
     private IChangeStreamSubject? _changeStreamSubject;
     private IChangeStreamConnection? _changeStreamConnection;
     private Task? _leaseContenderTask;
@@ -41,6 +40,7 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
         _requests = _database.GetCollection<BsonDocument>(options.RequestsCollectionName);
         _eventLog = _database.GetCollection<BsonDocument>(options.EventLogCollectionName);
         _leases = _database.GetCollection<LeaseDocument>(options.LeasesCollectionName);
+        _commitTracker = new CommitTracker(options, loggerFactory.CreateLogger<CommitTracker>());
         _options = options;
         _loggerFactory = loggerFactory;
     }
@@ -55,20 +55,8 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
         // Link so that disposal during startup propagates as cancellation.
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stopCts.Token);
 
-        var changeStreamSubject = await CreateChangeStreamSubjectAsync(linkedCts.Token);
-
-        lock (_startLock)
-        {
-            _changeStreamSubject = changeStreamSubject;
-
-            if (_options.NodeRole.HasFlag(NodeRole.Client))
-            {
-                foreach (var commitTracker in _pendingCommitTrackers ?? [])
-                    changeStreamSubject.Attach(commitTracker);
-
-                _pendingCommitTrackers = null;
-            }
-        }
+        _changeStreamSubject = await CreateChangeStreamSubjectAsync(linkedCts.Token);
+        _changeStreamSubject.Attach(_commitTracker);
 
         if (_options.NodeRole.HasFlag(NodeRole.Leader))
         {
@@ -79,14 +67,14 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
             var leaseListener = new LeaseListener(
                 _requests,
                 _eventLog,
-                changeStreamSubject,
+                _changeStreamSubject,
                 _options.Leader,
                 _loggerFactory);
 
             _leaseContenderTask = leaseContender.RunAsync(leaseListener, _stopCts.Token);
         }
 
-        _changeStreamConnection = changeStreamSubject.Connect();
+        _changeStreamConnection = _changeStreamSubject.Connect();
     }
 
     public IEventStoreClient<TEvent> CreateClient<TEvent>(EventCodec<TEvent, BsonValue, BsonValue> eventCodec)
@@ -103,15 +91,7 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
             eventCodec,
             _loggerFactory.CreateLogger<MongoEventStoreClient<TEvent>>());
 
-        var commitTracker = new CommitTracker(client, _options, _loggerFactory.CreateLogger<CommitTracker>());
-
-        lock (_startLock)
-        {
-            if (_changeStreamSubject is not null)
-                _changeStreamSubject.Attach(commitTracker);
-            else
-                (_pendingCommitTrackers ??= []).Add(commitTracker);
-        }
+        _commitTracker.AddListener(client);
 
         return client;
     }

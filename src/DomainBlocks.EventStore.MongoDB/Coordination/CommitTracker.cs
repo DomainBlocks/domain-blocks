@@ -1,4 +1,5 @@
-﻿using DomainBlocks.EventStore.MongoDB.Schema;
+﻿using System.Collections.Immutable;
+using DomainBlocks.EventStore.MongoDB.Schema;
 using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
 using Microsoft.Extensions.Logging;
@@ -8,7 +9,6 @@ using MongoDB.Driver;
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
 public sealed class CommitTracker(
-    ICommitListener listener,
     MongoEventStoreNodeOptions options,
     ILogger<CommitTracker> logger) :
     IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>
@@ -22,10 +22,22 @@ public sealed class CommitTracker(
 
     private readonly CollectionNamespace _leasesNs = new(options.DatabaseName, options.LeasesCollectionName);
 
+    private ImmutableArray<ICommitListener> _listeners = [];
+
     private readonly SortedDictionary<long, RecordedBatch> _recordedBatches = [];
     private long? _currentEpoch;
 
-    public ValueTask OnNextAsync(ChangeStreamDocument<BsonDocument> change, CancellationToken cancellationToken)
+    public void AddListener(ICommitListener listener)
+    {
+        ImmutableInterlocked.Update(
+            ref _listeners,
+            static (current, item) => current.Add(item),
+            listener);
+    }
+
+    ValueTask IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>.OnNextAsync(
+        ChangeStreamDocument<BsonDocument> change,
+        CancellationToken cancellationToken)
     {
         if (change.CollectionNamespace.Equals(_eventLogNs))
             HandleEventLogChange(change);
@@ -164,25 +176,31 @@ public sealed class CommitTracker(
 
     private void NotifyCommitted(Guid commitId)
     {
-        try
+        foreach (var listener in _listeners)
         {
-            listener.OnCommitted(commitId);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error invoking OnCommitted for commit ID {CommitId}", commitId);
+            try
+            {
+                listener.OnCommitted(commitId);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error invoking OnCommitted for commit ID {CommitId}", commitId);
+            }
         }
     }
 
     private void NotifyCommitRejected(Guid commitId, BsonValue rejection)
     {
-        try
+        foreach (var listener in _listeners)
         {
-            listener.OnCommitRejected(commitId, rejection);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error invoking OnCommitRejected for commit ID {CommitId}", commitId);
+            try
+            {
+                listener.OnCommitRejected(commitId, rejection);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error invoking OnCommitRejected for commit ID {CommitId}", commitId);
+            }
         }
     }
 
