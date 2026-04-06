@@ -56,7 +56,6 @@ public class MongoEventStoreClientTests : EventStoreClientTests
 
         _mongoClient.Dispose();
         _loggerFactory.Dispose();
-        await ((IAsyncDisposable)_client).DisposeAsync();
     }
 
     [Test]

@@ -6,46 +6,21 @@ using DomainBlocks.EventStore.MongoDB.Coordination;
 using DomainBlocks.EventStore.MongoDB.Schema;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
-using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
-public class MongoEventStoreClient<TEvent> :
+public class MongoEventStoreClient<TEvent>(
+    ChannelWriter<BsonDocument> requestWriter,
+    EventCodec<TEvent, BsonValue, BsonValue> eventCodec,
+    ILogger<MongoEventStoreClient<TEvent>> logger) :
     IEventStoreClient<TEvent>,
-    ICommitListener,
-    IAsyncDisposable
+    ICommitListener
     where TEvent : notnull
 {
-    private readonly IMongoCollection<BsonDocument> _requests;
-
-    private readonly IEventEncoder<TEvent, BsonValue, BsonValue> _eventEncoder;
-    private readonly IEventDecoder<TEvent, BsonValue, BsonValue> _eventDecoder;
-    private readonly ILogger<MongoEventStoreClient<TEvent>> _logger;
-    private readonly Channel<BsonDocument> _channel;
-    private readonly Task _consumeTask;
-    private readonly CancellationTokenSource _stopCts = new();
+    private readonly IEventEncoder<TEvent, BsonValue, BsonValue> _eventEncoder = eventCodec.Encoder;
+    private readonly IEventDecoder<TEvent, BsonValue, BsonValue> _eventDecoder = eventCodec.Decoder;
+    private readonly ILogger<MongoEventStoreClient<TEvent>> _logger = logger;
     private readonly ConcurrentDictionary<Guid, TaskCompletionSource> _pendingCommits = [];
-
-    public MongoEventStoreClient(
-        IMongoCollection<BsonDocument> requests,
-        ClientOptions options,
-        EventCodec<TEvent, BsonValue, BsonValue> eventCodec,
-        ILogger<MongoEventStoreClient<TEvent>> logger)
-    {
-        _requests = requests.WithWriteConcern(WriteConcern.WMajority.With(journal: true));
-        _eventEncoder = eventCodec.Encoder;
-        _eventDecoder = eventCodec.Decoder;
-        _logger = logger;
-
-        var channelOptions = new BoundedChannelOptions(options.RequestQueueCapacity)
-        {
-            SingleWriter = false,
-            SingleReader = true
-        };
-
-        _channel = Channel.CreateBounded<BsonDocument>(channelOptions);
-        _consumeTask = ConsumeRequestsAsync(options.RequestBatchSize, _stopCts.Token);
-    }
 
     public async Task AppendToStreamAsync(
         string streamId,
@@ -83,8 +58,7 @@ public class MongoEventStoreClient<TEvent> :
 
         try
         {
-            await _channel.Writer.WriteAsync(request, timeoutCts.Token);
-
+            await requestWriter.WriteAsync(request, timeoutCts.Token);
             await tcs.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -122,41 +96,5 @@ public class MongoEventStoreClient<TEvent> :
         var actualStreamState = rejection[CommitRejection.FieldNames.ActualStreamState].ToStreamState();
 
         tcs.TrySetException(new StreamAppendConflictException(streamId, expectedStreamState, actualStreamState));
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        _channel.Writer.TryComplete();
-        await _stopCts.CancelAsync();
-        await _consumeTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
-        _stopCts.Dispose();
-    }
-
-    private async Task ConsumeRequestsAsync(int insertBatchSize, CancellationToken ct)
-    {
-        var batch = new List<BsonDocument>(insertBatchSize);
-
-        try
-        {
-            while (await _channel.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
-            {
-                batch.Clear();
-
-                while (batch.Count < insertBatchSize && _channel.Reader.TryRead(out var request))
-                    batch.Add(request);
-
-                _logger.LogDebug("Request batch size: {Count}", batch.Count);
-
-                await _requests.InsertManyAsync(batch, new InsertManyOptions { IsOrdered = false }, ct);
-            }
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            _logger.LogDebug("Request consumer cancelled");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Request consumer failed");
-        }
     }
 }

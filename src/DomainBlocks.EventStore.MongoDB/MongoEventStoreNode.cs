@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Threading.Channels;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB.Coordination;
 using DomainBlocks.EventStore.MongoDB.Schema;
@@ -18,12 +19,15 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
     private readonly IMongoCollection<BsonDocument> _requests;
     private readonly IMongoCollection<BsonDocument> _eventLog;
     private readonly IMongoCollection<LeaseDocument> _leases;
+    private readonly Channel<BsonDocument> _requestChannel;
     private readonly CommitTracker _commitTracker;
     private readonly MongoEventStoreNodeOptions _options;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly ILogger<MongoEventStoreNode> _logger;
     private readonly CancellationTokenSource _stopCts = new();
     private IChangeStreamSubject? _changeStreamSubject;
     private IChangeStreamConnection? _changeStreamConnection;
+    private Task? _insertRequestsTask;
     private Task? _leaseContenderTask;
     private int _started;
     private int _disposed;
@@ -37,12 +41,25 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
             throw new ArgumentException("NodeRole must be specified.", nameof(options));
 
         _database = mongoClient.GetDatabase(options.DatabaseName);
-        _requests = _database.GetCollection<BsonDocument>(options.RequestsCollectionName);
+
+        _requests = _database
+            .GetCollection<BsonDocument>(options.RequestsCollectionName)
+            .WithWriteConcern(WriteConcern.WMajority.With(journal: true));
+
         _eventLog = _database.GetCollection<BsonDocument>(options.EventLogCollectionName);
         _leases = _database.GetCollection<LeaseDocument>(options.LeasesCollectionName);
+
+        _requestChannel = Channel.CreateBounded<BsonDocument>(
+            new BoundedChannelOptions(options.Client.RequestQueueCapacity)
+            {
+                SingleWriter = false,
+                SingleReader = true
+            });
+
         _commitTracker = new CommitTracker(options, loggerFactory.CreateLogger<CommitTracker>());
         _options = options;
         _loggerFactory = loggerFactory;
+        _logger = loggerFactory.CreateLogger<MongoEventStoreNode>();
     }
 
     public async Task StartAsync(CancellationToken cancellationToken = default)
@@ -57,6 +74,9 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
 
         _changeStreamSubject = await CreateChangeStreamSubjectAsync(linkedCts.Token);
         _changeStreamSubject.Attach(_commitTracker);
+
+        if (_options.NodeRole.HasFlag(NodeRole.Client))
+            _insertRequestsTask = InsertRequestsAsync(_requestChannel.Reader, _stopCts.Token);
 
         if (_options.NodeRole.HasFlag(NodeRole.Leader))
         {
@@ -86,8 +106,7 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
             throw new InvalidOperationException("Cannot create a client on a leader-only node.");
 
         var client = new MongoEventStoreClient<TEvent>(
-            _requests,
-            _options.Client,
+            _requestChannel.Writer,
             eventCodec,
             _loggerFactory.CreateLogger<MongoEventStoreClient<TEvent>>());
 
@@ -103,10 +122,15 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
 
         using (_stopCts)
         {
+            _requestChannel.Writer.TryComplete();
+
             if (_changeStreamConnection is not null)
                 await _changeStreamConnection.DisposeAsync().ConfigureAwait(false);
 
             await _stopCts.CancelAsync().ConfigureAwait(false);
+
+            if (_insertRequestsTask is not null)
+                await _insertRequestsTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
             if (_leaseContenderTask is not null)
                 await _leaseContenderTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
@@ -153,5 +177,34 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
             pipeline.Match(filter),
             logger: logger,
             cancellationToken: cancellationToken);
+    }
+
+    private async Task InsertRequestsAsync(ChannelReader<BsonDocument> reader, CancellationToken ct)
+    {
+        var batchSize = _options.Client.RequestBatchSize;
+        var batch = new List<BsonDocument>(batchSize);
+
+        try
+        {
+            while (await reader.WaitToReadAsync(ct).ConfigureAwait(false))
+            {
+                batch.Clear();
+
+                while (batch.Count < batchSize && reader.TryRead(out var request))
+                    batch.Add(request);
+
+                _logger.LogDebug("Request batch size: {Count}", batch.Count);
+
+                await _requests.InsertManyAsync(batch, new InsertManyOptions { IsOrdered = false }, ct);
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            _logger.LogDebug("Request consumer cancelled");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Request consumer failed");
+        }
     }
 }
