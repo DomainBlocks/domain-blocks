@@ -84,6 +84,10 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
             var leaseClient = new LeaseClient(leaseStore, _loggerFactory.CreateLogger<LeaseClient>());
             var leaseContender = new LeaseContender(leaseClient, _loggerFactory.CreateLogger<LeaseContender>());
 
+            // Requests collection is abstracted away behind a channel.
+            // - When in-memory, pass request channel directly
+            // - When not in-memory, pass in an adapter over the requests collection / change stream (with catch-up)
+
             var leaseListener = new LeaseListener(
                 _requests,
                 _eventLog,

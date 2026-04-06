@@ -2,9 +2,7 @@
 
 public sealed class LeaderOptions
 {
-    public int CatchUpBatchSize { get; set; } = 500;
+    public int QueueCapacity { get; set; } = 1_000;
 
-    public int LiveQueueCapacity { get; set; } = 1_000;
-
-    public int LiveBatchSize { get; set; } = 500;
+    public int BatchSize { get; set; } = 500;
 }

@@ -5,7 +5,7 @@ namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
 public interface ILeaseListener
 {
-    Task OnLeaseAcquiredAsync(ILeaseHandle<LeaseState> handle, CancellationToken cancellationToken);
+    Task OnLeaseAcquiredAsync(ILeaseHandle<LeaseState> leaseHandle, CancellationToken cancellationToken);
 
     Task OnLeaseLostAsync(LeaseClaim leaseClaim, LeaseLostInfo? leaseLostInfo, CancellationToken cancellationToken);
 }
