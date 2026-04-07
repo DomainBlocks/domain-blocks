@@ -17,7 +17,11 @@ public sealed class MongoEventStoreNodeOptions
 
     public NodeRole NodeRole { get; set; } = NodeRole.ClientLeader;
 
-    public ClientOptions Client { get; set; } = new();
+    public int RequestQueueCapacity { get; set; } = 1_000;
 
-    public LeaderOptions Leader { get; set; } = new();
+    public int RequestBatchSize { get; set; } = 500;
+
+    public int IngestQueueCapacity { get; set; } = 1_000;
+
+    public int IngestBatchSize { get; set; } = 500;
 }

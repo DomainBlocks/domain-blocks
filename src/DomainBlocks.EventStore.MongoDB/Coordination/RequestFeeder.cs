@@ -7,7 +7,7 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
-internal sealed class RequestPump :
+internal sealed class RequestFeeder :
     IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>,
     IAsyncDisposable
 {
@@ -22,18 +22,19 @@ internal sealed class RequestPump :
     private Task? _catchUpTask;
     private Task? _pumpTask;
 
-    public RequestPump(
+    public RequestFeeder(
         IMongoCollection<BsonDocument> requests,
         IChangeStreamSubject<ChangeStreamDocument<BsonDocument>> changeStreamSubject,
-        LeaderOptions options,
-        ILogger<RequestPump> logger)
+        int queueCapacity,
+        int batchSize,
+        ILogger<RequestFeeder> logger)
     {
         _requests = requests;
         _changeStreamSubject = changeStreamSubject;
-        _batchSize = options.BatchSize;
+        _batchSize = batchSize;
         _logger = logger;
 
-        var channelOptions = new BoundedChannelOptions(options.QueueCapacity)
+        var channelOptions = new BoundedChannelOptions(queueCapacity)
         {
             SingleWriter = true,
             SingleReader = true

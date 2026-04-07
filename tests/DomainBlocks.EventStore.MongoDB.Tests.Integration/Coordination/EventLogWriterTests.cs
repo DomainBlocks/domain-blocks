@@ -73,9 +73,7 @@ public class EventLogWriterTests
         var result = await writer.WriteAsync(requests, ct);
 
         result.StartPosition.ShouldBe(0);
-        result.NextPosition.ShouldBe(4);
         result.Count.ShouldBe(4);
-        result.IsEmpty.ShouldBeFalse();
 
         var entries = await ReadEntries();
         entries.Count.ShouldBe(3);
@@ -120,9 +118,7 @@ public class EventLogWriterTests
         var result = await writer.WriteAsync(requests, ct);
 
         result.StartPosition.ShouldBe(0);
-        result.NextPosition.ShouldBe(4);
         result.Count.ShouldBe(4);
-        result.IsEmpty.ShouldBeFalse();
 
         var entries = await ReadEntries();
         entries.Count.ShouldBe(3);
@@ -168,7 +164,7 @@ public class EventLogWriterTests
         var result1 = await writer.WriteAsync(requests1, ct);
         var result2 = await writer.WriteAsync(requests2, ct);
 
-        result2.StartPosition.ShouldBe(result1.NextPosition);
+        result2.StartPosition.ShouldBe(result1.StartPosition + result1.Count);
 
         var entries = await ReadEntries();
         entries.Count.ShouldBe(3);
@@ -193,7 +189,7 @@ public class EventLogWriterTests
 
         var result = await writer.WriteAsync([], ct);
 
-        result.IsEmpty.ShouldBeTrue();
+        result.ShouldBe(EventLogWriteResult.Empty);
 
         var all = await ReadAllEntries();
         all.ShouldBeEmpty();
@@ -212,7 +208,7 @@ public class EventLogWriterTests
 
         var result = await writer.WriteAsync(requests, ct);
 
-        result.IsEmpty.ShouldBeTrue();
+        result.ShouldBe(EventLogWriteResult.Empty);
 
         var all = await ReadAllEntries();
         all.ShouldBeEmpty();
@@ -594,7 +590,6 @@ public class EventLogWriterTests
             ct);
 
         result.StartPosition.ShouldBe(5);
-        result.NextPosition.ShouldBe(7);
         result.Count.ShouldBe(2);
 
         var entries = await ReadEntries();
@@ -621,7 +616,6 @@ public class EventLogWriterTests
             ct);
 
         result.StartPosition.ShouldBe(0);
-        result.NextPosition.ShouldBe(3); // 2 events + 1 marker
         result.Count.ShouldBe(3);
 
         var entries = await ReadEntries();

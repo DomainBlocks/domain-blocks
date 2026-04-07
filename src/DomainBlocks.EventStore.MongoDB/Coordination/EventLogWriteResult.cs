@@ -1,10 +1,8 @@
-﻿namespace DomainBlocks.EventStore.MongoDB.Coordination;
+﻿using MongoDB.Bson;
 
-public readonly record struct EventLogWriteResult(long StartPosition, long NextPosition)
+namespace DomainBlocks.EventStore.MongoDB.Coordination;
+
+public record EventLogWriteResult(long StartPosition, long Count, BsonValue AppendBatchRecorded)
 {
-    public long EndPosition => StartPosition + Count - 1;
-
-    public long Count => NextPosition - StartPosition;
-
-    public bool IsEmpty => Count == 0;
+    public static readonly EventLogWriteResult Empty = new(0, 0, new BsonDocument());
 }

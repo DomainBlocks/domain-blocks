@@ -1,5 +1,4 @@
-﻿using System.Collections.Immutable;
-using DomainBlocks.EventStore.MongoDB.Schema;
+﻿using DomainBlocks.EventStore.MongoDB.Schema;
 using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 using DomainBlocks.Infrastructure.MongoDB.Leases;
 using Microsoft.Extensions.Logging;
@@ -10,6 +9,7 @@ namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
 public sealed class CommitTracker(
     MongoEventStoreNodeOptions options,
+    CommitSubject commitSubject,
     ILogger<CommitTracker> logger) :
     IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>
 {
@@ -22,18 +22,8 @@ public sealed class CommitTracker(
 
     private readonly CollectionNamespace _leasesNs = new(options.DatabaseName, options.LeasesCollectionName);
 
-    private ImmutableArray<ICommitListener> _listeners = [];
-
     private readonly SortedDictionary<long, RecordedBatch> _recordedBatches = [];
     private long? _currentEpoch;
-
-    public void AddListener(ICommitListener listener)
-    {
-        ImmutableInterlocked.Update(
-            ref _listeners,
-            static (current, item) => current.Add(item),
-            listener);
-    }
 
     ValueTask IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>.OnNextAsync(
         ChangeStreamDocument<BsonDocument> change,
@@ -84,9 +74,7 @@ public sealed class CommitTracker(
                 return; // Out-of-order delivery - a newer leader already claimed this position.
         }
 
-        _recordedBatches[position] = new RecordedBatch(
-            epoch,
-            doc[EventLogEntry.FieldNames.EventData].AsBsonDocument);
+        _recordedBatches[position] = new RecordedBatch(epoch, doc[EventLogEntry.FieldNames.EventData]);
     }
 
     private void HandleLeaseChange(ChangeStreamDocument<BsonDocument> change)
@@ -154,18 +142,7 @@ public sealed class CommitTracker(
                 continue;
             }
 
-            var appendedCommitIds = batch.EventData[AppendBatchRecorded.FieldNames.AppendedCommitIds].AsBsonArray;
-            var duplicateCommitIds = batch.EventData[AppendBatchRecorded.FieldNames.DuplicateCommitIds].AsBsonArray;
-            var rejections = batch.EventData[AppendBatchRecorded.FieldNames.Rejections].AsBsonArray;
-
-            foreach (var commitId in appendedCommitIds.Concat(duplicateCommitIds))
-                NotifyCommitted(commitId.AsGuid);
-
-            foreach (var rejection in rejections)
-            {
-                var commitId = rejection[CommitRejection.FieldNames.CommitId].AsGuid;
-                NotifyCommitRejected(commitId, rejection);
-            }
+            commitSubject.Notify(batch.EventData);
 
             toRemove.Add(position);
         }
@@ -174,39 +151,9 @@ public sealed class CommitTracker(
             _recordedBatches.Remove(position);
     }
 
-    private void NotifyCommitted(Guid commitId)
-    {
-        foreach (var listener in _listeners)
-        {
-            try
-            {
-                listener.OnCommitted(commitId);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error invoking OnCommitted for commit ID {CommitId}", commitId);
-            }
-        }
-    }
-
-    private void NotifyCommitRejected(Guid commitId, BsonValue rejection)
-    {
-        foreach (var listener in _listeners)
-        {
-            try
-            {
-                listener.OnCommitRejected(commitId, rejection);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error invoking OnCommitRejected for commit ID {CommitId}", commitId);
-            }
-        }
-    }
-
-    private readonly struct RecordedBatch(long epoch, BsonDocument eventData)
+    private readonly struct RecordedBatch(long epoch, BsonValue eventData)
     {
         public long Epoch { get; } = epoch;
-        public BsonDocument EventData { get; } = eventData;
+        public BsonValue EventData { get; } = eventData;
     }
 }

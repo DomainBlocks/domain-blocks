@@ -20,6 +20,7 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
     private readonly IMongoCollection<BsonDocument> _eventLog;
     private readonly IMongoCollection<LeaseDocument> _leases;
     private readonly Channel<BsonDocument> _requestChannel;
+    private readonly CommitSubject _commitSubject;
     private readonly CommitTracker _commitTracker;
     private readonly MongoEventStoreNodeOptions _options;
     private readonly ILoggerFactory _loggerFactory;
@@ -50,13 +51,14 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
         _leases = _database.GetCollection<LeaseDocument>(options.LeasesCollectionName);
 
         _requestChannel = Channel.CreateBounded<BsonDocument>(
-            new BoundedChannelOptions(options.Client.RequestQueueCapacity)
+            new BoundedChannelOptions(options.RequestQueueCapacity)
             {
                 SingleWriter = false,
                 SingleReader = true
             });
 
-        _commitTracker = new CommitTracker(options, loggerFactory.CreateLogger<CommitTracker>());
+        _commitSubject = new CommitSubject(loggerFactory.CreateLogger<CommitSubject>());
+        _commitTracker = new CommitTracker(options, _commitSubject, loggerFactory.CreateLogger<CommitTracker>());
         _options = options;
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<MongoEventStoreNode>();
@@ -84,18 +86,15 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
             var leaseClient = new LeaseClient(leaseStore, _loggerFactory.CreateLogger<LeaseClient>());
             var leaseContender = new LeaseContender(leaseClient, _loggerFactory.CreateLogger<LeaseContender>());
 
-            // Requests collection is abstracted away behind a channel.
-            // - When in-memory, pass request channel directly
-            // - When not in-memory, pass in an adapter over the requests collection / change stream (with catch-up)
-
-            var leaseListener = new LeaseListener(
+            var leaseHandler = new LeaseHandler(
                 _requests,
-                _eventLog,
                 _changeStreamSubject,
-                _options.Leader,
+                _eventLog,
+                _options.IngestQueueCapacity,
+                _options.IngestBatchSize,
                 _loggerFactory);
 
-            _leaseContenderTask = leaseContender.RunAsync(leaseListener, _stopCts.Token);
+            _leaseContenderTask = leaseContender.RunAsync(leaseHandler, _stopCts.Token);
         }
 
         _changeStreamConnection = _changeStreamSubject.Connect();
@@ -114,7 +113,7 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
             eventCodec,
             _loggerFactory.CreateLogger<MongoEventStoreClient<TEvent>>());
 
-        _commitTracker.AddListener(client);
+        _commitSubject.Attach(client);
 
         return client;
     }
@@ -185,7 +184,7 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
 
     private async Task InsertRequestsAsync(ChannelReader<BsonDocument> reader, CancellationToken ct)
     {
-        var batchSize = _options.Client.RequestBatchSize;
+        var batchSize = _options.RequestBatchSize;
         var batch = new List<BsonDocument>(batchSize);
 
         try

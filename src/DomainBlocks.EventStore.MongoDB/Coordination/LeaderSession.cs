@@ -13,6 +13,7 @@ public sealed class LeaderSession : IAsyncDisposable
     private readonly IEventLogWriter _eventLogWriter;
     private readonly int _batchSize;
     private readonly ILogger _logger;
+    private readonly CommitSubject? _commitSubject;
     private readonly CancellationTokenSource _stopCts;
     private readonly Task _runTask;
 
@@ -21,13 +22,15 @@ public sealed class LeaderSession : IAsyncDisposable
         ChannelReader<BsonDocument> requestReader,
         IEventLogWriter eventLogWriter,
         int batchSize,
-        ILogger<LeaderSession> logger)
+        ILogger<LeaderSession> logger,
+        CommitSubject? commitSubject = null)
     {
         _leaseHandle = leaseHandle;
         _requestReader = requestReader;
         _eventLogWriter = eventLogWriter;
         _batchSize = batchSize;
         _logger = logger;
+        _commitSubject = commitSubject;
         _stopCts = CancellationTokenSource.CreateLinkedTokenSource(leaseHandle.LeaseLostToken);
         _runTask = RunAsync(_stopCts.Token);
     }
@@ -44,8 +47,6 @@ public sealed class LeaderSession : IAsyncDisposable
 
     private async Task RunAsync(CancellationToken ct)
     {
-        _logger.LogInformation("Switching to live mode");
-
         var batch = new List<BsonDocument>(_batchSize);
         var advanceTask = Task.FromResult(true);
 
@@ -71,7 +72,7 @@ public sealed class LeaderSession : IAsyncDisposable
             var result = await _eventLogWriter.FlushAsync(ct).ConfigureAwait(false);
 
             // Advance without awaiting.
-            advanceTask = TryAdvanceCommitPositionAsync(result.Count, ct);
+            advanceTask = TryAdvanceCommitPositionAsync(result, ct);
 
             // If the queue is empty, advance immediately rather than waiting until the next batch.
             if (_requestReader.Count == 0)
@@ -87,15 +88,18 @@ public sealed class LeaderSession : IAsyncDisposable
         await advanceTask.ConfigureAwait(false);
     }
 
-    private async Task<bool> TryAdvanceCommitPositionAsync(long count, CancellationToken ct)
+    private async Task<bool> TryAdvanceCommitPositionAsync(EventLogWriteResult result, CancellationToken ct)
     {
-        if (count == 0)
+        if (result == EventLogWriteResult.Empty)
             return true;
 
-        var success = await _leaseHandle.TryAdvanceCommitPositionAsync(count, ct).ConfigureAwait(false);
+        var success = await _leaseHandle.TryAdvanceCommitPositionAsync(result.Count, ct).ConfigureAwait(false);
+
+        if (success && _commitSubject is not null)
+            _commitSubject.Notify(result.AppendBatchRecorded);
 
         if (!success)
-            _logger.LogWarning("Failed to advance commit position by {Count}", count);
+            _logger.LogWarning("Failed to advance commit position by {Count}", result.Count);
 
         return success;
     }

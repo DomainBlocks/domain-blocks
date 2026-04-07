@@ -28,7 +28,7 @@ public sealed partial class EventLogWriter(
     private readonly HashSet<Guid> _duplicateCommitIds = [];
     private readonly Dictionary<Guid, BsonDocument> _commitRejections = [];
     private readonly Dictionary<string, long> _headStreamVersions = [];
-    private readonly List<WriteModel<BsonDocument>> _writeModels = [];
+    private readonly List<ReplaceOneModel<BsonDocument>> _replaceOneModels = [];
 
     private bool _isPrepared;
     private Task _prepareTask = Task.CompletedTask;
@@ -41,6 +41,8 @@ public sealed partial class EventLogWriter(
             throw new InvalidOperationException(
                 "Prepare has already been called. Call FlushAsync before calling Prepare again.");
         }
+
+        ClearBuffers();
 
         _requests.AddRange(requests);
         _prepareTask = _requests.Count == 0 ? Task.CompletedTask : PrepareAsync(cancellationToken);
@@ -55,19 +57,19 @@ public sealed partial class EventLogWriter(
         try
         {
             if (_requests.Count == 0)
-                return new EventLogWriteResult(_nextPosition, _nextPosition);
+                return EventLogWriteResult.Empty;
 
             await _prepareTask.ConfigureAwait(false);
 
-            var nextPosition = BuildWriteModels();
+            var nextPosition = BuildReplaceOneModels();
 
-            if (_writeModels.Count == 0)
+            if (_replaceOneModels.Count == 0)
             {
-                logger.LogDebug("Batch produced no write models; skipping");
-                return new EventLogWriteResult(_nextPosition, _nextPosition);
+                logger.LogDebug("Batch produced no writes; skipping");
+                return EventLogWriteResult.Empty;
             }
 
-            await _eventLog.BulkWriteAsync(_writeModels, OrderedBulkWriteOptions, cancellationToken)
+            await _eventLog.BulkWriteAsync(_replaceOneModels, OrderedBulkWriteOptions, cancellationToken)
                 .ConfigureAwait(false);
 
             var startPosition = _nextPosition;
@@ -82,11 +84,13 @@ public sealed partial class EventLogWriter(
                 _duplicateCommitIds.Count,
                 _commitRejections.Count);
 
-            return new EventLogWriteResult(startPosition, nextPosition);
+            var count = nextPosition - startPosition;
+            var appendBatchRecorded = _replaceOneModels[^1].Replacement[EventLogEntry.FieldNames.EventData];
+
+            return new EventLogWriteResult(startPosition, count, appendBatchRecorded);
         }
         finally
         {
-            ClearBuffers();
             _isPrepared = false;
         }
     }
@@ -98,10 +102,10 @@ public sealed partial class EventLogWriter(
         _duplicateCommitIds.Clear();
         _commitRejections.Clear();
         _headStreamVersions.Clear();
-        _writeModels.Clear();
+        _replaceOneModels.Clear();
     }
 
-    private long BuildWriteModels()
+    private long BuildReplaceOneModels()
     {
         var nextPosition = _nextPosition;
 
@@ -158,7 +162,7 @@ public sealed partial class EventLogWriter(
                     bsonCommitId,
                     @event.AsBsonDocument);
 
-                _writeModels.Add(writeModel);
+                _replaceOneModels.Add(writeModel);
             }
 
             _headStreamVersions[streamId] = streamVersion;
@@ -176,7 +180,7 @@ public sealed partial class EventLogWriter(
                 nameof(EventNames.AppendBatchRecorded),
                 CreateBatchRecordedEventData());
 
-            _writeModels.Add(writeModel);
+            _replaceOneModels.Add(writeModel);
         }
 
         return nextPosition;

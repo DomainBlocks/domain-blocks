@@ -14,7 +14,7 @@ public class MongoEventStoreClient<TEvent>(
     EventCodec<TEvent, BsonValue, BsonValue> eventCodec,
     ILogger<MongoEventStoreClient<TEvent>> logger) :
     IEventStoreClient<TEvent>,
-    ICommitListener
+    ICommitObserver
     where TEvent : notnull
 {
     private readonly IEventEncoder<TEvent, BsonValue, BsonValue> _eventEncoder = eventCodec.Encoder;
@@ -80,13 +80,13 @@ public class MongoEventStoreClient<TEvent>(
         throw new NotImplementedException();
     }
 
-    void ICommitListener.OnCommitted(Guid commitId)
+    void ICommitObserver.OnCommitted(Guid commitId)
     {
         if (_pendingCommits.TryRemove(commitId, out var tcs))
             tcs.TrySetResult();
     }
 
-    void ICommitListener.OnCommitRejected(Guid commitId, BsonValue rejection)
+    void ICommitObserver.OnCommitRejected(Guid commitId, BsonValue rejection)
     {
         if (!_pendingCommits.TryRemove(commitId, out var tcs))
             return;

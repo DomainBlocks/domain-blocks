@@ -9,18 +9,19 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
-public sealed class LeaseListener(
+public sealed class LeaseHandler(
     IMongoCollection<BsonDocument> requests,
-    IMongoCollection<BsonDocument> eventLog,
     IChangeStreamSubject<ChangeStreamDocument<BsonDocument>> changeStreamSubject,
-    LeaderOptions options,
+    IMongoCollection<BsonDocument> eventLog,
+    int queueCapacity,
+    int batchSize,
     ILoggerFactory loggerFactory) :
-    ILeaseListener
+    ILeaseHandler
 {
     private LeaderSession? _session;
-    private RequestPump? _requestPump;
+    private RequestFeeder? _requestFeeder;
 
-    public Task OnLeaseAcquiredAsync(ILeaseHandle<LeaseState> leaseHandle, CancellationToken ct)
+    public Task HandleLeaseAcquiredAsync(ILeaseHandle<LeaseState> leaseHandle, CancellationToken ct)
     {
         var leaseState = BsonSerializer.Deserialize<LeaseState>(leaseHandle.Snapshot.State);
 
@@ -31,7 +32,7 @@ public sealed class LeaseListener(
             loggerFactory.CreateLogger<EventLogWriter>());
 
         var requestChannel = Channel.CreateBounded<BsonDocument>(
-            new BoundedChannelOptions(options.QueueCapacity)
+            new BoundedChannelOptions(queueCapacity)
             {
                 SingleWriter = true,
                 SingleReader = true
@@ -41,26 +42,27 @@ public sealed class LeaseListener(
             leaseHandle,
             requestChannel.Reader,
             eventLogWriter,
-            options.BatchSize,
+            batchSize,
             loggerFactory.CreateLogger<LeaderSession>());
 
-        _requestPump = new RequestPump(
+        _requestFeeder = new RequestFeeder(
             requests,
             changeStreamSubject,
-            options,
-            loggerFactory.CreateLogger<RequestPump>());
+            queueCapacity,
+            batchSize,
+            loggerFactory.CreateLogger<RequestFeeder>());
 
-        _requestPump.Start(requestChannel.Writer);
+        _requestFeeder.Start(requestChannel.Writer);
 
         return Task.CompletedTask;
     }
 
-    public async Task OnLeaseLostAsync(LeaseClaim claim, LeaseLostInfo? info, CancellationToken ct)
+    public async Task HandleLeaseLostAsync(LeaseClaim claim, LeaseLostInfo? info, CancellationToken ct)
     {
         if (_session is not null)
-            await _session.DisposeAsync();
+            await _session.DisposeAsync().ConfigureAwait(false);
 
-        if (_requestPump is not null)
-            await _requestPump.DisposeAsync();
+        if (_requestFeeder is not null)
+            await _requestFeeder.DisposeAsync().ConfigureAwait(false);
     }
 }
