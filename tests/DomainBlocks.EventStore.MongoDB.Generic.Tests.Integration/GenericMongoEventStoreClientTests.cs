@@ -46,6 +46,6 @@ public class GenericMongoEventStoreClientTests : EventStoreClientTests
     [OneTimeTearDown]
     public void OneTimeTearDown()
     {
-        _mongoClient.Dispose();
+        //_mongoClient.Dispose();
     }
 }

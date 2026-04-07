@@ -10,7 +10,8 @@ public static class FieldPathResolver
     {
         var field = new ExpressionFieldDefinition<TDocument, TField>(expression);
         var serializer = BsonSerializer.SerializerRegistry.GetSerializer<TDocument>();
-        var args = new RenderArgs<TDocument>(serializer, BsonSerializer.SerializerRegistry);
-        return field.Render(args).FieldName;
+        //var args = new RenderArgs<TDocument>(serializer, BsonSerializer.SerializerRegistry);
+        //return field.Render(args).FieldName;
+        return field.Render(serializer, BsonSerializer.SerializerRegistry).FieldName;
     }
 }

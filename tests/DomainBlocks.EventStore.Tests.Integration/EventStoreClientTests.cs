@@ -52,7 +52,7 @@ public class EventStoreClientTests
             EventDocumentCodec = EventDocumentCodec.Create(EventCodec.Create(codecOptions))
         };
 
-        using var mongoClient = new MongoClient(MongoConnectionStrings.Default);
+        /*using*/ var mongoClient = new MongoClient(MongoConnectionStrings.Default);
         var client = new MongoEventStoreClient<object, EventDocument>(mongoClient, clientOptions);
 
         var orderId = Guid.NewGuid();

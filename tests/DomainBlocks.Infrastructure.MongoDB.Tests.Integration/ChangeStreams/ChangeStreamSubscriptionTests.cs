@@ -30,7 +30,7 @@ public class ChangeStreamSubscriptionTests
     public async Task OneTimeTearDown()
     {
         await _collection.Database.DropCollectionAsync("test_items");
-        _mongoClient.Dispose();
+        //_mongoClient.Dispose();
     }
 
     [Test]

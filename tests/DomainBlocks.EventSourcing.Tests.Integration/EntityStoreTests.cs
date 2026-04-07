@@ -64,7 +64,7 @@ public class EntityStoreTests
     [OneTimeTearDown]
     public void OneTimeTearDown()
     {
-        _mongoClient.Dispose();
+        //_mongoClient.Dispose();
     }
 
     [Test]

@@ -64,7 +64,7 @@ public class MongoSerializationTests
         TEvent @event,
         IObjectSerde<BsonValue> serde) where TEvent : class
     {
-        using var mongoClient = new MongoClient(MongoConnectionStrings.Default);
+        /*using*/ var mongoClient = new MongoClient(MongoConnectionStrings.Default);
 
         var client = CreateEventStoreClient(mongoClient, serde);
 

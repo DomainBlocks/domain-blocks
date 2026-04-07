@@ -68,7 +68,7 @@ public class ReadEventTransformTests
             EventDocumentCodec = EventDocumentCodec.Create(EventCodec.Create(codecOptions))
         };
 
-        using var mongoClient = new MongoClient(MongoConnectionStrings.Default);
+        /*using*/ var mongoClient = new MongoClient(MongoConnectionStrings.Default);
         var client = new MongoEventStoreClient<object, EventDocument>(mongoClient, options);
 
         var streamId = $"test-read-transform-{Guid.NewGuid()}";

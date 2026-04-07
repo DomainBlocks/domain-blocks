@@ -48,7 +48,7 @@ public class LeaseClientTests
     public async Task OneTimeTearDown()
     {
         await _leases.Database.DropCollectionAsync("test_leases");
-        _mongoClient.Dispose();
+        //_mongoClient.Dispose();
     }
 
     [Test]
