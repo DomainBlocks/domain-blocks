@@ -1,12 +1,15 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="MongoDB.Driver" Version="3.5.2"/>
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\DomainBlocks.EventStore.Abstractions\DomainBlocks.EventStore.Abstractions.csproj"/>
-    <ProjectReference Include="..\DomainBlocks.EventStore.Primitives\DomainBlocks.EventStore.Primitives.csproj"/>
     <ProjectReference Include="..\DomainBlocks.Infrastructure.MongoDB\DomainBlocks.Infrastructure.MongoDB.csproj"/>
   </ItemGroup>
 
