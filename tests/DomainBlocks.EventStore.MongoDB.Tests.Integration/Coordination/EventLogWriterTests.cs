@@ -51,7 +51,7 @@ public class EventLogWriterTests
     public async Task OneTimeTearDown()
     {
         await _mongoClient.DropDatabaseAsync(_options.DatabaseName);
-        //_mongoClient.Dispose();
+        _mongoClient.Dispose();
         _loggerFactory.Dispose();
     }
 
