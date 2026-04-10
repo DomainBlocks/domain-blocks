@@ -1,4 +1,4 @@
-﻿namespace DomainBlocks.Infrastructure.MongoDB.Leases;
+namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
 public enum LeaseLostReason
 {

@@ -1,6 +1,4 @@
 ﻿using System.Threading.Channels;
-using DomainBlocks.EventStore.MongoDB.Schema;
-using DomainBlocks.Infrastructure.MongoDB.Leases;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 
@@ -8,7 +6,7 @@ namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
 public sealed class LeaderSession : IAsyncDisposable
 {
-    private readonly ILeaseHandle<LeaseState> _leaseHandle;
+    private readonly Lease _lease;
     private readonly ChannelReader<BsonDocument> _requestReader;
     private readonly IEventLogWriter _eventLogWriter;
     private readonly int _batchSize;
@@ -18,20 +16,20 @@ public sealed class LeaderSession : IAsyncDisposable
     private readonly Task _runTask;
 
     public LeaderSession(
-        ILeaseHandle<LeaseState> leaseHandle,
+        Lease lease,
         ChannelReader<BsonDocument> requestReader,
         IEventLogWriter eventLogWriter,
         int batchSize,
         ILogger<LeaderSession> logger,
         CommitSubject? commitSubject = null)
     {
-        _leaseHandle = leaseHandle;
+        _lease = lease;
         _requestReader = requestReader;
         _eventLogWriter = eventLogWriter;
         _batchSize = batchSize;
         _logger = logger;
         _commitSubject = commitSubject;
-        _stopCts = CancellationTokenSource.CreateLinkedTokenSource(leaseHandle.LeaseLostToken);
+        _stopCts = CancellationTokenSource.CreateLinkedTokenSource(lease.LeaseLostToken);
         _runTask = RunAsync(_stopCts.Token);
     }
 
@@ -93,7 +91,7 @@ public sealed class LeaderSession : IAsyncDisposable
         if (result == EventLogWriteResult.Empty)
             return true;
 
-        var success = await _leaseHandle.TryAdvanceCommitPositionAsync(result.Count, ct).ConfigureAwait(false);
+        var success = await _lease.TryAdvanceCommitPositionAsync(result.Count, ct).ConfigureAwait(false);
 
         if (success && _commitSubject is not null)
             _commitSubject.Notify(result.AppendBatchRecorded);

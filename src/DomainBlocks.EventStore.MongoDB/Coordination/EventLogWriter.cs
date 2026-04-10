@@ -171,6 +171,8 @@ public sealed partial class EventLogWriter(
 
         if (HasCommits())
         {
+            var eventData = CreateBatchRecordedEventData();
+
             var writeModel = CreateEventWrite(
                 nextPosition++,
                 epoch,
@@ -178,7 +180,7 @@ public sealed partial class EventLogWriter(
                 0,
                 BsonEmptyGuid,
                 nameof(EventNames.AppendBatchRecorded),
-                CreateBatchRecordedEventData());
+                eventData);
 
             _replaceOneModels.Add(writeModel);
         }

@@ -1,10 +1,7 @@
 ﻿using System.Threading.Channels;
-using DomainBlocks.EventStore.MongoDB.Schema;
 using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
-using DomainBlocks.Infrastructure.MongoDB.Leases;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
-using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
@@ -21,14 +18,12 @@ public sealed class LeaseHandler(
     private LeaderSession? _session;
     private RequestFeeder? _requestFeeder;
 
-    public Task HandleLeaseAcquiredAsync(ILeaseHandle<LeaseState> leaseHandle, CancellationToken ct)
+    public Task HandleLeaseAcquiredAsync(Lease lease, CancellationToken cancellationToken)
     {
-        var leaseState = BsonSerializer.Deserialize<LeaseState>(leaseHandle.Snapshot.State);
-
         var eventLogWriter = new EventLogWriter(
             eventLog,
-            leaseHandle.Snapshot.Epoch,
-            leaseState.CommitPosition,
+            lease.Epoch,
+            lease.CommitPosition,
             loggerFactory.CreateLogger<EventLogWriter>());
 
         var requestChannel = Channel.CreateBounded<BsonDocument>(
@@ -39,7 +34,7 @@ public sealed class LeaseHandler(
             });
 
         _session = new LeaderSession(
-            leaseHandle,
+            lease,
             requestChannel.Reader,
             eventLogWriter,
             batchSize,
@@ -57,7 +52,7 @@ public sealed class LeaseHandler(
         return Task.CompletedTask;
     }
 
-    public async Task HandleLeaseLostAsync(LeaseClaim claim, LeaseLostInfo? info, CancellationToken ct)
+    public async Task HandleLeaseLostAsync(LeaseLostInfo lostInfo, CancellationToken cancellationToken)
     {
         if (_session is not null)
             await _session.DisposeAsync().ConfigureAwait(false);

@@ -1,82 +1,95 @@
-using DomainBlocks.EventStore.MongoDB.Schema;
-using DomainBlocks.Infrastructure.MongoDB.Leases;
 using Microsoft.Extensions.Logging;
 
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
-public sealed class LeaseContender(ILeaseClient leaseClient, ILogger<LeaseContender> logger)
+internal sealed class LeaseContender(
+    LeaseStore store,
+    ILogger<LeaseContender> logger,
+    TimeProvider? timeProvider = null)
 {
-    public const string ResourceId = "dbx_event_log_lease";
+    private static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan RenewInterval = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(5);
+
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     public async Task RunAsync(ILeaseHandler handler, CancellationToken cancellationToken = default)
     {
-        var options = new AcquireLeaseOptions
-        {
-            AcquireTimeout = Timeout.InfiniteTimeSpan
-        };
-
         while (!cancellationToken.IsCancellationRequested)
         {
-            var result = await leaseClient
-                .AcquireLeaseAsync<LeaseState>(ResourceId, options, cancellationToken)
-                .ConfigureAwait(false);
+            var lease = await AcquireAsync(cancellationToken).ConfigureAwait(false);
 
-            if (!result.IsAcquired)
-                continue; // Shouldn't happen with infinite timeout
-
-            var handle = result.Handle;
-
-            await using (handle.ConfigureAwait(false))
+            await using (lease.ConfigureAwait(false))
             {
-                await NotifyLeaseAcquiredAsync(handler, handle, cancellationToken).ConfigureAwait(false);
-
                 try
                 {
-                    var leaseLostInfo = await handle.LeaseLostTask.WaitAsync(cancellationToken).ConfigureAwait(false);
+                    await InvokeHandleLeaseAcquiredAsync(handler, lease, cancellationToken).ConfigureAwait(false);
 
-                    await NotifyLeaseLostAsync(handler, handle.Claim, leaseLostInfo, cancellationToken)
-                        .ConfigureAwait(false);
+                    var lostInfo = await lease.LeaseLostTask.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+                    await InvokeHandleLeaseLostAsync(handler, lostInfo, cancellationToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
-                    logger.LogDebug("Lease contender canceled");
-                }
-                finally
-                {
-                    await handle.DisposeAsync().ConfigureAwait(false);
+                    logger.LogDebug("Log lease contender cancelled");
                 }
             }
         }
     }
 
-    private async Task NotifyLeaseAcquiredAsync(
-        ILeaseHandler handler,
-        ILeaseHandle<LeaseState> handle,
-        CancellationToken cancellationToken)
+    private async Task<Lease> AcquireAsync(CancellationToken cancellationToken)
     {
-        try
+        while (true)
         {
-            await handler.HandleLeaseAcquiredAsync(handle, cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error invoking OnLeaseAcquiredAsync");
+            cancellationToken.ThrowIfCancellationRequested();
+
+            logger.LogDebug("Attempting to acquire log lease");
+
+            var doc = await store
+                .AcquireAsync(Environment.MachineName, LeaseDuration, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (doc is not null)
+            {
+                logger.LogInformation(
+                    "Log lease acquired (epoch {Epoch}, commitPosition {CommitPosition})",
+                    doc.Epoch, doc.CommitPosition);
+
+                return new Lease(doc, store, LeaseDuration, RenewInterval, logger, _timeProvider);
+            }
+
+            logger.LogDebug("Log lease held elsewhere; retrying in {Delay}", RetryDelay);
+            await _timeProvider.Delay(RetryDelay, cancellationToken).ConfigureAwait(false);
         }
     }
 
-    private async Task NotifyLeaseLostAsync(
+    private async Task InvokeHandleLeaseAcquiredAsync(
         ILeaseHandler handler,
-        LeaseClaim leaseClaim,
-        LeaseLostInfo? leaseLostInfo,
+        Lease lease,
         CancellationToken cancellationToken)
     {
         try
         {
-            await handler.HandleLeaseLostAsync(leaseClaim, leaseLostInfo, cancellationToken).ConfigureAwait(false);
+            await handler.HandleLeaseAcquiredAsync(lease, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error invoking NotifyLeaseLostAsync");
+            logger.LogError(ex, $"{nameof(ILeaseHandler.HandleLeaseAcquiredAsync)} invocation failed");
+        }
+    }
+
+    private async Task InvokeHandleLeaseLostAsync(
+        ILeaseHandler handler,
+        LeaseLostInfo info,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await handler.HandleLeaseLostAsync(info, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, $"{nameof(ILeaseHandler.HandleLeaseLostAsync)} invocation failed");
         }
     }
 }

@@ -1,9 +1,9 @@
 ﻿using DomainBlocks.EventStore.MongoDB.Schema;
 using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
-using DomainBlocks.Infrastructure.MongoDB.Leases;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using LeaseDocument = DomainBlocks.EventStore.MongoDB.Schema.LeaseDocument;
 
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
@@ -13,11 +13,6 @@ public sealed class CommitTracker(
     ILogger<CommitTracker> logger) :
     IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>
 {
-    private const string CommitPositionFieldPath =
-        $"{LeaseDocument.FieldNames.State}.{LeaseState.FieldNames.CommitPosition}";
-
-    private const string EpochFieldPath = LeaseDocument.FieldNames.Epoch;
-
     private readonly CollectionNamespace _eventLogNs = new(options.DatabaseName, options.EventLogCollectionName);
 
     private readonly CollectionNamespace _leasesNs = new(options.DatabaseName, options.LeasesCollectionName);
@@ -83,8 +78,8 @@ public sealed class CommitTracker(
             return;
 
         // Only care about the log lease.
-        var resourceId = change.DocumentKey["_id"].AsString;
-        if (resourceId != LeaseContender.ResourceId)
+        var id = change.DocumentKey["_id"].AsString;
+        if (id != LeaseDocument.LeaseId)
             return;
 
         var updatedFields = change.UpdateDescription?.UpdatedFields;
@@ -92,33 +87,31 @@ public sealed class CommitTracker(
             return;
 
         // Detect epoch transitions and purge stale buffered batches.
-        if (updatedFields.Contains(EpochFieldPath))
+        if (updatedFields.TryGetValue(LeaseDocument.FieldNames.Epoch, out var e))
         {
-            var epoch = updatedFields[EpochFieldPath].AsInt64;
+            var epoch = e.AsInt64;
 
             if (!_currentEpoch.HasValue || epoch > _currentEpoch.Value)
             {
                 _currentEpoch = epoch;
-                PurgeStaleBatches(epoch);
+                PurgeStaleBatches();
             }
         }
 
         // Advance commit position if present.
-        if (!updatedFields.Contains(CommitPositionFieldPath))
+        if (!updatedFields.TryGetValue(LeaseDocument.FieldNames.CommitPosition, out var commitPosition))
             return;
 
-        var commitPosition = updatedFields[CommitPositionFieldPath].AsInt64;
-
-        FlushUpTo(commitPosition);
+        FlushUpTo(commitPosition.AsInt64);
     }
 
-    private void PurgeStaleBatches(long currentEpoch)
+    private void PurgeStaleBatches()
     {
         var toRemove = new List<long>();
 
         foreach (var (position, batch) in _recordedBatches)
         {
-            if (batch.Epoch < currentEpoch)
+            if (batch.Epoch < _currentEpoch)
                 toRemove.Add(position);
         }
 

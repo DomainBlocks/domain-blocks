@@ -19,23 +19,27 @@ public sealed class CommitSubject(ILogger<CommitSubject> logger)
 
     public void Notify(BsonValue appendBatchRecorded)
     {
+        var observersSnapshot = _observers;
+        if (observersSnapshot.IsEmpty)
+            return;
+
         var appendedCommitIds = appendBatchRecorded[AppendBatchRecorded.FieldNames.AppendedCommitIds].AsBsonArray;
         var duplicateCommitIds = appendBatchRecorded[AppendBatchRecorded.FieldNames.DuplicateCommitIds].AsBsonArray;
         var rejections = appendBatchRecorded[AppendBatchRecorded.FieldNames.Rejections].AsBsonArray;
 
         foreach (var commitId in appendedCommitIds.Concat(duplicateCommitIds))
-            NotifyCommitted(commitId.AsGuid);
+            NotifyCommitted(commitId.AsGuid, observersSnapshot);
 
         foreach (var rejection in rejections)
         {
             var commitId = rejection[CommitRejection.FieldNames.CommitId].AsGuid;
-            NotifyCommitRejected(commitId, rejection);
+            NotifyCommitRejected(commitId, rejection, observersSnapshot);
         }
     }
 
-    private void NotifyCommitted(Guid commitId)
+    private void NotifyCommitted(Guid commitId, ImmutableArray<ICommitObserver> observers)
     {
-        foreach (var observer in _observers)
+        foreach (var observer in observers)
         {
             try
             {
@@ -48,9 +52,9 @@ public sealed class CommitSubject(ILogger<CommitSubject> logger)
         }
     }
 
-    private void NotifyCommitRejected(Guid commitId, BsonValue rejection)
+    private void NotifyCommitRejected(Guid commitId, BsonValue rejection, ImmutableArray<ICommitObserver> observers)
     {
-        foreach (var observer in _observers)
+        foreach (var observer in observers)
         {
             try
             {

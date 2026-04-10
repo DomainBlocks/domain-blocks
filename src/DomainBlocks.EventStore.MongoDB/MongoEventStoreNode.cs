@@ -4,7 +4,6 @@ using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB.Coordination;
 using DomainBlocks.EventStore.MongoDB.Schema;
 using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
-using DomainBlocks.Infrastructure.MongoDB.Leases;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -83,8 +82,7 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
         if (_options.NodeRole.HasFlag(NodeRole.Leader))
         {
             var leaseStore = new LeaseStore(_leases);
-            var leaseClient = new LeaseClient(leaseStore, _loggerFactory.CreateLogger<LeaseClient>());
-            var leaseContender = new LeaseContender(leaseClient, _loggerFactory.CreateLogger<LeaseContender>());
+            var leaseContender = new LeaseContender(leaseStore, _loggerFactory.CreateLogger<LeaseContender>());
 
             var leaseHandler = new LeaseHandler(
                 _requests,
