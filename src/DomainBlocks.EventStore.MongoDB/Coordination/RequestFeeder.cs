@@ -1,5 +1,4 @@
 using System.Threading.Channels;
-using DomainBlocks.EventStore.MongoDB.Schema;
 using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
@@ -7,9 +6,7 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
-internal sealed class RequestFeeder :
-    IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>,
-    IAsyncDisposable
+internal sealed class RequestFeeder : IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>, IAsyncDisposable
 {
     private readonly IMongoCollection<BsonDocument> _requests;
     private readonly IChangeStreamSubject<ChangeStreamDocument<BsonDocument>> _changeStreamSubject;
@@ -91,8 +88,8 @@ internal sealed class RequestFeeder :
     {
         _logger.LogInformation("Catch-up phase starting");
 
-        var sort = Builders<BsonDocument>.Sort.Ascending(AppendRequest.FieldNames.CreatedAtUtc);
-        var seenCommitIds = new HashSet<BsonValue>();
+        var sort = Builders<BsonDocument>.Sort.Ascending("_id");
+        BsonValue? lastSeenId = null;
 
         try
         {
@@ -100,8 +97,8 @@ internal sealed class RequestFeeder :
             {
                 ct.ThrowIfCancellationRequested();
 
-                var filter = seenCommitIds.Count > 0
-                    ? Builders<BsonDocument>.Filter.Nin(AppendRequest.FieldNames.CommitId, seenCommitIds)
+                var filter = lastSeenId is not null
+                    ? Builders<BsonDocument>.Filter.Gt("_id", lastSeenId)
                     : FilterDefinition<BsonDocument>.Empty;
 
                 var batch = await _requests
@@ -116,7 +113,7 @@ internal sealed class RequestFeeder :
 
                 foreach (var request in batch)
                 {
-                    seenCommitIds.Add(request[AppendRequest.FieldNames.CommitId]);
+                    lastSeenId = request["_id"];
                     await _catchUpChannel.Writer.WriteAsync(request, ct).ConfigureAwait(false);
                 }
             }

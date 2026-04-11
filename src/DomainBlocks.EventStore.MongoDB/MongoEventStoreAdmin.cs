@@ -41,9 +41,8 @@ public static class MongoEventStoreAdmin
 
         CreateIndexModel<EventLogEntry>[] indexModels =
         [
-            new(builder.Ascending(x => x.Epoch)),
-            new(builder.Ascending(x => x.StreamId).Ascending(x => x.StreamVersion)),
-            new(builder.Ascending(x => x.CommitId))
+            new(builder.Ascending(x => x.StreamId).Ascending(x => x.Epoch).Ascending(x => x.StreamVersion)),
+            new(builder.Ascending(x => x.CommitId).Ascending(x => x.Epoch))
         ];
 
         return appendRequests.Indexes.CreateManyAsync(indexModels, cancellationToken);

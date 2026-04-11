@@ -27,7 +27,7 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
     private readonly CancellationTokenSource _stopCts = new();
     private IChangeStreamSubject? _changeStreamSubject;
     private IChangeStreamConnection? _changeStreamConnection;
-    private Task? _insertRequestsTask;
+    private Task? _publishRequestsTask;
     private Task? _leaseContenderTask;
     private int _started;
     private int _disposed;
@@ -40,12 +40,13 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
         if (options.NodeRole is NodeRole.None)
             throw new ArgumentException("NodeRole must be specified.", nameof(options));
 
-        _database = mongoClient.GetDatabase(options.DatabaseName);
-
-        _requests = _database
-            .GetCollection<BsonDocument>(options.RequestsCollectionName)
+        _database = mongoClient
+            .GetDatabase(options.DatabaseName)
+            .WithReadConcern(ReadConcern.Majority)
+            .WithReadPreference(ReadPreference.Primary)
             .WithWriteConcern(WriteConcern.WMajority.With(journal: true));
 
+        _requests = _database.GetCollection<BsonDocument>(options.RequestsCollectionName);
         _eventLog = _database.GetCollection<BsonDocument>(options.EventLogCollectionName);
         _leases = _database.GetCollection<LeaseDocument>(options.LeasesCollectionName);
 
@@ -74,10 +75,12 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stopCts.Token);
 
         _changeStreamSubject = await CreateChangeStreamSubjectAsync(linkedCts.Token);
-        _changeStreamSubject.Attach(_commitTracker);
 
         if (_options.NodeRole.HasFlag(NodeRole.Client))
-            _insertRequestsTask = InsertRequestsAsync(_requestChannel.Reader, _stopCts.Token);
+        {
+            _changeStreamSubject.Attach(_commitTracker);
+            _publishRequestsTask = PublishRequestsAsync(_requestChannel.Reader, _stopCts.Token);
+        }
 
         if (_options.NodeRole.HasFlag(NodeRole.Leader))
         {
@@ -130,8 +133,8 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
 
             await _stopCts.CancelAsync().ConfigureAwait(false);
 
-            if (_insertRequestsTask is not null)
-                await _insertRequestsTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            if (_publishRequestsTask is not null)
+                await _publishRequestsTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
             if (_leaseContenderTask is not null)
                 await _leaseContenderTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
@@ -181,7 +184,7 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
             cancellationToken: cancellationToken);
     }
 
-    private async Task InsertRequestsAsync(ChannelReader<BsonDocument> reader, CancellationToken ct)
+    private async Task PublishRequestsAsync(ChannelReader<BsonDocument> reader, CancellationToken ct)
     {
         var batchSize = _options.RequestBatchSize;
         var batch = new List<BsonDocument>(batchSize);

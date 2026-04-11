@@ -70,6 +70,10 @@ public class MongoEventStoreClient<TEvent>(
         {
             throw new TimeoutException($"Append request did not complete within {options.Timeout}.");
         }
+        finally
+        {
+            _pendingCommits.TryRemove(options.CommitId, out _);
+        }
     }
 
     public IAsyncEnumerable<ReadEvent<TEvent>> ReadStreamAsync(
@@ -82,13 +86,13 @@ public class MongoEventStoreClient<TEvent>(
 
     void ICommitObserver.OnCommitted(Guid commitId)
     {
-        if (_pendingCommits.TryRemove(commitId, out var tcs))
+        if (_pendingCommits.TryGetValue(commitId, out var tcs))
             tcs.TrySetResult();
     }
 
     void ICommitObserver.OnConflictRejected(Guid commitId, BsonValue conflict)
     {
-        if (!_pendingCommits.TryRemove(commitId, out var tcs))
+        if (!_pendingCommits.TryGetValue(commitId, out var tcs))
             return;
 
         var streamId = conflict[AppendConflict.FieldNames.StreamId].AsString;

@@ -61,14 +61,14 @@ public partial class EventLogWriter
             GroupByStreamStage
         };
 
-        var duplicatesTask = _eventLog
+        var duplicatesTask = eventLog
             .Distinct<BsonValue>(
                 EventLogEntry.FieldNames.CommitId,
                 commitIdFilter,
                 cancellationToken: cancellationToken)
             .ForEachAsync(x => _duplicateCommitIds.Add(x.AsGuid), cancellationToken);
 
-        var versionsTask = _eventLog
+        var versionsTask = eventLog
             .Aggregate<BsonDocument>(maxStreamVersionsPipeline, cancellationToken: cancellationToken)
             .ForEachAsync(x => _headStreamVersions[x["_id"].AsString] = x["version"].AsInt64, cancellationToken);
 

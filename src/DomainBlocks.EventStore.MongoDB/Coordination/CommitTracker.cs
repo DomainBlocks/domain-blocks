@@ -16,6 +16,7 @@ public sealed partial class CommitTracker(
     private readonly CollectionNamespace _eventLogNs = new(options.DatabaseName, options.EventLogCollectionName);
     private readonly CollectionNamespace _leasesNs = new(options.DatabaseName, options.LeasesCollectionName);
     private readonly SortedDictionary<long, PendingEntry> _pendingEntries = [];
+    private readonly List<long> _positionsBuffer = [];
     private long? _currentEpoch;
 
     ValueTask IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>.OnNextAsync(
@@ -131,28 +132,28 @@ public sealed partial class CommitTracker(
 
     private void PurgeStaleEntries()
     {
-        var stalePositions = new List<long>();
+        _positionsBuffer.Clear();
 
         foreach (var (position, entry) in _pendingEntries)
         {
             if (entry.Epoch < _currentEpoch)
-                stalePositions.Add(position);
+                _positionsBuffer.Add(position);
         }
 
-        foreach (var position in stalePositions)
+        foreach (var position in _positionsBuffer)
             _pendingEntries.Remove(position);
     }
 
     private void FlushUpTo(long commitPosition)
     {
-        var flushedPositions = new List<long>();
+        _positionsBuffer.Clear();
 
         foreach (var (position, entry) in _pendingEntries)
         {
             if (position > commitPosition)
                 break;
 
-            flushedPositions.Add(position);
+            _positionsBuffer.Add(position);
 
             // Skip stale entries that slipped through before purge.
             if (_currentEpoch.HasValue && entry.Epoch < _currentEpoch.Value)
@@ -166,7 +167,7 @@ public sealed partial class CommitTracker(
                 commitSubject.NotifyConflictsRejected(entry.EventData!);
         }
 
-        foreach (var position in flushedPositions)
+        foreach (var position in _positionsBuffer)
             _pendingEntries.Remove(position);
     }
 

@@ -16,11 +16,6 @@ public sealed partial class EventLogWriter(
 {
     private static readonly BulkWriteOptions OrderedBulkWriteOptions = new() { IsOrdered = true };
 
-    private readonly IMongoCollection<BsonDocument> _eventLog = eventLog
-        .WithReadConcern(ReadConcern.Majority)
-        .WithReadPreference(ReadPreference.Primary)
-        .WithWriteConcern(WriteConcern.WMajority.With(journal: true));
-
     // Reused buffers
     private readonly List<BsonDocument> _requests = [];
     private readonly HashSet<Guid> _appendedCommitIds = [];
@@ -68,8 +63,7 @@ public sealed partial class EventLogWriter(
                 return EventLogWriteResult.Empty;
             }
 
-            await _eventLog.BulkWriteAsync(_writes, OrderedBulkWriteOptions, cancellationToken)
-                .ConfigureAwait(false);
+            await eventLog.BulkWriteAsync(_writes, OrderedBulkWriteOptions, cancellationToken).ConfigureAwait(false);
 
             var startPosition = _nextPosition;
             _nextPosition += _writes.Count;
@@ -105,6 +99,7 @@ public sealed partial class EventLogWriter(
     {
         BsonDocument? duplicatesSkippedData = null;
         BsonDocument? conflictsRejectedData = null;
+        var writtenAtUtc = DateTime.UtcNow;
 
         foreach (var request in _requests)
         {
@@ -159,7 +154,8 @@ public sealed partial class EventLogWriter(
                     ++streamVersion,
                     bsonCommitId,
                     commitIndex++,
-                    e.AsBsonDocument);
+                    e.AsBsonDocument,
+                    writtenAtUtc);
 
                 _writes.Add(replaceOneModel);
             }
@@ -173,14 +169,16 @@ public sealed partial class EventLogWriter(
             duplicatesSkippedData = CreateDuplicatesSkippedData();
 
             var replaceOneModel = CreateReplaceOneModel(
-                position: _nextPosition + _writes.Count,
-                epoch: epoch,
-                streamId: BsonString.Empty,
-                streamVersion: 0,
-                commitId: BsonNull.Value,
-                commitIndex: 0,
-                eventName: nameof(EventNames.DuplicatesSkipped),
-                eventData: duplicatesSkippedData);
+                _nextPosition + _writes.Count,
+                epoch,
+                BsonString.Empty,
+                0,
+                BsonNull.Value,
+                0,
+                nameof(EventNames.DuplicatesSkipped),
+                duplicatesSkippedData,
+                BsonNull.Value,
+                writtenAtUtc);
 
             _writes.Add(replaceOneModel);
         }
@@ -190,14 +188,16 @@ public sealed partial class EventLogWriter(
             conflictsRejectedData = CreateConflictsRejectedData();
 
             var replaceOneModel = CreateReplaceOneModel(
-                position: _nextPosition + _writes.Count,
-                epoch: epoch,
+                _nextPosition + _writes.Count,
+                epoch,
                 streamId: BsonString.Empty,
                 streamVersion: 0,
                 commitId: BsonNull.Value,
                 commitIndex: 0,
-                eventName: nameof(EventNames.ConflictsRejected),
-                eventData: conflictsRejectedData);
+                nameof(EventNames.ConflictsRejected),
+                conflictsRejectedData,
+                metadata: BsonNull.Value,
+                writtenAtUtc);
 
             _writes.Add(replaceOneModel);
         }
@@ -217,7 +217,8 @@ public sealed partial class EventLogWriter(
         long streamVersion,
         BsonValue commitId,
         int commitIndex,
-        BsonDocument pendingEvent)
+        BsonDocument pendingEvent,
+        DateTime writtenAtUtc)
     {
         return CreateReplaceOneModel(
             position,
@@ -228,7 +229,8 @@ public sealed partial class EventLogWriter(
             commitIndex,
             pendingEvent[PendingEvent.FieldNames.EventName],
             pendingEvent[PendingEvent.FieldNames.EventData],
-            pendingEvent[PendingEvent.FieldNames.Metadata]);
+            pendingEvent[PendingEvent.FieldNames.Metadata],
+            writtenAtUtc);
     }
 
     private static ReplaceOneModel<BsonDocument> CreateReplaceOneModel(
@@ -240,7 +242,8 @@ public sealed partial class EventLogWriter(
         int commitIndex,
         BsonValue eventName,
         BsonValue eventData,
-        BsonValue? metadata = null)
+        BsonValue metadata,
+        DateTime writtenAtUtc)
     {
         var filter = new BsonDocument
         {
@@ -258,8 +261,8 @@ public sealed partial class EventLogWriter(
             { EventLogEntry.FieldNames.CommitIndex, commitIndex },
             { EventLogEntry.FieldNames.EventName, eventName },
             { EventLogEntry.FieldNames.EventData, eventData },
-            { EventLogEntry.FieldNames.Metadata, metadata ?? BsonNull.Value },
-            { EventLogEntry.FieldNames.WrittenAtUtc, DateTime.UtcNow }
+            { EventLogEntry.FieldNames.Metadata, metadata },
+            { EventLogEntry.FieldNames.WrittenAtUtc, writtenAtUtc }
         };
 
         return new ReplaceOneModel<BsonDocument>(filter, replacement) { IsUpsert = true };
