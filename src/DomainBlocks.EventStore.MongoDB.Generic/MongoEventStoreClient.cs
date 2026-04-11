@@ -31,7 +31,7 @@ public class MongoEventStoreClient<TEvent, TEventDocument> : IEventStoreClient<T
         AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        options ??= AppendToStreamOptions.Default;
+        options ??= new AppendToStreamOptions();
         var expectedState = options.ExpectedState;
 
         var currentState = await GetStreamStateAsync(streamId, cancellationToken).ConfigureAwait(false);

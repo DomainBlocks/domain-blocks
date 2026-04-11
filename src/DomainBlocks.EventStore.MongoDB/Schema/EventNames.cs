@@ -2,5 +2,6 @@
 
 public static class EventNames
 {
-    public const string AppendBatchRecorded = "AppendBatchRecorded";
+    public const string DuplicatesSkipped = "DuplicatesSkipped";
+    public const string ConflictsRejected = "ConflictsRejected";
 }

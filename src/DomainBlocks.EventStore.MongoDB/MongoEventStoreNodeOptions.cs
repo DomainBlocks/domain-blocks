@@ -21,7 +21,7 @@ public sealed class MongoEventStoreNodeOptions
 
     public int RequestBatchSize { get; set; } = 500;
 
-    public int IngestQueueCapacity { get; set; } = 1_000;
+    public int WriteQueueCapacity { get; set; } = 1_000;
 
-    public int IngestBatchSize { get; set; } = 500;
+    public int WriteBatchSize { get; set; } = 500;
 }

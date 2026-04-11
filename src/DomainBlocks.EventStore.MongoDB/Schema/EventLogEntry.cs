@@ -22,6 +22,9 @@ public sealed class EventLogEntry
     [BsonGuidRepresentation(GuidRepresentation.Standard)]
     public required Guid CommitId { get; init; }
 
+    [BsonElement(FieldNames.CommitIndex)]
+    public required int CommitIndex { get; init; }
+
     [BsonElement(FieldNames.EventName)]
     public required string EventName { get; init; }
 
@@ -40,6 +43,7 @@ public sealed class EventLogEntry
         public const string StreamId = "streamId";
         public const string StreamVersion = "streamVersion";
         public const string CommitId = "commitId";
+        public const string CommitIndex = "commitIndex";
         public const string EventName = "eventName";
         public const string EventData = "eventData";
         public const string Metadata = "metadata";

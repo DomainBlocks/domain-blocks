@@ -28,7 +28,7 @@ public class MongoEventStoreClient<TEvent>(
         AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        options ??= AppendToStreamOptions.Default;
+        options ??= new AppendToStreamOptions();
 
         var eventsArray = new BsonArray(
             _eventEncoder
@@ -86,14 +86,14 @@ public class MongoEventStoreClient<TEvent>(
             tcs.TrySetResult();
     }
 
-    void ICommitObserver.OnCommitRejected(Guid commitId, BsonValue rejection)
+    void ICommitObserver.OnConflictRejected(Guid commitId, BsonValue conflict)
     {
         if (!_pendingCommits.TryRemove(commitId, out var tcs))
             return;
 
-        var streamId = rejection[CommitRejection.FieldNames.StreamId].AsString;
-        var expectedStreamState = rejection[CommitRejection.FieldNames.ExpectedStreamState].ToExpectedStreamState();
-        var actualStreamState = rejection[CommitRejection.FieldNames.ActualStreamState].ToStreamState();
+        var streamId = conflict[AppendConflict.FieldNames.StreamId].AsString;
+        var expectedStreamState = conflict[AppendConflict.FieldNames.ExpectedStreamState].ToExpectedStreamState();
+        var actualStreamState = conflict[AppendConflict.FieldNames.ActualStreamState].ToStreamState();
 
         tcs.TrySetException(new StreamAppendConflictException(streamId, expectedStreamState, actualStreamState));
     }

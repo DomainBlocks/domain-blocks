@@ -11,7 +11,6 @@ public sealed class LeaderSession : IAsyncDisposable
     private readonly IEventLogWriter _eventLogWriter;
     private readonly int _batchSize;
     private readonly ILogger _logger;
-    private readonly CommitSubject? _commitSubject;
     private readonly CancellationTokenSource _stopCts;
     private readonly Task _runTask;
 
@@ -20,15 +19,13 @@ public sealed class LeaderSession : IAsyncDisposable
         ChannelReader<BsonDocument> requestReader,
         IEventLogWriter eventLogWriter,
         int batchSize,
-        ILogger<LeaderSession> logger,
-        CommitSubject? commitSubject = null)
+        ILogger<LeaderSession> logger)
     {
         _lease = lease;
         _requestReader = requestReader;
         _eventLogWriter = eventLogWriter;
         _batchSize = batchSize;
         _logger = logger;
-        _commitSubject = commitSubject;
         _stopCts = CancellationTokenSource.CreateLinkedTokenSource(lease.LeaseLostToken);
         _runTask = RunAsync(_stopCts.Token);
     }
@@ -92,9 +89,6 @@ public sealed class LeaderSession : IAsyncDisposable
             return true;
 
         var success = await _lease.TryAdvanceCommitPositionAsync(result.Count, ct).ConfigureAwait(false);
-
-        if (success && _commitSubject is not null)
-            _commitSubject.Notify(result.AppendBatchRecorded);
 
         if (!success)
             _logger.LogWarning("Failed to advance commit position by {Count}", result.Count);

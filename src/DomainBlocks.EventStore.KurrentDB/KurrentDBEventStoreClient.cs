@@ -21,7 +21,7 @@ public class KurrentDBEventStoreClient<TEvent>(
         AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        options ??= AppendToStreamOptions.Default;
+        options ??= new AppendToStreamOptions();
         var kurrentExpectedState = ToKurrentStreamState(options.ExpectedState);
 
         var eventData = eventEncoder

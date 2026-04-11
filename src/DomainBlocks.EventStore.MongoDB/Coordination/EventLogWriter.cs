@@ -15,7 +15,6 @@ public sealed partial class EventLogWriter(
     IEventLogWriter
 {
     private static readonly BulkWriteOptions OrderedBulkWriteOptions = new() { IsOrdered = true };
-    private static readonly BsonBinaryData BsonEmptyGuid = new(Guid.Empty, GuidRepresentation.Standard);
 
     private readonly IMongoCollection<BsonDocument> _eventLog = eventLog
         .WithReadConcern(ReadConcern.Majority)
@@ -26,9 +25,9 @@ public sealed partial class EventLogWriter(
     private readonly List<BsonDocument> _requests = [];
     private readonly HashSet<Guid> _appendedCommitIds = [];
     private readonly HashSet<Guid> _duplicateCommitIds = [];
-    private readonly Dictionary<Guid, BsonDocument> _commitRejections = [];
+    private readonly Dictionary<Guid, BsonDocument> _conflicts = [];
     private readonly Dictionary<string, long> _headStreamVersions = [];
-    private readonly List<ReplaceOneModel<BsonDocument>> _replaceOneModels = [];
+    private readonly List<ReplaceOneModel<BsonDocument>> _writes = [];
 
     private bool _isPrepared;
     private Task _prepareTask = Task.CompletedTask;
@@ -61,33 +60,30 @@ public sealed partial class EventLogWriter(
 
             await _prepareTask.ConfigureAwait(false);
 
-            var nextPosition = BuildReplaceOneModels();
+            var (duplicatesSkipped, conflictsRejected) = CreateWrites();
 
-            if (_replaceOneModels.Count == 0)
+            if (_writes.Count == 0)
             {
                 logger.LogDebug("Batch produced no writes; skipping");
                 return EventLogWriteResult.Empty;
             }
 
-            await _eventLog.BulkWriteAsync(_replaceOneModels, OrderedBulkWriteOptions, cancellationToken)
+            await _eventLog.BulkWriteAsync(_writes, OrderedBulkWriteOptions, cancellationToken)
                 .ConfigureAwait(false);
 
             var startPosition = _nextPosition;
-            _nextPosition = nextPosition;
+            _nextPosition += _writes.Count;
 
             logger.LogInformation(
                 "Batch appended: positions {StartPosition}–{EndPosition}, " +
                 "{AppendCount} appended, {DuplicateCount} duplicate(s), {RejectionCount} rejected",
                 startPosition,
-                nextPosition - 1,
+                _nextPosition - 1,
                 _appendedCommitIds.Count,
                 _duplicateCommitIds.Count,
-                _commitRejections.Count);
+                _conflicts.Count);
 
-            var count = nextPosition - startPosition;
-            var appendBatchRecorded = _replaceOneModels[^1].Replacement[EventLogEntry.FieldNames.EventData];
-
-            return new EventLogWriteResult(startPosition, count, appendBatchRecorded);
+            return new EventLogWriteResult(startPosition, _writes.Count, duplicatesSkipped, conflictsRejected);
         }
         finally
         {
@@ -100,14 +96,15 @@ public sealed partial class EventLogWriter(
         _requests.Clear();
         _appendedCommitIds.Clear();
         _duplicateCommitIds.Clear();
-        _commitRejections.Clear();
+        _conflicts.Clear();
         _headStreamVersions.Clear();
-        _replaceOneModels.Clear();
+        _writes.Clear();
     }
 
-    private long BuildReplaceOneModels()
+    private (BsonDocument? DuplicatesSkipped, BsonDocument? ConflictsRejected) CreateWrites()
     {
-        var nextPosition = _nextPosition;
+        BsonDocument? duplicatesSkippedData = null;
+        BsonDocument? conflictsRejectedData = null;
 
         foreach (var request in _requests)
         {
@@ -141,88 +138,106 @@ public sealed partial class EventLogWriter(
                     expectedStreamState,
                     actualStreamState);
 
-                var rejection = CreateCommitRejection(
+                var conflict = CreateConflict(
                     commitId,
                     bsonStreamId,
                     bsonExpectedStreamState,
-                    actualStreamState);
+                    BsonDocument.From(actualStreamState));
 
-                _commitRejections.Add(commitId, rejection);
+                _conflicts.Add(commitId, conflict);
 
                 continue;
             }
 
-            foreach (var @event in events)
+            var commitIndex = 0;
+            foreach (var e in events)
             {
-                var writeModel = CreateEventWrite(
-                    nextPosition++,
+                var replaceOneModel = CreateReplaceOneModel(
+                    _nextPosition + _writes.Count,
                     epoch,
                     bsonStreamId,
                     ++streamVersion,
                     bsonCommitId,
-                    @event.AsBsonDocument);
+                    commitIndex++,
+                    e.AsBsonDocument);
 
-                _replaceOneModels.Add(writeModel);
+                _writes.Add(replaceOneModel);
             }
 
             _headStreamVersions[streamId] = streamVersion;
             _appendedCommitIds.Add(commitId);
         }
 
-        if (HasCommits())
+        if (_duplicateCommitIds.Count > 0)
         {
-            var eventData = CreateBatchRecordedEventData();
+            duplicatesSkippedData = CreateDuplicatesSkippedData();
 
-            var writeModel = CreateEventWrite(
-                nextPosition++,
-                epoch,
-                BsonString.Empty,
-                0,
-                BsonEmptyGuid,
-                nameof(EventNames.AppendBatchRecorded),
-                eventData);
+            var replaceOneModel = CreateReplaceOneModel(
+                position: _nextPosition + _writes.Count,
+                epoch: epoch,
+                streamId: BsonString.Empty,
+                streamVersion: 0,
+                commitId: BsonNull.Value,
+                commitIndex: 0,
+                eventName: nameof(EventNames.DuplicatesSkipped),
+                eventData: duplicatesSkippedData);
 
-            _replaceOneModels.Add(writeModel);
+            _writes.Add(replaceOneModel);
         }
 
-        return nextPosition;
+        if (_conflicts.Count > 0)
+        {
+            conflictsRejectedData = CreateConflictsRejectedData();
+
+            var replaceOneModel = CreateReplaceOneModel(
+                position: _nextPosition + _writes.Count,
+                epoch: epoch,
+                streamId: BsonString.Empty,
+                streamVersion: 0,
+                commitId: BsonNull.Value,
+                commitIndex: 0,
+                eventName: nameof(EventNames.ConflictsRejected),
+                eventData: conflictsRejectedData);
+
+            _writes.Add(replaceOneModel);
+        }
+
+        return (duplicatesSkippedData, conflictsRejectedData);
 
         bool IsProcessed(Guid id) =>
             _appendedCommitIds.Contains(id) ||
             _duplicateCommitIds.Contains(id) ||
-            _commitRejections.ContainsKey(id);
-
-        bool HasCommits() =>
-            _appendedCommitIds.Count > 0 ||
-            _duplicateCommitIds.Count > 0 ||
-            _commitRejections.Count > 0;
+            _conflicts.ContainsKey(id);
     }
 
-    private static ReplaceOneModel<BsonDocument> CreateEventWrite(
+    private static ReplaceOneModel<BsonDocument> CreateReplaceOneModel(
         long position,
         long epoch,
         BsonValue streamId,
         long streamVersion,
         BsonValue commitId,
+        int commitIndex,
         BsonDocument pendingEvent)
     {
-        return CreateEventWrite(
+        return CreateReplaceOneModel(
             position,
             epoch,
             streamId,
             streamVersion,
             commitId,
+            commitIndex,
             pendingEvent[PendingEvent.FieldNames.EventName],
             pendingEvent[PendingEvent.FieldNames.EventData],
             pendingEvent[PendingEvent.FieldNames.Metadata]);
     }
 
-    private static ReplaceOneModel<BsonDocument> CreateEventWrite(
+    private static ReplaceOneModel<BsonDocument> CreateReplaceOneModel(
         long position,
         long epoch,
         BsonValue streamId,
         long streamVersion,
         BsonValue commitId,
+        int commitIndex,
         BsonValue eventName,
         BsonValue eventData,
         BsonValue? metadata = null)
@@ -240,6 +255,7 @@ public sealed partial class EventLogWriter(
             { EventLogEntry.FieldNames.StreamId, streamId },
             { EventLogEntry.FieldNames.StreamVersion, streamVersion },
             { EventLogEntry.FieldNames.CommitId, commitId },
+            { EventLogEntry.FieldNames.CommitIndex, commitIndex },
             { EventLogEntry.FieldNames.EventName, eventName },
             { EventLogEntry.FieldNames.EventData, eventData },
             { EventLogEntry.FieldNames.Metadata, metadata ?? BsonNull.Value },
@@ -249,34 +265,40 @@ public sealed partial class EventLogWriter(
         return new ReplaceOneModel<BsonDocument>(filter, replacement) { IsUpsert = true };
     }
 
-    private static BsonDocument CreateCommitRejection(
+    private static BsonDocument CreateConflict(
         Guid commitId,
         BsonValue streamId,
         BsonValue expectedStreamState,
-        StreamState actualStreamState)
+        BsonValue actualStreamState)
     {
         return new BsonDocument
         {
-            { CommitRejection.FieldNames.CommitId, new BsonBinaryData(commitId, GuidRepresentation.Standard) },
-            { CommitRejection.FieldNames.StreamId, streamId },
-            { CommitRejection.FieldNames.ExpectedStreamState, expectedStreamState },
-            { CommitRejection.FieldNames.ActualStreamState, BsonDocument.From(actualStreamState) }
+            { AppendConflict.FieldNames.CommitId, new BsonBinaryData(commitId, GuidRepresentation.Standard) },
+            { AppendConflict.FieldNames.StreamId, streamId },
+            { AppendConflict.FieldNames.ExpectedStreamState, expectedStreamState },
+            { AppendConflict.FieldNames.ActualStreamState, actualStreamState }
         };
     }
 
-    private BsonDocument CreateBatchRecordedEventData()
+    private BsonDocument CreateDuplicatesSkippedData()
     {
         return new BsonDocument
         {
             {
-                AppendBatchRecorded.FieldNames.AppendedCommitIds,
-                new BsonArray(_appendedCommitIds.Select(x => new BsonBinaryData(x, GuidRepresentation.Standard)))
-            },
-            {
-                AppendBatchRecorded.FieldNames.DuplicateCommitIds,
+                DuplicatesSkipped.FieldNames.CommitIds,
                 new BsonArray(_duplicateCommitIds.Select(x => new BsonBinaryData(x, GuidRepresentation.Standard)))
-            },
-            { AppendBatchRecorded.FieldNames.Rejections, new BsonArray(_commitRejections.Values) }
+            }
+        };
+    }
+
+    private BsonDocument CreateConflictsRejectedData()
+    {
+        return new BsonDocument
+        {
+            {
+                ConflictsRejected.FieldNames.Conflicts,
+                new BsonArray(_conflicts.Values)
+            }
         };
     }
 }

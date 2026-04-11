@@ -20,7 +20,7 @@ public class MongoEventStoreClientTests : EventStoreClientTests
     private MongoEventStoreNodeOptions _options = null!;
     private ILoggerFactory _loggerFactory = null!;
     private IEventStoreClient<IDomainEvent> _client = null!;
-    private IMongoEventStoreNode _node = null!;
+    private MongoEventStoreNode _node = null!;
 
     protected override IEventStoreClient<IDomainEvent> Client => _client;
 

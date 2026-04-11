@@ -88,8 +88,8 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
                 _requests,
                 _changeStreamSubject,
                 _eventLog,
-                _options.IngestQueueCapacity,
-                _options.IngestBatchSize,
+                _options.WriteQueueCapacity,
+                _options.WriteBatchSize,
                 _loggerFactory);
 
             _leaseContenderTask = leaseContender.RunAsync(leaseHandler, _stopCts.Token);
@@ -154,7 +154,8 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
         }
 
         var eventFilter = filterBuilder.Eq("ns.coll", _options.EventLogCollectionName) &
-                          filterBuilder.Eq("fullDocument.eventName", EventNames.AppendBatchRecorded);
+                          // We only need the first event in a given commit to obtain the commit ID.
+                          filterBuilder.Eq($"fullDocument.{EventLogEntry.FieldNames.CommitIndex}", 0);
 
         var leaseFilter = filterBuilder.Eq("ns.coll", _options.LeasesCollectionName);
         var clientFilter = eventFilter | leaseFilter;

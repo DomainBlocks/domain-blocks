@@ -17,29 +17,33 @@ public sealed class CommitSubject(ILogger<CommitSubject> logger)
             observer);
     }
 
-    public void Notify(BsonValue appendBatchRecorded)
+    public void NotifyCommitted(Guid commitId)
     {
-        var observersSnapshot = _observers;
-        if (observersSnapshot.IsEmpty)
-            return;
+        InvokeCommitted(commitId);
+    }
 
-        var appendedCommitIds = appendBatchRecorded[AppendBatchRecorded.FieldNames.AppendedCommitIds].AsBsonArray;
-        var duplicateCommitIds = appendBatchRecorded[AppendBatchRecorded.FieldNames.DuplicateCommitIds].AsBsonArray;
-        var rejections = appendBatchRecorded[AppendBatchRecorded.FieldNames.Rejections].AsBsonArray;
+    public void NotifyDuplicatesSkipped(BsonValue payload)
+    {
+        var commitIds = payload[DuplicatesSkipped.FieldNames.CommitIds].AsBsonArray;
 
-        foreach (var commitId in appendedCommitIds.Concat(duplicateCommitIds))
-            NotifyCommitted(commitId.AsGuid, observersSnapshot);
+        foreach (var id in commitIds)
+            InvokeCommitted(id.AsGuid);
+    }
 
-        foreach (var rejection in rejections)
+    public void NotifyConflictsRejected(BsonValue payload)
+    {
+        var conflicts = payload[ConflictsRejected.FieldNames.Conflicts].AsBsonArray;
+
+        foreach (var conflict in conflicts)
         {
-            var commitId = rejection[CommitRejection.FieldNames.CommitId].AsGuid;
-            NotifyCommitRejected(commitId, rejection, observersSnapshot);
+            var commitId = conflict[AppendConflict.FieldNames.CommitId].AsGuid;
+            InvokeConflictRejected(commitId, conflict);
         }
     }
 
-    private void NotifyCommitted(Guid commitId, ImmutableArray<ICommitObserver> observers)
+    private void InvokeCommitted(Guid commitId)
     {
-        foreach (var observer in observers)
+        foreach (var observer in _observers)
         {
             try
             {
@@ -52,13 +56,13 @@ public sealed class CommitSubject(ILogger<CommitSubject> logger)
         }
     }
 
-    private void NotifyCommitRejected(Guid commitId, BsonValue rejection, ImmutableArray<ICommitObserver> observers)
+    private void InvokeConflictRejected(Guid commitId, BsonValue conflict)
     {
-        foreach (var observer in observers)
+        foreach (var observer in _observers)
         {
             try
             {
-                observer.OnCommitRejected(commitId, rejection);
+                observer.OnConflictRejected(commitId, conflict);
             }
             catch (Exception ex)
             {

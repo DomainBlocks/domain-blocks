@@ -6,5 +6,5 @@ public interface ICommitObserver
 {
     void OnCommitted(Guid commitId);
 
-    void OnCommitRejected(Guid commitId, BsonValue rejection);
+    void OnConflictRejected(Guid commitId, BsonValue conflict);
 }

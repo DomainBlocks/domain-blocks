@@ -7,17 +7,15 @@ using LeaseDocument = DomainBlocks.EventStore.MongoDB.Schema.LeaseDocument;
 
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
-public sealed class CommitTracker(
+public sealed partial class CommitTracker(
     MongoEventStoreNodeOptions options,
     CommitSubject commitSubject,
     ILogger<CommitTracker> logger) :
     IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>
 {
     private readonly CollectionNamespace _eventLogNs = new(options.DatabaseName, options.EventLogCollectionName);
-
     private readonly CollectionNamespace _leasesNs = new(options.DatabaseName, options.LeasesCollectionName);
-
-    private readonly SortedDictionary<long, RecordedBatch> _recordedBatches = [];
+    private readonly SortedDictionary<long, PendingEntry> _pendingEntries = [];
     private long? _currentEpoch;
 
     ValueTask IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>.OnNextAsync(
@@ -26,7 +24,6 @@ public sealed class CommitTracker(
     {
         if (change.CollectionNamespace.Equals(_eventLogNs))
             HandleEventLogChange(change);
-
         else if (change.CollectionNamespace.Equals(_leasesNs))
             HandleLeaseChange(change);
 
@@ -42,34 +39,62 @@ public sealed class CommitTracker(
         if (doc is null)
             return;
 
-        var position = doc["_id"].AsInt64;
         var epoch = doc[EventLogEntry.FieldNames.Epoch].AsInt64;
-        var eventName = doc[EventLogEntry.FieldNames.EventName].AsString;
 
-        if (eventName != nameof(EventNames.AppendBatchRecorded))
-            return;
-
-        // Ignore batches from epochs we know are stale.
+        // Ignore entries from stale epochs.
         if (epoch < _currentEpoch)
             return;
 
-        if (_recordedBatches.TryGetValue(position, out var existing))
+        var position = doc["_id"].AsInt64;
+        var eventName = doc[EventLogEntry.FieldNames.EventName].AsString;
+
+        if (eventName is EventNames.DuplicatesSkipped or EventNames.ConflictsRejected)
+            HandleSentinelEntry(position, epoch, eventName, doc);
+        else
+            HandleDomainEventEntry(position, epoch, doc);
+    }
+
+    private void HandleSentinelEntry(long position, long epoch, string eventName, BsonDocument doc)
+    {
+        if (_pendingEntries.TryGetValue(position, out var existing))
         {
             if (existing.Epoch == epoch)
             {
-                logger.LogWarning(
-                    "Duplicate batch received for position {Position} from epoch {Epoch}.",
-                    position,
-                    epoch);
-
+                LogPositionObservedMoreThanOnce(position, epoch);
                 return;
             }
 
             if (existing.Epoch > epoch)
-                return; // Out-of-order delivery - a newer leader already claimed this position.
+                return; // A newer leader already claimed this position.
+
+            // A newer epoch is overwriting this position - evict the old entry.
+            _pendingEntries.Remove(position);
         }
 
-        _recordedBatches[position] = new RecordedBatch(epoch, doc[EventLogEntry.FieldNames.EventData]);
+        var eventData = doc[EventLogEntry.FieldNames.EventData];
+        _pendingEntries[position] = PendingEntry.ForSentinel(epoch, eventName, eventData);
+    }
+
+    private void HandleDomainEventEntry(long position, long epoch, BsonDocument doc)
+    {
+        var commitId = doc[EventLogEntry.FieldNames.CommitId].AsGuid;
+
+        if (_pendingEntries.TryGetValue(position, out var existing))
+        {
+            if (existing.Epoch == epoch)
+            {
+                LogPositionObservedMoreThanOnce(position, epoch);
+                return;
+            }
+
+            if (existing.Epoch > epoch)
+                return; // A newer leader already claimed this position.
+
+            // A newer epoch is overwriting this position - evict the old entry.
+            _pendingEntries.Remove(position);
+        }
+
+        _pendingEntries[position] = PendingEntry.ForCommit(epoch, commitId);
     }
 
     private void HandleLeaseChange(ChangeStreamDocument<BsonDocument> change)
@@ -77,7 +102,6 @@ public sealed class CommitTracker(
         if (change.OperationType != ChangeStreamOperationType.Update)
             return;
 
-        // Only care about the log lease.
         var id = change.DocumentKey["_id"].AsString;
         if (id != LeaseDocument.LeaseId)
             return;
@@ -86,7 +110,7 @@ public sealed class CommitTracker(
         if (updatedFields is null)
             return;
 
-        // Detect epoch transitions and purge stale buffered batches.
+        // Epoch changed (new leaseholder)
         if (updatedFields.TryGetValue(LeaseDocument.FieldNames.Epoch, out var e))
         {
             var epoch = e.AsInt64;
@@ -94,59 +118,80 @@ public sealed class CommitTracker(
             if (!_currentEpoch.HasValue || epoch > _currentEpoch.Value)
             {
                 _currentEpoch = epoch;
-                PurgeStaleBatches();
+                PurgeStaleEntries();
             }
         }
 
-        // Advance commit position if present.
-        if (!updatedFields.TryGetValue(LeaseDocument.FieldNames.CommitPosition, out var commitPosition))
-            return;
-
-        FlushUpTo(commitPosition.AsInt64);
+        // Commit position advanced
+        if (updatedFields.TryGetValue(LeaseDocument.FieldNames.CommitPosition, out var commitPosition))
+        {
+            FlushUpTo(commitPosition.AsInt64);
+        }
     }
 
-    private void PurgeStaleBatches()
+    private void PurgeStaleEntries()
     {
-        var toRemove = new List<long>();
+        var stalePositions = new List<long>();
 
-        foreach (var (position, batch) in _recordedBatches)
+        foreach (var (position, entry) in _pendingEntries)
         {
-            if (batch.Epoch < _currentEpoch)
-                toRemove.Add(position);
+            if (entry.Epoch < _currentEpoch)
+                stalePositions.Add(position);
         }
 
-        foreach (var position in toRemove)
-            _recordedBatches.Remove(position);
+        foreach (var position in stalePositions)
+            _pendingEntries.Remove(position);
     }
 
     private void FlushUpTo(long commitPosition)
     {
-        var toRemove = new List<long>();
+        var flushedPositions = new List<long>();
 
-        foreach (var (position, batch) in _recordedBatches)
+        foreach (var (position, entry) in _pendingEntries)
         {
             if (position > commitPosition)
-                break; // SortedDictionary - everything after is also above
+                break;
 
-            // Skip batches from stale epochs that slipped through.
-            if (_currentEpoch.HasValue && batch.Epoch < _currentEpoch.Value)
-            {
-                toRemove.Add(position);
+            flushedPositions.Add(position);
+
+            // Skip stale entries that slipped through before purge.
+            if (_currentEpoch.HasValue && entry.Epoch < _currentEpoch.Value)
                 continue;
-            }
 
-            commitSubject.Notify(batch.EventData);
-
-            toRemove.Add(position);
+            if (entry.CommitId.HasValue)
+                commitSubject.NotifyCommitted(entry.CommitId.Value);
+            else if (entry.EventName == EventNames.DuplicatesSkipped)
+                commitSubject.NotifyDuplicatesSkipped(entry.EventData!);
+            else if (entry.EventName == EventNames.ConflictsRejected)
+                commitSubject.NotifyConflictsRejected(entry.EventData!);
         }
 
-        foreach (var position in toRemove)
-            _recordedBatches.Remove(position);
+        foreach (var position in flushedPositions)
+            _pendingEntries.Remove(position);
     }
 
-    private readonly struct RecordedBatch(long epoch, BsonValue eventData)
+    [LoggerMessage(LogLevel.Warning, "Position {Position} observed more than once for epoch {Epoch}; ignoring")]
+    partial void LogPositionObservedMoreThanOnce(long position, long epoch);
+
+    private sealed class PendingEntry
     {
-        public long Epoch { get; } = epoch;
-        public BsonValue EventData { get; } = eventData;
+        private PendingEntry(long epoch, Guid? commitId, string? eventName, BsonValue? eventData)
+        {
+            Epoch = epoch;
+            CommitId = commitId;
+            EventName = eventName;
+            EventData = eventData;
+        }
+
+        public long Epoch { get; }
+        public Guid? CommitId { get; }
+        public string? EventName { get; }
+        public BsonValue? EventData { get; }
+
+        public static PendingEntry ForCommit(long epoch, Guid commitId) =>
+            new(epoch, commitId, null, null);
+
+        public static PendingEntry ForSentinel(long epoch, string eventName, BsonValue eventData) =>
+            new(epoch, null, eventName, eventData);
     }
 }

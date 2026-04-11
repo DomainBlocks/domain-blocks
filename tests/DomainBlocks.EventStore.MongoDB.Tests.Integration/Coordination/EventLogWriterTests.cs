@@ -73,7 +73,7 @@ public class EventLogWriterTests
         var result = await writer.WriteAsync(requests, ct);
 
         result.StartPosition.ShouldBe(0);
-        result.Count.ShouldBe(4);
+        result.Count.ShouldBe(3); // 3 events; no sentinel on happy path
 
         var entries = await ReadEntries();
         entries.Count.ShouldBe(3);
@@ -93,10 +93,8 @@ public class EventLogWriterTests
         entries[2].StreamVersion.ShouldBe(2);
         entries[2].EventName.ShouldBe("EventC");
 
-        var batchRecorded = await ReadLastBatchRecorded();
-        batchRecorded.AppendedCommitIds.ShouldBe([commitId]);
-        batchRecorded.DuplicateCommitIds.ShouldBeEmpty();
-        batchRecorded.Rejections.ShouldBeEmpty();
+        result.DuplicatesSkipped.ShouldBeNull();
+        result.ConflictsRejected.ShouldBeNull();
     }
 
     [Test]
@@ -118,12 +116,11 @@ public class EventLogWriterTests
         var result = await writer.WriteAsync(requests, ct);
 
         result.StartPosition.ShouldBe(0);
-        result.Count.ShouldBe(4);
+        result.Count.ShouldBe(3); // 3 events; no sentinel on happy path
 
         var entries = await ReadEntries();
         entries.Count.ShouldBe(3);
 
-        // Stream A events
         entries[0].Position.ShouldBe(0);
         entries[0].StreamId.ShouldBe(streamA);
         entries[0].StreamVersion.ShouldBe(0);
@@ -132,16 +129,12 @@ public class EventLogWriterTests
         entries[1].StreamId.ShouldBe(streamA);
         entries[1].StreamVersion.ShouldBe(1);
 
-        // Stream B events
         entries[2].Position.ShouldBe(2);
         entries[2].StreamId.ShouldBe(streamB);
         entries[2].StreamVersion.ShouldBe(0);
 
-        var batchRecorded = await ReadLastBatchRecorded();
-        batchRecorded.AppendedCommitIds.ShouldContain(commitA);
-        batchRecorded.AppendedCommitIds.ShouldContain(commitB);
-        batchRecorded.DuplicateCommitIds.ShouldBeEmpty();
-        batchRecorded.Rejections.ShouldBeEmpty();
+        result.DuplicatesSkipped.ShouldBeNull();
+        result.ConflictsRejected.ShouldBeNull();
     }
 
     [Test]
@@ -175,7 +168,7 @@ public class EventLogWriterTests
         entries[1].Position.ShouldBe(1);
         entries[1].StreamVersion.ShouldBe(1);
 
-        entries[2].Position.ShouldBe(3); // An extra position should be taken by marker event
+        entries[2].Position.ShouldBe(2); // No extra sentinel position on happy path
         entries[2].StreamVersion.ShouldBe(2);
     }
 
@@ -237,22 +230,21 @@ public class EventLogWriterTests
         var result1 = await writer.WriteAsync(requests1, ct);
         var result2 = await writer.WriteAsync(requests2, ct);
 
-        result1.Count.ShouldBe(2);
-        result2.Count.ShouldBe(1); // Marker only
+        result1.Count.ShouldBe(1); // 1 event; no sentinel on happy path
+        result2.Count.ShouldBe(1); // DuplicatesSkipped sentinel only
 
-        // Only one event should exist - the duplicate wasn't re-appended.
+        // Only one domain event should exist - the duplicate was not re-appended.
         var entries = await ReadEntries();
         entries.Count.ShouldBe(1);
 
-        // Second batch should still produce a batch-completed marker with the duplicate.
-        var allEntries = await ReadAllEntries();
-        var batchCompletedEntries = allEntries.Where(e => e.EventName == EventNames.AppendBatchRecorded).ToArray();
-        batchCompletedEntries.Length.ShouldBe(2);
+        // First batch: no sentinel.
+        result1.DuplicatesSkipped.ShouldBeNull();
+        result1.ConflictsRejected.ShouldBeNull();
 
-        var secondMarker = batchCompletedEntries.OrderBy(e => e.Position).Last();
-        var secondCompleted = BsonSerializer.Deserialize<AppendBatchRecorded>(secondMarker.EventData.AsBsonDocument);
-        secondCompleted.DuplicateCommitIds.ShouldContain(commitId);
-        secondCompleted.AppendedCommitIds.ShouldBeEmpty();
+        // Second batch: DuplicatesSkipped sentinel with the duplicate commit ID.
+        result2.DuplicatesSkipped.ShouldNotBeNull();
+        DeserializeDuplicatesSkipped(result2.DuplicatesSkipped).CommitIds.ShouldContain(commitId);
+        result2.ConflictsRejected.ShouldBeNull();
     }
 
     [Test]
@@ -271,7 +263,7 @@ public class EventLogWriterTests
 
         var result = await writer.WriteAsync(requests, ct);
 
-        result.Count.ShouldBe(2);
+        result.Count.ShouldBe(1); // 1 event; within-batch duplicate is silently dropped, no sentinel
 
         var entries = await ReadEntries();
         entries.Count.ShouldBe(1);
@@ -294,7 +286,7 @@ public class EventLogWriterTests
 
         var result = await writer.WriteAsync(requests, ct);
 
-        result.Count.ShouldBe(2);
+        result.Count.ShouldBe(1); // 1 event; no sentinel on happy path
 
         var entries = await ReadEntries();
         entries.Count.ShouldBe(1);
@@ -319,18 +311,18 @@ public class EventLogWriterTests
             [CreateRequest(rejectedCommitId, streamId, ExpectedStreamState.StreamDoesNotExist, "E2")],
             ct);
 
-        result.Count.ShouldBe(1);
+        result.Count.ShouldBe(1); // ConflictsRejected sentinel only
 
         // Only the first event should exist.
         var entries = await ReadEntries();
         entries.Count.ShouldBe(1);
 
-        var batchRecorded = await ReadLastBatchRecorded();
-        batchRecorded.Rejections.Count.ShouldBe(1);
-
-        var rejection = batchRecorded.Rejections.First();
-        rejection.CommitId.ShouldBe(rejectedCommitId);
-        rejection.StreamId.ShouldBe(streamId);
+        result.ConflictsRejected.ShouldNotBeNull();
+        var conflictsRejected = DeserializeConflictsRejected(result.ConflictsRejected);
+        conflictsRejected.Conflicts.Count.ShouldBe(1);
+        var conflict = conflictsRejected.Conflicts.First();
+        conflict.CommitId.ShouldBe(rejectedCommitId);
+        conflict.StreamId.ShouldBe(streamId);
     }
 
     // OCC: ExpectedStreamState.StreamExists
@@ -352,7 +344,7 @@ public class EventLogWriterTests
             [CreateRequest(commitId, streamId, ExpectedStreamState.StreamExists, "E2")],
             ct);
 
-        result.Count.ShouldBe(2);
+        result.Count.ShouldBe(1); // 1 event; no sentinel on happy path
 
         var entries = await ReadEntries();
         entries.Count.ShouldBe(2);
@@ -371,17 +363,17 @@ public class EventLogWriterTests
             [CreateRequest(rejectedCommitId, streamId, ExpectedStreamState.StreamExists, "E1")],
             ct);
 
-        result.Count.ShouldBe(1);
+        result.Count.ShouldBe(1); // ConflictsRejected sentinel only
 
         var entries = await ReadEntries();
         entries.ShouldBeEmpty();
 
-        var batchRecorded = await ReadLastBatchRecorded();
-        batchRecorded.Rejections.Count.ShouldBe(1);
-
-        var rejection = batchRecorded.Rejections.First();
-        rejection.CommitId.ShouldBe(rejectedCommitId);
-        rejection.StreamId.ShouldBe(streamId);
+        result.ConflictsRejected.ShouldNotBeNull();
+        var conflictsRejected = DeserializeConflictsRejected(result.ConflictsRejected);
+        conflictsRejected.Conflicts.Count.ShouldBe(1);
+        var conflict = conflictsRejected.Conflicts.First();
+        conflict.CommitId.ShouldBe(rejectedCommitId);
+        conflict.StreamId.ShouldBe(streamId);
     }
 
     // OCC: ExpectedStreamState.SpecificVersion
@@ -393,7 +385,7 @@ public class EventLogWriterTests
         var writer = CreateWriter();
         var streamId = CreateStreamId();
 
-        // Append two events → stream at version 1.
+        // Append two events - stream at version 1.
         await writer.WriteAsync(
             [CreateRequest(Guid.CreateVersion7(), streamId, ExpectedStreamState.Any, "E1", "E2")],
             ct);
@@ -405,7 +397,7 @@ public class EventLogWriterTests
             [CreateRequest(commitId, streamId, ExpectedStreamState.SpecificVersion(new StreamVersion(1)), "E3")],
             ct);
 
-        result.Count.ShouldBe(2);
+        result.Count.ShouldBe(1); // 1 event; no sentinel on happy path
 
         var entries = await ReadEntries();
         entries.Count.ShouldBe(3);
@@ -420,7 +412,7 @@ public class EventLogWriterTests
         var writer = CreateWriter();
         var streamId = CreateStreamId();
 
-        // Append two events → stream at version 1.
+        // Append two events - stream at version 1.
         await writer.WriteAsync(
             [CreateRequest(Guid.CreateVersion7(), streamId, ExpectedStreamState.Any, "E1", "E2")],
             ct);
@@ -438,15 +430,15 @@ public class EventLogWriterTests
             ],
             ct);
 
-        result.Count.ShouldBe(1);
+        result.Count.ShouldBe(1); // ConflictsRejected sentinel only
 
         var entries = await ReadEntries();
         entries.Count.ShouldBe(2); // Only the original two.
 
-        var batchRecorded = await ReadLastBatchRecorded();
-        var rejection = batchRecorded.Rejections.First();
-        rejection.CommitId.ShouldBe(rejectedCommitId);
-        rejection.StreamId.ShouldBe(streamId);
+        result.ConflictsRejected.ShouldNotBeNull();
+        var conflict = DeserializeConflictsRejected(result.ConflictsRejected).Conflicts.First();
+        conflict.CommitId.ShouldBe(rejectedCommitId);
+        conflict.StreamId.ShouldBe(streamId);
     }
 
     [Test]
@@ -467,15 +459,15 @@ public class EventLogWriterTests
             ],
             ct);
 
-        result.Count.ShouldBe(1);
+        result.Count.ShouldBe(1); // ConflictsRejected sentinel only
 
         var entries = await ReadEntries();
         entries.ShouldBeEmpty();
 
-        var batchRecorded = await ReadLastBatchRecorded();
-        var rejection = batchRecorded.Rejections.First();
-        rejection.CommitId.ShouldBe(rejectedCommitId);
-        rejection.StreamId.ShouldBe(streamId);
+        result.ConflictsRejected.ShouldNotBeNull();
+        var conflict = DeserializeConflictsRejected(result.ConflictsRejected).Conflicts.First();
+        conflict.CommitId.ShouldBe(rejectedCommitId);
+        conflict.StreamId.ShouldBe(streamId);
     }
 
     // OCC within a single batch
@@ -495,7 +487,7 @@ public class EventLogWriterTests
 
         var result = await writer.WriteAsync(requests, ct);
 
-        result.Count.ShouldBe(3);
+        result.Count.ShouldBe(2); // 2 events; no sentinel on happy path
 
         var entries = await ReadEntries();
         entries.Count.ShouldBe(2);
@@ -509,12 +501,12 @@ public class EventLogWriterTests
     {
         var writer = CreateWriter();
         var streamId = CreateStreamId();
+        var rejectedCommitId = Guid.CreateVersion7();
 
         var requests = new[]
         {
             CreateRequest(Guid.CreateVersion7(), streamId, ExpectedStreamState.Any, "E1"),
-            CreateRequest(Guid.CreateVersion7(), streamId, ExpectedStreamState.StreamDoesNotExist, "Rejected"),
-
+            CreateRequest(rejectedCommitId, streamId, ExpectedStreamState.StreamDoesNotExist, "Rejected"),
             CreateRequest(
                 Guid.CreateVersion7(),
                 streamId,
@@ -524,7 +516,7 @@ public class EventLogWriterTests
 
         var result = await writer.WriteAsync(requests, ct);
 
-        result.Count.ShouldBe(3);
+        result.Count.ShouldBe(3); // 2 events + ConflictsRejected sentinel
 
         var entries = await ReadEntries();
         entries.Count.ShouldBe(2);
@@ -533,10 +525,10 @@ public class EventLogWriterTests
         entries[1].EventName.ShouldBe("E2");
         entries[1].StreamVersion.ShouldBe(1);
 
-        var batchRecorded = await ReadLastBatchRecorded();
-        var rejection = batchRecorded.Rejections.First();
-        rejection.CommitId.ShouldBe(requests[1][CommitRejection.FieldNames.CommitId].AsGuid);
-        rejection.StreamId.ShouldBe(streamId);
+        result.ConflictsRejected.ShouldNotBeNull();
+        var conflict = DeserializeConflictsRejected(result.ConflictsRejected).Conflicts.First();
+        conflict.CommitId.ShouldBe(rejectedCommitId);
+        conflict.StreamId.ShouldBe(streamId);
     }
 
     // Mixed outcomes
@@ -555,7 +547,7 @@ public class EventLogWriterTests
             [CreateRequest(seedCommitId, streamId, ExpectedStreamState.Any, "E1")],
             ct);
 
-        // Batch with: one good append, one rejection (wrong version), one duplicate (seedCommitId).
+        // Batch with: one good append, one conflict (wrong version), one duplicate (seedCommitId).
         var goodCommitId = Guid.CreateVersion7();
         var badCommitId = Guid.CreateVersion7();
 
@@ -567,13 +559,19 @@ public class EventLogWriterTests
             ],
             ct);
 
-        result.Count.ShouldBe(2); // 1 event + marker
+        result.Count.ShouldBe(3); // 1 event + DuplicatesSkipped + ConflictsRejected
 
-        var batchRecorded = await ReadLastBatchRecorded();
-        batchRecorded.AppendedCommitIds.ShouldBe([goodCommitId]);
-        batchRecorded.Rejections.Count.ShouldBe(1);
-        batchRecorded.Rejections.First().CommitId.ShouldBe(badCommitId);
-        batchRecorded.DuplicateCommitIds.ShouldBe([seedCommitId]);
+        var entries = await ReadEntries();
+        entries.Count.ShouldBe(2); // E1 (seed) + E2 (good)
+        entries[1].CommitId.ShouldBe(goodCommitId);
+
+        result.DuplicatesSkipped.ShouldNotBeNull();
+        DeserializeDuplicatesSkipped(result.DuplicatesSkipped).CommitIds.ShouldContain(seedCommitId);
+
+        result.ConflictsRejected.ShouldNotBeNull();
+        var conflictsRejected = DeserializeConflictsRejected(result.ConflictsRejected);
+        conflictsRejected.Conflicts.Count.ShouldBe(1);
+        conflictsRejected.Conflicts.First().CommitId.ShouldBe(badCommitId);
     }
 
     // initialCommitPosition
@@ -590,7 +588,7 @@ public class EventLogWriterTests
             ct);
 
         result.StartPosition.ShouldBe(5);
-        result.Count.ShouldBe(2);
+        result.Count.ShouldBe(1); // 1 event; no sentinel on happy path
 
         var entries = await ReadEntries();
         entries.Count.ShouldBe(1);
@@ -616,7 +614,7 @@ public class EventLogWriterTests
             ct);
 
         result.StartPosition.ShouldBe(0);
-        result.Count.ShouldBe(3);
+        result.Count.ShouldBe(2); // 2 events; no sentinel on happy path
 
         var entries = await ReadEntries();
         entries.Count.ShouldBe(2);
@@ -725,6 +723,7 @@ public class EventLogWriterTests
             StreamId = CreateStreamId(),
             StreamVersion = 0,
             CommitId = Guid.CreateVersion7(),
+            CommitIndex = 0,
             EventName = "SeededEvent",
             EventData = BsonNull.Value,
             Metadata = BsonNull.Value,
@@ -735,7 +734,9 @@ public class EventLogWriterTests
     private async Task<List<EventLogEntry>> ReadEntries()
     {
         return await _eventLog
-            .Find(Builders<EventLogEntry>.Filter.Ne(x => x.EventName, EventNames.AppendBatchRecorded))
+            .Find(Builders<EventLogEntry>.Filter.Nin(
+                x => x.EventName,
+                [EventNames.DuplicatesSkipped, EventNames.ConflictsRejected]))
             .SortBy(x => x.Position)
             .ToListAsync();
     }
@@ -748,13 +749,9 @@ public class EventLogWriterTests
             .ToListAsync();
     }
 
-    private async Task<AppendBatchRecorded> ReadLastBatchRecorded()
-    {
-        var entry = await _eventLog
-            .Find(Builders<EventLogEntry>.Filter.Eq(x => x.EventName, EventNames.AppendBatchRecorded))
-            .SortByDescending(x => x.Position)
-            .FirstAsync();
+    private static DuplicatesSkipped DeserializeDuplicatesSkipped(BsonValue payload) =>
+        BsonSerializer.Deserialize<DuplicatesSkipped>(payload.AsBsonDocument);
 
-        return BsonSerializer.Deserialize<AppendBatchRecorded>(entry.EventData.AsBsonDocument);
-    }
+    private static ConflictsRejected DeserializeConflictsRejected(BsonValue payload) =>
+        BsonSerializer.Deserialize<ConflictsRejected>(payload.AsBsonDocument);
 }
