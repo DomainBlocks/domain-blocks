@@ -1,12 +1,12 @@
 ﻿using System.Threading.Channels;
-using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
+using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
-public sealed class LeaseHandler(
+internal sealed class LeaseHandler(
     IMongoCollection<BsonDocument> requests,
     IChangeStreamSubject<ChangeStreamDocument<BsonDocument>> changeStreamSubject,
     IMongoCollection<BsonDocument> eventLog,

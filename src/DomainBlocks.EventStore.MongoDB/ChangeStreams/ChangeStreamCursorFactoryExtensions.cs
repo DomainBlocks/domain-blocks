@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 using Polly;
 using Polly.Retry;
 
-namespace DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
+namespace DomainBlocks.EventStore.MongoDB.ChangeStreams;
 
 internal static class ChangeStreamCursorFactoryExtensions
 {

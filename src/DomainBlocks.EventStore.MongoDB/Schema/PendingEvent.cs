@@ -4,7 +4,7 @@ using MongoDB.Bson.Serialization.Attributes;
 namespace DomainBlocks.EventStore.MongoDB.Schema;
 
 // ReSharper disable all
-public sealed class PendingEvent
+internal sealed class PendingEvent
 {
     [BsonElement(FieldNames.EventName)]
     public required string EventName { get; init; }

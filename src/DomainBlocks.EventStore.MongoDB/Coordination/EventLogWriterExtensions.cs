@@ -2,7 +2,7 @@
 
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
-public static class EventLogWriterExtensions
+internal static class EventLogWriterExtensions
 {
     extension(IEventLogWriter writer)
     {

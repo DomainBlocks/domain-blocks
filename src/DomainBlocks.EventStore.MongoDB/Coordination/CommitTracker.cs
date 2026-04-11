@@ -1,5 +1,5 @@
-﻿using DomainBlocks.EventStore.MongoDB.Schema;
-using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
+﻿using DomainBlocks.EventStore.MongoDB.ChangeStreams;
+using DomainBlocks.EventStore.MongoDB.Schema;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -7,7 +7,7 @@ using LeaseDocument = DomainBlocks.EventStore.MongoDB.Schema.LeaseDocument;
 
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
-public sealed partial class CommitTracker(
+internal sealed partial class CommitTracker(
     MongoEventStoreNodeOptions options,
     CommitSubject commitSubject,
     ILogger<CommitTracker> logger) :

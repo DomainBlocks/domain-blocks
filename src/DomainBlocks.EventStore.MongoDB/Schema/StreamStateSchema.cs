@@ -1,6 +1,6 @@
 ﻿namespace DomainBlocks.EventStore.MongoDB.Schema;
 
-public static class StreamStateSchema
+internal static class StreamStateSchema
 {
     public static class FieldNames
     {

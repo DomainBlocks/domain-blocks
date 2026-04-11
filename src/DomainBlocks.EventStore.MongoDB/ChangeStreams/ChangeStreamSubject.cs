@@ -2,7 +2,7 @@
 using MongoDB.Bson;
 using MongoDB.Driver;
 
-namespace DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
+namespace DomainBlocks.EventStore.MongoDB.ChangeStreams;
 
 internal sealed class ChangeStreamSubject<TDocument, TResult>(
     ChangeStreamCursorFactory<TDocument, TResult> cursorFactory,

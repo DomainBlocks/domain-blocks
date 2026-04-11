@@ -9,7 +9,7 @@ using MongoDB.Bson;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
-public class MongoEventStoreClient<TEvent>(
+internal class MongoEventStoreClient<TEvent>(
     ChannelWriter<BsonDocument> requestWriter,
     EventCodec<TEvent, BsonValue, BsonValue> eventCodec,
     ILogger<MongoEventStoreClient<TEvent>> logger) :

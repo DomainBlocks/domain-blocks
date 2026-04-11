@@ -1,9 +1,8 @@
-using DomainBlocks.Infrastructure.MongoDB.Errors;
 using MongoDB.Driver;
 
-namespace DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
+namespace DomainBlocks.EventStore.MongoDB.ChangeStreams;
 
-public static class ChangeStreamResumePolicy
+internal static class ChangeStreamResumePolicy
 {
     public static bool CanResume(Exception exception)
     {
@@ -18,6 +17,6 @@ public static class ChangeStreamResumePolicy
         }
 
         // Requires wire version 9 or higher.
-        return exception is MongoException ex && ex.HasErrorLabel(ErrorLabels.ResumableChangeStreamError);
+        return exception is MongoException ex && ex.HasErrorLabel(MongoErrorLabels.ResumableChangeStreamError);
     }
 }

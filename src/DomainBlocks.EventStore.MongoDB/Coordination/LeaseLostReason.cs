@@ -1,6 +1,6 @@
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
-public enum LeaseLostReason
+internal enum LeaseLostReason
 {
     Released,
     Revoked,

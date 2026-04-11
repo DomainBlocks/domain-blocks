@@ -7,7 +7,7 @@ using static DomainBlocks.EventStore.MongoDB.Schema.ExpectedStreamStateSchema;
 
 namespace DomainBlocks.EventStore.MongoDB.Serialization;
 
-public sealed class ExpectedStreamStateBsonSerializer : StructSerializerBase<ExpectedStreamState>
+internal sealed class ExpectedStreamStateBsonSerializer : StructSerializerBase<ExpectedStreamState>
 {
     public override void Serialize(
         BsonSerializationContext context,

@@ -1,6 +1,6 @@
 ﻿using MongoDB.Driver;
 
-namespace DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
+namespace DomainBlocks.EventStore.MongoDB.ChangeStreams;
 
 internal static class ChangeStreamOptionsExtensions
 {

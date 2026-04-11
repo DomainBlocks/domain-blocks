@@ -1,6 +1,6 @@
 ﻿using System.Net;
-using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
-using DomainBlocks.Infrastructure.MongoDB.Errors;
+using System.Threading.Channels;
+using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
@@ -12,9 +12,9 @@ using Moq;
 using NUnit.Framework;
 using Shouldly;
 
-namespace DomainBlocks.Infrastructure.MongoDB.Tests.Unit.ChangeStreams;
+namespace DomainBlocks.EventStore.MongoDB.Tests.Unit.ChangeStreams;
 
-public class ChangeStreamSubscriptionTests
+public class ChangeStreamSubjectTests
 {
     private const int TestTimeoutMillis = 5 * 1000;
 
@@ -43,28 +43,60 @@ public class ChangeStreamSubscriptionTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task WaitUntilLiveAsync_WhenFirstBatchIsObserved_CompletesSuccessfully(CancellationToken ct)
+    public async Task Connect_WhenSubjectCreatedWithoutResumeOption_ResumesFromAnchorToken(CancellationToken ct)
     {
+        var anchorToken = new BsonDocument("_data", "1");
+
         var batch = new ChangeStreamBatch
         {
             Items = [], // First batch can be empty
-            ResumeToken = new BsonDocument("_data", "1")
+            ResumeToken = anchorToken
         };
 
-        SetupChangeStream([batch]);
+        // Capture the ChangeStreamOptions from the second WatchAsync call (the one made by the
+        // producer when Connect() is called), so we can assert the anchor token is used.
+        var connectCallTcs = new TaskCompletionSource<ChangeStreamOptions>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
 
-        await using var subscription = _mockCollection.Object.SubscribeToChangeStream();
+        var callCount = 0;
+        var testCursor = new TestChangeStreamCursor<ChangeStreamDocument<BsonDocument>>([batch]);
 
-        await subscription.WaitUntilLiveAsync(ct);
+        _mockCollection
+            .Setup(x => x.WatchAsync(
+                It.IsAny<PipelineDefinition<ChangeStreamDocument<BsonDocument>, ChangeStreamDocument<BsonDocument>>>(),
+                It.IsAny<ChangeStreamOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<
+                PipelineDefinition<ChangeStreamDocument<BsonDocument>, ChangeStreamDocument<BsonDocument>>,
+                ChangeStreamOptions,
+                CancellationToken>((_, options, _) =>
+            {
+                // Call #1 is the anchoring call inside CreateSubjectAsync.
+                // Call #2 is the producer's first call after Connect().
+                if (++callCount == 2)
+                    connectCallTcs.TrySetResult(options);
+            })
+            .ReturnsAsync(testCursor);
+
+        var subject = await ChangeStreamSubjectFactory.CreateAsync(
+            _mockCollection.Object.WatchAsync,
+            new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
+            x => x.ResumeToken,
+            cancellationToken: ct);
+
+        await using var connection = subject.Connect();
+
+        var capturedOptions = await connectCallTcs.Task.WaitAsync(ct);
+        capturedOptions.ResumeAfter.ShouldBe(anchorToken);
     }
 
     [TestCaseSource(nameof(ResumableExceptions))]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task AsAsyncEnumerable_WhenCursorFailsWithResumableError_ContinuesAfterReconnect(
+    public async Task Connect_WhenCursorFailsWithResumableError_ContinuesAfterReconnect(
         Exception exception,
         CancellationToken ct)
     {
-        ChangeStreamBatch[] batch =
+        ChangeStreamBatch[] batches =
         [
             new() { Items = [CreateChange(new BsonDocument("_data", "1"))] },
             new() { Items = [CreateChange(new BsonDocument("_data", "2"))] },
@@ -72,30 +104,45 @@ public class ChangeStreamSubscriptionTests
             new() { Items = [CreateChange(new BsonDocument("_data", "3"))] }
         ];
 
-        SetupChangeStream(batch);
+        SetupChangeStream(batches);
 
         using var loggerFactory = LoggerFactory.Create(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug));
-        var logger = loggerFactory.CreateLogger<ChangeStreamSubscriptionTests>();
+        var logger = loggerFactory.CreateLogger<ChangeStreamSubjectTests>();
 
-        await using var subscription = _mockCollection.Object.SubscribeToChangeStream(logger: logger);
+        // Pre-seed a ResumeAfter so CreateSubjectAsync skips its internal anchoring call,
+        // ensuring the test batches are consumed exclusively by the producer.
+        var subject = await ChangeStreamSubjectFactory.CreateAsync(
+            _mockCollection.Object.WatchAsync,
+            new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
+            x => x.ResumeToken,
+            new ChangeStreamSubjectOptions
+            {
+                MongoOptions = new ChangeStreamOptions { ResumeAfter = new BsonDocument("_data", "0") }
+            },
+            logger,
+            ct);
 
-        var expectedCount = batch.Count(x => x.Exception is null);
+        var observer = new TestObserver();
+        using var _ = subject.Attach(observer);
+        await using var connection = subject.Connect();
 
-        var receivedItems = await subscription
+        var expectedCount = batches.Count(x => x.Exception is null);
+
+        var receivedItems = await observer
             .ReadAllAsync(ct)
             .Take(expectedCount)
             .ToArrayAsync(ct);
 
-        receivedItems.ShouldBe(batch.SelectMany(x => x.Items ?? []));
+        receivedItems.ShouldBe(batches.SelectMany(x => x.Items ?? []));
     }
 
     [TestCaseSource(nameof(UnresumableExceptions))]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task AsAsyncEnumerable_WhenCursorFailsWithUnresumableError_ThrowsException(
+    public async Task Connect_WhenCursorFailsWithUnresumableError_FaultsCompletion(
         Exception exception,
         CancellationToken ct)
     {
-        ChangeStreamBatch[] batch =
+        ChangeStreamBatch[] batches =
         [
             new() { Items = [CreateChange(new BsonDocument("_data", "1"))] },
             new() { Items = [CreateChange(new BsonDocument("_data", "2"))] },
@@ -103,26 +150,33 @@ public class ChangeStreamSubscriptionTests
             new() { Items = [CreateChange(new BsonDocument("_data", "3"))] }
         ];
 
-        SetupChangeStream(batch);
+        SetupChangeStream(batches);
 
         using var loggerFactory = LoggerFactory.Create(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug));
-        var logger = loggerFactory.CreateLogger<ChangeStreamSubscriptionTests>();
+        var logger = loggerFactory.CreateLogger<ChangeStreamSubjectTests>();
 
-        await using var subscription = _mockCollection.Object.SubscribeToChangeStream(logger: logger);
+        // Pre-seed a ResumeAfter so CreateSubjectAsync skips its internal anchoring call.
+        var subject = await ChangeStreamSubjectFactory.CreateAsync(
+            _mockCollection.Object.WatchAsync,
+            new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
+            x => x.ResumeToken,
+            new ChangeStreamSubjectOptions
+            {
+                MongoOptions = new ChangeStreamOptions { ResumeAfter = new BsonDocument("_data", "0") }
+            },
+            logger,
+            ct);
 
-        var thrownException = await subscription
-            .ReadAllAsync(ct)
-            .ToArrayAsync(ct)
-            .AsTask()
-            .ShouldThrowAsync(exception.GetType());
+        await using var connection = subject.Connect();
 
+        var thrownException = await connection.Completion.ShouldThrowAsync(exception.GetType());
         thrownException.ShouldBe(exception);
     }
 
     private static MongoException CreateResumableMongoException()
     {
         var exception = new MongoException("Resumable error");
-        exception.AddErrorLabel(ErrorLabels.ResumableChangeStreamError);
+        exception.AddErrorLabel(MongoErrorLabels.ResumableChangeStreamError);
         return exception;
     }
 
@@ -137,7 +191,6 @@ public class ChangeStreamSubscriptionTests
     private static ChangeStreamDocument<BsonDocument> CreateChange(BsonDocument id)
     {
         return new ChangeStreamDocument<BsonDocument>(
-            // The ID is the resume token for change stream documents.
             new BsonDocument("_id", id),
             BsonSerializer.SerializerRegistry.GetSerializer<BsonDocument>());
     }
@@ -197,6 +250,23 @@ public class ChangeStreamSubscriptionTests
         public void Dispose()
         {
         }
+    }
+
+    // Collects items pushed by the subject's producer via OnNextAsync, and exposes them
+    // as an async enumerable for assertions.
+    private class TestObserver : IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>
+    {
+        private readonly Channel<ChangeStreamDocument<BsonDocument>> _channel =
+            Channel.CreateUnbounded<ChangeStreamDocument<BsonDocument>>();
+
+        public ValueTask OnNextAsync(ChangeStreamDocument<BsonDocument> change, CancellationToken cancellationToken)
+        {
+            _channel.Writer.TryWrite(change);
+            return ValueTask.CompletedTask;
+        }
+
+        public IAsyncEnumerable<ChangeStreamDocument<BsonDocument>> ReadAllAsync(CancellationToken ct) =>
+            _channel.Reader.ReadAllAsync(ct);
     }
 
     private class TestMongoConnectionException(bool isNetworkException) :

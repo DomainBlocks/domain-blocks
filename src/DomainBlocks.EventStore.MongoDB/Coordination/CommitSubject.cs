@@ -5,7 +5,7 @@ using MongoDB.Bson;
 
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
-public sealed class CommitSubject(ILogger<CommitSubject> logger)
+internal sealed class CommitSubject(ILogger<CommitSubject> logger)
 {
     private ImmutableArray<ICommitObserver> _observers = [];
 

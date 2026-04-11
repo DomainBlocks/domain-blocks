@@ -1,9 +1,9 @@
 ﻿using System.Diagnostics;
 using System.Threading.Channels;
 using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using DomainBlocks.EventStore.MongoDB.Coordination;
 using DomainBlocks.EventStore.MongoDB.Schema;
-using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -150,8 +150,10 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
         // Leader needs request inserts only, so we can use a change stream directly on the requests collection.
         if (_options.NodeRole is NodeRole.Leader)
         {
-            return await _requests.CreateSubjectAsync(
+            return await ChangeStreamSubjectFactory.CreateAsync(
+                _requests.WatchAsync,
                 pipeline.Match(filterBuilder.Eq("operationType", "insert")),
+                x => x.ResumeToken,
                 logger: logger,
                 cancellationToken: cancellationToken);
         }
@@ -178,8 +180,10 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
                 : throw new UnreachableException($"Unknown node role '{_options.NodeRole}'.");
         }
 
-        return await _database.CreateSubjectAsync(
+        return await ChangeStreamSubjectFactory.CreateAsync(
+            _database.WatchAsync,
             pipeline.Match(filter),
+            x => x.ResumeToken,
             logger: logger,
             cancellationToken: cancellationToken);
     }

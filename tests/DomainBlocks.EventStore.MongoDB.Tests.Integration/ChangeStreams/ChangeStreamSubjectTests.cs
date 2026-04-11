@@ -1,4 +1,4 @@
-﻿using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
+﻿using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using DomainBlocks.Testing.Integration.MongoDB;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
@@ -6,7 +6,7 @@ using MongoDB.Driver;
 using NUnit.Framework;
 using Shouldly;
 
-namespace DomainBlocks.Infrastructure.MongoDB.Tests.Integration.ChangeStreams;
+namespace DomainBlocks.EventStore.MongoDB.Tests.Integration.ChangeStreams;
 
 public class ChangeStreamSubjectTests
 {
@@ -45,7 +45,12 @@ public class ChangeStreamSubjectTests
         using var loggerFactory = LoggerFactory.Create(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug));
         var logger = loggerFactory.CreateLogger<ChangeStreamSubjectTests>();
 
-        var subject = await _collection.CreateSubjectAsync(pipeline, logger: logger, cancellationToken: ct);
+        var subject = await ChangeStreamSubjectFactory.CreateAsync(
+            _collection.WatchAsync,
+            pipeline,
+            x => x.ResumeToken,
+            logger: logger,
+            cancellationToken: ct);
 
         var observer1 = new TestChangeStreamObserver(expectedCount: insertCount);
         var observer2 = new TestChangeStreamObserver(expectedCount: insertCount);

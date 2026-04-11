@@ -1,6 +1,6 @@
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
-public interface ILeaseHandler
+internal interface ILeaseHandler
 {
     Task HandleLeaseAcquiredAsync(Lease lease, CancellationToken cancellationToken);
 

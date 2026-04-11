@@ -3,7 +3,7 @@ using MongoDB.Bson.Serialization.Attributes;
 namespace DomainBlocks.EventStore.MongoDB.Schema;
 
 // ReSharper disable all
-public sealed class LeaseDocument
+internal sealed class LeaseDocument
 {
     public const string LeaseId = "dbx_event_log_lease";
 

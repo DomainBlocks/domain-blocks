@@ -4,7 +4,7 @@ using MongoDB.Bson.Serialization.Attributes;
 namespace DomainBlocks.EventStore.MongoDB.Schema;
 
 // ReSharper disable all
-public sealed class DuplicatesSkipped
+internal sealed class DuplicatesSkipped
 {
     [BsonElement(FieldNames.CommitIds)]
     [BsonGuidRepresentation(GuidRepresentation.Standard)]

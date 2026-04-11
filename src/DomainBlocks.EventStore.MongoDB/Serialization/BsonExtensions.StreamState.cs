@@ -4,7 +4,7 @@ using static DomainBlocks.EventStore.MongoDB.Schema.StreamStateSchema;
 
 namespace DomainBlocks.EventStore.MongoDB.Serialization;
 
-public static partial class BsonExtensions
+internal static partial class BsonExtensions
 {
     extension(BsonDocument doc)
     {

@@ -6,7 +6,7 @@ using MongoDB.Bson.Serialization.Attributes;
 namespace DomainBlocks.EventStore.MongoDB.Schema;
 
 // ReSharper disable all
-public sealed class AppendConflict
+internal sealed class AppendConflict
 {
     [BsonElement(FieldNames.CommitId)]
     [BsonGuidRepresentation(GuidRepresentation.Standard)]

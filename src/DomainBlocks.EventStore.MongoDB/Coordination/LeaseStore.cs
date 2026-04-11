@@ -3,7 +3,7 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
-public sealed class LeaseStore(IMongoCollection<LeaseDocument> leases, TimeProvider? timeProvider = null)
+internal sealed class LeaseStore(IMongoCollection<LeaseDocument> leases, TimeProvider? timeProvider = null)
 {
     private static readonly FindOneAndUpdateOptions<LeaseDocument> UpsertReturnAfterOptions = new()
     {
@@ -37,7 +37,7 @@ public sealed class LeaseStore(IMongoCollection<LeaseDocument> leases, TimeProvi
                 .FindOneAndUpdateAsync(filter, update, UpsertReturnAfterOptions, cancellationToken)
                 .ConfigureAwait(false);
         }
-        catch (MongoCommandException ex) when (ex.Code == 11000)
+        catch (MongoCommandException ex) when (ex.Code == MongoErrorCodes.DuplicateKey)
         {
             return null; // Another contender won the race.
         }

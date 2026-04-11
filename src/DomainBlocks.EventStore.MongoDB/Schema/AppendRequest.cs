@@ -6,7 +6,7 @@ using MongoDB.Bson.Serialization.Attributes;
 namespace DomainBlocks.EventStore.MongoDB.Schema;
 
 // ReSharper disable all
-public sealed class AppendRequest
+internal sealed class AppendRequest
 {
     public ObjectId Id { get; init; }
 

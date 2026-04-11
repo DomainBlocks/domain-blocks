@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
-public sealed class Lease : IAsyncDisposable
+internal sealed class Lease : IAsyncDisposable
 {
     private readonly string _holderId;
     private readonly LeaseStore _store;

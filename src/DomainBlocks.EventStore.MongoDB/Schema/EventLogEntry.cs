@@ -4,7 +4,7 @@ using MongoDB.Bson.Serialization.Attributes;
 namespace DomainBlocks.EventStore.MongoDB.Schema;
 
 // ReSharper disable all
-public sealed class EventLogEntry
+internal sealed class EventLogEntry
 {
     [BsonId]
     public required long Position { get; init; }

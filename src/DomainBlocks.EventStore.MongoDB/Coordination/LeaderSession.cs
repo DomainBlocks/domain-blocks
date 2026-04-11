@@ -4,7 +4,7 @@ using MongoDB.Bson;
 
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
-public sealed class LeaderSession : IAsyncDisposable
+internal sealed class LeaderSession : IAsyncDisposable
 {
     private readonly Lease _lease;
     private readonly ChannelReader<BsonDocument> _requestReader;

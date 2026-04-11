@@ -5,7 +5,7 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
-public partial class EventLogWriter
+internal partial class EventLogWriter
 {
     private static readonly BsonDocument GroupByStreamStage = new("$group", new BsonDocument
     {

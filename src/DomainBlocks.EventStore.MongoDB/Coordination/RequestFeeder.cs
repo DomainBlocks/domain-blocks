@@ -1,5 +1,5 @@
 using System.Threading.Channels;
-using DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
+using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;

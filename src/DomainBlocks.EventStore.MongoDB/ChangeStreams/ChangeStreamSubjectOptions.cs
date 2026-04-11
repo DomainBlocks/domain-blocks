@@ -1,8 +1,8 @@
 using MongoDB.Driver;
 
-namespace DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
+namespace DomainBlocks.EventStore.MongoDB.ChangeStreams;
 
-public class ChangeStreamSubjectOptions
+internal class ChangeStreamSubjectOptions
 {
     public ChangeStreamOptions MongoOptions { get; set; } = new();
 

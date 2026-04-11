@@ -7,7 +7,7 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
-public sealed partial class EventLogWriter(
+internal sealed partial class EventLogWriter(
     IMongoCollection<BsonDocument> eventLog,
     long epoch,
     long? epochStartPosition,

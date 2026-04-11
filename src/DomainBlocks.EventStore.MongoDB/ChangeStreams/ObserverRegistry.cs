@@ -1,6 +1,6 @@
 ﻿using System.Collections.Immutable;
 
-namespace DomainBlocks.Infrastructure.MongoDB.ChangeStreams;
+namespace DomainBlocks.EventStore.MongoDB.ChangeStreams;
 
 internal sealed class ObserverRegistry<TObserver>
 {

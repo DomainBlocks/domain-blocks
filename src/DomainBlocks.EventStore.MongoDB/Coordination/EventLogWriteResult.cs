@@ -2,7 +2,7 @@
 
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
-public record EventLogWriteResult(
+internal record EventLogWriteResult(
     long StartPosition,
     long Count,
     BsonValue? DuplicatesSkipped,

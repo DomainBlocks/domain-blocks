@@ -2,7 +2,7 @@
 
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
-public interface ICommitObserver
+internal interface ICommitObserver
 {
     void OnCommitted(Guid commitId);
 
