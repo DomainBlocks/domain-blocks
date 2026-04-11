@@ -1,6 +1,7 @@
-﻿using MongoDB.Bson;
+﻿using DomainBlocks.EventStore.MongoDB.Coordination;
+using MongoDB.Bson;
 
-namespace DomainBlocks.EventStore.MongoDB.Coordination;
+namespace DomainBlocks.EventStore.MongoDB.Tests.Integration.Coordination;
 
 internal static class EventLogWriterExtensions
 {

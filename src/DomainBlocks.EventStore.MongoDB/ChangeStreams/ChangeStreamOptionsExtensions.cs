@@ -6,11 +6,6 @@ internal static class ChangeStreamOptionsExtensions
 {
     extension(ChangeStreamOptions options)
     {
-        public bool HasResumeOption =>
-            options.ResumeAfter is not null ||
-            options.StartAfter is not null ||
-            options.StartAtOperationTime is not null;
-
         public ChangeStreamOptions Copy()
         {
             return new ChangeStreamOptions

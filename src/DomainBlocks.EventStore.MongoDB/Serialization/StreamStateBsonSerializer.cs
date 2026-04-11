@@ -3,7 +3,7 @@ using MongoDB.Bson;
 using MongoDB.Bson.IO;
 using MongoDB.Bson.Serialization;
 using MongoDB.Bson.Serialization.Serializers;
-using static DomainBlocks.EventStore.MongoDB.Schema.ExpectedStreamStateSchema;
+using static DomainBlocks.EventStore.MongoDB.Schema.StreamStateSchema;
 
 namespace DomainBlocks.EventStore.MongoDB.Serialization;
 
