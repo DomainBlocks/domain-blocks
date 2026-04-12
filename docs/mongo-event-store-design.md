@@ -1,132 +1,113 @@
 ﻿# Mongo Event Store Design
 
-This document describes the high-level design of the MongoDB-backed commit log used by DomainBlocks. This goal is to
-provide globally-ordered, event-sourced history without requiring additional infrastructure beyond MongoDB, while
-remaining robust to partial writes, leader failover, and restart scenarios.
+Provides a globally ordered event log backed solely by MongoDB - no additional infrastructure required. Any application
+node may accept writes; exactly one leader node establishes canonical order.
 
 ## Goals
 
-- No additional services beyond MongoDB (no dedicated appender service).
-- Any node may accept writes.
-- Exactly one node establishes canonical global order.
-- Readers and projections observe only confirmed history.
-- Correct under:
-    - non-atomic `insertMany`
-    - node crashes mid-write
-    - leader restarts
-    - loss of change stream resume tokens
+- No services beyond MongoDB.
+- Any node may accept write requests.
+- Exactly one node assigns global ordering.
+- Readers observe only durably committed history.
+- Correct under partial writes, node crashes, and leader failover.
 
-## Collection 1: `dbx_events` (ingress + payload)
+---
 
-### Purpose
+## Collections
 
-Store the data that makes up a proposed commit:
+### `dbx_requests` - proposed appends (staging area)
 
-- advisory ingress marker for a commit (declares intent and expected event count)
-- the actual domain event documents
+Written by any node. Each document is a single proposed append: a `commitId`, `streamId`, `expectedStreamState`, and
+the event payloads to write. Documents are TTL-expired automatically.
 
-This collection is *not* considered globally ordered truth. It is a durable log of proposed work and the backing store
-for event payloads.
+### `dbx_event_log` - the authoritative event log
 
-### Written by
+Written by the leader only. Each document is a single committed event, assigned a monotonic global `position` (`_id`)
+and an `epoch` stamp. The position sequence is the global order. Readers and projections tail this collection.
 
-Any node (all application instances).
+### `dbx_leases` - leader lease
 
-### Read by
+A single document. Holds the current leader's `holderId`, a monotonically incrementing `epoch`, an expiry, and a
+`commitPosition` - the high-water mark up to which the leader has durably written and confirmed.
 
-- The leader to verify completeness before confirming commit
-- Historical readers, projections, subscribers to hydrate domain events after observing a confirmed event. This can be
-  abstracted away by the library.
+---
 
-### Notes
+## Write Path
 
-- Immutable
-- Never individually marked as "committed"
-- May be partially present if `insertMany` fails mid-batch
+1. A client node serialises the append into an `AppendRequest` document (commitId, streamId, expectedStreamState,
+   events) and writes it to `dbx_requests`. It then registers a `TaskCompletionSource` keyed by `commitId` and waits on
+   it.
 
-### Documents
+2. The leader's `RequestFeeder` picks up the request - either via a catch-up query (on startup, to drain any backlog) or
+   via a live change stream feed thereafter.
 
-- All documents share a `commitId` and an `eventName` discriminator.
-- `CommitProposed` event (advisory ingress): Declares that a commit of N events is proposed.
-- Any arbitrary event that is part of the commit, e.g. domain events.
+3. The leader processes requests in batches. A `Prepare` step queries `dbx_event_log` for any already-committed
+   `commitId`s (duplicate detection) and the current head version of each affected stream. These reads run concurrently
+   with the previous batch's `commitPosition` advancement to keep the pipeline saturated.
 
-## Collection 2: `dbx_commits` (authoritative control log)
+4. With the stream versions in hand, the leader checks each request's `expectedStreamState` in memory. Conflicts are
+   collected; accepted events are assigned monotonic global positions and written to `dbx_event_log` via a bulk upsert.
+   Any duplicates or conflicts are recorded as sentinel entries in the same batch so clients can be notified.
 
-Provides the single **causally ordered log** that defines:
+5. After the bulk write, the leader advances `commitPosition` on the lease document via an epoch-fenced update. The
+   write is conditional on the lease still being held by the same leader at the same epoch, so a stale leader cannot
+   advance the position.
 
-- Leadership epochs (fencing boundary)
-- Commit outcomes (confirmed / rejected)
-- Global ordering (via monotonically assigned positions)
+6. The client's `CommitTracker` is watching the `dbx_event_log` and `dbx_leases`change streams. When `commitPosition`
+   advances, it flushes all buffered entries up to that position in order, completing (or faulting) the waiting
+   `TaskCompletionSource`.
 
-This collection is the only collection that projections and subscriptions must tail.
+7. `AppendToStreamAsync` returns to the caller.
 
-### Written by
+---
 
-**Leader only** - the node holding leadership lease.
+## Leader Election
 
-### Read by
+Nodes compete for the lease via an atomic `findOneAndUpdate` with a CAS filter (`expiresAtUtc ≤ now`). On success,
+`epoch` is incremented atomically. The winner becomes the leader for the duration of the lease and renews it
+periodically. If renewal fails (e.g. due to expiry), the lease is considered lost and the leader session tears down.
 
-- All nodes to ack requests, drive subscriptions/projections, and read historical events ordered by global position.
-- The leader itself to detect newer leadership and self-correct.
+---
 
-### Documents
+## Epoch-Guarded Writes (Split-Brain Protection)
 
-- `LeaderElected` event (epoch boundary): Defines the active epoch for subsequent commit outcomes.
-- `CommitConfirmed` event: Marks a commit as canonical and assigns global position range.
-- `CommitRejected` event: Marks a commit as not canonical.
+Every event log write is a `ReplaceOneModel` upsert with the filter:
 
-### Invariants:
+    { _id: <position>, epoch: { $lt: <currentEpoch> } }
 
-- The leader must emit `LeaderElected(epoch=E)` before emitting any outcomes with epoch `E`.
+This means a position is only written if it does not yet exist, or if it was written by a stale leader with a lower
+epoch. Above `commitPosition`, a new leader can safely reclaim any positions left behind by a predecessor. Stale leaders
+cannot overwrite positions already claimed by the current epoch.
 
-### Ordering and split-brain fencing
+---
 
-Because `LeaderElected` and commit outcomes share one ordered collection, consumers can reject stale/out-of-epoch
-outcomes.
+## Commit Acknowledgement
 
-A commit is valid **iff** its epoch matches the most recent `LeaderElected` event.
+`CommitTracker` runs on client nodes and reacts to a single database change stream filtered on two collections:
 
-This makes stale leaders self-identifying: any outcome written with an older epoch after a newer `LeaderElected` is
-automatically invalid.
+- **`dbx_event_log`** - buffers incoming events in a `SortedDictionary<position, entry>`. Entries from stale epochs are
+  ignored or evicted.
+- **`dbx_leases`** - on `commitPosition` advance: flush all buffered entries up to that position in order, completing
+  the relevant `TaskCompletionSource`. On epoch change: purge any buffered entries from the old epoch.
 
-## Leadership handshake
+Using `commitPosition` as the flush gate means clients never observe a partially written batch. The TCS wired to
+`AppendToStreamAsync` completes (or faults with a conflict exception) only once the leader has declared the batch
+durable.
 
-1. Acquire leadership via atomic CAS `findOneAndUpdate` operation on lease document
-    - Epoch is atomically incremented to `E` on successful acquisition
-2. Within a transaction:
-    1. Read current lease state with `readConcern: majority`
-    2. Assert `epoch == E && holderId == me` via a conditional lease “touch” (CAS) so the transaction cannot commit
-       successfully if the lease is concurrently modified.
-    3. Reserve the next position `P` atomically (CAS sequences document)
-    4. Insert `LeaderElected(epoch=E, position=P, holderId=me)` into commits
-    5. Commit
-3. Only start confirming/rejecting commits after observing `LeaderElected(epoch=E, position=P, holderId=me)` through
-   a change stream watcher.
+---
 
-If the lease document changed at any point during step 2 (i.e. new leader), the transaction fails and
-`LeaderElected` with a stale epoch is never published.
+## Read Path
 
-Because all `LeaderElected` events are appended to `dbx_commits` only after a fenced leadership handshake
-(transactionally asserting the current lease epoch and holder) and are assigned a monotonic `position` at insertion
-time, a historical replay of `LeaderElected` events ordered by `position` will match the order in which those same
-events were observed by change stream watchers.
+`ReadStreamAsync` queries `dbx_event_log` filtered by `streamId` and `position ≤ commitPosition`, sorted by
+`streamVersion`. The `commitPosition` is cached in memory on the client (kept current by `CommitTracker`) and falls back
+to a live lease read on first access.
 
-## Cheap commit outcomes (no per-commit fencing)
+---
 
-We deliberately **do not** perform the full transactional leadership handshake for every commit outcome (e.g.
-`CommitConfirmed` / `CommitRejected`) for throughput and cost reasons.
+## Node Roles
 
-Instead, we rely on the following properties:
-
-- `dbx_commits` is a single, ordered control log where every record has a monotonic `position`.
-- `LeaderElected` establishes an epoch boundary in that same ordered log.
-- Every commit outcome includes the `epoch` under which it was produced.
-
-A stale leader may occasionally continue to write commit outcomes briefly after losing leadership (e.g. due to
-observation lag), but this does not compromise correctness. Consumers validate every commit outcome against the
-leadership boundaries recorded in `dbx_commits`, and ignore any outcome whose epoch does not match the active
-`LeaderElected` boundary at that position.
-
-This design intentionally trades rare, harmless noise (stale outcomes that are deterministically ignored) for higher
-steady-state throughput, while keeping the canonical history fully deterministic, replayable, and defined solely by the
-ordered contents of `dbx_commits`.
+| Role           | Behaviour                                                            |
+|----------------|----------------------------------------------------------------------|
+| `ClientLeader` | Default. Dual role handling writes and ordering in a single process. |
+| `Client`       | Publishes requests and tracks commit outcomes only.                  |
+| `Leader`       | Competes for the lease and orders events only.                       |
