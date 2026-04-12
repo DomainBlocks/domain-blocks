@@ -21,7 +21,6 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
     private readonly IMongoCollection<LeaseDocument> _leases;
     private readonly Channel<BsonDocument> _requestChannel;
     private readonly CommitSubject _commitSubject;
-    private readonly CommitTracker _commitTracker;
     private readonly MongoEventStoreNodeOptions _options;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<MongoEventStoreNode> _logger;
@@ -61,7 +60,6 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
             });
 
         _commitSubject = new CommitSubject(loggerFactory.CreateLogger<CommitSubject>());
-        _commitTracker = new CommitTracker(options, _commitSubject, loggerFactory.CreateLogger<CommitTracker>());
         _options = options;
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<MongoEventStoreNode>();
@@ -85,7 +83,13 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
 
         if (_options.NodeRole.HasFlag(NodeRole.Client))
         {
-            _changeStreamSubject.Attach(_commitTracker);
+            var commitTracker = new CommitTracker(
+                _options,
+                _commitSubject,
+                _loggerFactory.CreateLogger<CommitTracker>());
+
+            _changeStreamSubject.Attach(commitTracker);
+
             _publishRequestsTask = PublishRequestsAsync(_requestChannel.Reader, _stopCts.Token);
         }
 
