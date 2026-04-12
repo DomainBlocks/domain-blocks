@@ -51,17 +51,17 @@ internal class MongoEventStoreClient<TEvent>(
             { AppendRequest.FieldNames.CreatedAtUtc, DateTime.UtcNow }
         };
 
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(options.Timeout);
-
         var tcs = _pendingCommits.GetOrAdd(
             options.CommitId,
             _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
 
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(options.Timeout);
+
         try
         {
             await requestWriter.WriteAsync(request, timeoutCts.Token);
-            await tcs.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            await tcs.Task.WaitAsync(timeoutCts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
