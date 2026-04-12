@@ -34,7 +34,7 @@ public static class MongoEventStoreAdmin
     }
 
     private static Task EnsureEventLogIndexesAsync(
-        IMongoCollection<EventLogEntry> appendRequests,
+        IMongoCollection<EventLogEntry> eventLog,
         CancellationToken cancellationToken = default)
     {
         var builder = Builders<EventLogEntry>.IndexKeys;
@@ -45,6 +45,6 @@ public static class MongoEventStoreAdmin
             new(builder.Ascending(x => x.CommitId).Ascending(x => x.Epoch))
         ];
 
-        return appendRequests.Indexes.CreateManyAsync(indexModels, cancellationToken);
+        return eventLog.Indexes.CreateManyAsync(indexModels, cancellationToken);
     }
 }
