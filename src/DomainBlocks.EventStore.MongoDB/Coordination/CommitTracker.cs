@@ -118,6 +118,7 @@ internal sealed partial class CommitTracker(
 
             if (!_currentEpoch.HasValue || epoch > _currentEpoch.Value)
             {
+                LogEpochChanged(_currentEpoch, epoch);
                 _currentEpoch = epoch;
                 PurgeStaleEntries();
             }
@@ -175,6 +176,9 @@ internal sealed partial class CommitTracker(
 
     [LoggerMessage(LogLevel.Warning, "Position {Position} observed more than once for epoch {Epoch}; ignoring")]
     partial void LogPositionObservedMoreThanOnce(long position, long epoch);
+
+    [LoggerMessage(LogLevel.Information, "Epoch changed from {OldEpoch} to {NewEpoch}")]
+    partial void LogEpochChanged(long? oldEpoch, long newEpoch);
 
     private sealed class PendingEntry
     {
