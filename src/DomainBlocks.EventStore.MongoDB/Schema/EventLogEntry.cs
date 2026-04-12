@@ -20,7 +20,7 @@ internal sealed class EventLogEntry
 
     [BsonElement(FieldNames.CommitId)]
     [BsonGuidRepresentation(GuidRepresentation.Standard)]
-    public required Guid CommitId { get; init; }
+    public required Guid? CommitId { get; init; }
 
     [BsonElement(FieldNames.CommitIndex)]
     public required int CommitIndex { get; init; }

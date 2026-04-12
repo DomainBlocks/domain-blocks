@@ -164,13 +164,7 @@ internal class MongoEventStoreClient<TEvent>(
 
     void ICommitObserver.OnCommitPositionAdvanced(long commitPosition)
     {
-        // Only advance, never go backwards (e.g. from a stale change stream redelivery).
-        long current;
-        do
-        {
-            current = Volatile.Read(ref _commitPosition);
-        } while (commitPosition > current &&
-                 Interlocked.CompareExchange(ref _commitPosition, commitPosition, current) != current);
+        AdvanceCommitPosition(commitPosition);
     }
 
     void ICommitObserver.OnCommitted(Guid commitId)
@@ -191,6 +185,17 @@ internal class MongoEventStoreClient<TEvent>(
         tcs.TrySetException(new StreamAppendConflictException(streamId, expectedStreamState, actualStreamState));
     }
 
+    private void AdvanceCommitPosition(long commitPosition)
+    {
+        // Only advance, never go backwards.
+        long current;
+        do
+        {
+            current = Volatile.Read(ref _commitPosition);
+        } while (commitPosition > current &&
+                 Interlocked.CompareExchange(ref _commitPosition, commitPosition, current) != current);
+    }
+
     private ValueTask<long?> GetCommitPositionAsync(CancellationToken cancellationToken)
     {
         var commitPosition = Volatile.Read(ref _commitPosition);
@@ -206,12 +211,16 @@ internal class MongoEventStoreClient<TEvent>(
                 .FirstOrDefaultAsync(cancellationToken)
                 .ConfigureAwait(false);
 
-            var pos = lease?.CommitPosition;
-            if (pos is null)
+            var leaseCommitPosition = lease?.CommitPosition;
+            if (leaseCommitPosition is null or -1)
                 return null;
 
-            Interlocked.CompareExchange(ref _commitPosition, pos.Value, -1);
-            return pos.Value;
+            // Ensure _commitPosition is at least leaseCommitPosition to avoid a lagging change stream setting a lower
+            // value ahead of a caller's next read, i.e. sequential reads should never go back in time. In practice this
+            // scenario is expected to be rare.
+            AdvanceCommitPosition(leaseCommitPosition.Value);
+
+            return leaseCommitPosition.Value;
         }
     }
 
