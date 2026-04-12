@@ -28,7 +28,7 @@ internal sealed class LeaseContender(
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
-                    logger.LogDebug("Log lease contender cancelled");
+                    logger.LogDebug("Lease contender cancelled");
                 }
             }
         }
@@ -36,11 +36,13 @@ internal sealed class LeaseContender(
 
     private async Task<Lease> AcquireAsync(CancellationToken cancellationToken)
     {
+        logger.LogInformation("Waiting to acquire lease");
+
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            logger.LogDebug("Attempting to acquire log lease");
+            logger.LogDebug("Attempting to acquire lease");
 
             var doc = await store
                 .AcquireAsync(Environment.MachineName, options.LeaseDuration, cancellationToken)
@@ -49,13 +51,13 @@ internal sealed class LeaseContender(
             if (doc is not null)
             {
                 logger.LogInformation(
-                    "Log lease acquired (epoch {Epoch}, commitPosition {CommitPosition})",
+                    "Lease acquired (epoch {Epoch}, commitPosition {CommitPosition})",
                     doc.Epoch, doc.CommitPosition);
 
                 return new Lease(doc, store, options.LeaseDuration, options.LeaseRenewInterval, logger, _timeProvider);
             }
 
-            logger.LogDebug("Log lease held elsewhere; retrying in {Delay}", options.LeaseAcquireRetryDelay);
+            logger.LogDebug("Lease held elsewhere; retrying in {Delay}", options.LeaseAcquireRetryDelay);
             await _timeProvider.Delay(options.LeaseAcquireRetryDelay, cancellationToken).ConfigureAwait(false);
         }
     }

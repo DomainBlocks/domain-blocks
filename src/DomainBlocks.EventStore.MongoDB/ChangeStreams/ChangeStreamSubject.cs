@@ -80,7 +80,7 @@ internal sealed class ChangeStreamSubject<TDocument, TResult>(
 
         private async Task RunProducerAsync()
         {
-            _logger?.LogInformation("Producer started");
+            _logger?.LogDebug("Producer started");
 
             try
             {

@@ -106,7 +106,7 @@ internal sealed class Lease : IAsyncDisposable
 
             if (await _store.TryReleaseAsync(_holderId, Epoch, cts.Token).ConfigureAwait(false))
             {
-                _logger.LogInformation("Log lease released by '{HolderId}' (epoch {Epoch})", _holderId, Epoch);
+                _logger.LogInformation("Lease released by '{HolderId}' (epoch {Epoch})", _holderId, Epoch);
             }
             else
             {
@@ -118,7 +118,7 @@ internal sealed class Lease : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to release log lease for '{HolderId}' (epoch {Epoch})", _holderId, Epoch);
+            _logger.LogError(ex, "Failed to release lease for '{HolderId}' (epoch {Epoch})", _holderId, Epoch);
         }
     }
 }

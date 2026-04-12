@@ -27,6 +27,8 @@ Console.CancelKeyPress += (_, e) =>
 
 await MongoEventStoreAdmin.EnsureInitializedAsync(mongoClient, options, cts.Token);
 
+logger.LogInformation("Starting leader node");
+
 // Create and start node
 await using var node = new MongoEventStoreNode(mongoClient, options, loggerFactory);
 
@@ -37,5 +39,5 @@ try
 }
 catch (OperationCanceledException) when (cts.IsCancellationRequested)
 {
-    logger.LogInformation("Stopped.");
+    logger.LogInformation("Stopped");
 }

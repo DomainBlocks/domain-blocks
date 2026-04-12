@@ -42,7 +42,7 @@ var client = node.CreateClient(eventCodec);
 var streamId = $"example-{Guid.NewGuid():N}";
 var counter = 0;
 
-logger.LogInformation("Starting event loop on stream {StreamId}. Press Ctrl+C to stop.", streamId);
+logger.LogInformation("Client node writing events on stream {StreamId}. Press Ctrl+C to stop.", streamId);
 
 try
 {
@@ -52,14 +52,14 @@ try
 
         await client.AppendToStreamAsync(streamId, [@event], cancellationToken: cts.Token);
 
-        logger.LogInformation("Appended event #{Counter} at {Timestamp}", counter, @event.Timestamp);
+        logger.LogInformation("Appended event #{Counter}", counter);
 
         await Task.Delay(TimeSpan.FromSeconds(1), cts.Token);
     }
 }
 catch (OperationCanceledException) when (cts.IsCancellationRequested)
 {
-    logger.LogInformation("Stopped.");
+    logger.LogInformation("Stopped");
 }
 
 internal interface IDomainEvent;
