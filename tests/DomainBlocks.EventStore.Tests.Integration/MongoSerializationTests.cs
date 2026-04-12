@@ -1,4 +1,5 @@
-using DomainBlocks.EventStore.MongoDB.Generic;
+using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.MongoDB;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.Abstractions;
 using DomainBlocks.Serialization.Google.Protobuf;
@@ -66,7 +67,15 @@ public class MongoSerializationTests
     {
         using var mongoClient = new MongoClient(MongoConnectionStrings.Default);
 
-        var client = CreateEventStoreClient(mongoClient, serde);
+        var options = new MongoEventStoreNodeOptions
+        {
+            DatabaseName = "domainblocks_tests"
+        };
+
+        await using var node = new MongoEventStoreNode(mongoClient, options);
+        await node.StartAsync();
+
+        var client = CreateEventStoreClient(node, serde);
 
         var streamId = $"test-{serde.GetType().Name}-{Guid.NewGuid()}";
         await client.AppendToStreamAsync(streamId, [@event]);
@@ -79,29 +88,35 @@ public class MongoSerializationTests
             .ShouldBe(@event);
     }
 
-    private static MongoEventStoreClient<object, EventDocument> CreateEventStoreClient(
-        MongoClient mongoClient,
+    private static IEventStoreClient<object> CreateEventStoreClient(
+        MongoEventStoreNode node,
         IObjectSerde<BsonValue> serde)
     {
         var eventTypeMap = EventTypeMap.Create(builder => builder
             .MapType<UserCreated>()
             .MapType<Proto.UserCreated>(m => m.WithName("ProtoUserCreated")));
 
-        var codecOptions = new EventCodecOptions<object, BsonValue, BsonValue>
+        var encoderOptions = new EventEncoderOptions<object, BsonValue, BsonValue>
         {
-            TypeMap = eventTypeMap,
-            EventSerde = serde,
-            MetadataSerde = new BsonDocumentMetadataSerde()
+            TypeMap = eventTypeMap.Appends,
+            EventSerializer = serde,
+            MetadataSerializer = new BsonDocumentMetadataSerde()
         };
 
-        var options = new MongoEventStoreClientOptions<object, EventDocument>
+        var decoderOptions = new EventDecoderOptions<object, BsonValue, BsonValue>
         {
-            CollectionOptions = EventStoreCollectionOptions.Default,
-            EventDocumentSchema = EventDocumentSchema.Default,
-            EventDocumentCodec = EventDocumentCodec.Create(EventCodec.Create(codecOptions))
+            TypeMap = eventTypeMap.Reads,
+            EventDeserializer = serde,
+            MetadataDeserializer = new BsonDocumentMetadataSerde()
         };
 
-        return new MongoEventStoreClient<object, EventDocument>(mongoClient, options);
+        var eventCode = new EventCodec<object, BsonValue, BsonValue>
+        {
+            Encoder = EventEncoder.Create(encoderOptions),
+            Decoder = EventDecoder.Create(decoderOptions)
+        };
+
+        return node.CreateClient(eventCode);
     }
 
     private record UserCreated

@@ -5,6 +5,7 @@ using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using DomainBlocks.EventStore.MongoDB.Coordination;
 using DomainBlocks.EventStore.MongoDB.Schema;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
@@ -35,10 +36,12 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
     public MongoEventStoreNode(
         IMongoClient mongoClient,
         MongoEventStoreNodeOptions options,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory? loggerFactory = null)
     {
         if (options.NodeRole is NodeRole.None)
             throw new ArgumentException("NodeRole must be specified.", nameof(options));
+
+        loggerFactory ??= NullLoggerFactory.Instance;
 
         _database = mongoClient
             .GetDatabase(options.DatabaseName)
@@ -109,11 +112,7 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
         if (_options.NodeRole is NodeRole.Leader)
             throw new InvalidOperationException("Cannot create a client on a leader-only node.");
 
-        var client = new MongoEventStoreClient<TEvent>(
-            _requestChannel.Writer,
-            eventCodec,
-            _loggerFactory.CreateLogger<MongoEventStoreClient<TEvent>>());
-
+        var client = new MongoEventStoreClient<TEvent>(_requestChannel.Writer, _eventLog, _leases, eventCodec);
         _commitSubject.Attach(client);
 
         return client;

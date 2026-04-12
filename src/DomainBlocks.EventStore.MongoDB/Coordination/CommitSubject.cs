@@ -17,31 +17,22 @@ internal sealed class CommitSubject(ILogger<CommitSubject> logger)
             observer);
     }
 
-    public void NotifyCommitted(Guid commitId)
+    public void NotifyCommitPositionAdvanced(long commitPosition)
     {
-        InvokeCommitted(commitId);
-    }
-
-    public void NotifyDuplicatesSkipped(BsonValue payload)
-    {
-        var commitIds = payload[DuplicatesSkipped.FieldNames.CommitIds].AsBsonArray;
-
-        foreach (var id in commitIds)
-            InvokeCommitted(id.AsGuid);
-    }
-
-    public void NotifyConflictsRejected(BsonValue payload)
-    {
-        var conflicts = payload[ConflictsRejected.FieldNames.Conflicts].AsBsonArray;
-
-        foreach (var conflict in conflicts)
+        foreach (var observer in _observers)
         {
-            var commitId = conflict[AppendConflict.FieldNames.CommitId].AsGuid;
-            InvokeConflictRejected(commitId, conflict);
+            try
+            {
+                observer.OnCommitPositionAdvanced(commitPosition);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error invoking OnCommitPositionAdvanced for position {Position}", commitPosition);
+            }
         }
     }
 
-    private void InvokeCommitted(Guid commitId)
+    public void NotifyCommitted(Guid commitId)
     {
         foreach (var observer in _observers)
         {
@@ -56,17 +47,33 @@ internal sealed class CommitSubject(ILogger<CommitSubject> logger)
         }
     }
 
-    private void InvokeConflictRejected(Guid commitId, BsonValue conflict)
+    public void NotifyDuplicatesSkipped(BsonValue payload)
     {
-        foreach (var observer in _observers)
+        var commitIds = payload[DuplicatesSkipped.FieldNames.CommitIds].AsBsonArray;
+
+        foreach (var id in commitIds)
+            NotifyCommitted(id.AsGuid);
+    }
+
+    public void NotifyConflictsRejected(BsonValue payload)
+    {
+        var conflicts = payload[ConflictsRejected.FieldNames.Conflicts].AsBsonArray;
+        var observers = _observers;
+
+        foreach (var conflict in conflicts)
         {
-            try
+            var commitId = conflict[AppendConflict.FieldNames.CommitId].AsGuid;
+
+            foreach (var observer in observers)
             {
-                observer.OnConflictRejected(commitId, conflict);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error invoking OnCommitRejected for commit ID {CommitId}", commitId);
+                try
+                {
+                    observer.OnConflictRejected(commitId, conflict);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Error invoking OnCommitRejected for commit ID {CommitId}", commitId);
+                }
             }
         }
     }

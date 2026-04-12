@@ -1,8 +1,6 @@
-using DomainBlocks.EventStore.MongoDB.Generic;
+using DomainBlocks.EventStore.MongoDB;
 using DomainBlocks.EventStore.TypeMapping;
-using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Testing.Integration.MongoDB;
-using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 using NUnit.Framework;
@@ -24,6 +22,16 @@ public class EventStoreClientTests
     [Test]
     public async Task Should_read_multiple_events_as_common_type()
     {
+        using var mongoClient = new MongoClient(MongoConnectionStrings.Default);
+
+        var options = new MongoEventStoreNodeOptions
+        {
+            DatabaseName = "domainblocks_tests"
+        };
+
+        await using var node = new MongoEventStoreNode(mongoClient, options);
+        await node.StartAsync();
+
         var eventTypeMap = EventTypeMap.Create(builder => builder
             .ForAppends(appends => appends
                 .MapType<LimitOrderSubmitted>()
@@ -36,24 +44,8 @@ public class EventStoreClientTests
                         nameof(LimitOrderAmended),
                         nameof(LimitOrderFilled)))));
 
-        var codecOptions = new EventCodecOptions<object, BsonValue, BsonValue>
-        {
-            TypeMap = eventTypeMap,
-            EventSerde = new BsonDocumentObjectSerde(),
-            MetadataSerde = new BsonDocumentMetadataSerde()
-        };
-
-        var collectionOptions = EventStoreCollectionOptions.Default;
-
-        var clientOptions = new MongoEventStoreClientOptions<object, EventDocument>
-        {
-            CollectionOptions = collectionOptions,
-            EventDocumentSchema = EventDocumentSchema.Default,
-            EventDocumentCodec = EventDocumentCodec.Create(EventCodec.Create(codecOptions))
-        };
-
-        using var mongoClient = new MongoClient(MongoConnectionStrings.Default);
-        var client = new MongoEventStoreClient<object, EventDocument>(mongoClient, clientOptions);
+        var eventCode = MongoTestEventCodec.Create<object>(eventTypeMap);
+        var client = node.CreateClient(eventCode);
 
         var orderId = Guid.NewGuid();
         var streamId = $"order-{orderId}";

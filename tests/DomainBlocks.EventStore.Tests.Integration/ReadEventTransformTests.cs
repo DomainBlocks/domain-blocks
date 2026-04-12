@@ -1,10 +1,8 @@
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.MongoDB.Generic;
+using DomainBlocks.EventStore.MongoDB;
 using DomainBlocks.EventStore.Transforms;
 using DomainBlocks.EventStore.TypeMapping;
-using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Testing.Integration.MongoDB;
-using MongoDB.Bson;
 using MongoDB.Driver;
 using NUnit.Framework;
 using Shouldly;
@@ -16,8 +14,22 @@ public class ReadEventTransformTests
     [Test]
     public async Task Should_transform_read_event()
     {
+        using var mongoClient = new MongoClient(MongoConnectionStrings.Default);
+
         var shipmentId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
         var dispatchedAt = new DateTime(2025, 08, 25, 14, 30, 0, DateTimeKind.Utc);
+
+        var options = new MongoEventStoreNodeOptions
+        {
+            DatabaseName = "domainblocks_tests"
+        };
+
+        await using var node = new MongoEventStoreNode(mongoClient, options);
+        await node.StartAsync();
+
+        var eventTypeMap = EventTypeMap.Create(x => x.MapType<ShipmentDispatched>());
+        var eventCode = MongoTestEventCodec.Create<object>(eventTypeMap);
+        var client = node.CreateClient(eventCode);
 
         var legacyEvent = new ShipmentDispatched(
             shipmentId,
@@ -53,23 +65,6 @@ public class ReadEventTransformTests
                 WeightKg: 5.0,
                 Destination: "Madrid, ES")
         };
-
-        var codecOptions = new EventCodecOptions<object, BsonValue, BsonValue>
-        {
-            TypeMap = EventTypeMap.Create(x => x.MapType<ShipmentDispatched>()),
-            EventSerde = new BsonDocumentObjectSerde(),
-            MetadataSerde = new BsonDocumentMetadataSerde()
-        };
-
-        var options = new MongoEventStoreClientOptions<object, EventDocument>
-        {
-            CollectionOptions = EventStoreCollectionOptions.Default,
-            EventDocumentSchema = EventDocumentSchema.Default,
-            EventDocumentCodec = EventDocumentCodec.Create(EventCodec.Create(codecOptions))
-        };
-
-        using var mongoClient = new MongoClient(MongoConnectionStrings.Default);
-        var client = new MongoEventStoreClient<object, EventDocument>(mongoClient, options);
 
         var streamId = $"test-read-transform-{Guid.NewGuid()}";
         await client.AppendToStreamAsync(streamId, [legacyEvent]);

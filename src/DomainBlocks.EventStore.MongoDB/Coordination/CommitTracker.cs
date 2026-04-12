@@ -148,6 +148,8 @@ internal sealed partial class CommitTracker(
     {
         _positionsBuffer.Clear();
 
+        commitSubject.NotifyCommitPositionAdvanced(commitPosition);
+
         foreach (var (position, entry) in _pendingEntries)
         {
             if (position > commitPosition)

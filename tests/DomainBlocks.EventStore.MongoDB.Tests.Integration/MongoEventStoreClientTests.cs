@@ -3,11 +3,9 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.TypeMapping;
-using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Testing.Integration;
 using DomainBlocks.Testing.Integration.MongoDB;
 using Microsoft.Extensions.Logging;
-using MongoDB.Bson;
 using MongoDB.Driver;
 using NUnit.Framework;
 
@@ -40,7 +38,9 @@ public class MongoEventStoreClientTests : EventStoreClientTests
 
         _node = new MongoEventStoreNode(_mongoClient, _options, _loggerFactory);
 
-        _client = _node.CreateClient(GetEventCodec());
+        var eventTypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>());
+        var eventCodec = MongoTestEventCodec.Create<IDomainEvent>(eventTypeMap);
+        _client = _node.CreateClient(eventCodec);
 
         await MongoEventStoreAdmin.EnsureInitializedAsync(_mongoClient, _options);
 
@@ -51,7 +51,6 @@ public class MongoEventStoreClientTests : EventStoreClientTests
     public async Task OneTimeTearDown()
     {
         await _node.DisposeAsync();
-
         await _mongoClient.DropDatabaseAsync(_options.DatabaseName);
 
         _mongoClient.Dispose();
@@ -59,13 +58,7 @@ public class MongoEventStoreClientTests : EventStoreClientTests
     }
 
     [Test]
-    [CancelAfter(TestTimeoutMillis)]
-    public async Task AppendOneTest(CancellationToken ct)
-    {
-        await AppendAsync("append-one", ct);
-    }
-
-    [Test]
+    [Explicit("Benchmark")]
     [CancelAfter(TestTimeoutMillis)]
     public async Task AppendToStreamAsync_SingleAppend_MeasureLatency(CancellationToken ct)
     {
@@ -100,6 +93,7 @@ public class MongoEventStoreClientTests : EventStoreClientTests
     }
 
     [Test]
+    [Explicit("Benchmark")]
     [CancelAfter(TestTimeoutMillis)]
     public async Task AppendToStreamAsync_MeasureThroughputCeiling(CancellationToken ct)
     {
@@ -192,30 +186,5 @@ public class MongoEventStoreClientTests : EventStoreClientTests
         };
 
         await Client.AppendToStreamAsync(streamId, events, options, ct);
-    }
-
-    private static EventCodec<IDomainEvent, BsonValue, BsonValue> GetEventCodec()
-    {
-        var eventTypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>());
-
-        var encoderOptions = new EventEncoderOptions<IDomainEvent, BsonValue, BsonValue>
-        {
-            TypeMap = eventTypeMap.Appends,
-            EventSerializer = new BsonDocumentObjectSerde(),
-            MetadataSerializer = new BsonDocumentMetadataSerde()
-        };
-
-        var decoderOptions = new EventDecoderOptions<IDomainEvent, BsonValue, BsonValue>
-        {
-            TypeMap = eventTypeMap.Reads,
-            EventDeserializer = new BsonDocumentObjectSerde(),
-            MetadataDeserializer = new BsonDocumentMetadataSerde()
-        };
-
-        return new EventCodec<IDomainEvent, BsonValue, BsonValue>
-        {
-            Encoder = EventEncoder.Create(encoderOptions),
-            Decoder = EventDecoder.Create(decoderOptions)
-        };
     }
 }
