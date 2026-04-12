@@ -4,13 +4,10 @@ namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
 internal sealed class LeaseContender(
     LeaseStore store,
+    MongoEventStoreNodeOptions options,
     ILogger<LeaseContender> logger,
     TimeProvider? timeProvider = null)
 {
-    private static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan RenewInterval = TimeSpan.FromSeconds(10);
-    private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(5);
-
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     public async Task RunAsync(ILeaseHandler handler, CancellationToken cancellationToken = default)
@@ -46,7 +43,7 @@ internal sealed class LeaseContender(
             logger.LogDebug("Attempting to acquire log lease");
 
             var doc = await store
-                .AcquireAsync(Environment.MachineName, LeaseDuration, cancellationToken)
+                .AcquireAsync(Environment.MachineName, options.LeaseDuration, cancellationToken)
                 .ConfigureAwait(false);
 
             if (doc is not null)
@@ -55,11 +52,11 @@ internal sealed class LeaseContender(
                     "Log lease acquired (epoch {Epoch}, commitPosition {CommitPosition})",
                     doc.Epoch, doc.CommitPosition);
 
-                return new Lease(doc, store, LeaseDuration, RenewInterval, logger, _timeProvider);
+                return new Lease(doc, store, options.LeaseDuration, options.LeaseRenewInterval, logger, _timeProvider);
             }
 
-            logger.LogDebug("Log lease held elsewhere; retrying in {Delay}", RetryDelay);
-            await _timeProvider.Delay(RetryDelay, cancellationToken).ConfigureAwait(false);
+            logger.LogDebug("Log lease held elsewhere; retrying in {Delay}", options.LeaseAcquireRetryDelay);
+            await _timeProvider.Delay(options.LeaseAcquireRetryDelay, cancellationToken).ConfigureAwait(false);
         }
     }
 

@@ -28,8 +28,8 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
     private readonly CancellationTokenSource _stopCts = new();
     private IChangeStreamSubject? _changeStreamSubject;
     private IChangeStreamConnection? _changeStreamConnection;
-    private Task? _publishRequestsTask;
-    private Task? _leaseContenderTask;
+    private Task _publishRequestsTask = Task.CompletedTask;
+    private Task _leaseContenderTask = Task.CompletedTask;
     private int _started;
     private int _disposed;
 
@@ -67,6 +67,10 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
         _logger = loggerFactory.CreateLogger<MongoEventStoreNode>();
     }
 
+    public Task Completed => Volatile.Read(ref _started) == 0
+        ? throw new InvalidOperationException("StartAsync must be called before accessing Completed.")
+        : Task.WhenAll(_publishRequestsTask, _leaseContenderTask);
+
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
@@ -88,7 +92,11 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
         if (_options.NodeRole.HasFlag(NodeRole.Leader))
         {
             var leaseStore = new LeaseStore(_leases);
-            var leaseContender = new LeaseContender(leaseStore, _loggerFactory.CreateLogger<LeaseContender>());
+
+            var leaseContender = new LeaseContender(
+                leaseStore,
+                _options,
+                _loggerFactory.CreateLogger<LeaseContender>());
 
             var leaseHandler = new LeaseHandler(
                 _requests,
@@ -131,12 +139,8 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
                 await _changeStreamConnection.DisposeAsync().ConfigureAwait(false);
 
             await _stopCts.CancelAsync().ConfigureAwait(false);
-
-            if (_publishRequestsTask is not null)
-                await _publishRequestsTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
-
-            if (_leaseContenderTask is not null)
-                await _leaseContenderTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            await _publishRequestsTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            await _leaseContenderTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
         }
     }
 

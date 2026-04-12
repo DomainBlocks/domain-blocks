@@ -24,4 +24,10 @@ public sealed class MongoEventStoreNodeOptions
     public int WriteQueueCapacity { get; set; } = 1_000;
 
     public int WriteBatchSize { get; set; } = 500;
+
+    public TimeSpan LeaseDuration { get; set; } = TimeSpan.FromSeconds(6);
+
+    public TimeSpan LeaseRenewInterval { get; set; } = TimeSpan.FromSeconds(2);
+
+    public TimeSpan LeaseAcquireRetryDelay { get; set; } = TimeSpan.FromSeconds(1);
 }
