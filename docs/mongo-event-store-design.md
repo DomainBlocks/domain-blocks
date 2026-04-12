@@ -106,8 +106,8 @@ to a live lease read on first access.
 
 ## Node Roles
 
-| Role           | Behaviour                                                            |
-|----------------|----------------------------------------------------------------------|
-| `ClientLeader` | Default. Dual role handling writes and ordering in a single process. |
-| `Client`       | Publishes requests and tracks commit outcomes only.                  |
-| `Leader`       | Competes for the lease and orders events only.                       |
+| Role           | Behaviour                                                                                            |
+|----------------|------------------------------------------------------------------------------------------------------|
+| `Client`       | Submits append requests and tracks commit outcomes via the change stream.                            |
+| `Leader`       | Competes for the lease and, when held, handles append requests by writing ordered events to the log. |
+| `ClientLeader` | Default. Both `Client` and `Leader` roles in a single process.                                       |
