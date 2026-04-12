@@ -24,7 +24,7 @@ internal static class ChangeStreamSubjectFactory
         // later connect to process live changes without gaps. This avoids the need to internally buffer.
         if (!HasResumeOption(options.MongoOptions))
         {
-            var cursor = await cursorFactory(pipeline, options.MongoOptions, cancellationToken);
+            using var cursor = await cursorFactory(pipeline, options.MongoOptions, cancellationToken);
 
             if (!await cursor.MoveNextAsync(cancellationToken).ConfigureAwait(false))
             {
