@@ -1,0 +1,36 @@
+﻿apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mongo-benchmarks
+  namespace: domain-blocks
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      initContainers:
+        - name: wait-for-mongo-primary
+          image: mongo:latest
+          command:
+            - bash
+            - -c
+            - |
+              echo "Waiting for MongoDB replica set to have a PRIMARY..."
+              until mongosh --host mongo-0.mongo.domain-blocks.svc.cluster.local \
+                    --quiet \
+                    --eval 'rs.status().members.filter(m => m.stateStr === "PRIMARY").length' \
+                    | grep -q 1; do
+                echo "No primary yet, retrying in 2s..."
+                sleep 2
+              done
+              echo "MongoDB primary is ready."
+      containers:
+        - name: benchmark-runner
+          image: domain-blocks-benchmarks:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MONGO_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: mongo-connection
+                  key: connectionString

@@ -1,13 +1,11 @@
 using DomainBlocks.EventSourcing.Tests.Integration.DomainEvents;
 using DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 using DomainBlocks.EventSourcing.Tests.Integration.EntityDefinitions;
-using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.MongoDB.Generic;
+using DomainBlocks.EventStore.MongoDB;
 using DomainBlocks.EventStore.TypeMapping;
-using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Testing.Integration.MongoDB;
-using MongoDB.Bson;
+using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using NUnit.Framework;
 using Shouldly;
@@ -17,33 +15,35 @@ namespace DomainBlocks.EventSourcing.Tests.Integration;
 [TestFixture]
 public class EntityStoreTests
 {
-    private EntityStore<IDomainEvent> _entityStore = null!;
     private MongoClient _mongoClient = null!;
+    private MongoEventStoreNodeOptions _options = null!;
+    private ILoggerFactory _loggerFactory = null!;
+    private MongoEventStoreNode _node = null!;
+    private EntityStore<IDomainEvent> _entityStore = null!;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
     {
+        _mongoClient = new MongoClient(MongoConnectionStrings.Default);
+
+        _options = new MongoEventStoreNodeOptions
+        {
+            DatabaseName = "domainblocks_tests"
+        };
+
+        _loggerFactory = LoggerFactory.Create(x => x
+            .AddSimpleConsole(o => o.TimestampFormat = "HH:mm:ss.fff ")
+            .SetMinimumLevel(LogLevel.Debug));
+
+        _node = new MongoEventStoreNode(_mongoClient, _options, _loggerFactory);
+
         var eventTypeMap = EventTypeMap.Create(builder => builder
             .MapType<ShoppingSessionStarted>()
             .MapType<ItemAddedToShoppingCart>()
             .MapType<ItemRemovedFromShoppingCart>());
 
-        var codecOptions = new EventCodecOptions<IDomainEvent, BsonValue, BsonValue>
-        {
-            TypeMap = eventTypeMap,
-            EventSerde = new BsonDocumentObjectSerde(),
-            MetadataSerde = new BsonDocumentMetadataSerde()
-        };
-
-        var options = new MongoEventStoreClientOptions<IDomainEvent, EventDocument>
-        {
-            CollectionOptions = EventStoreCollectionOptions.Default,
-            EventDocumentSchema = EventDocumentSchema.Default,
-            EventDocumentCodec = EventDocumentCodec.Create(EventCodec.Create(codecOptions))
-        };
-
-        _mongoClient = new MongoClient(MongoConnectionStrings.Default);
-        var eventStoreClient = new MongoEventStoreClient<IDomainEvent, EventDocument>(_mongoClient, options);
+        var eventCode = MongoTestEventCodec.Create<IDomainEvent>(eventTypeMap);
+        var eventStoreClient = _node.CreateClient(eventCode);
 
         var entityDefinitionProvider = new CompositeEntityDefinitionProvider<IDomainEvent>(
         [
@@ -55,16 +55,19 @@ public class EntityStoreTests
 
         _entityStore = new EntityStore<IDomainEvent>(eventStoreClient, entityDefinitionProvider);
 
-        await MongoEventStoreAdmin.EnsureIndexesAsync(
-            _mongoClient,
-            options.CollectionOptions,
-            options.EventDocumentSchema);
+        await MongoEventStoreAdmin.EnsureInitializedAsync(_mongoClient, _options);
+
+        await _node.StartAsync();
     }
 
     [OneTimeTearDown]
-    public void OneTimeTearDown()
+    public async Task OneTimeTearDown()
     {
+        await _node.DisposeAsync();
+        await _mongoClient.DropDatabaseAsync(_options.DatabaseName);
+
         _mongoClient.Dispose();
+        _loggerFactory.Dispose();
     }
 
     [Test]

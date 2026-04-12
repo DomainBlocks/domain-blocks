@@ -6,7 +6,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
-    <PackageReference Include="MongoDB.Driver" Version="3.5.2" />
+    <PackageReference Include="MongoDB.Driver" Version="3.7.1" />
     <PackageReference Include="NUnit" Version="4.4.0"/>
     <PackageReference Include="Shouldly" Version="4.3.0"/>
   </ItemGroup>
@@ -17,10 +17,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\DomainBlocks.EventStore.KurrentDB\DomainBlocks.EventStore.KurrentDB.csproj" />
-    <ProjectReference Include="..\..\src\DomainBlocks.EventStore.MongoDB.Generic\DomainBlocks.EventStore.MongoDB.Generic.csproj" />
-    <ProjectReference Include="..\..\src\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj"/>
+    <ProjectReference Include="..\..\src\DomainBlocks.EventStore.MongoDB\DomainBlocks.EventStore.MongoDB.csproj" />
     <ProjectReference Include="..\..\src\DomainBlocks.Serialization.Google.Protobuf\DomainBlocks.Serialization.Google.Protobuf.csproj"/>
-    <ProjectReference Include="..\..\src\DomainBlocks.Serialization.MongoDB.Bson\DomainBlocks.Serialization.MongoDB.Bson.csproj"/>
     <ProjectReference Include="..\..\src\DomainBlocks.Serialization.SystemTextJson\DomainBlocks.Serialization.SystemTextJson.csproj"/>
     <ProjectReference Include="..\DomainBlocks.Serialization.Google.Protobuf.Tests\DomainBlocks.Serialization.Google.Protobuf.Tests.csproj"/>
     <ProjectReference Include="..\DomainBlocks.Testing.Integration.MongoDB\DomainBlocks.Testing.Integration.MongoDB.csproj" />

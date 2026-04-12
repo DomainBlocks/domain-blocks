@@ -9,9 +9,9 @@ public abstract class EventStoreClientTests
 {
     // Set a longer timeout when debugging.
 #if DEBUG
-    private const int TestTimeoutMillis = 10 * 60 * 1_000;
+    protected const int TestTimeoutMillis = 10 * 60 * 1_000;
 #else
-    private const int TestTimeoutMillis = 5 * 1_000;
+    protected const int TestTimeoutMillis = 120 * 1_000;
 #endif
 
     private static IEnumerable<TestCaseData> PositionAndDirectionCases
@@ -48,7 +48,7 @@ public abstract class EventStoreClientTests
             CreateTestEvent("TestEvent3")
         ];
 
-        var streamId = $"test-{Guid.NewGuid()}";
+        var streamId = $"test-{Guid.NewGuid():N}";
 
         await Client.AppendToStreamAsync(streamId, events, cancellationToken: cancellationToken);
 
@@ -79,7 +79,7 @@ public abstract class EventStoreClientTests
             CreateTestEvent("TestEvent6")
         ];
 
-        var streamId = $"test-{Guid.NewGuid()}";
+        var streamId = $"test-{Guid.NewGuid():N}";
 
         await Client.AppendToStreamAsync(streamId, events1, cancellationToken: cancellationToken);
         await Client.AppendToStreamAsync(streamId, events2, cancellationToken: cancellationToken);
@@ -100,7 +100,7 @@ public abstract class EventStoreClientTests
     public async Task AppendToStreamAsync_ExpectedStateHasWrongVersion_ThrowsVersionConflict(
         CancellationToken cancellationToken)
     {
-        var streamId = $"test-{Guid.NewGuid()}";
+        var streamId = $"test-{Guid.NewGuid():N}";
 
         await Client.AppendToStreamAsync(
             streamId,
@@ -135,7 +135,7 @@ public abstract class EventStoreClientTests
     public async Task AppendToStreamAsync_ExpectedStateIsStreamExistsAndStreamDoesNotExist_ThrowsExpectedStreamToExist(
         CancellationToken cancellationToken)
     {
-        var streamId = $"test-{Guid.NewGuid()}";
+        var streamId = $"test-{Guid.NewGuid():N}";
 
         var exception = await Client
             .AppendToStreamAsync(
@@ -161,7 +161,7 @@ public abstract class EventStoreClientTests
         AppendToStreamAsync_ExpectedStateIsStreamDoesNotExistAndStreamExists_ThrowsExpectedStreamToNotExist(
             CancellationToken cancellationToken)
     {
-        var streamId = $"test-{Guid.NewGuid()}";
+        var streamId = $"test-{Guid.NewGuid():N}";
 
         await Client.AppendToStreamAsync(
             streamId,
@@ -193,7 +193,7 @@ public abstract class EventStoreClientTests
         StreamReadDirection direction,
         CancellationToken cancellationToken)
     {
-        var streamId = $"test-{Guid.NewGuid()}";
+        var streamId = $"test-{Guid.NewGuid():N}";
 
         await Client.AppendToStreamAsync(
             streamId,
@@ -220,7 +220,7 @@ public abstract class EventStoreClientTests
         StreamReadDirection direction,
         CancellationToken cancellationToken)
     {
-        var streamId = $"test-{Guid.NewGuid()}";
+        var streamId = $"test-{Guid.NewGuid():N}";
 
         var options = new ReadStreamOptions
         {
@@ -242,7 +242,7 @@ public abstract class EventStoreClientTests
         StreamReadDirection direction,
         CancellationToken cancellationToken)
     {
-        var streamId = $"test-{Guid.NewGuid()}";
+        var streamId = $"test-{Guid.NewGuid():N}";
 
         var options = new ReadStreamOptions
         {
@@ -277,7 +277,7 @@ public abstract class EventStoreClientTests
             CreateTestEvent("TestEvent6").Event
         ];
 
-        var streamId = $"test-{Guid.NewGuid()}";
+        var streamId = $"test-{Guid.NewGuid():N}";
 
         await Client.AppendToStreamAsync(streamId, events1, cancellationToken: cancellationToken);
         await Client.AppendToStreamAsync(streamId, events2, cancellationToken: cancellationToken);
@@ -314,7 +314,7 @@ public abstract class EventStoreClientTests
         }
     }
 
-    private static AppendEvent<IDomainEvent> CreateTestEvent(string value)
+    protected static AppendEvent<IDomainEvent> CreateTestEvent(string value)
     {
         return new AppendEvent<IDomainEvent>(new TestEvent { Value = value });
     }

@@ -28,12 +28,14 @@ dotnet_analyzer_diagnostic.category-Style.severity = warning
 
 # Set severity level of specific rules (sorted by rule ID)
 dotnet_diagnostic.IDE0007.severity = suggestion # Use var instead of explicit type
+dotnet_diagnostic.IDE0010.severity = suggestion # Add missing cases to switch statement
 dotnet_diagnostic.IDE0022.severity = silent     # Use expression body for methods
 dotnet_diagnostic.IDE0023.severity = silent     # Use expression body for conversion operators
 dotnet_diagnostic.IDE0024.severity = silent     # Use expression body for operators
 dotnet_diagnostic.IDE0028.severity = suggestion # Use collection initializers or expressions
 dotnet_diagnostic.IDE0045.severity = suggestion # Use conditional expression for assignment
 dotnet_diagnostic.IDE0058.severity = silent     # Remove unnecessary expression value
+dotnet_diagnostic.IDE0061.severity = silent     # Use expression/block body for local function
 dotnet_diagnostic.IDE0065.severity = suggestion # Using directive placement
 dotnet_diagnostic.IDE0072.severity = suggestion # Add missing cases to switch expression
 dotnet_diagnostic.IDE0270.severity = suggestion # Null check can be simplified (if null check)
