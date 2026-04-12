@@ -676,7 +676,7 @@ public class EventLogWriterTests
 
     private static string CreateStreamId() => $"stream-{Guid.CreateVersion7():N}";
 
-    private EventLogWriter CreateWriter(long epoch = Epoch, long? initialCommitPosition = null)
+    private EventLogWriter CreateWriter(long epoch = Epoch, long initialCommitPosition = -1)
     {
         return new EventLogWriter(
             _eventLogAsBson,

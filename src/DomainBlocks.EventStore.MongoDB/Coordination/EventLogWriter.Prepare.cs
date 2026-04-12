@@ -13,13 +13,7 @@ internal partial class EventLogWriter
         { "version", new BsonDocument("$max", $"${EventLogEntry.FieldNames.StreamVersion}") }
     });
 
-    private readonly BsonDocument _visibilityFilter = epochStartPosition.HasValue
-        ? new BsonDocument("$or", new BsonArray
-        {
-            new BsonDocument(EventLogEntry.FieldNames.Epoch, epoch),
-            new BsonDocument("_id", new BsonDocument("$lte", epochStartPosition.Value))
-        })
-        : new BsonDocument(EventLogEntry.FieldNames.Epoch, epoch);
+    private readonly BsonDocument _visibilityFilter;
 
     private readonly HashSet<BsonValue> _prepareDedup = [];
     private readonly BsonArray _prepareCommitIds = [];
@@ -61,20 +55,20 @@ internal partial class EventLogWriter
             GroupByStreamStage
         };
 
-        var duplicatesTask = eventLog
+        var duplicatesTask = _eventLog
             .Distinct<BsonValue>(
                 EventLogEntry.FieldNames.CommitId,
                 commitIdFilter,
                 cancellationToken: cancellationToken)
             .ForEachAsync(x => _duplicateCommitIds.Add(x.AsGuid), cancellationToken);
 
-        var versionsTask = eventLog
+        var versionsTask = _eventLog
             .Aggregate<BsonDocument>(maxStreamVersionsPipeline, cancellationToken: cancellationToken)
             .ForEachAsync(x => _headStreamVersions[x["_id"].AsString] = x["version"].AsInt64, cancellationToken);
 
         await Task.WhenAll(duplicatesTask, versionsTask).ConfigureAwait(false);
 
-        logger.LogDebug(
+        _logger.LogDebug(
             "Prepare complete: Found {DuplicateCount} duplicate(s), loaded {StreamCount} stream version(s)",
             _duplicateCommitIds.Count,
             _headStreamVersions.Count);

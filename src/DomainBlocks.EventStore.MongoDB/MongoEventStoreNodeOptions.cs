@@ -25,7 +25,7 @@ public sealed class MongoEventStoreNodeOptions
 
     public int WriteBatchSize { get; set; } = 500;
 
-    public TimeSpan LeaseDuration { get; set; } = TimeSpan.FromSeconds(6);
+    public Func<TimeSpan> LeaseDuration { get; set; } = () => TimeSpan.FromSeconds(6);
 
     public TimeSpan LeaseRenewInterval { get; set; } = TimeSpan.FromSeconds(2);
 

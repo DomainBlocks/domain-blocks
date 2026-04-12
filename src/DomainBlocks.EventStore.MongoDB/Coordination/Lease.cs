@@ -7,7 +7,7 @@ internal sealed class Lease : IAsyncDisposable
 {
     private readonly string _holderId;
     private readonly LeaseStore _store;
-    private readonly TimeSpan _duration;
+    private readonly Func<TimeSpan> _duration;
     private readonly TimeSpan _renewInterval;
     private readonly ILogger _logger;
     private readonly TimeProvider _timeProvider;
@@ -22,7 +22,7 @@ internal sealed class Lease : IAsyncDisposable
     public Lease(
         LeaseDocument document,
         LeaseStore store,
-        TimeSpan duration,
+        Func<TimeSpan> duration,
         TimeSpan renewInterval,
         ILogger logger,
         TimeProvider timeProvider)
@@ -39,7 +39,7 @@ internal sealed class Lease : IAsyncDisposable
     }
 
     public long Epoch { get; }
-    public long? CommitPosition { get; }
+    public long CommitPosition { get; }
     public CancellationToken LeaseLostToken => _leaseLostCts.Token;
     public Task<LeaseLostInfo> LeaseLostTask => _leaseLostTcs.Task;
 
@@ -69,7 +69,7 @@ internal sealed class Lease : IAsyncDisposable
                 await _timeProvider.Delay(_renewInterval, _leaseLostCts.Token).ConfigureAwait(false);
 
                 var renewed = await _store
-                    .TryRenewAsync(_holderId, Epoch, _duration, _leaseLostCts.Token)
+                    .TryRenewAsync(_holderId, Epoch, _duration(), _leaseLostCts.Token)
                     .ConfigureAwait(false);
 
                 if (renewed)
@@ -78,7 +78,7 @@ internal sealed class Lease : IAsyncDisposable
                     continue;
                 }
 
-                _logger.LogInformation("Lease lost by '{HolderId}' (epoch {Epoch}): revoked", _holderId, Epoch);
+                _logger.LogWarning("Lease lost by '{HolderId}' (epoch {Epoch}): revoked", _holderId, Epoch);
 
                 await _leaseLostCts.CancelAsync().ConfigureAwait(false);
                 _leaseLostTcs.TrySetResult(new LeaseLostInfo(LeaseLostReason.Revoked));

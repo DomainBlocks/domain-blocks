@@ -22,7 +22,7 @@ internal sealed class LeaseDocument
     public required DateTime ExpiresAtUtc { get; init; }
 
     [BsonElement(FieldNames.CommitPosition)]
-    public long? CommitPosition { get; init; }
+    public long CommitPosition { get; init; }
 
     [BsonElement(FieldNames.LastUpdatedAtUtc)]
     public required DateTime LastUpdatedAtUtc { get; init; }

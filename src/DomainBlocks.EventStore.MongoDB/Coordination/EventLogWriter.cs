@@ -7,12 +7,7 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
-internal sealed partial class EventLogWriter(
-    IMongoCollection<BsonDocument> eventLog,
-    long epoch,
-    long? epochStartPosition,
-    ILogger<EventLogWriter> logger) :
-    IEventLogWriter
+internal sealed partial class EventLogWriter : IEventLogWriter
 {
     private static readonly BulkWriteOptions OrderedBulkWriteOptions = new() { IsOrdered = true };
 
@@ -26,7 +21,31 @@ internal sealed partial class EventLogWriter(
 
     private bool _isPrepared;
     private Task _prepareTask = Task.CompletedTask;
-    private long _nextPosition = epochStartPosition.HasValue ? epochStartPosition.Value + 1 : 0;
+    private long _nextPosition;
+    private readonly IMongoCollection<BsonDocument> _eventLog;
+    private readonly long _epoch;
+    private readonly ILogger<EventLogWriter> _logger;
+
+    public EventLogWriter(
+        IMongoCollection<BsonDocument> eventLog,
+        long epoch,
+        long epochStartPosition,
+        ILogger<EventLogWriter> logger)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(epoch, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(epochStartPosition, -1);
+
+        _eventLog = eventLog;
+        _epoch = epoch;
+        _logger = logger;
+        _nextPosition = epochStartPosition + 1;
+
+        _visibilityFilter = new BsonDocument("$or", new BsonArray
+        {
+            new BsonDocument(EventLogEntry.FieldNames.Epoch, epoch),
+            new BsonDocument("_id", new BsonDocument("$lte", epochStartPosition))
+        });
+    }
 
     public void Prepare(IEnumerable<BsonDocument> requests, CancellationToken cancellationToken)
     {
@@ -59,16 +78,16 @@ internal sealed partial class EventLogWriter(
 
             if (_writes.Count == 0)
             {
-                logger.LogDebug("Batch produced no writes; skipping");
+                _logger.LogDebug("Batch produced no writes; skipping");
                 return EventLogWriteResult.Empty;
             }
 
-            await eventLog.BulkWriteAsync(_writes, OrderedBulkWriteOptions, cancellationToken).ConfigureAwait(false);
+            await _eventLog.BulkWriteAsync(_writes, OrderedBulkWriteOptions, cancellationToken).ConfigureAwait(false);
 
             var startPosition = _nextPosition;
             _nextPosition += _writes.Count;
 
-            logger.LogInformation(
+            _logger.LogInformation(
                 "Batch appended: positions {StartPosition}–{EndPosition}, " +
                 "{AppendCount} appended, {DuplicateCount} duplicate(s), {RejectionCount} rejected",
                 startPosition,
@@ -125,7 +144,7 @@ internal sealed partial class EventLogWriter(
             var expectedStreamState = bsonExpectedStreamState.ToExpectedStreamState();
             if (!expectedStreamState.Matches(actualStreamState))
             {
-                logger.LogWarning(
+                _logger.LogWarning(
                     "Append rejected for commit ID {CommitId}, stream '{StreamId}': " +
                     "expected {ExpectedState}, actual {ActualState}",
                     commitId,
@@ -149,7 +168,7 @@ internal sealed partial class EventLogWriter(
             {
                 var replaceOneModel = CreateReplaceOneModel(
                     _nextPosition + _writes.Count,
-                    epoch,
+                    _epoch,
                     bsonStreamId,
                     ++streamVersion,
                     bsonCommitId,
@@ -170,7 +189,7 @@ internal sealed partial class EventLogWriter(
 
             var replaceOneModel = CreateReplaceOneModel(
                 _nextPosition + _writes.Count,
-                epoch,
+                _epoch,
                 BsonString.Empty,
                 0,
                 BsonNull.Value,
@@ -189,7 +208,7 @@ internal sealed partial class EventLogWriter(
 
             var replaceOneModel = CreateReplaceOneModel(
                 _nextPosition + _writes.Count,
-                epoch,
+                _epoch,
                 streamId: BsonString.Empty,
                 streamVersion: 0,
                 commitId: BsonNull.Value,

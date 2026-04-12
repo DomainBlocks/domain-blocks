@@ -29,6 +29,7 @@ internal sealed class LeaseStore(IMongoCollection<LeaseDocument> leases, TimePro
             .Inc(x => x.Epoch, 1)
             .Set(x => x.AcquiredAtUtc, now)
             .Set(x => x.ExpiresAtUtc, now + duration)
+            .SetOnInsert(x => x.CommitPosition, -1)
             .Set(x => x.LastUpdatedAtUtc, now);
 
         try

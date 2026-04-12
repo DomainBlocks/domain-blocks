@@ -3,10 +3,15 @@ using DomainBlocks.Testing.Integration.MongoDB;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 
+var chaosMode = SelectChaosMode(args);
+
 var options = new MongoEventStoreNodeOptions
 {
     DatabaseName = "domainblocks_examples",
-    NodeRole = NodeRole.Leader
+    NodeRole = NodeRole.Leader,
+    LeaseDuration = chaosMode
+        ? () => Random.Shared.NextDouble() < 0.5 ? TimeSpan.FromMilliseconds(1) : TimeSpan.FromSeconds(6)
+        : () => TimeSpan.FromSeconds(6)
 };
 
 using var loggerFactory = LoggerFactory.Create(x => x
@@ -17,7 +22,6 @@ var logger = loggerFactory.CreateLogger("LeaderNode");
 
 using var mongoClient = new MongoClient(MongoConnectionStrings.Default);
 
-// Quit with Ctrl+C
 var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
 {
@@ -27,9 +31,8 @@ Console.CancelKeyPress += (_, e) =>
 
 await MongoEventStoreAdmin.EnsureInitializedAsync(mongoClient, options, cts.Token);
 
-logger.LogInformation("Starting leader node");
+logger.LogInformation("Starting leader node (chaos mode: {ChaosMode})", chaosMode);
 
-// Create and start node
 await using var node = new MongoEventStoreNode(mongoClient, options, loggerFactory);
 
 try
@@ -40,4 +43,31 @@ try
 catch (OperationCanceledException) when (cts.IsCancellationRequested)
 {
     logger.LogInformation("Stopped");
+}
+
+static bool SelectChaosMode(string[] args)
+{
+    if (args.Length > 0)
+    {
+        return args[0].ToLowerInvariant() switch
+        {
+            "chaos" => true,
+            "normal" => false,
+            var other => throw new ArgumentException($"Unknown mode '{other}'. Valid options: normal, chaos")
+        };
+    }
+
+    Console.WriteLine();
+    Console.WriteLine("Select mode:");
+    Console.WriteLine("  1  Normal");
+    Console.WriteLine("  2  Chaos (randomly expires lease to trigger failover)");
+    Console.WriteLine();
+    Console.Write("Choice: ");
+
+    return Console.ReadLine()?.Trim() switch
+    {
+        "1" => false,
+        "2" => true,
+        var other => throw new InvalidOperationException($"Invalid choice '{other}'.")
+    };
 }

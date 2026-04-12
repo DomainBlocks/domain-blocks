@@ -45,7 +45,7 @@ internal sealed class LeaseContender(
             logger.LogDebug("Attempting to acquire lease");
 
             var doc = await store
-                .AcquireAsync(Environment.MachineName, options.LeaseDuration, cancellationToken)
+                .AcquireAsync(Environment.MachineName, options.LeaseDuration(), cancellationToken)
                 .ConfigureAwait(false);
 
             if (doc is not null)

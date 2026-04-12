@@ -40,7 +40,7 @@ public class LeaseStoreTests
         doc.ShouldNotBeNull();
         doc.Epoch.ShouldBe(1);
         doc.HolderId.ShouldStartWith("test:");
-        doc.CommitPosition.ShouldBeNull();
+        doc.CommitPosition.ShouldBe(-1);
         doc.AcquiredAtUtc.ShouldBe(_timeProvider.GetUtcNow().UtcDateTime);
         doc.ExpiresAtUtc.ShouldBe(_timeProvider.GetUtcNow().UtcDateTime + LeaseDuration);
     }
@@ -80,7 +80,7 @@ public class LeaseStoreTests
         var doc2 = await _store.AcquireAsync("holder2", LeaseDuration);
 
         doc2.ShouldNotBeNull();
-        doc2.CommitPosition.ShouldBe(10);
+        doc2.CommitPosition.ShouldBe(9);
     }
 
     [Test]
@@ -129,7 +129,7 @@ public class LeaseStoreTests
         _timeProvider.Advance(LeaseDuration + TimeSpan.FromMilliseconds(1));
         var doc2 = await _store.AcquireAsync("holder2", LeaseDuration);
 
-        doc2!.CommitPosition.ShouldBe(8);
+        doc2!.CommitPosition.ShouldBe(7);
     }
 
     [Test]

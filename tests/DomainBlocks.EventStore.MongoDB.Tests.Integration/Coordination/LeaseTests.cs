@@ -43,7 +43,7 @@ public class LeaseTests
         await using var lease = await AcquireLeaseAsync(ct);
 
         lease.Epoch.ShouldBe(1);
-        lease.CommitPosition.ShouldBeNull();
+        lease.CommitPosition.ShouldBe(-1);
     }
 
     [Test]
@@ -81,7 +81,7 @@ public class LeaseTests
         await using var lease = new Lease(
             doc,
             _store,
-            LeaseDuration,
+            () => LeaseDuration,
             LeaseDuration * 2,
             NullLogger.Instance,
             _timeProvider);
@@ -104,7 +104,7 @@ public class LeaseTests
         await using var lease = new Lease(
             doc,
             _store,
-            LeaseDuration,
+            () => LeaseDuration,
             LeaseDuration * 2,
             NullLogger.Instance,
             _timeProvider);
@@ -138,6 +138,6 @@ public class LeaseTests
     {
         var doc = await _store.AcquireAsync("test", LeaseDuration, ct);
         doc.ShouldNotBeNull();
-        return new Lease(doc, _store, LeaseDuration, RenewInterval, NullLogger.Instance, _timeProvider);
+        return new Lease(doc, _store, () => LeaseDuration, RenewInterval, NullLogger.Instance, _timeProvider);
     }
 }
