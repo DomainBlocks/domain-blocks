@@ -18,8 +18,9 @@ internal sealed class LeaseContender(
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private readonly CollectionNamespace _leasesNs = new(options.DatabaseName, options.LeasesCollectionName);
 
-    private readonly Channel<LeaseUpdateKind> _leaseUpdates =
-        Channel.CreateBounded<LeaseUpdateKind>(new BoundedChannelOptions(capacity: 1)
+    // Signals from the change stream when the lease is explicitly released.
+    private readonly Channel<bool> _releaseSignal =
+        Channel.CreateBounded<bool>(new BoundedChannelOptions(1)
         {
             FullMode = BoundedChannelFullMode.DropOldest
         });
@@ -27,7 +28,6 @@ internal sealed class LeaseContender(
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
         logger.LogInformation("Lease contender starting");
-
         using var _ = changeStreamSubject.Attach(this);
 
         try
@@ -46,18 +46,14 @@ internal sealed class LeaseContender(
                     try
                     {
                         await leaderRunner.RunAsync(lease, cancellationToken).ConfigureAwait(false);
-
                         logger.LogWarning("Stepping down (epoch {Epoch}): unexpected exit", lease.Epoch);
                     }
                     catch (OperationCanceledException) when (lease.LeaseLostToken.IsCancellationRequested
                                                              && !cancellationToken.IsCancellationRequested)
                     {
                         var lostInfo = await lease.LeaseLostTask.ConfigureAwait(false);
-
-                        logger.LogWarning(
-                            "Stepping down (epoch {Epoch}): lease lost ({Reason})",
-                            lease.Epoch,
-                            lostInfo.Reason);
+                        logger.LogWarning("Stepping down (epoch {Epoch}): lease lost ({Reason})",
+                            lease.Epoch, lostInfo.Reason);
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException)
                     {
@@ -96,7 +92,11 @@ internal sealed class LeaseContender(
         }
 
         var updateKind = Enum.Parse<LeaseUpdateKind>(lastUpdateValue[LeaseUpdate.FieldNames.Kind].AsString);
-        return _leaseUpdates.Writer.WriteAsync(updateKind, cancellationToken);
+
+        if (updateKind == LeaseUpdateKind.Released)
+            _releaseSignal.Writer.TryWrite(true);
+
+        return ValueTask.CompletedTask;
     }
 
     private async Task<Lease> AcquireAsync(bool waitFirst, CancellationToken cancellationToken)
@@ -105,10 +105,7 @@ internal sealed class LeaseContender(
         var clockSkewTolerance = TimeSpan.Zero;
 
         if (waitFirst)
-        {
-            var outcome = await WaitForOpportunityAsync(cancellationToken).ConfigureAwait(false);
-            clockSkewTolerance = outcome == WaitOutcome.ReleaseObserved ? options.ClockSkewTolerance : TimeSpan.Zero;
-        }
+            clockSkewTolerance = await WaitForOpportunityAsync(cancellationToken).ConfigureAwait(false);
 
         while (true)
         {
@@ -121,72 +118,38 @@ internal sealed class LeaseContender(
 
             if (doc is not null)
             {
-                logger.LogInformation(
-                    "Lease acquired (epoch {Epoch}, commitPosition {CommitPosition})",
-                    doc.Epoch,
-                    doc.CommitPosition);
+                logger.LogInformation("Lease acquired (epoch {Epoch}, commitPosition {CommitPosition})",
+                    doc.Epoch, doc.CommitPosition);
 
-                return new Lease(
-                    doc,
-                    store,
-                    options.LeaseDuration,
-                    options.LeaseRenewInterval,
-                    logger,
-                    _timeProvider);
+                return new Lease(doc, store, options.LeaseDuration, options.LeaseRenewInterval, logger, _timeProvider);
             }
 
-            logger.LogDebug("Lease held elsewhere; watching change stream for opportunity");
-            var outcome = await WaitForOpportunityAsync(cancellationToken).ConfigureAwait(false);
-
-            // A releasing node sets ExpiresAtUtc = its local now. If its clock leads ours, the lease will appear
-            // unexpired to us even though it has been released. ClockSkewTolerance widens the acquire filter to
-            // (ExpiresAtUtc <= our now + tolerance), absorbing up to that much clock lead in the releasing node.
-            clockSkewTolerance = outcome == WaitOutcome.ReleaseObserved ? options.ClockSkewTolerance : TimeSpan.Zero;
+            logger.LogDebug("Lease held elsewhere; polling for opportunity");
+            clockSkewTolerance = await WaitForOpportunityAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
-    private async Task<WaitOutcome> WaitForOpportunityAsync(CancellationToken cancellationToken)
+    // Returns ClockSkewTolerance if an explicit release was observed, zero otherwise.
+    private async Task<TimeSpan> WaitForOpportunityAsync(CancellationToken cancellationToken)
     {
-        var countdown = options.LeaseRenewInterval + options.ClockSkewTolerance;
+        using var pollCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        pollCts.CancelAfter(options.LeaseRenewInterval + GetJitter());
 
-        while (true)
+        try
         {
-            using var countdownCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            countdownCts.CancelAfter(countdown + GetJitter());
-
-            try
-            {
-                var updateKind = await _leaseUpdates.Reader.ReadAsync(countdownCts.Token).ConfigureAwait(false);
-
-                switch (updateKind)
-                {
-                    case LeaseUpdateKind.Acquired:
-                        logger.LogDebug("Lease acquired by another holder; resetting countdown");
-                        break;
-                    case LeaseUpdateKind.Renewed:
-                        logger.LogDebug("Lease renewal observed; resetting countdown");
-                        break;
-                    case LeaseUpdateKind.Released:
-                        logger.LogDebug("Lease release observed; attempting acquire");
-                        await _timeProvider.Delay(GetJitter(), cancellationToken).ConfigureAwait(false);
-                        return WaitOutcome.ReleaseObserved;
-                }
-            }
-            catch (OperationCanceledException) when (countdownCts.IsCancellationRequested)
-            {
-                // Countdown completed without a renewal - the lease may be expiring.
-                logger.LogDebug("Renewal not observed after {Countdown}; attempting acquire", countdown);
-                return WaitOutcome.RenewalNotObserved;
-            }
+            await _releaseSignal.Reader.ReadAsync(pollCts.Token).ConfigureAwait(false);
+            logger.LogDebug("Lease release observed; attempting acquire");
+            await _timeProvider.Delay(GetJitter(), cancellationToken).ConfigureAwait(false);
+            return options.ClockSkewTolerance;
         }
-
-        TimeSpan GetJitter() =>
-            TimeSpan.FromMilliseconds(Random.Shared.NextDouble() * options.MaxLeaseAcquireJitter.TotalMilliseconds);
+        catch (OperationCanceledException) when (pollCts.IsCancellationRequested
+                                                 && !cancellationToken.IsCancellationRequested)
+        {
+            logger.LogDebug("Poll interval elapsed; attempting acquire");
+            return TimeSpan.Zero;
+        }
     }
 
-    private enum WaitOutcome
-    {
-        ReleaseObserved,
-        RenewalNotObserved
-    }
+    private TimeSpan GetJitter() =>
+        TimeSpan.FromMilliseconds(Random.Shared.NextDouble() * options.MaxLeaseAcquireJitter.TotalMilliseconds);
 }
