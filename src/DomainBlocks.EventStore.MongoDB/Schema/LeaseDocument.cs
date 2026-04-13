@@ -24,8 +24,8 @@ internal sealed class LeaseDocument
     [BsonElement(FieldNames.CommitPosition)]
     public long CommitPosition { get; init; }
 
-    [BsonElement(FieldNames.LastUpdatedAtUtc)]
-    public required DateTime LastUpdatedAtUtc { get; init; }
+    [BsonElement(FieldNames.LastUpdate)]
+    public required LeaseUpdate LastUpdate { get; init; }
 
     public static class FieldNames
     {
@@ -34,6 +34,6 @@ internal sealed class LeaseDocument
         public const string AcquiredAtUtc = "acquiredAtUtc";
         public const string ExpiresAtUtc = "expiresAtUtc";
         public const string CommitPosition = "commitPosition";
-        public const string LastUpdatedAtUtc = "lastUpdatedAtUtc";
+        public const string LastUpdate = "lastUpdate";
     }
 }

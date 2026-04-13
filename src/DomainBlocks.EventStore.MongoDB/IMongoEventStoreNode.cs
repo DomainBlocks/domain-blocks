@@ -5,7 +5,7 @@ namespace DomainBlocks.EventStore.MongoDB;
 
 public interface IMongoEventStoreNode : IAsyncDisposable
 {
-    Task Completed { get; }
+    Task Completion { get; }
 
     Task StartAsync(CancellationToken cancellationToken = default);
 
