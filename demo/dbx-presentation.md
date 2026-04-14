@@ -15,7 +15,6 @@ marp: true
     - Partial writes corrupt aggregate state
 - **Append-only durability**
     - Once committed, events are permanent and immutable
-    - The event log is the source of truth
 - **Stream ordering**
     - Events within a stream must reflect the order they were applied
     - Out-of-order reads break aggregate state reconstruction
@@ -98,7 +97,7 @@ marp: true
 
 # Raft split-brain example
 
-[![bg h:670 left](https://mermaid.ink/img/pako:eNp9Uk1TgzAQ_Ss7e5VWaKEtOThT8OwPcLhE2LYoJBgSq3b6313oUPulnMi-97Jv32aHuS4IBbb07kjl9FjKtZF1poC_Rhpb5mUjlYUlyBaemAzLazA5gsk1mB7BNFMHWGlLoD_IwFIAVZRbKqAiWZDxwJKp4WmgLkcPD4mArSlZMkADkN4CkhEjfK_M387q6Y36DTuNdC3BPSiyW23eDqPoK2bicXO2zFz6bEpDLYwYhg0x_4WkhZXRdRfW4Kq3a7qcWwsf-uj6Ljjxx6P2EC9BdaGcU07a_5VbRz3reBrQZavfKH5lZ2HwWK7uR3NKbqVhZMXJbHvVxYpaKyv6Zx-GXg-GR0zSat2T0MO1KQsU1jjysOaS7I6468QZ2g3VlKHg34JW0lU2w0ztWcZv61nrelAa7dYbFCtZtXxyTSHt8JiPFFIcVKqdsihm8_4KFDv8RBHHY38x8cP5LAwmiygKPPxCEcyjcRT7YehHs3gex4to7-F339QfM2syC6aL2J9OpkEY7n8AFSgFWQ?type=png)](https://mermaid.ai/live/edit#pako:eNp9Uk1TgzAQ_Ss7e5VWaKEtOThT8OwPcLhE2LYoJBgSq3b6313oUPulnMi-97Jv32aHuS4IBbb07kjl9FjKtZF1poC_Rhpb5mUjlYUlyBaemAzLazA5gsk1mB7BNFMHWGlLoD_IwFIAVZRbKqAiWZDxwJKp4WmgLkcPD4mArSlZMkADkN4CkhEjfK_M387q6Y36DTuNdC3BPSiyW23eDqPoK2bicXO2zFz6bEpDLYwYhg0x_4WkhZXRdRfW4Kq3a7qcWwsf-uj6Ljjxx6P2EC9BdaGcU07a_5VbRz3reBrQZavfKH5lZ2HwWK7uR3NKbqVhZMXJbHvVxYpaKyv6Zx-GXg-GR0zSat2T0MO1KQsU1jjysOaS7I6468QZ2g3VlKHg34JW0lU2w0ztWcZv61nrelAa7dYbFCtZtXxyTSHt8JiPFFIcVKqdsihm8_4KFDv8RBHHY38x8cP5LAwmiygKPPxCEcyjcRT7YehHs3gex4to7-F339QfM2syC6aL2J9OpkEY7n8AFSgFWQ)
+[![bg h:670 left](https://mermaid.ink/img/pako:eNp9U8FymzAQ_ZUdnZqJTG1jStAhM4ae8wEdLiqsDQ1IVBKhrcf_3gVicGzHnJDe29333o4OLNM5MsEs_m5RZfi9lHsj61QBfY00rszKRioHW5AWXogM22swnsD4GkwmMOHgeR6Hl1SNNKUdgn5DA1sBWGHmMIcKZY6Gg0NTz9Tt4vk5FiCbBlUOX0bwYcaST7B4QSB1l9nr1LG_T27c3xDVyNYifAWFrtPmdTTmSn3FjTkpUBoKJMZPlI7DTleV7tBYsI4uR4ND6UnaINv00VsHb32vd_GPq4czmeR7AGkzqk_oknSm4rMYH1cXUz-GdTVvjmWu_BCMQdvWaGEBrZKdNITsKKVuqLpYGtmv8O7q7jBOCzT4azS2gKLcF6Ri1ne-0Hu8Gz7aJpeOfPQkTjqwsZDrToHT0wIZZ3tT5kw40yJnNVFlf2SHvmHKXIE1pkzQb4472VYuZak6Uhk9gB9a16dKo9t9wcROVpZO4-j3FzfdGooATaJb5ZhYB8uhCRMH9oeJVbD2NtG3yF8GfrQOfZ-zv0yEK88PN9FTuF76QbTZ-EfO_g1Tl95TGBz_AwSpNXw?type=png)](https://mermaid.ai/live/edit#pako:eNp9U8FymzAQ_ZUdnZqJTG1jStAhM4ae8wEdLiqsDQ1IVBKhrcf_3gVicGzHnJDe29333o4OLNM5MsEs_m5RZfi9lHsj61QBfY00rszKRioHW5AWXogM22swnsD4GkwmMOHgeR6Hl1SNNKUdgn5DA1sBWGHmMIcKZY6Gg0NTz9Tt4vk5FiCbBlUOX0bwYcaST7B4QSB1l9nr1LG_T27c3xDVyNYifAWFrtPmdTTmSn3FjTkpUBoKJMZPlI7DTleV7tBYsI4uR4ND6UnaINv00VsHb32vd_GPq4czmeR7AGkzqk_oknSm4rMYH1cXUz-GdTVvjmWu_BCMQdvWaGEBrZKdNITsKKVuqLpYGtmv8O7q7jBOCzT4azS2gKLcF6Ri1ne-0Hu8Gz7aJpeOfPQkTjqwsZDrToHT0wIZZ3tT5kw40yJnNVFlf2SHvmHKXIE1pkzQb4472VYuZak6Uhk9gB9a16dKo9t9wcROVpZO4-j3FzfdGooATaJb5ZhYB8uhCRMH9oeJVbD2NtG3yF8GfrQOfZ-zv0yEK88PN9FTuF76QbTZ-EfO_g1Tl95TGBz_AwSpNXw)
 
 ---
 
@@ -113,11 +112,16 @@ marp: true
 
 # Raft commit index example
 
-| Node                    | idx 1  | idx 2  | idx 3  | * | idx 4  | idx 5  | idx 6  |
-|-------------------------|--------|--------|--------|---|--------|--------|--------|
-| **Node A** (leader, t1) | t1 / A | t1 / B | t1 / C | * | t1 / D | t1 / E | -      |
-| **Node B** (leader, t2) | t1 / A | t1 / B | t1 / C | * | t2 / F | t2 / G | t2 / H |
-| **Node C**              | t1 / A | t1 / B | t1 / C | * | t1 / D | -      | -      |
+Commit index = 3 (agreed by majority)
+
+| Node                    | idx 1  | idx 2  | idx 3  | idx 4  | idx 5  | idx 6  |
+|-------------------------|--------|--------|--------|--------|--------|--------|
+| Node A (leader, t1)     | t1 / A | t1 / B | t1 / C | t1 / D | t1 / E | -      |
+| Node B (leader, t2)     | t1 / A | t1 / B | t1 / C | t2 / F | t2 / G | t2 / H |
+| Node C                  | t1 / A | t1 / B | t1 / C | t1 / D | -      | -      |
+
+- Only the leader advances the commit index (after majority replication)
+- The leader propagates the commit index via AppendEntries (heartbeats)
 
 ---
 
@@ -141,15 +145,15 @@ marp: true
 
 ---
 
-# Event writes and position advancement (1)
+# Appending events (example 1)
 
 [![h:500 left](https://mermaid.ink/img/pako:eNqVkk2L1EAQhv9KUXhwIRvyYZKdBgdELx5m9OJFAtJ0apKGpDvbH-7okP9uZ5IMi66IOTSk662q563qCwrdEDK09OhJCfogeWv4UCsI38iNk0KOXDk4psAtHIMa0hei2S2a_Rk9zMGDVq2u1RJV2hHo72RCJoOeuCWg8ygN2Qho1KLbujxTpgy4ePSzaEnZpNlW9pje7_eHUFC3saGx54I-KXp9gW-yYVCsegYXeNU7BhlMEcRxvJx3vzcMhZSGRgvgDkZtoVgUB7gPba481gtB1i73L1nzij9xQ6vFLsxhsdmswNl_Aaf_BJ5p6SytszdoeJKuWye1f7vNdTMRGE9c9t7QcxNh23P0sO7GxiepmkD2TjVfxoa7GTGsQXsj6GMgrTE4qPHGm10BZ9pAbsnNDoQeBuk-axuMwTTd_W2YGGFrZIPMGU8RDmQGPv_iZc6o0XU0UI1z04ZO3PeuxlpNIS08tq9aD1um0b7tkJ14H54K-iv3-r5vt4ZUQ-a99sohq3bltQiyC56R5Ulc7vIqKXdZVTyUSZJH-ANZ-lDGeZW-yXZVHo6yyKcIf177JnFV7aqkSJKiyNOkSovpF5MdBxE?type=png)](https://mermaid.ai/live/edit#pako:eNqVkk2L1EAQhv9KUXhwIRvyYZKdBgdELx5m9OJFAtJ0apKGpDvbH-7okP9uZ5IMi66IOTSk662q563qCwrdEDK09OhJCfogeWv4UCsI38iNk0KOXDk4psAtHIMa0hei2S2a_Rk9zMGDVq2u1RJV2hHo72RCJoOeuCWg8ygN2Qho1KLbujxTpgy4ePSzaEnZpNlW9pje7_eHUFC3saGx54I-KXp9gW-yYVCsegYXeNU7BhlMEcRxvJx3vzcMhZSGRgvgDkZtoVgUB7gPba481gtB1i73L1nzij9xQ6vFLsxhsdmswNl_Aaf_BJ5p6SytszdoeJKuWye1f7vNdTMRGE9c9t7QcxNh23P0sO7GxiepmkD2TjVfxoa7GTGsQXsj6GMgrTE4qPHGm10BZ9pAbsnNDoQeBuk-axuMwTTd_W2YGGFrZIPMGU8RDmQGPv_iZc6o0XU0UI1z04ZO3PeuxlpNIS08tq9aD1um0b7tkJ14H54K-iv3-r5vt4ZUQ-a99sohq3bltQiyC56R5Ulc7vIqKXdZVTyUSZJH-ANZ-lDGeZW-yXZVHo6yyKcIf177JnFV7aqkSJKiyNOkSovpF5MdBxE)
 
 ---
 
-# Event writes and position advancement (2)
+# Appending events (example 2)
 
-[![h:500 left](https://mermaid.ink/img/pako:eNqVUk2L2zAQ_SvD0EMXvMYfGzsWZaG0lx6c9tJLMRQhTxKBLXn10U0b_N8rJXEKTZelOgik997MvMccUeiekKGlJ09K0EfJd4aPnYJwJm6cFHLiysEmB25hE9iQ_wMtrmhxi7YRbLXa6U6dUaUdgf5BJigZDMR7MgnQpMU-lj-TNsX942MbYL1LDU0DF_RZ0dsjfJc9g9WFz-AIbwbHIIc5gTRNz_fd341CIaWh1wK4g0lbWJ0ZLdyHNqc5rBeCrH1xSEtAh0kasgl4xZ-5oRtmzoCLJx9JZ8liq_hjC2LD9lLSplup-mDsveq_Tj130WFQa28EfQpGOwwBdHi1m5_8RbPBuCUXAxB6HKX7om3IBeb57sbalsvBL-Ne5sj_K97i1XhjtnSQ1ll4lm5_8f1u2YhlmvwaNCa4M7JH5oynBEcyI49PPEZFh25PI3UYI-hpy_3gOuzUHGRhrb5pPS5Ko_1uj2zLh5A3-lOKl02-_hpSYck-aK8csnVZnYogO-IBWZmlVVPWWdUU9WpdZVmZ4E9k-bpKyzp_KJq6DFe1KucEf536ZmldN3X20KzXWVbUdZ3PvwHQnACU?type=png)](https://mermaid.ai/live/edit#pako:eNqVUk2L2zAQ_SvD0EMXvMYfGzsWZaG0lx6c9tJLMRQhTxKBLXn10U0b_N8rJXEKTZelOgik997MvMccUeiekKGlJ09K0EfJd4aPnYJwJm6cFHLiysEmB25hE9iQ_wMtrmhxi7YRbLXa6U6dUaUdgf5BJigZDMR7MgnQpMU-lj-TNsX942MbYL1LDU0DF_RZ0dsjfJc9g9WFz-AIbwbHIIc5gTRNz_fd341CIaWh1wK4g0lbWJ0ZLdyHNqc5rBeCrH1xSEtAh0kasgl4xZ-5oRtmzoCLJx9JZ8liq_hjC2LD9lLSplup-mDsveq_Tj130WFQa28EfQpGOwwBdHi1m5_8RbPBuCUXAxB6HKX7om3IBeb57sbalsvBL-Ne5sj_K97i1XhjtnSQ1ll4lm5_8f1u2YhlmvwaNCa4M7JH5oynBEcyI49PPEZFh25PI3UYI-hpy_3gOuzUHGRhrb5pPS5Ko_1uj2zLh5A3-lOKl02-_hpSYck-aK8csnVZnYogO-IBWZmlVVPWWdUU9WpdZVmZ4E9k-bpKyzp_KJq6DFe1KucEf536ZmldN3X20KzXWVbUdZ3PvwHQnACU)
+[![h:500 left](https://mermaid.ink/img/pako:eNqlU02L2zAQ_SuD6GEXHBPLzToRZaG0lx6S9tJLMRQhTRKBLXn1sZs2-L9Xsp3sttntB_XBYM8bvTfvjY5EGImEEYd3AbXA94rvLG9rDfHpuPVKqI5rD5sCuINNREPxTJWeq_Syuk7FtdE7U-uxqo1HMPdoYyeDBrlEmwF2RuzT8SNoQ2e3t-tYNrvcYtdwgR81Xh3hq5IMFhOewRFeNZ5BAX0GeZ6P7-tfieJB2oA0AriHzjhYjIg1zCLNoMMFIdC5F0U6BDx0yqLLIGj-wC2OyElvMelNSJdvlZZR71stP3eS-7PwmsSBajKohJ_ErpOSTXEWArOJlYu7EGklXI0W0YvpUteEcmPTyU76_Djce2w778Ab4PKex-xBmLZVgzmnACBZ89uRIp8JVuCHp5NNwRTnGWNEDn2KauT4ZFxMEPr--iKELVdNeMHYv1sE-sdFSFuAB-Xi-A_K7yen3px296SmeLISo47_84P-sx-PCkhGdlZJwrwNmJEWbcvTJzmmjpr4PbZYk0QqcctD42tS6z62xSv4xZj21GlN2O0J2_Im7ggJg-7p1p__WtTxQr4zQXvClsVqOISwIzkQVixo_np1syrni3JFq7LMyDfCqnleVvF3VdxUyyUtaZ-R7wPrPF9Wi_4HFRVZcA?type=png)](https://mermaid.ai/live/edit#pako:eNqlU02L2zAQ_SuD6GEXHBPLzToRZaG0lx6S9tJLMRQhTRKBLXn1sZs2-L9Xsp3sttntB_XBYM8bvTfvjY5EGImEEYd3AbXA94rvLG9rDfHpuPVKqI5rD5sCuINNREPxTJWeq_Syuk7FtdE7U-uxqo1HMPdoYyeDBrlEmwF2RuzT8SNoQ2e3t-tYNrvcYtdwgR81Xh3hq5IMFhOewRFeNZ5BAX0GeZ6P7-tfieJB2oA0AriHzjhYjIg1zCLNoMMFIdC5F0U6BDx0yqLLIGj-wC2OyElvMelNSJdvlZZR71stP3eS-7PwmsSBajKohJ_ErpOSTXEWArOJlYu7EGklXI0W0YvpUteEcmPTyU76_Djce2w778Ab4PKex-xBmLZVgzmnACBZ89uRIp8JVuCHp5NNwRTnGWNEDn2KauT4ZFxMEPr--iKELVdNeMHYv1sE-sdFSFuAB-Xi-A_K7yen3px296SmeLISo47_84P-sx-PCkhGdlZJwrwNmJEWbcvTJzmmjpr4PbZYk0QqcctD42tS6z62xSv4xZj21GlN2O0J2_Im7ggJg-7p1p__WtTxQr4zQXvClsVqOISwIzkQVixo_np1syrni3JFq7LMyDfCqnleVvF3VdxUyyUtaZ-R7wPrPF9Wi_4HFRVZcA)
 
 ---
 
@@ -162,12 +166,14 @@ marp: true
 | bulkWrite + transaction    | 15.3ms      | 21.4ms      | 149 ops/sec       | ✅           |
 | **DomainBlocks**           | **22.7ms**  | **25.8ms**  | **4,541 ops/sec** | ✅           |
 
+- Write latency is partly driven by idempotency and optimistic concurrency validation in the write path; optimisable
+
 ---
 
 # Designed for MongoDB, designed for correctness
 
 - Embraces MongoDB's primitives - document atomicity, CAS, change streams
-- Single writer via lease-based election - global ordering without transaction contention on every write
+- Single writer via lease-based election - global ordering without transactions
 - Epoch-filtered writes - split-brain protection using document-level atomicity
 - Built for distributed environments - multi-node coordination is a first-class concern
 - Addresses fundamental limitations that are often overlooked in MongoDB event store implementations
