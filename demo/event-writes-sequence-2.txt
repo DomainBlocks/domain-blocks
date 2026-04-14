@@ -16,11 +16,11 @@ sequenceDiagram
     note over N1: acquires lease, epoch 2
 
     note over N2: attempts to advance commit pos
-    N2 ->> M: leases.findOneAndUpdate({ resourceId: "log", epoch: 1, ... }, { $set: { commitPos: 5 }})
+    N2 ->> M: leases.findOneAndUpdate({ _id: "log", epoch: 1, ... }, { $set: { commitPos: 5 }})
     M -->> N2: failure
     
     N1->>M: log.replaceOne({ _id: 5, epoch: { $lt: 2 }, ...}, ...)
     note over M: doc exists with epoch < 2
     M -->> N1: success
-    N1 ->> M: leases.findOneAndUpdate({ resourceId: "log", epoch: 2, ... }, { $set: { commitPos: 5 }})
+    N1 ->> M: leases.findOneAndUpdate({ _id: "log", epoch: 2, ... }, { $set: { commitPos: 5 }})
     M -->> N1: success

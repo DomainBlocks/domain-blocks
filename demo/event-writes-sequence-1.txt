@@ -15,5 +15,5 @@ sequenceDiagram
     note over M: doc exists at pos 5 with epoch >= 1
     M -->> N2: failure
     
-    N1 ->> M: leases.findOneAndUpdate({ resourceId: "log", epoch: 2, ... }, { $set: { commitPos: 5 }})
+    N1 ->> M: leases.findOneAndUpdate({ _id: "log", epoch: 2, ... }, { $set: { commitPos: 5 }})
     M -->> N1: success
