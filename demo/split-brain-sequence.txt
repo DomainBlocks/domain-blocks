@@ -1,0 +1,26 @@
+sequenceDiagram
+    participant A as Node A
+    participant B as Node B
+    participant C as Node C
+
+    note over A: elected leader, term N
+
+    A->>B: write term N
+    A->>C: write term N
+    B-->>A: ack term N
+    C-->>A: ack term N
+
+    note over A: pause / network partion
+    note over B,C: lease expires - no heartbeat from A
+
+    B->>C: request vote term N+1
+    C-->>B: vote granted term N+1
+    note over B: elected leader, term N+1
+
+    B->>C: write term N+1
+    C-->>B: ack term N+1
+
+    note over A: resumes - unaware of new term
+
+    A->>B: stale write term N
+    B-->>A: rejected - wrong term

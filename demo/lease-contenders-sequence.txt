@@ -1,0 +1,18 @@
+sequenceDiagram
+    participant A as Node A
+    participant B as Node B
+    participant M as MongoDB
+
+    note over A,B: both attempt lease acquisition
+
+    A->>M: leases.findOneAndUpdate({ _id: "log", ... }, ...)
+    B->>M: leases.findOneAndUpdate({ _id: "log", ... }, ...)
+
+    note over M: Node A wins atomic upsert
+    note over M: epoch incremented, holderId = A
+
+    M-->>A: success - lease acquired (epoch N)
+    note over A: now leader, epoch N
+    
+    M-->>B: failure (duplicate key / no match)
+    note over B: not held - will retry

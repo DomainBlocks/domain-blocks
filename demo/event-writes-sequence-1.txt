@@ -1,0 +1,19 @@
+sequenceDiagram
+    participant N1 as Node 1
+    participant N2 as Node 2
+    participant M as Mongo
+
+    note over N2: lease expires, epoch 1
+    note over N1: acquires lease, epoch 2
+
+    N1->>M: log.replaceOne({ _id: 5, epoch: { $lt: 2 }, ...}, ...)
+    note over M: no doc at pos 5
+    M -->> N1: success
+    
+    note over N2: unaware lease has expired
+    N2->>M: log.replaceOne({ _id: 5, epoch: { $lt: 1 }, ...}, ...)
+    note over M: doc exists at pos 5 with epoch >= 1
+    M -->> N2: failure
+    
+    N1 ->> M: leases.findOneAndUpdate({ resourceId: "log", epoch: 2, ... }, { $set: { commitPos: 5 }})
+    M -->> N1: success
