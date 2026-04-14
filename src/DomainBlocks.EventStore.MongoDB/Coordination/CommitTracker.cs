@@ -42,9 +42,10 @@ internal sealed partial class CommitTracker(
 
         var epoch = doc[EventLogEntry.FieldNames.Epoch].AsInt64;
 
-        // Ignore entries from stale epochs.
-        if (epoch < _currentEpoch)
-            return;
+        if (!_currentEpoch.HasValue)
+            _currentEpoch = epoch;
+        else if (epoch < _currentEpoch)
+            return; // Ignore entries from stale epochs.
 
         var position = doc["_id"].AsInt64;
         var eventName = doc[EventLogEntry.FieldNames.EventName].AsString;
