@@ -62,7 +62,7 @@ public class MongoEventStoreClient2ConcurrencyTests
         // Drop the event log and sequence collections between tests for isolation.
         var db = _mongoClient.GetDatabase(_options.DatabaseName);
         await db.DropCollectionAsync(_options.EventLogCollectionName);
-        await db.DropCollectionAsync(_options.SequenceCollectionName);
+        await db.DropCollectionAsync(_options.SequencesCollectionName);
 
         // Re-create indexes for the next test.
         await MongoEventStoreClient2<IDomainEvent>.EnsureInitializedAsync(_mongoClient, _options);
@@ -297,7 +297,7 @@ public class MongoEventStoreClient2ConcurrencyTests
     public async Task SequenceCounter_ConcurrentIncrements_AreSerialised(CancellationToken ct)
     {
         var db = _mongoClient.GetDatabase(_options.DatabaseName);
-        var sequence = db.GetCollection<BsonDocument>(_options.SequenceCollectionName);
+        var sequence = db.GetCollection<BsonDocument>(_options.SequencesCollectionName);
 
         var filter = Builders<BsonDocument>.Filter.Eq("_id", "global");
         var update = Builders<BsonDocument>.Update.Inc("next", 1L);

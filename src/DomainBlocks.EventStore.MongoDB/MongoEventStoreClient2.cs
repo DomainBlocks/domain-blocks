@@ -24,7 +24,7 @@ public sealed class MongoEventStoreClient2<TEvent> : IEventStoreClient<TEvent>, 
 
     private readonly IMongoClient _mongoClient;
     private readonly IMongoCollection<BsonDocument> _eventLog;
-    private readonly IMongoCollection<BsonDocument> _sequence;
+    private readonly IMongoCollection<BsonDocument> _sequences;
     private readonly IEventEncoder<TEvent, BsonValue, BsonValue> _encoder;
     private readonly IEventDecoder<TEvent, BsonValue, BsonValue> _decoder;
     private readonly int _batchSize;
@@ -41,7 +41,7 @@ public sealed class MongoEventStoreClient2<TEvent> : IEventStoreClient<TEvent>, 
         _mongoClient = mongoClient;
         _encoder = eventCodec.Encoder;
         _decoder = eventCodec.Decoder;
-        _batchSize = options.BatchSize;
+        _batchSize = options.AppendBatchSize;
 
         var db = mongoClient
             .GetDatabase(options.DatabaseName)
@@ -50,9 +50,9 @@ public sealed class MongoEventStoreClient2<TEvent> : IEventStoreClient<TEvent>, 
             .WithWriteConcern(WriteConcern.WMajority.With(journal: true));
 
         _eventLog = db.GetCollection<BsonDocument>(options.EventLogCollectionName);
-        _sequence = db.GetCollection<BsonDocument>(options.SequenceCollectionName);
+        _sequences = db.GetCollection<BsonDocument>(options.SequencesCollectionName);
 
-        _channel = Channel.CreateBounded<PendingWrite>(new BoundedChannelOptions(options.QueueCapacity)
+        _channel = Channel.CreateBounded<PendingWrite>(new BoundedChannelOptions(options.AppendQueueCapacity)
         {
             SingleReader = true,
             SingleWriter = false
@@ -528,7 +528,7 @@ public sealed class MongoEventStoreClient2<TEvent> : IEventStoreClient<TEvent>, 
             Projection = Builders<BsonDocument>.Projection.Include(SequenceField)
         };
 
-        var doc = await _sequence
+        var doc = await _sequences
             .FindOneAndUpdateAsync(session, filter, update, options, ct)
             .ConfigureAwait(false);
 
