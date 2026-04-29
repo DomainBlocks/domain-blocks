@@ -16,7 +16,7 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
     private MongoClient _mongoClient = null!;
     private MongoEventStoreClient2Options _options = null!;
     private IEventStoreClient<IDomainEvent> _client = null!;
-    private MongoEventStoreClient2<IDomainEvent> _node = null!;
+    private MongoEventStoreClient3<IDomainEvent> _node = null!;
 
     protected override IEventStoreClient<IDomainEvent> Client => _client;
 
@@ -35,7 +35,7 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
 
         await MongoEventStoreClient2<IDomainEvent>.EnsureInitializedAsync(_mongoClient, _options);
 
-        _node = new MongoEventStoreClient2<IDomainEvent>(_mongoClient, eventCodec, _options);
+        _node = new MongoEventStoreClient3<IDomainEvent>(_mongoClient, eventCodec, _options);
         _client = _node;
     }
 
