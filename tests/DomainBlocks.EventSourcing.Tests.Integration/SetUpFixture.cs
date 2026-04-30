@@ -9,6 +9,6 @@ public class SetUpFixture
     [OneTimeSetUp]
     public void OneTimeSetUp()
     {
-        MongoTestSerialization.Configure();
+        TestMongoSerialization.Configure();
     }
 }

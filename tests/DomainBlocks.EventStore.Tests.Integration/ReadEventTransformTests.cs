@@ -14,7 +14,7 @@ public class ReadEventTransformTests
     [Test]
     public async Task Should_transform_read_event()
     {
-        using var mongoClient = new MongoClient(MongoConnectionStrings.Default);
+        using var mongoClient = new MongoClient(TestMongoConnectionStrings.Default);
 
         var shipmentId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
         var dispatchedAt = new DateTime(2025, 08, 25, 14, 30, 0, DateTimeKind.Utc);
@@ -28,7 +28,7 @@ public class ReadEventTransformTests
         await node.StartAsync();
 
         var eventTypeMap = EventTypeMap.Create(x => x.MapType<ShipmentDispatched>());
-        var eventCode = MongoTestEventCodec.Create<object>(eventTypeMap);
+        var eventCode = TestMongoEventCodec.Create<object>(eventTypeMap);
         var client = node.CreateClient(eventCode);
 
         var legacyEvent = new ShipmentDispatched(

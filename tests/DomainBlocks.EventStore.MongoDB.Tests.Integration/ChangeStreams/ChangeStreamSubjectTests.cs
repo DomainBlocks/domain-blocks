@@ -18,7 +18,7 @@ public class ChangeStreamSubjectTests
     [SetUp]
     public void SetUp()
     {
-        var mongoClient = new MongoClient(MongoConnectionStrings.Default);
+        var mongoClient = new MongoClient(TestMongoConnectionStrings.Default);
         var db = mongoClient.GetDatabase("domainblocks_tests");
         var collection = db.GetCollection<BsonDocument>("test_items");
 

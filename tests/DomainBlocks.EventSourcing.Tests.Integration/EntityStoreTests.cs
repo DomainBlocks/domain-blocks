@@ -24,7 +24,7 @@ public class EntityStoreTests
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
     {
-        _mongoClient = new MongoClient(MongoConnectionStrings.Default);
+        _mongoClient = new MongoClient(TestMongoConnectionStrings.Default);
 
         _options = new MongoEventStoreNodeOptions
         {
@@ -42,7 +42,7 @@ public class EntityStoreTests
             .MapType<ItemAddedToShoppingCart>()
             .MapType<ItemRemovedFromShoppingCart>());
 
-        var eventCode = MongoTestEventCodec.Create<IDomainEvent>(eventTypeMap);
+        var eventCode = TestMongoEventCodec.Create<IDomainEvent>(eventTypeMap);
         var eventStoreClient = _node.CreateClient(eventCode);
 
         var entityDefinitionProvider = new CompositeEntityDefinitionProvider<IDomainEvent>(

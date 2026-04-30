@@ -31,7 +31,7 @@ public class MongoEventStoreClient2ConcurrencyTests
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
     {
-        _mongoClient = new MongoClient(MongoConnectionStrings.Default);
+        _mongoClient = new MongoClient(TestMongoConnectionStrings.Default);
 
         _options = new MongoEventStoreClientOptions2
         {
@@ -45,7 +45,7 @@ public class MongoEventStoreClient2ConcurrencyTests
     public void SetUp()
     {
         var eventTypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>());
-        var eventCodec = MongoTestEventCodec.Create<IDomainEvent>(eventTypeMap);
+        var eventCodec = TestMongoEventCodec.Create<IDomainEvent>(eventTypeMap);
 
         _writers = Enumerable
             .Range(0, WriterCount)

@@ -23,7 +23,7 @@ public class MongoEventStoreClientTests : EventStoreClientTests
     public async Task OneTimeSetUp()
     {
         //_mongoClient = new MongoClient("mongodb+srv://dev:49afD4FXHDWUWpNg@domainblockstestcluster.cle2ydx.mongodb.net/?appName=DomainBlocksTestCluster");
-        _mongoClient = new MongoClient(MongoConnectionStrings.Default);
+        _mongoClient = new MongoClient(TestMongoConnectionStrings.Default);
 
         _options = new MongoEventStoreNodeOptions
         {
@@ -37,7 +37,7 @@ public class MongoEventStoreClientTests : EventStoreClientTests
         _node = new MongoEventStoreNode(_mongoClient, _options, _loggerFactory);
 
         var eventTypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>());
-        var eventCodec = MongoTestEventCodec.Create<IDomainEvent>(eventTypeMap);
+        var eventCodec = TestMongoEventCodec.Create<IDomainEvent>(eventTypeMap);
         _client = _node.CreateClient(eventCodec);
 
         await MongoEventStoreAdmin.EnsureInitializedAsync(_mongoClient, _options);

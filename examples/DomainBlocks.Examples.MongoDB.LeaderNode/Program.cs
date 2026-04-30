@@ -20,7 +20,7 @@ using var loggerFactory = LoggerFactory.Create(x => x
 
 var logger = loggerFactory.CreateLogger("LeaderNode");
 
-using var mongoClient = new MongoClient(MongoConnectionStrings.Default);
+using var mongoClient = new MongoClient(TestMongoConnectionStrings.Default);
 
 var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>

@@ -19,7 +19,7 @@ using var loggerFactory = LoggerFactory.Create(x => x
 
 var logger = loggerFactory.CreateLogger(role.ToString());
 
-using var mongoClient = new MongoClient(MongoConnectionStrings.Default);
+using var mongoClient = new MongoClient(TestMongoConnectionStrings.Default);
 
 var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
@@ -34,7 +34,7 @@ await using var node = new MongoEventStoreNode(mongoClient, options, loggerFacto
 await node.StartAsync(cts.Token);
 
 var eventTypeMap = EventTypeMap.Create(x => x.MapType<ExampleEvent>());
-var eventCodec = MongoTestEventCodec.Create<IDomainEvent>(eventTypeMap);
+var eventCodec = TestMongoEventCodec.Create<IDomainEvent>(eventTypeMap);
 var client = node.CreateClient(eventCodec);
 
 var streamId = $"example-{Guid.NewGuid():N}";
