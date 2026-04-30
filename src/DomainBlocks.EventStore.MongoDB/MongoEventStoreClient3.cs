@@ -11,6 +11,11 @@ public sealed class MongoEventStoreClient3<TEvent> :
     IAsyncDisposable
     where TEvent : notnull
 {
+    private static readonly TransactionOptions TransactionOptions = new(
+        ReadConcern.Snapshot,
+        ReadPreference.Primary,
+        WriteConcern.WMajority.With(journal: true));
+
     private readonly IMongoClient _mongoClient;
     private readonly IMongoCollection<BsonDocument> _eventLog;
     private readonly IMongoCollection<BsonDocument> _sequences;
@@ -21,13 +26,7 @@ public sealed class MongoEventStoreClient3<TEvent> :
     private readonly int _appendBatchSize;
     private readonly CancellationTokenSource _stopCts = new();
     private readonly Task _appendTask;
-
-    // Reused buffers
-    private readonly HashSet<Guid> _seenCommitIds = [];
-    private readonly HashSet<Guid> _existingCommitIds = [];
-    private readonly Dictionary<string, long> _headStreamVersions = [];
-    private readonly List<BsonDocument> _batchedEvents = [];
-    private readonly Dictionary<Guid, PendingAppend> _pendingAppends = [];
+    private readonly Buffers _buffers = new();
 
     public MongoEventStoreClient3(
         IMongoClient mongoClient,
@@ -85,7 +84,7 @@ public sealed class MongoEventStoreClient3<TEvent> :
         if (eventDocuments.Length == 0)
             return;
 
-        var pendingAppend = new PendingAppend(eventDocuments, options.ExpectedState);
+        var pendingAppend = new PendingAppend(options.CommitId, streamId, options.ExpectedState, eventDocuments);
 
         using var linkedTimeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         linkedTimeoutCts.CancelAfter(options.Timeout);
@@ -138,7 +137,7 @@ public sealed class MongoEventStoreClient3<TEvent> :
                 if (batch.Count == 0)
                     continue;
 
-                await ProcessAppendBatchWithRetryAsync(batch, ct).ConfigureAwait(false);
+                await ProcessAppendsAsync(batch, ct).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException ex) when (ct.IsCancellationRequested)
@@ -146,51 +145,56 @@ public sealed class MongoEventStoreClient3<TEvent> :
             // Graceful stop: complete writer, then fault current batch + queued items.
             _appendChannel.Writer.TryComplete();
             FaultAll(batch, ex);
-            DrainWithFault(ex);
+            DrainWithFault(_appendChannel, ex);
         }
         catch (Exception ex)
         {
             // Fatal worker failure: complete writer with error, then current batch + queued items.
             _appendChannel.Writer.TryComplete(ex);
             FaultAll(batch, ex);
-            DrainWithFault(ex);
+            DrainWithFault(_appendChannel, ex);
         }
     }
 
-    private async Task ProcessAppendBatchWithRetryAsync(List<PendingAppend> batch, CancellationToken ct)
+    private async Task ProcessAppendsAsync(List<PendingAppend> batch, CancellationToken ct)
     {
-        await ProcessAppendBatchAsync(batch, ct).ConfigureAwait(false);
+        _buffers.ClearAll();
+        await PrepareAndPruneAsync(batch, ct).ConfigureAwait(false);
+        await CommitAsync(ct).ConfigureAwait(false);
     }
 
-    private async Task ProcessAppendBatchAsync(List<PendingAppend> batch, CancellationToken ct)
+    private async Task PrepareAndPruneAsync(List<PendingAppend> batch, CancellationToken ct)
     {
         _preAppendQuery.Reset();
 
-        // Clear buffers
-        _seenCommitIds.Clear();
-        _existingCommitIds.Clear();
-        _headStreamVersions.Clear();
-        _batchedEvents.Clear();
-        _pendingAppends.Clear();
-
         foreach (var append in batch)
-            _preAppendQuery.AddInput(append.CommitId, append.StreamId);
+            _preAppendQuery.AddInput(append.BsonCommitId, append.BsonStreamId);
 
-        await _preAppendQuery.ExecuteAsync(_existingCommitIds, _headStreamVersions, ct).ConfigureAwait(false);
+        await _preAppendQuery
+            .ExecuteAsync(
+                _buffers.ExistingCommitIds,
+                _buffers.HeadStreamVersions,
+                ct)
+            .ConfigureAwait(false);
 
         var writtenAtUtc = DateTime.UtcNow;
 
         foreach (var append in batch)
         {
-            if (!_seenCommitIds.Add(append.CommitId.AsGuid))
+            var commitId = append.CommitId;
+
+            if (!_buffers.SeenCommitIds.Add(commitId))
                 continue;
 
-            if (_existingCommitIds.Contains(append.CommitId.AsGuid))
+            if (_buffers.ExistingCommitIds.Contains(commitId))
+            {
                 append.Ack.TrySetResult();
+                continue;
+            }
 
-            var streamId = append.StreamId.AsString;
+            var streamId = append.StreamId;
             var expectedState = append.ExpectedState;
-            var streamVersion = _headStreamVersions.GetValueOrDefault(streamId, -1L);
+            var streamVersion = _buffers.HeadStreamVersions.GetValueOrDefault(streamId, -1L);
 
             var actualState = streamVersion < 0
                 ? StreamState.StreamDoesNotExist
@@ -206,17 +210,71 @@ public sealed class MongoEventStoreClient3<TEvent> :
             {
                 e[EventLogEntry.FieldNames.StreamVersion] = ++streamVersion;
                 e[EventLogEntry.FieldNames.WrittenAtUtc] = writtenAtUtc;
-                _batchedEvents.Add(e);
+                _buffers.OutgoingEvents.Add(e);
             }
 
-            _pendingAppends.Add(append.CommitId.AsGuid, append);
-            _headStreamVersions[streamId] = streamVersion;
+            _buffers.HeadStreamVersions[streamId] = streamVersion;
+            _buffers.OutgoingAppends.Add(commitId, append);
         }
 
         // Remove everything we've already completed.
         batch.RemoveAll(x => x.Ack.Task.IsCompleted);
+    }
 
-        // TODO: Transaction!
+    private async Task CommitAsync(CancellationToken ct)
+    {
+        var eventCount = _buffers.OutgoingEvents.Count;
+        if (eventCount == 0)
+            return;
+
+        using var session = await _mongoClient.StartSessionAsync(cancellationToken: ct).ConfigureAwait(false);
+        session.StartTransaction(TransactionOptions);
+
+        try
+        {
+            var events = _buffers.OutgoingEvents;
+            var startPosition = await ClaimPositionsAsync(session, eventCount, ct).ConfigureAwait(false);
+
+            for (var i = 0; i < eventCount; i++)
+                events[i]["_id"] = startPosition + i;
+
+            await _eventLog
+                .InsertManyAsync(session, events, new InsertManyOptions { IsOrdered = true }, ct)
+                .ConfigureAwait(false);
+
+            await session.CommitTransactionAsync(ct).ConfigureAwait(false);
+
+            foreach (var append in _buffers.OutgoingAppends.Values)
+                append.Ack.TrySetResult();
+        }
+        catch (Exception ex)
+        {
+            // TODO
+        }
+    }
+
+    private async Task<long> ClaimPositionsAsync(IClientSessionHandle session, long count, CancellationToken ct)
+    {
+        const string sequenceId = "event_log_seq";
+        const string nextFieldName = "next";
+
+        var filter = Builders<BsonDocument>.Filter.Eq("_id", sequenceId);
+        var update = Builders<BsonDocument>.Update.Inc(nextFieldName, count);
+
+        var options = new FindOneAndUpdateOptions<BsonDocument>
+        {
+            IsUpsert = true,
+            Projection = Builders<BsonDocument>.Projection.Include(nextFieldName),
+            ReturnDocument = ReturnDocument.Before
+        };
+
+        var result = await _sequences
+            .FindOneAndUpdateAsync(session, filter, update, options, ct)
+            .ConfigureAwait(false);
+
+        var start = result?[nextFieldName].ToInt64() ?? 0;
+
+        return start;
     }
 
     private static void FaultAll(List<PendingAppend> appends, Exception exception)
@@ -225,30 +283,56 @@ public sealed class MongoEventStoreClient3<TEvent> :
             append.Ack.TrySetException(exception);
     }
 
-    private void DrainWithFault(Exception exception)
+    private static void DrainWithFault(ChannelReader<PendingAppend> reader, Exception exception)
     {
-        while (_appendChannel.Reader.TryRead(out var pending))
+        while (reader.TryRead(out var pending))
             pending.Ack.TrySetException(exception);
+    }
+
+    private sealed class Buffers
+    {
+        public readonly HashSet<Guid> SeenCommitIds = [];
+        public readonly HashSet<Guid> ExistingCommitIds = [];
+        public readonly Dictionary<string, long> HeadStreamVersions = [];
+        public readonly List<BsonDocument> OutgoingEvents = [];
+        public readonly Dictionary<Guid, PendingAppend> OutgoingAppends = [];
+
+        public void ClearAll()
+        {
+            SeenCommitIds.Clear();
+            ExistingCommitIds.Clear();
+            HeadStreamVersions.Clear();
+            OutgoingEvents.Clear();
+            OutgoingAppends.Clear();
+        }
     }
 
     private sealed class PendingAppend
     {
-        public PendingAppend(BsonDocument[] events, ExpectedStreamState expectedState)
+        public PendingAppend(
+            Guid commitId,
+            string streamId,
+            ExpectedStreamState expectedState,
+            BsonDocument[] events)
         {
             if (events.Length == 0)
                 throw new ArgumentException("Must have at least one event.", nameof(events));
 
+            CommitId = commitId;
+            StreamId = streamId;
             Events = events;
             ExpectedState = expectedState;
             Ack = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         }
 
+        public Guid CommitId { get; }
+        public string StreamId { get; }
         public BsonDocument[] Events { get; }
         public ExpectedStreamState ExpectedState { get; }
         public TaskCompletionSource Ack { get; }
 
         // Computed properties
-        public BsonValue StreamId => Events[0][EventLogEntry.FieldNames.StreamId];
-        public BsonValue CommitId => Events[0][EventLogEntry.FieldNames.CommitId];
+        public BsonValue BsonCommitId => Events[0][EventLogEntry.FieldNames.CommitId];
+        public BsonValue BsonStreamId => Events[0][EventLogEntry.FieldNames.StreamId];
     }
 }
