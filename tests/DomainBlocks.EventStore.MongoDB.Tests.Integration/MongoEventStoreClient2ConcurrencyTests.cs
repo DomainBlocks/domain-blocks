@@ -16,7 +16,7 @@ namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 [TestFixture]
 public class MongoEventStoreClient2ConcurrencyTests
 {
-    private const int WriterCount = 5;
+    private const int WriterCount = 20;
 
 #if DEBUG
     private const int TestTimeoutMillis = 10 * 60 * 1_000;
@@ -71,7 +71,7 @@ public class MongoEventStoreClient2ConcurrencyTests
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _mongoClient.DropDatabaseAsync(_options.DatabaseName);
+        //await _mongoClient.DropDatabaseAsync(_options.DatabaseName);
         _mongoClient.Dispose();
     }
 
@@ -366,6 +366,123 @@ public class MongoEventStoreClient2ConcurrencyTests
         txnAValue.ShouldBe(1L, "Transaction A claims first increment");
         txnBValue.ShouldBe(2L, "Transaction B claims second increment after A commits");
         txnBConflictCount.ShouldBeGreaterThanOrEqualTo(1, "Transaction B must have seen at least one WriteConflict");
+    }
+
+    /// <summary>
+    /// Long-running stress test:
+    /// multiple writers append concurrently while a MongoDB change stream observes inserts.
+    /// The observer asserts global position is strictly increasing and contiguous for this test run.
+    /// Fails fast on first ordering violation.
+    /// </summary>
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task LongRunning_ChangeStream_GlobalPositions_AreStrictlyIncreasingAndContiguous_FailFast(
+        CancellationToken ct)
+    {
+        const int runSeconds = 30;
+        const int minObservedEvents = 200; // Guard against trivial pass.
+        const int writerDelayMs = 0; // Increase to reduce pressure if needed.
+
+        var db = _mongoClient.GetDatabase(_options.DatabaseName);
+        var eventLog = db.GetCollection<BsonDocument>(_options.EventLogCollectionName);
+
+        var runId = Guid.NewGuid().ToString("N");
+
+        using var runCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        runCts.CancelAfter(TimeSpan.FromSeconds(runSeconds));
+        var runToken = runCts.Token;
+
+        // Capture first assertion failure from observer and fail after coordinated shutdown.
+        Exception? firstFailure = null;
+
+        // Watch inserts on event log. We filter to this test run inside the loop.
+        var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>()
+            .Match(x => x.OperationType == ChangeStreamOperationType.Insert);
+
+        var changeStreamOptions = new ChangeStreamOptions
+        {
+            FullDocument = ChangeStreamFullDocumentOption.Default
+        };
+
+        // Open change stream before writers start so we do not miss early inserts.
+        using var cursor = await eventLog.WatchAsync(pipeline, changeStreamOptions, runToken);
+
+        var observerTask = Task.Run(async () =>
+        {
+            long? lastPos = null;
+            var observed = 0;
+
+            try
+            {
+                await foreach (var change in cursor.ToAsyncEnumerable().WithCancellation(runToken))
+                {
+                    var doc = change.FullDocument;
+                    if (doc is null)
+                        continue;
+
+                    var pos = doc["_id"].AsInt64;
+
+                    if (lastPos.HasValue && pos != lastPos.Value + 1)
+                    {
+                        firstFailure ??= new ShouldAssertException(
+                            $"Global position not contiguous. Last={lastPos.Value}, Current={pos}, RunId={runId}");
+                        await runCts.CancelAsync(); // Fail fast: stop all writers and observer quickly.
+                        return;
+                    }
+
+                    lastPos = pos;
+                    observed++;
+                }
+            }
+            catch (OperationCanceledException) when (runToken.IsCancellationRequested)
+            {
+                // Expected when run duration elapses or fail-fast cancellation occurs.
+            }
+
+            if (firstFailure is null)
+            {
+                observed.ShouldBeGreaterThanOrEqualTo(
+                    minObservedEvents,
+                    $"Expected to observe at least {minObservedEvents} events for RunId={runId}");
+            }
+        }, runToken);
+
+        var writerTasks = _writers
+            .Select((writer, writerIndex) => Task.Run(async () =>
+            {
+                var streamId = $"lr-{runId}-w{writerIndex}";
+                var sequence = 0;
+
+                while (!runToken.IsCancellationRequested)
+                {
+                    await writer.AppendToStreamAsync(
+                        streamId,
+                        [
+                            new AppendEvent<IDomainEvent>(new TestEvent
+                                { Value = $"{runId}|w{writerIndex}|e{sequence++}" })
+                        ],
+                        new AppendToStreamOptions { ExpectedState = ExpectedStreamState.Any },
+                        runToken);
+
+                    if (writerDelayMs > 0)
+                        await Task.Delay(writerDelayMs, runToken);
+                }
+            }, runToken))
+            .ToList();
+
+        // Wait for run end or fail-fast cancellation.
+        try
+        {
+            await Task.WhenAll(writerTasks.Append(observerTask));
+        }
+        catch (OperationCanceledException) when (runToken.IsCancellationRequested)
+        {
+            // Normal shutdown path.
+        }
+
+        // Surface the first observer failure as the test failure.
+        if (firstFailure is not null)
+            throw firstFailure;
     }
 
     // -------------------------------------------------------------------------
