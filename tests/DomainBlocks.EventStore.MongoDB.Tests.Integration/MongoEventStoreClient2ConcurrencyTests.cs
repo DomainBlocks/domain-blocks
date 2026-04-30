@@ -9,8 +9,8 @@ using Shouldly;
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
 /// <summary>
-/// Validates correctness of <see cref="MongoEventStoreClient2{TEvent}"/> under concurrent multi-writer load.
-/// Each <see cref="MongoEventStoreClient2{TEvent}"/> instance represents an independent writer process
+/// Validates correctness of <see cref="MongoEventStoreClient2"/> under concurrent multi-writer load.
+/// Each <see cref="MongoEventStoreClient2"/> instance represents an independent writer process
 /// sharing the same MongoDB database.
 /// </summary>
 [TestFixture]
@@ -25,7 +25,7 @@ public class MongoEventStoreClient2ConcurrencyTests
 #endif
 
     private MongoClient _mongoClient = null!;
-    private MongoEventStoreClient2Options _options = null!;
+    private MongoEventStoreClientOptions2 _options = null!;
     private List<MongoEventStoreClient2<IDomainEvent>> _writers = null!;
 
     [OneTimeSetUp]
@@ -33,12 +33,12 @@ public class MongoEventStoreClient2ConcurrencyTests
     {
         _mongoClient = new MongoClient(MongoConnectionStrings.Default);
 
-        _options = new MongoEventStoreClient2Options
+        _options = new MongoEventStoreClientOptions2
         {
             DatabaseName = "domainblocks_tests_v2_concurrency"
         };
 
-        await MongoEventStoreClient2<IDomainEvent>.EnsureInitializedAsync(_mongoClient, _options);
+        await MongoEventStoreAdmin2.EnsureInitializedAsync(_mongoClient, _options);
     }
 
     [SetUp]
@@ -65,7 +65,7 @@ public class MongoEventStoreClient2ConcurrencyTests
         await db.DropCollectionAsync(_options.SequencesCollectionName);
 
         // Re-create indexes for the next test.
-        await MongoEventStoreClient2<IDomainEvent>.EnsureInitializedAsync(_mongoClient, _options);
+        await MongoEventStoreAdmin2.EnsureInitializedAsync(_mongoClient, _options);
     }
 
     [OneTimeTearDown]
