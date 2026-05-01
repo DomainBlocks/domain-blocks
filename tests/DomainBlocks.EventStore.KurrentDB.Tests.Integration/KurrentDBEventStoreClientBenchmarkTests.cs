@@ -1,21 +1,19 @@
 ﻿using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Integration;
-using DomainBlocks.Testing.Integration.MongoDB;
 using NUnit.Framework;
 
-namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
+namespace DomainBlocks.EventStore.KurrentDB.Tests.Integration;
 
 [TestFixture]
-public class MongoEventStoreClientTestsV2 : EventStoreClientTestsV2
+public class KurrentDBEventStoreClientBenchmarkTests : EventStoreClientBenchmarkTests
 {
     protected override Task<ITestEventStoreClientFactory<object>> GetClientFactoryAsync(
         CancellationToken cancellationToken = default)
     {
         var eventTypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>());
 
-        var clientFactory = new TestMongoEventStoreClientFactory<object>(
-            TestMongoConnectionStrings.Default,
-            "domainblocks_tests",
+        var clientFactory = new TestKurrentDBEventStoreClientFactory<object>(
+            TestConnectionStrings.Default,
             eventTypeMap);
 
         return Task.FromResult<ITestEventStoreClientFactory<object>>(clientFactory);

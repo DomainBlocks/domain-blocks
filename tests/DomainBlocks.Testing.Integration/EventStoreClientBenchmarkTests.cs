@@ -9,13 +9,6 @@ namespace DomainBlocks.Testing.Integration;
 
 public abstract class EventStoreClientBenchmarkTests : EventStoreClientTestBase<object>
 {
-    // Set a longer timeout when debugging.
-#if DEBUG
-    private const int TestTimeoutMillis = 10 * 60 * 1_000;
-#else
-    private const int TestTimeoutMillis = 120 * 1_000;
-#endif
-
     private ITestEventStoreClientFactory<object> _clientFactory = null!;
     private ITestEventStoreClientHandle<object> _clientHandle = null!;
     private IEventStoreClient<object> _client = null!;

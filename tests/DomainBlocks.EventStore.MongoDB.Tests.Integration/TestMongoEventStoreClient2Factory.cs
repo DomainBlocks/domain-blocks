@@ -8,21 +8,21 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
-public sealed class TestMongoEventStoreClientFactory<TEvent> :
+public sealed class TestMongoEventStoreClient2Factory<TEvent> :
     ITestEventStoreClientFactory<TEvent>
     where TEvent : notnull
 {
     private readonly MongoClient _mongoClient;
-    private readonly MongoEventStoreNodeOptions _nodeOptions;
+    private readonly MongoEventStoreClientOptions2 _options;
     private readonly EventCodec<TEvent, BsonValue, BsonValue> _codec;
     private readonly ILoggerFactory _loggerFactory;
     private readonly Task _initTask;
 
-    public TestMongoEventStoreClientFactory(string connectionString, string databaseName, EventTypeMap eventTypeMap)
+    public TestMongoEventStoreClient2Factory(string connectionString, string databaseName, EventTypeMap eventTypeMap)
     {
         _mongoClient = new MongoClient(connectionString);
 
-        _nodeOptions = new MongoEventStoreNodeOptions
+        _options = new MongoEventStoreClientOptions2
         {
             DatabaseName = databaseName
         };
@@ -33,41 +33,35 @@ public sealed class TestMongoEventStoreClientFactory<TEvent> :
             .AddSimpleConsole(o => o.TimestampFormat = "HH:mm:ss.fff ")
             .SetMinimumLevel(LogLevel.Debug));
 
-        _initTask = MongoEventStoreAdmin.EnsureInitializedAsync(_mongoClient, _nodeOptions);
+        _initTask = MongoEventStoreAdmin2.EnsureInitializedAsync(_mongoClient, _options);
     }
 
     public async Task<ITestEventStoreClientHandle<TEvent>> CreateAsync(CancellationToken cancellationToken = default)
     {
         await _initTask.WaitAsync(cancellationToken);
 
-        var handle = new ClientHandle(_mongoClient, _nodeOptions, _codec);
-        await handle.Node.StartAsync(cancellationToken);
+        var handle = new ClientHandle(_mongoClient, _codec, _options);
         return handle;
     }
 
     public async ValueTask DisposeAsync()
     {
-        await _mongoClient.DropDatabaseAsync(_nodeOptions.DatabaseName);
+        await _mongoClient.DropDatabaseAsync(_options.DatabaseName);
 
         _mongoClient.Dispose();
         _loggerFactory.Dispose();
     }
 
-    private sealed class ClientHandle : ITestEventStoreClientHandle<TEvent>
+    private sealed class ClientHandle(
+        IMongoClient mongoClient,
+        EventCodec<TEvent, BsonValue, BsonValue> codec,
+        MongoEventStoreClientOptions2 options) :
+        ITestEventStoreClientHandle<TEvent>
     {
-        public ClientHandle(
-            IMongoClient mongoClient,
-            MongoEventStoreNodeOptions nodeOptions,
-            EventCodec<TEvent, BsonValue, BsonValue> codec)
-        {
-            Node = new MongoEventStoreNode(mongoClient, nodeOptions);
-            Client = Node.CreateClient(codec);
-        }
+        private readonly MongoEventStoreClient2<TEvent> _client = new(mongoClient, codec, options);
 
-        public IMongoEventStoreNode Node { get; }
+        public IEventStoreClient<TEvent> Client => _client;
 
-        public IEventStoreClient<TEvent> Client { get; }
-
-        public ValueTask DisposeAsync() => Node.DisposeAsync();
+        public ValueTask DisposeAsync() => _client.DisposeAsync();
     }
 }
