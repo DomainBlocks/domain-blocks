@@ -49,7 +49,7 @@ public abstract class EventStoreClientBenchmarkTests : EventStoreClientTestBase<
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task AppendToStreamAsync_MeasureThroughputCeiling(CancellationToken ct)
     {
-        const int clientCount = 1;
+        const int clientCount = 3;
         const int maxInFlight = 1000;
         const int warmUpSeconds = 3;
         const int measureSeconds = 15;
