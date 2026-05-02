@@ -9,11 +9,6 @@ namespace DomainBlocks.Testing.Integration;
 
 public abstract class EventStoreClientBenchmarkTests : EventStoreClientTestBase<object>
 {
-    protected virtual Task OnThroughputTestCompletedAsync(CancellationToken cancellationToken)
-    {
-        return Task.CompletedTask;
-    }
-
     [Test]
     [Explicit("Benchmark")]
     [CancelAfter(TestTimeouts.DefaultMillis)]
@@ -54,7 +49,7 @@ public abstract class EventStoreClientBenchmarkTests : EventStoreClientTestBase<
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task AppendToStreamAsync_MeasureThroughputCeiling(CancellationToken ct)
     {
-        const int clientCount = 3;
+        const int clientCount = 1;
         const int maxInFlight = 1000;
         const int warmUpSeconds = 3;
         const int measureSeconds = 15;
@@ -138,13 +133,11 @@ public abstract class EventStoreClientBenchmarkTests : EventStoreClientTestBase<
             var throughput = ops / elapsed.TotalSeconds;
 
             await TestContext.Out.WriteLineAsync($"clients:       {clientCount}");
-            await TestContext.Out.WriteLineAsync($"max in-flight: {maxInFlight}");
-            await TestContext.Out.WriteLineAsync($"ops measured:  {ops}");
-            await TestContext.Out.WriteLineAsync($"errors:        {errors}");
-            await TestContext.Out.WriteLineAsync($"elapsed:       {elapsed.TotalMilliseconds:F0} ms");
-            await TestContext.Out.WriteLineAsync($"throughput:    {throughput:F0} ops/sec");
-
-            await OnThroughputTestCompletedAsync(ct);
+            await TestContext.Out.WriteLineAsync($"max in-flight: {maxInFlight:N0}");
+            await TestContext.Out.WriteLineAsync($"ops measured:  {ops:N0}");
+            await TestContext.Out.WriteLineAsync($"errors:        {errors:N0}");
+            await TestContext.Out.WriteLineAsync($"elapsed:       {elapsed.TotalMilliseconds:N0} ms");
+            await TestContext.Out.WriteLineAsync($"throughput:    {throughput:N0} ops/sec");
         }
         finally
         {

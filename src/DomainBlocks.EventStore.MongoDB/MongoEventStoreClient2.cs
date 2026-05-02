@@ -33,6 +33,7 @@ public sealed class MongoEventStoreClient2<TEvent> :
     private readonly CancellationTokenSource _stopCts = new();
     private readonly Task _appendTask;
     private readonly Buffers _buffers = new();
+    private int _disposed;
 
     public MongoEventStoreClient2(
         IMongoClient mongoClient,
@@ -187,6 +188,9 @@ public sealed class MongoEventStoreClient2<TEvent> :
 
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+
         _appendChannel.Writer.TryComplete();
         await _stopCts.CancelAsync().ConfigureAwait(false);
         await _appendTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
