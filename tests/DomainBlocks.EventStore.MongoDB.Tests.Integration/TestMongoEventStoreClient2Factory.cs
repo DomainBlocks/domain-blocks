@@ -8,57 +8,93 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
+public static class TestMongoEventStoreClient2Factory
+{
+    public static TestMongoEventStoreClient2Factory<object> CreateDefault(MongoEventStoreClientOptions2 options)
+    {
+        var eventTypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>());
+
+        return new TestMongoEventStoreClient2Factory<object>(
+            TestMongoConnectionStrings.Default,
+            options,
+            eventTypeMap);
+    }
+}
+
 public sealed class TestMongoEventStoreClient2Factory<TEvent> :
     ITestEventStoreClientFactory<TEvent>
     where TEvent : notnull
 {
-    private readonly MongoClient _mongoClient;
     private readonly MongoEventStoreClientOptions2 _options;
     private readonly EventCodec<TEvent, BsonValue, BsonValue> _codec;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly ILogger<TestMongoEventStoreClient2Factory<TEvent>> _logger;
     private readonly Task _initTask;
 
-    public TestMongoEventStoreClient2Factory(string connectionString, string databaseName, EventTypeMap eventTypeMap)
+    public TestMongoEventStoreClient2Factory(
+        string connectionString,
+        MongoEventStoreClientOptions2 options,
+        EventTypeMap eventTypeMap)
     {
-        _mongoClient = new MongoClient(connectionString);
-
-        _options = new MongoEventStoreClientOptions2
-        {
-            DatabaseName = databaseName
-        };
-
+        _options = options;
         _codec = TestMongoEventCodec.Create<TEvent>(eventTypeMap);
 
         _loggerFactory = LoggerFactory.Create(x => x
             .AddSimpleConsole(o => o.TimestampFormat = "HH:mm:ss.fff ")
             .SetMinimumLevel(LogLevel.Debug));
 
-        _initTask = MongoEventStoreAdmin2.EnsureInitializedAsync(_mongoClient, _options);
+        _logger = _loggerFactory.CreateLogger<TestMongoEventStoreClient2Factory<TEvent>>();
+
+        var mongoClient = new MongoClient(connectionString);
+        _initTask = MongoEventStoreAdmin2.EnsureInitializedAsync(mongoClient, _options);
+
+        MongoClient = mongoClient;
     }
 
-    public async Task<ITestEventStoreClientHandle<TEvent>> CreateAsync(CancellationToken cancellationToken = default)
+    public IMongoClient MongoClient { get; }
+
+    public async Task<ITestEventStoreClientHandle<TEvent>> CreateAsync(
+        string name,
+        CancellationToken cancellationToken = default)
     {
         await _initTask.WaitAsync(cancellationToken);
 
-        var handle = new ClientHandle(_mongoClient, _codec, _options);
+        var logger = _loggerFactory.CreateLogger($"MongoEventStoreClient2_{name}");
+
+        var handle = new ClientHandle(
+            MongoClient,
+            _codec,
+            _options,
+            logger);
+
         return handle;
     }
 
     public async ValueTask DisposeAsync()
     {
-        await _mongoClient.DropDatabaseAsync(_options.DatabaseName);
+        using var ct = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
-        _mongoClient.Dispose();
+        try
+        {
+            await MongoClient.DropDatabaseAsync(_options.DatabaseName, ct.Token);
+        }
+        catch (OperationCanceledException) when (ct.Token.IsCancellationRequested)
+        {
+            _logger.LogWarning("Timed out waiting for database '{DatabaseName}' to be dropped", _options.DatabaseName);
+        }
+
+        MongoClient.Dispose();
         _loggerFactory.Dispose();
     }
 
     private sealed class ClientHandle(
         IMongoClient mongoClient,
         EventCodec<TEvent, BsonValue, BsonValue> codec,
-        MongoEventStoreClientOptions2 options) :
+        MongoEventStoreClientOptions2 options,
+        ILogger logger) :
         ITestEventStoreClientHandle<TEvent>
     {
-        private readonly MongoEventStoreClient2<TEvent> _client = new(mongoClient, codec, options);
+        private readonly MongoEventStoreClient2<TEvent> _client = new(mongoClient, codec, logger, options);
 
         public IEventStoreClient<TEvent> Client => _client;
 

@@ -27,7 +27,9 @@ public sealed class TestKurrentDBEventStoreClientFactory<TEvent> :
         _codec = EventCodec.Create(codecOptions);
     }
 
-    public Task<ITestEventStoreClientHandle<TEvent>> CreateAsync(CancellationToken cancellationToken = default)
+    public Task<ITestEventStoreClientHandle<TEvent>> CreateAsync(
+        string name,
+        CancellationToken cancellationToken = default)
     {
         return Task.FromResult<ITestEventStoreClientHandle<TEvent>>(new ClientHandle(_kurrentClient, _codec));
     }

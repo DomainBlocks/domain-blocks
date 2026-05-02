@@ -1,4 +1,5 @@
-﻿using MongoDB.Driver;
+﻿using Microsoft.Extensions.Logging;
+using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
@@ -6,7 +7,9 @@ internal static class ClientSessionHandleExtensions
 {
     extension(IClientSessionHandle session)
     {
-        public async Task CommitWithRetryOnUnknownResultAsync(CancellationToken cancellationToken = default)
+        public async Task CommitWithRetryOnUnknownResultAsync(
+            ILogger? logger = null,
+            CancellationToken cancellationToken = default)
         {
             while (true)
             {
@@ -17,7 +20,7 @@ internal static class ClientSessionHandleExtensions
                 }
                 catch (MongoException ex) when (ex.HasErrorLabel(MongoErrorLabels.UnknownTransactionCommitResult))
                 {
-                    // Retry
+                    logger?.LogWarning(ex, "Unknown transaction commit result; retrying");
                 }
             }
         }

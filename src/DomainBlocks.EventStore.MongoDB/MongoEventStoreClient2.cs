@@ -2,6 +2,7 @@
 using System.Threading.Channels;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB.Schema;
+using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
@@ -26,6 +27,7 @@ public sealed class MongoEventStoreClient2<TEvent> :
     private readonly PreAppendQuery _preAppendQuery;
     private readonly IEventEncoder<TEvent, BsonValue, BsonValue> _encoder;
     private readonly IEventDecoder<TEvent, BsonValue, BsonValue> _decoder;
+    private readonly ILogger _logger;
     private readonly Channel<PendingAppend> _appendChannel;
     private readonly int _appendBatchSize;
     private readonly CancellationTokenSource _stopCts = new();
@@ -35,6 +37,7 @@ public sealed class MongoEventStoreClient2<TEvent> :
     public MongoEventStoreClient2(
         IMongoClient mongoClient,
         EventCodec<TEvent, BsonValue, BsonValue> eventCodec,
+        ILogger logger,
         MongoEventStoreClientOptions2? options = null)
     {
         options ??= new MongoEventStoreClientOptions2();
@@ -51,6 +54,7 @@ public sealed class MongoEventStoreClient2<TEvent> :
         _preAppendQuery = new PreAppendQuery(_eventLog);
         _encoder = eventCodec.Encoder;
         _decoder = eventCodec.Decoder;
+        _logger = logger;
 
         _appendChannel = Channel.CreateBounded<PendingAppend>(new BoundedChannelOptions(options.AppendQueueCapacity)
         {
@@ -218,6 +222,7 @@ public sealed class MongoEventStoreClient2<TEvent> :
         catch (Exception ex)
         {
             // Fatal worker failure: complete writer with error, then current batch + queued items.
+            _logger.LogCritical(ex, "A fatal error occurred while processing appends");
             _appendChannel.Writer.TryComplete(ex);
             FaultAll(batch, ex);
             DrainWithFault(_appendChannel, ex);
@@ -252,6 +257,7 @@ public sealed class MongoEventStoreClient2<TEvent> :
             catch (MongoException ex) when (ex.HasErrorLabel(MongoErrorLabels.TransientTransactionError))
             {
                 // Transient error - retry the whole pending batch.
+                _logger.LogTrace("Transient transaction error; retrying");
             }
         }
     }
@@ -335,11 +341,11 @@ public sealed class MongoEventStoreClient2<TEvent> :
                 .InsertManyAsync(session, events, new InsertManyOptions { IsOrdered = true }, ct)
                 .ConfigureAwait(false);
 
-            await session.CommitWithRetryOnUnknownResultAsync(ct).ConfigureAwait(false);
+            await session.CommitWithRetryOnUnknownResultAsync(_logger, ct).ConfigureAwait(false);
         }
         catch (MongoBulkWriteException ex) when (ex.WriteErrors.Any(x => x.Code == MongoErrorCodes.DuplicateKey))
         {
-            await session.AbortTransactionAsync(ct).ConfigureAwait(false);
+            await SafeAbortTransactionAsync(session, ct).ConfigureAwait(false);
 
             var firstError = ex.WriteErrors.First(e => e.Code == MongoErrorCodes.DuplicateKey);
             var failedEvent = _buffers.OutgoingEvents[firstError.Index];
@@ -350,20 +356,7 @@ public sealed class MongoEventStoreClient2<TEvent> :
         }
         catch (Exception)
         {
-            try
-            {
-                await session.AbortTransactionAsync(ct).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                // Expected during shutdown/timeout.
-                // Don't replace original failure - cancellation will eventually propagate.
-            }
-            catch (Exception abortEx)
-            {
-                // Log here
-            }
-
+            await SafeAbortTransactionAsync(session, ct).ConfigureAwait(false);
             throw;
         }
 
@@ -395,6 +388,25 @@ public sealed class MongoEventStoreClient2<TEvent> :
         var start = result?[nextFieldName].ToInt64() ?? 0;
 
         return start;
+    }
+
+    private async Task SafeAbortTransactionAsync(IClientSessionHandle session, CancellationToken ct)
+    {
+        if (!session.IsInTransaction)
+            return;
+
+        try
+        {
+            await session.AbortTransactionAsync(ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            _logger.LogTrace("Transaction canceled");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to abort transaction");
+        }
     }
 
     private static void FaultAll(List<PendingAppend> appends, Exception exception)

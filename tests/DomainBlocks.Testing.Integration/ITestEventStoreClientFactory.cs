@@ -2,5 +2,5 @@
 
 public interface ITestEventStoreClientFactory<TEvent> : IAsyncDisposable where TEvent : notnull
 {
-    Task<ITestEventStoreClientHandle<TEvent>> CreateAsync(CancellationToken cancellationToken = default);
+    Task<ITestEventStoreClientHandle<TEvent>> CreateAsync(string name, CancellationToken cancellationToken = default);
 }

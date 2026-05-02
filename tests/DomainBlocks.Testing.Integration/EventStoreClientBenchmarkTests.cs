@@ -9,35 +9,21 @@ namespace DomainBlocks.Testing.Integration;
 
 public abstract class EventStoreClientBenchmarkTests : EventStoreClientTestBase<object>
 {
-    private ITestEventStoreClientFactory<object> _clientFactory = null!;
-    private ITestEventStoreClientHandle<object> _clientHandle = null!;
-    private IEventStoreClient<object> _client = null!;
-
-    [SetUp]
-    public async Task SetUp()
+    protected virtual Task OnThroughputTestCompletedAsync(CancellationToken cancellationToken)
     {
-        _clientFactory = await GetClientFactoryAsync();
-        _clientHandle = await _clientFactory.CreateAsync();
-        _client = _clientHandle.Client;
-    }
-
-    [TearDown]
-    public async Task TearDown()
-    {
-        await _clientHandle.DisposeAsync();
-        await _clientFactory.DisposeAsync();
+        return Task.CompletedTask;
     }
 
     [Test]
     [Explicit("Benchmark")]
-    [CancelAfter(TestTimeoutMillis)]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task AppendToStreamAsync_SingleAppend_MeasureLatency(CancellationToken ct)
     {
         const int warmupIterations = 10;
         const int iterations = 100;
 
         for (var i = 0; i < warmupIterations; i++)
-            await AppendAsync("warmup", ct);
+            await AppendAsync(Client, "warmup", ct);
 
         var latencies = new List<double>(iterations);
 
@@ -45,7 +31,7 @@ public abstract class EventStoreClientBenchmarkTests : EventStoreClientTestBase<
         {
             var streamId = $"test-{Guid.NewGuid():N}";
             var sw = Stopwatch.StartNew();
-            await AppendAsync(streamId, ct);
+            await AppendAsync(Client, streamId, ct);
             sw.Stop();
             latencies.Add(sw.Elapsed.TotalMilliseconds);
         }
@@ -65,88 +51,109 @@ public abstract class EventStoreClientBenchmarkTests : EventStoreClientTestBase<
 
     [Test]
     [Explicit("Benchmark")]
-    [CancelAfter(TestTimeoutMillis)]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task AppendToStreamAsync_MeasureThroughputCeiling(CancellationToken ct)
     {
+        const int clientCount = 3;
         const int maxInFlight = 1000;
         const int warmUpSeconds = 3;
         const int measureSeconds = 15;
 
-        var semaphore = new SemaphoreSlim(maxInFlight, maxInFlight);
-        var ops = 0;
-        var errors = 0;
-        var isInMeasureWindow = new StrongBox<bool>(false);
+        // Create a pool of clients
+        var clientHandles = new ITestEventStoreClientHandle<object>[clientCount];
+        for (var i = 0; i < clientCount; i++)
+            clientHandles[i] = await ClientFactory.CreateAsync($"client_{i}", ct);
 
-        var runCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        runCts.CancelAfter(TimeSpan.FromSeconds(warmUpSeconds + measureSeconds));
+        var clients = clientHandles.Select(x => x.Client).ToArray();
 
-        var pendingTasks = new ConcurrentBag<Task>();
+        try
+        {
+            var semaphore = new SemaphoreSlim(maxInFlight, maxInFlight);
+            var ops = 0;
+            var errors = 0;
+            var isInMeasureWindow = new StrongBox<bool>(false);
+            var random = Random.Shared;
 
-        var producerLoopTask = Task.Run(
-            async () =>
-            {
-                using (runCts)
+            var runCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            runCts.CancelAfter(TimeSpan.FromSeconds(warmUpSeconds + measureSeconds));
+
+            var pendingTasks = new ConcurrentBag<Task>();
+
+            var producerLoopTask = Task.Run(
+                async () =>
                 {
-                    while (!runCts.IsCancellationRequested)
+                    using (runCts)
                     {
-                        try
+                        while (!runCts.IsCancellationRequested)
                         {
-                            await semaphore.WaitAsync(runCts.Token);
-                        }
-                        catch (OperationCanceledException)
-                        {
-                            break;
-                        }
-
-                        var isMeasuring = isInMeasureWindow.Value;
-
-                        var task = AppendAsync($"test-{Guid.NewGuid():N}", runCts.Token).ContinueWith(
-                            t =>
+                            try
                             {
-                                semaphore.Release();
+                                await semaphore.WaitAsync(runCts.Token);
+                            }
+                            catch (OperationCanceledException)
+                            {
+                                break;
+                            }
 
-                                if (t.IsCompletedSuccessfully)
-                                {
-                                    if (isMeasuring)
-                                        Interlocked.Increment(ref ops);
-                                }
-                                else if (t.IsFaulted)
-                                {
-                                    Interlocked.Increment(ref errors);
-                                }
-                            },
-                            TaskScheduler.Default);
+                            var isMeasuring = isInMeasureWindow.Value;
+                            var client = clients[random.Next(clientCount)]; // randomly pick a client
 
-                        pendingTasks.Add(task);
+                            var task = AppendAsync(client, $"test-{Guid.NewGuid():N}", runCts.Token).ContinueWith(
+                                t =>
+                                {
+                                    semaphore.Release();
+
+                                    if (t.IsCompletedSuccessfully)
+                                    {
+                                        if (isMeasuring)
+                                            Interlocked.Increment(ref ops);
+                                    }
+                                    else if (t.IsFaulted)
+                                    {
+                                        Interlocked.Increment(ref errors);
+                                    }
+                                },
+                                TaskScheduler.Default);
+
+                            pendingTasks.Add(task);
+                        }
                     }
-                }
-            },
-            ct);
+                },
+                ct);
 
-        // Warm-up
-        await Task.Delay(TimeSpan.FromSeconds(warmUpSeconds), ct);
+            // Warm-up
+            await Task.Delay(TimeSpan.FromSeconds(warmUpSeconds), ct);
 
-        // Measure
-        isInMeasureWindow.Value = true;
-        var start = Stopwatch.GetTimestamp();
-        await Task.Delay(TimeSpan.FromSeconds(measureSeconds), ct);
+            // Measure
+            isInMeasureWindow.Value = true;
+            var start = Stopwatch.GetTimestamp();
+            await Task.Delay(TimeSpan.FromSeconds(measureSeconds), ct);
 
-        // Stop
-        isInMeasureWindow.Value = false;
-        var elapsed = Stopwatch.GetElapsedTime(start);
-        await producerLoopTask;
-        await Task.WhenAll(pendingTasks);
+            // Stop
+            isInMeasureWindow.Value = false;
+            var elapsed = Stopwatch.GetElapsedTime(start);
+            await producerLoopTask;
+            await Task.WhenAll(pendingTasks).WaitAsync(ct);
 
-        var throughput = ops / elapsed.TotalSeconds;
+            var throughput = ops / elapsed.TotalSeconds;
 
-        await TestContext.Out.WriteLineAsync($"max in-flight: {maxInFlight}");
-        await TestContext.Out.WriteLineAsync($"ops measured:  {ops}");
-        await TestContext.Out.WriteLineAsync($"errors:        {errors}");
-        await TestContext.Out.WriteLineAsync($"elapsed:       {elapsed.TotalMilliseconds:F0} ms");
-        await TestContext.Out.WriteLineAsync($"throughput:    {throughput:F0} ops/sec");
+            await TestContext.Out.WriteLineAsync($"clients:       {clientCount}");
+            await TestContext.Out.WriteLineAsync($"max in-flight: {maxInFlight}");
+            await TestContext.Out.WriteLineAsync($"ops measured:  {ops}");
+            await TestContext.Out.WriteLineAsync($"errors:        {errors}");
+            await TestContext.Out.WriteLineAsync($"elapsed:       {elapsed.TotalMilliseconds:F0} ms");
+            await TestContext.Out.WriteLineAsync($"throughput:    {throughput:F0} ops/sec");
+
+            await OnThroughputTestCompletedAsync(ct);
+        }
+        finally
+        {
+            foreach (var handle in clientHandles)
+                await handle.DisposeAsync().AsTask().WaitAsync(ct);
+        }
     }
 
-    private async Task AppendAsync(string streamId, CancellationToken ct)
+    private static async Task AppendAsync(IEventStoreClient<object> client, string streamId, CancellationToken ct)
     {
         object[] events = [new TestEvent { Value = "Benchmark" }];
 
@@ -156,6 +163,6 @@ public abstract class EventStoreClientBenchmarkTests : EventStoreClientTestBase<
             CommitId = Guid.CreateVersion7()
         };
 
-        await _client.AppendToStreamAsync(streamId, events, options, ct);
+        await client.AppendToStreamAsync(streamId, events, options, ct);
     }
 }

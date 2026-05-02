@@ -27,27 +27,8 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
         }
     }
 
-    private ITestEventStoreClientFactory<object> _clientFactory = null!;
-    private ITestEventStoreClientHandle<object> _clientHandle = null!;
-    private IEventStoreClient<object> _client = null!;
-
-    [SetUp]
-    public async Task SetUp()
-    {
-        _clientFactory = await GetClientFactoryAsync();
-        _clientHandle = await _clientFactory.CreateAsync();
-        _client = _clientHandle.Client;
-    }
-
-    [TearDown]
-    public async Task TearDown()
-    {
-        await _clientHandle.DisposeAsync();
-        await _clientFactory.DisposeAsync();
-    }
-
     [Test]
-    [CancelAfter(TestTimeoutMillis)]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task AppendToStreamAsync_ExpectedStateIsAnyAndStreamDoesNotExist_AppendsEvents(
         CancellationToken cancellationToken)
     {
@@ -60,9 +41,9 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
 
         var streamId = $"test-{Guid.NewGuid():N}";
 
-        await _client.AppendToStreamAsync(streamId, events, cancellationToken: cancellationToken);
+        await Client.AppendToStreamAsync(streamId, events, cancellationToken: cancellationToken);
 
-        var readEvents = await _client
+        var readEvents = await Client
             .ReadStreamAsync(streamId, cancellationToken: cancellationToken)
             .ToArrayAsync(cancellationToken);
 
@@ -71,7 +52,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
     }
 
     [Test]
-    [CancelAfter(TestTimeoutMillis)]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task AppendToStreamAsync_ExpectedStateIsAnyAndStreamExists_AppendsEvents(
         CancellationToken cancellationToken)
     {
@@ -91,10 +72,10 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
 
         var streamId = $"test-{Guid.NewGuid():N}";
 
-        await _client.AppendToStreamAsync(streamId, events1, cancellationToken: cancellationToken);
-        await _client.AppendToStreamAsync(streamId, events2, cancellationToken: cancellationToken);
+        await Client.AppendToStreamAsync(streamId, events1, cancellationToken: cancellationToken);
+        await Client.AppendToStreamAsync(streamId, events2, cancellationToken: cancellationToken);
 
-        var readEvents = await _client
+        var readEvents = await Client
             .ReadStreamAsync(streamId, cancellationToken: cancellationToken)
             .ToArrayAsync(cancellationToken);
 
@@ -106,13 +87,13 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
     }
 
     [Test]
-    [CancelAfter(TestTimeoutMillis)]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task AppendToStreamAsync_ExpectedStateHasWrongVersion_ThrowsVersionConflict(
         CancellationToken cancellationToken)
     {
         var streamId = $"test-{Guid.NewGuid():N}";
 
-        await _client.AppendToStreamAsync(
+        await Client.AppendToStreamAsync(
             streamId,
             [
                 CreateTestEvent("TestEvent1"),
@@ -123,7 +104,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
 
         var expectedState = ExpectedStreamState.SpecificVersion(new StreamVersion(1));
 
-        var exception = await _client
+        var exception = await Client
             .AppendToStreamAsync(
                 streamId,
                 [CreateTestEvent("TestEvent4")],
@@ -141,13 +122,13 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
     }
 
     [Test]
-    [CancelAfter(TestTimeoutMillis)]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task AppendToStreamAsync_ExpectedStateIsStreamExistsAndStreamDoesNotExist_ThrowsExpectedStreamToExist(
         CancellationToken cancellationToken)
     {
         var streamId = $"test-{Guid.NewGuid():N}";
 
-        var exception = await _client
+        var exception = await Client
             .AppendToStreamAsync(
                 streamId,
                 [
@@ -166,14 +147,14 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
     }
 
     [Test]
-    [CancelAfter(TestTimeoutMillis)]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task
         AppendToStreamAsync_ExpectedStateIsStreamDoesNotExistAndStreamExists_ThrowsExpectedStreamToNotExist(
             CancellationToken cancellationToken)
     {
         var streamId = $"test-{Guid.NewGuid():N}";
 
-        await _client.AppendToStreamAsync(
+        await Client.AppendToStreamAsync(
             streamId,
             [
                 CreateTestEvent("TestEvent1"),
@@ -182,7 +163,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
             ],
             cancellationToken: cancellationToken);
 
-        var exception = await _client
+        var exception = await Client
             .AppendToStreamAsync(
                 streamId,
                 [CreateTestEvent("TestEvent4")],
@@ -197,7 +178,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
     }
 
     [TestCaseSource(nameof(PositionAndDirectionEdgeCases))]
-    [CancelAfter(TestTimeoutMillis)]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task ReadStreamAsync_EdgeCasePositionAndDirectionAndStreamExists_ReturnsEmpty(
         StreamReadPosition position,
         StreamReadDirection direction,
@@ -205,7 +186,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
     {
         var streamId = $"test-{Guid.NewGuid():N}";
 
-        await _client.AppendToStreamAsync(
+        await Client.AppendToStreamAsync(
             streamId,
             [CreateTestEvent("TestEvent1"), CreateTestEvent("TestEvent2")],
             cancellationToken: cancellationToken);
@@ -216,7 +197,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
             Direction = direction
         };
 
-        var readEvents = await _client
+        var readEvents = await Client
             .ReadStreamAsync(streamId, options, cancellationToken)
             .ToArrayAsync(cancellationToken);
 
@@ -224,7 +205,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
     }
 
     [TestCaseSource(nameof(PositionAndDirectionEdgeCases))]
-    [CancelAfter(TestTimeoutMillis)]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task ReadStreamAsync_EdgeCasePositionAndDirectionAndStreamDoesNotExist_ReturnsEmpty(
         StreamReadPosition position,
         StreamReadDirection direction,
@@ -238,7 +219,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
             Direction = direction
         };
 
-        var readEvents = await _client
+        var readEvents = await Client
             .ReadStreamAsync(streamId, options, cancellationToken)
             .ToArrayAsync(cancellationToken);
 
@@ -246,7 +227,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
     }
 
     [TestCaseSource(nameof(PositionAndDirectionCases))]
-    [CancelAfter(TestTimeoutMillis)]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task ReadStreamAsync_StreamDoesNotExistAndBehaviorIsThrow_ThrowsStreamNotFound(
         StreamReadPosition position,
         StreamReadDirection direction,
@@ -261,7 +242,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
             StreamNotFoundBehavior = StreamNotFoundBehavior.Throw
         };
 
-        await _client
+        await Client
             .ReadStreamAsync(streamId, options, cancellationToken)
             // Stream must be materialized.
             .ToArrayAsync(cancellationToken)
@@ -270,7 +251,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
     }
 
     [Test]
-    [CancelAfter(TestTimeoutMillis)]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task ReadStreamAsync_FromVersion_ReturnsExpectedEvents(CancellationToken cancellationToken)
     {
         object[] events1 =
@@ -289,8 +270,8 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
 
         var streamId = $"test-{Guid.NewGuid():N}";
 
-        await _client.AppendToStreamAsync(streamId, events1, cancellationToken: cancellationToken);
-        await _client.AppendToStreamAsync(streamId, events2, cancellationToken: cancellationToken);
+        await Client.AppendToStreamAsync(streamId, events1, cancellationToken: cancellationToken);
+        await Client.AppendToStreamAsync(streamId, events2, cancellationToken: cancellationToken);
 
         var expected = events1.Concat(events2).ToArray();
 
@@ -310,7 +291,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
 
         ValueTask<object[]> ReadEvents(int startVersion, StreamReadDirection direction)
         {
-            return _client
+            return Client
                 .ReadStreamAsync(
                     streamId,
                     new ReadStreamOptions

@@ -1,6 +1,4 @@
-﻿using DomainBlocks.EventStore.TypeMapping;
-using DomainBlocks.Testing.Integration;
-using DomainBlocks.Testing.Integration.MongoDB;
+﻿using DomainBlocks.Testing.Integration;
 using NUnit.Framework;
 
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
@@ -11,13 +9,8 @@ public class MongoEventStoreClient2Tests : EventStoreClientTests
     protected override Task<ITestEventStoreClientFactory<object>> GetClientFactoryAsync(
         CancellationToken cancellationToken = default)
     {
-        var eventTypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>());
-
-        var clientFactory = new TestMongoEventStoreClient2Factory<object>(
-            TestMongoConnectionStrings.Default,
-            "domainblocks_tests_v2",
-            eventTypeMap);
-
+        var options = new MongoEventStoreClientOptions2 { DatabaseName = "domainblocks_tests_v2" };
+        var clientFactory = TestMongoEventStoreClient2Factory.CreateDefault(options);
         return Task.FromResult<ITestEventStoreClientFactory<object>>(clientFactory);
     }
 }

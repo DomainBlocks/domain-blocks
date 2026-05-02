@@ -8,6 +8,19 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
+public static class TestMongoEventStoreClientFactory
+{
+    public static TestMongoEventStoreClientFactory<object> CreateDefault(MongoEventStoreNodeOptions options)
+    {
+        var eventTypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>());
+
+        return new TestMongoEventStoreClientFactory<object>(
+            TestMongoConnectionStrings.Default,
+            options,
+            eventTypeMap);
+    }
+}
+
 public sealed class TestMongoEventStoreClientFactory<TEvent> :
     ITestEventStoreClientFactory<TEvent>
     where TEvent : notnull
@@ -18,15 +31,13 @@ public sealed class TestMongoEventStoreClientFactory<TEvent> :
     private readonly ILoggerFactory _loggerFactory;
     private readonly Task _initTask;
 
-    public TestMongoEventStoreClientFactory(string connectionString, string databaseName, EventTypeMap eventTypeMap)
+    public TestMongoEventStoreClientFactory(
+        string connectionString,
+        MongoEventStoreNodeOptions nodeOptions,
+        EventTypeMap eventTypeMap)
     {
         _mongoClient = new MongoClient(connectionString);
-
-        _nodeOptions = new MongoEventStoreNodeOptions
-        {
-            DatabaseName = databaseName
-        };
-
+        _nodeOptions = nodeOptions;
         _codec = TestMongoEventCodec.Create<TEvent>(eventTypeMap);
 
         _loggerFactory = LoggerFactory.Create(x => x
@@ -36,7 +47,9 @@ public sealed class TestMongoEventStoreClientFactory<TEvent> :
         _initTask = MongoEventStoreAdmin.EnsureInitializedAsync(_mongoClient, _nodeOptions);
     }
 
-    public async Task<ITestEventStoreClientHandle<TEvent>> CreateAsync(CancellationToken cancellationToken = default)
+    public async Task<ITestEventStoreClientHandle<TEvent>> CreateAsync(
+        string name,
+        CancellationToken cancellationToken = default)
     {
         await _initTask.WaitAsync(cancellationToken);
 
