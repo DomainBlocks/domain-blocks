@@ -29,5 +29,7 @@ public sealed class MongoEventStoreNodeOptions
 
     public TimeSpan LeaseRenewInterval { get; set; } = TimeSpan.FromSeconds(2);
 
-    public TimeSpan LeaseAcquireRetryDelay { get; set; } = TimeSpan.FromSeconds(1);
+    public TimeSpan MaxLeaseAcquireJitter { get; set; } = TimeSpan.FromMilliseconds(500);
+
+    public TimeSpan ClockSkewTolerance { get; set; } = TimeSpan.FromSeconds(1);
 }

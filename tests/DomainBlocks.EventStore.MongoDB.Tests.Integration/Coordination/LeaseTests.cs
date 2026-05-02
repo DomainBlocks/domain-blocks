@@ -75,7 +75,7 @@ public class LeaseTests
     public async Task LeaseLostToken_WhenRenewalFails_IsCancelled(CancellationToken ct)
     {
         // Set RenewInterval > LeaseDuration so the heartbeat fires only after the lease has expired.
-        var doc = await _store.AcquireAsync("test", LeaseDuration, ct);
+        var doc = await _store.AcquireAsync("test", LeaseDuration, cancellationToken: ct);
         doc.ShouldNotBeNull();
 
         await using var lease = new Lease(
@@ -98,7 +98,7 @@ public class LeaseTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task LeaseLostTask_WhenRenewalFails_CompletesWithRevokedReason(CancellationToken ct)
     {
-        var doc = await _store.AcquireAsync("test", LeaseDuration, ct);
+        var doc = await _store.AcquireAsync("test", LeaseDuration, cancellationToken: ct);
         doc.ShouldNotBeNull();
 
         await using var lease = new Lease(
@@ -136,7 +136,7 @@ public class LeaseTests
 
     private async Task<Lease> AcquireLeaseAsync(CancellationToken ct = default)
     {
-        var doc = await _store.AcquireAsync("test", LeaseDuration, ct);
+        var doc = await _store.AcquireAsync("test", LeaseDuration, cancellationToken: ct);
         doc.ShouldNotBeNull();
         return new Lease(doc, _store, () => LeaseDuration, RenewInterval, NullLogger.Instance, _timeProvider);
     }

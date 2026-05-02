@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using System.Threading.Channels;
+﻿using System.Threading.Channels;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using DomainBlocks.EventStore.MongoDB.Coordination;
@@ -65,7 +64,7 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
         _logger = loggerFactory.CreateLogger<MongoEventStoreNode>();
     }
 
-    public Task Completed => Volatile.Read(ref _started) == 0
+    public Task Completion => Volatile.Read(ref _started) == 0
         ? throw new InvalidOperationException("StartAsync must be called before accessing Completed.")
         : Task.WhenAll(_publishRequestsTask, _leaseContenderTask);
 
@@ -95,22 +94,28 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
 
         if (_options.NodeRole.HasFlag(NodeRole.Leader))
         {
-            var leaseStore = new LeaseStore(_leases);
-
-            var leaseContender = new LeaseContender(
-                leaseStore,
-                _options,
-                _loggerFactory.CreateLogger<LeaseContender>());
-
-            var leaseHandler = new LeaseHandler(
+            var requestFeeder = new RequestFeeder(
                 _requests,
                 _changeStreamSubject,
+                _options.WriteQueueCapacity,
+                _options.WriteBatchSize,
+                _loggerFactory.CreateLogger<RequestFeeder>());
+
+            var leaderRunner = new LeaderRunner(
+                requestFeeder,
                 _eventLog,
                 _options.WriteQueueCapacity,
                 _options.WriteBatchSize,
                 _loggerFactory);
 
-            _leaseContenderTask = leaseContender.RunAsync(leaseHandler, _stopCts.Token);
+            var leaseContender = new LeaseContender(
+                new LeaseStore(_leases),
+                _changeStreamSubject,
+                leaderRunner,
+                _options,
+                _loggerFactory.CreateLogger<LeaseContender>());
+
+            _leaseContenderTask = leaseContender.RunAsync(_stopCts.Token);
         }
 
         _changeStreamConnection = _changeStreamSubject.Connect();
@@ -154,37 +159,24 @@ public sealed class MongoEventStoreNode : IMongoEventStoreNode
         var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>();
         var logger = _loggerFactory.CreateLogger("ChangeStream");
 
-        // Leader needs request inserts only, so we can use a change stream directly on the requests collection.
-        if (_options.NodeRole is NodeRole.Leader)
+        // Both roles observe lease changes.
+        var filter = filterBuilder.Eq("ns.coll", _options.LeasesCollectionName);
+
+        if (_options.NodeRole.HasFlag(NodeRole.Client))
         {
-            return await ChangeStreamSubjectFactory.CreateAsync(
-                _requests.WatchAsync,
-                pipeline.Match(filterBuilder.Eq("operationType", "insert")),
-                x => x.ResumeToken,
-                logger: logger,
-                cancellationToken: cancellationToken);
+            var eventCommitIdFilter = filterBuilder.Eq("ns.coll", _options.EventLogCollectionName) &
+                                      // We only need the first event in a given commit to obtain the commit ID.
+                                      filterBuilder.Eq($"fullDocument.{EventLogEntry.FieldNames.CommitIndex}", 0);
+
+            filter |= eventCommitIdFilter;
         }
 
-        var eventFilter = filterBuilder.Eq("ns.coll", _options.EventLogCollectionName) &
-                          // We only need the first event in a given commit to obtain the commit ID.
-                          filterBuilder.Eq($"fullDocument.{EventLogEntry.FieldNames.CommitIndex}", 0);
-
-        var leaseFilter = filterBuilder.Eq("ns.coll", _options.LeasesCollectionName);
-        var clientFilter = eventFilter | leaseFilter;
-        FilterDefinition<ChangeStreamDocument<BsonDocument>> filter;
-
-        if (_options.NodeRole is NodeRole.ClientLeader)
+        if (_options.NodeRole.HasFlag(NodeRole.Leader))
         {
-            var leaderFilter = filterBuilder.Eq("ns.coll", _options.RequestsCollectionName) &
-                               filterBuilder.Eq("operationType", "insert");
+            var requestsFilter = filterBuilder.Eq("ns.coll", _options.RequestsCollectionName) &
+                                 filterBuilder.Eq("operationType", "insert");
 
-            filter = clientFilter | leaderFilter;
-        }
-        else
-        {
-            filter = _options.NodeRole is NodeRole.Client
-                ? clientFilter
-                : throw new UnreachableException($"Unknown node role '{_options.NodeRole}'.");
+            filter |= requestsFilter;
         }
 
         return await ChangeStreamSubjectFactory.CreateAsync(

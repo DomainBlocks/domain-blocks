@@ -16,13 +16,14 @@ internal sealed class LeaseStore(IMongoCollection<LeaseDocument> leases, TimePro
     public async Task<LeaseDocument?> AcquireAsync(
         string holderIdPrefix,
         TimeSpan duration,
+        TimeSpan clockSkewTolerance = default,
         CancellationToken cancellationToken = default)
     {
         var holderId = $"{holderIdPrefix}:{Guid.CreateVersion7():N}";
         var now = _timeProvider.GetUtcNow().UtcDateTime;
 
         var filter = Builders<LeaseDocument>.Filter.Eq(x => x.Id, LeaseDocument.LeaseId) &
-                     Builders<LeaseDocument>.Filter.Lte(x => x.ExpiresAtUtc, now);
+                     Builders<LeaseDocument>.Filter.Lte(x => x.ExpiresAtUtc, now + clockSkewTolerance);
 
         var update = Builders<LeaseDocument>.Update
             .Set(x => x.HolderId, holderId)
@@ -30,7 +31,11 @@ internal sealed class LeaseStore(IMongoCollection<LeaseDocument> leases, TimePro
             .Set(x => x.AcquiredAtUtc, now)
             .Set(x => x.ExpiresAtUtc, now + duration)
             .SetOnInsert(x => x.CommitPosition, -1)
-            .Set(x => x.LastUpdatedAtUtc, now);
+            .Set(x => x.LastUpdate, new LeaseUpdate
+            {
+                Kind = LeaseUpdateKind.Acquired,
+                AtUtc = now
+            });
 
         try
         {
@@ -56,7 +61,11 @@ internal sealed class LeaseStore(IMongoCollection<LeaseDocument> leases, TimePro
 
         var update = Builders<LeaseDocument>.Update
             .Set(x => x.ExpiresAtUtc, now + duration)
-            .Set(x => x.LastUpdatedAtUtc, now);
+            .Set(x => x.LastUpdate, new LeaseUpdate
+            {
+                Kind = LeaseUpdateKind.Renewed,
+                AtUtc = now
+            });
 
         var result = await leases
             .UpdateOneAsync(filter, update, cancellationToken: cancellationToken)
@@ -76,7 +85,11 @@ internal sealed class LeaseStore(IMongoCollection<LeaseDocument> leases, TimePro
 
         var update = Builders<LeaseDocument>.Update
             .Set(x => x.ExpiresAtUtc, now) // Expire immediately.
-            .Set(x => x.LastUpdatedAtUtc, now);
+            .Set(x => x.LastUpdate, new LeaseUpdate
+            {
+                Kind = LeaseUpdateKind.Released,
+                AtUtc = now
+            });
 
         var result = await leases
             .UpdateOneAsync(filter, update, cancellationToken: cancellationToken)
@@ -99,7 +112,11 @@ internal sealed class LeaseStore(IMongoCollection<LeaseDocument> leases, TimePro
 
         var update = Builders<LeaseDocument>.Update
             .Inc(x => x.CommitPosition, count)
-            .Set(x => x.LastUpdatedAtUtc, now);
+            .Set(x => x.LastUpdate, new LeaseUpdate
+            {
+                Kind = LeaseUpdateKind.CommitPositionAdvanced,
+                AtUtc = now
+            });
 
         var result = await leases
             .UpdateOneAsync(filter, update, cancellationToken: cancellationToken)

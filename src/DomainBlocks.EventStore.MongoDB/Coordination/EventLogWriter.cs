@@ -98,6 +98,11 @@ internal sealed partial class EventLogWriter : IEventLogWriter
 
             return new EventLogWriteResult(startPosition, _writes.Count, duplicatesSkipped, conflictsRejected);
         }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error writing events");
+            throw;
+        }
         finally
         {
             _isPrepared = false;

@@ -78,7 +78,7 @@ internal sealed class Lease : IAsyncDisposable
                     continue;
                 }
 
-                _logger.LogWarning("Lease lost by '{HolderId}' (epoch {Epoch}): revoked", _holderId, Epoch);
+                _logger.LogDebug("Lease lost by '{HolderId}' (epoch {Epoch}): revoked", _holderId, Epoch);
 
                 await _leaseLostCts.CancelAsync().ConfigureAwait(false);
                 _leaseLostTcs.TrySetResult(new LeaseLostInfo(LeaseLostReason.Revoked));
@@ -106,11 +106,11 @@ internal sealed class Lease : IAsyncDisposable
 
             if (await _store.TryReleaseAsync(_holderId, Epoch, cts.Token).ConfigureAwait(false))
             {
-                _logger.LogInformation("Lease released by '{HolderId}' (epoch {Epoch})", _holderId, Epoch);
+                _logger.LogDebug("Lease released by '{HolderId}' (epoch {Epoch})", _holderId, Epoch);
             }
             else
             {
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "Holder '{HolderId}' (epoch {Epoch}) unable to release lease (no longer held)",
                     _holderId,
                     Epoch);

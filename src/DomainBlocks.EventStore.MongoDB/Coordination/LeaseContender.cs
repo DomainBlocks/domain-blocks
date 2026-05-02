@@ -1,94 +1,155 @@
+using System.Threading.Channels;
+using DomainBlocks.EventStore.MongoDB.ChangeStreams;
+using DomainBlocks.EventStore.MongoDB.Schema;
 using Microsoft.Extensions.Logging;
+using MongoDB.Bson;
+using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Coordination;
 
 internal sealed class LeaseContender(
     LeaseStore store,
+    IChangeStreamSubject<ChangeStreamDocument<BsonDocument>> changeStreamSubject,
+    LeaderRunner leaderRunner,
     MongoEventStoreNodeOptions options,
     ILogger<LeaseContender> logger,
-    TimeProvider? timeProvider = null)
+    TimeProvider? timeProvider = null) : IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>
 {
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+    private readonly CollectionNamespace _leasesNs = new(options.DatabaseName, options.LeasesCollectionName);
 
-    public async Task RunAsync(ILeaseHandler handler, CancellationToken cancellationToken = default)
-    {
-        while (!cancellationToken.IsCancellationRequested)
+    // Signals from the change stream when the lease is explicitly released.
+    private readonly Channel<bool> _releaseSignal =
+        Channel.CreateBounded<bool>(new BoundedChannelOptions(1)
         {
-            var lease = await AcquireAsync(cancellationToken).ConfigureAwait(false);
+            FullMode = BoundedChannelFullMode.DropOldest
+        });
 
-            await using (lease.ConfigureAwait(false))
+    public async Task RunAsync(CancellationToken cancellationToken = default)
+    {
+        logger.LogInformation("Lease contender starting");
+        using var _ = changeStreamSubject.Attach(this);
+
+        try
+        {
+            var waitFirst = false;
+
+            while (!cancellationToken.IsCancellationRequested)
             {
-                try
-                {
-                    await InvokeHandleLeaseAcquiredAsync(handler, lease, cancellationToken).ConfigureAwait(false);
+                var lease = await AcquireAsync(waitFirst, cancellationToken).ConfigureAwait(false);
+                waitFirst = true;
 
-                    var lostInfo = await lease.LeaseLostTask.WaitAsync(cancellationToken).ConfigureAwait(false);
-
-                    await InvokeHandleLeaseLostAsync(handler, lostInfo, cancellationToken).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                await using (lease.ConfigureAwait(false))
                 {
-                    logger.LogDebug("Lease contender cancelled");
+                    logger.LogInformation("Became leader (epoch {Epoch})", lease.Epoch);
+
+                    try
+                    {
+                        await leaderRunner.RunAsync(lease, cancellationToken).ConfigureAwait(false);
+                        logger.LogWarning("Stepping down (epoch {Epoch}): unexpected exit", lease.Epoch);
+                    }
+                    catch (OperationCanceledException) when (lease.LeaseLostToken.IsCancellationRequested
+                                                             && !cancellationToken.IsCancellationRequested)
+                    {
+                        var lostInfo = await lease.LeaseLostTask.ConfigureAwait(false);
+                        logger.LogWarning("Stepping down (epoch {Epoch}): lease lost ({Reason})",
+                            lease.Epoch, lostInfo.Reason);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        logger.LogWarning("Stepping down (epoch {Epoch}): error", lease.Epoch);
+                    }
                 }
             }
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Normal shutdown
+        }
+        finally
+        {
+            logger.LogInformation("Lease contender stopped");
+        }
     }
 
-    private async Task<Lease> AcquireAsync(CancellationToken cancellationToken)
+    ValueTask IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>.OnNextAsync(
+        ChangeStreamDocument<BsonDocument> change,
+        CancellationToken cancellationToken)
+    {
+        if (!change.CollectionNamespace.Equals(_leasesNs) ||
+            change.OperationType != ChangeStreamOperationType.Update ||
+            change.DocumentKey["_id"].AsString != LeaseDocument.LeaseId)
+        {
+            return ValueTask.CompletedTask;
+        }
+
+        var updatedFields = change.UpdateDescription?.UpdatedFields;
+
+        if (updatedFields is null ||
+            !updatedFields.TryGetValue(LeaseDocument.FieldNames.LastUpdate, out var lastUpdateValue))
+        {
+            return ValueTask.CompletedTask;
+        }
+
+        var updateKind = Enum.Parse<LeaseUpdateKind>(lastUpdateValue[LeaseUpdate.FieldNames.Kind].AsString);
+
+        if (updateKind == LeaseUpdateKind.Released)
+            _releaseSignal.Writer.TryWrite(true);
+
+        return ValueTask.CompletedTask;
+    }
+
+    private async Task<Lease> AcquireAsync(bool waitFirst, CancellationToken cancellationToken)
     {
         logger.LogInformation("Waiting to acquire lease");
+        var clockSkewTolerance = TimeSpan.Zero;
+
+        if (waitFirst)
+            clockSkewTolerance = await WaitForOpportunityAsync(cancellationToken).ConfigureAwait(false);
 
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
-
             logger.LogDebug("Attempting to acquire lease");
 
             var doc = await store
-                .AcquireAsync(Environment.MachineName, options.LeaseDuration(), cancellationToken)
+                .AcquireAsync(Environment.MachineName, options.LeaseDuration(), clockSkewTolerance, cancellationToken)
                 .ConfigureAwait(false);
 
             if (doc is not null)
             {
-                logger.LogInformation(
-                    "Lease acquired (epoch {Epoch}, commitPosition {CommitPosition})",
+                logger.LogInformation("Lease acquired (epoch {Epoch}, commitPosition {CommitPosition})",
                     doc.Epoch, doc.CommitPosition);
 
                 return new Lease(doc, store, options.LeaseDuration, options.LeaseRenewInterval, logger, _timeProvider);
             }
 
-            logger.LogDebug("Lease held elsewhere; retrying in {Delay}", options.LeaseAcquireRetryDelay);
-            await _timeProvider.Delay(options.LeaseAcquireRetryDelay, cancellationToken).ConfigureAwait(false);
+            logger.LogDebug("Lease held elsewhere; polling for opportunity");
+            clockSkewTolerance = await WaitForOpportunityAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
-    private async Task InvokeHandleLeaseAcquiredAsync(
-        ILeaseHandler handler,
-        Lease lease,
-        CancellationToken cancellationToken)
+    // Returns ClockSkewTolerance if an explicit release was observed, zero otherwise.
+    private async Task<TimeSpan> WaitForOpportunityAsync(CancellationToken cancellationToken)
     {
+        using var pollCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        pollCts.CancelAfter(options.LeaseRenewInterval + GetJitter());
+
         try
         {
-            await handler.HandleLeaseAcquiredAsync(lease, cancellationToken).ConfigureAwait(false);
+            await _releaseSignal.Reader.ReadAsync(pollCts.Token).ConfigureAwait(false);
+            logger.LogDebug("Lease release observed; attempting acquire");
+            await _timeProvider.Delay(GetJitter(), cancellationToken).ConfigureAwait(false);
+            return options.ClockSkewTolerance;
         }
-        catch (Exception ex)
+        catch (OperationCanceledException) when (pollCts.IsCancellationRequested
+                                                 && !cancellationToken.IsCancellationRequested)
         {
-            logger.LogError(ex, $"{nameof(ILeaseHandler.HandleLeaseAcquiredAsync)} invocation failed");
+            logger.LogDebug("Poll interval elapsed; attempting acquire");
+            return TimeSpan.Zero;
         }
     }
 
-    private async Task InvokeHandleLeaseLostAsync(
-        ILeaseHandler handler,
-        LeaseLostInfo info,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await handler.HandleLeaseLostAsync(info, cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, $"{nameof(ILeaseHandler.HandleLeaseLostAsync)} invocation failed");
-        }
-    }
+    private TimeSpan GetJitter() =>
+        TimeSpan.FromMilliseconds(Random.Shared.NextDouble() * options.MaxLeaseAcquireJitter.TotalMilliseconds);
 }

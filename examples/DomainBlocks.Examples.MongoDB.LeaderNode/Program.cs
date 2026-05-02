@@ -16,7 +16,7 @@ var options = new MongoEventStoreNodeOptions
 
 using var loggerFactory = LoggerFactory.Create(x => x
     .AddSimpleConsole(o => o.TimestampFormat = "HH:mm:ss.fff ")
-    .SetMinimumLevel(LogLevel.Information));
+    .SetMinimumLevel(LogLevel.Debug));
 
 var logger = loggerFactory.CreateLogger("LeaderNode");
 
@@ -38,7 +38,7 @@ await using var node = new MongoEventStoreNode(mongoClient, options, loggerFacto
 try
 {
     await node.StartAsync(cts.Token);
-    await node.Completed.WaitAsync(cts.Token);
+    await node.Completion.WaitAsync(cts.Token);
 }
 catch (OperationCanceledException) when (cts.IsCancellationRequested)
 {
