@@ -26,6 +26,8 @@ public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppend
     private readonly ILogger _logger;
     private readonly Channel<AppendEntry<TContext>> _channel;
     private readonly int _batchSize;
+    private readonly int _maxConflictRetries;
+    private readonly TimeSpan _conflictRetryDelay;
     private readonly CancellationTokenSource _stopCts = new();
     private readonly Task _runAppendLoopTask;
     private readonly Buffers _buffers = new();
@@ -72,6 +74,9 @@ public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppend
         });
 
         _batchSize = options.BatchSize;
+        _maxConflictRetries = options.MaxConflictRetries;
+        _conflictRetryDelay = options.ConflictRetryDelay;
+
         _runAppendLoopTask = RunAppendLoopAsync(_stopCts.Token);
     }
 
@@ -155,6 +160,8 @@ public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppend
 
     private async Task ProcessBatchAsync(List<AppendEntry<TContext>> batch, CancellationToken ct)
     {
+        _buffers.ConflictRetryCounts.Clear();
+
         while (batch.Count > 0)
         {
             try
@@ -167,19 +174,12 @@ public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppend
                     case CommitResult.Success:
                         return;
                     case CommitResult.Conflict conflict:
-                    {
-                        _appenderPolicy.OnConflict(conflict.ConflictingAppend);
-
-                        if (conflict.ConflictingAppend.IsCompleted)
-                            batch.Remove(conflict.ConflictingAppend);
-
+                        HandleConflict(batch, conflict.ConflictingAppend);
                         break;
-                    }
                 }
             }
             catch (MongoException ex) when (ex.HasErrorLabel(MongoErrorLabels.TransientTransactionError))
             {
-                // Transient error - retry the whole batch.
                 _logger.LogTrace("Transient transaction error; retrying");
             }
         }
@@ -187,7 +187,9 @@ public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppend
 
     private async Task PrepareCommitAsync(List<AppendEntry<TContext>> batch, CancellationToken ct)
     {
-        _buffers.ClearAll();
+        _buffers.OutgoingAppends.Clear();
+        _buffers.OutgoingDocuments.Clear();
+        _buffers.AppendIndexMap.Clear();
 
         await _appenderPolicy.OnCommittingAsync(batch, ct);
 
@@ -227,7 +229,7 @@ public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppend
                 .InsertManyAsync(session, docs, new InsertManyOptions { IsOrdered = true }, ct)
                 .ConfigureAwait(false);
 
-            await session.CommitWithRetryOnUnknownResultAsync(_logger, ct).ConfigureAwait(false);
+            await session.CommitWithRetryAsync(_logger, ct).ConfigureAwait(false);
         }
         catch (MongoBulkWriteException ex) when (ex.WriteErrors.Any(x => x.Code == MongoErrorCodes.DuplicateKey))
         {
@@ -248,6 +250,39 @@ public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppend
             append.TryComplete();
 
         return new CommitResult.Success();
+    }
+
+    private void HandleConflict(List<AppendEntry<TContext>> batch, AppendEntry<TContext> conflict)
+    {
+        using var scope = _logger.BeginScope(new { AppendId = conflict.Id });
+
+        _appenderPolicy.OnConflict(conflict);
+
+        if (conflict.IsCompleted)
+        {
+            batch.Remove(conflict);
+            _buffers.ConflictRetryCounts.Remove(conflict);
+            return;
+        }
+
+        var retryCount = _buffers.ConflictRetryCounts.GetValueOrDefault(conflict);
+        if (retryCount >= _maxConflictRetries)
+        {
+            _logger.LogWarning(
+                "Unresolved append conflict after {MaxRetries} retries; evicting entry",
+                _maxConflictRetries);
+
+            conflict.TryComplete(
+                new AppendConflictException($"Unresolved append conflict after {_maxConflictRetries} retries."));
+
+            batch.Remove(conflict);
+            _buffers.ConflictRetryCounts.Remove(conflict);
+        }
+        else
+        {
+            _logger.LogDebug("Retrying append conflict");
+            _buffers.ConflictRetryCounts[conflict] = retryCount + 1;
+        }
     }
 
     private async Task<long> ClaimSequenceAsync(IClientSessionHandle session, long count, CancellationToken ct)
@@ -340,13 +375,7 @@ public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppend
         public readonly List<AppendEntry<TContext>> OutgoingAppends = [];
         public readonly List<BsonDocument> OutgoingDocuments = [];
         public readonly List<AppendEntry<TContext>> AppendIndexMap = [];
-
-        public void ClearAll()
-        {
-            OutgoingAppends.Clear();
-            OutgoingDocuments.Clear();
-            AppendIndexMap.Clear();
-        }
+        public readonly Dictionary<AppendEntry<TContext>, int> ConflictRetryCounts = [];
     }
 
     private abstract class CommitResult

@@ -15,6 +15,7 @@ public sealed class AppendEntry<TContext>
         Context = context;
     }
 
+    public Guid Id { get; } = Guid.NewGuid();
     public IReadOnlyList<BsonDocument> Documents { get; }
     public TContext Context { get; }
     public bool IsCompleted => _tcs.Task.IsCompleted;

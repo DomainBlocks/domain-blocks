@@ -5,13 +5,14 @@ namespace DomainBlocks.MongoDB.Sequencing;
 
 internal static class ClientSessionHandleExtensions
 {
+    private const int MaxCommitRetries = 3;
+    private static readonly TimeSpan CommitRetryDelay = TimeSpan.FromMilliseconds(100);
+
     extension(IClientSessionHandle session)
     {
-        public async Task CommitWithRetryOnUnknownResultAsync(
-            ILogger? logger = null,
-            CancellationToken cancellationToken = default)
+        public async Task CommitWithRetryAsync(ILogger? logger = null, CancellationToken cancellationToken = default)
         {
-            while (true)
+            for (var attempt = 0; attempt < MaxCommitRetries; attempt++)
             {
                 try
                 {
@@ -21,8 +22,12 @@ internal static class ClientSessionHandleExtensions
                 catch (MongoException ex) when (ex.HasErrorLabel(MongoErrorLabels.UnknownTransactionCommitResult))
                 {
                     logger?.LogWarning(ex, "Unknown transaction commit result; retrying");
+                    await Task.Delay(CommitRetryDelay, cancellationToken).ConfigureAwait(false);
                 }
             }
+
+            // Final attempt - let it throw
+            await session.CommitTransactionAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 }

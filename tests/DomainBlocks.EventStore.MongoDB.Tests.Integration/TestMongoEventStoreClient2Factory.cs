@@ -40,7 +40,11 @@ public sealed class TestMongoEventStoreClient2Factory<TEvent> :
         _codec = TestMongoEventCodec.Create<TEvent>(eventTypeMap);
 
         _loggerFactory = LoggerFactory.Create(x => x
-            .AddSimpleConsole(o => o.TimestampFormat = "HH:mm:ss.fff ")
+            .AddSimpleConsole(opt =>
+            {
+                opt.IncludeScopes = true;
+                opt.TimestampFormat = "HH:mm:ss.fff ";
+            })
             .SetMinimumLevel(LogLevel.Debug));
 
         _logger = _loggerFactory.CreateLogger<TestMongoEventStoreClient2Factory<TEvent>>();

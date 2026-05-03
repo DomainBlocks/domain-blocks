@@ -9,7 +9,7 @@ namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
 public class MongoEventStoreClient2ConcurrencyTests2
 {
-    private const int WriterCount = 5;
+    private const int ClientCount = 5;
 
     private MongoEventStoreClientOptions2 _options = null!;
     private TestMongoEventStoreClient2Factory<object> _clientFactory = null!;
@@ -23,9 +23,9 @@ public class MongoEventStoreClient2ConcurrencyTests2
         _clientFactory = TestMongoEventStoreClient2Factory.CreateDefault(_options);
         _mongoClient = _clientFactory.MongoClient;
 
-        _clientHandles = new ITestEventStoreClientHandle<object>[WriterCount];
+        _clientHandles = new ITestEventStoreClientHandle<object>[ClientCount];
 
-        for (var i = 0; i < WriterCount; i++)
+        for (var i = 0; i < ClientCount; i++)
             _clientHandles[i] = await _clientFactory.CreateAsync($"client_{i}");
     }
 
@@ -36,6 +36,39 @@ public class MongoEventStoreClient2ConcurrencyTests2
             await clientHandle.DisposeAsync();
 
         await _clientFactory.DisposeAsync();
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task ConcurrentAnyWrites_ToSameStream_AllSucceedWithUniqueVersions(CancellationToken ct)
+    {
+        const int appendCountPerClient = 20;
+        var streamId = $"shared-{Guid.NewGuid():N}";
+        var totalExpected = ClientCount * appendCountPerClient;
+
+        // All writers concurrently append to the same stream.
+        var tasks = _clientHandles.SelectMany((clientHandle, clientIndex) =>
+            Enumerable.Range(0, appendCountPerClient).Select(i =>
+                clientHandle.Client.AppendToStreamAsync(
+                    streamId,
+                    [new TestEvent { Value = $"w{clientIndex}-e{i}" }],
+                    new AppendToStreamOptions { ExpectedState = ExpectedStreamState.Any },
+                    ct)));
+
+        // Every task must complete successfully — no exceptions.
+        await Task.WhenAll(tasks);
+
+        // Read back and verify.
+        var readEvents = await _clientHandles[0].Client
+            .ReadStreamAsync(streamId, cancellationToken: ct)
+            .ToListAsync(ct);
+
+        readEvents.Count.ShouldBe(totalExpected, "All events must be committed");
+
+        var versions = readEvents.Select(e => e.Context.StreamVersion.Value).ToList();
+        versions.ShouldBeUnique("No two events may share a stream version");
+        versions.ShouldBe(Enumerable.Range(0, totalExpected).Select(i => (ulong)i),
+            "Stream versions must be contiguous starting from 0");
     }
 
     [Test]
