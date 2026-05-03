@@ -91,15 +91,15 @@ public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppend
             return;
 
         options ??= new AppendOptions();
-        var appendItem = new AppendEntry<TContext>(bsonDocuments, context);
+        var append = new AppendEntry<TContext>(bsonDocuments, context);
 
         using var linkedTimeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         linkedTimeoutCts.CancelAfter(options.Timeout);
 
         try
         {
-            await _channel.Writer.WriteAsync(appendItem, linkedTimeoutCts.Token);
-            await appendItem.Completion.WaitAsync(linkedTimeoutCts.Token).ConfigureAwait(false);
+            await _channel.Writer.WriteAsync(append, linkedTimeoutCts.Token);
+            await append.Completion.WaitAsync(linkedTimeoutCts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -174,13 +174,13 @@ public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppend
                     case CommitResult.Success:
                         return;
                     case CommitResult.Conflict conflict:
-                        HandleConflict(batch, conflict.ConflictingAppend);
+                        await HandleConflictAsync(batch, conflict.ConflictingAppend, ct).ConfigureAwait(false);
                         break;
                 }
             }
             catch (MongoException ex) when (ex.HasErrorLabel(MongoErrorLabels.TransientTransactionError))
             {
-                _logger.LogTrace("Transient transaction error; retrying");
+                _logger.LogTrace("Transient transaction error; retrying batch");
             }
         }
     }
@@ -252,36 +252,49 @@ public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppend
         return new CommitResult.Success();
     }
 
-    private void HandleConflict(List<AppendEntry<TContext>> batch, AppendEntry<TContext> conflict)
+    private async Task HandleConflictAsync(
+        List<AppendEntry<TContext>> batch,
+        AppendEntry<TContext> conflict,
+        CancellationToken ct)
     {
         using var scope = _logger.BeginScope(new { AppendId = conflict.Id });
+
+        _logger.LogDebug("Duplicate key conflict detected; invoking policy");
 
         _appenderPolicy.OnConflict(conflict);
 
         if (conflict.IsCompleted)
         {
+            _logger.LogDebug("Conflict resolved by policy");
             batch.Remove(conflict);
-            _buffers.ConflictRetryCounts.Remove(conflict);
+            _buffers.ConflictRetryCounts.Remove(conflict.Id);
             return;
         }
 
-        var retryCount = _buffers.ConflictRetryCounts.GetValueOrDefault(conflict);
+        var retryCount = _buffers.ConflictRetryCounts.GetValueOrDefault(conflict.Id);
         if (retryCount >= _maxConflictRetries)
         {
             _logger.LogWarning(
-                "Unresolved append conflict after {MaxRetries} retries; evicting entry",
+                "Conflict not resolved by policy after {MaxRetries} retries; evicting entry",
                 _maxConflictRetries);
 
             conflict.TryComplete(
-                new AppendConflictException($"Unresolved append conflict after {_maxConflictRetries} retries."));
+                new AppendConflictException($"Conflict not resolved after {_maxConflictRetries} retries."));
 
             batch.Remove(conflict);
-            _buffers.ConflictRetryCounts.Remove(conflict);
+            _buffers.ConflictRetryCounts.Remove(conflict.Id);
         }
         else
         {
-            _logger.LogDebug("Retrying append conflict");
-            _buffers.ConflictRetryCounts[conflict] = retryCount + 1;
+            _logger.LogDebug(
+                "Conflict not resolved by policy; retrying batch in {RetryDelay} (attempt {Attempt}/{Max})",
+                _conflictRetryDelay,
+                retryCount + 1,
+                _maxConflictRetries);
+
+            _buffers.ConflictRetryCounts[conflict.Id] = retryCount + 1;
+
+            await Task.Delay(_conflictRetryDelay, ct).ConfigureAwait(false);
         }
     }
 
@@ -375,7 +388,7 @@ public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppend
         public readonly List<AppendEntry<TContext>> OutgoingAppends = [];
         public readonly List<BsonDocument> OutgoingDocuments = [];
         public readonly List<AppendEntry<TContext>> AppendIndexMap = [];
-        public readonly Dictionary<AppendEntry<TContext>, int> ConflictRetryCounts = [];
+        public readonly Dictionary<Guid, int> ConflictRetryCounts = [];
     }
 
     private abstract class CommitResult
