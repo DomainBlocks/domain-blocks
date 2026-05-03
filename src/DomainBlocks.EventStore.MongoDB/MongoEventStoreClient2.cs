@@ -59,13 +59,14 @@ public sealed class MongoEventStoreClient2<TEvent> :
     {
         options ??= new AppendToStreamOptions();
 
+        var bsonStreamId = new BsonString(streamId);
         var bsonCommitId = new BsonBinaryData(options.CommitId, GuidRepresentation.Standard);
 
         var eventDocuments = _encoder
             .Encode(events)
             .Select((x, i) => new BsonDocument
             {
-                { EventLogEntry.FieldNames.StreamId, streamId },
+                { EventLogEntry.FieldNames.StreamId, bsonStreamId },
                 { EventLogEntry.FieldNames.CommitId, bsonCommitId },
                 { EventLogEntry.FieldNames.CommitIndex, i },
                 { EventLogEntry.FieldNames.EventName, x.EventName },

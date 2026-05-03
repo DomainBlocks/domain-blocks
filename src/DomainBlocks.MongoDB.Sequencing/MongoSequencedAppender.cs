@@ -210,7 +210,9 @@ public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppend
 
     private async Task<CommitResult> CommitAsync(CancellationToken ct)
     {
-        var docCount = _buffers.OutgoingDocuments.Count;
+        var docs = _buffers.OutgoingDocuments;
+        var docCount = docs.Count;
+
         if (docCount == 0)
             return new CommitResult.Success();
 
@@ -219,7 +221,6 @@ public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppend
 
         try
         {
-            var docs = _buffers.OutgoingDocuments;
             var startSeq = await ClaimSequenceAsync(session, docCount, ct).ConfigureAwait(false);
 
             for (var i = 0; i < docCount; i++)
@@ -236,7 +237,7 @@ public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppend
             await SafeAbortTransactionAsync(session, ct).ConfigureAwait(false);
 
             var firstError = ex.WriteErrors.First(e => e.Code == MongoErrorCodes.DuplicateKey);
-            var conflictingDoc = _buffers.OutgoingDocuments[firstError.Index];
+            var conflictingDoc = docs[firstError.Index];
             var conflictingAppend = _buffers.AppendIndexMap[firstError.Index];
             return new CommitResult.Conflict(conflictingAppend);
         }
