@@ -1,181 +1,13 @@
 ﻿using System.Threading.Channels;
-using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.MongoDB.Schema;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 
-namespace DomainBlocks.EventStore.MongoDB;
+namespace DomainBlocks.MongoDB.Sequencing;
 
-public sealed class SequenceBinding<TDocument>(
-    CollectionNamespace sequenceCollectionNamespace,
-    CollectionNamespace targetCollectionNamespace,
-    string sequenceId,
-    FieldDefinition<TDocument, long> targetField)
-{
-    public CollectionNamespace SequenceCollectionNamespace { get; } = sequenceCollectionNamespace;
-    public CollectionNamespace TargetCollectionNamespace { get; } = targetCollectionNamespace;
-    public string SequenceId { get; } = sequenceId;
-    public FieldDefinition<TDocument, long> TargetField { get; } = targetField;
-}
-
-public class SequencedAppenderOptions
-{
-    public int QueueCapacity { get; set; } = 1_000;
-    public int BatchSize { get; set; } = 500;
-}
-
-public class AppendOptions
-{
-    public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(30);
-}
-
-public sealed class AppendEntry<TContext>
-{
-    private readonly TaskCompletionSource _tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-    public AppendEntry(IReadOnlyList<BsonDocument> documents, TContext context)
-    {
-        if (documents.Count == 0)
-            throw new ArgumentException("At least one document is required.", nameof(documents));
-
-        Documents = documents;
-        Context = context;
-    }
-
-    public IReadOnlyList<BsonDocument> Documents { get; }
-    public TContext Context { get; }
-    public bool IsCompleted => _tcs.Task.IsCompleted;
-    internal Task Completion => _tcs.Task;
-
-    public bool TryComplete(Exception? error = null)
-    {
-        return error is null ? _tcs.TrySetResult() : _tcs.TrySetException(error);
-    }
-}
-
-public interface ISequencedAppendPolicy<TContext>
-{
-    ValueTask OnCommittingAsync(IReadOnlyList<AppendEntry<TContext>> batch, CancellationToken cancellationToken);
-
-    void OnConflict(AppendEntry<TContext> conflict);
-}
-
-public sealed class NullSequencedAppendPolicy<TDocument, TContext> : ISequencedAppendPolicy<TContext>
-{
-    public static readonly NullSequencedAppendPolicy<TDocument, TContext> Instance = new();
-
-    public ValueTask OnCommittingAsync(
-        IReadOnlyList<AppendEntry<TContext>> batch,
-        CancellationToken cancellationToken)
-    {
-        return ValueTask.CompletedTask;
-    }
-
-    public void OnConflict(AppendEntry<TContext> conflict)
-    {
-    }
-}
-
-public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog) :
-    ISequencedAppendPolicy<AppendToStreamContext>
-{
-    private readonly PreAppendQuery _preAppendQuery = new(eventLog);
-    private readonly Buffers _buffers = new();
-
-    public async ValueTask OnCommittingAsync(
-        IReadOnlyList<AppendEntry<AppendToStreamContext>> batch,
-        CancellationToken cancellationToken)
-    {
-        _buffers.ClearAll();
-        _preAppendQuery.Reset();
-
-        foreach (var append in batch)
-        {
-            var firstEvent = append.Documents[0];
-            var bsonCommitId = firstEvent[EventLogEntry.FieldNames.CommitId];
-            var bsonStreamId = firstEvent[EventLogEntry.FieldNames.StreamId];
-            _preAppendQuery.AddInput(bsonCommitId, bsonStreamId);
-        }
-
-        await _preAppendQuery
-            .ExecuteAsync(_buffers.ExistingCommitIds, _buffers.HeadStreamVersions, cancellationToken)
-            .ConfigureAwait(false);
-
-        var writtenAtUtc = DateTime.UtcNow;
-
-        foreach (var append in batch)
-        {
-            var commitId = append.Context.CommitId;
-
-            if (!_buffers.SeenCommitIds.Add(commitId))
-                continue;
-
-            if (_buffers.ExistingCommitIds.Contains(commitId))
-            {
-                append.TryComplete();
-                continue;
-            }
-
-            var streamId = append.Context.StreamId;
-            var expectedState = append.Context.ExpectedState;
-            var streamVersion = _buffers.HeadStreamVersions.GetValueOrDefault(streamId, -1L);
-
-            var actualState = streamVersion < 0
-                ? StreamState.StreamDoesNotExist
-                : StreamState.StreamExists(StreamVersion.FromInt64(streamVersion));
-
-            if (!expectedState.Matches(actualState))
-            {
-                append.TryComplete(new StreamAppendConflictException(streamId, expectedState, actualState));
-                continue;
-            }
-
-            foreach (var eventDoc in append.Documents)
-            {
-                eventDoc[EventLogEntry.FieldNames.StreamVersion] = ++streamVersion;
-                eventDoc[EventLogEntry.FieldNames.WrittenAtUtc] = writtenAtUtc;
-            }
-
-            _buffers.HeadStreamVersions[streamId] = streamVersion;
-        }
-    }
-
-    public void OnConflict(AppendEntry<AppendToStreamContext> conflict)
-    {
-        var isPermanentConflict = conflict.Context.ExpectedState.IsStreamDoesNotExist ||
-                                  conflict.Context.ExpectedState.IsSpecificVersion;
-
-        if (!isPermanentConflict)
-            return;
-
-        var exception = new StreamAppendConflictException(
-            conflict.Context.StreamId,
-            conflict.Context.ExpectedState);
-
-        conflict.TryComplete(exception);
-    }
-
-    private sealed class Buffers
-    {
-        public readonly HashSet<Guid> SeenCommitIds = [];
-        public readonly HashSet<Guid> ExistingCommitIds = [];
-        public readonly Dictionary<string, long> HeadStreamVersions = [];
-
-        public void ClearAll()
-        {
-            SeenCommitIds.Clear();
-            ExistingCommitIds.Clear();
-            HeadStreamVersions.Clear();
-        }
-    }
-}
-
-public record AppendToStreamContext(Guid CommitId, string StreamId, ExpectedStreamState ExpectedState);
-
-internal static class SequencedAppender
+internal static class MongoSequencedAppender
 {
     public static readonly TransactionOptions TransactionOptions = new(
         ReadConcern.Snapshot,
@@ -183,14 +15,14 @@ internal static class SequencedAppender
         WriteConcern.WMajority.With(journal: true));
 }
 
-public class SequencedAppender<TDocument, TContext>
+public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppender<TDocument, TContext>
 {
     private readonly IMongoClient _mongoClient;
     private readonly IMongoCollection<BsonDocument> _sequenceCollection;
     private readonly IMongoCollection<BsonDocument> _targetCollection;
     private readonly string _sequenceId;
     private readonly string[] _targetFieldPathSegments;
-    private readonly ISequencedAppendPolicy<TContext> _appendPolicy;
+    private readonly IMongoSequencedAppenderPolicy<TContext> _appenderPolicy;
     private readonly ILogger _logger;
     private readonly Channel<AppendEntry<TContext>> _channel;
     private readonly int _batchSize;
@@ -199,11 +31,11 @@ public class SequencedAppender<TDocument, TContext>
     private readonly Buffers _buffers = new();
     private int _disposed;
 
-    public SequencedAppender(
+    public MongoSequencedAppender(
         IMongoClient mongoClient,
-        SequenceBinding<TDocument> binding,
-        ISequencedAppendPolicy<TContext>? appendPolicy = null,
-        SequencedAppenderOptions? options = null,
+        MongoSequenceBinding<TDocument> binding,
+        IMongoSequencedAppenderPolicy<TContext>? appendPolicy = null,
+        MongoSequencedAppenderOptions? options = null,
         ILogger? logger = null)
     {
         var serializerRegistry = BsonSerializer.SerializerRegistry;
@@ -216,7 +48,7 @@ public class SequencedAppender<TDocument, TContext>
 
         var targetFieldName = binding.TargetField.Render(renderArgs).FieldName;
 
-        options ??= new SequencedAppenderOptions();
+        options ??= new MongoSequencedAppenderOptions();
 
         _mongoClient = mongoClient;
 
@@ -230,7 +62,7 @@ public class SequencedAppender<TDocument, TContext>
 
         _sequenceId = binding.SequenceId;
         _targetFieldPathSegments = targetFieldName.Split('.');
-        _appendPolicy = appendPolicy ?? NullSequencedAppendPolicy<TDocument, TContext>.Instance;
+        _appenderPolicy = appendPolicy ?? NullSequencedAppenderPolicy<TDocument, TContext>.Instance;
         _logger = logger ?? NullLogger.Instance;
 
         _channel = Channel.CreateBounded<AppendEntry<TContext>>(new BoundedChannelOptions(options.QueueCapacity)
@@ -294,8 +126,6 @@ public class SequencedAppender<TDocument, TContext>
         {
             while (await _channel.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
             {
-                batch.Clear();
-
                 while (batch.Count < _batchSize && _channel.Reader.TryRead(out var append))
                     batch.Add(append);
 
@@ -303,6 +133,7 @@ public class SequencedAppender<TDocument, TContext>
                     continue;
 
                 await ProcessBatchAsync(batch, ct).ConfigureAwait(false);
+                batch.Clear();
             }
         }
         catch (OperationCanceledException ex) when (ct.IsCancellationRequested)
@@ -337,7 +168,7 @@ public class SequencedAppender<TDocument, TContext>
                         return;
                     case CommitResult.Conflict conflict:
                     {
-                        _appendPolicy.OnConflict(conflict.ConflictingAppend);
+                        _appenderPolicy.OnConflict(conflict.ConflictingAppend);
 
                         if (conflict.ConflictingAppend.IsCompleted)
                             batch.Remove(conflict.ConflictingAppend);
@@ -358,7 +189,7 @@ public class SequencedAppender<TDocument, TContext>
     {
         _buffers.ClearAll();
 
-        await _appendPolicy.OnCommittingAsync(batch, ct);
+        await _appenderPolicy.OnCommittingAsync(batch, ct);
 
         foreach (var append in batch)
         {
@@ -382,7 +213,7 @@ public class SequencedAppender<TDocument, TContext>
             return new CommitResult.Success();
 
         using var session = await _mongoClient.StartSessionAsync(cancellationToken: ct).ConfigureAwait(false);
-        session.StartTransaction(SequencedAppender.TransactionOptions);
+        session.StartTransaction(MongoSequencedAppender.TransactionOptions);
 
         try
         {

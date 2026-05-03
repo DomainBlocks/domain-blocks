@@ -40,6 +40,7 @@
     <Project Path="src/DomainBlocks.EventStore.KurrentDB/DomainBlocks.EventStore.KurrentDB.csproj" />
     <Project Path="src/DomainBlocks.EventStore.MongoDB/DomainBlocks.EventStore.MongoDB.csproj" />
     <Project Path="src/DomainBlocks.EventStore/DomainBlocks.EventStore.csproj" />
+    <Project Path="src/DomainBlocks.MongoDB.Sequencing/DomainBlocks.MongoDB.Sequencing.csproj" />
     <Project Path="src/DomainBlocks.Serialization.Abstractions/DomainBlocks.Serialization.Abstractions.csproj" />
     <Project Path="src/DomainBlocks.Serialization.Google.Protobuf/DomainBlocks.Serialization.Google.Protobuf.csproj" />
     <Project Path="src/DomainBlocks.Serialization.MongoDB.Bson/DomainBlocks.Serialization.MongoDB.Bson.csproj" />

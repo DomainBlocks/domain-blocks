@@ -1,0 +1,5 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="MongoDB.Driver" Version="3.7.1" />
+  </ItemGroup>
+</Project>

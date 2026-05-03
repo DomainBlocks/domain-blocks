@@ -1,7 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 
-namespace DomainBlocks.EventStore.MongoDB;
+namespace DomainBlocks.MongoDB.Sequencing;
 
 internal static class ClientSessionHandleExtensions
 {
