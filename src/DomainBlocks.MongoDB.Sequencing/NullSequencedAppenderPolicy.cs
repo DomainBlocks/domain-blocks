@@ -4,7 +4,7 @@ public sealed class NullSequencedAppenderPolicy<TDocument, TContext> : IMongoSeq
 {
     public static readonly NullSequencedAppenderPolicy<TDocument, TContext> Instance = new();
 
-    public ValueTask OnCommittingAsync(
+    public ValueTask OnBatchCommittingAsync(
         IReadOnlyList<AppendEntry<TContext>> batch,
         CancellationToken cancellationToken)
     {

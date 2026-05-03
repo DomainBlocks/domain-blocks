@@ -6,15 +6,13 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
-public record AppendToStreamContext(Guid CommitId, string StreamId, ExpectedStreamState ExpectedState);
-
 public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog) :
     IMongoSequencedAppenderPolicy<AppendToStreamContext>
 {
     private readonly PreAppendQuery _preAppendQuery = new(eventLog);
     private readonly Buffers _buffers = new();
 
-    public async ValueTask OnCommittingAsync(
+    public async ValueTask OnBatchCommittingAsync(
         IReadOnlyList<AppendEntry<AppendToStreamContext>> batch,
         CancellationToken cancellationToken)
     {

@@ -191,7 +191,7 @@ public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppend
         _buffers.OutgoingDocuments.Clear();
         _buffers.AppendIndexMap.Clear();
 
-        await _appenderPolicy.OnCommittingAsync(batch, ct);
+        await _appenderPolicy.OnBatchCommittingAsync(batch, ct);
 
         foreach (var append in batch)
         {
