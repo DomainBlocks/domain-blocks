@@ -67,15 +67,12 @@ public class MongoSerializationTests
     {
         using var mongoClient = new MongoClient(TestMongoConnectionStrings.Default);
 
-        var options = new MongoEventStoreNodeOptions
+        var options = new MongoEventStoreClientOptions
         {
             DatabaseName = "domainblocks_tests"
         };
 
-        await using var node = new MongoEventStoreNode(mongoClient, options);
-        await node.StartAsync();
-
-        var client = CreateEventStoreClient(node, serde);
+        await using var client = CreateEventStoreClient(mongoClient, serde, options);
 
         var streamId = $"test-{serde.GetType().Name}-{Guid.NewGuid()}";
         await client.AppendToStreamAsync(streamId, [@event]);
@@ -88,9 +85,10 @@ public class MongoSerializationTests
             .ShouldBe(@event);
     }
 
-    private static IEventStoreClient<object> CreateEventStoreClient(
-        MongoEventStoreNode node,
-        IObjectSerde<BsonValue> serde)
+    private static MongoEventStoreClient<object> CreateEventStoreClient(
+        MongoClient mongoClient,
+        IObjectSerde<BsonValue> serde,
+        MongoEventStoreClientOptions options)
     {
         var eventTypeMap = EventTypeMap.Create(builder => builder
             .MapType<UserCreated>()
@@ -110,13 +108,13 @@ public class MongoSerializationTests
             MetadataDeserializer = new BsonDocumentMetadataSerde()
         };
 
-        var eventCode = new EventCodec<object, BsonValue, BsonValue>
+        var eventCodec = new EventCodec<object, BsonValue, BsonValue>
         {
             Encoder = EventEncoder.Create(encoderOptions),
             Decoder = EventDecoder.Create(decoderOptions)
         };
 
-        return node.CreateClient(eventCode);
+        return MongoEventStoreClient.Create(mongoClient, eventCodec, options);
     }
 
     private record UserCreated

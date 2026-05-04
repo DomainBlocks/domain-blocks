@@ -1,28 +1,64 @@
-﻿using System.Collections.Concurrent;
-using System.Runtime.CompilerServices;
-using System.Threading.Channels;
+﻿using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.MongoDB.Serialization;
-using DomainBlocks.EventStore.MongoDB.Coordination;
-using DomainBlocks.EventStore.MongoDB.Schema;
+using DomainBlocks.MongoDB.Sequencing;
+using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
-internal class MongoEventStoreClient<TEvent>(
-    ChannelWriter<BsonDocument> requestWriter,
-    IMongoCollection<BsonDocument> eventLog,
-    IMongoCollection<LeaseDocument> leases,
-    EventCodec<TEvent, BsonValue, BsonValue> eventCodec) :
-    IEventStoreClient<TEvent>,
-    ICommitObserver
-    where TEvent : notnull
+public static class MongoEventStoreClient
 {
-    private readonly IEventEncoder<TEvent, BsonValue, BsonValue> _eventEncoder = eventCodec.Encoder;
-    private readonly IEventDecoder<TEvent, BsonValue, BsonValue> _eventDecoder = eventCodec.Decoder;
-    private readonly ConcurrentDictionary<Guid, TaskCompletionSource> _pendingCommits = [];
-    private long _commitPosition = -1;
+    private const string SequenceIdFieldName = "event_log_seq";
+
+    private static readonly StringFieldDefinition<BsonDocument, long> SequenceTargetField = new("_id");
+
+    public static MongoEventStoreClient<TEvent> Create<TEvent>(
+        IMongoClient mongoClient,
+        EventCodec<TEvent, BsonValue, BsonValue> codec,
+        MongoEventStoreClientOptions? options = null,
+        ILogger? logger = null)
+        where TEvent : notnull
+    {
+        options ??= new MongoEventStoreClientOptions();
+
+        var db = mongoClient.GetDatabase(options.DatabaseName);
+
+        var sequenceBinding = new MongoSequenceBinding<BsonDocument>(
+            new CollectionNamespace(db.DatabaseNamespace, options.SequencesCollectionName),
+            new CollectionNamespace(db.DatabaseNamespace, options.EventLogCollectionName),
+            sequenceId: SequenceIdFieldName,
+            targetField: SequenceTargetField);
+
+        var eventLog = db.GetCollection<BsonDocument>(options.EventLogCollectionName);
+
+        var sequencedAppender = new MongoSequencedAppender<BsonDocument, AppendToStreamContext>(
+            mongoClient,
+            sequenceBinding,
+            new AppendToStreamPolicy(eventLog),
+            new MongoSequencedAppenderOptions
+            {
+                QueueCapacity = options.AppendQueueCapacity,
+                BatchSize = options.AppendBatchSize
+            },
+            logger);
+
+        return new MongoEventStoreClient<TEvent>(sequencedAppender, eventLog, codec);
+    }
+}
+
+public sealed class MongoEventStoreClient<TEvent>(
+    IMongoSequencedAppender<BsonDocument, AppendToStreamContext> sequencedAppender,
+    IMongoCollection<BsonDocument> eventLog,
+    EventCodec<TEvent, BsonValue, BsonValue> eventCodec) :
+    IMongoEventStoreClient<TEvent> where TEvent : notnull
+{
+    private readonly IMongoCollection<BsonDocument> _eventLog = eventLog
+        .WithReadConcern(ReadConcern.Majority)
+        .WithReadPreference(ReadPreference.Primary);
+
+    private readonly IEventEncoder<TEvent, BsonValue, BsonValue> _encoder = eventCodec.Encoder;
+    private readonly IEventDecoder<TEvent, BsonValue, BsonValue> _decoder = eventCodec.Decoder;
 
     public async Task AppendToStreamAsync(
         string streamId,
@@ -32,50 +68,27 @@ internal class MongoEventStoreClient<TEvent>(
     {
         options ??= new AppendToStreamOptions();
 
-        var eventsArray = new BsonArray(
-            _eventEncoder
-                .Encode(events)
-                .Select(x => new BsonDocument
-                {
-                    { PendingEvent.FieldNames.EventName, x.EventName },
-                    { PendingEvent.FieldNames.EventData, x.EventData },
-                    { PendingEvent.FieldNames.Metadata, x.Metadata ?? BsonNull.Value }
-                }));
+        var bsonStreamId = new BsonString(streamId);
+        var bsonCommitId = new BsonBinaryData(options.CommitId, GuidRepresentation.Standard);
 
-        var request = new BsonDocument
-        {
-            { AppendRequest.FieldNames.CommitId, new BsonBinaryData(options.CommitId, GuidRepresentation.Standard) },
-            { AppendRequest.FieldNames.StreamId, streamId },
-            { AppendRequest.FieldNames.ExpectedStreamState, BsonDocument.From(options.ExpectedState) },
-            { AppendRequest.FieldNames.Events, eventsArray },
-            { AppendRequest.FieldNames.CreatedAtUtc, DateTime.UtcNow }
-        };
+        var eventDocuments = _encoder
+            .Encode(events)
+            .Select((x, i) => new BsonDocument
+            {
+                { EventLogEntry.FieldNames.StreamId, bsonStreamId },
+                { EventLogEntry.FieldNames.CommitId, bsonCommitId },
+                { EventLogEntry.FieldNames.CommitIndex, i },
+                { EventLogEntry.FieldNames.EventName, x.EventName },
+                { EventLogEntry.FieldNames.EventData, x.EventData },
+                { EventLogEntry.FieldNames.Metadata, x.Metadata ?? BsonNull.Value }
+            });
 
-        var tcs = _pendingCommits.GetOrAdd(
-            options.CommitId,
-            _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
+        var context = new AppendToStreamContext(options.CommitId, streamId, options.ExpectedState);
+        var appendOptions = new AppendOptions { Timeout = options.Timeout };
 
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(options.Timeout);
-
-        try
-        {
-            await requestWriter.WriteAsync(request, timeoutCts.Token);
-            await tcs.Task.WaitAsync(timeoutCts.Token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            // Caller canceled.
-            throw;
-        }
-        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
-        {
-            throw new TimeoutException($"Append request did not complete within {options.Timeout}.");
-        }
-        finally
-        {
-            _pendingCommits.TryRemove(options.CommitId, out _);
-        }
+        await sequencedAppender
+            .AppendAsync(eventDocuments, context, appendOptions, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public async IAsyncEnumerable<ReadEvent<TEvent>> ReadStreamAsync(
@@ -87,23 +100,12 @@ internal class MongoEventStoreClient<TEvent>(
         var position = options.Position;
         var direction = options.Direction;
 
-        var commitPosition = await GetCommitPositionAsync(cancellationToken).ConfigureAwait(false);
-
-        // Nothing has been committed yet - the log is empty.
-        if (commitPosition is null)
-        {
-            if (options.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw)
-                throw new StreamNotFoundException(streamId);
-
-            yield break;
-        }
-
         // Edge cases that represent an empty sequence of events.
         if (position.IsStart && direction == StreamReadDirection.Backward ||
             position.IsEnd && direction == StreamReadDirection.Forward)
         {
             if (options.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw &&
-                !await StreamExistsAsync(streamId, commitPosition.Value, cancellationToken).ConfigureAwait(false))
+                !await StreamExistsAsync(streamId, cancellationToken).ConfigureAwait(false))
             {
                 throw new StreamNotFoundException(streamId);
             }
@@ -111,8 +113,7 @@ internal class MongoEventStoreClient<TEvent>(
             yield break;
         }
 
-        var filter = Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, streamId) &
-                     Builders<BsonDocument>.Filter.Lte("_id", commitPosition.Value);
+        var filter = Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, streamId);
 
         if (position.IsSpecificVersion)
         {
@@ -129,7 +130,7 @@ internal class MongoEventStoreClient<TEvent>(
             ? Builders<BsonDocument>.Sort.Ascending(EventLogEntry.FieldNames.StreamVersion)
             : Builders<BsonDocument>.Sort.Descending(EventLogEntry.FieldNames.StreamVersion);
 
-        using var cursor = await eventLog
+        using var cursor = await _eventLog
             .Find(filter)
             .Sort(sort)
             .Limit(options.MaxCount)
@@ -151,7 +152,7 @@ internal class MongoEventStoreClient<TEvent>(
                 var metadata = doc[EventLogEntry.FieldNames.Metadata];
                 var writtenAtUtc = doc[EventLogEntry.FieldNames.WrittenAtUtc].AsBsonDateTime.ToUniversalTime();
 
-                var (@event, decodedMetadata) = _eventDecoder.Decode(eventName, eventData, metadata);
+                var (@event, decodedMetadata) = _decoder.Decode(eventName, eventData, metadata);
                 var context = new ReadEventContext(streamId, streamVersion, writtenAtUtc, globalPosition);
 
                 yield return ReadEvent.Create(@event, decodedMetadata, context);
@@ -162,76 +163,14 @@ internal class MongoEventStoreClient<TEvent>(
             throw new StreamNotFoundException(streamId);
     }
 
-    void ICommitObserver.OnCommitPositionAdvanced(long commitPosition)
+    public ValueTask DisposeAsync()
     {
-        AdvanceCommitPosition(commitPosition);
+        return sequencedAppender.DisposeAsync();
     }
 
-    void ICommitObserver.OnCommitted(Guid commitId)
+    private async Task<bool> StreamExistsAsync(string streamId, CancellationToken cancellationToken)
     {
-        if (_pendingCommits.TryGetValue(commitId, out var tcs))
-            tcs.TrySetResult();
-    }
-
-    void ICommitObserver.OnConflictRejected(Guid commitId, BsonValue conflict)
-    {
-        if (!_pendingCommits.TryGetValue(commitId, out var tcs))
-            return;
-
-        var streamId = conflict[AppendConflict.FieldNames.StreamId].AsString;
-        var expectedStreamState = conflict[AppendConflict.FieldNames.ExpectedStreamState].ToExpectedStreamState();
-        var actualStreamState = conflict[AppendConflict.FieldNames.ActualStreamState].ToStreamState();
-
-        tcs.TrySetException(new StreamAppendConflictException(streamId, expectedStreamState, actualStreamState));
-    }
-
-    private void AdvanceCommitPosition(long commitPosition)
-    {
-        // Only advance, never go backwards.
-        long current;
-        do
-        {
-            current = Volatile.Read(ref _commitPosition);
-        } while (commitPosition > current &&
-                 Interlocked.CompareExchange(ref _commitPosition, commitPosition, current) != current);
-    }
-
-    private ValueTask<long?> GetCommitPositionAsync(CancellationToken cancellationToken)
-    {
-        var commitPosition = Volatile.Read(ref _commitPosition);
-
-        return commitPosition >= 0
-            ? ValueTask.FromResult<long?>(commitPosition)
-            : new ValueTask<long?>(FallbackAsync());
-
-        async Task<long?> FallbackAsync()
-        {
-            var lease = await leases
-                .Find(Builders<LeaseDocument>.Filter.Eq(x => x.Id, LeaseDocument.LeaseId))
-                .FirstOrDefaultAsync(cancellationToken)
-                .ConfigureAwait(false);
-
-            var leaseCommitPosition = lease?.CommitPosition;
-            if (leaseCommitPosition is null or -1)
-                return null;
-
-            // Ensure _commitPosition is at least leaseCommitPosition to avoid a lagging change stream setting a lower
-            // value ahead of a caller's next read, i.e. sequential reads should never go back in time. In practice this
-            // scenario is expected to be rare.
-            AdvanceCommitPosition(leaseCommitPosition.Value);
-
-            return leaseCommitPosition.Value;
-        }
-    }
-
-    private async Task<bool> StreamExistsAsync(
-        string streamId,
-        long commitPosition,
-        CancellationToken cancellationToken)
-    {
-        var filter = Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, streamId) &
-                     Builders<BsonDocument>.Filter.Lte("_id", commitPosition);
-
-        return await eventLog.Find(filter).AnyAsync(cancellationToken).ConfigureAwait(false);
+        var filter = Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, streamId);
+        return await _eventLog.Find(filter).AnyAsync(cancellationToken).ConfigureAwait(false);
     }
 }

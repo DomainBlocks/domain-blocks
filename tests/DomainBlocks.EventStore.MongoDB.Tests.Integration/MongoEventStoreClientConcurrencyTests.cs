@@ -5,19 +5,19 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
-public class MongoEventStoreClient2ConcurrencyTests
+public class MongoEventStoreClientConcurrencyTests
 {
     private const int ClientCount = 5;
 
-    private MongoEventStoreClientOptions2 _options = null!;
-    private TestMongoEventStoreClient2Factory<object> _clientFactory = null!;
+    private MongoEventStoreClientOptions _options = null!;
+    private TestMongoEventStoreClientFactory<object> _clientFactory = null!;
     private ITestEventStoreClientHandle<object>[] _clientHandles = null!;
 
     [SetUp]
     public async Task SetUp()
     {
-        _options = new MongoEventStoreClientOptions2 { DatabaseName = $"dbx_test_{Guid.NewGuid():N}" };
-        _clientFactory = TestMongoEventStoreClient2Factory.CreateDefault(_options);
+        _options = new MongoEventStoreClientOptions { DatabaseName = $"dbx_test_{Guid.NewGuid():N}" };
+        _clientFactory = TestMongoEventStoreClientFactory.CreateDefault(_options);
 
         _clientHandles = new ITestEventStoreClientHandle<object>[ClientCount];
 

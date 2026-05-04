@@ -1,5 +1,4 @@
-﻿using DomainBlocks.EventStore.MongoDB.Schema;
-using MongoDB.Bson;
+﻿using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB;

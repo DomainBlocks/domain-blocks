@@ -19,17 +19,15 @@ public class ReadEventTransformTests
         var shipmentId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
         var dispatchedAt = new DateTime(2025, 08, 25, 14, 30, 0, DateTimeKind.Utc);
 
-        var options = new MongoEventStoreNodeOptions
+        var eventTypeMap = EventTypeMap.Create(x => x.MapType<ShipmentDispatched>());
+        var eventCodec = TestMongoEventCodec.Create<object>(eventTypeMap);
+
+        var options = new MongoEventStoreClientOptions
         {
             DatabaseName = "domainblocks_tests"
         };
 
-        await using var node = new MongoEventStoreNode(mongoClient, options);
-        await node.StartAsync();
-
-        var eventTypeMap = EventTypeMap.Create(x => x.MapType<ShipmentDispatched>());
-        var eventCode = TestMongoEventCodec.Create<object>(eventTypeMap);
-        var client = node.CreateClient(eventCode);
+        await using var client = MongoEventStoreClient.Create(mongoClient, eventCodec, options);
 
         var legacyEvent = new ShipmentDispatched(
             shipmentId,

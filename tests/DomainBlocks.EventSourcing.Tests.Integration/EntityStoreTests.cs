@@ -16,9 +16,9 @@ namespace DomainBlocks.EventSourcing.Tests.Integration;
 public class EntityStoreTests
 {
     private MongoClient _mongoClient = null!;
-    private MongoEventStoreNodeOptions _options = null!;
+    private MongoEventStoreClientOptions _options = null!;
     private ILoggerFactory _loggerFactory = null!;
-    private MongoEventStoreNode _node = null!;
+    private MongoEventStoreClient<IDomainEvent> _client = null!;
     private EntityStore<IDomainEvent> _entityStore = null!;
 
     [OneTimeSetUp]
@@ -26,7 +26,7 @@ public class EntityStoreTests
     {
         _mongoClient = new MongoClient(TestMongoConnectionStrings.Default);
 
-        _options = new MongoEventStoreNodeOptions
+        _options = new MongoEventStoreClientOptions
         {
             DatabaseName = "domainblocks_tests"
         };
@@ -35,15 +35,18 @@ public class EntityStoreTests
             .AddSimpleConsole(o => o.TimestampFormat = "HH:mm:ss.fff ")
             .SetMinimumLevel(LogLevel.Debug));
 
-        _node = new MongoEventStoreNode(_mongoClient, _options, _loggerFactory);
-
         var eventTypeMap = EventTypeMap.Create(builder => builder
             .MapType<ShoppingSessionStarted>()
             .MapType<ItemAddedToShoppingCart>()
             .MapType<ItemRemovedFromShoppingCart>());
 
-        var eventCode = TestMongoEventCodec.Create<IDomainEvent>(eventTypeMap);
-        var eventStoreClient = _node.CreateClient(eventCode);
+        var eventCodec = TestMongoEventCodec.Create<IDomainEvent>(eventTypeMap);
+
+        _client = MongoEventStoreClient.Create(
+            _mongoClient,
+            eventCodec,
+            _options,
+            _loggerFactory.CreateLogger<MongoEventStoreClient<IDomainEvent>>());
 
         var entityDefinitionProvider = new CompositeEntityDefinitionProvider<IDomainEvent>(
         [
@@ -53,21 +56,19 @@ public class EntityStoreTests
             new GenericEntityDefinitionProvider<IDomainEvent>(typeof(FunctionalAggregateWrapperDefinition<>))
         ]);
 
-        _entityStore = new EntityStore<IDomainEvent>(eventStoreClient, entityDefinitionProvider);
+        _entityStore = new EntityStore<IDomainEvent>(_client, entityDefinitionProvider);
 
         await MongoEventStoreAdmin.EnsureInitializedAsync(_mongoClient, _options);
-
-        await _node.StartAsync();
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _node.DisposeAsync();
         await _mongoClient.DropDatabaseAsync(_options.DatabaseName);
 
-        _mongoClient.Dispose();
+        await _client.DisposeAsync();
         _loggerFactory.Dispose();
+        _mongoClient.Dispose();
     }
 
     [Test]

@@ -24,14 +24,6 @@ public class EventStoreClientTests
     {
         using var mongoClient = new MongoClient(TestMongoConnectionStrings.Default);
 
-        var options = new MongoEventStoreNodeOptions
-        {
-            DatabaseName = "domainblocks_tests"
-        };
-
-        await using var node = new MongoEventStoreNode(mongoClient, options);
-        await node.StartAsync();
-
         var eventTypeMap = EventTypeMap.Create(builder => builder
             .ForAppends(appends => appends
                 .MapType<LimitOrderSubmitted>()
@@ -44,8 +36,14 @@ public class EventStoreClientTests
                         nameof(LimitOrderAmended),
                         nameof(LimitOrderFilled)))));
 
-        var eventCode = TestMongoEventCodec.Create<object>(eventTypeMap);
-        var client = node.CreateClient(eventCode);
+        var eventCodec = TestMongoEventCodec.Create<object>(eventTypeMap);
+
+        var options = new MongoEventStoreClientOptions
+        {
+            DatabaseName = "domainblocks_tests"
+        };
+
+        await using var client = MongoEventStoreClient.Create(mongoClient, eventCodec, options);
 
         var orderId = Guid.NewGuid();
         var streamId = $"order-{orderId}";
