@@ -47,18 +47,18 @@ public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog
             }
 
             var streamId = append.Context.StreamId;
-            var expectedState = append.Context.ExpectedState;
+            var expectedStreamState = append.Context.ExpectedStreamState;
             var streamVersion = _buffers.HeadStreamVersions.GetValueOrDefault(streamId, -1L);
 
-            var actualState = streamVersion < 0
+            var actualStreamState = streamVersion < 0
                 ? StreamState.StreamDoesNotExist
                 : StreamState.StreamExists(StreamVersion.FromInt64(streamVersion));
 
-            if (!expectedState.Matches(actualState))
+            if (!expectedStreamState.Matches(actualStreamState))
             {
                 completionSource.TryComplete(
                     append,
-                    new StreamAppendConflictException(streamId, expectedState, actualState));
+                    new StreamAppendConflictException(streamId, expectedStreamState, actualStreamState));
 
                 continue;
             }
@@ -90,8 +90,8 @@ public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog
                     conflictInfo.OriginatingException));
         }
 
-        var isRetryable = conflictingAppend.Context.ExpectedState.IsAny ||
-                          conflictingAppend.Context.ExpectedState.IsStreamExists;
+        var isRetryable = conflictingAppend.Context.ExpectedStreamState.IsAny ||
+                          conflictingAppend.Context.ExpectedStreamState.IsStreamExists;
 
         if (isRetryable)
             return ConflictResolution.Retry;
@@ -99,7 +99,7 @@ public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog
         return ConflictResolution.Fail(
             new StreamAppendConflictException(
                 conflictingAppend.Context.StreamId,
-                conflictingAppend.Context.ExpectedState,
+                conflictingAppend.Context.ExpectedStreamState,
                 innerException: conflictInfo.OriginatingException));
     }
 

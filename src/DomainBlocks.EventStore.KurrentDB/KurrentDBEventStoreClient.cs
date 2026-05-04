@@ -22,7 +22,7 @@ public class KurrentDBEventStoreClient<TEvent>(
         CancellationToken cancellationToken = default)
     {
         options ??= new AppendToStreamOptions();
-        var kurrentExpectedState = ToKurrentStreamState(options.ExpectedState);
+        var kurrentExpectedState = ToKurrentStreamState(options.ExpectedStreamState);
 
         var eventData = eventEncoder
             .Encode(events)
@@ -41,7 +41,7 @@ public class KurrentDBEventStoreClient<TEvent>(
         catch (WrongExpectedVersionException ex)
         {
             var actualState = ToStreamState(ex.ActualStreamState);
-            throw new StreamAppendConflictException(streamId, options.ExpectedState, actualState, ex);
+            throw new StreamAppendConflictException(streamId, options.ExpectedStreamState, actualState, ex);
         }
     }
 
