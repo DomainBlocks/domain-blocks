@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <PackageReference Include="KurrentDB.Client" Version="1.3.0" />
+    <PackageReference Include="KurrentDB.Client" />
   </ItemGroup>
 
   <ItemGroup>
