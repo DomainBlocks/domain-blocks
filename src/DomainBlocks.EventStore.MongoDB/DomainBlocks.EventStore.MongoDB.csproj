@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DomainBlocks.EventStore.Abstractions\DomainBlocks.EventStore.Abstractions.csproj"/>
+    <ProjectReference Include="..\DomainBlocks.MongoDB.Sequencing\DomainBlocks.MongoDB.Sequencing.csproj" />
   </ItemGroup>
 
 </Project>

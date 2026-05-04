@@ -5,7 +5,7 @@ using NUnit.Framework;
 namespace DomainBlocks.EventStore.KurrentDB.Tests.Integration;
 
 [TestFixture]
-public class KurrentDBEventStoreClientTests : EventStoreClientTests
+public class KurrentDBEventStoreClientBenchmarkTests : EventStoreClientBenchmarkTests
 {
     protected override Task<ITestEventStoreClientFactory<object>> GetClientFactoryAsync(
         CancellationToken cancellationToken = default)

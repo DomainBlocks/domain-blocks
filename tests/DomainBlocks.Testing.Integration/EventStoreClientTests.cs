@@ -5,15 +5,8 @@ using Shouldly;
 
 namespace DomainBlocks.Testing.Integration;
 
-public abstract class EventStoreClientTests
+public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
 {
-    // Set a longer timeout when debugging.
-#if DEBUG
-    protected const int TestTimeoutMillis = 10 * 60 * 1_000;
-#else
-    protected const int TestTimeoutMillis = 120 * 1_000;
-#endif
-
     private static IEnumerable<TestCaseData> PositionAndDirectionCases
     {
         get
@@ -34,14 +27,12 @@ public abstract class EventStoreClientTests
         }
     }
 
-    protected abstract IEventStoreClient<IDomainEvent> Client { get; }
-
     [Test]
-    [CancelAfter(TestTimeoutMillis)]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task AppendToStreamAsync_ExpectedStateIsAnyAndStreamDoesNotExist_AppendsEvents(
         CancellationToken cancellationToken)
     {
-        AppendEvent<IDomainEvent>[] events =
+        AppendEvent<object>[] events =
         [
             CreateTestEvent("TestEvent1"),
             CreateTestEvent("TestEvent2"),
@@ -61,18 +52,18 @@ public abstract class EventStoreClientTests
     }
 
     [Test]
-    [CancelAfter(TestTimeoutMillis)]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task AppendToStreamAsync_ExpectedStateIsAnyAndStreamExists_AppendsEvents(
         CancellationToken cancellationToken)
     {
-        AppendEvent<IDomainEvent>[] events1 =
+        AppendEvent<object>[] events1 =
         [
             CreateTestEvent("TestEvent1"),
             CreateTestEvent("TestEvent2"),
             CreateTestEvent("TestEvent3")
         ];
 
-        AppendEvent<IDomainEvent>[] events2 =
+        AppendEvent<object>[] events2 =
         [
             CreateTestEvent("TestEvent4"),
             CreateTestEvent("TestEvent5"),
@@ -96,7 +87,7 @@ public abstract class EventStoreClientTests
     }
 
     [Test]
-    [CancelAfter(TestTimeoutMillis)]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task AppendToStreamAsync_ExpectedStateHasWrongVersion_ThrowsVersionConflict(
         CancellationToken cancellationToken)
     {
@@ -131,7 +122,7 @@ public abstract class EventStoreClientTests
     }
 
     [Test]
-    [CancelAfter(TestTimeoutMillis)]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task AppendToStreamAsync_ExpectedStateIsStreamExistsAndStreamDoesNotExist_ThrowsExpectedStreamToExist(
         CancellationToken cancellationToken)
     {
@@ -156,7 +147,7 @@ public abstract class EventStoreClientTests
     }
 
     [Test]
-    [CancelAfter(TestTimeoutMillis)]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task
         AppendToStreamAsync_ExpectedStateIsStreamDoesNotExistAndStreamExists_ThrowsExpectedStreamToNotExist(
             CancellationToken cancellationToken)
@@ -187,7 +178,7 @@ public abstract class EventStoreClientTests
     }
 
     [TestCaseSource(nameof(PositionAndDirectionEdgeCases))]
-    [CancelAfter(TestTimeoutMillis)]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task ReadStreamAsync_EdgeCasePositionAndDirectionAndStreamExists_ReturnsEmpty(
         StreamReadPosition position,
         StreamReadDirection direction,
@@ -214,7 +205,7 @@ public abstract class EventStoreClientTests
     }
 
     [TestCaseSource(nameof(PositionAndDirectionEdgeCases))]
-    [CancelAfter(TestTimeoutMillis)]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task ReadStreamAsync_EdgeCasePositionAndDirectionAndStreamDoesNotExist_ReturnsEmpty(
         StreamReadPosition position,
         StreamReadDirection direction,
@@ -236,7 +227,7 @@ public abstract class EventStoreClientTests
     }
 
     [TestCaseSource(nameof(PositionAndDirectionCases))]
-    [CancelAfter(TestTimeoutMillis)]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task ReadStreamAsync_StreamDoesNotExistAndBehaviorIsThrow_ThrowsStreamNotFound(
         StreamReadPosition position,
         StreamReadDirection direction,
@@ -260,17 +251,17 @@ public abstract class EventStoreClientTests
     }
 
     [Test]
-    [CancelAfter(TestTimeoutMillis)]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task ReadStreamAsync_FromVersion_ReturnsExpectedEvents(CancellationToken cancellationToken)
     {
-        IDomainEvent[] events1 =
+        object[] events1 =
         [
             CreateTestEvent("TestEvent1").Event,
             CreateTestEvent("TestEvent2").Event,
             CreateTestEvent("TestEvent3").Event
         ];
 
-        IDomainEvent[] events2 =
+        object[] events2 =
         [
             CreateTestEvent("TestEvent4").Event,
             CreateTestEvent("TestEvent5").Event,
@@ -298,7 +289,7 @@ public abstract class EventStoreClientTests
             actual.ShouldBe(expected.Take(v + 1).Reverse());
         }
 
-        ValueTask<IDomainEvent[]> ReadEvents(int startVersion, StreamReadDirection direction)
+        ValueTask<object[]> ReadEvents(int startVersion, StreamReadDirection direction)
         {
             return Client
                 .ReadStreamAsync(
@@ -314,15 +305,8 @@ public abstract class EventStoreClientTests
         }
     }
 
-    protected static AppendEvent<IDomainEvent> CreateTestEvent(string value)
+    private static AppendEvent<object> CreateTestEvent(string value)
     {
-        return new AppendEvent<IDomainEvent>(new TestEvent { Value = value });
-    }
-
-    protected interface IDomainEvent;
-
-    protected record TestEvent : IDomainEvent
-    {
-        public required string Value { get; init; }
+        return new AppendEvent<object>(new TestEvent { Value = value });
     }
 }

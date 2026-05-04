@@ -25,7 +25,7 @@ public class EventLogWriterTests
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
     {
-        _mongoClient = new MongoClient(MongoConnectionStrings.Default);
+        _mongoClient = new MongoClient(TestMongoConnectionStrings.Default);
 
         _options = new MongoEventStoreNodeOptions
         {

@@ -4,7 +4,7 @@ using MongoDB.Bson.Serialization.Serializers;
 
 namespace DomainBlocks.Testing.Integration.MongoDB;
 
-public static class MongoTestSerialization
+public static class TestMongoSerialization
 {
     private static int _configured;
 

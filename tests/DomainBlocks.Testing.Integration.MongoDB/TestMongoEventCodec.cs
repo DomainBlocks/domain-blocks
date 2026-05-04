@@ -6,7 +6,7 @@ using MongoDB.Bson;
 
 namespace DomainBlocks.Testing.Integration.MongoDB;
 
-public static class MongoTestEventCodec
+public static class TestMongoEventCodec
 {
     public static EventCodec<TEvent, BsonValue, BsonValue> Create<TEvent>(EventTypeMap eventTypeMap)
         where TEvent : notnull

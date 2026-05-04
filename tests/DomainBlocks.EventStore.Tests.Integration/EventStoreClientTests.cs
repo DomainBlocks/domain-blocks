@@ -22,7 +22,7 @@ public class EventStoreClientTests
     [Test]
     public async Task Should_read_multiple_events_as_common_type()
     {
-        using var mongoClient = new MongoClient(MongoConnectionStrings.Default);
+        using var mongoClient = new MongoClient(TestMongoConnectionStrings.Default);
 
         var options = new MongoEventStoreNodeOptions
         {
@@ -44,7 +44,7 @@ public class EventStoreClientTests
                         nameof(LimitOrderAmended),
                         nameof(LimitOrderFilled)))));
 
-        var eventCode = MongoTestEventCodec.Create<object>(eventTypeMap);
+        var eventCode = TestMongoEventCodec.Create<object>(eventTypeMap);
         var client = node.CreateClient(eventCode);
 
         var orderId = Guid.NewGuid();

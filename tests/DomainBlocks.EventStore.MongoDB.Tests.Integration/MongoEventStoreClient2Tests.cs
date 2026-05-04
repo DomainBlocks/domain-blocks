@@ -4,13 +4,13 @@ using NUnit.Framework;
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
 [TestFixture]
-public class MongoEventStoreClientTests : EventStoreClientTests
+public class MongoEventStoreClient2Tests : EventStoreClientTests
 {
     protected override Task<ITestEventStoreClientFactory<object>> GetClientFactoryAsync(
         CancellationToken cancellationToken = default)
     {
-        var options = new MongoEventStoreNodeOptions { DatabaseName = $"dbx_test_{Guid.NewGuid():N}" };
-        var clientFactory = TestMongoEventStoreClientFactory.CreateDefault(options);
+        var options = new MongoEventStoreClientOptions2 { DatabaseName = $"dbx_test_{Guid.NewGuid():N}" };
+        var clientFactory = TestMongoEventStoreClient2Factory.CreateDefault(options);
         return Task.FromResult<ITestEventStoreClientFactory<object>>(clientFactory);
     }
 }

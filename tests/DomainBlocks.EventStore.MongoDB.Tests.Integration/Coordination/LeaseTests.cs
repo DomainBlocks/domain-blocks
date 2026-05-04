@@ -24,7 +24,7 @@ public class LeaseTests
     [SetUp]
     public void SetUp()
     {
-        var db = new MongoClient(MongoConnectionStrings.Default).GetDatabase("domainblocks_tests");
+        var db = new MongoClient(TestMongoConnectionStrings.Default).GetDatabase("domainblocks_tests");
         _leases = db.GetCollection<LeaseDocument>("test_leases");
         _timeProvider = new FakeTimeProvider();
         _store = new LeaseStore(_leases, _timeProvider);

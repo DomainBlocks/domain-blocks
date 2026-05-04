@@ -4,7 +4,7 @@ using NUnit.Framework;
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
 [TestFixture]
-public class MongoEventStoreClientTests : EventStoreClientTests
+public class MongoEventStoreClientBenchmarkTests : EventStoreClientBenchmarkTests
 {
     protected override Task<ITestEventStoreClientFactory<object>> GetClientFactoryAsync(
         CancellationToken cancellationToken = default)
