@@ -230,8 +230,8 @@ public class MongoSequencedAppenderConcurrencyTests
     {
         var binding = new MongoSequenceBinding<TestDoc>(
             sequenceCollectionNamespace: _seqNs,
-            targetCollectionNamespace: _targetNs,
             sequenceId: "test_seq",
+            targetCollectionNamespace: _targetNs,
             targetField: new ExpressionFieldDefinition<TestDoc, long>(x => x.Nested!.Sequence));
 
         return new MongoSequencedAppender<TestDoc, object>(_mongoClient, binding);
