@@ -83,7 +83,7 @@ public sealed class MongoEventStoreClient<TEvent>(
                 { EventLogEntry.FieldNames.Metadata, x.Metadata ?? BsonNull.Value }
             });
 
-        var context = new AppendToStreamContext(options.CommitId, streamId, options.ExpectedState);
+        var context = new AppendToStreamContext(options.CommitId, streamId, options.ExpectedStreamState);
         var appendOptions = new AppendOptions { Timeout = options.Timeout };
 
         await sequencedAppender

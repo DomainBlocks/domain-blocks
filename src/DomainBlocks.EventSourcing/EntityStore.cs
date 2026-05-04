@@ -45,7 +45,7 @@ public sealed class EntityStore<TEvent>(
 
         var options = new AppendToStreamOptions
         {
-            ExpectedState = entity.Version.HasValue
+            ExpectedStreamState = entity.Version.HasValue
                 ? ExpectedStreamState.SpecificVersion(entity.Version.Value)
                 : ExpectedStreamState.StreamDoesNotExist
         };

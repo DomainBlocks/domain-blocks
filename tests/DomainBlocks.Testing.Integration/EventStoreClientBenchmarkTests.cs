@@ -152,7 +152,7 @@ public abstract class EventStoreClientBenchmarkTests : EventStoreClientTestBase<
 
         var options = new AppendToStreamOptions
         {
-            ExpectedState = ExpectedStreamState.Any,
+            ExpectedStreamState = ExpectedStreamState.Any,
             CommitId = Guid.CreateVersion7()
         };
 

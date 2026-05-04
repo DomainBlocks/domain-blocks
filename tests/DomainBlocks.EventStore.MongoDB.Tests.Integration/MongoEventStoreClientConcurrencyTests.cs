@@ -50,7 +50,7 @@ public class MongoEventStoreClientConcurrencyTests
                 .Select(i => clientHandle.Client.AppendToStreamAsync(
                     streamId,
                     [new TestEvent { Value = $"w{clientIndex}-e{i}" }],
-                    new AppendToStreamOptions { ExpectedState = ExpectedStreamState.Any },
+                    new AppendToStreamOptions { ExpectedStreamState = ExpectedStreamState.Any },
                     ct)));
 
         // Every task must complete successfully - no exceptions.
@@ -83,7 +83,7 @@ public class MongoEventStoreClientConcurrencyTests
                 await clientHandle.Client.AppendToStreamAsync(
                     streamId,
                     [new TestEvent { Value = "create" }],
-                    new AppendToStreamOptions { ExpectedState = ExpectedStreamState.StreamDoesNotExist },
+                    new AppendToStreamOptions { ExpectedStreamState = ExpectedStreamState.StreamDoesNotExist },
                     ct);
 
                 return (Success: true, Exception: null);
@@ -128,7 +128,7 @@ public class MongoEventStoreClientConcurrencyTests
         await _clientHandles[0].Client.AppendToStreamAsync(
             streamId,
             [new TestEvent { Value = "seed" }],
-            new AppendToStreamOptions { ExpectedState = ExpectedStreamState.Any },
+            new AppendToStreamOptions { ExpectedStreamState = ExpectedStreamState.Any },
             ct);
 
         var targetVersion = ExpectedStreamState.SpecificVersion(StreamVersion.FromInt64(0));
@@ -140,7 +140,7 @@ public class MongoEventStoreClientConcurrencyTests
                 await clientHandle.Client.AppendToStreamAsync(
                     streamId,
                     [new TestEvent { Value = "raced" }],
-                    new AppendToStreamOptions { ExpectedState = targetVersion },
+                    new AppendToStreamOptions { ExpectedStreamState = targetVersion },
                     ct);
 
                 return (Success: true, Exception: null);
@@ -180,7 +180,7 @@ public class MongoEventStoreClientConcurrencyTests
                 clientHandle.Client.AppendToStreamAsync(
                     streamIds[i],
                     [new TestEvent { Value = $"e{j}" }],
-                    new AppendToStreamOptions { ExpectedState = ExpectedStreamState.Any },
+                    new AppendToStreamOptions { ExpectedStreamState = ExpectedStreamState.Any },
                     ct))));
 
         await Task.WhenAll(tasks);

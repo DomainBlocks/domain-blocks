@@ -1,113 +1,110 @@
 ﻿# Mongo Event Store Design
 
-Provides a globally ordered event log backed solely by MongoDB - no additional infrastructure required. Any application
-node may accept writes; exactly one leader node establishes canonical order.
+Provides a globally ordered event log backed by a MongoDB replica set.
 
 ## Goals
 
 - No services beyond MongoDB.
-- Any node may accept write requests.
-- Exactly one node assigns global ordering.
-- Readers observe only durably committed history.
-- Correct under partial writes, node crashes, and leader failover.
+- Globally ordered event positions assigned atomically, providing a total order across historical replays and change
+  stream observations.
+- Correct under concurrent writes, duplicate submissions, and optimistic concurrency conflicts.
 
 ---
 
 ## Collections
 
-### `dbx_requests` - proposed appends (staging area)
+### `dbx_event_log` – the authoritative event log
 
-Written by any node. Each document is a single proposed append: a `commitId`, `streamId`, `expectedStreamState`, and
-the event payloads to write. Documents are TTL-expired automatically.
+Every committed event is stored here. The `_id` field is the global position - a contiguous, strictly increasing integer
+assigned atomically to each event when committed. Each document also carries a `streamId`, `streamVersion` (per-stream
+sequence number), `commitId`, `commitIndex`, `eventName`, `eventData`, `metadata`, and `writtenAtUtc`.
 
-### `dbx_event_log` - the authoritative event log
+Two indexes are maintained:
 
-Written by the leader only. Each document is a single committed event, assigned a monotonic global `position` (`_id`)
-and an `epoch` stamp. The position sequence is the global order. Readers and projections tail this collection.
+- **`event_log_stream_id_stream_version_ux`** - a unique compound index on `(streamId, streamVersion)`. This is the
+  mechanism by which optimistic concurrency conflicts are detected.
+- **`event_log_commit_id_ix`** - an index on `commitId` for efficient duplicate detection.
 
-### `dbx_leases` - leader lease
+### `dbx_sequences` – sequence counters
 
-A single document. Holds the current leader's `holderId`, a monotonically incrementing `epoch`, an expiry, and a
-`commitPosition` - the high-water mark up to which the leader has durably written and confirmed.
+A collection of sequence counter documents, each identified by a string `_id`. The event store uses a single counter
+document (`_id: "event_log_position"`) to track the next available global position. Each time a batch is committed, the
+counter is incremented atomically using `findOneAndUpdate` with a `$inc` operator, which returns the previous value.
+This returned value is used as the starting position for the range of global `_id` values assigned to the events in that
+batch.
 
 ---
 
 ## Write Path
 
-1. A client node serialises the append into an `AppendRequest` document (commitId, streamId, expectedStreamState,
-   events) and writes it to `dbx_requests`. It then registers a `TaskCompletionSource` keyed by `commitId` and waits on
-   it.
+1. A caller invokes `AppendToStreamAsync` with a `streamId`, events, and an optional `ExpectedStreamState`
+   (e.g. `StreamDoesNotExist`, `StreamExists`, a specific version, or `Any`). The client encodes the events into BSON
+   documents and enqueues them as an `AppendEntry` onto an internal bounded channel, then awaits a
+   `TaskCompletionSource` for the result.
 
-2. The leader's `RequestFeeder` picks up the request - either via a catch-up query (on startup, to drain any backlog) or
-   via a live change stream feed thereafter.
+2. `MongoSequencedAppender` runs a single background append loop that drains the channel in batches.
 
-3. The leader processes requests in batches. A `Prepare` step queries `dbx_event_log` for any already-committed
-   `commitId`s (duplicate detection) and the current head version of each affected stream. These reads run concurrently
-   with the previous batch's `commitPosition` advancement to keep the pipeline saturated.
+3. **Pre-commit (`OnBatchCommittingAsync`)** - before each batch is committed, `AppendToStreamPolicy` runs a pre-commit
+   query against `dbx_event_log` (using `ReadConcern.Majority`, `ReadPreference.Primary`):
+    - A `Distinct` query collects any `commitId` values that already exist - duplicate detection.
+    - An aggregation pipeline (`$match` + `$group` with `$max`) retrieves the current head `streamVersion` for each
+      affected stream.
 
-4. With the stream versions in hand, the leader checks each request's `expectedStreamState` in memory. Conflicts are
-   collected; accepted events are assigned monotonic global positions and written to `dbx_event_log` via a bulk upsert.
-   Any duplicates or conflicts are recorded as sentinel entries in the same batch so clients can be notified.
+   These two queries run concurrently.
 
-5. After the bulk write, the leader advances `commitPosition` on the lease document via an epoch-fenced update. The
-   write is conditional on the lease still being held by the same leader at the same epoch, so a stale leader cannot
-   advance the position.
+4. With the query results in hand, the policy inspects each entry in the batch:
+    - **Duplicate** (`commitId` already exists): the entry's `TaskCompletionSource` is completed successfully
+      immediately; the documents are excluded from the commit.
+    - **Expected stream state mismatch** (`ExpectedStreamState` does not match the actual stream state): the entry's
+      `TaskCompletionSource` is faulted with a `StreamAppendConflictException`; the documents are excluded from the
+      commit.
+    - **Accepted**: `streamVersion` and `writtenAtUtc` fields are stamped onto each document in memory. Per-stream
+      versions are tracked across the batch so multiple appends to the same stream in one batch are assigned
+      consecutive versions.
 
-6. The client's `CommitTracker` is watching the `dbx_event_log` and `dbx_leases`change streams. When `commitPosition`
-   advances, it flushes all buffered entries up to that position in order, completing (or faulting) the waiting
-   `TaskCompletionSource`.
+5. **Commit** - a MongoDB multi-document transaction is opened (`ReadConcern.Snapshot`, `ReadPreference.Primary`,
+   `WriteConcern.WMajority` with journaling):
+    - A range of sequence numbers is claimed atomically via `findOneAndUpdate` (`$inc`) on the sequence counter
+      document, inside the transaction. Any concurrent transaction that also modifies the sequence document will trigger
+      a write conflict, causing one of them to be retried. **This serializes concurrent commits through the sequence
+      counter, and is the mechanism by which we achieve a total order across historical replays (sorted by `_id`) and
+      real-time change stream observations.**
+    - Each document is assigned its global `_id` (position) from the claimed sequence range.
+    - All documents are inserted via `InsertMany` (ordered) into `dbx_event_log`.
+    - The transaction is committed, with automatic retry on transient errors.
 
-7. `AppendToStreamAsync` returns to the caller.
+6. On success, all accepted `TaskCompletionSource` instances are completed. `AppendToStreamAsync` returns to the
+   caller.
 
----
-
-## Leader Election
-
-Nodes compete for the lease via an atomic `findOneAndUpdate` with a CAS filter (`expiresAtUtc ≤ now`). On success,
-`epoch` is incremented atomically. The winner becomes the leader for the duration of the lease and renews it
-periodically. If renewal fails (e.g. due to expiry), the lease is considered lost and the leader session tears down.
-
----
-
-## Epoch-Guarded Writes (Split-Brain Protection)
-
-Every event log write is a `ReplaceOneModel` upsert with the filter:
-
-    { _id: <position>, epoch: { $lt: <currentEpoch> } }
-
-This means a position is only written if it does not yet exist, or if it was written by a stale leader with a lower
-epoch. Above `commitPosition`, a new leader can safely reclaim any positions left behind by a predecessor. Stale leaders
-cannot overwrite positions already claimed by the current epoch.
-
----
-
-## Commit Acknowledgement
-
-`CommitTracker` runs on client nodes and reacts to a single database change stream filtered on two collections:
-
-- **`dbx_event_log`** - buffers incoming events in a `SortedDictionary<position, entry>`. Entries from stale epochs are
-  ignored or evicted.
-- **`dbx_leases`** - on `commitPosition` advance: flush all buffered entries up to that position in order, completing
-  the relevant `TaskCompletionSource`. On epoch change: purge any buffered entries from the old epoch.
-
-Using `commitPosition` as the flush gate means clients never observe a partially written batch. The TCS wired to
-`AppendToStreamAsync` completes (or faults with a conflict exception) only once the leader has declared the batch
-durable.
+7. **Conflict handling** - if `InsertMany` raises a duplicate key error:
+    - If the conflicting index is `event_log_stream_id_stream_version_ux` and the `ExpectedStreamState` is `Any` or
+      `StreamExists`, the `AppendEntry` is eligible for retry. The policy returns `ConflictResolution.Retry`; the batch
+      is retried with the conflicting entry up to a configurable limit with a delay between attempts. On each retry the
+      pre-commit query re-reads stream versions so the correct next version is used.
+    - Otherwise, the entry is faulted with an appropriate exception and removed from the batch.
+    - Transient transaction errors (labelled `TransientTransactionError` by the driver) cause the entire batch to be
+      retried transparently.
 
 ---
 
 ## Read Path
 
-`ReadStreamAsync` queries `dbx_event_log` filtered by `streamId` and `position ≤ commitPosition`, sorted by
-`streamVersion`. The `commitPosition` is cached in memory on the client (kept current by `CommitTracker`) and falls back
-to a live lease read on first access.
+`ReadStreamAsync` queries `dbx_event_log` filtered by `streamId`, optionally bounded by a specific `streamVersion`.
+Results are sorted ascending or descending by `streamVersion` according to the requested direction. The collection is
+read with `ReadConcern.Majority` and `ReadPreference.Primary`. Reads are bounded by an optional `MaxCount` limit.
+
+If `StreamNotFoundBehavior.Throw` is set and no events are found, a `StreamNotFoundException` is raised.
 
 ---
 
-## Node Roles
+## Extensibility - `IMongoSequencedAppenderPolicy`
 
-| Role           | Behaviour                                                                                            |
-|----------------|------------------------------------------------------------------------------------------------------|
-| `Client`       | Submits append requests and tracks commit outcomes via the change stream.                            |
-| `Leader`       | Competes for the lease and, when held, handles append requests by writing ordered events to the log. |
-| `ClientLeader` | Default. Both `Client` and `Leader` roles in a single process.                                       |
+The sequencing machinery (`MongoSequencedAppender`) is general-purpose and decoupled from event store concerns.
+Application-specific pre-commit logic and conflict resolution are injected via
+`IMongoSequencedAppenderPolicy<TContext>`:
+
+- **`OnBatchCommittingAsync`** - inspect or mutate documents before the transaction, and short-circuit individual
+  entries (success or failure) where applicable.
+- **`OnConflict`** - decide whether a duplicate key error should be retried or faulted.
+
+`AppendToStreamPolicy` is the event store's implementation of this interface.

@@ -110,7 +110,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
                 [CreateTestEvent("TestEvent4")],
                 new AppendToStreamOptions
                 {
-                    ExpectedState = expectedState
+                    ExpectedStreamState = expectedState
                 },
                 cancellationToken)
             .ShouldThrowAsync<StreamAppendConflictException>();
@@ -136,7 +136,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
                     CreateTestEvent("TestEvent2"),
                     CreateTestEvent("TestEvent3")
                 ],
-                new AppendToStreamOptions { ExpectedState = ExpectedStreamState.StreamExists },
+                new AppendToStreamOptions { ExpectedStreamState = ExpectedStreamState.StreamExists },
                 cancellationToken)
             .ShouldThrowAsync<StreamAppendConflictException>();
 
@@ -167,7 +167,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
             .AppendToStreamAsync(
                 streamId,
                 [CreateTestEvent("TestEvent4")],
-                new AppendToStreamOptions { ExpectedState = ExpectedStreamState.StreamDoesNotExist },
+                new AppendToStreamOptions { ExpectedStreamState = ExpectedStreamState.StreamDoesNotExist },
                 cancellationToken)
             .ShouldThrowAsync<StreamAppendConflictException>();
 
