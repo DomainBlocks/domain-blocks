@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
-    <PackageReference Include="MongoDB.Driver" Version="3.7.1" />
+    <PackageReference Include="MongoDB.Driver" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\DomainBlocks.Core\DomainBlocks.Core.csproj" />

@@ -9,7 +9,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="MongoDB.Bson" Version="3.7.1" />
+    <PackageReference Include="MongoDB.Bson" />
   </ItemGroup>
 
 </Project>
