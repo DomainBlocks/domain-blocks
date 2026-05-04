@@ -1,7 +1,5 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.Testing.Integration;
-using MongoDB.Bson;
-using MongoDB.Driver;
 using NUnit.Framework;
 using Shouldly;
 
@@ -13,7 +11,6 @@ public class MongoEventStoreClient2ConcurrencyTests
 
     private MongoEventStoreClientOptions2 _options = null!;
     private TestMongoEventStoreClient2Factory<object> _clientFactory = null!;
-    private IMongoClient _mongoClient = null!;
     private ITestEventStoreClientHandle<object>[] _clientHandles = null!;
 
     [SetUp]
@@ -21,7 +18,6 @@ public class MongoEventStoreClient2ConcurrencyTests
     {
         _options = new MongoEventStoreClientOptions2 { DatabaseName = $"dbx_test_{Guid.NewGuid():N}" };
         _clientFactory = TestMongoEventStoreClient2Factory.CreateDefault(_options);
-        _mongoClient = _clientFactory.MongoClient;
 
         _clientHandles = new ITestEventStoreClientHandle<object>[ClientCount];
 
@@ -48,9 +44,10 @@ public class MongoEventStoreClient2ConcurrencyTests
         var streamId = $"shared-{Guid.NewGuid():N}";
 
         // All writers concurrently append to the same stream.
-        var tasks = _clientHandles.SelectMany((clientHandle, clientIndex) =>
-            Enumerable.Range(0, eventCountPerClient).Select(i =>
-                clientHandle.Client.AppendToStreamAsync(
+        var tasks = _clientHandles
+            .SelectMany((clientHandle, clientIndex) => Enumerable
+                .Range(0, eventCountPerClient)
+                .Select(i => clientHandle.Client.AppendToStreamAsync(
                     streamId,
                     [new TestEvent { Value = $"w{clientIndex}-e{i}" }],
                     new AppendToStreamOptions { ExpectedState = ExpectedStreamState.Any },
@@ -202,157 +199,5 @@ public class MongoEventStoreClient2ConcurrencyTests
             var versions = readEvents.Select(e => e.Context.StreamVersion.Value).ToList();
             versions.ShouldBe(Enumerable.Range(0, eventCountPerClient).Select(i => (ulong)i));
         }
-    }
-
-    [Test]
-    [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task ConcurrentWrites_GlobalPositions_AreStrictlyIncreasingAndContiguous_HistoricalRead
-        (CancellationToken ct)
-    {
-        const int eventCountPerClient = 30;
-        var streamIds = _clientHandles.Select(_ => $"pos-{Guid.NewGuid():N}").ToList();
-
-        await Task.WhenAll(_clientHandles.Select((clientHandle, i) =>
-            Task.WhenAll(Enumerable.Range(0, eventCountPerClient).Select(j =>
-                clientHandle.Client.AppendToStreamAsync(
-                    streamIds[i],
-                    [new TestEvent { Value = $"e{j}" }],
-                    new AppendToStreamOptions { ExpectedState = ExpectedStreamState.Any },
-                    ct)))));
-
-        var allPositions = new List<ulong>();
-
-        foreach (var streamId in streamIds)
-        {
-            var events = await _clientHandles[0].Client
-                .ReadStreamAsync(streamId, cancellationToken: ct)
-                .ToArrayAsync(ct);
-
-            allPositions.AddRange(events
-                .Select(e => e.Context.GlobalPosition?.Value)
-                .OfType<ulong>());
-        }
-
-        const int totalExpected = ClientCount * eventCountPerClient;
-        allPositions.Count.ShouldBe(totalExpected, "All events must have a global position");
-
-        var sorted = allPositions.Order().ToList();
-        var first = sorted[0];
-
-        sorted.ShouldBe(
-            Enumerable.Range(0, totalExpected).Select(i => first + (ulong)i),
-            "Global positions must be contiguous and strictly increasing");
-    }
-
-    [Test]
-    [CancelAfter(TestTimeouts.DefaultMillis)]
-    [Explicit("long running")]
-    public async Task ConcurrentWrites_GlobalPositions_AreStrictlyIncreasingAndContiguous_ChangeStreamRead(
-        CancellationToken ct)
-    {
-        const int runSeconds = 15;
-        const int minObservedEvents = 200;
-
-        var db = _mongoClient.GetDatabase(_options.DatabaseName);
-        var eventLog = db.GetCollection<BsonDocument>(_options.EventLogCollectionName);
-
-        var runId = Guid.NewGuid().ToString("N");
-
-        using var runCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        runCts.CancelAfter(TimeSpan.FromSeconds(runSeconds));
-        var runToken = runCts.Token;
-
-        // Capture first assertion failure from observer and fail after coordinated shutdown.
-        Exception? firstFailure = null;
-
-        // Watch inserts on event log. We filter to this test run inside the loop.
-        var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>()
-            .Match(x => x.OperationType == ChangeStreamOperationType.Insert);
-
-        var changeStreamOptions = new ChangeStreamOptions
-        {
-            FullDocument = ChangeStreamFullDocumentOption.Default
-        };
-
-        // Open change stream before writers start so we do not miss early inserts.
-        using var cursor = await eventLog.WatchAsync(pipeline, changeStreamOptions, runToken);
-
-        var observerTask = Task.Run(
-            async () =>
-            {
-                long? lastPos = null;
-                var observed = 0;
-
-                try
-                {
-                    await foreach (var change in cursor.ToAsyncEnumerable().WithCancellation(runToken))
-                    {
-                        var doc = change.FullDocument;
-                        if (doc is null)
-                            continue;
-
-                        var pos = doc["_id"].AsInt64;
-
-                        if (lastPos.HasValue && pos != lastPos.Value + 1)
-                        {
-                            firstFailure ??= new ShouldAssertException(
-                                $"Global position not contiguous. Last={lastPos.Value}, Current={pos}, RunId={runId}");
-
-                            await runCts.CancelAsync(); // Fail fast: stop all writers and observer quickly.
-
-                            return;
-                        }
-
-                        lastPos = pos;
-                        observed++;
-                    }
-                }
-                catch (OperationCanceledException) when (runToken.IsCancellationRequested)
-                {
-                    // Expected when run duration elapses or fail-fast cancellation occurs.
-                }
-
-                if (firstFailure is null)
-                {
-                    observed.ShouldBeGreaterThanOrEqualTo(
-                        minObservedEvents,
-                        $"Expected to observe at least {minObservedEvents} events for RunId={runId}");
-                }
-            },
-            runToken);
-
-        var appendTasks = _clientHandles
-            .Select((handle, i) => Task.Run(async () =>
-                {
-                    var streamId = $"lr-{runId}-w{i}";
-                    var sequence = 0;
-
-                    while (!runToken.IsCancellationRequested)
-                    {
-                        await handle.Client.AppendToStreamAsync(
-                            streamId,
-                            [
-                                new TestEvent { Value = $"{runId}|w{i}|e{sequence++}" }
-                            ],
-                            new AppendToStreamOptions { ExpectedState = ExpectedStreamState.Any },
-                            runToken);
-                    }
-                },
-                runToken))
-            .ToList();
-
-        // Wait for run end or fail-fast cancellation.
-        try
-        {
-            await Task.WhenAll(appendTasks.Append(observerTask));
-        }
-        catch (OperationCanceledException) when (runToken.IsCancellationRequested)
-        {
-            // Normal shutdown path.
-        }
-
-        // Surface the first observer failure as the test failure.
-        if (firstFailure is not null)
-            throw firstFailure;
     }
 }

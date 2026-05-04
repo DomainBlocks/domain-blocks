@@ -347,7 +347,7 @@ public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppend
         {
             var segment = pathSegments[i];
 
-            if (!currentDoc.TryGetValue(segment, out var child))
+            if (!currentDoc.TryGetValue(segment, out var child) || child.IsBsonNull)
             {
                 var childDoc = new BsonDocument();
                 currentDoc[segment] = childDoc;
