@@ -1,4 +1,5 @@
-﻿using System.Threading.Channels;
+﻿using System.Diagnostics;
+using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Bson;
@@ -33,6 +34,17 @@ public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppend
     private readonly Buffers _buffers = new();
     private int _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of <see cref="MongoSequencedAppender{TDocument,TContext}"/>.
+    /// </summary>
+    /// <param name="mongoClient">The MongoDB client used by this appender.</param>
+    /// <param name="binding">The sequence binding used by this appender.</param>
+    /// <param name="appendPolicy">
+    /// An optional policy for pre-commit logic and conflict resolution. Defaults to
+    /// <see cref="DefaultSequencedAppenderPolicy{TContext}"/> if not provided.
+    /// </param>
+    /// <param name="options">Optional configuration.</param>
+    /// <param name="logger">An optional logger. No logging occurs if not provided.</param>
     public MongoSequencedAppender(
         IMongoClient mongoClient,
         MongoSequenceBinding<TDocument> binding,
@@ -64,7 +76,7 @@ public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppend
 
         _sequenceId = binding.SequenceId;
         _targetFieldPathSegments = targetFieldName.Split('.');
-        _appenderPolicy = appendPolicy ?? NullSequencedAppenderPolicy<TDocument, TContext>.Instance;
+        _appenderPolicy = appendPolicy ?? DefaultSequencedAppenderPolicy<TContext>.Shared;
         _logger = logger ?? NullLogger.Instance;
 
         _channel = Channel.CreateBounded<AppendEntry<TContext>>(new BoundedChannelOptions(options.QueueCapacity)
@@ -174,7 +186,7 @@ public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppend
                     case CommitResult.Success:
                         return;
                     case CommitResult.Conflict conflict:
-                        await HandleConflictAsync(batch, conflict.ConflictingAppend, ct).ConfigureAwait(false);
+                        await HandleConflictAsync(batch, conflict, ct).ConfigureAwait(false);
                         break;
                 }
             }
@@ -191,7 +203,7 @@ public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppend
         _buffers.OutgoingDocuments.Clear();
         _buffers.AppendIndexMap.Clear();
 
-        await _appenderPolicy.OnBatchCommittingAsync(batch, ct);
+        await _appenderPolicy.OnBatchCommittingAsync(batch, AppendCompletionSource<TContext>.Shared, ct);
 
         foreach (var append in batch)
         {
@@ -237,9 +249,9 @@ public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppend
             await SafeAbortTransactionAsync(session, ct).ConfigureAwait(false);
 
             var firstError = ex.WriteErrors.First(e => e.Code == MongoErrorCodes.DuplicateKey);
-            var conflictingDoc = docs[firstError.Index];
             var conflictingAppend = _buffers.AppendIndexMap[firstError.Index];
-            return new CommitResult.Conflict(conflictingAppend);
+            var conflictInfo = new AppendConflictInfo(firstError.Index, firstError.Message, ex);
+            return new CommitResult.Conflict(conflictingAppend, conflictInfo);
         }
         catch (Exception)
         {
@@ -255,35 +267,40 @@ public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppend
 
     private async Task HandleConflictAsync(
         List<AppendEntry<TContext>> batch,
-        AppendEntry<TContext> conflict,
+        CommitResult.Conflict conflict,
         CancellationToken ct)
     {
-        using var scope = _logger.BeginScope(new { AppendId = conflict.Id });
+        var conflictingAppend = conflict.ConflictingAppend;
 
+        using var scope = _logger.BeginScope(new { AppendId = conflictingAppend.Id });
         _logger.LogDebug("Duplicate key conflict detected; invoking policy");
 
-        _appenderPolicy.OnConflict(conflict);
+        var resolution = _appenderPolicy.OnConflict(conflictingAppend, conflict.ConflictInfo);
 
-        if (conflict.IsCompleted)
+        if (resolution is ConflictResolution.FailResolution fail)
         {
             _logger.LogDebug("Conflict resolved by policy");
-            batch.Remove(conflict);
-            _buffers.ConflictRetryCounts.Remove(conflict.Id);
+            conflictingAppend.TryComplete(fail.Exception);
+            batch.Remove(conflictingAppend);
+            _buffers.ConflictRetryCounts.Remove(conflictingAppend.Id);
             return;
         }
 
-        var retryCount = _buffers.ConflictRetryCounts.GetValueOrDefault(conflict.Id);
+        if (resolution is not ConflictResolution.RetryResolution)
+            throw new UnreachableException($"Unknown conflict resolution type '{resolution.GetType()}'.");
+
+        var retryCount = _buffers.ConflictRetryCounts.GetValueOrDefault(conflictingAppend.Id);
         if (retryCount >= _maxConflictRetries)
         {
             _logger.LogWarning(
                 "Conflict not resolved by policy after {MaxRetries} retries; evicting entry",
                 _maxConflictRetries);
 
-            conflict.TryComplete(
+            conflictingAppend.TryComplete(
                 new AppendConflictException($"Conflict not resolved after {_maxConflictRetries} retries."));
 
-            batch.Remove(conflict);
-            _buffers.ConflictRetryCounts.Remove(conflict.Id);
+            batch.Remove(conflictingAppend);
+            _buffers.ConflictRetryCounts.Remove(conflictingAppend.Id);
         }
         else
         {
@@ -293,7 +310,7 @@ public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppend
                 retryCount + 1,
                 _maxConflictRetries);
 
-            _buffers.ConflictRetryCounts[conflict.Id] = retryCount + 1;
+            _buffers.ConflictRetryCounts[conflictingAppend.Id] = retryCount + 1;
 
             await Task.Delay(_conflictRetryDelay, ct).ConfigureAwait(false);
         }
@@ -396,9 +413,11 @@ public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppend
     {
         public sealed class Success : CommitResult;
 
-        public sealed class Conflict(AppendEntry<TContext> conflictingAppend) : CommitResult
+        public sealed class Conflict(AppendEntry<TContext> conflictingAppend, AppendConflictInfo conflictInfo) :
+            CommitResult
         {
             public AppendEntry<TContext> ConflictingAppend { get; } = conflictingAppend;
+            public AppendConflictInfo ConflictInfo { get; } = conflictInfo;
         }
     }
 }

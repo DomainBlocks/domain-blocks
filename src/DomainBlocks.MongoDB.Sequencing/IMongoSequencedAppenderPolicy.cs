@@ -1,8 +1,25 @@
 namespace DomainBlocks.MongoDB.Sequencing;
 
+/// <summary>
+/// Defines a policy for pre-commit logic and conflict resolution for a
+/// <see cref="MongoSequencedAppender{TDocument,TContext}"/>.
+/// </summary>
 public interface IMongoSequencedAppenderPolicy<TContext>
 {
-    ValueTask OnBatchCommittingAsync(IReadOnlyList<AppendEntry<TContext>> batch, CancellationToken cancellationToken);
+    /// <summary>
+    /// Called before each batch is committed. Implementations may inspect and mutate the documents in each append
+    /// entry, and use <paramref name="completionSource"/> to succeed or fail individual entries early. Entries not
+    /// completed here will be committed.
+    /// </summary>
+    ValueTask OnBatchCommittingAsync(
+        IReadOnlyList<AppendEntry<TContext>> batch,
+        IAppendCompletionSource<TContext> completionSource,
+        CancellationToken cancellationToken);
 
-    void OnConflict(AppendEntry<TContext> conflict);
+    /// <summary>
+    /// Called when a duplicate key conflict is detected during a commit attempt. Return
+    /// <see cref="ConflictResolution.Retry"/> to retry the append operation, or <see cref="ConflictResolution.Fail"/>
+    /// to fault it.
+    /// </summary>
+    ConflictResolution OnConflict(AppendEntry<TContext> conflictingAppend, AppendConflictInfo conflictInfo);
 }

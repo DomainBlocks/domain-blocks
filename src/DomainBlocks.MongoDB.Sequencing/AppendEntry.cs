@@ -2,6 +2,9 @@ using MongoDB.Bson;
 
 namespace DomainBlocks.MongoDB.Sequencing;
 
+/// <summary>
+/// Represents the documents and context associated with a single append operation.
+/// </summary>
 public sealed class AppendEntry<TContext>
 {
     private readonly TaskCompletionSource _tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -15,13 +18,21 @@ public sealed class AppendEntry<TContext>
         Context = context;
     }
 
-    public Guid Id { get; } = Guid.NewGuid();
+    /// <summary>
+    /// The BSON documents to be appended.
+    /// </summary>
     public IReadOnlyList<BsonDocument> Documents { get; }
+
+    /// <summary>
+    /// The caller-supplied context associated with this append.
+    /// </summary>
     public TContext Context { get; }
-    public bool IsCompleted => _tcs.Task.IsCompleted;
+
+    internal Guid Id { get; } = Guid.NewGuid();
+    internal bool IsCompleted => _tcs.Task.IsCompleted;
     internal Task Completion => _tcs.Task;
 
-    public bool TryComplete(Exception? error = null)
+    internal bool TryComplete(Exception? error = null)
     {
         return error is null ? _tcs.TrySetResult() : _tcs.TrySetException(error);
     }

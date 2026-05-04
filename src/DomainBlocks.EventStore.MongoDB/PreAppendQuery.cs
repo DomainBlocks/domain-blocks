@@ -32,7 +32,7 @@ internal sealed class PreAppendQuery(IMongoCollection<BsonDocument> eventLog)
         _streamIds.Clear();
     }
 
-    public async Task ExecuteAsync(
+    public async Task ExecuteIntoAsync(
         HashSet<Guid> existingCommitIds,
         Dictionary<string, long> headStreamVersions,
         CancellationToken cancellationToken)

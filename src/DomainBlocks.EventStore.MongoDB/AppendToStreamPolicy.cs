@@ -14,6 +14,7 @@ public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog
 
     public async ValueTask OnBatchCommittingAsync(
         IReadOnlyList<AppendEntry<AppendToStreamContext>> batch,
+        IAppendCompletionSource<AppendToStreamContext> completionSource,
         CancellationToken cancellationToken)
     {
         _buffers.ClearAll();
@@ -28,7 +29,7 @@ public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog
         }
 
         await _preAppendQuery
-            .ExecuteAsync(_buffers.ExistingCommitIds, _buffers.HeadStreamVersions, cancellationToken)
+            .ExecuteIntoAsync(_buffers.ExistingCommitIds, _buffers.HeadStreamVersions, cancellationToken)
             .ConfigureAwait(false);
 
         var writtenAtUtc = DateTime.UtcNow;
@@ -42,7 +43,7 @@ public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog
 
             if (_buffers.ExistingCommitIds.Contains(commitId))
             {
-                append.TryComplete();
+                completionSource.TryComplete(append);
                 continue;
             }
 
@@ -56,7 +57,10 @@ public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog
 
             if (!expectedState.Matches(actualState))
             {
-                append.TryComplete(new StreamAppendConflictException(streamId, expectedState, actualState));
+                completionSource.TryComplete(
+                    append,
+                    new StreamAppendConflictException(streamId, expectedState, actualState));
+
                 continue;
             }
 
@@ -70,19 +74,34 @@ public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog
         }
     }
 
-    public void OnConflict(AppendEntry<AppendToStreamContext> conflict)
+    public ConflictResolution OnConflict(
+        AppendEntry<AppendToStreamContext> conflictingAppend,
+        AppendConflictInfo conflictInfo)
     {
-        var isPermanentConflict = conflict.Context.ExpectedState.IsStreamDoesNotExist ||
-                                  conflict.Context.ExpectedState.IsSpecificVersion;
+        // MongoDB does not populate WriteError.Details for duplicate key errors (code 11000). The only available signal
+        // is the error message, which includes the index name. This is potentially fragile, but is the only option the
+        // driver exposes.
+        if (conflictInfo.Message?.Contains(EventLogIndexNames.UniqueStreamVersion) is not true)
+        {
+            var message = conflictInfo.Message is not null ? $"'{conflictInfo.Message}'" : "none";
 
-        if (!isPermanentConflict)
-            return;
+            return ConflictResolution.Fail(
+                new AppendConflictException(
+                    $"Unknown conflict. Message: {message}.",
+                    conflictInfo.OriginatingException));
+        }
 
-        var exception = new StreamAppendConflictException(
-            conflict.Context.StreamId,
-            conflict.Context.ExpectedState);
+        var isRetryable = conflictingAppend.Context.ExpectedState.IsAny ||
+                          conflictingAppend.Context.ExpectedState.IsStreamExists;
 
-        conflict.TryComplete(exception);
+        if (isRetryable)
+            return ConflictResolution.Retry;
+
+        return ConflictResolution.Fail(
+            new StreamAppendConflictException(
+                conflictingAppend.Context.StreamId,
+                conflictingAppend.Context.ExpectedState,
+                innerException: conflictInfo.OriginatingException));
     }
 
     private sealed class Buffers
