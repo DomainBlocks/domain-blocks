@@ -1,5 +1,6 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.TypeMapping;
+using DomainBlocks.MongoDB.Sequencing;
 using DomainBlocks.Testing.Integration;
 using DomainBlocks.Testing.Integration.MongoDB;
 using Microsoft.Extensions.Logging;
@@ -91,14 +92,39 @@ public sealed class TestMongoEventStoreClient2Factory<TEvent> :
         _loggerFactory.Dispose();
     }
 
-    private sealed class ClientHandle(
-        IMongoClient mongoClient,
-        EventCodec<TEvent, BsonValue, BsonValue> codec,
-        MongoEventStoreClientOptions2 options,
-        ILogger logger) :
-        ITestEventStoreClientHandle<TEvent>
+    private sealed class ClientHandle : ITestEventStoreClientHandle<TEvent>
     {
-        private readonly MongoEventStoreClient2<TEvent> _client = new(mongoClient, codec, logger, options);
+        private readonly MongoEventStoreClient2<TEvent> _client;
+
+        public ClientHandle(
+            IMongoClient mongoClient,
+            EventCodec<TEvent, BsonValue, BsonValue> codec,
+            MongoEventStoreClientOptions2 options,
+            ILogger logger)
+        {
+            var db = mongoClient.GetDatabase(options.DatabaseName);
+
+            var sequenceBinding = new MongoSequenceBinding<BsonDocument>(
+                new CollectionNamespace(db.DatabaseNamespace, options.SequencesCollectionName),
+                new CollectionNamespace(db.DatabaseNamespace, options.EventLogCollectionName),
+                sequenceId: "event_log_seq",
+                targetField: "_id");
+
+            var eventLog = db.GetCollection<BsonDocument>(options.EventLogCollectionName);
+
+            var sequencedAppender = new MongoSequencedAppender<BsonDocument, AppendToStreamContext>(
+                mongoClient,
+                sequenceBinding,
+                new AppendToStreamPolicy(eventLog),
+                new MongoSequencedAppenderOptions
+                {
+                    QueueCapacity = options.AppendQueueCapacity,
+                    BatchSize = options.AppendBatchSize
+                },
+                logger);
+
+            _client = new MongoEventStoreClient2<TEvent>(sequencedAppender, eventLog, codec);
+        }
 
         public IEventStoreClient<TEvent> Client => _client;
 

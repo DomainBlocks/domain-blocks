@@ -4,13 +4,17 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
-internal sealed class PreAppendQuery(IMongoCollection<BsonDocument> eventLog)
+internal sealed class PreCommitQuery(IMongoCollection<BsonDocument> eventLog)
 {
     private static readonly BsonDocument MaxStreamVersionsGroupStage = new("$group", new BsonDocument
     {
         { "_id", $"${EventLogEntry.FieldNames.StreamId}" },
         { "version", new BsonDocument("$max", $"${EventLogEntry.FieldNames.StreamVersion}") }
     });
+
+    private readonly IMongoCollection<BsonDocument> _eventLog = eventLog
+        .WithReadConcern(ReadConcern.Majority)
+        .WithReadPreference(ReadPreference.Primary);
 
     private readonly HashSet<BsonValue> _dedup = [];
     private readonly BsonArray _commitIds = [];
@@ -50,22 +54,17 @@ internal sealed class PreAppendQuery(IMongoCollection<BsonDocument> eventLog)
             MaxStreamVersionsGroupStage
         };
 
-        var commitIdsTask = eventLog
+        var commitIdsTask = _eventLog
             .Distinct<BsonValue>(
                 EventLogEntry.FieldNames.CommitId,
                 commitIdFilter,
                 cancellationToken: cancellationToken)
             .ForEachAsync(x => existingCommitIds.Add(x.AsGuid), cancellationToken);
 
-        var versionsTask = eventLog
+        var versionsTask = _eventLog
             .Aggregate<BsonDocument>(maxStreamVersionsPipeline, cancellationToken: cancellationToken)
             .ForEachAsync(x => headStreamVersions[x["_id"].AsString] = x["version"].AsInt64, cancellationToken);
 
         await Task.WhenAll(commitIdsTask, versionsTask).ConfigureAwait(false);
-
-        // _logger.LogDebug(
-        //     "Prepare append complete: Found {DuplicateCount} duplicate(s), loaded {StreamCount} stream version(s)",
-        //     _duplicateCommitIds.Count,
-        //     _headStreamVersions.Count);
     }
 }

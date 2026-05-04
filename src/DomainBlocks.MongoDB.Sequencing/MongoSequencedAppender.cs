@@ -16,7 +16,7 @@ internal static class MongoSequencedAppender
         WriteConcern.WMajority.With(journal: true));
 }
 
-public class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppender<TDocument, TContext>
+public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppender<TDocument, TContext>
 {
     private readonly IMongoClient _mongoClient;
     private readonly IMongoCollection<BsonDocument> _sequenceCollection;

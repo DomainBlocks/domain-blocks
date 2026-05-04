@@ -2,54 +2,25 @@
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB.Schema;
 using DomainBlocks.MongoDB.Sequencing;
-using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
-public sealed class MongoEventStoreClient2<TEvent> :
+public sealed class MongoEventStoreClient2<TEvent>(
+    IMongoSequencedAppender<BsonDocument, AppendToStreamContext> sequencedAppender,
+    IMongoCollection<BsonDocument> eventLog,
+    EventCodec<TEvent, BsonValue, BsonValue> eventCodec) :
     IEventStoreClient<TEvent>,
     IAsyncDisposable
     where TEvent : notnull
 {
-    private readonly IMongoCollection<BsonDocument> _eventLog;
-    private readonly MongoSequencedAppender<BsonDocument, AppendToStreamContext> _sequencedAppender;
-    private readonly IEventEncoder<TEvent, BsonValue, BsonValue> _encoder;
-    private readonly IEventDecoder<TEvent, BsonValue, BsonValue> _decoder;
-    private readonly ILogger _logger;
+    private readonly IMongoCollection<BsonDocument> _eventLog = eventLog
+        .WithReadConcern(ReadConcern.Majority)
+        .WithReadPreference(ReadPreference.Primary);
 
-    public MongoEventStoreClient2(
-        IMongoClient mongoClient,
-        EventCodec<TEvent, BsonValue, BsonValue> eventCodec,
-        ILogger logger,
-        MongoEventStoreClientOptions2? options = null)
-    {
-        options ??= new MongoEventStoreClientOptions2();
-
-        var db = mongoClient.GetDatabase(options.DatabaseName);
-
-        var sequenceBinding = new MongoSequenceBinding<BsonDocument>(
-            new CollectionNamespace(db.DatabaseNamespace, options.SequencesCollectionName),
-            new CollectionNamespace(db.DatabaseNamespace, options.EventLogCollectionName),
-            sequenceId: "event_log_seq",
-            targetField: "_id");
-
-        _eventLog = db
-            .GetCollection<BsonDocument>(options.EventLogCollectionName)
-            .WithReadConcern(ReadConcern.Majority)
-            .WithReadPreference(ReadPreference.Primary);
-
-        _sequencedAppender = new MongoSequencedAppender<BsonDocument, AppendToStreamContext>(
-            mongoClient,
-            sequenceBinding,
-            new AppendToStreamPolicy(_eventLog),
-            logger: logger);
-
-        _encoder = eventCodec.Encoder;
-        _decoder = eventCodec.Decoder;
-        _logger = logger;
-    }
+    private readonly IEventEncoder<TEvent, BsonValue, BsonValue> _encoder = eventCodec.Encoder;
+    private readonly IEventDecoder<TEvent, BsonValue, BsonValue> _decoder = eventCodec.Decoder;
 
     public async Task AppendToStreamAsync(
         string streamId,
@@ -77,7 +48,7 @@ public sealed class MongoEventStoreClient2<TEvent> :
         var context = new AppendToStreamContext(options.CommitId, streamId, options.ExpectedState);
         var appendOptions = new AppendOptions { Timeout = options.Timeout };
 
-        await _sequencedAppender
+        await sequencedAppender
             .AppendAsync(eventDocuments, context, appendOptions, cancellationToken)
             .ConfigureAwait(false);
     }
@@ -156,7 +127,7 @@ public sealed class MongoEventStoreClient2<TEvent> :
 
     public ValueTask DisposeAsync()
     {
-        return _sequencedAppender.DisposeAsync();
+        return sequencedAppender.DisposeAsync();
     }
 
     private async Task<bool> StreamExistsAsync(string streamId, CancellationToken cancellationToken)

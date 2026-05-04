@@ -9,7 +9,7 @@ namespace DomainBlocks.EventStore.MongoDB;
 public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog) :
     IMongoSequencedAppenderPolicy<AppendToStreamContext>
 {
-    private readonly PreAppendQuery _preAppendQuery = new(eventLog);
+    private readonly PreCommitQuery _preCommitQuery = new(eventLog);
     private readonly Buffers _buffers = new();
 
     public async ValueTask OnBatchCommittingAsync(
@@ -18,17 +18,17 @@ public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog
         CancellationToken cancellationToken)
     {
         _buffers.ClearAll();
-        _preAppendQuery.Reset();
+        _preCommitQuery.Reset();
 
         foreach (var append in batch)
         {
             var firstEvent = append.Documents[0];
             var bsonCommitId = firstEvent[EventLogEntry.FieldNames.CommitId];
             var bsonStreamId = firstEvent[EventLogEntry.FieldNames.StreamId];
-            _preAppendQuery.AddInput(bsonCommitId, bsonStreamId);
+            _preCommitQuery.AddInput(bsonCommitId, bsonStreamId);
         }
 
-        await _preAppendQuery
+        await _preCommitQuery
             .ExecuteIntoAsync(_buffers.ExistingCommitIds, _buffers.HeadStreamVersions, cancellationToken)
             .ConfigureAwait(false);
 
