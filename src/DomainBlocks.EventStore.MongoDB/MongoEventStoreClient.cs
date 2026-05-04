@@ -26,9 +26,9 @@ public static class MongoEventStoreClient
 
         var sequenceBinding = new MongoSequenceBinding<BsonDocument>(
             new CollectionNamespace(db.DatabaseNamespace, options.SequencesCollectionName),
+            SequenceIdFieldName,
             new CollectionNamespace(db.DatabaseNamespace, options.EventLogCollectionName),
-            sequenceId: SequenceIdFieldName,
-            targetField: SequenceTargetField);
+            SequenceTargetField);
 
         var eventLog = db.GetCollection<BsonDocument>(options.EventLogCollectionName);
 
