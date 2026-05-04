@@ -39,7 +39,7 @@ internal sealed class PreCommitQuery(IMongoCollection<BsonDocument> eventLog)
     public async Task ExecuteIntoAsync(
         HashSet<Guid> existingCommitIds,
         Dictionary<string, long> headStreamVersions,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken = default)
     {
         var commitIdFilter = new BsonDocument(
             EventLogEntry.FieldNames.CommitId,
