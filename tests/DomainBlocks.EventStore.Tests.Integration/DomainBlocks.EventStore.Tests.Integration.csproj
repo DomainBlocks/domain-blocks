@@ -20,7 +20,6 @@
     <ProjectReference Include="..\..\src\DomainBlocks.EventStore.MongoDB\DomainBlocks.EventStore.MongoDB.csproj" />
     <ProjectReference Include="..\..\src\DomainBlocks.Serialization.Google.Protobuf\DomainBlocks.Serialization.Google.Protobuf.csproj"/>
     <ProjectReference Include="..\..\src\DomainBlocks.Serialization.SystemTextJson\DomainBlocks.Serialization.SystemTextJson.csproj"/>
-    <ProjectReference Include="..\DomainBlocks.Serialization.Google.Protobuf.Tests\DomainBlocks.Serialization.Google.Protobuf.Tests.csproj"/>
     <ProjectReference Include="..\DomainBlocks.Testing.Integration.MongoDB\DomainBlocks.Testing.Integration.MongoDB.csproj" />
   </ItemGroup>
 

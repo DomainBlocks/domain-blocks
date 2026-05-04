@@ -5,11 +5,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DomainBlocks.Serialization.Abstractions\DomainBlocks.Serialization.Abstractions.csproj"/>
+    <PackageReference Include="MongoDB.Bson" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="MongoDB.Bson" />
+    <ProjectReference Include="..\DomainBlocks.Serialization.Abstractions\DomainBlocks.Serialization.Abstractions.csproj"/>
   </ItemGroup>
 
 </Project>

@@ -1,4 +1,5 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+
   <ItemGroup>
     <PackageReference Include="NUnit" />
     <PackageReference Include="Shouldly" />
@@ -8,4 +9,5 @@
     <ProjectReference Include="..\..\src\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj"/>
     <ProjectReference Include="..\..\src\DomainBlocks.EventStore.Abstractions\DomainBlocks.EventStore.Abstractions.csproj"/>
   </ItemGroup>
+
 </Project>
