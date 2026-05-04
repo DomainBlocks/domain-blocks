@@ -1,16 +1,13 @@
 ﻿using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 
-namespace DomainBlocks.EventStore.MongoDB.Schema;
+namespace DomainBlocks.EventStore.MongoDB;
 
 // ReSharper disable all
 internal sealed class EventLogEntry
 {
     [BsonId]
     public required long Position { get; init; }
-
-    [BsonElement(FieldNames.Epoch)]
-    public required long Epoch { get; init; }
 
     [BsonElement(FieldNames.StreamId)]
     public required string StreamId { get; init; }
@@ -39,7 +36,6 @@ internal sealed class EventLogEntry
 
     public static class FieldNames
     {
-        public const string Epoch = "epoch";
         public const string StreamId = "streamId";
         public const string StreamVersion = "streamVersion";
         public const string CommitId = "commitId";

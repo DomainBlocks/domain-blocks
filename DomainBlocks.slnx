@@ -25,10 +25,6 @@
     <File Path="docs/vision.md" />
     <File Path="docs/mongo-event-store-design.md" />
   </Folder>
-  <Folder Name="/examples/">
-    <Project Path="examples/DomainBlocks.Examples.MongoDB.ClientNode/DomainBlocks.Examples.MongoDB.ClientNode.csproj" />
-    <Project Path="examples/DomainBlocks.Examples.MongoDB.LeaderNode/DomainBlocks.Examples.MongoDB.LeaderNode.csproj" />
-  </Folder>
   <Folder Name="/scripts/">
     <File Path="scripts/init-mongo-replica-set.sh" />
   </Folder>
