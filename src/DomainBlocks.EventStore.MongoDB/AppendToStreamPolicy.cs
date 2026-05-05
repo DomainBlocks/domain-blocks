@@ -90,17 +90,16 @@ public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog
                     conflictInfo.OriginatingException));
         }
 
-        var isRetryable = conflictingAppend.Context.ExpectedStreamState.IsAny ||
-                          conflictingAppend.Context.ExpectedStreamState.IsStreamExists;
+        var expectedStreamState = conflictingAppend.Context.ExpectedStreamState;
+        var canRetry = expectedStreamState.IsAny || expectedStreamState.IsStreamExists;
 
-        if (isRetryable)
-            return ConflictResolution.Retry;
-
-        return ConflictResolution.Fail(
-            new StreamAppendConflictException(
-                conflictingAppend.Context.StreamId,
-                conflictingAppend.Context.ExpectedStreamState,
-                innerException: conflictInfo.OriginatingException));
+        return canRetry
+            ? ConflictResolution.Retry
+            : ConflictResolution.Fail(
+                new StreamAppendConflictException(
+                    conflictingAppend.Context.StreamId,
+                    expectedStreamState,
+                    innerException: conflictInfo.OriginatingException));
     }
 
     private sealed class Buffers
