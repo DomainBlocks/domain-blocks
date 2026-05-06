@@ -19,20 +19,28 @@ public sealed class AppendEntry<TContext>
     }
 
     /// <summary>
-    /// The BSON documents to be appended.
+    /// Gets the BSON documents to be appended.
     /// </summary>
     public IReadOnlyList<BsonDocument> Documents { get; }
 
     /// <summary>
-    /// The caller-supplied context associated with this append.
+    /// Gets the caller-supplied context associated with the append operation.
     /// </summary>
     public TContext Context { get; }
 
+    /// <summary>
+    /// Gets a value that indicates whether this append entry has completed.
+    /// </summary>
+    public bool IsCompleted => _tcs.Task.IsCompleted;
+
     internal Guid Id { get; } = Guid.NewGuid();
-    internal bool IsCompleted => _tcs.Task.IsCompleted;
     internal Task Completion => _tcs.Task;
 
-    internal bool TryComplete(Exception? error = null)
+    /// <summary>
+    /// Attempts to complete this append entry successfully, or with a failure if an exception is provided.
+    /// </summary>
+    /// <returns>True if the entry has completed, or false if it has already been completed.</returns>
+    public bool TryComplete(Exception? error = null)
     {
         return error is null ? _tcs.TrySetResult() : _tcs.TrySetException(error);
     }

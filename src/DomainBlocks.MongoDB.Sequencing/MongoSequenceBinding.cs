@@ -11,7 +11,7 @@ namespace DomainBlocks.MongoDB.Sequencing;
 /// <param name="targetCollectionNamespace">
 /// The namespace of the target collection into which documents are appended.
 /// </param>
-/// <param name="targetCollectionNamespace">
+/// <param name="targetField">
 /// The definition of the document field into which sequence numbers are written.
 /// </param>
 public sealed class MongoSequenceBinding<TDocument>(
