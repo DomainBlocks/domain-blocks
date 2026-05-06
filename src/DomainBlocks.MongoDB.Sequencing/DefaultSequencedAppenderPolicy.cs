@@ -12,14 +12,14 @@ public sealed class DefaultSequencedAppenderPolicy<TContext> : IMongoSequencedAp
     {
     }
 
-    public ValueTask OnBatchCommittingAsync(
-        IReadOnlyList<AppendEntry<TContext>> batch,
+    public Task OnBatchCommittingAsync(
+        IReadOnlyList<AppendRequest<TContext>> batch,
         CancellationToken cancellationToken)
     {
-        return ValueTask.CompletedTask;
+        return Task.CompletedTask;
     }
 
-    public ConflictResolution OnConflict(ConflictingAppendEntry<TContext> conflict)
+    public ConflictResolution OnConflict(AppendConflict<TContext> conflict)
     {
         return ConflictResolution.Retry;
     }

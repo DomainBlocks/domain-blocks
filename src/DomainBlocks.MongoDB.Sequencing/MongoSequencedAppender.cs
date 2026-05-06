@@ -27,7 +27,7 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
     private readonly string[] _targetFieldPathSegments;
     private readonly IMongoSequencedAppenderPolicy<TContext> _appenderPolicy;
     private readonly ILogger _logger;
-    private readonly Channel<AppendEntry<TContext>> _channel;
+    private readonly Channel<AppendRequest<TContext>> _channel;
     private readonly int _batchSize;
     private readonly int _maxConflictRetries;
     private readonly TimeSpan _conflictRetryDelay;
@@ -81,7 +81,7 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
         _appenderPolicy = appendPolicy ?? DefaultSequencedAppenderPolicy<TContext>.Shared;
         _logger = logger ?? NullLogger.Instance;
 
-        _channel = Channel.CreateBounded<AppendEntry<TContext>>(new BoundedChannelOptions(options.QueueCapacity)
+        _channel = Channel.CreateBounded<AppendRequest<TContext>>(new BoundedChannelOptions(options.QueueCapacity)
         {
             SingleWriter = false,
             SingleReader = true
@@ -105,15 +105,15 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
             return;
 
         options ??= new AppendOptions();
-        var entry = new AppendEntry<TContext>(bsonDocuments, context);
+        var request = new AppendRequest<TContext>(bsonDocuments, context);
 
         using var linkedTimeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         linkedTimeoutCts.CancelAfter(options.Timeout);
 
         try
         {
-            await _channel.Writer.WriteAsync(entry, linkedTimeoutCts.Token);
-            await entry.Completion.WaitAsync(linkedTimeoutCts.Token).ConfigureAwait(false);
+            await _channel.Writer.WriteAsync(request, linkedTimeoutCts.Token);
+            await request.Completion.WaitAsync(linkedTimeoutCts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -139,14 +139,14 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
 
     private async Task RunAppendLoopAsync(CancellationToken ct)
     {
-        var batch = new List<AppendEntry<TContext>>(_batchSize);
+        var batch = new List<AppendRequest<TContext>>(_batchSize);
 
         try
         {
             while (await _channel.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
             {
-                while (batch.Count < _batchSize && _channel.Reader.TryRead(out var entry))
-                    batch.Add(entry);
+                while (batch.Count < _batchSize && _channel.Reader.TryRead(out var request))
+                    batch.Add(request);
 
                 if (batch.Count == 0)
                     continue;
@@ -172,7 +172,7 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
         }
     }
 
-    private async Task ProcessBatchAsync(List<AppendEntry<TContext>> batch, CancellationToken ct)
+    private async Task ProcessBatchAsync(List<AppendRequest<TContext>> batch, CancellationToken ct)
     {
         _buffers.ConflictRetryCounts.Clear();
 
@@ -186,6 +186,8 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
                 switch (result)
                 {
                     case CommitResult.Success:
+                        foreach (var request in _buffers.Requests)
+                            request.Value.TryComplete();
                         return;
                     case CommitResult.Conflict conflict:
                         await HandleConflictAsync(batch, conflict, ct).ConfigureAwait(false);
@@ -199,32 +201,32 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
         }
     }
 
-    private async Task PrepareCommitAsync(List<AppendEntry<TContext>> batch, CancellationToken ct)
+    private async Task PrepareCommitAsync(List<AppendRequest<TContext>> batch, CancellationToken ct)
     {
-        _buffers.OutgoingEntries.Clear();
-        _buffers.OutgoingDocuments.Clear();
-        _buffers.OutgoingDocumentEntries.Clear();
+        _buffers.Requests.Clear();
+        _buffers.Documents.Clear();
+        _buffers.RequestByDocumentIndex.Clear();
 
         await _appenderPolicy.OnBatchCommittingAsync(batch, ct);
 
-        foreach (var entry in batch)
+        foreach (var request in batch)
         {
-            if (entry.IsCompleted)
+            if (request.IsCompleted)
                 continue;
 
-            _buffers.OutgoingEntries.Add(entry.Id, entry);
+            _buffers.Requests.Add(request.Id, request);
 
-            foreach (var document in entry.Documents)
+            foreach (var document in request.Documents)
             {
-                _buffers.OutgoingDocuments.Add(document);
-                _buffers.OutgoingDocumentEntries.Add(entry);
+                _buffers.Documents.Add(document);
+                _buffers.RequestByDocumentIndex.Add(request);
             }
         }
     }
 
     private async Task<CommitResult> CommitAsync(CancellationToken ct)
     {
-        var docs = _buffers.OutgoingDocuments;
+        var docs = _buffers.Documents;
         var docCount = docs.Count;
 
         if (docCount == 0)
@@ -251,16 +253,16 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
             await SafeAbortTransactionAsync(session, ct).ConfigureAwait(false);
 
             var firstError = ex.WriteErrors.First(e => e.Code == MongoErrorCodes.DuplicateKey);
-            var entry = _buffers.OutgoingDocumentEntries[firstError.Index];
+            var request = _buffers.RequestByDocumentIndex[firstError.Index];
 
-            var conflictingEntry = new ConflictingAppendEntry<TContext>(
-                entry.Documents,
-                entry.Context,
+            var conflict = new AppendConflict<TContext>(
+                request.Documents,
+                request.Context,
                 firstError.Index,
                 firstError.Message,
                 ex);
 
-            return new CommitResult.Conflict(entry.Id, conflictingEntry);
+            return new CommitResult.Conflict(request.Id, conflict);
         }
         catch (Exception)
         {
@@ -268,28 +270,29 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
             throw;
         }
 
-        foreach (var entry in _buffers.OutgoingEntries)
-            entry.Value.TryComplete();
-
         return new CommitResult.Success();
     }
 
     private async Task HandleConflictAsync(
-        List<AppendEntry<TContext>> batch,
+        List<AppendRequest<TContext>> batch,
         CommitResult.Conflict conflict,
         CancellationToken ct)
     {
-        using var scope = _logger.BeginScope(new { conflict.EntryId });
+        var requestId = conflict.RequestId;
+        var appendConflict = conflict.AppendConflict;
+
+        using var scope = _logger.BeginScope(new { RequestId = requestId });
         _logger.LogDebug("Duplicate key conflict detected; invoking policy");
 
-        var resolution = _appenderPolicy.OnConflict(conflict.Entry);
+        var resolution = _appenderPolicy.OnConflict(appendConflict);
 
         if (resolution is ConflictResolution.FailResolution fail)
         {
             _logger.LogDebug("Conflict resolved by policy");
 
             CompleteAndRemoveFromBatch(
-                fail.Exception ?? new AppendConflictException(innerException: conflict.Entry.OriginatingException));
+                fail.Exception ??
+                new AppendConflictException(innerException: appendConflict.OriginatingException));
 
             return;
         }
@@ -297,16 +300,16 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
         if (resolution is not ConflictResolution.RetryResolution)
             throw new UnreachableException($"Unknown conflict resolution type '{resolution.GetType()}'.");
 
-        var retryCount = _buffers.ConflictRetryCounts.GetValueOrDefault(conflict.EntryId);
+        var retryCount = _buffers.ConflictRetryCounts.GetValueOrDefault(requestId);
         if (retryCount >= _maxConflictRetries)
         {
             _logger.LogWarning(
-                "Conflict not resolved by policy after {MaxRetries} retries; evicting entry",
+                "Conflict not resolved by policy after {MaxRetries} retries; evicting request",
                 _maxConflictRetries);
 
             CompleteAndRemoveFromBatch(new AppendConflictException(
                 $"Conflict not resolved after {_maxConflictRetries} retries.",
-                innerException: conflict.Entry.OriginatingException));
+                innerException: appendConflict.OriginatingException));
         }
         else
         {
@@ -316,16 +319,16 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
                 retryCount + 1,
                 _maxConflictRetries);
 
-            _buffers.ConflictRetryCounts[conflict.EntryId] = retryCount + 1;
+            _buffers.ConflictRetryCounts[requestId] = retryCount + 1;
 
             await Task.Delay(_conflictRetryDelay, ct).ConfigureAwait(false);
         }
 
         void CompleteAndRemoveFromBatch(Exception exception)
         {
-            var entry = _buffers.OutgoingEntries[conflict.EntryId];
-            entry.TryComplete(exception);
-            batch.Remove(entry);
+            var request = _buffers.Requests[requestId];
+            request.TryComplete(exception);
+            batch.Remove(request);
         }
     }
 
@@ -402,23 +405,23 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
         }
     }
 
-    private static void FaultAll(List<AppendEntry<TContext>> entries, Exception exception)
+    private static void FaultAll(List<AppendRequest<TContext>> entries, Exception exception)
     {
-        foreach (var entry in entries)
-            entry.TryComplete(exception);
+        foreach (var request in entries)
+            request.TryComplete(exception);
     }
 
-    private static void DrainWithFault(ChannelReader<AppendEntry<TContext>> reader, Exception exception)
+    private static void DrainWithFault(ChannelReader<AppendRequest<TContext>> reader, Exception exception)
     {
-        while (reader.TryRead(out var entry))
-            entry.TryComplete(exception);
+        while (reader.TryRead(out var request))
+            request.TryComplete(exception);
     }
 
     private sealed class Buffers
     {
-        public readonly Dictionary<Guid, AppendEntry<TContext>> OutgoingEntries = [];
-        public readonly List<BsonDocument> OutgoingDocuments = [];
-        public readonly List<AppendEntry<TContext>> OutgoingDocumentEntries = [];
+        public readonly Dictionary<Guid, AppendRequest<TContext>> Requests = [];
+        public readonly List<BsonDocument> Documents = [];
+        public readonly List<AppendRequest<TContext>> RequestByDocumentIndex = [];
         public readonly Dictionary<Guid, int> ConflictRetryCounts = [];
     }
 
@@ -426,10 +429,10 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
     {
         public sealed class Success : CommitResult;
 
-        public sealed class Conflict(Guid entryId, ConflictingAppendEntry<TContext> entry) : CommitResult
+        public sealed class Conflict(Guid requestId, AppendConflict<TContext> appendConflict) : CommitResult
         {
-            public Guid EntryId { get; } = entryId;
-            public ConflictingAppendEntry<TContext> Entry { get; } = entry;
+            public Guid RequestId { get; } = requestId;
+            public AppendConflict<TContext> AppendConflict { get; } = appendConflict;
         }
     }
 }

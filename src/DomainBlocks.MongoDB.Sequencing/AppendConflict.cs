@@ -3,10 +3,9 @@
 namespace DomainBlocks.MongoDB.Sequencing;
 
 /// <summary>
-/// Represents an append entry that caused a duplicate key conflict during a commit attempt, along with details about
-/// the conflict.
+/// Represents an append conflict caused by duplicate key error during a commit attempt.
 /// </summary>
-public sealed class ConflictingAppendEntry<TContext>(
+public sealed class AppendConflict<TContext>(
     IReadOnlyList<BsonDocument> documents,
     TContext context,
     int documentIndex,
