@@ -11,16 +11,16 @@ public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog
     private readonly PreCommitQuery _preCommitQuery = new(eventLog);
     private readonly Buffers _buffers = new();
 
-    public async ValueTask OnBatchCommittingAsync(
-        IReadOnlyList<AppendEntry<AppendToStreamContext>> batch,
+    public async Task OnBatchCommittingAsync(
+        IReadOnlyList<AppendRequest<AppendToStreamContext>> batch,
         CancellationToken cancellationToken)
     {
         _buffers.ClearAll();
         _preCommitQuery.Reset();
 
-        foreach (var entry in batch)
+        foreach (var request in batch)
         {
-            var firstEvent = entry.Documents[0];
+            var firstEvent = request.Documents[0];
             var bsonCommitId = firstEvent[EventLogEntry.FieldNames.CommitId];
             var bsonStreamId = firstEvent[EventLogEntry.FieldNames.StreamId];
             _preCommitQuery.AddInput(bsonCommitId, bsonStreamId);
@@ -32,21 +32,21 @@ public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog
 
         var writtenAtUtc = DateTime.UtcNow;
 
-        foreach (var entry in batch)
+        foreach (var request in batch)
         {
-            var commitId = entry.Context.CommitId;
+            var commitId = request.Context.CommitId;
 
             if (!_buffers.SeenCommitIds.Add(commitId))
                 continue;
 
             if (_buffers.ExistingCommitIds.Contains(commitId))
             {
-                entry.TryComplete();
+                request.TryComplete();
                 continue;
             }
 
-            var streamId = entry.Context.StreamId;
-            var expectedStreamState = entry.Context.ExpectedStreamState;
+            var streamId = request.Context.StreamId;
+            var expectedStreamState = request.Context.ExpectedStreamState;
             var streamVersion = _buffers.HeadStreamVersions.GetValueOrDefault(streamId, -1L);
 
             var actualStreamState = streamVersion < 0
@@ -55,21 +55,23 @@ public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog
 
             if (!expectedStreamState.Matches(actualStreamState))
             {
-                entry.TryComplete(new StreamAppendConflictException(streamId, expectedStreamState, actualStreamState));
+                request.TryComplete(
+                    new StreamAppendConflictException(streamId, expectedStreamState, actualStreamState));
+
                 continue;
             }
 
-            foreach (var eventDoc in entry.Documents)
+            foreach (var doc in request.Documents)
             {
-                eventDoc[EventLogEntry.FieldNames.StreamVersion] = ++streamVersion;
-                eventDoc[EventLogEntry.FieldNames.WrittenAtUtc] = writtenAtUtc;
+                doc[EventLogEntry.FieldNames.StreamVersion] = ++streamVersion;
+                doc[EventLogEntry.FieldNames.WrittenAtUtc] = writtenAtUtc;
             }
 
             _buffers.HeadStreamVersions[streamId] = streamVersion;
         }
     }
 
-    public ConflictResolution OnConflict(ConflictingAppendEntry<AppendToStreamContext> conflict)
+    public ConflictResolution OnConflict(AppendConflict<AppendToStreamContext> conflict)
     {
         // MongoDB does not populate WriteError.Details for duplicate key errors (code 11000). The only available signal
         // is the error message, which includes the index name. This is potentially fragile, but is the only option the
