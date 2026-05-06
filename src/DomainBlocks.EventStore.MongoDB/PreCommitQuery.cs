@@ -40,9 +40,7 @@ internal sealed class PreCommitQuery(IMongoCollection<BsonDocument> eventLog)
         Dictionary<string, long> headStreamVersions,
         CancellationToken cancellationToken = default)
     {
-        var commitIdFilter = new BsonDocument(
-            EventLogEntry.FieldNames.CommitId,
-            new BsonDocument("$in", _commitIds));
+        var commitIdFilter = Builders<BsonDocument>.Filter.In(EventLogEntry.FieldNames.CommitId, _commitIds);
 
         var maxStreamVersionsPipeline = new[]
         {

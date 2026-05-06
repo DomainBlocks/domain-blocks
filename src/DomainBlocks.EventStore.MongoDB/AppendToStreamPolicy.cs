@@ -13,15 +13,14 @@ public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog
 
     public async ValueTask OnBatchCommittingAsync(
         IReadOnlyList<AppendEntry<AppendToStreamContext>> batch,
-        IAppendCompletionSource<AppendToStreamContext> completionSource,
         CancellationToken cancellationToken)
     {
         _buffers.ClearAll();
         _preCommitQuery.Reset();
 
-        foreach (var append in batch)
+        foreach (var entry in batch)
         {
-            var firstEvent = append.Documents[0];
+            var firstEvent = entry.Documents[0];
             var bsonCommitId = firstEvent[EventLogEntry.FieldNames.CommitId];
             var bsonStreamId = firstEvent[EventLogEntry.FieldNames.StreamId];
             _preCommitQuery.AddInput(bsonCommitId, bsonStreamId);
@@ -33,21 +32,21 @@ public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog
 
         var writtenAtUtc = DateTime.UtcNow;
 
-        foreach (var append in batch)
+        foreach (var entry in batch)
         {
-            var commitId = append.Context.CommitId;
+            var commitId = entry.Context.CommitId;
 
             if (!_buffers.SeenCommitIds.Add(commitId))
                 continue;
 
             if (_buffers.ExistingCommitIds.Contains(commitId))
             {
-                completionSource.TryComplete(append);
+                entry.TryComplete();
                 continue;
             }
 
-            var streamId = append.Context.StreamId;
-            var expectedStreamState = append.Context.ExpectedStreamState;
+            var streamId = entry.Context.StreamId;
+            var expectedStreamState = entry.Context.ExpectedStreamState;
             var streamVersion = _buffers.HeadStreamVersions.GetValueOrDefault(streamId, -1L);
 
             var actualStreamState = streamVersion < 0
@@ -56,14 +55,11 @@ public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog
 
             if (!expectedStreamState.Matches(actualStreamState))
             {
-                completionSource.TryComplete(
-                    append,
-                    new StreamAppendConflictException(streamId, expectedStreamState, actualStreamState));
-
+                entry.TryComplete(new StreamAppendConflictException(streamId, expectedStreamState, actualStreamState));
                 continue;
             }
 
-            foreach (var eventDoc in append.Documents)
+            foreach (var eventDoc in entry.Documents)
             {
                 eventDoc[EventLogEntry.FieldNames.StreamVersion] = ++streamVersion;
                 eventDoc[EventLogEntry.FieldNames.WrittenAtUtc] = writtenAtUtc;
@@ -73,33 +69,31 @@ public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog
         }
     }
 
-    public ConflictResolution OnConflict(
-        AppendEntry<AppendToStreamContext> conflictingAppend,
-        AppendConflictInfo conflictInfo)
+    public ConflictResolution OnConflict(ConflictingAppendEntry<AppendToStreamContext> conflict)
     {
         // MongoDB does not populate WriteError.Details for duplicate key errors (code 11000). The only available signal
         // is the error message, which includes the index name. This is potentially fragile, but is the only option the
         // driver exposes.
-        if (conflictInfo.Message?.Contains(EventLogIndexNames.UniqueStreamVersion) is not true)
+        if (conflict.ErrorMessage?.Contains(EventLogIndexNames.UniqueStreamVersion) is not true)
         {
-            var message = conflictInfo.Message is not null ? $"'{conflictInfo.Message}'" : "none";
+            var message = conflict.ErrorMessage is not null ? $"'{conflict.ErrorMessage}'" : "none";
 
             return ConflictResolution.Fail(
                 new AppendConflictException(
                     $"Unknown conflict. Message: {message}.",
-                    conflictInfo.OriginatingException));
+                    conflict.OriginatingException));
         }
 
-        var expectedStreamState = conflictingAppend.Context.ExpectedStreamState;
+        var expectedStreamState = conflict.Context.ExpectedStreamState;
         var canRetry = expectedStreamState.IsAny || expectedStreamState.IsStreamExists;
 
         return canRetry
             ? ConflictResolution.Retry
             : ConflictResolution.Fail(
                 new StreamAppendConflictException(
-                    conflictingAppend.Context.StreamId,
+                    conflict.Context.StreamId,
                     expectedStreamState,
-                    innerException: conflictInfo.OriginatingException));
+                    innerException: conflict.OriginatingException));
     }
 
     private sealed class Buffers

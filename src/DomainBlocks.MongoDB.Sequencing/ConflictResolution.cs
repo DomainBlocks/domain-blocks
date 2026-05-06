@@ -6,13 +6,13 @@
 public abstract class ConflictResolution
 {
     /// <summary>
-    /// Retries the conflicting append. The appender will retry up to
+    /// Retries the conflicting append operation. The appender will retry up to
     /// <see cref="MongoSequencedAppenderOptions.MaxConflictRetries"/> times.
     /// </summary>
     public static ConflictResolution Retry { get; } = new RetryResolution();
 
     /// <summary>
-    /// Fails the conflicting append with an optional exception. If no exception is provided, a default
+    /// Fails the conflicting append operation with an optional exception. If no exception is provided, a default
     /// <see cref="AppendConflictException"/> is used.
     /// </summary>
     public static ConflictResolution Fail(Exception? exception = null) => new FailResolution(exception);
