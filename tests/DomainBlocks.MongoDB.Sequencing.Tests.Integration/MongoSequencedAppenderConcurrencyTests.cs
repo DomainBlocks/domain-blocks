@@ -48,24 +48,27 @@ public class MongoSequencedAppenderConcurrencyTests
         foreach (var appender in _appenders)
             await appender.DisposeAsync();
 
-        using (_mongoClient)
-        {
-            var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
-            using (cts)
-            {
-                try
-                {
-                    var dbNames = await (await _mongoClient.ListDatabaseNamesAsync(cts.Token)).ToListAsync(cts.Token);
-                    var testDbNames = dbNames.Where(name => name.StartsWith(TestDbPrefix));
-                    var dropDbTasks = testDbNames.Select(name => _mongoClient.DropDatabaseAsync(name, cts.Token));
-                    await Task.WhenAll(dropDbTasks);
-                }
-                catch (OperationCanceledException)
-                {
-                    // best-effort
-                }
-            }
+        try
+        {
+            var dbNames = await (await _mongoClient.ListDatabaseNamesAsync(cts.Token)).ToListAsync(cts.Token);
+            var testDbNames = dbNames.Where(name => name.StartsWith(TestDbPrefix));
+
+            foreach (var testDbName in testDbNames)
+                await _mongoClient.DropDatabaseAsync(testDbName, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // best-effort
+        }
+        finally
+        {
+            cts.Dispose();
+
+#if !MONGO_DRIVER_V2
+            _mongoClient.Dispose();
+#endif
         }
     }
 
@@ -158,26 +161,29 @@ public class MongoSequencedAppenderConcurrencyTests
                         new ChangeStreamOptions { FullDocument = ChangeStreamFullDocumentOption.Default },
                         runToken);
 
-                    await foreach (var change in cursor.ToAsyncEnumerable().WithCancellation(runToken))
+                    while (await cursor.MoveNextAsync(runToken))
                     {
-                        var doc = change.FullDocument;
-                        if (doc is null)
-                            continue;
-
-                        var seq = doc["Nested"]["seq"].AsInt64;
-
-                        if (lastSeq.HasValue && seq != lastSeq.Value + 1)
+                        foreach (var change in cursor.Current)
                         {
-                            firstFailure ??= new ShouldAssertException(
-                                $"Sequence anomaly detected. Last={lastSeq.Value}, Current={seq}");
+                            var doc = change.FullDocument;
+                            if (doc is null)
+                                continue;
 
-                            // ReSharper disable once AccessToDisposedClosure - disposed when test method returns
-                            await runCts.CancelAsync();
-                            return;
+                            var seq = doc["Nested"]["seq"].AsInt64;
+
+                            if (lastSeq.HasValue && seq != lastSeq.Value + 1)
+                            {
+                                firstFailure ??= new ShouldAssertException(
+                                    $"Sequence anomaly detected. Last={lastSeq.Value}, Current={seq}");
+
+                                // ReSharper disable once AccessToDisposedClosure - disposed when test method returns
+                                await runCts.CancelAsync();
+                                return;
+                            }
+
+                            lastSeq = seq;
+                            observed++;
                         }
-
-                        lastSeq = seq;
-                        observed++;
                     }
                 }
                 catch (OperationCanceledException) when (runToken.IsCancellationRequested)
