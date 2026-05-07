@@ -5,7 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="MongoDB.Driver" VersionOverride="2.27.0" />
+    <PackageReference Include="MongoDB.Driver" VersionOverride="[2.27.0,3.0.0)" />
   </ItemGroup>
 
   <ItemGroup>
