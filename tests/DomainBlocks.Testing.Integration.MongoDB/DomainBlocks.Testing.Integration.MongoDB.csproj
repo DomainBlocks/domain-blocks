@@ -1,12 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="MongoDB.Driver" />
-    <PackageReference Include="NUnit" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\..\src\DomainBlocks.EventStore.Abstractions\DomainBlocks.EventStore.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj" />
     <ProjectReference Include="..\..\src\DomainBlocks.Serialization.MongoDB.Bson\DomainBlocks.Serialization.MongoDB.Bson.csproj" />
