@@ -10,21 +10,6 @@ namespace DomainBlocks.EventStore.KurrentDB.Tests.Integration;
 [TestFixture]
 public class KurrentDbClientDirectBenchmarkTests
 {
-    private KurrentDBClient _client = null!;
-
-    [SetUp]
-    public void SetUp()
-    {
-        _client = CreateClient("single");
-    }
-
-    [TearDown]
-    public async Task TearDown()
-    {
-        if (_client is IAsyncDisposable asyncDisposable)
-            await asyncDisposable.DisposeAsync();
-    }
-
     [Test]
     [Explicit("Benchmark")]
     [CancelAfter(TestTimeouts.DefaultMillis)]
@@ -33,8 +18,10 @@ public class KurrentDbClientDirectBenchmarkTests
         const int warmupIterations = 10;
         const int iterations = 100;
 
+        await using var client = CreateClient("client_0");
+
         for (var i = 0; i < warmupIterations; i++)
-            await AppendAsync(_client, "warmup", ct);
+            await AppendAsync(client, "warmup", ct);
 
         var latencies = new List<double>(iterations);
 
@@ -42,7 +29,7 @@ public class KurrentDbClientDirectBenchmarkTests
         {
             var streamId = $"test-{Guid.NewGuid():N}";
             var sw = Stopwatch.StartNew();
-            await AppendAsync(_client, streamId, ct);
+            await AppendAsync(client, streamId, ct);
             sw.Stop();
             latencies.Add(sw.Elapsed.TotalMilliseconds);
         }
