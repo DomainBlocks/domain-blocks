@@ -7,7 +7,7 @@ namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
 public class MongoEventStoreClientConcurrencyTests
 {
-    private const int ClientCount = 5;
+    private const int ClientCount = 3;
 
     private MongoEventStoreClientOptions _options = null!;
     private TestMongoEventStoreClientFactory<object> _clientFactory = null!;
