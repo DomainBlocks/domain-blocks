@@ -4,9 +4,9 @@ namespace DomainBlocks.EventStore;
 
 public static class EventStoreClientExtensions
 {
-    public static Task AppendToStreamAsync<TEvent>(
-        this IEventStoreClient<TEvent> client,
-        string streamId,
+    public static Task AppendToStreamAsync<TStreamId, TEvent>(
+        this IEventStoreClient<TStreamId, TEvent> client,
+        TStreamId streamId,
         IEnumerable<TEvent> events,
         AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default) where TEvent : notnull
