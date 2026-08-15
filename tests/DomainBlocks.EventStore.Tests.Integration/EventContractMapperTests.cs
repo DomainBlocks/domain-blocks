@@ -1,3 +1,4 @@
+using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.ContractMapping;
 using DomainBlocks.EventStore.KurrentDB;
 using DomainBlocks.EventStore.TypeMapping;

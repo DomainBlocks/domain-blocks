@@ -1,4 +1,4 @@
-namespace DomainBlocks.EventStore;
+namespace DomainBlocks.EventStore.Metadata;
 
 public readonly ref struct MetadataWriter
 {

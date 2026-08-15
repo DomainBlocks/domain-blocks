@@ -1,4 +1,4 @@
-﻿namespace DomainBlocks.EventStore.Abstractions;
+﻿namespace DomainBlocks.EventStore.Abstractions.Codecs;
 
 public static class EncodedEvent
 {

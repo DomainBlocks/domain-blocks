@@ -1,6 +1,6 @@
-﻿using DomainBlocks.EventStore.Abstractions;
+﻿using DomainBlocks.EventStore.Abstractions.Codecs;
 
-namespace DomainBlocks.EventStore;
+namespace DomainBlocks.EventStore.Codecs;
 
 public static class EventCodec
 {

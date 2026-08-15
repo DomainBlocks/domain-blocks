@@ -1,4 +1,4 @@
-﻿namespace DomainBlocks.EventStore.Abstractions;
+﻿namespace DomainBlocks.EventStore.Abstractions.Codecs;
 
 public sealed class EventCodec<TEvent, TEventData, TMetadata> where TEvent : notnull where TEventData : notnull
 {

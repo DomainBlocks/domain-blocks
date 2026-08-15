@@ -1,10 +1,12 @@
 using System.Collections.Frozen;
 using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.Abstractions.Codecs;
 using DomainBlocks.EventStore.ContractMapping;
+using DomainBlocks.EventStore.Metadata;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.Abstractions;
 
-namespace DomainBlocks.EventStore;
+namespace DomainBlocks.EventStore.Codecs;
 
 public static class EventEncoder
 {

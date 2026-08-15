@@ -1,5 +1,6 @@
 ﻿using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.Abstractions.Codecs;
 using KurrentDB.Client;
 using KurrentStreamPosition = KurrentDB.Client.StreamPosition;
 using KurrentStreamState = KurrentDB.Client.StreamState;

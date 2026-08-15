@@ -1,4 +1,4 @@
-﻿namespace DomainBlocks.EventStore.Abstractions;
+﻿namespace DomainBlocks.EventStore.Abstractions.Codecs;
 
 public interface IEventDecoder<TEvent, in TEventData, in TMetadata> where TEvent : notnull where TEventData : notnull
 {

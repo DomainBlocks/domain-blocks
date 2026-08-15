@@ -2,7 +2,7 @@ using DomainBlocks.EventStore.ContractMapping;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.Abstractions;
 
-namespace DomainBlocks.EventStore;
+namespace DomainBlocks.EventStore.Codecs;
 
 public sealed class EventDecoderOptions<TEvent, TEventData, TMetadata> where TEvent : notnull where TEventData : notnull
 {
