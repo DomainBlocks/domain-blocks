@@ -46,9 +46,26 @@ public class KurrentDBEventStoreClient<TEvent>(
         }
     }
 
+    public IAsyncEnumerable<ReadEvent<TEvent>> ReadAll(ReadAllOptions? options = null)
+    {
+        throw new NotImplementedException();
+    }
+
     public IAsyncEnumerable<ReadEvent<TEvent>> ReadStream(string streamId, ReadStreamOptions? options = null)
     {
         return ReadStreamCoreAsync(streamId, options ?? ReadStreamOptions.Default);
+    }
+
+    public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(SubscribeToAllOptions? options = null)
+    {
+        throw new NotImplementedException();
+    }
+
+    public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
+        string streamId,
+        SubscribeToStreamOptions? options = null)
+    {
+        throw new NotImplementedException();
     }
 
     private async IAsyncEnumerable<ReadEvent<TEvent>> ReadStreamCoreAsync(
@@ -59,8 +76,8 @@ public class KurrentDBEventStoreClient<TEvent>(
         var position = options.Position;
         var direction = options.Direction;
 
-        if (position.IsStart && direction == StreamReadDirection.Backward ||
-            position.IsEnd && direction == StreamReadDirection.Forward)
+        if (position.IsStart && direction == ReadDirection.Backward ||
+            position.IsEnd && direction == ReadDirection.Forward)
         {
             if (options.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw &&
                 !await StreamExistsAsync(streamId, cancellationToken).ConfigureAwait(false))
@@ -95,9 +112,8 @@ public class KurrentDBEventStoreClient<TEvent>(
             var (@event, metadata) = eventDecoder.Decode(record.EventType, record.Data, metadataBytes);
 
             var streamVersion = new StreamVersion(originalRecord.EventNumber.ToUInt64());
-            var globalPosition = new LogPosition(originalRecord.Position.CommitPosition);
-
-            var context = new ReadEventContext(streamId, streamVersion, record.Created, globalPosition);
+            var logSequenceNumber = new LogSequenceNumber(originalRecord.Position.CommitPosition);
+            var context = new ReadEventContext(streamId, streamVersion, record.Created, logSequenceNumber);
 
             yield return ReadEvent.Create(@event, metadata, context);
         }
@@ -112,18 +128,18 @@ public class KurrentDBEventStoreClient<TEvent>(
         _ => throw new ArgumentOutOfRangeException(nameof(expected), expected, null)
     };
 
-    private static Direction ToKurrentDirection(StreamReadDirection direction)
+    private static Direction ToKurrentDirection(ReadDirection direction)
     {
-        return direction == StreamReadDirection.Forward ? Direction.Forwards : Direction.Backwards;
+        return direction == ReadDirection.Forward ? Direction.Forwards : Direction.Backwards;
     }
 
-    private static KurrentStreamPosition ToKurrentStreamPosition(StreamReadPosition position)
+    private static KurrentStreamPosition ToKurrentStreamPosition(ReadPosition<StreamVersion> position)
     {
         return position switch
         {
             { IsStart: true } => KurrentStreamPosition.Start,
             { IsEnd: true } => KurrentStreamPosition.End,
-            { IsSpecificVersion: true } => KurrentStreamPosition.FromStreamRevision(position.Version.Value.Value),
+            { IsSpecific: true } => KurrentStreamPosition.FromStreamRevision(position.Specific.Value.Value),
             _ => default
         };
     }

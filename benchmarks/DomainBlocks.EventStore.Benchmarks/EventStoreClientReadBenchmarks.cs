@@ -119,6 +119,11 @@ public class EventStoreClientReadBenchmarks
             throw new NotImplementedException();
         }
 
+        public IAsyncEnumerable<ReadEvent<TEvent>> ReadAll(ReadAllOptions? options = null)
+        {
+            throw new NotImplementedException();
+        }
+
         public async IAsyncEnumerable<ReadEvent<TEvent>> ReadStream(string streamId, ReadStreamOptions? options = null)
         {
             options ??= ReadStreamOptions.Default;
@@ -138,10 +143,22 @@ public class EventStoreClientReadBenchmarks
                     streamId,
                     new StreamVersion(originalEventRecord.EventNumber.ToUInt64()),
                     eventRecord.Created,
-                    new LogPosition(originalEventRecord.Position.CommitPosition));
+                    new LogSequenceNumber(originalEventRecord.Position.CommitPosition));
 
                 yield return ReadEvent.Create(@event, metadata, context);
             }
+        }
+
+        public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(SubscribeToAllOptions? options = null)
+        {
+            throw new NotImplementedException();
+        }
+
+        public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
+            string streamId,
+            SubscribeToStreamOptions? options = null)
+        {
+            throw new NotImplementedException();
         }
     }
 }

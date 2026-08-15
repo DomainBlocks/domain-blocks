@@ -7,8 +7,7 @@ public readonly record struct StreamVersion(ulong Value)
 {
     public static StreamVersion FromInt64(long value)
     {
-        if (value < 0)
-            throw new ArgumentOutOfRangeException(nameof(value), value, "Stream version cannot be negative.");
+        ArgumentOutOfRangeException.ThrowIfNegative(value);
 
         return new StreamVersion((ulong)value);
     }

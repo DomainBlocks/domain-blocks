@@ -11,14 +11,14 @@ public sealed class ReadStreamOptions
     public static readonly ReadStreamOptions Default = new();
 
     /// <summary>
-    /// The position at which to begin reading. Defaults to <see cref="StreamReadPosition.Start"/>.
+    /// The position at which to begin reading. Defaults to <see cref="ReadPosition{TPosition}.Start"/>.
     /// </summary>
-    public StreamReadPosition Position { get; init; } = StreamReadPosition.Start;
+    public ReadPosition<StreamVersion> Position { get; init; } = ReadPosition<StreamVersion>.Start;
 
     /// <summary>
-    /// The direction in which to read events. Defaults to <see cref="StreamReadDirection.Forward"/>.
+    /// The direction in which to read events. Defaults to <see cref="ReadDirection.Forward"/>.
     /// </summary>
-    public StreamReadDirection Direction { get; init; } = StreamReadDirection.Forward;
+    public ReadDirection Direction { get; init; } = ReadDirection.Forward;
 
     /// <summary>
     /// The maximum number of events to read, or <c>null</c> for no limit.

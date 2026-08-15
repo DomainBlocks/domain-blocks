@@ -5,16 +5,18 @@ using Shouldly;
 
 namespace DomainBlocks.Testing.Integration;
 
+using StreamReadPosition = ReadPosition<StreamVersion>;
+
 public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
 {
     private static IEnumerable<TestCaseData> PositionAndDirectionCases
     {
         get
         {
-            yield return new TestCaseData(StreamReadPosition.Start, StreamReadDirection.Forward);
-            yield return new TestCaseData(StreamReadPosition.Start, StreamReadDirection.Backward);
-            yield return new TestCaseData(StreamReadPosition.End, StreamReadDirection.Forward);
-            yield return new TestCaseData(StreamReadPosition.End, StreamReadDirection.Backward);
+            yield return new TestCaseData(StreamReadPosition.Start, ReadDirection.Forward);
+            yield return new TestCaseData(StreamReadPosition.Start, ReadDirection.Backward);
+            yield return new TestCaseData(StreamReadPosition.End, ReadDirection.Forward);
+            yield return new TestCaseData(StreamReadPosition.End, ReadDirection.Backward);
         }
     }
 
@@ -22,8 +24,8 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
     {
         get
         {
-            yield return new TestCaseData(StreamReadPosition.Start, StreamReadDirection.Backward);
-            yield return new TestCaseData(StreamReadPosition.End, StreamReadDirection.Forward);
+            yield return new TestCaseData(StreamReadPosition.Start, ReadDirection.Backward);
+            yield return new TestCaseData(StreamReadPosition.End, ReadDirection.Forward);
         }
     }
 
@@ -177,7 +179,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task ReadStream_EdgeCasePositionAndDirectionAndStreamExists_ReturnsEmpty(
         StreamReadPosition position,
-        StreamReadDirection direction,
+        ReadDirection direction,
         CancellationToken cancellationToken)
     {
         var streamId = $"test-{Guid.NewGuid():N}";
@@ -202,7 +204,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task ReadStream_EdgeCasePositionAndDirectionAndStreamDoesNotExist_ReturnsEmpty(
         StreamReadPosition position,
-        StreamReadDirection direction,
+        ReadDirection direction,
         CancellationToken cancellationToken)
     {
         var streamId = $"test-{Guid.NewGuid():N}";
@@ -222,7 +224,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task ReadStream_StreamDoesNotExistAndBehaviorIsThrow_ThrowsStreamNotFound(
         StreamReadPosition position,
-        StreamReadDirection direction,
+        ReadDirection direction,
         CancellationToken cancellationToken)
     {
         var streamId = $"test-{Guid.NewGuid():N}";
@@ -270,18 +272,18 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
         // Forward: At(v) == expected.Skip(v)
         for (var v = 0; v < expected.Length; v++)
         {
-            var actual = await ReadEvents(v, StreamReadDirection.Forward);
+            var actual = await ReadEvents(v, ReadDirection.Forward);
             actual.ShouldBe(expected.Skip(v));
         }
 
         // Backward: At(v) == expected.Take(v+1).Reverse()
         for (var v = expected.Length - 1; v >= 0; v--)
         {
-            var actual = await ReadEvents(v, StreamReadDirection.Backward);
+            var actual = await ReadEvents(v, ReadDirection.Backward);
             actual.ShouldBe(expected.Take(v + 1).Reverse());
         }
 
-        ValueTask<object[]> ReadEvents(int startVersion, StreamReadDirection direction)
+        ValueTask<object[]> ReadEvents(int startVersion, ReadDirection direction)
         {
             return Client
                 .ReadStream(

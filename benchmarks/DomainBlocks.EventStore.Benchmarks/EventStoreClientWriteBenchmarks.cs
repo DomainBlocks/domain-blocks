@@ -98,7 +98,24 @@ public class EventStoreClientWriteBenchmarks
             return Task.CompletedTask;
         }
 
+        public IAsyncEnumerable<ReadEvent<TEvent>> ReadAll(ReadAllOptions? options = null)
+        {
+            throw new NotImplementedException();
+        }
+
         public IAsyncEnumerable<ReadEvent<TEvent>> ReadStream(string streamId, ReadStreamOptions? options = null)
+        {
+            throw new NotImplementedException();
+        }
+
+        public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(SubscribeToAllOptions? options = null)
+        {
+            throw new NotImplementedException();
+        }
+
+        public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
+            string streamId,
+            SubscribeToStreamOptions? options = null)
         {
             throw new NotImplementedException();
         }

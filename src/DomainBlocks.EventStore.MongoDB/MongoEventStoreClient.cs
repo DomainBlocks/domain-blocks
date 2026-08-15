@@ -92,9 +92,26 @@ public sealed class MongoEventStoreClient<TEvent>(
             .ConfigureAwait(false);
     }
 
+    public IAsyncEnumerable<ReadEvent<TEvent>> ReadAll(ReadAllOptions? options = null)
+    {
+        throw new NotImplementedException();
+    }
+
     public IAsyncEnumerable<ReadEvent<TEvent>> ReadStream(string streamId, ReadStreamOptions? options = null)
     {
         return ReadStreamCoreAsync(streamId, options ?? ReadStreamOptions.Default);
+    }
+
+    public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(SubscribeToAllOptions? options = null)
+    {
+        throw new NotImplementedException();
+    }
+
+    public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
+        string streamId,
+        SubscribeToStreamOptions? options = null)
+    {
+        throw new NotImplementedException();
     }
 
     private async IAsyncEnumerable<ReadEvent<TEvent>> ReadStreamCoreAsync(
@@ -106,8 +123,8 @@ public sealed class MongoEventStoreClient<TEvent>(
         var direction = options.Direction;
 
         // Edge cases that represent an empty sequence of events.
-        if (position.IsStart && direction == StreamReadDirection.Backward ||
-            position.IsEnd && direction == StreamReadDirection.Forward)
+        if (position.IsStart && direction == ReadDirection.Backward ||
+            position.IsEnd && direction == ReadDirection.Forward)
         {
             if (options.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw &&
                 !await StreamExistsAsync(streamId, cancellationToken).ConfigureAwait(false))
@@ -120,18 +137,18 @@ public sealed class MongoEventStoreClient<TEvent>(
 
         var filter = Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, streamId);
 
-        if (position.IsSpecificVersion)
+        if (position.IsSpecific)
         {
-            var versionValue = position.Version.Value.ToInt64();
+            var versionValue = position.Specific.Value.ToInt64();
 
-            var versionFilter = direction == StreamReadDirection.Forward
+            var versionFilter = direction == ReadDirection.Forward
                 ? Builders<BsonDocument>.Filter.Gte(EventLogEntry.FieldNames.StreamVersion, versionValue)
                 : Builders<BsonDocument>.Filter.Lte(EventLogEntry.FieldNames.StreamVersion, versionValue);
 
             filter &= versionFilter;
         }
 
-        var sort = direction == StreamReadDirection.Forward
+        var sort = direction == ReadDirection.Forward
             ? Builders<BsonDocument>.Sort.Ascending(EventLogEntry.FieldNames.StreamVersion)
             : Builders<BsonDocument>.Sort.Descending(EventLogEntry.FieldNames.StreamVersion);
 
@@ -150,7 +167,7 @@ public sealed class MongoEventStoreClient<TEvent>(
             {
                 isEmpty = false;
 
-                var globalPosition = LogPosition.FromInt64(doc["_id"].AsInt64);
+                var logSequenceNumber = LogSequenceNumber.FromInt64(doc["_id"].AsInt64);
                 var streamVersion = StreamVersion.FromInt64(doc[EventLogEntry.FieldNames.StreamVersion].AsInt64);
                 var eventName = doc[EventLogEntry.FieldNames.EventName].AsString;
                 var eventData = doc[EventLogEntry.FieldNames.EventData];
@@ -158,7 +175,7 @@ public sealed class MongoEventStoreClient<TEvent>(
                 var writtenAtUtc = doc[EventLogEntry.FieldNames.WrittenAtUtc].AsBsonDateTime.ToUniversalTime();
 
                 var (@event, decodedMetadata) = _decoder.Decode(eventName, eventData, metadata);
-                var context = new ReadEventContext(streamId, streamVersion, writtenAtUtc, globalPosition);
+                var context = new ReadEventContext(streamId, streamVersion, writtenAtUtc, logSequenceNumber);
 
                 yield return ReadEvent.Create(@event, decodedMetadata, context);
             }

@@ -9,7 +9,7 @@ public static class EventStoreClientExtensions
         TStreamId streamId,
         IEnumerable<TEvent> events,
         AppendToStreamOptions? options = null,
-        CancellationToken cancellationToken = default) where TEvent : notnull
+        CancellationToken cancellationToken = default) where TStreamId : notnull where TEvent : notnull
     {
         return client.AppendToStreamAsync(
             streamId,
