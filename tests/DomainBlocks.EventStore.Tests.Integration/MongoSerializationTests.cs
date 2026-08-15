@@ -1,4 +1,4 @@
-using DomainBlocks.EventStore.Abstractions;
+﻿using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Codecs;
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.MongoDB;
@@ -78,7 +78,7 @@ public class MongoSerializationTests
 
         var streamId = $"test-{serde.GetType().Name}-{Guid.NewGuid()}";
         await client.AppendToStreamAsync(streamId, [@event]);
-        var readEvents = await client.ReadStreamAsync(streamId).ToArrayAsync();
+        var readEvents = await client.ReadStream(streamId).ToArrayAsync();
 
         readEvents
             .ShouldHaveSingleItem()

@@ -1,4 +1,4 @@
-using DomainBlocks.EventStore.MongoDB;
+﻿using DomainBlocks.EventStore.MongoDB;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Integration.MongoDB;
 using MongoDB.Bson.Serialization;
@@ -78,7 +78,7 @@ public class EventStoreClientTests
         await client.AppendToStreamAsync(streamId, [submitted, amended, filled]);
 
         var orderEvents = await client
-            .ReadStreamAsync(streamId)
+            .ReadStream(streamId)
             .Unwrap()
             .OfType<LimitOrderEvent>()
             .ToArrayAsync();

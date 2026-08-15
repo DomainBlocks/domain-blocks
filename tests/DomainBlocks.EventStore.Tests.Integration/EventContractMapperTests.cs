@@ -1,4 +1,4 @@
-using DomainBlocks.EventStore.Codecs;
+﻿using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.ContractMapping;
 using DomainBlocks.EventStore.KurrentDB;
 using DomainBlocks.EventStore.TypeMapping;
@@ -41,7 +41,7 @@ public class EventContractMapperTests
 
         await client.AppendToStreamAsync(streamId, [originalEvent]);
 
-        var readEvents = await client.ReadStreamAsync(streamId).Unwrap().ToArrayAsync();
+        var readEvents = await client.ReadStream(streamId).Unwrap().ToArrayAsync();
 
         readEvents
             .ShouldHaveSingleItem()

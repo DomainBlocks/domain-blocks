@@ -92,12 +92,16 @@ public sealed class MongoEventStoreClient<TEvent>(
             .ConfigureAwait(false);
     }
 
-    public async IAsyncEnumerable<ReadEvent<TEvent>> ReadStreamAsync(
+    public IAsyncEnumerable<ReadEvent<TEvent>> ReadStream(string streamId, ReadStreamOptions? options = null)
+    {
+        return ReadStreamCoreAsync(streamId, options ?? ReadStreamOptions.Default);
+    }
+
+    private async IAsyncEnumerable<ReadEvent<TEvent>> ReadStreamCoreAsync(
         string streamId,
-        ReadStreamOptions? options = null,
+        ReadStreamOptions options,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        options ??= ReadStreamOptions.Default;
         var position = options.Position;
         var direction = options.Direction;
 

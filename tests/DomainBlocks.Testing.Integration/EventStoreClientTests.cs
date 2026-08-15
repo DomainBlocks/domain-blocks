@@ -43,9 +43,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
 
         await Client.AppendToStreamAsync(streamId, events, cancellationToken: cancellationToken);
 
-        var readEvents = await Client
-            .ReadStreamAsync(streamId, cancellationToken: cancellationToken)
-            .ToArrayAsync(cancellationToken);
+        var readEvents = await Client.ReadStream(streamId).ToArrayAsync(cancellationToken);
 
         readEvents.ShouldAllBe(x => x.Context.StreamId == streamId);
         readEvents.Unwrap().ShouldBe(events.Select(x => x.Event));
@@ -75,9 +73,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
         await Client.AppendToStreamAsync(streamId, events1, cancellationToken: cancellationToken);
         await Client.AppendToStreamAsync(streamId, events2, cancellationToken: cancellationToken);
 
-        var readEvents = await Client
-            .ReadStreamAsync(streamId, cancellationToken: cancellationToken)
-            .ToArrayAsync(cancellationToken);
+        var readEvents = await Client.ReadStream(streamId).ToArrayAsync(cancellationToken);
 
         readEvents.ShouldAllBe(x => x.Context.StreamId == streamId);
 
@@ -179,7 +175,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
 
     [TestCaseSource(nameof(PositionAndDirectionEdgeCases))]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task ReadStreamAsync_EdgeCasePositionAndDirectionAndStreamExists_ReturnsEmpty(
+    public async Task ReadStream_EdgeCasePositionAndDirectionAndStreamExists_ReturnsEmpty(
         StreamReadPosition position,
         StreamReadDirection direction,
         CancellationToken cancellationToken)
@@ -197,16 +193,14 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
             Direction = direction
         };
 
-        var readEvents = await Client
-            .ReadStreamAsync(streamId, options, cancellationToken)
-            .ToArrayAsync(cancellationToken);
+        var readEvents = await Client.ReadStream(streamId, options).ToArrayAsync(cancellationToken);
 
         readEvents.ShouldBeEmpty();
     }
 
     [TestCaseSource(nameof(PositionAndDirectionEdgeCases))]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task ReadStreamAsync_EdgeCasePositionAndDirectionAndStreamDoesNotExist_ReturnsEmpty(
+    public async Task ReadStream_EdgeCasePositionAndDirectionAndStreamDoesNotExist_ReturnsEmpty(
         StreamReadPosition position,
         StreamReadDirection direction,
         CancellationToken cancellationToken)
@@ -219,16 +213,14 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
             Direction = direction
         };
 
-        var readEvents = await Client
-            .ReadStreamAsync(streamId, options, cancellationToken)
-            .ToArrayAsync(cancellationToken);
+        var readEvents = await Client.ReadStream(streamId, options).ToArrayAsync(cancellationToken);
 
         readEvents.ShouldBeEmpty();
     }
 
     [TestCaseSource(nameof(PositionAndDirectionCases))]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task ReadStreamAsync_StreamDoesNotExistAndBehaviorIsThrow_ThrowsStreamNotFound(
+    public async Task ReadStream_StreamDoesNotExistAndBehaviorIsThrow_ThrowsStreamNotFound(
         StreamReadPosition position,
         StreamReadDirection direction,
         CancellationToken cancellationToken)
@@ -243,7 +235,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
         };
 
         await Client
-            .ReadStreamAsync(streamId, options, cancellationToken)
+            .ReadStream(streamId, options)
             // Stream must be materialized.
             .ToArrayAsync(cancellationToken)
             .AsTask()
@@ -252,7 +244,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task ReadStreamAsync_FromVersion_ReturnsExpectedEvents(CancellationToken cancellationToken)
+    public async Task ReadStream_FromVersion_ReturnsExpectedEvents(CancellationToken cancellationToken)
     {
         object[] events1 =
         [
@@ -292,14 +284,13 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
         ValueTask<object[]> ReadEvents(int startVersion, StreamReadDirection direction)
         {
             return Client
-                .ReadStreamAsync(
+                .ReadStream(
                     streamId,
                     new ReadStreamOptions
                     {
                         Position = StreamReadPosition.At(StreamVersion.FromInt64(startVersion)),
                         Direction = direction
-                    },
-                    cancellationToken)
+                    })
                 .Unwrap()
                 .ToArrayAsync(cancellationToken);
         }

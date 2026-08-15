@@ -1,5 +1,4 @@
-﻿using System.Runtime.CompilerServices;
-using BenchmarkDotNet.Attributes;
+﻿using BenchmarkDotNet.Attributes;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Codecs;
 using DomainBlocks.EventStore.Codecs;
@@ -45,10 +44,10 @@ public class EventStoreClientReadBenchmarks
     }
 
     [Benchmark]
-    public async Task ReadStreamAsync_NoIO()
+    public async Task ReadStream_NoIO()
     {
         // Force enumeration
-        await foreach (var _ in _client.ReadStreamAsync(StreamId, _readStreamOptions))
+        await foreach (var _ in _client.ReadStream(StreamId, _readStreamOptions))
         {
         }
     }
@@ -120,12 +119,7 @@ public class EventStoreClientReadBenchmarks
             throw new NotImplementedException();
         }
 
-#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
-        public async IAsyncEnumerable<ReadEvent<TEvent>> ReadStreamAsync(
-#pragma warning restore CS1998
-            string streamId,
-            ReadStreamOptions? options = null,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        public async IAsyncEnumerable<ReadEvent<TEvent>> ReadStream(string streamId, ReadStreamOptions? options = null)
         {
             options ??= ReadStreamOptions.Default;
 

@@ -1,4 +1,4 @@
-using DomainBlocks.EventStore.Abstractions;
+﻿using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB;
 using DomainBlocks.EventStore.Transforms;
 using DomainBlocks.EventStore.TypeMapping;
@@ -68,7 +68,7 @@ public class ReadEventTransformTests
         await client.AppendToStreamAsync(streamId, [legacyEvent]);
 
         var readEvents = await client
-            .ReadStreamAsync(streamId)
+            .ReadStream(streamId)
             .Transform([new ShipmentDispatchedTransform()])
             .Unwrap()
             .ToArrayAsync();

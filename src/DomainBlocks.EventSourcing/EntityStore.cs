@@ -61,10 +61,6 @@ public sealed class EntityStore<TEvent>(
         CancellationToken cancellationToken)
         where TEntity : notnull
     {
-        var streamName = GetStreamName<TEntity>(entityId);
-        var readOptions = new ReadStreamOptions { StreamNotFoundBehavior = streamNotFoundBehavior };
-        var events = eventStoreClient.ReadStreamAsync(streamName, readOptions, cancellationToken);
-
         var entityDefinition = GetEntityDefinition<TEntity>();
         var initialState = entityDefinition.CreateInitialState(); // May come from a snapshot (in future).
 
@@ -80,7 +76,13 @@ public sealed class EntityStore<TEvent>(
 
         async IAsyncEnumerable<TEvent> EnumerateEvents()
         {
-            await foreach (var e in events.ConfigureAwait(false))
+            var streamName = GetStreamName<TEntity>(entityId);
+            var readOptions = new ReadStreamOptions { StreamNotFoundBehavior = streamNotFoundBehavior };
+
+            await foreach (var e in eventStoreClient
+                               .ReadStream(streamName, readOptions)
+                               .WithCancellation(cancellationToken)
+                               .ConfigureAwait(false))
             {
                 loadedVersion = e.Context.StreamVersion;
                 yield return e.Event;

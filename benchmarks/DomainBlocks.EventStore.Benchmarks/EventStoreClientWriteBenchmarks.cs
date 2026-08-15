@@ -98,10 +98,7 @@ public class EventStoreClientWriteBenchmarks
             return Task.CompletedTask;
         }
 
-        public IAsyncEnumerable<ReadEvent<TEvent>> ReadStreamAsync(
-            string streamId,
-            ReadStreamOptions? options = null,
-            CancellationToken cancellationToken = default)
+        public IAsyncEnumerable<ReadEvent<TEvent>> ReadStream(string streamId, ReadStreamOptions? options = null)
         {
             throw new NotImplementedException();
         }

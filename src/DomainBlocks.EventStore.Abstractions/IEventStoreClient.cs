@@ -8,10 +8,7 @@ public interface IEventStoreClient<in TStreamId, TEvent> where TStreamId : notnu
         AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default);
 
-    IAsyncEnumerable<ReadEvent<TEvent>> ReadStreamAsync(
-        TStreamId streamId,
-        ReadStreamOptions? options = null,
-        CancellationToken cancellationToken = default);
+    IAsyncEnumerable<ReadEvent<TEvent>> ReadStream(TStreamId streamId, ReadStreamOptions? options = null);
 }
 
 public interface IEventStoreClient<TEvent> : IEventStoreClient<string, TEvent> where TEvent : notnull;

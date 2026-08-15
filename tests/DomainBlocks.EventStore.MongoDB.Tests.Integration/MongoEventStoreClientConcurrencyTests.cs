@@ -57,9 +57,7 @@ public class MongoEventStoreClientConcurrencyTests
         await Task.WhenAll(tasks);
 
         // Read back and verify.
-        var readEvents = await _clientHandles[0].Client
-            .ReadStreamAsync(streamId, cancellationToken: ct)
-            .ToArrayAsync(ct);
+        var readEvents = await _clientHandles[0].Client.ReadStream(streamId).ToArrayAsync(ct);
 
         readEvents.Length.ShouldBe(expectedTotalEventCount, "All events must be committed");
 
@@ -110,9 +108,7 @@ public class MongoEventStoreClientConcurrencyTests
         }
 
         // Verify the stream contains exactly one event.
-        var readEvents = await _clientHandles[0].Client
-            .ReadStreamAsync(streamId, cancellationToken: ct)
-            .ToArrayAsync(ct);
+        var readEvents = await _clientHandles[0].Client.ReadStream(streamId).ToArrayAsync(ct);
 
         readEvents.ShouldHaveSingleItem();
         readEvents[0].Context.StreamVersion.ShouldBe(StreamVersion.FromInt64(0));
@@ -158,9 +154,7 @@ public class MongoEventStoreClientConcurrencyTests
         conflicts.ShouldBe(ClientCount - 1, "All other writers must be rejected");
 
         // The stream must have exactly 2 events: the seed + the winner.
-        var readEvents = await _clientHandles[0].Client
-            .ReadStreamAsync(streamId, cancellationToken: ct)
-            .ToArrayAsync(ct);
+        var readEvents = await _clientHandles[0].Client.ReadStream(streamId).ToArrayAsync(ct);
 
         readEvents.Length.ShouldBe(2);
         readEvents[0].Context.StreamVersion.ShouldBe(StreamVersion.FromInt64(0));
@@ -188,9 +182,7 @@ public class MongoEventStoreClientConcurrencyTests
         // Each stream must have exactly writesPerWriter events with contiguous versions.
         foreach (var streamId in streamIds)
         {
-            var readEvents = await _clientHandles[0].Client
-                .ReadStreamAsync(streamId, cancellationToken: ct)
-                .ToArrayAsync(ct);
+            var readEvents = await _clientHandles[0].Client.ReadStream(streamId).ToArrayAsync(ct);
 
             readEvents.Length.ShouldBe(
                 eventCountPerClient,
