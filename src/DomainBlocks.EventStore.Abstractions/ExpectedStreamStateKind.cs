@@ -6,7 +6,7 @@
 public enum ExpectedStreamStateKind
 {
     Any = 0,
-    StreamDoesNotExist,
-    StreamExists,
-    SpecificVersion
+    DoesNotExist,
+    Exists,
+    AtVersion
 }

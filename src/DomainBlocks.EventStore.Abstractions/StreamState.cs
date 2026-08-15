@@ -13,7 +13,7 @@ public readonly record struct StreamState
     /// <summary>
     /// Represents a stream state indicating that the stream does not exist (i.e. has no events).
     /// </summary>
-    public static readonly StreamState StreamDoesNotExist = new(StreamStateKind.StreamDoesNotExist);
+    public static readonly StreamState StreamDoesNotExist = new(StreamStateKind.DoesNotExist);
 
     private StreamState(StreamStateKind kind, StreamVersion? version = null)
     {
@@ -35,18 +35,18 @@ public readonly record struct StreamState
     /// Gets a value indicating whether the stream does not exist.
     /// </summary>
     [MemberNotNullWhen(false, nameof(Version))]
-    public bool IsStreamDoesNotExist => Kind == StreamStateKind.StreamDoesNotExist;
+    public bool IsStreamDoesNotExist => Kind == StreamStateKind.DoesNotExist;
 
     /// <summary>
     /// Gets a value indicating whether the stream exists.
     /// </summary>
     [MemberNotNullWhen(true, nameof(Version))]
-    public bool IsStreamExists => Kind == StreamStateKind.StreamExists;
+    public bool IsStreamExists => Kind == StreamStateKind.AtVersion;
 
     /// <summary>
     /// Creates a stream state representing an existing stream with the specified version.
     /// </summary>
-    public static StreamState StreamExists(StreamVersion version) => new(StreamStateKind.StreamExists, version);
+    public static StreamState StreamExists(StreamVersion version) => new(StreamStateKind.AtVersion, version);
 
     public static bool TryParse(string input, [NotNullWhen(true)] out StreamState? result)
     {
@@ -69,7 +69,7 @@ public readonly record struct StreamState
 
     public override string ToString() => Kind switch
     {
-        StreamStateKind.StreamDoesNotExist => nameof(StreamDoesNotExist),
+        StreamStateKind.DoesNotExist => nameof(StreamDoesNotExist),
         _ => $"{VersionPrefix}{Version?.Value}"
     };
 }

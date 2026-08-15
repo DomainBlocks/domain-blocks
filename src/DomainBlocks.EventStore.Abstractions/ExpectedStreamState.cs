@@ -19,12 +19,12 @@ public readonly record struct ExpectedStreamState
     /// <summary>
     /// Stream must not exist.
     /// </summary>
-    public static readonly ExpectedStreamState StreamDoesNotExist = new(ExpectedStreamStateKind.StreamDoesNotExist);
+    public static readonly ExpectedStreamState StreamDoesNotExist = new(ExpectedStreamStateKind.DoesNotExist);
 
     /// <summary>
     /// Stream must exist.
     /// </summary>
-    public static readonly ExpectedStreamState StreamExists = new(ExpectedStreamStateKind.StreamExists);
+    public static readonly ExpectedStreamState StreamExists = new(ExpectedStreamStateKind.Exists);
 
     private ExpectedStreamState(ExpectedStreamStateKind kind, StreamVersion? version = null)
     {
@@ -50,25 +50,25 @@ public readonly record struct ExpectedStreamState
     /// <summary>
     /// True if this instance is <see cref="StreamDoesNotExist"/>.
     /// </summary>
-    public bool IsStreamDoesNotExist => Kind == ExpectedStreamStateKind.StreamDoesNotExist;
+    public bool IsStreamDoesNotExist => Kind == ExpectedStreamStateKind.DoesNotExist;
 
     /// <summary>
     /// True if this instance is <see cref="StreamExists"/>.
     /// </summary>
-    public bool IsStreamExists => Kind == ExpectedStreamStateKind.StreamExists;
+    public bool IsStreamExists => Kind == ExpectedStreamStateKind.Exists;
 
     /// <summary>
     /// True if this instance represents a specific stream version.
     /// </summary>
     [MemberNotNullWhen(true, nameof(Version))]
-    public bool IsSpecificVersion => Kind == ExpectedStreamStateKind.SpecificVersion;
+    public bool IsSpecificVersion => Kind == ExpectedStreamStateKind.AtVersion;
 
     /// <summary>
     /// Creates an expected stream state for a specific version.
     /// </summary>
     public static ExpectedStreamState SpecificVersion(StreamVersion version)
     {
-        return new ExpectedStreamState(ExpectedStreamStateKind.SpecificVersion, version);
+        return new ExpectedStreamState(ExpectedStreamStateKind.AtVersion, version);
     }
 
     public static bool TryParse(string input, [NotNullWhen(true)] out ExpectedStreamState? result)
@@ -125,8 +125,8 @@ public readonly record struct ExpectedStreamState
     public override string ToString() => Kind switch
     {
         ExpectedStreamStateKind.Any => nameof(Any),
-        ExpectedStreamStateKind.StreamDoesNotExist => nameof(StreamDoesNotExist),
-        ExpectedStreamStateKind.StreamExists => nameof(StreamExists),
+        ExpectedStreamStateKind.DoesNotExist => nameof(StreamDoesNotExist),
+        ExpectedStreamStateKind.Exists => nameof(StreamExists),
         _ => $"{VersionPrefix}{Version?.Value}"
     };
 }
