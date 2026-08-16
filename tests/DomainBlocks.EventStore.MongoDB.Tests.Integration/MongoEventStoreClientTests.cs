@@ -18,11 +18,9 @@ public class MongoEventStoreClientTests : EventStoreClientTests
     [Test]
     public void Test()
     {
-        MongoEventStoreClient2<object> client = null!;
-
-        var events = client.ReadLog(ReadDefinition
+        var definition = ReadDefinition
             .Forward<LogPosition>()
             .FromStart()
-            .WithLive(new LiveSubscriberOptions { QueueCapacity = 100 }));
+            .ThenLive(new LiveConsumerOptions());
     }
 }

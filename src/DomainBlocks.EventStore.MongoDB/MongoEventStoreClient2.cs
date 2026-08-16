@@ -45,10 +45,4 @@ public sealed class MongoEventStoreClient2<TEvent> :
     {
         throw new NotImplementedException();
     }
-
-    public IAsyncEnumerable<ReadEvent2<TEvent, string, StreamPosition, LogPosition>> ReadLog(
-        ReadDefinition<LogPosition> definition)
-    {
-        throw new NotImplementedException();
-    }
 }
