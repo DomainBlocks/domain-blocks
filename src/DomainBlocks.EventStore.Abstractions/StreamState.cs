@@ -15,7 +15,7 @@ public readonly record struct StreamState
     /// </summary>
     public static readonly StreamState StreamDoesNotExist = new(StreamStateKind.DoesNotExist);
 
-    private StreamState(StreamStateKind kind, StreamVersion? version = null)
+    private StreamState(StreamStateKind kind, StreamPosition? version = null)
     {
         Kind = kind;
         Version = version;
@@ -29,7 +29,7 @@ public readonly record struct StreamState
     /// <summary>
     /// Gets the stream version, if the stream exists.
     /// </summary>
-    public StreamVersion? Version { get; }
+    public StreamPosition? Version { get; }
 
     /// <summary>
     /// Gets a value indicating whether the stream does not exist.
@@ -46,7 +46,7 @@ public readonly record struct StreamState
     /// <summary>
     /// Creates a stream state representing an existing stream with the specified version.
     /// </summary>
-    public static StreamState StreamExists(StreamVersion version) => new(StreamStateKind.AtVersion, version);
+    public static StreamState StreamExists(StreamPosition version) => new(StreamStateKind.AtVersion, version);
 
     public static bool TryParse(string input, [NotNullWhen(true)] out StreamState? result)
     {
@@ -61,7 +61,7 @@ public readonly record struct StreamState
             var raw = input[VersionPrefix.Length..];
 
             if (ulong.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v))
-                result = StreamExists(new StreamVersion(v));
+                result = StreamExists(new StreamPosition(v));
         }
 
         return result.HasValue;

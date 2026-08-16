@@ -26,7 +26,7 @@ public readonly record struct ExpectedStreamState
     /// </summary>
     public static readonly ExpectedStreamState StreamExists = new(ExpectedStreamStateKind.Exists);
 
-    private ExpectedStreamState(ExpectedStreamStateKind kind, StreamVersion? version = null)
+    private ExpectedStreamState(ExpectedStreamStateKind kind, StreamPosition? version = null)
     {
         Kind = kind;
         Version = version;
@@ -40,7 +40,7 @@ public readonly record struct ExpectedStreamState
     /// <summary>
     /// The expected stream version when <see cref="IsSpecificVersion"/> is <c>true</c>, otherwise <c>null</c>.
     /// </summary>
-    public StreamVersion? Version { get; }
+    public StreamPosition? Version { get; }
 
     /// <summary>
     /// True if this instance is <see cref="Any"/>.
@@ -66,7 +66,7 @@ public readonly record struct ExpectedStreamState
     /// <summary>
     /// Creates an expected stream state for a specific version.
     /// </summary>
-    public static ExpectedStreamState SpecificVersion(StreamVersion version)
+    public static ExpectedStreamState SpecificVersion(StreamPosition version)
     {
         return new ExpectedStreamState(ExpectedStreamStateKind.AtVersion, version);
     }
@@ -92,7 +92,7 @@ public readonly record struct ExpectedStreamState
             var raw = input[VersionPrefix.Length..];
 
             if (ulong.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v))
-                result = SpecificVersion(new StreamVersion(v));
+                result = SpecificVersion(new StreamPosition(v));
         }
 
         return result.HasValue;

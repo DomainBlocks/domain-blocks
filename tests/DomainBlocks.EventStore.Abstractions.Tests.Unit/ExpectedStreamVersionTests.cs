@@ -22,7 +22,7 @@ public class ExpectedStreamStateTests
     [Test]
     public void Version_WhenSpecificVersion_IsSpecificVersion()
     {
-        var version = new StreamVersion(42);
+        var version = new StreamPosition(42);
         var expected = ExpectedStreamState.SpecificVersion(version);
         expected.Version.ShouldBe(version);
     }
@@ -38,15 +38,15 @@ public class ExpectedStreamStateTests
     [Test]
     public void ToString_ForSpecificVersion_ReturnsNumericValue()
     {
-        var specific = ExpectedStreamState.SpecificVersion(new StreamVersion(99));
+        var specific = ExpectedStreamState.SpecificVersion(new StreamPosition(99));
         specific.ToString().ShouldBe("Version=99");
     }
 
     [Test]
     public void Equals_WhenValuesAreSame_ReturnsTrue()
     {
-        var a = ExpectedStreamState.SpecificVersion(new StreamVersion(1));
-        var b = ExpectedStreamState.SpecificVersion(new StreamVersion(1));
+        var a = ExpectedStreamState.SpecificVersion(new StreamPosition(1));
+        var b = ExpectedStreamState.SpecificVersion(new StreamPosition(1));
 
         a.Equals(b).ShouldBeTrue();
     }
@@ -54,8 +54,8 @@ public class ExpectedStreamStateTests
     [Test]
     public void Equals_WhenValuesDiffer_ReturnsFalse()
     {
-        var a = ExpectedStreamState.SpecificVersion(new StreamVersion(1));
-        var b = ExpectedStreamState.SpecificVersion(new StreamVersion(2));
+        var a = ExpectedStreamState.SpecificVersion(new StreamPosition(1));
+        var b = ExpectedStreamState.SpecificVersion(new StreamPosition(2));
 
         a.Equals(b).ShouldBeFalse();
         a.Equals(ExpectedStreamState.Any).ShouldBeFalse();

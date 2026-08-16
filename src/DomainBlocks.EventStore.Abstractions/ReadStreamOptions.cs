@@ -13,7 +13,7 @@ public sealed class ReadStreamOptions
     /// <summary>
     /// The position at which to begin reading. Defaults to <see cref="ReadPosition{TPosition}.Start"/>.
     /// </summary>
-    public ReadPosition<StreamVersion> Position { get; init; } = ReadPosition<StreamVersion>.Start;
+    public ReadPosition<StreamPosition> Position { get; init; } = ReadPosition<StreamPosition>.Start;
 
     /// <summary>
     /// The direction in which to read events. Defaults to <see cref="ReadDirection.Forward"/>.

@@ -8,44 +8,44 @@ public class ReadPositionTests
     [Test]
     public void Instance_WhenDefaultConstructed_EqualsStart()
     {
-        default(ReadPosition<StreamVersion>).ShouldBe(ReadPosition<StreamVersion>.Start);
-        new ReadPosition<StreamVersion>().ShouldBe(ReadPosition<StreamVersion>.Start);
+        default(ReadPosition<StreamPosition>).ShouldBe(ReadPosition<StreamPosition>.Start);
+        new ReadPosition<StreamPosition>().ShouldBe(ReadPosition<StreamPosition>.Start);
     }
 
     [Test]
     public void Version_WhenStartOrEnd_IsNull()
     {
-        ReadPosition<StreamVersion>.Start.Specific.ShouldBeNull();
-        ReadPosition<StreamVersion>.End.Specific.ShouldBeNull();
+        ReadPosition<StreamPosition>.Start.Specific.ShouldBeNull();
+        ReadPosition<StreamPosition>.End.Specific.ShouldBeNull();
     }
 
     [Test]
     public void Version_WhenSpecific_IsSpecific()
     {
-        var version = new StreamVersion(123);
-        var position = ReadPosition<StreamVersion>.At(version);
+        var version = new StreamPosition(123);
+        var position = ReadPosition<StreamPosition>.At(version);
         position.Specific.ShouldBe(version);
     }
 
     [Test]
     public void ToString_WhenNonSpecific_ReturnsName()
     {
-        ReadPosition<StreamVersion>.Start.ToString().ShouldBe("Start");
-        ReadPosition<StreamVersion>.End.ToString().ShouldBe("End");
+        ReadPosition<StreamPosition>.Start.ToString().ShouldBe("Start");
+        ReadPosition<StreamPosition>.End.ToString().ShouldBe("End");
     }
 
     [Test]
     public void ToString_ForSpecific_ReturnsNumericValue()
     {
-        var specific = ReadPosition<StreamVersion>.At(new StreamVersion(99));
+        var specific = ReadPosition<StreamPosition>.At(new StreamPosition(99));
         specific.ToString().ShouldBe("Specific=99");
     }
 
     [Test]
     public void Equals_WhenValuesAreSame_ReturnsTrue()
     {
-        var a = ReadPosition<StreamVersion>.At(new StreamVersion(1));
-        var b = ReadPosition<StreamVersion>.At(new StreamVersion(1));
+        var a = ReadPosition<StreamPosition>.At(new StreamPosition(1));
+        var b = ReadPosition<StreamPosition>.At(new StreamPosition(1));
 
         a.Equals(b).ShouldBeTrue();
     }
@@ -53,12 +53,12 @@ public class ReadPositionTests
     [Test]
     public void Equals_WhenValuesDiffer_ReturnsFalse()
     {
-        var a = ReadPosition<StreamVersion>.At(new StreamVersion(1));
-        var b = ReadPosition<StreamVersion>.At(new StreamVersion(2));
+        var a = ReadPosition<StreamPosition>.At(new StreamPosition(1));
+        var b = ReadPosition<StreamPosition>.At(new StreamPosition(2));
 
         a.Equals(b).ShouldBeFalse();
-        ReadPosition<StreamVersion>.Start.Equals(ReadPosition<StreamVersion>.End).ShouldBeFalse();
-        ReadPosition<StreamVersion>.Start.Equals(a).ShouldBeFalse();
-        ReadPosition<StreamVersion>.End.Equals(a).ShouldBeFalse();
+        ReadPosition<StreamPosition>.Start.Equals(ReadPosition<StreamPosition>.End).ShouldBeFalse();
+        ReadPosition<StreamPosition>.Start.Equals(a).ShouldBeFalse();
+        ReadPosition<StreamPosition>.End.Equals(a).ShouldBeFalse();
     }
 }

@@ -3,12 +3,12 @@
 namespace DomainBlocks.EventStore.MongoDB;
 
 public sealed class MongoEventStoreClient2<TEvent> :
-    IEventStoreClient2<TEvent, string, StreamVersion, LogSequenceNumber>
+    IEventStoreClient2<TEvent, string, StreamPosition, LogPosition>
     where TEvent : notnull
 {
     public Task AppendToStreamAsync(
         string streamId,
-        ExpectedStreamState2<StreamVersion> expectedStreamState,
+        ExpectedStreamState2<StreamPosition> expectedStreamState,
         IEnumerable<AppendEvent<TEvent>> events,
         AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default)
@@ -16,32 +16,38 @@ public sealed class MongoEventStoreClient2<TEvent> :
         throw new NotImplementedException();
     }
 
-    public IAsyncEnumerable<ReadEvent2<TEvent, string, StreamVersion, LogSequenceNumber>> ReadAll(
-        ReadMode<LogSequenceNumber>? mode = null,
+    public IAsyncEnumerable<ReadEvent2<TEvent, string, StreamPosition, LogPosition>> ReadAll(
+        ReadMode<LogPosition>? mode = null,
         ReadAllOptions? options = null)
     {
         throw new NotImplementedException();
     }
 
-    public IAsyncEnumerable<ReadEvent2<TEvent, string, StreamVersion, LogSequenceNumber>> ReadStream(
+    public IAsyncEnumerable<ReadEvent2<TEvent, string, StreamPosition, LogPosition>> ReadStream(
         string streamId,
-        ReadMode<StreamVersion>? mode = null,
+        ReadMode<StreamPosition>? mode = null,
         ReadStreamOptions? options = null)
     {
         throw new NotImplementedException();
     }
 
-    public IAsyncEnumerable<SubscriptionMessage2<TEvent, string, StreamVersion, LogSequenceNumber>> SubscribeToAll(
-        SubscribeOrigin<LogSequenceNumber>? origin = null,
+    public IAsyncEnumerable<SubscriptionMessage2<TEvent, string, StreamPosition, LogPosition>> SubscribeToAll(
+        SubscribeOrigin<LogPosition>? origin = null,
         SubscribeToAllOptions? options = null)
     {
         throw new NotImplementedException();
     }
 
-    public IAsyncEnumerable<SubscriptionMessage2<TEvent, string, StreamVersion, LogSequenceNumber>> SubscribeToStream(
+    public IAsyncEnumerable<SubscriptionMessage2<TEvent, string, StreamPosition, LogPosition>> SubscribeToStream(
         string streamId,
-        SubscribeOrigin<StreamVersion>? origin = null,
+        SubscribeOrigin<StreamPosition>? origin = null,
         SubscribeToStreamOptions? options = null)
+    {
+        throw new NotImplementedException();
+    }
+
+    public IAsyncEnumerable<ReadEvent2<TEvent, string, StreamPosition, LogPosition>> ReadLog(
+        ReadDefinition<LogPosition> definition)
     {
         throw new NotImplementedException();
     }

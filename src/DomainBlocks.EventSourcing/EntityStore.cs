@@ -66,7 +66,7 @@ public sealed class EntityStore<TEvent>(
 
         // Used in closure of EnumerateEvents, so must be declared before the async enumerable is materialised, i.e.
         // before RestoreAsync is invoked.
-        StreamVersion? loadedVersion = null;
+        StreamPosition? loadedVersion = null;
 
         var entity = await entityDefinition
             .RestoreAsync(initialState, EnumerateEvents(), cancellationToken)

@@ -5,7 +5,7 @@ using Shouldly;
 
 namespace DomainBlocks.Testing.Integration;
 
-using StreamReadPosition = ReadPosition<StreamVersion>;
+using StreamReadPosition = ReadPosition<StreamPosition>;
 
 public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
 {
@@ -100,7 +100,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
             ],
             cancellationToken: cancellationToken);
 
-        var expectedState = ExpectedStreamState.SpecificVersion(new StreamVersion(1));
+        var expectedState = ExpectedStreamState.SpecificVersion(new StreamPosition(1));
 
         var exception = await Client
             .AppendToStreamAsync(
@@ -116,7 +116,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
         exception.StreamId.ShouldBe(streamId);
         exception.ExpectedState.ShouldBe(expectedState);
         exception.ActualState.ShouldNotBeNull();
-        exception.ActualState.ShouldBe(StreamState.StreamExists(new StreamVersion(2)));
+        exception.ActualState.ShouldBe(StreamState.StreamExists(new StreamPosition(2)));
     }
 
     [Test]
@@ -172,7 +172,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
         exception.StreamId.ShouldBe(streamId);
         exception.ExpectedState.ShouldBe(ExpectedStreamState.StreamDoesNotExist);
         exception.ActualState.ShouldNotBeNull();
-        exception.ActualState.ShouldBe(StreamState.StreamExists(new StreamVersion(2)));
+        exception.ActualState.ShouldBe(StreamState.StreamExists(new StreamPosition(2)));
     }
 
     [TestCaseSource(nameof(PositionAndDirectionEdgeCases))]
@@ -290,7 +290,7 @@ public abstract class EventStoreClientTests : EventStoreClientTestBase<object>
                     streamId,
                     new ReadStreamOptions
                     {
-                        Position = StreamReadPosition.At(StreamVersion.FromInt64(startVersion)),
+                        Position = StreamReadPosition.At(StreamPosition.FromInt64(startVersion)),
                         Direction = direction
                     })
                 .Unwrap()

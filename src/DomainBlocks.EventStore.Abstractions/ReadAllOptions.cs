@@ -4,7 +4,7 @@ public sealed class ReadAllOptions
 {
     public static readonly ReadAllOptions Default = new();
 
-    public ReadPosition<LogSequenceNumber> Position { get; init; } = ReadPosition<LogSequenceNumber>.Start;
+    public ReadPosition<LogPosition> Position { get; init; } = ReadPosition<LogPosition>.Start;
 
     public ReadDirection Direction { get; init; } = ReadDirection.Forward;
 

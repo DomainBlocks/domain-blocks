@@ -5,6 +5,7 @@ using KurrentDB.Client;
 using KurrentStreamPosition = KurrentDB.Client.StreamPosition;
 using KurrentStreamState = KurrentDB.Client.StreamState;
 using StreamNotFoundException = DomainBlocks.EventStore.Abstractions.StreamNotFoundException;
+using StreamPosition = DomainBlocks.EventStore.Abstractions.StreamPosition;
 using StreamState = DomainBlocks.EventStore.Abstractions.StreamState;
 
 namespace DomainBlocks.EventStore.KurrentDB;
@@ -111,8 +112,8 @@ public class KurrentDBEventStoreClient<TEvent>(
 
             var (@event, metadata) = eventDecoder.Decode(record.EventType, record.Data, metadataBytes);
 
-            var streamVersion = new StreamVersion(originalRecord.EventNumber.ToUInt64());
-            var logSequenceNumber = new LogSequenceNumber(originalRecord.Position.CommitPosition);
+            var streamVersion = new StreamPosition(originalRecord.EventNumber.ToUInt64());
+            var logSequenceNumber = new LogPosition(originalRecord.Position.CommitPosition);
             var context = new ReadEventContext(streamId, streamVersion, record.Created, logSequenceNumber);
 
             yield return ReadEvent.Create(@event, metadata, context);
@@ -133,7 +134,7 @@ public class KurrentDBEventStoreClient<TEvent>(
         return direction == ReadDirection.Forward ? Direction.Forwards : Direction.Backwards;
     }
 
-    private static KurrentStreamPosition ToKurrentStreamPosition(ReadPosition<StreamVersion> position)
+    private static KurrentStreamPosition ToKurrentStreamPosition(ReadPosition<StreamPosition> position)
     {
         return position switch
         {
@@ -153,7 +154,7 @@ public class KurrentDBEventStoreClient<TEvent>(
         {
             var value = kurrentStreamState.ToInt64();
             if (value >= 0)
-                return StreamState.StreamExists(StreamVersion.FromInt64(value));
+                return StreamState.StreamExists(StreamPosition.FromInt64(value));
         }
 
         return null;

@@ -5,6 +5,7 @@ using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.SystemTextJson;
 using KurrentDB.Client;
+using StreamPosition = DomainBlocks.EventStore.Abstractions.StreamPosition;
 
 namespace DomainBlocks.EventStore.Benchmarks;
 
@@ -84,7 +85,7 @@ public class EventStoreClientReadBenchmarks
             var eventRecord = new EventRecord(
                 StreamId,
                 Uuid.NewUuid(),
-                StreamPosition.FromStreamRevision(i),
+                KurrentDB.Client.StreamPosition.FromStreamRevision(i),
                 new Position(i, i),
                 kurrentMetadata,
                 serializedEvent,
@@ -141,9 +142,9 @@ public class EventStoreClientReadBenchmarks
 
                 var context = new ReadEventContext(
                     streamId,
-                    new StreamVersion(originalEventRecord.EventNumber.ToUInt64()),
+                    new StreamPosition(originalEventRecord.EventNumber.ToUInt64()),
                     eventRecord.Created,
-                    new LogSequenceNumber(originalEventRecord.Position.CommitPosition));
+                    new LogPosition(originalEventRecord.Position.CommitPosition));
 
                 yield return ReadEvent.Create(@event, metadata, context);
             }

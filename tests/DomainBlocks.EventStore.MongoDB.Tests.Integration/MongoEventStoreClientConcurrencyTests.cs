@@ -104,14 +104,14 @@ public class MongoEventStoreClientConcurrencyTests
             ex.ShouldNotBeNull();
             ex.StreamId.ShouldBe(streamId);
             ex.ExpectedState.ShouldBe(ExpectedStreamState.StreamDoesNotExist);
-            ex.ActualState?.ShouldBe(StreamState.StreamExists(StreamVersion.FromInt64(0)));
+            ex.ActualState?.ShouldBe(StreamState.StreamExists(StreamPosition.FromInt64(0)));
         }
 
         // Verify the stream contains exactly one event.
         var readEvents = await _clientHandles[0].Client.ReadStream(streamId).ToArrayAsync(ct);
 
         readEvents.ShouldHaveSingleItem();
-        readEvents[0].Context.StreamVersion.ShouldBe(StreamVersion.FromInt64(0));
+        readEvents[0].Context.StreamVersion.ShouldBe(StreamPosition.FromInt64(0));
     }
 
     [Test]
@@ -127,7 +127,7 @@ public class MongoEventStoreClientConcurrencyTests
             new AppendToStreamOptions { ExpectedStreamState = ExpectedStreamState.Any },
             ct);
 
-        var targetVersion = ExpectedStreamState.SpecificVersion(StreamVersion.FromInt64(0));
+        var targetVersion = ExpectedStreamState.SpecificVersion(StreamPosition.FromInt64(0));
 
         var results = await Task.WhenAll(_clientHandles.Select(async clientHandle =>
         {
@@ -157,8 +157,8 @@ public class MongoEventStoreClientConcurrencyTests
         var readEvents = await _clientHandles[0].Client.ReadStream(streamId).ToArrayAsync(ct);
 
         readEvents.Length.ShouldBe(2);
-        readEvents[0].Context.StreamVersion.ShouldBe(StreamVersion.FromInt64(0));
-        readEvents[1].Context.StreamVersion.ShouldBe(StreamVersion.FromInt64(1));
+        readEvents[0].Context.StreamVersion.ShouldBe(StreamPosition.FromInt64(0));
+        readEvents[1].Context.StreamVersion.ShouldBe(StreamPosition.FromInt64(1));
     }
 
     [Test]

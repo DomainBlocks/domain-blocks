@@ -4,6 +4,7 @@ using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Codecs;
 using KurrentDB.Client;
 using StreamNotFoundException = DomainBlocks.EventStore.Abstractions.StreamNotFoundException;
+using StreamPosition = KurrentDB.Client.StreamPosition;
 using StreamState = KurrentDB.Client.StreamState;
 
 namespace DomainBlocks.EventStore.KurrentDB;
@@ -73,6 +74,12 @@ public class KurrentDBEventStoreClient2<TEvent>(
         string streamId,
         SubscribeOrigin<StreamPosition>? origin = null,
         SubscribeToStreamOptions? options = null)
+    {
+        throw new NotImplementedException();
+    }
+
+    public IAsyncEnumerable<ReadEvent2<TEvent, string, StreamPosition, Position>> ReadLog(
+        ReadDefinition<Position> definition)
     {
         throw new NotImplementedException();
     }

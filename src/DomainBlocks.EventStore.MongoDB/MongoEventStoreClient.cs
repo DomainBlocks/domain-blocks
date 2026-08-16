@@ -167,8 +167,8 @@ public sealed class MongoEventStoreClient<TEvent>(
             {
                 isEmpty = false;
 
-                var logSequenceNumber = LogSequenceNumber.FromInt64(doc["_id"].AsInt64);
-                var streamVersion = StreamVersion.FromInt64(doc[EventLogEntry.FieldNames.StreamVersion].AsInt64);
+                var logSequenceNumber = LogPosition.FromInt64(doc["_id"].AsInt64);
+                var streamVersion = StreamPosition.FromInt64(doc[EventLogEntry.FieldNames.StreamVersion].AsInt64);
                 var eventName = doc[EventLogEntry.FieldNames.EventName].AsString;
                 var eventData = doc[EventLogEntry.FieldNames.EventData];
                 var metadata = doc[EventLogEntry.FieldNames.Metadata];

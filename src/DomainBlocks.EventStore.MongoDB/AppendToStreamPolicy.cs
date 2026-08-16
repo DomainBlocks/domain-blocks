@@ -51,7 +51,7 @@ public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog
 
             var actualStreamState = streamVersion < 0
                 ? StreamState.StreamDoesNotExist
-                : StreamState.StreamExists(StreamVersion.FromInt64(streamVersion));
+                : StreamState.StreamExists(StreamPosition.FromInt64(streamVersion));
 
             if (!expectedStreamState.Matches(actualStreamState))
             {

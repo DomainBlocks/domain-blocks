@@ -2,6 +2,6 @@
 
 public readonly record struct ReadEventContext(
     string StreamId,
-    StreamVersion StreamVersion,
+    StreamPosition StreamVersion,
     DateTime CreatedAtUtc,
-    LogSequenceNumber? LogSequenceNumber = null);
+    LogPosition? LogSequenceNumber = null);
