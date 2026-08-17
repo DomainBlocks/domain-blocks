@@ -38,7 +38,7 @@ public class ReadPositionTests
     public void ToString_ForSpecific_ReturnsNumericValue()
     {
         var specific = ReadPosition<StreamPosition>.At(new StreamPosition(99));
-        specific.ToString().ShouldBe("Specific=99");
+        specific.ToString().ShouldBe(new StreamPosition(99).ToString());
     }
 
     [Test]

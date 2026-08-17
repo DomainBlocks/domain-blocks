@@ -1,4 +1,4 @@
-﻿namespace DomainBlocks.EventStore.Abstractions;
+﻿namespace DomainBlocks.EventStore.Abstractions.New;
 
 public static class ReadEvent2
 {

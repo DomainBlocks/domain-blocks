@@ -1,6 +1,6 @@
 ﻿using System.Diagnostics;
 
-namespace DomainBlocks.EventStore.Abstractions;
+namespace DomainBlocks.EventStore.Abstractions.New;
 
 /// <summary>
 /// Represents the observed state of an event stream.

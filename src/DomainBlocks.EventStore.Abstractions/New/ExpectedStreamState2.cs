@@ -1,6 +1,6 @@
 ﻿using System.Diagnostics;
 
-namespace DomainBlocks.EventStore.Abstractions;
+namespace DomainBlocks.EventStore.Abstractions.New;
 
 /// <summary>
 /// Represents the expected state of an event stream. Used to enforce concurrency or existence checks when performing

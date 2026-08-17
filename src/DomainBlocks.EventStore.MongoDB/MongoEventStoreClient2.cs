@@ -1,9 +1,15 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.Abstractions.New;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
 public sealed class MongoEventStoreClient2<TEvent> :
-    IEventStoreClient2<TEvent, string, StreamPosition, LogPosition>
+    IEventStoreClient2<
+        AppendEvent<TEvent>,
+        ReadEvent2<TEvent, string, StreamPosition, LogPosition>,
+        string,
+        StreamPosition,
+        LogPosition>
     where TEvent : notnull
 {
     public Task AppendToStreamAsync(
@@ -16,32 +22,13 @@ public sealed class MongoEventStoreClient2<TEvent> :
         throw new NotImplementedException();
     }
 
-    public IAsyncEnumerable<ReadEvent2<TEvent, string, StreamPosition, LogPosition>> ReadAll(
-        ReadMode<LogPosition>? mode = null,
-        ReadAllOptions? options = null)
+    public IReadBuilder<ReadEvent2<TEvent, string, StreamPosition, LogPosition>, LogPosition>.IForward ReadAll()
     {
         throw new NotImplementedException();
     }
 
-    public IAsyncEnumerable<ReadEvent2<TEvent, string, StreamPosition, LogPosition>> ReadStream(
-        string streamId,
-        ReadMode<StreamPosition>? mode = null,
-        ReadStreamOptions? options = null)
-    {
-        throw new NotImplementedException();
-    }
-
-    public IAsyncEnumerable<SubscriptionMessage2<TEvent, string, StreamPosition, LogPosition>> SubscribeToAll(
-        SubscribeOrigin<LogPosition>? origin = null,
-        SubscribeToAllOptions? options = null)
-    {
-        throw new NotImplementedException();
-    }
-
-    public IAsyncEnumerable<SubscriptionMessage2<TEvent, string, StreamPosition, LogPosition>> SubscribeToStream(
-        string streamId,
-        SubscribeOrigin<StreamPosition>? origin = null,
-        SubscribeToStreamOptions? options = null)
+    public IReadBuilder<ReadEvent2<TEvent, string, StreamPosition, LogPosition>, StreamPosition>.IForward ReadStream(
+        string streamId)
     {
         throw new NotImplementedException();
     }
