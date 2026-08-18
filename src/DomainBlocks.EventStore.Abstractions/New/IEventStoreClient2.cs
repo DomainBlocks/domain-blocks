@@ -19,7 +19,7 @@ public interface IEventStoreClient2<in TAppendEvent, out TReadEvent, in TStreamI
     IAsyncEnumerable<TReadEvent> ReadStream(
         TStreamId streamId,
         ReadDefinition<TStreamPos> definition,
-        ReadStreamOptions? options = null);
+        ReadStreamOptions2? options = null);
 
     IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
         SubscriptionDefinition<TLogPos> definition,

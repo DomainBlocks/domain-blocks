@@ -2,6 +2,78 @@
 
 namespace DomainBlocks.EventStore.Abstractions.New;
 
+// public static class ExpectedStreamState2
+// {
+//     public static ExpectedStreamState2<TVersion> Any<TVersion>()
+//         where TVersion : notnull =>
+//         ExpectedStreamState2<TVersion>.Any.Instance;
+//
+//     public static ExpectedStreamState2<TVersion> DoesNotExist<TVersion>()
+//         where TVersion : notnull =>
+//         ExpectedStreamState2<TVersion>.DoesNotExist.Instance;
+//
+//     public static ExpectedStreamState2<TVersion> Exists<TVersion>()
+//         where TVersion : notnull =>
+//         ExpectedStreamState2<TVersion>.Exists.Instance;
+//
+//     public static ExpectedStreamState2<TVersion> AtVersion<TVersion>(TVersion version) where TVersion : notnull
+//     {
+//         ArgumentNullException.ThrowIfNull(version);
+//         return new ExpectedStreamState2<TVersion>.AtVersion(version);
+//     }
+// }
+//
+// public abstract record ExpectedStreamState2<TVersion> where TVersion : notnull
+// {
+//     private ExpectedStreamState2()
+//     {
+//     }
+//
+//     public abstract bool Matches(StreamState2<TVersion> actualState);
+//
+//     public sealed record Any : ExpectedStreamState2<TVersion>
+//     {
+//         public static Any Instance { get; } = new();
+//
+//         private Any()
+//         {
+//         }
+//
+//         public override bool Matches(StreamState2<TVersion> actualState) => true;
+//     }
+//
+//     public sealed record DoesNotExist : ExpectedStreamState2<TVersion>
+//     {
+//         public static DoesNotExist Instance { get; } = new();
+//
+//         private DoesNotExist()
+//         {
+//         }
+//
+//         public override bool Matches(StreamState2<TVersion> actualState) =>
+//             actualState.Kind == StreamStateKind.DoesNotExist;
+//     }
+//
+//     public sealed record Exists : ExpectedStreamState2<TVersion>
+//     {
+//         public static Exists Instance { get; } = new();
+//
+//         private Exists()
+//         {
+//         }
+//
+//         public override bool Matches(StreamState2<TVersion> actualState) =>
+//             actualState.Kind == StreamStateKind.AtVersion;
+//     }
+//
+//     public sealed record AtVersion(TVersion Version) : ExpectedStreamState2<TVersion>
+//     {
+//         public override bool Matches(StreamState2<TVersion> actualState) =>
+//             actualState.Kind == StreamStateKind.AtVersion &&
+//             EqualityComparer<TVersion>.Default.Equals(Version, actualState.Version);
+//     }
+// }
+
 /// <summary>
 /// Represents the expected state of an event stream. Used to enforce concurrency or existence checks when performing
 /// stream operations. The default value is <see cref="Any"/>.

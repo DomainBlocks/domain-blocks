@@ -2,6 +2,8 @@
 
 public sealed class ReadStreamOptions2
 {
+    public static readonly ReadStreamOptions2 Default = new();
+
     /// <summary>
     /// The maximum number of events to read, or <c>null</c> for no limit.
     /// </summary>

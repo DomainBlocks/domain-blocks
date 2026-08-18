@@ -15,7 +15,7 @@ public static class EventStoreClientExtensions
 
         public IEventReadBuilder<TReadEvent, TStreamPos> ReadStream(
             TStreamId streamId,
-            ReadStreamOptions? options = null) =>
+            ReadStreamOptions2? options = null) =>
             new EventReadBuilder<TReadEvent, TStreamPos>(def => client.ReadStream(streamId, def, options));
 
         public IEventSubscriptionBuilder<TReadEvent, TLogPos> SubscribeToAll(SubscriptionOptions? options = null) =>
