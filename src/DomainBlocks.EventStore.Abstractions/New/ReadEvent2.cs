@@ -52,6 +52,6 @@ public readonly struct ReadEvent2<TEvent, TStreamId, TStreamPos, TLogPos>(
     public TLogPos LogPosition { get; } = logPosition;
 
     public static implicit operator ReadEvent2<TEvent, TStreamId>(
-        ReadEvent2<TEvent, TStreamId, TStreamPos, TLogPos> e)
-        => e._inner;
+        ReadEvent2<TEvent, TStreamId, TStreamPos, TLogPos> e) =>
+        e._inner;
 }

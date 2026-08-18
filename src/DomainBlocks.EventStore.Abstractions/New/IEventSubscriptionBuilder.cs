@@ -3,7 +3,6 @@ namespace DomainBlocks.EventStore.Abstractions.New;
 public interface IEventSubscriptionBuilder<out TEvent, in TPos> where TEvent : notnull where TPos : notnull
 {
     ISubscription FromStart();
-    ISubscription From(TPos position);
     ISubscription After(TPos position);
     ISubscription FromLive();
 
@@ -15,6 +14,6 @@ public interface IEventSubscriptionBuilder<out TEvent, in TPos> where TEvent : n
 
     interface ISubscriptionMessages
     {
-        IAsyncEnumerable<ISubscriptionMessage> ToAsyncEnumerable();
+        IAsyncEnumerable<SubscriptionMessage> ToAsyncEnumerable();
     }
 }

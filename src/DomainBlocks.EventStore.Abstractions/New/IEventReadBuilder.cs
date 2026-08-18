@@ -4,7 +4,6 @@ public interface IEventReadBuilder<out TEvent, in TPos> where TEvent : notnull w
 {
     IRead FromStart();
     IRead From(TPos position);
-    IRead After(TPos position);
     IBackward Backward();
 
     interface IRead

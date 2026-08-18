@@ -1,8 +1,7 @@
 namespace DomainBlocks.EventStore.Abstractions.New;
 
 internal sealed class EventSubscriptionBuilder<TEvent, TPos>(
-    Func<SubscriptionDefinition<TPos>, IAsyncEnumerable<ISubscriptionMessage>> subscriber,
-    SubscriptionOptions options) :
+    Func<SubscriptionDefinition<TPos>, IAsyncEnumerable<SubscriptionMessage>> subscriber) :
     IEventSubscriptionBuilder<TEvent, TPos>,
     IEventSubscriptionBuilder<TEvent, TPos>.ISubscription,
     IEventSubscriptionBuilder<TEvent, TPos>.ISubscriptionMessages
@@ -17,25 +16,19 @@ internal sealed class EventSubscriptionBuilder<TEvent, TPos>(
 
     IEventSubscriptionBuilder<TEvent, TPos>.ISubscription IEventSubscriptionBuilder<TEvent, TPos>.FromStart()
     {
-        _definition = new SubscriptionDefinition<TPos>(ReadOrigin.Start<TPos>(), options);
-        return this;
-    }
-
-    IEventSubscriptionBuilder<TEvent, TPos>.ISubscription IEventSubscriptionBuilder<TEvent, TPos>.From(TPos position)
-    {
-        _definition = new SubscriptionDefinition<TPos>(ReadOrigin.From(position), options);
+        _definition = SubscriptionDefinition.FromStart<TPos>();
         return this;
     }
 
     IEventSubscriptionBuilder<TEvent, TPos>.ISubscription IEventSubscriptionBuilder<TEvent, TPos>.After(TPos position)
     {
-        _definition = new SubscriptionDefinition<TPos>(ReadOrigin.After(position), options);
+        _definition = SubscriptionDefinition.After(position);
         return this;
     }
 
     IEventSubscriptionBuilder<TEvent, TPos>.ISubscription IEventSubscriptionBuilder<TEvent, TPos>.FromLive()
     {
-        _definition = new SubscriptionDefinition<TPos>(ReadOrigin.End<TPos>(), options);
+        _definition = SubscriptionDefinition.FromLive<TPos>();
         return this;
     }
 
@@ -46,8 +39,8 @@ internal sealed class EventSubscriptionBuilder<TEvent, TPos>(
     IAsyncEnumerable<TEvent> IEventSubscriptionBuilder<TEvent, TPos>.ISubscription.ToAsyncEnumerable()
     {
         return subscriber(_definition!)
-            .OfType<SubscriptionMessage.EventReceived<TEvent>>()
-            .Select(x => x.Event);
+            .OfType<SubscriptionMessage.Event<TEvent>>()
+            .Select(x => x.Value);
     }
 
     IEventSubscriptionBuilder<TEvent, TPos>.ISubscriptionMessages
@@ -57,6 +50,6 @@ internal sealed class EventSubscriptionBuilder<TEvent, TPos>(
     // IEventSubscriptionBuilder<TEvent, TPos>.ISubscriptionMessages
     // ─────────────────────────────────────────────────────────────
 
-    IAsyncEnumerable<ISubscriptionMessage>
+    IAsyncEnumerable<SubscriptionMessage>
         IEventSubscriptionBuilder<TEvent, TPos>.ISubscriptionMessages.ToAsyncEnumerable() => subscriber(_definition!);
 }

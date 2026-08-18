@@ -1,6 +1,7 @@
 ﻿namespace DomainBlocks.EventStore.Abstractions.New;
 
-internal sealed class EventReadBuilder<TEvent, TPos>(Func<ReadDefinition<TPos>, IAsyncEnumerable<TEvent>> reader) :
+internal sealed class EventReadBuilder<TEvent, TPos>(
+    Func<ReadDefinition<TPos>, IAsyncEnumerable<TEvent>> reader) :
     IEventReadBuilder<TEvent, TPos>,
     IEventReadBuilder<TEvent, TPos>.IRead,
     IEventReadBuilder<TEvent, TPos>.IBackward
@@ -15,19 +16,13 @@ internal sealed class EventReadBuilder<TEvent, TPos>(Func<ReadDefinition<TPos>, 
 
     IEventReadBuilder<TEvent, TPos>.IRead IEventReadBuilder<TEvent, TPos>.FromStart()
     {
-        _definition = new ReadDefinition<TPos>.Forward(ReadOrigin.Start<TPos>());
+        _definition = ReadDefinition.ForwardFromStart<TPos>();
         return this;
     }
 
     IEventReadBuilder<TEvent, TPos>.IRead IEventReadBuilder<TEvent, TPos>.From(TPos position)
     {
-        _definition = new ReadDefinition<TPos>.Forward(ReadOrigin.From(position));
-        return this;
-    }
-
-    IEventReadBuilder<TEvent, TPos>.IRead IEventReadBuilder<TEvent, TPos>.After(TPos position)
-    {
-        _definition = new ReadDefinition<TPos>.Forward(ReadOrigin.After(position));
+        _definition = ReadDefinition.ForwardFrom(position);
         return this;
     }
 
@@ -45,13 +40,13 @@ internal sealed class EventReadBuilder<TEvent, TPos>(Func<ReadDefinition<TPos>, 
 
     IEventReadBuilder<TEvent, TPos>.IRead IEventReadBuilder<TEvent, TPos>.IBackward.FromEnd()
     {
-        _definition = new ReadDefinition<TPos>.Backward(ReadOrigin.End<TPos>());
+        _definition = ReadDefinition.BackwardFromEnd<TPos>();
         return this;
     }
 
     IEventReadBuilder<TEvent, TPos>.IRead IEventReadBuilder<TEvent, TPos>.IBackward.From(TPos position)
     {
-        _definition = new ReadDefinition<TPos>.Backward(ReadOrigin.From(position));
+        _definition = ReadDefinition.BackwardFrom(position);
         return this;
     }
 }

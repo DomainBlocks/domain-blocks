@@ -1,14 +1,14 @@
 ﻿namespace DomainBlocks.EventStore.Abstractions.New;
 
-public abstract class SubscriptionMessage : ISubscriptionMessage
+public abstract class SubscriptionMessage
 {
     private SubscriptionMessage()
     {
     }
 
-    public sealed class EventReceived<TEvent>(TEvent @event) : SubscriptionMessage where TEvent : notnull
+    public sealed class Event<TEvent>(TEvent @event) : SubscriptionMessage where TEvent : notnull
     {
-        public TEvent Event { get; } = @event;
+        public TEvent Value { get; } = @event;
     }
 
     public sealed class CaughtUp : SubscriptionMessage;

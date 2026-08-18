@@ -187,7 +187,3 @@
 //     }
 // }
 
-using DomainBlocks.EventStore.Abstractions.New;
-using KurrentDB.Client;
-
-namespace DomainBlocks.EventStore.KurrentDB;
