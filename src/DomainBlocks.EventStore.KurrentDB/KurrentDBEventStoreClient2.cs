@@ -11,14 +11,6 @@ using StreamPos = KurrentDB.Client.StreamPosition;
 
 namespace DomainBlocks.EventStore.KurrentDB;
 
-public interface IKurrentDBEventStoreClient2<TEvent> : IEventStoreClient2<
-    AppendEvent<TEvent>,
-    ReadEvent2<TEvent, string, StreamPos, LogPos>,
-    string,
-    StreamPos,
-    LogPos>
-    where TEvent : notnull;
-
 public class KurrentDBEventStoreClient2<TEvent>(
     KurrentDBClient client,
     IEventEncoder<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventEncoder,
