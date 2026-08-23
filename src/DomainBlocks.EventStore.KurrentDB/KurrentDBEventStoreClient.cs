@@ -1,12 +1,11 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Codecs;
 using KurrentDB.Client;
-using KurrentStreamPosition = KurrentDB.Client.StreamPosition;
-using KurrentStreamState = KurrentDB.Client.StreamState;
+using NativeStreamState = KurrentDB.Client.StreamState;
 using StreamNotFoundException = DomainBlocks.EventStore.Abstractions.StreamNotFoundException;
-using StreamPosition = DomainBlocks.EventStore.Abstractions.StreamPosition;
-using StreamState = DomainBlocks.EventStore.Abstractions.StreamState;
+using StreamPosition = KurrentDB.Client.StreamPosition;
 
 namespace DomainBlocks.EventStore.KurrentDB;
 
@@ -14,17 +13,19 @@ public class KurrentDBEventStoreClient<TEvent>(
     KurrentDBClient client,
     IEventEncoder<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventEncoder,
     IEventDecoder<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventDecoder) :
-    IEventStoreClient<TEvent>
+    IKurrentDBEventStoreClient<TEvent>
     where TEvent : notnull
 {
     public async Task AppendToStreamAsync(
         string streamId,
+        ExpectedStreamState<StreamPosition> expectedState,
         IEnumerable<AppendEvent<TEvent>> events,
+        Guid? commitId = null,
         AppendToStreamOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        options ??= new AppendToStreamOptions();
-        var kurrentExpectedState = ToKurrentStreamState(options.ExpectedStreamState);
+        options ??= AppendToStreamOptions.Default;
+        var kurrentExpectedState = ToNativeStreamState(expectedState);
 
         var eventData = eventEncoder
             .Encode(events)
@@ -43,25 +44,84 @@ public class KurrentDBEventStoreClient<TEvent>(
         catch (WrongExpectedVersionException ex)
         {
             var actualState = ToStreamState(ex.ActualStreamState);
-            throw new StreamAppendConflictException(streamId, options.ExpectedStreamState, actualState, ex);
+            //throw new StreamAppendConflictException(streamId, options.ExpectedStreamState, actualState, ex);
+            throw;
         }
     }
 
-    public IAsyncEnumerable<ReadEvent<TEvent>> ReadStream(string streamId, ReadStreamOptions? options = null)
+    public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, Position>> ReadAll(
+        ReadDefinition<Position> definition,
+        ReadAllOptions? options = null)
     {
-        return ReadStreamCoreAsync(streamId, options ?? ReadStreamOptions.Default);
+        throw new NotImplementedException();
     }
 
-    private async IAsyncEnumerable<ReadEvent<TEvent>> ReadStreamCoreAsync(
+    public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, Position>> ReadStream(
         string streamId,
+        ReadDefinition<StreamPosition> definition,
+        ReadStreamOptions? options = null)
+    {
+        return ReadStreamCoreAsync(streamId, definition, options ?? ReadStreamOptions.Default);
+    }
+
+    public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
+        SubscriptionDefinition<Position> definition,
+        SubscriptionOptions? options = null)
+    {
+        throw new NotImplementedException();
+    }
+
+    public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(string streamId,
+        SubscriptionDefinition<StreamPosition> definition,
+        SubscriptionOptions? options = null)
+    {
+        throw new NotImplementedException();
+    }
+
+    private static NativeStreamState ToNativeStreamState(ExpectedStreamState<StreamPosition> expected) =>
+        expected switch
+        {
+            { Kind: ExpectedStreamStateKind.Any } => NativeStreamState.Any,
+            { Kind: ExpectedStreamStateKind.DoesNotExist } => NativeStreamState.NoStream,
+            { Kind: ExpectedStreamStateKind.Exists } => NativeStreamState.StreamExists,
+            { Kind: ExpectedStreamStateKind.AtVersion } => NativeStreamState.StreamRevision(expected.Version),
+            _ => throw new ArgumentOutOfRangeException(nameof(expected), expected, null)
+        };
+
+    private static StreamState<StreamPosition>? ToStreamState(NativeStreamState kurrentStreamState)
+    {
+        if (kurrentStreamState == NativeStreamState.NoStream)
+            return StreamState<StreamPosition>.DoesNotExist;
+
+        if (kurrentStreamState.HasPosition)
+        {
+            var value = kurrentStreamState.ToInt64();
+            if (value >= 0)
+                return StreamState<StreamPosition>.AtVersion(StreamPosition.FromInt64(value));
+        }
+
+        return null;
+    }
+
+    private async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, Position>> ReadStreamCoreAsync(
+        string streamId,
+        ReadDefinition<StreamPosition> definition,
         ReadStreamOptions options,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var position = options.Position;
-        var direction = options.Direction;
+        var (direction, revision) = definition switch
+        {
+            ReadDefinition<StreamPosition>.ForwardFromStart => (Direction.Forwards, StreamPosition.Start),
+            ReadDefinition<StreamPosition>.BackwardFromEnd => (Direction.Backwards, StreamPosition.End),
+            ReadDefinition<StreamPosition>.ForwardFrom d => (Direction.Forwards, d.Position),
+            ReadDefinition<StreamPosition>.BackwardFrom d => (Direction.Backwards, d.Position),
+            _ => throw new UnreachableException($"Unknown ReadDefinition type '{definition.GetType().Name}'.")
+        };
 
-        if (position.IsStart && direction == ReadDirection.Backward ||
-            position.IsEnd && direction == ReadDirection.Forward)
+        var isEmptyEnumeration = direction == Direction.Forwards && revision == StreamPosition.End ||
+                                 direction == Direction.Backwards && revision == StreamPosition.Start;
+
+        if (isEmptyEnumeration)
         {
             if (options.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw &&
                 !await StreamExistsAsync(streamId, cancellationToken).ConfigureAwait(false))
@@ -72,13 +132,10 @@ public class KurrentDBEventStoreClient<TEvent>(
             yield break;
         }
 
-        var kurrentDirection = ToKurrentDirection(direction);
-        var kurrentPosition = ToKurrentStreamPosition(position);
-
         var result = client.ReadStreamAsync(
-            kurrentDirection,
+            direction,
             streamId,
-            kurrentPosition,
+            revision,
             cancellationToken: cancellationToken);
 
         if (options.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw &&
@@ -95,52 +152,14 @@ public class KurrentDBEventStoreClient<TEvent>(
 
             var (@event, metadata) = eventDecoder.Decode(record.EventType, record.Data, metadataBytes);
 
-            var streamVersion = new StreamPosition(originalRecord.EventNumber.ToUInt64());
-            var logSequenceNumber = new LogPosition(originalRecord.Position.CommitPosition);
-            var context = new ReadEventContext(streamId, streamVersion, record.Created, logSequenceNumber);
-
-            yield return ReadEvent.Create(@event, metadata, context);
+            yield return ReadEvent.Create(
+                @event,
+                streamId,
+                metadata,
+                record.Created,
+                originalRecord.EventNumber,
+                originalRecord.Position);
         }
-    }
-
-    private static KurrentStreamState ToKurrentStreamState(ExpectedStreamState expected) => expected switch
-    {
-        _ when expected.IsAny => KurrentStreamState.Any,
-        _ when expected.IsStreamExists => KurrentStreamState.StreamExists,
-        _ when expected.IsStreamDoesNotExist => KurrentStreamState.NoStream,
-        _ when expected.IsSpecificVersion => KurrentStreamState.StreamRevision(expected.Version.Value.Value),
-        _ => throw new ArgumentOutOfRangeException(nameof(expected), expected, null)
-    };
-
-    private static Direction ToKurrentDirection(ReadDirection direction)
-    {
-        return direction == ReadDirection.Forward ? Direction.Forwards : Direction.Backwards;
-    }
-
-    private static KurrentStreamPosition ToKurrentStreamPosition(ReadPosition<StreamPosition> position)
-    {
-        return position switch
-        {
-            { IsStart: true } => KurrentStreamPosition.Start,
-            { IsEnd: true } => KurrentStreamPosition.End,
-            { IsSpecific: true } => KurrentStreamPosition.FromStreamRevision(position.Specific.Value.Value),
-            _ => default
-        };
-    }
-
-    private static StreamState? ToStreamState(KurrentStreamState kurrentStreamState)
-    {
-        if (kurrentStreamState == KurrentStreamState.NoStream)
-            return StreamState.StreamDoesNotExist;
-
-        if (kurrentStreamState.HasPosition)
-        {
-            var value = kurrentStreamState.ToInt64();
-            if (value >= 0)
-                return StreamState.StreamExists(StreamPosition.FromInt64(value));
-        }
-
-        return null;
     }
 
     private async Task<bool> StreamExistsAsync(string streamId, CancellationToken cancellationToken)
@@ -148,7 +167,7 @@ public class KurrentDBEventStoreClient<TEvent>(
         var streamExist = client.ReadStreamAsync(
             Direction.Backwards,
             streamId,
-            KurrentStreamPosition.End,
+            StreamPosition.End,
             maxCount: 1,
             cancellationToken: cancellationToken);
 

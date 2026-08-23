@@ -2,4 +2,7 @@ using DomainBlocks.EventStore.Abstractions;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
-public record AppendToStreamContext(Guid CommitId, string StreamId, ExpectedStreamState ExpectedStreamState);
+public record AppendToStreamContext(
+    Guid CommitId,
+    string StreamId,
+    ExpectedStreamState<StreamPosition> ExpectedStreamState);

@@ -1,5 +1,8 @@
-﻿using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.Abstractions;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
-public interface IMongoEventStoreClient<TEvent> : IEventStoreClient<TEvent>, IAsyncDisposable where TEvent : notnull;
+public interface IMongoEventStoreClient<TEvent> :
+    IEventStoreClient<TEvent, string, StreamPosition, LogPosition>,
+    IAsyncDisposable
+    where TEvent : notnull;

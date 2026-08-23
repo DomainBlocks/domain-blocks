@@ -2,9 +2,14 @@ using DomainBlocks.EventStore.Abstractions;
 
 namespace DomainBlocks.EventSourcing;
 
-public sealed class EntityStore<TEvent>(
-    IEventStoreClient<TEvent> eventStoreClient,
-    IEntityDefinitionProvider<TEvent> entityDefinitionProvider) : IEntityStore where TEvent : notnull
+public sealed class EntityStore<TEvent, TStreamId, TStreamPos, TLogPos>(
+    IEventStoreClient<TEvent, TStreamId, TStreamPos, TLogPos> eventStoreClient,
+    IEntityDefinitionProvider<TEvent> entityDefinitionProvider) :
+    IEntityStore
+    where TEvent : notnull
+    where TStreamId : notnull
+    where TStreamPos : notnull
+    where TLogPos : notnull
 {
     public async Task<Versioned<TEntity>> LoadAsync<TEntity>(
         string entityId,
@@ -43,12 +48,9 @@ public sealed class EntityStore<TEvent>(
 
         var streamName = GetStreamName<TEntity>(entityId);
 
-        var options = new AppendToStreamOptions
-        {
-            ExpectedStreamState = entity.Version.HasValue
-                ? ExpectedStreamState.SpecificVersion(entity.Version.Value)
-                : ExpectedStreamState.StreamDoesNotExist
-        };
+        var expectedStreamState = entity.Version.HasValue
+            ? ExpectedStreamState<TStreamPos>.AtVersion(entity.Version.Value)
+            : ExpectedStreamState<TStreamPos>.DoesNotExist;
 
         await eventStoreClient
             .AppendToStreamAsync(streamName, uncommittedEvents, options, cancellationToken)

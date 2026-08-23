@@ -50,13 +50,15 @@ public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog
             var streamVersion = _buffers.HeadStreamVersions.GetValueOrDefault(streamId, -1L);
 
             var actualStreamState = streamVersion < 0
-                ? StreamState.StreamDoesNotExist
-                : StreamState.StreamExists(StreamPosition.FromInt64(streamVersion));
+                ? StreamState<StreamPosition>.DoesNotExist
+                : StreamState<StreamPosition>.AtVersion(StreamPosition.FromInt64(streamVersion));
 
             if (!expectedStreamState.Matches(actualStreamState))
             {
-                request.TryComplete(
-                    new StreamAppendConflictException(streamId, expectedStreamState, actualStreamState));
+                request.TryComplete(new StreamAppendConflictException<StreamPosition>(
+                    streamId,
+                    expectedStreamState,
+                    actualStreamState));
 
                 continue;
             }
@@ -87,15 +89,14 @@ public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog
         }
 
         var expectedStreamState = conflict.Context.ExpectedStreamState;
-        var canRetry = expectedStreamState.IsAny || expectedStreamState.IsStreamExists;
+        var canRetry = expectedStreamState.Kind is ExpectedStreamStateKind.Any or ExpectedStreamStateKind.Exists;
 
         return canRetry
             ? ConflictResolution.Retry
-            : ConflictResolution.Fail(
-                new StreamAppendConflictException(
-                    conflict.Context.StreamId,
-                    expectedStreamState,
-                    innerException: conflict.OriginatingException));
+            : ConflictResolution.Fail(new StreamAppendConflictException<StreamPosition>(
+                conflict.Context.StreamId,
+                expectedStreamState,
+                innerException: conflict.OriginatingException));
     }
 
     private sealed class Buffers

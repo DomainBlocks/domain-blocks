@@ -1,5 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
+﻿using System.Diagnostics;
 
 namespace DomainBlocks.EventStore.Abstractions;
 
@@ -7,29 +6,31 @@ namespace DomainBlocks.EventStore.Abstractions;
 /// Represents the expected state of an event stream. Used to enforce concurrency or existence checks when performing
 /// stream operations. The default value is <see cref="Any"/>.
 /// </summary>
-public readonly record struct ExpectedStreamState
+public readonly record struct ExpectedStreamState<TVersion> where TVersion : notnull
 {
     private const string VersionPrefix = "Version=";
 
     /// <summary>
     /// Any state; stream may exist at any version or may not exist.
     /// </summary>
-    public static readonly ExpectedStreamState Any = new(ExpectedStreamStateKind.Any);
+    public static readonly ExpectedStreamState<TVersion> Any = new(ExpectedStreamStateKind.Any);
 
     /// <summary>
     /// Stream must not exist.
     /// </summary>
-    public static readonly ExpectedStreamState StreamDoesNotExist = new(ExpectedStreamStateKind.DoesNotExist);
+    public static readonly ExpectedStreamState<TVersion> DoesNotExist = new(ExpectedStreamStateKind.DoesNotExist);
 
     /// <summary>
     /// Stream must exist.
     /// </summary>
-    public static readonly ExpectedStreamState StreamExists = new(ExpectedStreamStateKind.Exists);
+    public static readonly ExpectedStreamState<TVersion> Exists = new(ExpectedStreamStateKind.Exists);
 
-    private ExpectedStreamState(ExpectedStreamStateKind kind, StreamPosition? version = null)
+    private readonly TVersion? _version;
+
+    private ExpectedStreamState(ExpectedStreamStateKind kind, TVersion? version = default)
     {
         Kind = kind;
-        Version = version;
+        _version = version;
     }
 
     /// <summary>
@@ -38,85 +39,40 @@ public readonly record struct ExpectedStreamState
     public ExpectedStreamStateKind Kind { get; }
 
     /// <summary>
-    /// The expected stream version when <see cref="IsSpecificVersion"/> is <c>true</c>, otherwise <c>null</c>.
+    /// The expected stream version.
     /// </summary>
-    public StreamPosition? Version { get; }
-
-    /// <summary>
-    /// True if this instance is <see cref="Any"/>.
-    /// </summary>
-    public bool IsAny => Kind == ExpectedStreamStateKind.Any;
-
-    /// <summary>
-    /// True if this instance is <see cref="StreamDoesNotExist"/>.
-    /// </summary>
-    public bool IsStreamDoesNotExist => Kind == ExpectedStreamStateKind.DoesNotExist;
-
-    /// <summary>
-    /// True if this instance is <see cref="StreamExists"/>.
-    /// </summary>
-    public bool IsStreamExists => Kind == ExpectedStreamStateKind.Exists;
-
-    /// <summary>
-    /// True if this instance represents a specific stream version.
-    /// </summary>
-    [MemberNotNullWhen(true, nameof(Version))]
-    public bool IsSpecificVersion => Kind == ExpectedStreamStateKind.AtVersion;
+    /// <exception cref="InvalidOperationException">
+    /// <see cref="Kind"/> is not <see cref="ExpectedStreamStateKind.AtVersion"/>.
+    /// </exception>
+    public TVersion Version => Kind == ExpectedStreamStateKind.AtVersion
+        ? _version!
+        : throw new InvalidOperationException(
+            $"Version is only available when Kind is '{nameof(ExpectedStreamStateKind.AtVersion)}'. Kind: '{Kind}'.");
 
     /// <summary>
     /// Creates an expected stream state for a specific version.
     /// </summary>
-    public static ExpectedStreamState SpecificVersion(StreamPosition version)
+    public static ExpectedStreamState<TVersion> AtVersion(TVersion version)
     {
-        return new ExpectedStreamState(ExpectedStreamStateKind.AtVersion, version);
-    }
-
-    public static bool TryParse(string input, [NotNullWhen(true)] out ExpectedStreamState? result)
-    {
-        result = null;
-
-        if (string.Equals(input, Any.ToString(), StringComparison.OrdinalIgnoreCase))
-        {
-            result = Any;
-        }
-        else if (string.Equals(input, StreamDoesNotExist.ToString(), StringComparison.OrdinalIgnoreCase))
-        {
-            result = StreamDoesNotExist;
-        }
-        else if (string.Equals(input, StreamExists.ToString(), StringComparison.OrdinalIgnoreCase))
-        {
-            result = StreamExists;
-        }
-        else if (input.StartsWith(VersionPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            var raw = input[VersionPrefix.Length..];
-
-            if (ulong.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v))
-                result = SpecificVersion(new StreamPosition(v));
-        }
-
-        return result.HasValue;
+        ArgumentNullException.ThrowIfNull(version);
+        return new ExpectedStreamState<TVersion>(ExpectedStreamStateKind.AtVersion, version);
     }
 
     /// <summary>
     /// Returns <c>true</c> if this expected state matches the given actual state.
     /// </summary>
-    public bool Matches(StreamState actualState)
+    public bool Matches(StreamState<TVersion> actualState)
     {
-        if (IsAny)
-            return true;
-
-        if (IsStreamDoesNotExist)
-            return actualState.IsStreamDoesNotExist;
-
-        if (IsStreamExists)
-            return actualState.IsStreamExists;
-
-        if (IsSpecificVersion)
-            return actualState.IsStreamExists && Version.Value == actualState.Version.Value;
-
-        // Defensive fallback: kind not recognized
-        return false;
+        return Kind switch
+        {
+            ExpectedStreamStateKind.Any => true,
+            ExpectedStreamStateKind.DoesNotExist => actualState.Kind == StreamStateKind.DoesNotExist,
+            ExpectedStreamStateKind.Exists => actualState.Kind == StreamStateKind.AtVersion,
+            ExpectedStreamStateKind.AtVersion =>
+                actualState.Kind == StreamStateKind.AtVersion &&
+                EqualityComparer<TVersion>.Default.Equals(_version!, actualState.Version),
+            _ => false // Defensive fallback: kind not recognized
+        };
     }
 
     /// <summary>
@@ -125,8 +81,9 @@ public readonly record struct ExpectedStreamState
     public override string ToString() => Kind switch
     {
         ExpectedStreamStateKind.Any => nameof(Any),
-        ExpectedStreamStateKind.DoesNotExist => nameof(StreamDoesNotExist),
-        ExpectedStreamStateKind.Exists => nameof(StreamExists),
-        _ => $"{VersionPrefix}{Version?.Value}"
+        ExpectedStreamStateKind.DoesNotExist => nameof(DoesNotExist),
+        ExpectedStreamStateKind.Exists => nameof(Exists),
+        ExpectedStreamStateKind.AtVersion => $"{VersionPrefix}{_version}",
+        _ => throw new UnreachableException($"Unknown {nameof(ExpectedStreamStateKind)} '{Kind}'.")
     };
 }

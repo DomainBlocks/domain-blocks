@@ -1,4 +1,4 @@
-namespace DomainBlocks.EventStore.Abstractions.New;
+namespace DomainBlocks.EventStore.Abstractions;
 
 public static class SubscriptionDefinition
 {
@@ -6,9 +6,9 @@ public static class SubscriptionDefinition
         where TPos : notnull =>
         SubscriptionDefinition<TPos>.FromStart.Instance;
 
-    public static SubscriptionDefinition<TPos>.FromEnd FromLive<TPos>()
+    public static SubscriptionDefinition<TPos>.FromLive FromLive<TPos>()
         where TPos : notnull =>
-        SubscriptionDefinition<TPos>.FromEnd.Instance;
+        SubscriptionDefinition<TPos>.FromLive.Instance;
 
     public static SubscriptionDefinition<TPos>.After After<TPos>(TPos position)
         where TPos : notnull =>
@@ -26,11 +26,11 @@ public abstract record SubscriptionDefinition<TPos> where TPos : notnull
         }
     }
 
-    public sealed record FromEnd : SubscriptionDefinition<TPos>
+    public sealed record FromLive : SubscriptionDefinition<TPos>
     {
-        public static readonly FromEnd Instance = new();
+        public static readonly FromLive Instance = new();
 
-        private FromEnd()
+        private FromLive()
         {
         }
     }

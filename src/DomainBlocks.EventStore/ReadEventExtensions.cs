@@ -4,21 +4,31 @@ namespace DomainBlocks.EventStore;
 
 public static class ReadEventExtensions
 {
-    /// <summary>
-    /// Unwraps the event objects from a sequence of <see cref="ReadEvent{TEvent}"/> instances.
-    /// </summary>
-    public static IEnumerable<TEvent> Unwrap<TEvent>(this IEnumerable<ReadEvent<TEvent>> source)
+    extension<TEvent, TStreamId, TStreamPos, TLogPos>(
+        IEnumerable<ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>> source)
         where TEvent : notnull
+        where TStreamId : notnull
+        where TStreamPos : notnull
+        where TLogPos : notnull
     {
-        return source.Select(x => x.Event);
+        /// <summary>
+        /// Unwraps the event objects from a sequence of
+        /// <see cref="ReadEvent{TEvent,TStreamId,TStreamPos,TLogPos}"/> instances.
+        /// </summary>
+        public IEnumerable<TEvent> Unwrap() => source.Select(x => x.Event);
     }
 
-    /// <summary>
-    /// Unwraps the event objects from a sequence of <see cref="ReadEvent{TEvent}"/> instances.
-    /// </summary>
-    public static IAsyncEnumerable<TEvent> Unwrap<TEvent>(this IAsyncEnumerable<ReadEvent<TEvent>> source)
+    extension<TEvent, TStreamId, TStreamPos, TLogPos>(
+        IAsyncEnumerable<ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>> source)
         where TEvent : notnull
+        where TStreamId : notnull
+        where TStreamPos : notnull
+        where TLogPos : notnull
     {
-        return source.Select(x => x.Event);
+        /// <summary>
+        /// Unwraps the event objects from a sequence of
+        /// <see cref="ReadEvent{TEvent,TStreamId,TStreamPos,TLogPos}"/> instances.
+        /// </summary>
+        public IAsyncEnumerable<TEvent> Unwrap() => source.Select(x => x.Event);
     }
 }

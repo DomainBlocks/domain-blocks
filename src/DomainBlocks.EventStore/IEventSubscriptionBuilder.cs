@@ -1,4 +1,6 @@
-namespace DomainBlocks.EventStore.Abstractions.New;
+using DomainBlocks.EventStore.Abstractions;
+
+namespace DomainBlocks.EventStore;
 
 public interface IEventSubscriptionBuilder<out TEvent, in TPos> where TEvent : notnull where TPos : notnull
 {

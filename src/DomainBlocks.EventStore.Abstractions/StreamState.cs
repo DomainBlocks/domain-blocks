@@ -1,24 +1,25 @@
-using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
+﻿using System.Diagnostics;
 
 namespace DomainBlocks.EventStore.Abstractions;
 
 /// <summary>
 /// Represents the observed state of an event stream.
 /// </summary>
-public readonly record struct StreamState
+public readonly record struct StreamState<TVersion> where TVersion : notnull
 {
     private const string VersionPrefix = "Version=";
 
     /// <summary>
     /// Represents a stream state indicating that the stream does not exist (i.e. has no events).
     /// </summary>
-    public static readonly StreamState StreamDoesNotExist = new(StreamStateKind.DoesNotExist);
+    public static readonly StreamState<TVersion> DoesNotExist = new(StreamStateKind.DoesNotExist);
 
-    private StreamState(StreamStateKind kind, StreamPosition? version = null)
+    private readonly TVersion? _version;
+
+    private StreamState(StreamStateKind kind, TVersion? version = default)
     {
         Kind = kind;
-        Version = version;
+        _version = version;
     }
 
     /// <summary>
@@ -27,49 +28,29 @@ public readonly record struct StreamState
     public StreamStateKind Kind { get; }
 
     /// <summary>
-    /// Gets the stream version, if the stream exists.
+    /// Gets the stream version.
     /// </summary>
-    public StreamPosition? Version { get; }
-
-    /// <summary>
-    /// Gets a value indicating whether the stream does not exist.
-    /// </summary>
-    [MemberNotNullWhen(false, nameof(Version))]
-    public bool IsStreamDoesNotExist => Kind == StreamStateKind.DoesNotExist;
-
-    /// <summary>
-    /// Gets a value indicating whether the stream exists.
-    /// </summary>
-    [MemberNotNullWhen(true, nameof(Version))]
-    public bool IsStreamExists => Kind == StreamStateKind.AtVersion;
+    /// <exception cref="InvalidOperationException">
+    /// <see cref="Kind"/> is not <see cref="StreamStateKind.AtVersion"/>.
+    /// </exception>
+    public TVersion Version => Kind == StreamStateKind.AtVersion
+        ? _version!
+        : throw new InvalidOperationException(
+            $"Version is only available when Kind is '{nameof(StreamStateKind.AtVersion)}'. Kind: '{Kind}'.");
 
     /// <summary>
     /// Creates a stream state representing an existing stream with the specified version.
     /// </summary>
-    public static StreamState StreamExists(StreamPosition version) => new(StreamStateKind.AtVersion, version);
-
-    public static bool TryParse(string input, [NotNullWhen(true)] out StreamState? result)
+    public static StreamState<TVersion> AtVersion(TVersion version)
     {
-        result = null;
-
-        if (string.Equals(input, StreamDoesNotExist.ToString(), StringComparison.OrdinalIgnoreCase))
-        {
-            result = StreamDoesNotExist;
-        }
-        else if (input.StartsWith(VersionPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            var raw = input[VersionPrefix.Length..];
-
-            if (ulong.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v))
-                result = StreamExists(new StreamPosition(v));
-        }
-
-        return result.HasValue;
+        ArgumentNullException.ThrowIfNull(version);
+        return new StreamState<TVersion>(StreamStateKind.AtVersion, version);
     }
 
     public override string ToString() => Kind switch
     {
-        StreamStateKind.DoesNotExist => nameof(StreamDoesNotExist),
-        _ => $"{VersionPrefix}{Version?.Value}"
+        StreamStateKind.DoesNotExist => nameof(DoesNotExist),
+        StreamStateKind.AtVersion => $"{VersionPrefix}{_version}",
+        _ => throw new UnreachableException($"Unknown {nameof(StreamStateKind)} '{Kind}'.")
     };
 }

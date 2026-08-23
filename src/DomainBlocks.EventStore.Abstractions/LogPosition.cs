@@ -5,7 +5,7 @@ namespace DomainBlocks.EventStore.Abstractions;
 /// spanning all streams, if supported by the underlying event store. Values increase in append order but are not
 /// guaranteed to be contiguous (some stores may leave gaps). The log-wide counterpart to <see cref="StreamPosition"/>.
 /// </summary>
-public readonly record struct LogPosition(ulong Value)
+public readonly record struct LogPosition(ulong Value) : IPosition<LogPosition>
 {
     public static LogPosition FromInt64(long value)
     {

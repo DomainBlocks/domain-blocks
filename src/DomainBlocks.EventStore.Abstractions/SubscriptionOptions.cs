@@ -1,4 +1,4 @@
-﻿namespace DomainBlocks.EventStore.Abstractions.New;
+﻿namespace DomainBlocks.EventStore.Abstractions;
 
 public sealed record SubscriptionOptions
 {

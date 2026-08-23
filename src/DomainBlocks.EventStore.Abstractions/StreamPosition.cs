@@ -3,7 +3,7 @@ namespace DomainBlocks.EventStore.Abstractions;
 /// <summary>
 /// Represents the zero-based position of an event within its stream.
 /// </summary>
-public readonly record struct StreamPosition(ulong Value)
+public readonly record struct StreamPosition(ulong Value) : IPosition<StreamPosition>
 {
     public static StreamPosition FromInt64(long value)
     {

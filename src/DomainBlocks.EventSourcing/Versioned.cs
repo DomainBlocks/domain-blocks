@@ -10,16 +10,16 @@ public static class Versioned
         new(entity, expectedVersion);
 }
 
-public sealed class Versioned<TEntity>
+public sealed class Versioned<TEntity, TVersion>
 {
-    internal Versioned(TEntity entity, StreamPosition? version)
+    internal Versioned(TEntity entity, TVersion? version)
     {
         Entity = entity;
         Version = version;
     }
 
     public TEntity Entity { get; }
-    public StreamPosition? Version { get; }
+    public TVersion? Version { get; }
 
     public Versioned<TEntity> With(Func<TEntity, TEntity> update) => With(update(Entity));
 

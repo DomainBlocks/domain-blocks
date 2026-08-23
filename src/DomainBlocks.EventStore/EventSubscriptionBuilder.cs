@@ -1,4 +1,6 @@
-namespace DomainBlocks.EventStore.Abstractions.New;
+using DomainBlocks.EventStore.Abstractions;
+
+namespace DomainBlocks.EventStore;
 
 internal sealed class EventSubscriptionBuilder<TEvent, TPos>(
     Func<SubscriptionDefinition<TPos>, IAsyncEnumerable<SubscriptionMessage>> subscriber) :
