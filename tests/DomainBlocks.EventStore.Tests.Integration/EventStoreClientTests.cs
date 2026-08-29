@@ -38,7 +38,7 @@ public class EventStoreClientTests
 
         var eventCodec = TestMongoEventCodec.Create<object>(eventTypeMap);
 
-        var options = new MongoEventStoreClientOptions
+        var options = new MongoEventStoreOptions
         {
             DatabaseName = "domainblocks_tests"
         };
@@ -79,7 +79,7 @@ public class EventStoreClientTests
 
         var orderEvents = await client
             .ReadStream(streamId)
-            .Unwrap()
+            .Select(x => x.Payload)
             .OfType<LimitOrderEvent>()
             .ToArrayAsync();
 

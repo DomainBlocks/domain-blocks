@@ -68,7 +68,7 @@ public class MongoSerializationTests
     {
         using var mongoClient = new MongoClient(TestMongoConnectionStrings.Default);
 
-        var options = new MongoEventStoreClientOptions
+        var options = new MongoEventStoreOptions
         {
             DatabaseName = "domainblocks_tests"
         };
@@ -89,7 +89,7 @@ public class MongoSerializationTests
     private static MongoEventStore<object> CreateEventStoreClient(
         MongoClient mongoClient,
         IObjectSerde<BsonValue> serde,
-        MongoEventStoreClientOptions options)
+        MongoEventStoreOptions options)
     {
         var eventTypeMap = EventTypeMap.Create(builder => builder
             .MapType<UserCreated>()

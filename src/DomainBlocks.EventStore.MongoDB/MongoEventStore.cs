@@ -19,11 +19,11 @@ public static class MongoEventStore
     public static MongoEventStore<TEvent> Create<TEvent>(
         IMongoClient mongoClient,
         EventCodec<TEvent, BsonValue, BsonValue> codec,
-        MongoEventStoreClientOptions? options = null,
+        MongoEventStoreOptions? options = null,
         ILogger? logger = null)
         where TEvent : notnull
     {
-        options ??= new MongoEventStoreClientOptions();
+        options ??= new MongoEventStoreOptions();
 
         var db = mongoClient.GetDatabase(options.DatabaseName);
 

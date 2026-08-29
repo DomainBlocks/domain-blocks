@@ -6,6 +6,8 @@ using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Metadata;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.SystemTextJson;
+using KurrentDB.Client;
+using StreamPosition = KurrentDB.Client.StreamPosition;
 
 namespace DomainBlocks.EventStore.Benchmarks;
 
@@ -47,7 +49,7 @@ public class EventStoreClientWriteBenchmarks
     [Benchmark]
     public Task AppendToStreamAsync_NoIO()
     {
-        return _client.AppendToStreamAsync(StreamId, _appendEvents);
+        return _client.AppendAsync(StreamId, _appendEvents);
     }
 
     private static AppendableEvent<IDomainEvent>[] CreateAppendEvents(int count)
@@ -79,12 +81,14 @@ public class EventStoreClientWriteBenchmarks
     private sealed class FakeKurrentDBEventStore<TEvent>(
         EventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec,
         Consumer consumer) :
-        IEventStore<,,,>
+        IEventStore<TEvent, string, StreamPosition, Position>
         where TEvent : notnull
     {
-        public Task AppendToStreamAsync(
+        public Task AppendAsync(
             string streamId,
             IEnumerable<AppendableEvent<TEvent>> events,
+            ExpectedStreamState<StreamPosition>? expectedState = null,
+            Guid? commitId = null,
             AppendOptions? options = null,
             CancellationToken cancellationToken = default)
         {
@@ -98,7 +102,34 @@ public class EventStoreClientWriteBenchmarks
             return Task.CompletedTask;
         }
 
-        public IAsyncEnumerable<ReadEvent<TEvent>> ReadStream(string streamId, ReadStreamOptions? options = null)
+        public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, Position>> ReadAll(
+            ReadDirection direction = ReadDirection.Forward,
+            ReadOrigin<Position>? origin = null,
+            ReadAllOptions? options = null)
+        {
+            throw new NotImplementedException();
+        }
+
+        public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, Position>> ReadStream(
+            string streamId,
+            ReadDirection direction = ReadDirection.Forward,
+            ReadOrigin<StreamPosition>? origin = null,
+            ReadStreamOptions? options = null)
+        {
+            throw new NotImplementedException();
+        }
+
+        public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
+            ReadOrigin<Position>? origin = null,
+            SubscriptionOptions? options = null)
+        {
+            throw new NotImplementedException();
+        }
+
+        public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
+            string streamId,
+            ReadOrigin<StreamPosition>? origin = null,
+            SubscriptionOptions? options = null)
         {
             throw new NotImplementedException();
         }

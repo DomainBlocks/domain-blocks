@@ -22,7 +22,7 @@ public class ReadEventTransformTests
         var eventTypeMap = EventTypeMap.Create(x => x.MapType<ShipmentDispatched>());
         var eventCodec = TestMongoEventCodec.Create<object>(eventTypeMap);
 
-        var options = new MongoEventStoreClientOptions
+        var options = new MongoEventStoreOptions
         {
             DatabaseName = "domainblocks_tests"
         };
@@ -70,7 +70,7 @@ public class ReadEventTransformTests
         var readEvents = await client
             .ReadStream(streamId)
             .Transform([new ShipmentDispatchedTransform()])
-            .Unwrap()
+            .Select(x => x.Payload)
             .ToArrayAsync();
 
         readEvents.ShouldBe(expectedEvents);
@@ -93,12 +93,12 @@ public class ReadEventTransformTests
         double WeightKg,
         string Destination);
 
-    private class ShipmentDispatchedTransform : ReadEventTransform<object, ShipmentDispatched>
+    private class ShipmentDispatchedTransform :
+        ReadEventTransform<object, ShipmentDispatched, string, StreamPosition, LogPosition>
     {
         protected override IEnumerable<object> Apply(
             ShipmentDispatched @event,
-            IReadOnlyDictionary<string, string> metadata,
-            ReadEventContext context)
+            ReadEventContext<string, StreamPosition, LogPosition> context)
         {
             yield return new ShipmentDispatchedV2(
                 @event.ShipmentId,

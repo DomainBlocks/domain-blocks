@@ -1,6 +1,6 @@
 namespace DomainBlocks.EventStore.MongoDB;
 
-public sealed class MongoEventStoreClientOptions
+public sealed class MongoEventStoreOptions
 {
     public string DatabaseName { get; set; } = "domainblocks";
     public string EventLogCollectionName { get; set; } = "dbx_event_log";

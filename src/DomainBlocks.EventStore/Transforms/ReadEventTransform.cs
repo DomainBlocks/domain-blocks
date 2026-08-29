@@ -2,13 +2,14 @@ using DomainBlocks.EventStore.Abstractions;
 
 namespace DomainBlocks.EventStore.Transforms;
 
-public abstract class ReadEventTransform<TEventBase, TStreamId, TStreamPos, TLogPos, TSourceEvent> :
+public abstract class ReadEventTransform<TEventBase, TSourceEvent, TStreamId, TStreamPos, TLogPos> :
     IReadEventTransform<TEventBase, TStreamId, TStreamPos, TLogPos>
     where TEventBase : class
+    where TSourceEvent : TEventBase
     where TStreamId : notnull
     where TStreamPos : notnull
     where TLogPos : notnull
-    where TSourceEvent : TEventBase
+
 {
     public Type SourceEventType => typeof(TSourceEvent);
 

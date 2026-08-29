@@ -5,7 +5,7 @@ using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.SystemTextJson;
 using KurrentDB.Client;
-using StreamPosition = DomainBlocks.EventStore.Abstractions.StreamPosition;
+using StreamPosition = KurrentDB.Client.StreamPosition;
 
 namespace DomainBlocks.EventStore.Benchmarks;
 
@@ -48,7 +48,7 @@ public class EventStoreClientReadBenchmarks
     public async Task ReadStream_NoIO()
     {
         // Force enumeration
-        await foreach (var _ in _client.ReadStream(StreamId, _readStreamOptions))
+        await foreach (var _ in _client.ReadStream(StreamId, options: _readStreamOptions))
         {
         }
     }
@@ -108,19 +108,34 @@ public class EventStoreClientReadBenchmarks
     private sealed class FakeKurrentDBEventStore<TEvent>(
         ResolvedEvent[] kurrentEvents,
         EventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec) :
-        IEventStore<,,,>
+        IEventStore<TEvent, string, StreamPosition, Position>
         where TEvent : notnull
     {
-        public Task AppendToStreamAsync(
+        public Task AppendAsync(
             string streamId,
             IEnumerable<AppendableEvent<TEvent>> events,
+            ExpectedStreamState<StreamPosition>? expectedState = null,
+            Guid? commitId = null,
             AppendOptions? options = null,
             CancellationToken cancellationToken = default)
         {
             throw new NotImplementedException();
         }
 
-        public async IAsyncEnumerable<ReadEvent<TEvent>> ReadStream(string streamId, ReadStreamOptions? options = null)
+        public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, Position>> ReadAll(
+            ReadDirection direction = ReadDirection.Forward,
+            ReadOrigin<Position>? origin = null,
+            ReadAllOptions? options = null)
+        {
+            throw new NotImplementedException();
+        }
+
+        // ReSharper disable once AsyncMethodWithoutAwait
+        public async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, Position>> ReadStream(
+            string streamId,
+            ReadDirection direction = ReadDirection.Forward,
+            ReadOrigin<StreamPosition>? origin = null,
+            ReadStreamOptions? options = null)
         {
             options ??= ReadStreamOptions.Default;
 
@@ -135,14 +150,30 @@ public class EventStoreClientReadBenchmarks
                     eventRecord.Data,
                     metadataBytes);
 
-                var context = new ReadEventContext(
+                var context = ReadEventContext.Create(
                     streamId,
-                    new StreamPosition(originalEventRecord.EventNumber.ToUInt64()),
+                    metadata,
                     eventRecord.Created,
-                    new LogPosition(originalEventRecord.Position.CommitPosition));
+                    originalEventRecord.EventNumber,
+                    originalEventRecord.Position);
 
-                yield return ReadEvent.Create(@event, metadata, context);
+                yield return ReadEvent.Create(@event, context);
             }
+        }
+
+        public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
+            ReadOrigin<Position>? origin = null,
+            SubscriptionOptions? options = null)
+        {
+            throw new NotImplementedException();
+        }
+
+        public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
+            string streamId,
+            ReadOrigin<StreamPosition>? origin = null,
+            SubscriptionOptions? options = null)
+        {
+            throw new NotImplementedException();
         }
     }
 }

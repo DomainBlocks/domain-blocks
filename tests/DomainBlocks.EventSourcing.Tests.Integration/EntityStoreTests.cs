@@ -16,7 +16,7 @@ namespace DomainBlocks.EventSourcing.Tests.Integration;
 public class EntityStoreTests
 {
     private MongoClient _mongoClient = null!;
-    private MongoEventStoreClientOptions _options = null!;
+    private MongoEventStoreOptions _options = null!;
     private ILoggerFactory _loggerFactory = null!;
     private MongoEventStore<IDomainEvent> _client = null!;
     private EntityStore<IDomainEvent> _entityStore = null!;
@@ -26,7 +26,7 @@ public class EntityStoreTests
     {
         _mongoClient = new MongoClient(TestMongoConnectionStrings.Default);
 
-        _options = new MongoEventStoreClientOptions
+        _options = new MongoEventStoreOptions
         {
             DatabaseName = "domainblocks_tests"
         };

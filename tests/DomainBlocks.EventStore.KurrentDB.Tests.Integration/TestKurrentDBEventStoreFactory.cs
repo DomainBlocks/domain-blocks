@@ -5,17 +5,18 @@ using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.SystemTextJson;
 using DomainBlocks.Testing.Integration;
 using KurrentDB.Client;
+using StreamPosition = KurrentDB.Client.StreamPosition;
 
 namespace DomainBlocks.EventStore.KurrentDB.Tests.Integration;
 
-public sealed class TestKurrentDBEventStoreClientFactory<TEvent> :
-    ITestEventStoreFactory<TEvent>
+public sealed class TestKurrentDBEventStoreFactory<TEvent> :
+    ITestEventStoreFactory<TEvent, string, StreamPosition, Position>
     where TEvent : notnull
 {
     private readonly KurrentDBClient _kurrentClient;
     private readonly EventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> _codec;
 
-    public TestKurrentDBEventStoreClientFactory(string connectionString, EventTypeMap eventTypeMap)
+    public TestKurrentDBEventStoreFactory(string connectionString, EventTypeMap eventTypeMap)
     {
         _kurrentClient = new KurrentDBClient(KurrentDBClientSettings.Create(connectionString));
 
@@ -29,11 +30,12 @@ public sealed class TestKurrentDBEventStoreClientFactory<TEvent> :
         _codec = EventCodec.Create(codecOptions);
     }
 
-    public Task<ITestEventStoreHandle<,,,>> CreateAsync(
+    public Task<ITestEventStoreHandle<TEvent, string, StreamPosition, Position>> CreateAsync(
         string name,
         CancellationToken cancellationToken = default)
     {
-        return Task.FromResult<ITestEventStoreHandle<,,,>>(new EventStoreHandle(_kurrentClient, _codec));
+        return Task.FromResult<ITestEventStoreHandle<TEvent, string, StreamPosition, Position>>(
+            new EventStoreHandle(_kurrentClient, _codec));
     }
 
     public ValueTask DisposeAsync() => _kurrentClient.DisposeAsync();
@@ -41,9 +43,9 @@ public sealed class TestKurrentDBEventStoreClientFactory<TEvent> :
     private sealed class EventStoreHandle(
         KurrentDBClient kurrentDBClient,
         EventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> codec) :
-        ITestEventStoreHandle<,,,>
+        ITestEventStoreHandle<TEvent, string, StreamPosition, Position>
     {
-        public IEventStore<,,,> Instance { get; } =
+        public IEventStore<TEvent, string, StreamPosition, Position> Instance { get; } =
             new KurrentDBEventStore<TEvent>(kurrentDBClient, codec.Encoder, codec.Decoder);
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;

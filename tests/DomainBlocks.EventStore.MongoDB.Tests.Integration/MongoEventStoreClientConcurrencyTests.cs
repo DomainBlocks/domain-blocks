@@ -7,65 +7,64 @@ namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
 public class MongoEventStoreClientConcurrencyTests
 {
-    private const int ClientCount = 3;
+    private const int InstanceCount = 3;
 
-    private MongoEventStoreClientOptions _options = null!;
-    private TestMongoEventStoreClientFactory<object> _clientFactory = null!;
-    private ITestEventStoreHandle<,,,>[] _clientHandles = null!;
+    private MongoEventStoreOptions _options = null!;
+    private TestMongoEventStoreFactory<object> _factory = null!;
+    private ITestEventStoreHandle<object, string, StreamPosition, LogPosition>[] _handles = null!;
 
     [SetUp]
     public async Task SetUp()
     {
-        _options = new MongoEventStoreClientOptions { DatabaseName = $"dbx_test_{Guid.NewGuid():N}" };
-        _clientFactory = TestMongoEventStoreClientFactory.CreateDefault(_options);
+        _options = new MongoEventStoreOptions { DatabaseName = $"dbx_test_{Guid.NewGuid():N}" };
+        _factory = TestMongoEventStoreFactory.CreateDefault(_options);
 
-        _clientHandles = new ITestEventStoreHandle<,,,>[ClientCount];
+        _handles = new ITestEventStoreHandle<object, string, StreamPosition, LogPosition>[InstanceCount];
 
-        for (var i = 0; i < ClientCount; i++)
-            _clientHandles[i] = await _clientFactory.CreateAsync($"client_{i}");
+        for (var i = 0; i < InstanceCount; i++)
+            _handles[i] = await _factory.CreateAsync($"instance_{i}");
     }
 
     [TearDown]
     public async Task TearDown()
     {
-        foreach (var clientHandle in _clientHandles)
-            await clientHandle.DisposeAsync();
+        foreach (var handle in _handles)
+            await handle.DisposeAsync();
 
-        await _clientFactory.DisposeAsync();
+        await _factory.DisposeAsync();
     }
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task ConcurrentAnyWrites_ToSameStream_AllSucceedWithContiguousVersions(CancellationToken ct)
+    public async Task ConcurrentAnyWrites_ToSameStream_AllSucceedWithContiguousPositions(CancellationToken ct)
     {
-        const int eventCountPerClient = 20;
-        const int expectedTotalEventCount = ClientCount * eventCountPerClient;
+        const int eventCountPerInstance = 20;
+        const int expectedTotalEventCount = InstanceCount * eventCountPerInstance;
 
         var streamId = $"shared-{Guid.NewGuid():N}";
 
         // All writers concurrently append to the same stream.
-        var tasks = _clientHandles
-            .SelectMany((clientHandle, clientIndex) => Enumerable
-                .Range(0, eventCountPerClient)
-                .Select(i => clientHandle.Instance.AppendToStreamAsync(
+        var tasks = _handles
+            .SelectMany((handle, index) => Enumerable
+                .Range(0, eventCountPerInstance)
+                .Select(i => handle.Instance.AppendAsync(
                     streamId,
-                    [new TestEvent { Value = $"w{clientIndex}-e{i}" }],
-                    new AppendOptions { ExpectedStreamState = ExpectedStreamState.Any },
-                    ct)));
+                    [new TestEvent { Value = $"w{index}-e{i}" }],
+                    cancellationToken: ct)));
 
         // Every task must complete successfully - no exceptions.
         await Task.WhenAll(tasks);
 
         // Read back and verify.
-        var readEvents = await _clientHandles[0].Instance.ReadStream(streamId).ToArrayAsync(ct);
+        var readEvents = await _handles[0].Instance.ReadStream(streamId).ToArrayAsync(ct);
 
         readEvents.Length.ShouldBe(expectedTotalEventCount, "All events must be committed");
 
-        var versions = readEvents.Select(e => e.Context.StreamVersion.Value).ToArray();
+        var positions = readEvents.Select(e => e.Context.StreamPosition.Value).ToArray();
 
-        versions.ShouldBe(
+        positions.ShouldBe(
             Enumerable.Range(0, expectedTotalEventCount).Select(i => (ulong)i),
-            "Stream versions must be contiguous starting from 0");
+            "Stream positions must be contiguous starting from 0");
     }
 
     [Test]
@@ -74,19 +73,19 @@ public class MongoEventStoreClientConcurrencyTests
     {
         var streamId = $"new-{Guid.NewGuid():N}";
 
-        var results = await Task.WhenAll(_clientHandles.Select(async clientHandle =>
+        var results = await Task.WhenAll(_handles.Select(async handle =>
         {
             try
             {
-                await clientHandle.Instance.AppendToStreamAsync(
+                await handle.Instance.AppendAsync(
                     streamId,
                     [new TestEvent { Value = "create" }],
-                    new AppendOptions { ExpectedStreamState = ExpectedStreamState.StreamDoesNotExist },
-                    ct);
+                    ExpectedStreamState.DoesNotExist<StreamPosition>(),
+                    cancellationToken: ct);
 
                 return (Success: true, Exception: null);
             }
-            catch (StreamAppendConflictException ex)
+            catch (StreamAppendConflictException<StreamPosition> ex)
             {
                 return (Success: false, Exception: ex);
             }
@@ -96,22 +95,22 @@ public class MongoEventStoreClientConcurrencyTests
         var conflictCount = results.Count(r => !r.Success);
 
         successCount.ShouldBe(1, "Exactly one writer must succeed in creating the stream");
-        conflictCount.ShouldBe(ClientCount - 1, "All other writers must receive a conflict");
+        conflictCount.ShouldBe(InstanceCount - 1, "All other writers must receive a conflict");
 
         // Verify conflict exceptions are well-formed.
         foreach (var (_, ex) in results.Where(r => !r.Success))
         {
             ex.ShouldNotBeNull();
             ex.StreamId.ShouldBe(streamId);
-            ex.ExpectedState.ShouldBe(ExpectedStreamState.StreamDoesNotExist);
-            ex.ActualState?.ShouldBe(StreamState.StreamExists(StreamPosition.FromInt64(0)));
+            ex.ExpectedState.ShouldBe(ExpectedStreamState.DoesNotExist<StreamPosition>());
+            ex.ActualState?.ShouldBe(StreamState.AtVersion(new StreamPosition(0)));
         }
 
         // Verify the stream contains exactly one event.
-        var readEvents = await _clientHandles[0].Instance.ReadStream(streamId).ToArrayAsync(ct);
+        var readEvents = await _handles[0].Instance.ReadStream(streamId).ToArrayAsync(ct);
 
         readEvents.ShouldHaveSingleItem();
-        readEvents[0].Context.StreamVersion.ShouldBe(StreamPosition.FromInt64(0));
+        readEvents[0].Context.StreamPosition.ShouldBe(new StreamPosition(0));
     }
 
     [Test]
@@ -120,24 +119,21 @@ public class MongoEventStoreClientConcurrencyTests
     {
         var streamId = $"versioned-{Guid.NewGuid():N}";
 
-        // Seed the stream with one event so all writers can target SpecificVersion(0).
-        await _clientHandles[0].Instance.AppendToStreamAsync(
+        // Seed the stream with one event so all writers can expect version 0.
+        await _handles[0].Instance.AppendAsync(
             streamId,
             [new TestEvent { Value = "seed" }],
-            new AppendOptions { ExpectedStreamState = ExpectedStreamState.Any },
-            ct);
+            cancellationToken: ct);
 
-        var targetVersion = ExpectedStreamState.SpecificVersion(StreamPosition.FromInt64(0));
-
-        var results = await Task.WhenAll(_clientHandles.Select(async clientHandle =>
+        var results = await Task.WhenAll(_handles.Select(async clientHandle =>
         {
             try
             {
-                await clientHandle.Instance.AppendToStreamAsync(
+                await clientHandle.Instance.AppendAsync(
                     streamId,
                     [new TestEvent { Value = "raced" }],
-                    new AppendOptions { ExpectedStreamState = targetVersion },
-                    ct);
+                    ExpectedStreamState.AtVersion(new StreamPosition(0)),
+                    cancellationToken: ct);
 
                 return (Success: true, Exception: null);
             }
@@ -151,45 +147,44 @@ public class MongoEventStoreClientConcurrencyTests
         var conflicts = results.Count(r => !r.Success);
 
         successes.ShouldBe(1, "Exactly one writer must win the version race");
-        conflicts.ShouldBe(ClientCount - 1, "All other writers must be rejected");
+        conflicts.ShouldBe(InstanceCount - 1, "All other writers must be rejected");
 
         // The stream must have exactly 2 events: the seed + the winner.
-        var readEvents = await _clientHandles[0].Instance.ReadStream(streamId).ToArrayAsync(ct);
+        var readEvents = await _handles[0].Instance.ReadStream(streamId).ToArrayAsync(ct);
 
         readEvents.Length.ShouldBe(2);
-        readEvents[0].Context.StreamVersion.ShouldBe(StreamPosition.FromInt64(0));
-        readEvents[1].Context.StreamVersion.ShouldBe(StreamPosition.FromInt64(1));
+        readEvents[0].Context.StreamPosition.ShouldBe(new StreamPosition(0));
+        readEvents[1].Context.StreamPosition.ShouldBe(new StreamPosition(1));
     }
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task ConcurrentWrites_ToIndependentStreams_AllSucceed(CancellationToken ct)
     {
-        const int eventCountPerClient = 50;
+        const int eventCountPerInstance = 50;
 
-        var streamIds = _clientHandles.Select(_ => $"indep-{Guid.NewGuid():N}").ToList();
+        var streamIds = _handles.Select(_ => $"indep-{Guid.NewGuid():N}").ToList();
 
-        var tasks = _clientHandles.Select((clientHandle, i) =>
-            Task.WhenAll(Enumerable.Range(0, eventCountPerClient).Select(j =>
-                clientHandle.Instance.AppendToStreamAsync(
+        var tasks = _handles.Select((clientHandle, i) =>
+            Task.WhenAll(Enumerable.Range(0, eventCountPerInstance).Select(j =>
+                clientHandle.Instance.AppendAsync(
                     streamIds[i],
                     [new TestEvent { Value = $"e{j}" }],
-                    new AppendOptions { ExpectedStreamState = ExpectedStreamState.Any },
-                    ct))));
+                    cancellationToken: ct))));
 
         await Task.WhenAll(tasks);
 
-        // Each stream must have exactly writesPerWriter events with contiguous versions.
+        // Each stream must have exactly eventCountPerInstance events with contiguous positions.
         foreach (var streamId in streamIds)
         {
-            var readEvents = await _clientHandles[0].Instance.ReadStream(streamId).ToArrayAsync(ct);
+            var readEvents = await _handles[0].Instance.ReadStream(streamId).ToArrayAsync(ct);
 
             readEvents.Length.ShouldBe(
-                eventCountPerClient,
-                $"Stream {streamId} must have {eventCountPerClient} events");
+                eventCountPerInstance,
+                $"Stream {streamId} must have {eventCountPerInstance} events");
 
-            var versions = readEvents.Select(e => e.Context.StreamVersion.Value).ToList();
-            versions.ShouldBe(Enumerable.Range(0, eventCountPerClient).Select(i => (ulong)i));
+            var positions = readEvents.Select(e => e.Context.StreamPosition.Value).ToList();
+            positions.ShouldBe(Enumerable.Range(0, eventCountPerInstance).Select(i => (ulong)i));
         }
     }
 }

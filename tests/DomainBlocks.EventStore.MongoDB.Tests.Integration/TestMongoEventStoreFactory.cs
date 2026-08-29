@@ -9,32 +9,32 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
-public static class TestMongoEventStoreClientFactory
+public static class TestMongoEventStoreFactory
 {
-    public static TestMongoEventStoreClientFactory<object> CreateDefault(MongoEventStoreClientOptions options)
+    public static TestMongoEventStoreFactory<object> CreateDefault(MongoEventStoreOptions options)
     {
         var eventTypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>());
 
-        return new TestMongoEventStoreClientFactory<object>(
+        return new TestMongoEventStoreFactory<object>(
             TestMongoConnectionStrings.Default,
             options,
             eventTypeMap);
     }
 }
 
-public sealed class TestMongoEventStoreClientFactory<TEvent> :
-    ITestEventStoreFactory<TEvent>
+public sealed class TestMongoEventStoreFactory<TEvent> :
+    ITestEventStoreFactory<TEvent, string, StreamPosition, LogPosition>
     where TEvent : notnull
 {
-    private readonly MongoEventStoreClientOptions _options;
+    private readonly MongoEventStoreOptions _options;
     private readonly EventCodec<TEvent, BsonValue, BsonValue> _codec;
     private readonly ILoggerFactory _loggerFactory;
-    private readonly ILogger<TestMongoEventStoreClientFactory<TEvent>> _logger;
+    private readonly ILogger<TestMongoEventStoreFactory<TEvent>> _logger;
     private readonly Task _initTask;
 
-    public TestMongoEventStoreClientFactory(
+    public TestMongoEventStoreFactory(
         string connectionString,
-        MongoEventStoreClientOptions options,
+        MongoEventStoreOptions options,
         EventTypeMap eventTypeMap)
     {
         _options = options;
@@ -48,7 +48,7 @@ public sealed class TestMongoEventStoreClientFactory<TEvent> :
             })
             .SetMinimumLevel(LogLevel.Debug));
 
-        _logger = _loggerFactory.CreateLogger<TestMongoEventStoreClientFactory<TEvent>>();
+        _logger = _loggerFactory.CreateLogger<TestMongoEventStoreFactory<TEvent>>();
 
         var mongoClient = new MongoClient(connectionString);
         _initTask = MongoEventStoreAdmin.EnsureInitializedAsync(mongoClient, _options);
@@ -58,7 +58,7 @@ public sealed class TestMongoEventStoreClientFactory<TEvent> :
 
     public IMongoClient MongoClient { get; }
 
-    public async Task<ITestEventStoreHandle<,,,>> CreateAsync(
+    public async Task<ITestEventStoreHandle<TEvent, string, StreamPosition, LogPosition>> CreateAsync(
         string name,
         CancellationToken cancellationToken = default)
     {
@@ -95,15 +95,15 @@ public sealed class TestMongoEventStoreClientFactory<TEvent> :
     private sealed class EventStoreHandle(
         IMongoClient mongoClient,
         EventCodec<TEvent, BsonValue, BsonValue> codec,
-        MongoEventStoreClientOptions options,
+        MongoEventStoreOptions options,
         ILogger logger) :
-        ITestEventStoreHandle<,,,>
+        ITestEventStoreHandle<TEvent, string, StreamPosition, LogPosition>
     {
-        private readonly MongoEventStore<TEvent> _client =
-            MongoEventStore.Create(mongoClient, codec, options, logger);
+        private readonly MongoEventStore<TEvent>
+            _instance = MongoEventStore.Create(mongoClient, codec, options, logger);
 
-        public IEventStore<,,,> Instance => _client;
+        public IEventStore<TEvent, string, StreamPosition, LogPosition> Instance => _instance;
 
-        public ValueTask DisposeAsync() => _client.DisposeAsync();
+        public ValueTask DisposeAsync() => _instance.DisposeAsync();
     }
 }
