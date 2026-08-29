@@ -8,12 +8,12 @@ using NUnit.Framework;
 namespace DomainBlocks.EventStore.KurrentDB.Tests.Integration;
 
 [TestFixture]
-public class KurrentDbClientDirectBenchmarkTests
+public class KurrentDbClientBenchmarkTests
 {
     [Test]
     [Explicit("Benchmark")]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task AppendToStreamAsync_SingleAppend_MeasureLatency(CancellationToken ct)
+    public async Task AppendAsync_SingleAppend_MeasureLatency(CancellationToken ct)
     {
         const int warmupIterations = 10;
         const int iterations = 100;
@@ -50,7 +50,7 @@ public class KurrentDbClientDirectBenchmarkTests
     [Test]
     [Explicit("Benchmark")]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task AppendToStreamAsync_MeasureThroughputCeiling(CancellationToken ct)
+    public async Task AppendAsync_MeasureThroughputCeiling(CancellationToken ct)
     {
         const int clientCount = 1;
         const int maxInFlight = 1000;

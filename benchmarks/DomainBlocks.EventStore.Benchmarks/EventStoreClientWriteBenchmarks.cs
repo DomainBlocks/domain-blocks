@@ -47,7 +47,7 @@ public class EventStoreClientWriteBenchmarks
     }
 
     [Benchmark]
-    public Task AppendToStreamAsync_NoIO()
+    public Task AppendAsync_NoIO()
     {
         return _client.AppendAsync(StreamId, _appendEvents);
     }

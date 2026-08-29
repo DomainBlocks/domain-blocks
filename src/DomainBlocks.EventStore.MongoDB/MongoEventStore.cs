@@ -111,7 +111,35 @@ public sealed class MongoEventStore<TEvent>(
         ReadStreamOptions? options = null)
     {
         options ??= ReadStreamOptions.Default;
-        return ReadCoreAsync(direction, origin, EventLogEntry.FieldNames.StreamVersion, options.MaxCount, streamId);
+
+        var isEmptyEnumeration = direction == ReadDirection.Forward && origin is ReadOrigin<StreamPosition>.End ||
+                                 direction == ReadDirection.Backward && origin is ReadOrigin<StreamPosition>.Start;
+
+        return isEmptyEnumeration
+            ? ReadEmptyAsync()
+            : ReadCoreAsync(
+                direction,
+                origin,
+                EventLogEntry.FieldNames.StreamVersion,
+                options.MaxCount,
+                streamId,
+                emptyAction: () =>
+                {
+                    if (options.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw)
+                        throw new StreamNotFoundException(streamId);
+                });
+
+        async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadEmptyAsync(
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            if (options.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw &&
+                !await StreamExistsAsync(streamId, cancellationToken).ConfigureAwait(false))
+            {
+                throw new StreamNotFoundException(streamId);
+            }
+
+            yield break;
+        }
     }
 
     public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
@@ -133,7 +161,8 @@ public sealed class MongoEventStore<TEvent>(
 
     private static ReadQuery GetReadQuery<TPos>(
         ReadDirection direction,
-        ReadOrigin<TPos>? origin, string positionFieldName)
+        ReadOrigin<TPos>? origin,
+        string positionFieldName)
         where TPos : struct,
         IPosition<TPos>
     {
@@ -216,6 +245,12 @@ public sealed class MongoEventStore<TEvent>(
 
         if (isEmpty)
             emptyAction?.Invoke();
+    }
+
+    private async Task<bool> StreamExistsAsync(string streamId, CancellationToken cancellationToken)
+    {
+        var filter = Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, streamId);
+        return await eventLog.Find(filter).AnyAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private sealed class ReadQuery(FilterDefinition<BsonDocument> filter, SortDefinition<BsonDocument> sort)

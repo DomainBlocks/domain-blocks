@@ -117,18 +117,8 @@ public class KurrentDBEventStore<TEvent>(
             ? ReadOrigin.Start<StreamPosition>()
             : ReadOrigin.End<StreamPosition>();
 
-        var revision = origin switch
-        {
-            ReadOrigin<StreamPosition>.Start => StreamPosition.Start,
-            ReadOrigin<StreamPosition>.End => StreamPosition.End,
-            ReadOrigin<StreamPosition>.Position p => p.Value,
-            _ => throw new UnreachableException($"Unknown ReadOrigin type '{origin.GetType().Name}'.")
-        };
-
-        var kurrentDirection = direction == ReadDirection.Forward ? Direction.Forwards : Direction.Backwards;
-
-        var isEmptyEnumeration = kurrentDirection == Direction.Forwards && revision == StreamPosition.End ||
-                                 kurrentDirection == Direction.Backwards && revision == StreamPosition.Start;
+        var isEmptyEnumeration = direction == ReadDirection.Forward && origin is ReadOrigin<StreamPosition>.End ||
+                                 direction == ReadDirection.Backward && origin is ReadOrigin<StreamPosition>.Start;
 
         if (isEmptyEnumeration)
         {
@@ -140,6 +130,16 @@ public class KurrentDBEventStore<TEvent>(
 
             yield break;
         }
+
+        var revision = origin switch
+        {
+            ReadOrigin<StreamPosition>.Start => StreamPosition.Start,
+            ReadOrigin<StreamPosition>.End => StreamPosition.End,
+            ReadOrigin<StreamPosition>.Position p => p.Value,
+            _ => throw new UnreachableException($"Unknown ReadOrigin type '{origin.GetType().Name}'.")
+        };
+
+        var kurrentDirection = direction == ReadDirection.Forward ? Direction.Forwards : Direction.Backwards;
 
         var result = client.ReadStreamAsync(
             kurrentDirection,

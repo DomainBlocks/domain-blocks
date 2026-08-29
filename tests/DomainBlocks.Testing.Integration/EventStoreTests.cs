@@ -14,10 +14,10 @@ public abstract class EventStoreTests<TStreamPos, TLogPos> :
     {
         get
         {
-            yield return new TestCaseData(ReadDirection.Forward, ReadOrigin.Start<TLogPos>());
-            yield return new TestCaseData(ReadDirection.Backward, ReadOrigin.Start<TLogPos>());
-            yield return new TestCaseData(ReadDirection.Forward, ReadOrigin.End<TLogPos>());
-            yield return new TestCaseData(ReadDirection.Backward, ReadOrigin.End<TLogPos>());
+            yield return new TestCaseData(ReadDirection.Forward, ReadOrigin.Start<TStreamPos>());
+            yield return new TestCaseData(ReadDirection.Backward, ReadOrigin.Start<TStreamPos>());
+            yield return new TestCaseData(ReadDirection.Forward, ReadOrigin.End<TStreamPos>());
+            yield return new TestCaseData(ReadDirection.Backward, ReadOrigin.End<TStreamPos>());
         }
     }
 
@@ -25,8 +25,8 @@ public abstract class EventStoreTests<TStreamPos, TLogPos> :
     {
         get
         {
-            yield return new TestCaseData(ReadDirection.Forward, ReadOrigin.End<TLogPos>());
-            yield return new TestCaseData(ReadDirection.Backward, ReadOrigin.Start<TLogPos>());
+            yield return new TestCaseData(ReadDirection.Forward, ReadOrigin.End<TStreamPos>());
+            yield return new TestCaseData(ReadDirection.Backward, ReadOrigin.Start<TStreamPos>());
         }
     }
 
@@ -54,8 +54,7 @@ public abstract class EventStoreTests<TStreamPos, TLogPos> :
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task AppendAsync_ExpectedStateIsAnyAndStreamExists_AppendsEvents(
-        CancellationToken cancellationToken)
+    public async Task AppendAsync_ExpectedStateIsAnyAndStreamExists_AppendsEvents(CancellationToken cancellationToken)
     {
         AppendableEvent<object>[] events1 =
         [
@@ -236,7 +235,7 @@ public abstract class EventStoreTests<TStreamPos, TLogPos> :
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task ReadStream_FromVersion_ReturnsExpectedEvents(CancellationToken cancellationToken)
+    public async Task ReadStream_FromPosition_ReturnsExpectedEvents(CancellationToken cancellationToken)
     {
         object[] events1 =
         [
@@ -259,27 +258,27 @@ public abstract class EventStoreTests<TStreamPos, TLogPos> :
 
         var expected = events1.Concat(events2).ToArray();
 
-        // Forward: At(v) == expected.Skip(v)
-        for (var v = 0; v < expected.Length; v++)
+        for (var pos = 0; pos < expected.Length; pos++)
         {
-            var actual = await ReadEvents(v, ReadDirection.Forward);
-            actual.ShouldBe(expected.Skip(v));
+            var actual = await ReadEvents(ReadDirection.Forward, pos);
+            actual.ShouldBe(expected.Skip(pos));
         }
 
-        // Backward: At(v) == expected.Take(v+1).Reverse()
-        for (var v = expected.Length - 1; v >= 0; v--)
+        for (var pos = expected.Length - 1; pos >= 0; pos--)
         {
-            var actual = await ReadEvents(v, ReadDirection.Backward);
-            actual.ShouldBe(expected.Take(v + 1).Reverse());
+            var actual = await ReadEvents(ReadDirection.Backward, pos);
+            actual.ShouldBe(expected.Take(pos + 1).Reverse());
         }
 
-        ValueTask<object[]> ReadEvents(int startVersion, ReadDirection direction)
+        return;
+
+        ValueTask<object[]> ReadEvents(ReadDirection direction, int position)
         {
             return EventStore
                 .ReadStream(
                     streamId,
                     direction,
-                    ReadOrigin.Position(CreateStreamPosition((ulong)startVersion)))
+                    ReadOrigin.Position(CreateStreamPosition((ulong)position)))
                 .Select(x => x.Payload)
                 .ToArrayAsync(cancellationToken);
         }
