@@ -2,6 +2,21 @@
 
 namespace DomainBlocks.EventStore.Abstractions;
 
+public static class ExpectedStreamState
+{
+    public static ExpectedStreamState<TVersion> Any<TVersion>() where TVersion : notnull =>
+        ExpectedStreamState<TVersion>.Any;
+
+    public static ExpectedStreamState<TVersion> DoesNotExist<TVersion>() where TVersion : notnull =>
+        ExpectedStreamState<TVersion>.DoesNotExist;
+
+    public static ExpectedStreamState<TVersion> Exists<TVersion>() where TVersion : notnull =>
+        ExpectedStreamState<TVersion>.Exists;
+
+    public static ExpectedStreamState<TVersion> AtVersion<TVersion>(TVersion version) where TVersion : notnull =>
+        ExpectedStreamState<TVersion>.AtVersion(version);
+}
+
 /// <summary>
 /// Represents the expected state of an event stream. Used to enforce concurrency or existence checks when performing
 /// stream operations. The default value is <see cref="Any"/>.

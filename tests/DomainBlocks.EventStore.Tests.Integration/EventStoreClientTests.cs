@@ -43,7 +43,7 @@ public class EventStoreClientTests
             DatabaseName = "domainblocks_tests"
         };
 
-        await using var client = MongoEventStoreClient.Create(mongoClient, eventCodec, options);
+        await using var client = MongoEventStore.Create(mongoClient, eventCodec, options);
 
         var orderId = Guid.NewGuid();
         var streamId = $"order-{orderId}";
@@ -75,7 +75,7 @@ public class EventStoreClientTests
             FilledAt = amended.AmendedAt.AddHours(1)
         };
 
-        await client.AppendToStreamAsync(streamId, [submitted, amended, filled]);
+        await client.AppendAsync(streamId, [submitted, amended, filled]);
 
         var orderEvents = await client
             .ReadStream(streamId)

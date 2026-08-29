@@ -3,7 +3,7 @@ using DomainBlocks.EventStore.Abstractions;
 namespace DomainBlocks.EventSourcing;
 
 public sealed class EntityStore<TEvent, TStreamId, TStreamPos, TLogPos>(
-    IEventStoreClient<TEvent, TStreamId, TStreamPos, TLogPos> eventStoreClient,
+    IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> eventStore,
     IEntityDefinitionProvider<TEvent> entityDefinitionProvider) :
     IEntityStore
     where TEvent : notnull
@@ -40,7 +40,7 @@ public sealed class EntityStore<TEvent, TStreamId, TStreamPos, TLogPos>(
         KeyValuePair<string, string>[] metadata = [KeyValuePair.Create("EntityClrType", entity.Entity.GetType().Name)];
 
         var uncommittedEvents = entityDefinition.GetUncommittedEvents(entity.Entity)
-            .Select(e => AppendEvent.Create(e, metadata))
+            .Select(e => AppendableEvent.Create(e, metadata))
             .ToArray();
 
         if (uncommittedEvents.Length == 0)
@@ -52,8 +52,8 @@ public sealed class EntityStore<TEvent, TStreamId, TStreamPos, TLogPos>(
             ? ExpectedStreamState<TStreamPos>.AtVersion(entity.Version.Value)
             : ExpectedStreamState<TStreamPos>.DoesNotExist;
 
-        await eventStoreClient
-            .AppendToStreamAsync(streamName, uncommittedEvents, options, cancellationToken)
+        await eventStore
+            .AppendAsync(streamName, uncommittedEvents, options, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -81,13 +81,13 @@ public sealed class EntityStore<TEvent, TStreamId, TStreamPos, TLogPos>(
             var streamName = GetStreamName<TEntity>(entityId);
             var readOptions = new ReadStreamOptions { StreamNotFoundBehavior = streamNotFoundBehavior };
 
-            await foreach (var e in eventStoreClient
+            await foreach (var e in eventStore
                                .ReadStream(streamName, readOptions)
                                .WithCancellation(cancellationToken)
                                .ConfigureAwait(false))
             {
                 loadedVersion = e.Context.StreamVersion;
-                yield return e.Event;
+                yield return e.Payload;
             }
         }
     }

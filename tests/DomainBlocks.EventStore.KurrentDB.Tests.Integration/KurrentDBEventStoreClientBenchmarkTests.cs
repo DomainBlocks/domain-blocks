@@ -5,9 +5,9 @@ using NUnit.Framework;
 namespace DomainBlocks.EventStore.KurrentDB.Tests.Integration;
 
 [TestFixture]
-public class KurrentDBEventStoreClientBenchmarkTests : EventStoreClientBenchmarkTests
+public class KurrentDBEventStoreBenchmarkTests : EventStoreBenchmarkTests
 {
-    protected override Task<ITestEventStoreClientFactory<object>> GetClientFactoryAsync(
+    protected override Task<ITestEventStoreFactory<object>> GetClientFactoryAsync(
         CancellationToken cancellationToken = default)
     {
         var eventTypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>());
@@ -16,6 +16,6 @@ public class KurrentDBEventStoreClientBenchmarkTests : EventStoreClientBenchmark
             TestConnectionStrings.Default,
             eventTypeMap);
 
-        return Task.FromResult<ITestEventStoreClientFactory<object>>(clientFactory);
+        return Task.FromResult<ITestEventStoreFactory<object>>(clientFactory);
     }
 }

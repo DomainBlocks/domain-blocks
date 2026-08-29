@@ -9,7 +9,7 @@ using KurrentDB.Client;
 namespace DomainBlocks.EventStore.KurrentDB.Tests.Integration;
 
 public sealed class TestKurrentDBEventStoreClientFactory<TEvent> :
-    ITestEventStoreClientFactory<TEvent>
+    ITestEventStoreFactory<TEvent>
     where TEvent : notnull
 {
     private readonly KurrentDBClient _kurrentClient;
@@ -29,22 +29,22 @@ public sealed class TestKurrentDBEventStoreClientFactory<TEvent> :
         _codec = EventCodec.Create(codecOptions);
     }
 
-    public Task<ITestEventStoreClientHandle<TEvent>> CreateAsync(
+    public Task<ITestEventStoreHandle<,,,>> CreateAsync(
         string name,
         CancellationToken cancellationToken = default)
     {
-        return Task.FromResult<ITestEventStoreClientHandle<TEvent>>(new ClientHandle(_kurrentClient, _codec));
+        return Task.FromResult<ITestEventStoreHandle<,,,>>(new EventStoreHandle(_kurrentClient, _codec));
     }
 
     public ValueTask DisposeAsync() => _kurrentClient.DisposeAsync();
 
-    private sealed class ClientHandle(
+    private sealed class EventStoreHandle(
         KurrentDBClient kurrentDBClient,
         EventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> codec) :
-        ITestEventStoreClientHandle<TEvent>
+        ITestEventStoreHandle<,,,>
     {
-        public IEventStoreClient<TEvent> Client { get; } =
-            new KurrentDBEventStoreClient<TEvent>(kurrentDBClient, codec.Encoder, codec.Decoder);
+        public IEventStore<,,,> Instance { get; } =
+            new KurrentDBEventStore<TEvent>(kurrentDBClient, codec.Encoder, codec.Decoder);
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

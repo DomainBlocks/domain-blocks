@@ -38,7 +38,7 @@ public static class ReadEventTransformExtensions
 
                 while (queue.TryDequeue(out var nextEvent))
                 {
-                    if (transformsByType.TryGetValue(nextEvent.Event.GetType(), out var transform))
+                    if (transformsByType.TryGetValue(nextEvent.Payload.GetType(), out var transform))
                     {
                         var transformedEvents = transform.Apply(nextEvent);
 

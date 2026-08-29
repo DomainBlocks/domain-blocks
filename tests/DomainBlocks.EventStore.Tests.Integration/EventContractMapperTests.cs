@@ -29,7 +29,7 @@ public class EventContractMapperTests
         };
 
         var codec = EventCodec.Create(codecOptions);
-        var client = new KurrentDBEventStoreClient<IDomainEvent>(kurrentClient, codec.Encoder, codec.Decoder);
+        var client = new KurrentDBEventStore<IDomainEvent>(kurrentClient, codec.Encoder, codec.Decoder);
 
         var originalEvent = new UserCreated
         {
@@ -39,7 +39,7 @@ public class EventContractMapperTests
 
         var streamId = $"test-contract-mapper-{Guid.NewGuid()}";
 
-        await client.AppendToStreamAsync(streamId, [originalEvent]);
+        await client.AppendAsync(streamId, [originalEvent]);
 
         var readEvents = await client.ReadStream(streamId).Unwrap().ToArrayAsync();
 

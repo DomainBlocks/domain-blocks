@@ -27,7 +27,7 @@ public class ReadEventTransformTests
             DatabaseName = "domainblocks_tests"
         };
 
-        await using var client = MongoEventStoreClient.Create(mongoClient, eventCodec, options);
+        await using var client = MongoEventStore.Create(mongoClient, eventCodec, options);
 
         var legacyEvent = new ShipmentDispatched(
             shipmentId,
@@ -65,7 +65,7 @@ public class ReadEventTransformTests
         };
 
         var streamId = $"test-read-transform-{Guid.NewGuid()}";
-        await client.AppendToStreamAsync(streamId, [legacyEvent]);
+        await client.AppendAsync(streamId, [legacyEvent]);
 
         var readEvents = await client
             .ReadStream(streamId)

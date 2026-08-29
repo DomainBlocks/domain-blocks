@@ -7,18 +7,21 @@ using NUnit.Framework;
 
 namespace DomainBlocks.Testing.Integration;
 
-public abstract class EventStoreClientBenchmarkTests : EventStoreClientTestBase<object>
+public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos> :
+    EventStoreTestBase<object, string, TStreamPos, TLogPos>
+    where TStreamPos : notnull
+    where TLogPos : notnull
 {
     [Test]
     [Explicit("Benchmark")]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task AppendToStreamAsync_SingleAppend_MeasureLatency(CancellationToken ct)
+    public async Task AppendAsync_SingleAppend_MeasureLatency(CancellationToken ct)
     {
         const int warmupIterations = 10;
         const int iterations = 100;
 
         for (var i = 0; i < warmupIterations; i++)
-            await AppendAsync(Client, "warmup", ct);
+            await AppendAsync(EventStore, "warmup", ct);
 
         var latencies = new List<double>(iterations);
 
@@ -26,7 +29,7 @@ public abstract class EventStoreClientBenchmarkTests : EventStoreClientTestBase<
         {
             var streamId = $"test-{Guid.NewGuid():N}";
             var sw = Stopwatch.StartNew();
-            await AppendAsync(Client, streamId, ct);
+            await AppendAsync(EventStore, streamId, ct);
             sw.Stop();
             latencies.Add(sw.Elapsed.TotalMilliseconds);
         }
@@ -47,19 +50,19 @@ public abstract class EventStoreClientBenchmarkTests : EventStoreClientTestBase<
     [Test]
     [Explicit("Benchmark")]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task AppendToStreamAsync_MeasureThroughputCeiling(CancellationToken ct)
+    public async Task AppendAsync_MeasureThroughputCeiling(CancellationToken ct)
     {
-        const int clientCount = 1;
+        const int instanceCount = 1;
         const int maxInFlight = 1000;
         const int warmUpSeconds = 3;
         const int measureSeconds = 15;
 
-        // Create a pool of clients
-        var clientHandles = new ITestEventStoreClientHandle<object>[clientCount];
-        for (var i = 0; i < clientCount; i++)
-            clientHandles[i] = await ClientFactory.CreateAsync($"client_{i}", ct);
+        // Create a pool of event store instances
+        var handles = new ITestEventStoreHandle<object, string, TStreamPos, TLogPos>[instanceCount];
+        for (var i = 0; i < instanceCount; i++)
+            handles[i] = await EventStoreFactory.CreateAsync($"instance_{i}", ct);
 
-        var clients = clientHandles.Select(x => x.Client).ToArray();
+        var instances = handles.Select(x => x.Instance).ToArray();
 
         try
         {
@@ -91,9 +94,9 @@ public abstract class EventStoreClientBenchmarkTests : EventStoreClientTestBase<
                             }
 
                             var isMeasuring = isInMeasureWindow.Value;
-                            var client = clients[random.Next(clientCount)]; // randomly pick a client
+                            var instance = instances[random.Next(instanceCount)]; // randomly pick an instance
 
-                            var task = AppendAsync(client, $"test-{Guid.NewGuid():N}", runCts.Token).ContinueWith(
+                            var task = AppendAsync(instance, $"test-{Guid.NewGuid():N}", runCts.Token).ContinueWith(
                                 t =>
                                 {
                                     semaphore.Release();
@@ -132,7 +135,7 @@ public abstract class EventStoreClientBenchmarkTests : EventStoreClientTestBase<
 
             var throughput = ops / elapsed.TotalSeconds;
 
-            await TestContext.Out.WriteLineAsync($"clients:       {clientCount}");
+            await TestContext.Out.WriteLineAsync($"instances:     {instanceCount}");
             await TestContext.Out.WriteLineAsync($"max in-flight: {maxInFlight:N0}");
             await TestContext.Out.WriteLineAsync($"ops measured:  {ops:N0}");
             await TestContext.Out.WriteLineAsync($"errors:        {errors:N0}");
@@ -141,21 +144,18 @@ public abstract class EventStoreClientBenchmarkTests : EventStoreClientTestBase<
         }
         finally
         {
-            foreach (var handle in clientHandles)
+            foreach (var handle in handles)
                 await handle.DisposeAsync().AsTask().WaitAsync(ct);
         }
     }
 
-    private static async Task AppendAsync(IEventStoreClient<object> client, string streamId, CancellationToken ct)
+    private static async Task AppendAsync(
+        IEventStore<object, string, TStreamPos, TLogPos> instance,
+        string streamId,
+        CancellationToken ct)
     {
         object[] events = [new TestEvent { Value = "Benchmark" }];
 
-        var options = new AppendToStreamOptions
-        {
-            ExpectedStreamState = ExpectedStreamState.Any,
-            CommitId = Guid.CreateVersion7()
-        };
-
-        await client.AppendToStreamAsync(streamId, events, options, ct);
+        await instance.AppendAsync(streamId, events, cancellationToken: ct);
     }
 }

@@ -17,8 +17,8 @@ public class EventStoreClientWriteBenchmarks
     private static readonly JsonUtf8BytesObjectSerde EventSerde = new();
     private static readonly JsonUtf8BytesMetadataSerde MetadataSerde = new();
 
-    private FakeKurrentDBEventStoreClient<IDomainEvent> _client = null!;
-    private AppendEvent<IDomainEvent>[] _appendEvents = null!;
+    private FakeKurrentDBEventStore<IDomainEvent> _client = null!;
+    private AppendableEvent<IDomainEvent>[] _appendEvents = null!;
 
     //[Params(100, 1_000, 10_000)]
     [Params(10_000)]
@@ -39,7 +39,7 @@ public class EventStoreClientWriteBenchmarks
 
         var eventCodec = EventCodec.Create(codecOptions);
 
-        _client = new FakeKurrentDBEventStoreClient<IDomainEvent>(eventCodec, consumer);
+        _client = new FakeKurrentDBEventStore<IDomainEvent>(eventCodec, consumer);
 
         _appendEvents = CreateAppendEvents(EventCount);
     }
@@ -50,13 +50,13 @@ public class EventStoreClientWriteBenchmarks
         return _client.AppendToStreamAsync(StreamId, _appendEvents);
     }
 
-    private static AppendEvent<IDomainEvent>[] CreateAppendEvents(int count)
+    private static AppendableEvent<IDomainEvent>[] CreateAppendEvents(int count)
     {
-        var events = new AppendEvent<IDomainEvent>[count];
+        var events = new AppendableEvent<IDomainEvent>[count];
 
         for (var i = 0; i < count; i++)
         {
-            events[i] = new AppendEvent<IDomainEvent>(
+            events[i] = new AppendableEvent<IDomainEvent>(
                 new TestEvent
                 {
                     Value1 = $"value1-{i}",
@@ -76,16 +76,16 @@ public class EventStoreClientWriteBenchmarks
         public required string Value2 { get; init; }
     }
 
-    private sealed class FakeKurrentDBEventStoreClient<TEvent>(
+    private sealed class FakeKurrentDBEventStore<TEvent>(
         EventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec,
         Consumer consumer) :
-        IEventStoreClient<TEvent>
+        IEventStore<,,,>
         where TEvent : notnull
     {
         public Task AppendToStreamAsync(
             string streamId,
-            IEnumerable<AppendEvent<TEvent>> events,
-            AppendToStreamOptions? options = null,
+            IEnumerable<AppendableEvent<TEvent>> events,
+            AppendOptions? options = null,
             CancellationToken cancellationToken = default)
         {
             foreach (var (eventName, eventData, metadata) in eventCodec.Encoder.Encode(events))

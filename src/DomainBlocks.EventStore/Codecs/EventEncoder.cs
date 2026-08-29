@@ -33,13 +33,13 @@ public sealed class EventEncoder<TEvent, TEventData, TMetadata>(
     private readonly FrozenDictionary<Type, IAppendEventContractMapper<TEvent>> _contractMappers =
         options.ContractMappers.ToFrozenDictionary(x => x.EventType);
 
-    public IEnumerable<EncodedEvent<TEventData, TMetadata>> Encode(IEnumerable<AppendEvent<TEvent>> events)
+    public IEnumerable<EncodedEvent<TEventData, TMetadata>> Encode(IEnumerable<AppendableEvent<TEvent>> events)
     {
         var metadataBuffer = new Dictionary<string, string>();
 
         foreach (var appendEvent in events)
         {
-            var @event = appendEvent.Event;
+            var @event = appendEvent.Payload;
             object? contract = null;
             string eventName;
 

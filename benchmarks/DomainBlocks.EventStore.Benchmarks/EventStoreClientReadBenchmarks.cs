@@ -17,7 +17,7 @@ public class EventStoreClientReadBenchmarks
     private static readonly JsonUtf8BytesObjectSerde EventSerde = new();
     private static readonly JsonUtf8BytesMetadataSerde MetadataSerde = new();
 
-    private FakeKurrentDBEventStoreClient<IDomainEvent> _client = null!;
+    private FakeKurrentDBEventStore<IDomainEvent> _client = null!;
     private ReadStreamOptions _readStreamOptions = null!;
 
     [Params(false, true)]
@@ -40,7 +40,7 @@ public class EventStoreClientReadBenchmarks
         };
 
         var eventCodec = EventCodec.Create(codecOptions);
-        _client = new FakeKurrentDBEventStoreClient<IDomainEvent>(kurrentEvents, eventCodec);
+        _client = new FakeKurrentDBEventStore<IDomainEvent>(kurrentEvents, eventCodec);
         _readStreamOptions = new ReadStreamOptions { IncludeMetadata = IncludeMetadata };
     }
 
@@ -105,16 +105,16 @@ public class EventStoreClientReadBenchmarks
         public required string Value2 { get; init; }
     }
 
-    private sealed class FakeKurrentDBEventStoreClient<TEvent>(
+    private sealed class FakeKurrentDBEventStore<TEvent>(
         ResolvedEvent[] kurrentEvents,
         EventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec) :
-        IEventStoreClient<TEvent>
+        IEventStore<,,,>
         where TEvent : notnull
     {
         public Task AppendToStreamAsync(
             string streamId,
-            IEnumerable<AppendEvent<TEvent>> events,
-            AppendToStreamOptions? options = null,
+            IEnumerable<AppendableEvent<TEvent>> events,
+            AppendOptions? options = null,
             CancellationToken cancellationToken = default)
         {
             throw new NotImplementedException();

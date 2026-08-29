@@ -18,7 +18,7 @@ public class EntityStoreTests
     private MongoClient _mongoClient = null!;
     private MongoEventStoreClientOptions _options = null!;
     private ILoggerFactory _loggerFactory = null!;
-    private MongoEventStoreClient<IDomainEvent> _client = null!;
+    private MongoEventStore<IDomainEvent> _client = null!;
     private EntityStore<IDomainEvent> _entityStore = null!;
 
     [OneTimeSetUp]
@@ -42,11 +42,11 @@ public class EntityStoreTests
 
         var eventCodec = TestMongoEventCodec.Create<IDomainEvent>(eventTypeMap);
 
-        _client = MongoEventStoreClient.Create(
+        _client = MongoEventStore.Create(
             _mongoClient,
             eventCodec,
             _options,
-            _loggerFactory.CreateLogger<MongoEventStoreClient<IDomainEvent>>());
+            _loggerFactory.CreateLogger<MongoEventStore<IDomainEvent>>());
 
         var entityDefinitionProvider = new CompositeEntityDefinitionProvider<IDomainEvent>(
         [

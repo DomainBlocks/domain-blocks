@@ -2,6 +2,15 @@
 
 namespace DomainBlocks.EventStore.Abstractions;
 
+public static class StreamState
+{
+    public static StreamState<TVersion> DoesNotExist<TVersion>() where TVersion : notnull =>
+        StreamState<TVersion>.DoesNotExist;
+
+    public static StreamState<TVersion> AtVersion<TVersion>(TVersion version) where TVersion : notnull =>
+        StreamState<TVersion>.AtVersion(version);
+}
+
 /// <summary>
 /// Represents the observed state of an event stream.
 /// </summary>

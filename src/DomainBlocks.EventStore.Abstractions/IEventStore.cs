@@ -1,17 +1,17 @@
 ﻿namespace DomainBlocks.EventStore.Abstractions;
 
-public interface IEventStoreClient<TEvent, TStreamId, TStreamPos, TLogPos>
+public interface IEventStore<TEvent, TStreamId, TStreamPos, TLogPos>
     where TEvent : notnull
     where TStreamId : notnull
     where TStreamPos : notnull
     where TLogPos : notnull
 {
-    Task AppendToStreamAsync(
+    Task AppendAsync(
         TStreamId streamId,
-        ExpectedStreamState<TStreamPos> expectedState,
-        IEnumerable<AppendEvent<TEvent>> events,
+        IEnumerable<AppendableEvent<TEvent>> events,
+        ExpectedStreamState<TStreamPos>? expectedState = null,
         Guid? commitId = null,
-        AppendToStreamOptions? options = null,
+        AppendOptions? options = null,
         CancellationToken cancellationToken = default);
 
     IAsyncEnumerable<ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>> ReadAll(

@@ -11,7 +11,7 @@ public class MongoEventStoreClientConcurrencyTests
 
     private MongoEventStoreClientOptions _options = null!;
     private TestMongoEventStoreClientFactory<object> _clientFactory = null!;
-    private ITestEventStoreClientHandle<object>[] _clientHandles = null!;
+    private ITestEventStoreHandle<,,,>[] _clientHandles = null!;
 
     [SetUp]
     public async Task SetUp()
@@ -19,7 +19,7 @@ public class MongoEventStoreClientConcurrencyTests
         _options = new MongoEventStoreClientOptions { DatabaseName = $"dbx_test_{Guid.NewGuid():N}" };
         _clientFactory = TestMongoEventStoreClientFactory.CreateDefault(_options);
 
-        _clientHandles = new ITestEventStoreClientHandle<object>[ClientCount];
+        _clientHandles = new ITestEventStoreHandle<,,,>[ClientCount];
 
         for (var i = 0; i < ClientCount; i++)
             _clientHandles[i] = await _clientFactory.CreateAsync($"client_{i}");
@@ -47,17 +47,17 @@ public class MongoEventStoreClientConcurrencyTests
         var tasks = _clientHandles
             .SelectMany((clientHandle, clientIndex) => Enumerable
                 .Range(0, eventCountPerClient)
-                .Select(i => clientHandle.Client.AppendToStreamAsync(
+                .Select(i => clientHandle.Instance.AppendToStreamAsync(
                     streamId,
                     [new TestEvent { Value = $"w{clientIndex}-e{i}" }],
-                    new AppendToStreamOptions { ExpectedStreamState = ExpectedStreamState.Any },
+                    new AppendOptions { ExpectedStreamState = ExpectedStreamState.Any },
                     ct)));
 
         // Every task must complete successfully - no exceptions.
         await Task.WhenAll(tasks);
 
         // Read back and verify.
-        var readEvents = await _clientHandles[0].Client.ReadStream(streamId).ToArrayAsync(ct);
+        var readEvents = await _clientHandles[0].Instance.ReadStream(streamId).ToArrayAsync(ct);
 
         readEvents.Length.ShouldBe(expectedTotalEventCount, "All events must be committed");
 
@@ -78,10 +78,10 @@ public class MongoEventStoreClientConcurrencyTests
         {
             try
             {
-                await clientHandle.Client.AppendToStreamAsync(
+                await clientHandle.Instance.AppendToStreamAsync(
                     streamId,
                     [new TestEvent { Value = "create" }],
-                    new AppendToStreamOptions { ExpectedStreamState = ExpectedStreamState.StreamDoesNotExist },
+                    new AppendOptions { ExpectedStreamState = ExpectedStreamState.StreamDoesNotExist },
                     ct);
 
                 return (Success: true, Exception: null);
@@ -108,7 +108,7 @@ public class MongoEventStoreClientConcurrencyTests
         }
 
         // Verify the stream contains exactly one event.
-        var readEvents = await _clientHandles[0].Client.ReadStream(streamId).ToArrayAsync(ct);
+        var readEvents = await _clientHandles[0].Instance.ReadStream(streamId).ToArrayAsync(ct);
 
         readEvents.ShouldHaveSingleItem();
         readEvents[0].Context.StreamVersion.ShouldBe(StreamPosition.FromInt64(0));
@@ -121,10 +121,10 @@ public class MongoEventStoreClientConcurrencyTests
         var streamId = $"versioned-{Guid.NewGuid():N}";
 
         // Seed the stream with one event so all writers can target SpecificVersion(0).
-        await _clientHandles[0].Client.AppendToStreamAsync(
+        await _clientHandles[0].Instance.AppendToStreamAsync(
             streamId,
             [new TestEvent { Value = "seed" }],
-            new AppendToStreamOptions { ExpectedStreamState = ExpectedStreamState.Any },
+            new AppendOptions { ExpectedStreamState = ExpectedStreamState.Any },
             ct);
 
         var targetVersion = ExpectedStreamState.SpecificVersion(StreamPosition.FromInt64(0));
@@ -133,10 +133,10 @@ public class MongoEventStoreClientConcurrencyTests
         {
             try
             {
-                await clientHandle.Client.AppendToStreamAsync(
+                await clientHandle.Instance.AppendToStreamAsync(
                     streamId,
                     [new TestEvent { Value = "raced" }],
-                    new AppendToStreamOptions { ExpectedStreamState = targetVersion },
+                    new AppendOptions { ExpectedStreamState = targetVersion },
                     ct);
 
                 return (Success: true, Exception: null);
@@ -154,7 +154,7 @@ public class MongoEventStoreClientConcurrencyTests
         conflicts.ShouldBe(ClientCount - 1, "All other writers must be rejected");
 
         // The stream must have exactly 2 events: the seed + the winner.
-        var readEvents = await _clientHandles[0].Client.ReadStream(streamId).ToArrayAsync(ct);
+        var readEvents = await _clientHandles[0].Instance.ReadStream(streamId).ToArrayAsync(ct);
 
         readEvents.Length.ShouldBe(2);
         readEvents[0].Context.StreamVersion.ShouldBe(StreamPosition.FromInt64(0));
@@ -171,10 +171,10 @@ public class MongoEventStoreClientConcurrencyTests
 
         var tasks = _clientHandles.Select((clientHandle, i) =>
             Task.WhenAll(Enumerable.Range(0, eventCountPerClient).Select(j =>
-                clientHandle.Client.AppendToStreamAsync(
+                clientHandle.Instance.AppendToStreamAsync(
                     streamIds[i],
                     [new TestEvent { Value = $"e{j}" }],
-                    new AppendToStreamOptions { ExpectedStreamState = ExpectedStreamState.Any },
+                    new AppendOptions { ExpectedStreamState = ExpectedStreamState.Any },
                     ct))));
 
         await Task.WhenAll(tasks);
@@ -182,7 +182,7 @@ public class MongoEventStoreClientConcurrencyTests
         // Each stream must have exactly writesPerWriter events with contiguous versions.
         foreach (var streamId in streamIds)
         {
-            var readEvents = await _clientHandles[0].Client.ReadStream(streamId).ToArrayAsync(ct);
+            var readEvents = await _clientHandles[0].Instance.ReadStream(streamId).ToArrayAsync(ct);
 
             readEvents.Length.ShouldBe(
                 eventCountPerClient,

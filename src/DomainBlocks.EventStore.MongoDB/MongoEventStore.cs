@@ -6,16 +6,17 @@ using DomainBlocks.MongoDB.Sequencing;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using AppendOptions = DomainBlocks.EventStore.Abstractions.AppendOptions;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
-public static class MongoEventStoreClient
+public static class MongoEventStore
 {
     private const string SequenceIdFieldName = "event_log_seq";
 
     private static readonly StringFieldDefinition<BsonDocument, long> SequenceTargetField = new("_id");
 
-    public static MongoEventStoreClient<TEvent> Create<TEvent>(
+    public static MongoEventStore<TEvent> Create<TEvent>(
         IMongoClient mongoClient,
         EventCodec<TEvent, BsonValue, BsonValue> codec,
         MongoEventStoreClientOptions? options = null,
@@ -45,30 +46,31 @@ public static class MongoEventStoreClient
             },
             logger);
 
-        return new MongoEventStoreClient<TEvent>(sequencedAppender, eventLog, codec);
+        return new MongoEventStore<TEvent>(sequencedAppender, eventLog, codec);
     }
 }
 
-public sealed class MongoEventStoreClient<TEvent>(
+public sealed class MongoEventStore<TEvent>(
     IMongoSequencedAppender<BsonDocument, AppendToStreamContext> sequencedAppender,
     IMongoCollection<BsonDocument> eventLog,
     EventCodec<TEvent, BsonValue, BsonValue> eventCodec) :
-    IMongoEventStoreClient<TEvent>
+    IMongoEventStore<TEvent>
     where TEvent : notnull
 {
     private readonly IEventEncoder<TEvent, BsonValue, BsonValue> _encoder = eventCodec.Encoder;
     private readonly IEventDecoder<TEvent, BsonValue, BsonValue> _decoder = eventCodec.Decoder;
 
-    public async Task AppendToStreamAsync(
+    public async Task AppendAsync(
         string streamId,
-        ExpectedStreamState<StreamPosition> expectedState,
-        IEnumerable<AppendEvent<TEvent>> events,
+        IEnumerable<AppendableEvent<TEvent>> events,
+        ExpectedStreamState<StreamPosition>? expectedState = null,
         Guid? commitId = null,
-        AppendToStreamOptions? options = null,
+        AppendOptions? options = null,
         CancellationToken cancellationToken = default)
     {
+        expectedState ??= ExpectedStreamState<StreamPosition>.Any;
         commitId ??= Guid.NewGuid();
-        options ??= new AppendToStreamOptions();
+        options ??= new AppendOptions();
 
         var bsonStreamId = new BsonString(streamId);
         var bsonCommitId = new BsonBinaryData(commitId.Value, GuidRepresentation.Standard);
@@ -85,8 +87,8 @@ public sealed class MongoEventStoreClient<TEvent>(
                 { EventLogEntry.FieldNames.Metadata, x.Metadata ?? BsonNull.Value }
             });
 
-        var context = new AppendToStreamContext(commitId.Value, streamId, expectedState);
-        var appendOptions = new AppendOptions { Timeout = options.Timeout };
+        var context = new AppendToStreamContext(commitId.Value, streamId, expectedState.Value);
+        var appendOptions = new DomainBlocks.MongoDB.Sequencing.AppendOptions { Timeout = options.Timeout };
 
         await sequencedAppender
             .AppendAsync(eventDocuments, context, appendOptions, cancellationToken)

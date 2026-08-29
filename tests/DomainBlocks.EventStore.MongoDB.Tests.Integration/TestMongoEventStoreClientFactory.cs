@@ -23,7 +23,7 @@ public static class TestMongoEventStoreClientFactory
 }
 
 public sealed class TestMongoEventStoreClientFactory<TEvent> :
-    ITestEventStoreClientFactory<TEvent>
+    ITestEventStoreFactory<TEvent>
     where TEvent : notnull
 {
     private readonly MongoEventStoreClientOptions _options;
@@ -58,7 +58,7 @@ public sealed class TestMongoEventStoreClientFactory<TEvent> :
 
     public IMongoClient MongoClient { get; }
 
-    public async Task<ITestEventStoreClientHandle<TEvent>> CreateAsync(
+    public async Task<ITestEventStoreHandle<,,,>> CreateAsync(
         string name,
         CancellationToken cancellationToken = default)
     {
@@ -66,7 +66,7 @@ public sealed class TestMongoEventStoreClientFactory<TEvent> :
 
         var logger = _loggerFactory.CreateLogger($"MongoEventStoreClient2_{name}");
 
-        var handle = new ClientHandle(
+        var handle = new EventStoreHandle(
             MongoClient,
             _codec,
             _options,
@@ -92,17 +92,17 @@ public sealed class TestMongoEventStoreClientFactory<TEvent> :
         _loggerFactory.Dispose();
     }
 
-    private sealed class ClientHandle(
+    private sealed class EventStoreHandle(
         IMongoClient mongoClient,
         EventCodec<TEvent, BsonValue, BsonValue> codec,
         MongoEventStoreClientOptions options,
         ILogger logger) :
-        ITestEventStoreClientHandle<TEvent>
+        ITestEventStoreHandle<,,,>
     {
-        private readonly MongoEventStoreClient<TEvent> _client =
-            MongoEventStoreClient.Create(mongoClient, codec, options, logger);
+        private readonly MongoEventStore<TEvent> _client =
+            MongoEventStore.Create(mongoClient, codec, options, logger);
 
-        public IEventStoreClient<TEvent> Client => _client;
+        public IEventStore<,,,> Instance => _client;
 
         public ValueTask DisposeAsync() => _client.DisposeAsync();
     }

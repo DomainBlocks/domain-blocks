@@ -5,23 +5,25 @@ namespace DomainBlocks.EventStore;
 public static class EventStoreClientExtensions
 {
     extension<TEvent, TStreamId, TStreamPos, TLogPos>(
-        IEventStoreClient<TEvent, TStreamId, TStreamPos, TLogPos> client)
+        IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> eventStore)
         where TEvent : notnull
         where TStreamId : notnull
         where TStreamPos : notnull
         where TLogPos : notnull
     {
-        public Task AppendToStreamAsync(TStreamId streamId,
-            ExpectedStreamState<TStreamPos> expectedState,
+        public Task AppendAsync(
+            TStreamId streamId,
             IEnumerable<TEvent> events,
-            AppendToStreamOptions? options = null,
+            ExpectedStreamState<TStreamPos>? expectedState = null,
+            Guid? commitId = null,
+            AppendOptions? options = null,
             CancellationToken cancellationToken = default)
         {
-            return client.AppendToStreamAsync(
+            return eventStore.AppendAsync(
                 streamId,
+                events.Select(x => AppendableEvent.Create(x)),
                 expectedState,
-                events.Select(x => AppendEvent.Create(x)),
-                null,
+                commitId,
                 options,
                 cancellationToken);
         }

@@ -1,8 +1,8 @@
 namespace DomainBlocks.EventStore.Abstractions;
 
-public sealed class AppendToStreamOptions
+public sealed class AppendOptions
 {
-    public static readonly AppendToStreamOptions Default = new();
+    public static readonly AppendOptions Default = new();
 
     /// <summary>
     /// Gets or sets how long the client waits for the operation to be acknowledged before timing out.

@@ -76,17 +76,17 @@ public class MongoSerializationTests
         await using var client = CreateEventStoreClient(mongoClient, serde, options);
 
         var streamId = $"test-{serde.GetType().Name}-{Guid.NewGuid()}";
-        await client.AppendToStreamAsync(streamId, [@event]);
+        await client.AppendAsync(streamId, [@event]);
         var readEvents = await client.ReadStream(streamId).ToArrayAsync();
 
         readEvents
             .ShouldHaveSingleItem()
-            .Event
+            .Payload
             .ShouldBeOfType<TEvent>()
             .ShouldBe(@event);
     }
 
-    private static MongoEventStoreClient<object> CreateEventStoreClient(
+    private static MongoEventStore<object> CreateEventStoreClient(
         MongoClient mongoClient,
         IObjectSerde<BsonValue> serde,
         MongoEventStoreClientOptions options)
@@ -115,7 +115,7 @@ public class MongoSerializationTests
             Decoder = EventDecoder.Create(decoderOptions)
         };
 
-        return MongoEventStoreClient.Create(mongoClient, eventCodec, options);
+        return MongoEventStore.Create(mongoClient, eventCodec, options);
     }
 
     private record UserCreated

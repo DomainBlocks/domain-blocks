@@ -4,5 +4,5 @@ using StreamPosition = KurrentDB.Client.StreamPosition;
 
 namespace DomainBlocks.EventStore.KurrentDB;
 
-public interface IKurrentDBEventStoreClient<TEvent> : IEventStoreClient<TEvent, string, StreamPosition, Position>
+public interface IKurrentDBEventStore<TEvent> : IEventStore<TEvent, string, StreamPosition, Position>
     where TEvent : notnull;

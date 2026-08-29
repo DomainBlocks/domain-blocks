@@ -9,23 +9,25 @@ using StreamPosition = KurrentDB.Client.StreamPosition;
 
 namespace DomainBlocks.EventStore.KurrentDB;
 
-public class KurrentDBEventStoreClient<TEvent>(
+public class KurrentDBEventStore<TEvent>(
     KurrentDBClient client,
     IEventEncoder<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventEncoder,
     IEventDecoder<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventDecoder) :
-    IKurrentDBEventStoreClient<TEvent>
+    IKurrentDBEventStore<TEvent>
     where TEvent : notnull
 {
-    public async Task AppendToStreamAsync(
+    public async Task AppendAsync(
         string streamId,
-        ExpectedStreamState<StreamPosition> expectedState,
-        IEnumerable<AppendEvent<TEvent>> events,
+        IEnumerable<AppendableEvent<TEvent>> events,
+        ExpectedStreamState<StreamPosition>? expectedState = null,
         Guid? commitId = null,
-        AppendToStreamOptions? options = null,
+        AppendOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        options ??= AppendToStreamOptions.Default;
-        var kurrentExpectedState = ToKurrentStreamState(expectedState);
+        expectedState ??= ExpectedStreamState<StreamPosition>.Any;
+        options ??= AppendOptions.Default;
+
+        var kurrentExpectedState = ToKurrentStreamState(expectedState.Value);
 
         var eventData = eventEncoder
             .Encode(events)
@@ -44,7 +46,7 @@ public class KurrentDBEventStoreClient<TEvent>(
         catch (WrongExpectedVersionException ex)
         {
             var actualState = ToStreamState(ex.ActualStreamState);
-            throw new StreamAppendConflictException<StreamPosition>(streamId, expectedState, actualState, ex);
+            throw new StreamAppendConflictException<StreamPosition>(streamId, expectedState.Value, actualState, ex);
         }
     }
 

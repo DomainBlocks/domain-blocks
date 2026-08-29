@@ -19,6 +19,6 @@ public abstract class ReadEventTransform<TEventBase, TStreamId, TStreamPos, TLog
     IEnumerable<TEventBase> IReadEventTransform<TEventBase, TStreamId, TStreamPos, TLogPos>.Apply(
         ReadEvent<TEventBase, TStreamId, TStreamPos, TLogPos> @event)
     {
-        return Apply((TSourceEvent)@event.Event, @event.Context);
+        return Apply((TSourceEvent)@event.Payload, @event.Context);
     }
 }
