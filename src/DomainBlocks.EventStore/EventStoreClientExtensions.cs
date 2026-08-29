@@ -25,24 +25,5 @@ public static class EventStoreClientExtensions
                 options,
                 cancellationToken);
         }
-
-        public IEventReadBuilder<TEvent, TStreamId, TStreamPos, TLogPos, TLogPos>
-            ReadAll(ReadAllOptions? options = null) =>
-            new EventReadBuilder<TEvent, TStreamId, TStreamPos, TLogPos, TLogPos>(def => client.ReadAll(def, options));
-
-        public IEventReadBuilder<TEvent, TStreamId, TStreamPos, TLogPos, TStreamPos> ReadStream(
-            TStreamId streamId,
-            ReadStreamOptions? options = null) =>
-            new EventReadBuilder<TEvent, TStreamId, TStreamPos, TLogPos, TStreamPos>(def =>
-                client.ReadStream(streamId, def, options));
-
-        public IEventSubscriptionBuilder<TEvent, TLogPos> SubscribeToAll(SubscriptionOptions? options = null) =>
-            new EventSubscriptionBuilder<TEvent, TLogPos>(def => client.SubscribeToAll(def, options));
-
-        public IEventSubscriptionBuilder<TEvent, TStreamPos> SubscribeToStream(
-            TStreamId streamId,
-            SubscriptionOptions? options = null) =>
-            new EventSubscriptionBuilder<TEvent, TStreamPos>(def =>
-                client.SubscribeToStream(streamId, def, options));
     }
 }

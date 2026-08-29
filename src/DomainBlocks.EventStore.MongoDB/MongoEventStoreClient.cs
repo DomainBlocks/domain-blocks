@@ -94,24 +94,26 @@ public sealed class MongoEventStoreClient<TEvent>(
     }
 
     public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAll(
-        ReadDefinition<LogPosition> definition,
+        ReadDirection direction = ReadDirection.Forward,
+        ReadOrigin<LogPosition>? origin = null,
         ReadAllOptions? options = null)
     {
         options ??= ReadAllOptions.Default;
-        return ReadCoreAsync(definition, "_id", options.MaxCount);
+        return ReadCoreAsync(direction, origin, "_id", options.MaxCount);
     }
 
     public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadStream(
         string streamId,
-        ReadDefinition<StreamPosition> definition,
+        ReadDirection direction = ReadDirection.Forward,
+        ReadOrigin<StreamPosition>? origin = null,
         ReadStreamOptions? options = null)
     {
         options ??= ReadStreamOptions.Default;
-        return ReadCoreAsync(definition, EventLogEntry.FieldNames.StreamVersion, options.MaxCount, streamId);
+        return ReadCoreAsync(direction, origin, EventLogEntry.FieldNames.StreamVersion, options.MaxCount, streamId);
     }
 
     public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
-        SubscriptionDefinition<LogPosition> definition,
+        ReadOrigin<LogPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
         throw new NotImplementedException();
@@ -119,7 +121,7 @@ public sealed class MongoEventStoreClient<TEvent>(
 
     public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
         string streamId,
-        SubscriptionDefinition<StreamPosition> definition,
+        ReadOrigin<StreamPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
         throw new NotImplementedException();
@@ -127,34 +129,39 @@ public sealed class MongoEventStoreClient<TEvent>(
 
     public ValueTask DisposeAsync() => sequencedAppender.DisposeAsync();
 
-    private static ReadQuery GetReadQuery<TPos>(ReadDefinition<TPos> definition, string positionFieldName)
+    private static ReadQuery GetReadQuery<TPos>(
+        ReadDirection direction,
+        ReadOrigin<TPos>? origin, string positionFieldName)
         where TPos : struct,
         IPosition<TPos>
     {
-        return definition switch
+        origin ??= direction == ReadDirection.Forward ? ReadOrigin.Start<TPos>() : ReadOrigin.End<TPos>();
+
+        return origin switch
         {
-            ReadDefinition<TPos>.ForwardFromStart => new ReadQuery(
+            ReadOrigin<TPos>.Start when direction == ReadDirection.Forward => new ReadQuery(
                 Builders<BsonDocument>.Filter.Empty,
                 Builders<BsonDocument>.Sort.Ascending(positionFieldName)),
 
-            ReadDefinition<TPos>.BackwardFromEnd => new ReadQuery(
+            ReadOrigin<TPos>.End when direction == ReadDirection.Backward => new ReadQuery(
                 Builders<BsonDocument>.Filter.Empty,
                 Builders<BsonDocument>.Sort.Descending(positionFieldName)),
 
-            ReadDefinition<TPos>.ForwardFrom d => new ReadQuery(
-                Builders<BsonDocument>.Filter.Gte(positionFieldName, d.Position.Value),
+            ReadOrigin<TPos>.Position p when direction == ReadDirection.Forward => new ReadQuery(
+                Builders<BsonDocument>.Filter.Gte(positionFieldName, p.Value.Value),
                 Builders<BsonDocument>.Sort.Ascending(positionFieldName)),
 
-            ReadDefinition<TPos>.BackwardFrom d => new ReadQuery(
-                Builders<BsonDocument>.Filter.Lte(positionFieldName, d.Position.Value),
+            ReadOrigin<TPos>.Position p when direction == ReadDirection.Backward => new ReadQuery(
+                Builders<BsonDocument>.Filter.Lte(positionFieldName, p.Value.Value),
                 Builders<BsonDocument>.Sort.Descending(positionFieldName)),
 
-            _ => throw new UnreachableException($"Unknown ReadDefinition type '{definition.GetType().Name}'.")
+            _ => throw new UnreachableException($"Unknown ReadOrigin type '{origin.GetType().Name}'.")
         };
     }
 
     private async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCoreAsync<TPos>(
-        ReadDefinition<TPos> definition,
+        ReadDirection direction,
+        ReadOrigin<TPos>? origin,
         string positionFieldName,
         int? maxCount,
         string? streamId = null,
@@ -163,7 +170,7 @@ public sealed class MongoEventStoreClient<TEvent>(
         where TPos : struct,
         IPosition<TPos>
     {
-        var query = GetReadQuery(definition, positionFieldName);
+        var query = GetReadQuery(direction, origin, positionFieldName);
 
         var filter = streamId is null
             ? query.Filter
@@ -194,13 +201,14 @@ public sealed class MongoEventStoreClient<TEvent>(
 
                 var (@event, decodedMetadata) = _decoder.Decode(eventName, eventData, metadata);
 
-                yield return ReadEvent.Create(
-                    @event,
+                var context = ReadEventContext.Create(
                     streamIdFromEvent,
                     decodedMetadata,
                     writtenAtUtc,
                     streamPosition,
                     logPosition);
+
+                yield return ReadEvent.Create(@event, context);
             }
         }
 

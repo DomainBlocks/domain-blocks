@@ -15,20 +15,22 @@ public interface IEventStoreClient<TEvent, TStreamId, TStreamPos, TLogPos>
         CancellationToken cancellationToken = default);
 
     IAsyncEnumerable<ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>> ReadAll(
-        ReadDefinition<TLogPos> definition,
+        ReadDirection direction = ReadDirection.Forward,
+        ReadOrigin<TLogPos>? origin = null,
         ReadAllOptions? options = null);
 
     IAsyncEnumerable<ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>> ReadStream(
         TStreamId streamId,
-        ReadDefinition<TStreamPos> definition,
+        ReadDirection direction = ReadDirection.Forward,
+        ReadOrigin<TStreamPos>? origin = null,
         ReadStreamOptions? options = null);
 
     IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
-        SubscriptionDefinition<TLogPos> definition,
+        ReadOrigin<TLogPos>? origin = null,
         SubscriptionOptions? options = null);
 
     IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
         TStreamId streamId,
-        SubscriptionDefinition<TStreamPos> definition,
+        ReadOrigin<TStreamPos>? origin = null,
         SubscriptionOptions? options = null);
 }
