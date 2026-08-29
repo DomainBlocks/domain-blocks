@@ -10,14 +10,14 @@ using StreamPosition = KurrentDB.Client.StreamPosition;
 namespace DomainBlocks.EventStore.Benchmarks;
 
 [MemoryDiagnoser]
-public class EventStoreClientReadBenchmarks
+public class EventStoreReadBenchmarks
 {
     private const string StreamId = "test-stream";
 
     private static readonly JsonUtf8BytesObjectSerde EventSerde = new();
     private static readonly JsonUtf8BytesMetadataSerde MetadataSerde = new();
 
-    private FakeKurrentDBEventStore<IDomainEvent> _client = null!;
+    private FakeKurrentDBEventStore<IDomainEvent> _eventStore = null!;
     private ReadStreamOptions _readStreamOptions = null!;
 
     [Params(false, true)]
@@ -32,15 +32,16 @@ public class EventStoreClientReadBenchmarks
     {
         var kurrentEvents = CreateKurrentEvents(EventCount);
 
-        var codecOptions = new EventCodecOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
+        var decoderOptions = new EventDecoderOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
-            TypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>()),
-            EventSerde = EventSerde,
-            MetadataSerde = MetadataSerde
+            TypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>()).Reads,
+            EventDeserializer = EventSerde,
+            MetadataDeserializer = MetadataSerde
         };
 
-        var eventCodec = EventCodec.Create(codecOptions);
-        _client = new FakeKurrentDBEventStore<IDomainEvent>(kurrentEvents, eventCodec);
+        var decoder = EventDecoder.Create(decoderOptions);
+
+        _eventStore = new FakeKurrentDBEventStore<IDomainEvent>(kurrentEvents, decoder);
         _readStreamOptions = new ReadStreamOptions { IncludeMetadata = IncludeMetadata };
     }
 
@@ -48,7 +49,7 @@ public class EventStoreClientReadBenchmarks
     public async Task ReadStream_NoIO()
     {
         // Force enumeration
-        await foreach (var _ in _client.ReadStream(StreamId, options: _readStreamOptions))
+        await foreach (var _ in _eventStore.ReadStream(StreamId, options: _readStreamOptions))
         {
         }
     }
@@ -85,7 +86,7 @@ public class EventStoreClientReadBenchmarks
             var eventRecord = new EventRecord(
                 StreamId,
                 Uuid.NewUuid(),
-                KurrentDB.Client.StreamPosition.FromStreamRevision(i),
+                StreamPosition.FromStreamRevision(i),
                 new Position(i, i),
                 kurrentMetadata,
                 serializedEvent,
@@ -107,7 +108,7 @@ public class EventStoreClientReadBenchmarks
 
     private sealed class FakeKurrentDBEventStore<TEvent>(
         ResolvedEvent[] kurrentEvents,
-        EventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec) :
+        IEventDecoder<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventDecoder) :
         IEventStore<TEvent, string, StreamPosition, Position>
         where TEvent : notnull
     {
@@ -145,7 +146,7 @@ public class EventStoreClientReadBenchmarks
                 var originalEventRecord = resolvedEvent.OriginalEvent;
                 var metadataBytes = options.IncludeMetadata ? eventRecord.Metadata : default;
 
-                var (@event, metadata) = eventCodec.Decoder.Decode(
+                var (@event, metadata) = eventDecoder.Decode(
                     eventRecord.EventType,
                     eventRecord.Data,
                     metadataBytes);

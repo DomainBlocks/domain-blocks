@@ -29,7 +29,7 @@ public class EventContractMapperTests
         };
 
         var codec = EventCodec.Create(codecOptions);
-        var eventStore = new KurrentDBEventStore<IDomainEvent>(kurrentClient, codec.Encoder, codec.Decoder);
+        var eventStore = new KurrentDBEventStore<IDomainEvent>(kurrentClient, codec);
 
         var originalEvent = new UserCreated
         {

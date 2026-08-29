@@ -5,7 +5,7 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
-public class MongoEventStoreClientConcurrencyTests
+public class MongoEventStoreConcurrencyTests
 {
     private const int InstanceCount = 3;
 
@@ -125,11 +125,11 @@ public class MongoEventStoreClientConcurrencyTests
             [new TestEvent { Value = "seed" }],
             cancellationToken: ct);
 
-        var results = await Task.WhenAll(_handles.Select(async clientHandle =>
+        var results = await Task.WhenAll(_handles.Select(async handle =>
         {
             try
             {
-                await clientHandle.Instance.AppendAsync(
+                await handle.Instance.AppendAsync(
                     streamId,
                     [new TestEvent { Value = "raced" }],
                     ExpectedStreamState.AtVersion(new StreamPosition(0)),
@@ -165,9 +165,9 @@ public class MongoEventStoreClientConcurrencyTests
 
         var streamIds = _handles.Select(_ => $"indep-{Guid.NewGuid():N}").ToList();
 
-        var tasks = _handles.Select((clientHandle, i) =>
+        var tasks = _handles.Select((handle, i) =>
             Task.WhenAll(Enumerable.Range(0, eventCountPerInstance).Select(j =>
-                clientHandle.Instance.AppendAsync(
+                handle.Instance.AppendAsync(
                     streamIds[i],
                     [new TestEvent { Value = $"e{j}" }],
                     cancellationToken: ct))));

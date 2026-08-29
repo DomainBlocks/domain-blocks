@@ -57,9 +57,6 @@ public sealed class MongoEventStore<TEvent>(
     IMongoEventStore<TEvent>
     where TEvent : notnull
 {
-    private readonly IEventEncoder<TEvent, BsonValue, BsonValue> _encoder = eventCodec.Encoder;
-    private readonly IEventDecoder<TEvent, BsonValue, BsonValue> _decoder = eventCodec.Decoder;
-
     public async Task AppendAsync(
         string streamId,
         IEnumerable<AppendableEvent<TEvent>> events,
@@ -75,7 +72,7 @@ public sealed class MongoEventStore<TEvent>(
         var bsonStreamId = new BsonString(streamId);
         var bsonCommitId = new BsonBinaryData(commitId.Value, GuidRepresentation.Standard);
 
-        var eventDocuments = _encoder
+        var eventDocuments = eventCodec.Encoder
             .Encode(events)
             .Select((x, i) => new BsonDocument
             {
@@ -230,7 +227,7 @@ public sealed class MongoEventStore<TEvent>(
                 var metadata = doc[EventLogEntry.FieldNames.Metadata];
                 var writtenAtUtc = doc[EventLogEntry.FieldNames.WrittenAtUtc].AsBsonDateTime.ToUniversalTime();
 
-                var (@event, decodedMetadata) = _decoder.Decode(eventName, eventData, metadata);
+                var (@event, decodedMetadata) = eventCodec.Decoder.Decode(eventName, eventData, metadata);
 
                 var context = ReadEventContext.Create(
                     streamIdFromEvent,

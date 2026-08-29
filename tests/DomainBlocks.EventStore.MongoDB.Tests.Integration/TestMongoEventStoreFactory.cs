@@ -64,7 +64,7 @@ public sealed class TestMongoEventStoreFactory<TEvent> :
     {
         await _initTask.WaitAsync(cancellationToken);
 
-        var logger = _loggerFactory.CreateLogger($"MongoEventStoreClient2_{name}");
+        var logger = _loggerFactory.CreateLogger($"MongoEventStore_{name}");
 
         var handle = new EventStoreHandle(
             MongoClient,

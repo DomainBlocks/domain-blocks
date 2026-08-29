@@ -2,7 +2,7 @@
 
 namespace DomainBlocks.EventStore;
 
-public static class EventStoreClientExtensions
+public static class EventStoreExtensions
 {
     extension<TEvent, TStreamId, TStreamPos, TLogPos>(
         IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> eventStore)

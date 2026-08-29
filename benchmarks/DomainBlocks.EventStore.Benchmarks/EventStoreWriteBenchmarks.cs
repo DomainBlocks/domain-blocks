@@ -12,14 +12,14 @@ using StreamPosition = KurrentDB.Client.StreamPosition;
 namespace DomainBlocks.EventStore.Benchmarks;
 
 [MemoryDiagnoser]
-public class EventStoreClientWriteBenchmarks
+public class EventStoreWriteBenchmarks
 {
     private const string StreamId = "test-stream";
 
     private static readonly JsonUtf8BytesObjectSerde EventSerde = new();
     private static readonly JsonUtf8BytesMetadataSerde MetadataSerde = new();
 
-    private FakeKurrentDBEventStore<IDomainEvent> _client = null!;
+    private FakeKurrentDBEventStore<IDomainEvent> _eventStore = null!;
     private AppendableEvent<IDomainEvent>[] _appendEvents = null!;
 
     //[Params(100, 1_000, 10_000)]
@@ -29,27 +29,24 @@ public class EventStoreClientWriteBenchmarks
     [GlobalSetup]
     public void GlobalSetup()
     {
-        var consumer = new Consumer();
-
-        var codecOptions = new EventCodecOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
+        var encoderOptions = new EventEncoderOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
-            TypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>()),
-            EventSerde = EventSerde,
-            MetadataSerde = MetadataSerde,
+            TypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>()).Appends,
+            EventSerializer = EventSerde,
+            MetadataSerializer = MetadataSerde,
             MetadataContributors = [new MetadataContributor(EventCount)]
         };
 
-        var eventCodec = EventCodec.Create(codecOptions);
+        var encoder = EventEncoder.Create(encoderOptions);
 
-        _client = new FakeKurrentDBEventStore<IDomainEvent>(eventCodec, consumer);
-
+        _eventStore = new FakeKurrentDBEventStore<IDomainEvent>(encoder, new Consumer());
         _appendEvents = CreateAppendEvents(EventCount);
     }
 
     [Benchmark]
     public Task AppendAsync_NoIO()
     {
-        return _client.AppendAsync(StreamId, _appendEvents);
+        return _eventStore.AppendAsync(StreamId, _appendEvents);
     }
 
     private static AppendableEvent<IDomainEvent>[] CreateAppendEvents(int count)
@@ -79,7 +76,7 @@ public class EventStoreClientWriteBenchmarks
     }
 
     private sealed class FakeKurrentDBEventStore<TEvent>(
-        EventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec,
+        IEventEncoder<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventEncoder,
         Consumer consumer) :
         IEventStore<TEvent, string, StreamPosition, Position>
         where TEvent : notnull
@@ -92,7 +89,7 @@ public class EventStoreClientWriteBenchmarks
             AppendOptions? options = null,
             CancellationToken cancellationToken = default)
         {
-            foreach (var (eventName, eventData, metadata) in eventCodec.Encoder.Encode(events))
+            foreach (var (eventName, eventData, metadata) in eventEncoder.Encode(events))
             {
                 consumer.Consume(eventName);
                 consumer.Consume(eventData);

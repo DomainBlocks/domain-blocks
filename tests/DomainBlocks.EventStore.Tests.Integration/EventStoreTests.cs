@@ -8,9 +8,9 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.Tests.Integration;
 
-public class EventStoreClientTests
+public class EventStoreTests
 {
-    static EventStoreClientTests()
+    static EventStoreTests()
     {
         BsonClassMap.RegisterClassMap<LimitOrderEvent>(cm =>
         {
@@ -43,7 +43,7 @@ public class EventStoreClientTests
             DatabaseName = "domainblocks_tests"
         };
 
-        await using var client = MongoEventStore.Create(mongoClient, eventCodec, options);
+        await using var eventStore = MongoEventStore.Create(mongoClient, eventCodec, options);
 
         var orderId = Guid.NewGuid();
         var streamId = $"order-{orderId}";
@@ -75,9 +75,9 @@ public class EventStoreClientTests
             FilledAt = amended.AmendedAt.AddHours(1)
         };
 
-        await client.AppendAsync(streamId, [submitted, amended, filled]);
+        await eventStore.AppendAsync(streamId, [submitted, amended, filled]);
 
-        var orderEvents = await client
+        var orderEvents = await eventStore
             .ReadStream(streamId)
             .Select(x => x.Payload)
             .OfType<LimitOrderEvent>()

@@ -46,7 +46,7 @@ public sealed class TestKurrentDBEventStoreFactory<TEvent> :
         ITestEventStoreHandle<TEvent, string, StreamPosition, Position>
     {
         public IEventStore<TEvent, string, StreamPosition, Position> Instance { get; } =
-            new KurrentDBEventStore<TEvent>(kurrentDBClient, codec.Encoder, codec.Decoder);
+            new KurrentDBEventStore<TEvent>(kurrentDBClient, codec);
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

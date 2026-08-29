@@ -73,11 +73,11 @@ public class MongoSerializationTests
             DatabaseName = "domainblocks_tests"
         };
 
-        await using var client = CreateEventStoreClient(mongoClient, serde, options);
+        await using var eventStore = CreateEventStore(mongoClient, serde, options);
 
         var streamId = $"test-{serde.GetType().Name}-{Guid.NewGuid()}";
-        await client.AppendAsync(streamId, [@event]);
-        var readEvents = await client.ReadStream(streamId).ToArrayAsync();
+        await eventStore.AppendAsync(streamId, [@event]);
+        var readEvents = await eventStore.ReadStream(streamId).ToArrayAsync();
 
         readEvents
             .ShouldHaveSingleItem()
@@ -86,7 +86,7 @@ public class MongoSerializationTests
             .ShouldBe(@event);
     }
 
-    private static MongoEventStore<object> CreateEventStoreClient(
+    private static MongoEventStore<object> CreateEventStore(
         MongoClient mongoClient,
         IObjectSerde<BsonValue> serde,
         MongoEventStoreOptions options)
