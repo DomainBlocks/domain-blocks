@@ -1,6 +1,4 @@
-﻿using System.Diagnostics;
-
-namespace DomainBlocks.EventStore.Abstractions;
+﻿namespace DomainBlocks.EventStore.Abstractions;
 
 public static class ExpectedStreamState
 {
@@ -23,8 +21,6 @@ public static class ExpectedStreamState
 /// </summary>
 public readonly record struct ExpectedStreamState<TVersion> where TVersion : notnull
 {
-    private const string VersionPrefix = "Version=";
-
     /// <summary>
     /// Any state; stream may exist at any version or may not exist.
     /// </summary>
@@ -40,12 +36,10 @@ public readonly record struct ExpectedStreamState<TVersion> where TVersion : not
     /// </summary>
     public static readonly ExpectedStreamState<TVersion> Exists = new(ExpectedStreamStateKind.Exists);
 
-    private readonly TVersion? _version;
-
     private ExpectedStreamState(ExpectedStreamStateKind kind, TVersion? version = default)
     {
         Kind = kind;
-        _version = version;
+        Version = version;
     }
 
     /// <summary>
@@ -53,16 +47,17 @@ public readonly record struct ExpectedStreamState<TVersion> where TVersion : not
     /// </summary>
     public ExpectedStreamStateKind Kind { get; }
 
+    public bool HasVersion => Kind == ExpectedStreamStateKind.AtVersion;
+
     /// <summary>
     /// The expected stream version.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// <see cref="Kind"/> is not <see cref="ExpectedStreamStateKind.AtVersion"/>.
     /// </exception>
-    public TVersion Version => Kind == ExpectedStreamStateKind.AtVersion
-        ? _version!
-        : throw new InvalidOperationException(
-            $"Version is only available when Kind is '{nameof(ExpectedStreamStateKind.AtVersion)}'. Kind: '{Kind}'.");
+    public TVersion Version => HasVersion
+        ? field!
+        : throw new InvalidOperationException("Expected stream state has no version.");
 
     /// <summary>
     /// Creates an expected stream state for a specific version.
@@ -82,10 +77,9 @@ public readonly record struct ExpectedStreamState<TVersion> where TVersion : not
         {
             ExpectedStreamStateKind.Any => true,
             ExpectedStreamStateKind.DoesNotExist => actualState.Kind == StreamStateKind.DoesNotExist,
-            ExpectedStreamStateKind.Exists => actualState.Kind == StreamStateKind.AtVersion,
+            ExpectedStreamStateKind.Exists => actualState.HasVersion,
             ExpectedStreamStateKind.AtVersion =>
-                actualState.Kind == StreamStateKind.AtVersion &&
-                EqualityComparer<TVersion>.Default.Equals(_version!, actualState.Version),
+                actualState.HasVersion && EqualityComparer<TVersion>.Default.Equals(Version, actualState.Version),
             _ => false // Defensive fallback: kind not recognized
         };
     }
@@ -93,12 +87,5 @@ public readonly record struct ExpectedStreamState<TVersion> where TVersion : not
     /// <summary>
     /// Returns a string representation of this expected stream state.
     /// </summary>
-    public override string ToString() => Kind switch
-    {
-        ExpectedStreamStateKind.Any => nameof(Any),
-        ExpectedStreamStateKind.DoesNotExist => nameof(DoesNotExist),
-        ExpectedStreamStateKind.Exists => nameof(Exists),
-        ExpectedStreamStateKind.AtVersion => $"{VersionPrefix}{_version}",
-        _ => throw new UnreachableException($"Unknown {nameof(ExpectedStreamStateKind)} '{Kind}'.")
-    };
+    public override string ToString() => HasVersion ? $"Version={Version}" : Kind.ToString();
 }

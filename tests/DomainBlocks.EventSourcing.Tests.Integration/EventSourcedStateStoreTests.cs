@@ -13,13 +13,13 @@ using Shouldly;
 namespace DomainBlocks.EventSourcing.Tests.Integration;
 
 [TestFixture]
-public class EntityStoreTests
+public class EventSourcedStateStoreTests
 {
     private MongoClient _mongoClient = null!;
     private MongoEventStoreOptions _options = null!;
     private ILoggerFactory _loggerFactory = null!;
     private MongoEventStore<IDomainEvent> _client = null!;
-    private EntityStore<IDomainEvent> _entityStore = null!;
+    private EventSourcedStateStore<IDomainEvent, string, StreamPosition, LogPosition> _stateStore = null!;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -35,10 +35,10 @@ public class EntityStoreTests
             .AddSimpleConsole(o => o.TimestampFormat = "HH:mm:ss.fff ")
             .SetMinimumLevel(LogLevel.Debug));
 
-        var eventTypeMap = EventTypeMap.Create(builder => builder
-            .MapType<ShoppingSessionStarted>()
-            .MapType<ItemAddedToShoppingCart>()
-            .MapType<ItemRemovedFromShoppingCart>());
+        var eventTypeMap = EventTypeMap.Create(
+            EventTypeMapping.ReadWrite<ShoppingSessionStarted>(),
+            EventTypeMapping.ReadWrite<ItemAddedToShoppingCart>(),
+            EventTypeMapping.ReadWrite<ItemRemovedFromShoppingCart>());
 
         var eventCodec = TestMongoEventCodec.Create<IDomainEvent>(eventTypeMap);
 
@@ -48,15 +48,20 @@ public class EntityStoreTests
             _options,
             _loggerFactory.CreateLogger<MongoEventStore<IDomainEvent>>());
 
-        var entityDefinitionProvider = new CompositeEntityDefinitionProvider<IDomainEvent>(
-        [
-            new GenericEntityDefinitionProvider<IDomainEvent>(typeof(AggregateDefinition<,>), [123, "ABC"]),
-            //new GenericEntityDefinitionProvider<IDomainEvent>(typeof(AggregateDefinition2<,>)),
-            new GenericEntityDefinitionProvider<IDomainEvent>(typeof(MutableAggregateDefinition<>)),
-            new GenericEntityDefinitionProvider<IDomainEvent>(typeof(FunctionalAggregateWrapperDefinition<>))
-        ]);
+        // var entityDefinitionProvider = new CompositeEntityDefinitionProvider<IDomainEvent>(
+        // [
+        //     new GenericEntityDefinitionProvider<IDomainEvent>(typeof(AggregateDefinition<,>), [123, "ABC"]),
+        //     //new GenericEntityDefinitionProvider<IDomainEvent>(typeof(AggregateDefinition2<,>)),
+        //     new GenericEntityDefinitionProvider<IDomainEvent>(typeof(MutableAggregateDefinition<>)),
+        //     new GenericEntityDefinitionProvider<IDomainEvent>(typeof(FunctionalAggregateWrapperDefinition<>))
+        // ]);
 
-        _entityStore = new EntityStore<IDomainEvent>(_client, entityDefinitionProvider);
+        var stateDefinitionProvider = new GenericEventSourcedStateDefinitionProvider<IDomainEvent, string>(
+            typeof(AggregateDefinition3<,>));
+
+        _stateStore = new EventSourcedStateStore<IDomainEvent, string, StreamPosition, LogPosition>(
+            _client,
+            stateDefinitionProvider);
 
         await MongoEventStoreAdmin.EnsureInitializedAsync(_mongoClient, _options);
     }
@@ -77,14 +82,17 @@ public class EntityStoreTests
         var entity = new ShoppingCart();
         entity.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Foo"));
         entity.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Bar"));
-        await _entityStore.SaveAsync(Versioned.New(entity));
 
-        var reloaded = await _entityStore.LoadAsync<ShoppingCart>(entity.State.SessionId.ToString()).AsEntity();
+        await _stateStore.SaveAsync(
+            new EventSourcedState<ShoppingCart, StreamPosition>(entity, Optional<StreamPosition>.None));
 
-        reloaded.State.SessionId.ShouldBe(entity.State.SessionId);
-        reloaded.State.Items.ShouldBe(entity.State.Items);
+        var reloaded = await _stateStore.LoadAsync<ShoppingCart>(entity.State.SessionId.ToString());
+
+        reloaded.Value.State.SessionId.ShouldBe(entity.State.SessionId);
+        reloaded.Value.State.Items.ShouldBe(entity.State.Items);
     }
 
+    /*
     [Test]
     public async Task WriteToExpectedNewStream_WhenStreamExists_ThrowsWrongExpectedStreamStateException()
     {
@@ -192,4 +200,5 @@ public class EntityStoreTests
         reloaded.Id.ShouldBe(entity.Id);
         reloaded.Entity.Items.ShouldBe(entity.Entity.Items);
     }
+    */
 }

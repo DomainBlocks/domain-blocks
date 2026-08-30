@@ -2,6 +2,7 @@ using DomainBlocks.EventStore.Abstractions;
 
 namespace DomainBlocks.EventSourcing;
 
+/*
 public static class Versioned
 {
     public static Versioned<TEntity> New<TEntity>(TEntity entity) => new(entity, null);
@@ -25,3 +26,4 @@ public sealed class Versioned<TEntity, TVersion>
 
     public Versioned<TEntity> With(TEntity entity) => new(entity, Version);
 }
+*/

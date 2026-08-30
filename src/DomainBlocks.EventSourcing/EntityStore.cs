@@ -1,3 +1,4 @@
+/*
 using DomainBlocks.EventStore.Abstractions;
 
 namespace DomainBlocks.EventSourcing;
@@ -105,3 +106,4 @@ public sealed class EntityStore<TEvent, TStreamId, TStreamPos, TLogPos>(
         return $"{streamNamePrefix}-{entityId}";
     }
 }
+*/

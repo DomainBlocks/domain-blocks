@@ -1,6 +1,4 @@
-﻿using System.Diagnostics;
-
-namespace DomainBlocks.EventStore.Abstractions;
+﻿namespace DomainBlocks.EventStore.Abstractions;
 
 public static class StreamState
 {
@@ -16,19 +14,15 @@ public static class StreamState
 /// </summary>
 public readonly record struct StreamState<TVersion> where TVersion : notnull
 {
-    private const string VersionPrefix = "Version=";
-
     /// <summary>
     /// Represents a stream state indicating that the stream does not exist (i.e. has no events).
     /// </summary>
     public static readonly StreamState<TVersion> DoesNotExist = new(StreamStateKind.DoesNotExist);
 
-    private readonly TVersion? _version;
-
     private StreamState(StreamStateKind kind, TVersion? version = default)
     {
         Kind = kind;
-        _version = version;
+        Version = version;
     }
 
     /// <summary>
@@ -36,16 +30,17 @@ public readonly record struct StreamState<TVersion> where TVersion : notnull
     /// </summary>
     public StreamStateKind Kind { get; }
 
+    public bool HasVersion => Kind == StreamStateKind.AtVersion;
+
     /// <summary>
     /// Gets the stream version.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// <see cref="Kind"/> is not <see cref="StreamStateKind.AtVersion"/>.
     /// </exception>
-    public TVersion Version => Kind == StreamStateKind.AtVersion
-        ? _version!
-        : throw new InvalidOperationException(
-            $"Version is only available when Kind is '{nameof(StreamStateKind.AtVersion)}'. Kind: '{Kind}'.");
+    public TVersion Version => HasVersion
+        ? field!
+        : throw new InvalidOperationException("Stream state has no version.");
 
     /// <summary>
     /// Creates a stream state representing an existing stream with the specified version.
@@ -56,10 +51,5 @@ public readonly record struct StreamState<TVersion> where TVersion : notnull
         return new StreamState<TVersion>(StreamStateKind.AtVersion, version);
     }
 
-    public override string ToString() => Kind switch
-    {
-        StreamStateKind.DoesNotExist => nameof(DoesNotExist),
-        StreamStateKind.AtVersion => $"{VersionPrefix}{_version}",
-        _ => throw new UnreachableException($"Unknown {nameof(StreamStateKind)} '{Kind}'.")
-    };
+    public override string ToString() => HasVersion ? $"Version={Version}" : Kind.ToString();
 }

@@ -1,4 +1,5 @@
-﻿using DomainBlocks.EventStore.Abstractions;
+﻿/*
+using DomainBlocks.EventStore.Abstractions;
 
 namespace DomainBlocks.EventSourcing;
 
@@ -31,3 +32,5 @@ public interface IEntityStore
     Task SaveAsync<TEntity>(Versioned<TEntity> entity, CancellationToken cancellationToken = default)
         where TEntity : notnull;
 }
+*/
+
