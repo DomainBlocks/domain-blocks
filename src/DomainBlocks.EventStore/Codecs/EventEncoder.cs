@@ -25,7 +25,7 @@ public sealed class EventEncoder<TEvent, TEventData, TMetadata>(
     where TEvent : notnull
     where TEventData : notnull
 {
-    private readonly AppendEventTypeMap _typeMap = options.TypeMap;
+    private readonly EventTypeMap _typeMap = options.TypeMap;
     private readonly IObjectSerializer<TEventData> _eventSerializer = options.EventSerializer;
     private readonly IMetadataSerializer<TMetadata> _metadataSerializer = options.MetadataSerializer;
     private readonly IMetadataContributor<TEvent>[] _metadataContributors = options.MetadataContributors.ToArray();

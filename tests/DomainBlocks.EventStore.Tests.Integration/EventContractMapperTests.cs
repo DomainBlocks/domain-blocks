@@ -18,7 +18,7 @@ public class EventContractMapperTests
         const string connectionString = "kurrentdb://admin:changeit@localhost:2113?tls=false&tlsVerifyCert=false";
         await using var kurrentClient = new KurrentDBClient(KurrentDBClientSettings.Create(connectionString));
 
-        var eventTypeMap = EventTypeMap.Create(x => x.MapType<Proto.UserCreated>());
+        var eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<Proto.UserCreated>());
 
         var codecOptions = new EventCodecOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {

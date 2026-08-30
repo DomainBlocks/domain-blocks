@@ -13,7 +13,7 @@ public static class TestMongoEventStoreFactory
 {
     public static TestMongoEventStoreFactory<object> CreateDefault(MongoEventStoreOptions options)
     {
-        var eventTypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>());
+        var eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>());
 
         return new TestMongoEventStoreFactory<object>(
             TestMongoConnectionStrings.Default,

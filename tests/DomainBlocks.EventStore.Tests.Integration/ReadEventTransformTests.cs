@@ -19,7 +19,7 @@ public class ReadEventTransformTests
         var shipmentId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
         var dispatchedAt = new DateTime(2025, 08, 25, 14, 30, 0, DateTimeKind.Utc);
 
-        var eventTypeMap = EventTypeMap.Create(x => x.MapType<ShipmentDispatched>());
+        var eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<ShipmentDispatched>());
         var eventCodec = TestMongoEventCodec.Create<object>(eventTypeMap);
 
         var options = new MongoEventStoreOptions

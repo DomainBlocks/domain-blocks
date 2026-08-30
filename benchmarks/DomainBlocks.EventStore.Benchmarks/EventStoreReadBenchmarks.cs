@@ -34,7 +34,7 @@ public class EventStoreReadBenchmarks
 
         var decoderOptions = new EventDecoderOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
-            TypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>()).Reads,
+            TypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>()),
             EventDeserializer = EventSerde,
             MetadataDeserializer = MetadataSerde
         };

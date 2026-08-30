@@ -23,7 +23,7 @@ public sealed class EventDecoder<TEvent, TEventData, TMetadata>(
     where TEvent : notnull
     where TEventData : notnull
 {
-    private readonly ReadEventTypeMap _eventTypeMap = options.TypeMap;
+    private readonly EventTypeMap _eventTypeMap = options.TypeMap;
     private readonly IObjectDeserializer<TEventData> _eventDeserializer = options.EventDeserializer;
     private readonly IMetadataDeserializer<TMetadata> _metadataDeserializer = options.MetadataDeserializer;
 

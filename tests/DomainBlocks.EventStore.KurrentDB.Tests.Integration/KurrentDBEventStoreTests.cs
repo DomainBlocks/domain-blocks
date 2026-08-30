@@ -11,7 +11,7 @@ public class KurrentDBEventStoreTests : EventStoreTests<StreamPosition, Position
     protected override Task<ITestEventStoreFactory<object, string, StreamPosition, Position>> GetEventStoreFactoryAsync(
         CancellationToken cancellationToken = default)
     {
-        var eventTypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>());
+        var eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>());
         var factory = new TestKurrentDBEventStoreFactory<object>(TestConnectionStrings.Default, eventTypeMap);
         return Task.FromResult<ITestEventStoreFactory<object, string, StreamPosition, Position>>(factory);
     }

@@ -7,7 +7,7 @@ namespace DomainBlocks.EventStore.Codecs;
 
 public class EventEncoderOptions<TEvent, TEventData, TMetadata> where TEvent : notnull where TEventData : notnull
 {
-    public required AppendEventTypeMap TypeMap { get; init; }
+    public required EventTypeMap TypeMap { get; init; }
     public required IObjectSerializer<TEventData> EventSerializer { get; init; }
     public required IMetadataSerializer<TMetadata> MetadataSerializer { get; init; }
     public IEnumerable<IMetadataContributor<TEvent>> MetadataContributors { get; init; } = [];

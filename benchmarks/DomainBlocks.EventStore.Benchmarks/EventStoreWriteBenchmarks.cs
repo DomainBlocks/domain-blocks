@@ -31,7 +31,7 @@ public class EventStoreWriteBenchmarks
     {
         var encoderOptions = new EventEncoderOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
-            TypeMap = EventTypeMap.Create(x => x.MapType<TestEvent>()).Appends,
+            TypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>()),
             EventSerializer = EventSerde,
             MetadataSerializer = MetadataSerde,
             MetadataContributors = [new MetadataContributor(EventCount)]

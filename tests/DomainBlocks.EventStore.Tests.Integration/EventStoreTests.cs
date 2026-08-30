@@ -24,17 +24,14 @@ public class EventStoreTests
     {
         using var mongoClient = new MongoClient(TestMongoConnectionStrings.Default);
 
-        var eventTypeMap = EventTypeMap.Create(builder => builder
-            .ForAppends(appends => appends
-                .MapType<LimitOrderSubmitted>()
-                .MapType<LimitOrderAmended>()
-                .MapType<LimitOrderFilled>())
-            .ForReads(reads => reads
-                .MapType<LimitOrderEvent>(mapping => mapping
-                    .FromNames(
-                        nameof(LimitOrderSubmitted),
-                        nameof(LimitOrderAmended),
-                        nameof(LimitOrderFilled)))));
+        var eventTypeMap = EventTypeMap.Create(
+            EventTypeMapping.WriteOnly<LimitOrderSubmitted>(),
+            EventTypeMapping.WriteOnly<LimitOrderAmended>(),
+            EventTypeMapping.WriteOnly<LimitOrderFilled>(),
+            EventTypeMapping.ReadOnly<LimitOrderEvent>(
+                nameof(LimitOrderSubmitted),
+                nameof(LimitOrderAmended),
+                nameof(LimitOrderFilled)));
 
         var eventCodec = TestMongoEventCodec.Create<object>(eventTypeMap);
 

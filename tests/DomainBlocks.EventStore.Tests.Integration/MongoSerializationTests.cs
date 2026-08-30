@@ -91,20 +91,20 @@ public class MongoSerializationTests
         IObjectSerde<BsonValue> serde,
         MongoEventStoreOptions options)
     {
-        var eventTypeMap = EventTypeMap.Create(builder => builder
-            .MapType<UserCreated>()
-            .MapType<Proto.UserCreated>(m => m.WithName("ProtoUserCreated")));
+        var eventTypeMap = EventTypeMap.Create(
+            EventTypeMapping.ReadWrite<UserCreated>(),
+            EventTypeMapping.ReadWrite<Proto.UserCreated>("ProtoUserCreated"));
 
         var encoderOptions = new EventEncoderOptions<object, BsonValue, BsonValue>
         {
-            TypeMap = eventTypeMap.Appends,
+            TypeMap = eventTypeMap,
             EventSerializer = serde,
             MetadataSerializer = new BsonDocumentMetadataSerde()
         };
 
         var decoderOptions = new EventDecoderOptions<object, BsonValue, BsonValue>
         {
-            TypeMap = eventTypeMap.Reads,
+            TypeMap = eventTypeMap,
             EventDeserializer = serde,
             MetadataDeserializer = new BsonDocumentMetadataSerde()
         };
