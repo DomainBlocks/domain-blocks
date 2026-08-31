@@ -8,7 +8,7 @@ public sealed class CompositeStateAdapterResolver<TEvent, TStreamId>(
     where TEvent : notnull
     where TStreamId : notnull
 {
-    private readonly ConcurrentDictionary<Type, IEventSourcedStateAdapter<TEvent, TStreamId>> _adapters = new();
+    private readonly ConcurrentDictionary<Type, IEventSourcedStateAdapter> _adapters = new();
     private readonly IEventSourcedStateAdapterResolver<TEvent, TStreamId>[] _resolvers = [.. resolvers];
 
     public IEventSourcedStateAdapter<TState, TEvent, TStreamId>? Resolve<TState>() where TState : notnull

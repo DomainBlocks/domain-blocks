@@ -82,7 +82,7 @@ public sealed class EventSourcedStateStore<TEvent, TStreamId, TStreamPos, TLogPo
 
     public Task SaveNewAsync<TState>(TState state, CancellationToken cancellationToken = default) where TState : notnull
     {
-        return SaveAsync(state, Optional<TStreamPos>.None, cancellationToken);
+        return SaveAsync(state, Optional.None<TStreamPos>(), cancellationToken);
     }
 
     private IEventSourcedStateAdapter<TState, TEvent, TStreamId> GetRequiredAdapter<TState>()

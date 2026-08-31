@@ -6,16 +6,16 @@ public sealed class StateAdapterResolver<TEvent, TStreamId> : IEventSourcedState
     where TEvent : notnull
     where TStreamId : notnull
 {
-    private readonly FrozenDictionary<Type, IEventSourcedStateAdapter<TEvent, TStreamId>> _adapters;
+    private readonly FrozenDictionary<Type, IEventSourcedStateAdapter> _adapters;
 
-    public StateAdapterResolver(IEnumerable<IEventSourcedStateAdapter<TEvent, TStreamId>> adapters)
+    public StateAdapterResolver(IEnumerable<IEventSourcedStateAdapter> adapters)
     {
         var adapterDict = adapters.ToFrozenDictionary(x => x.StateType);
 
         if (!adapterDict.Values.All(x => x.GetType().HasInterface(typeof(IEventSourcedStateAdapter<,,>))))
         {
             throw new ArgumentException(
-                $"State adapters must not implement '{typeof(IEventSourcedStateAdapter<,>)}' directly.",
+                $"State adapters must not implement '{typeof(IEventSourcedStateAdapter)}' directly.",
                 nameof(adapters));
         }
 

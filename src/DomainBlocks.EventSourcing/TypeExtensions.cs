@@ -4,7 +4,7 @@ using System.Text;
 
 namespace DomainBlocks.EventSourcing;
 
-public static class TypeExtensions
+internal static class TypeExtensions
 {
     extension(Type type)
     {
