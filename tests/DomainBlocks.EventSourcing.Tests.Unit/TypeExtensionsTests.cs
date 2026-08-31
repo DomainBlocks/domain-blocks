@@ -20,8 +20,8 @@ public class TypeExtensionsTests
     [Test]
     public void OpenGenericType_ShouldMatchClosedType_AndBindParameters()
     {
-        var openType = typeof(EntityBase<>);
-        var closedType = typeof(MyEntity);
+        var openType = typeof(AggregateBase<>);
+        var closedType = typeof(MyAggregate);
 
         var success = openType.TryBindGenericParameters(closedType, out var bindings);
 
@@ -35,7 +35,7 @@ public class TypeExtensionsTests
     [Test]
     public void OpenGenericType_ShouldNotBindIncompatibleClosedType()
     {
-        var openType = typeof(EntityBase<>);
+        var openType = typeof(AggregateBase<>);
         var closedType = typeof(string);
 
         var success = openType.TryBindGenericParameters(closedType, out var bindings);
@@ -48,7 +48,7 @@ public class TypeExtensionsTests
     public void ComplexGenericType_ShouldBindAllParameters()
     {
         var openType = typeof(ComplexBase<,,>);
-        var closedType = typeof(ComplexEntity);
+        var closedType = typeof(ComplexDerived);
 
         var success = openType.TryBindGenericParameters(closedType, out var bindings);
 
@@ -69,11 +69,11 @@ public class TypeExtensionsTests
 
     private class MyState : StateBase<MyState>;
 
-    private class EntityBase<TState> where TState : StateBase<TState>;
+    private class AggregateBase<TState> where TState : StateBase<TState>;
 
-    private class MyEntity : EntityBase<MyState>;
+    private class MyAggregate : AggregateBase<MyState>;
 
     private class ComplexBase<TKey, TValue, TCollection> where TCollection : ICollection<TValue>;
 
-    private class ComplexEntity : ComplexBase<int, string, List<string>>;
+    private class ComplexDerived : ComplexBase<int, string, List<string>>;
 }

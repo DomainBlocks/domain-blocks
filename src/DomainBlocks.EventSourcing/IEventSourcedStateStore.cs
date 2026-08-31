@@ -1,19 +1,22 @@
 ﻿namespace DomainBlocks.EventSourcing;
 
-public interface IEventSourcedStateStore<TStreamId, TStreamPos> where TStreamId : notnull where TStreamPos : notnull
+public interface IEventSourcedStateStore<in TStreamId, TStreamPos> where TStreamId : notnull where TStreamPos : notnull
 {
-    Task<EventSourcedState<TState, TStreamPos>> LoadAsync<TState>(
+    Task<(TState State, Optional<TStreamPos> Version)> LoadAsync<TState>(
         TStreamId streamId,
         CancellationToken cancellationToken = default)
         where TState : notnull;
 
-    Task<EventSourcedState<TState, TStreamPos>> LoadOrCreateAsync<TState>(
+    Task<(TState State, TStreamPos Version)> LoadRequiredAsync<TState>(
         TStreamId streamId,
         CancellationToken cancellationToken = default)
         where TState : notnull;
 
     Task SaveAsync<TState>(
-        EventSourcedState<TState, TStreamPos> state,
+        TState state,
+        Optional<TStreamPos> expectedVersion,
         CancellationToken cancellationToken = default)
         where TState : notnull;
+
+    Task SaveNewAsync<TState>(TState state, CancellationToken cancellationToken = default) where TState : notnull;
 }

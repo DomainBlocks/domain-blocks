@@ -1,6 +1,6 @@
+using DomainBlocks.EventSourcing.Tests.Integration.Adapters;
 using DomainBlocks.EventSourcing.Tests.Integration.DomainEvents;
 using DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
-using DomainBlocks.EventSourcing.Tests.Integration.EntityDefinitions;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB;
 using DomainBlocks.EventStore.TypeMapping;
@@ -48,20 +48,16 @@ public class EventSourcedStateStoreTests
             _options,
             _loggerFactory.CreateLogger<MongoEventStore<IDomainEvent>>());
 
-        // var entityDefinitionProvider = new CompositeEntityDefinitionProvider<IDomainEvent>(
-        // [
-        //     new GenericEntityDefinitionProvider<IDomainEvent>(typeof(AggregateDefinition<,>), [123, "ABC"]),
-        //     //new GenericEntityDefinitionProvider<IDomainEvent>(typeof(AggregateDefinition2<,>)),
-        //     new GenericEntityDefinitionProvider<IDomainEvent>(typeof(MutableAggregateDefinition<>)),
-        //     new GenericEntityDefinitionProvider<IDomainEvent>(typeof(FunctionalAggregateWrapperDefinition<>))
-        // ]);
-
-        var stateDefinitionProvider = new GenericEventSourcedStateDefinitionProvider<IDomainEvent, string>(
-            typeof(AggregateDefinition3<,>));
+        var stateAdapterResolver = new CompositeStateAdapterResolver<IDomainEvent, string>(
+        [
+            new GenericStateAdapterResolver<IDomainEvent, string>(typeof(AggregateAdapter<,>), 123, "ABC"),
+            new GenericStateAdapterResolver<IDomainEvent, string>(typeof(MutableAggregateAdapter<>)),
+            new GenericStateAdapterResolver<IDomainEvent, string>(typeof(FunctionalAggregateWrapperAdapter<>))
+        ]);
 
         _stateStore = new EventSourcedStateStore<IDomainEvent, string, StreamPosition, LogPosition>(
             _client,
-            stateDefinitionProvider);
+            stateAdapterResolver);
 
         await MongoEventStoreAdmin.EnsureInitializedAsync(_mongoClient, _options);
     }
@@ -77,128 +73,129 @@ public class EventSourcedStateStoreTests
     }
 
     [Test]
-    public async Task WriteToExpectedNewStream_WhenStreamDoesNotExist_Succeeds()
+    public async Task SaveNewAsync_WhenStreamDoesNotExist_Succeeds()
     {
-        var entity = new ShoppingCart();
-        entity.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Foo"));
-        entity.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Bar"));
+        var cart = new ShoppingCart();
+        var sessionId = Guid.NewGuid();
+        cart.AddItem(new ShoppingCartItem(sessionId, "Foo"));
+        cart.AddItem(new ShoppingCartItem(sessionId, "Bar"));
 
-        await _stateStore.SaveAsync(
-            new EventSourcedState<ShoppingCart, StreamPosition>(entity, Optional<StreamPosition>.None));
+        await _stateStore.SaveNewAsync(cart);
 
-        var reloaded = await _stateStore.LoadAsync<ShoppingCart>(entity.State.SessionId.ToString());
+        var (reloaded, _) = await _stateStore.LoadRequiredAsync<ShoppingCart>(sessionId.ToString());
 
-        reloaded.Value.State.SessionId.ShouldBe(entity.State.SessionId);
-        reloaded.Value.State.Items.ShouldBe(entity.State.Items);
-    }
-
-    /*
-    [Test]
-    public async Task WriteToExpectedNewStream_WhenStreamExists_ThrowsWrongExpectedStreamStateException()
-    {
-        var entity1 = new ShoppingCart();
-        entity1.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Foo"));
-        await _entityStore.SaveAsync(Versioned.New(entity1));
-
-        // Attempting to write a new state stream for the same ID should fail.
-        var entity2 = new ShoppingCart
-        {
-            State = new ShoppingCartState { SessionId = entity1.State.SessionId }
-        };
-
-        entity2.AddItem(new ShoppingCartItem(entity1.State.SessionId, "Bar"));
-
-        await _entityStore.SaveAsync(Versioned.New(entity2)).ShouldThrowAsync<StreamAppendConflictException>();
+        reloaded.State.SessionId.ShouldBe(sessionId);
+        reloaded.State.Items.ShouldBe(cart.State.Items);
     }
 
     [Test]
-    public async Task WriteToExpectedExisingStream_WhenNoStream_Succeeds()
+    public async Task SaveNewAsync_WhenStreamAlreadyExists_ThrowsStreamAppendConflictException()
     {
-        var id = Guid.NewGuid();
+        var cart1 = new ShoppingCart();
+        var sessionId = Guid.NewGuid();
+        cart1.AddItem(new ShoppingCartItem(sessionId, "Foo"));
+        await _stateStore.SaveNewAsync(cart1);
 
-        var versioned = await _entityStore.LoadOrCreateAsync<ShoppingCart>(id.ToString());
-        versioned.Entity.AddItem(new ShoppingCartItem(id, "Foo"));
+        // Attempting to write a new stream for the same ID should fail.
+        var cart2 = new ShoppingCart();
+        cart2.AddItem(new ShoppingCartItem(sessionId, "Bar"));
 
-        await _entityStore.SaveAsync(versioned);
-
-        var reloaded = await _entityStore.LoadAsync<ShoppingCart>(id.ToString()).AsEntity();
-
-        reloaded.State.SessionId.ShouldBe(versioned.Entity.State.SessionId);
-        reloaded.State.Items.ShouldBe(versioned.Entity.State.Items);
+        await _stateStore.SaveNewAsync(cart2).ShouldThrowAsync<StreamAppendConflictException>();
     }
 
     [Test]
-    public async Task WriteToExpectedExisingStream_WhenStreamExists_Succeeds()
+    public async Task SaveAsync_WhenStreamDoesNotExist_Succeeds()
     {
-        var entity1A = new ShoppingCart();
-        entity1A.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Foo"));
-        await _entityStore.SaveAsync(Versioned.New(entity1A));
+        var sessionId = Guid.NewGuid();
 
-        var entity1B = await _entityStore.LoadAsync<ShoppingCart>(entity1A.State.SessionId.ToString());
-        entity1B.Entity.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Bar"));
-        await _entityStore.SaveAsync(entity1B);
+        var (cart, version) = await _stateStore.LoadAsync<ShoppingCart>(sessionId.ToString());
+        cart.AddItem(new ShoppingCartItem(sessionId, "Foo"));
 
-        var reloaded = await _entityStore.LoadAsync<ShoppingCart>(entity1A.State.SessionId.ToString()).AsEntity();
+        await _stateStore.SaveAsync(cart, version);
 
-        reloaded.State.SessionId.ShouldBe(entity1A.State.SessionId);
-        reloaded.State.Items.ShouldBe(entity1B.Entity.State.Items);
+        var (reloaded, _) = await _stateStore.LoadRequiredAsync<ShoppingCart>(sessionId.ToString());
+
+        reloaded.State.SessionId.ShouldBe(sessionId);
+        reloaded.State.Items.ShouldBe(cart.State.Items);
     }
 
     [Test]
-    public async Task LoadAsync_WhenStreamDoesNotExist_ThrowsStreamNotFoundException()
+    public async Task SaveAsync_WhenStreamExists_Succeeds()
     {
-        const string id = "cart-1";
+        var cart = new ShoppingCart();
+        var sessionId = Guid.NewGuid();
+        cart.AddItem(new ShoppingCartItem(sessionId, "Foo"));
+        await _stateStore.SaveNewAsync(cart);
 
-        var exception = await _entityStore.LoadAsync<ShoppingCart>(id).ShouldThrowAsync<StreamNotFoundException>();
+        var (reloaded1, version) = await _stateStore.LoadRequiredAsync<ShoppingCart>(sessionId.ToString());
+        reloaded1.AddItem(new ShoppingCartItem(sessionId, "Bar"));
+        await _stateStore.SaveAsync(reloaded1, version);
 
-        exception.Message.ShouldBe("Stream 'shoppingCart-cart-1' not found.");
+        var (reloaded2, _) = await _stateStore.LoadRequiredAsync<ShoppingCart>(sessionId.ToString());
+
+        reloaded2.State.SessionId.ShouldBe(sessionId);
+        reloaded2.State.Items.ShouldBe(reloaded1.State.Items);
     }
 
     [Test]
-    public async Task LoadAsync_WhenStreamExists_Succeeds()
+    public async Task LoadAsync_WhenStreamDoesNotExist_ReturnsInitialState()
     {
-        var shoppingCart = new ShoppingCart();
-        shoppingCart.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Item 1"));
-        await _entityStore.SaveAsync(Versioned.New(shoppingCart));
+        var (cart, version) = await _stateStore.LoadAsync<ShoppingCart>("cart-1");
 
-        await _entityStore.LoadAsync<ShoppingCart>(shoppingCart.Id).ShouldNotThrowAsync();
+        cart.ShouldNotBeNull();
+        version.HasValue.ShouldBeFalse();
     }
 
     [Test]
-    public async Task LoadOrCreateAsync_WhenStreamDoesNotExist_Succeeds()
+    public async Task LoadRequiredAsync_WhenStreamDoesNotExist_ThrowsStreamNotFoundException()
     {
-        await _entityStore.LoadOrCreateAsync<ShoppingCart>("cart-1").ShouldNotThrowAsync();
+        const string streamId = "shoppingCart-cart-1";
+
+        var exception = await _stateStore
+            .LoadRequiredAsync<ShoppingCart>(streamId)
+            .ShouldThrowAsync<StreamNotFoundException>();
+
+        exception.Message.ShouldBe($"Stream '{streamId}' not found.");
+    }
+
+    [Test]
+    public async Task LoadRequiredAsync_WhenStreamExists_Succeeds()
+    {
+        var cart = new ShoppingCart();
+        cart.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Item 1"));
+        await _stateStore.SaveNewAsync(cart);
+
+        await _stateStore.LoadRequiredAsync<ShoppingCart>(cart.Id).ShouldNotThrowAsync();
     }
 
     [Test]
     public async Task MutableScenario()
     {
-        var entity = new MutableShoppingCart();
+        var cart = new MutableShoppingCart();
         var sessionId = Guid.NewGuid();
-        entity.AddItem(new ShoppingCartItem(sessionId, "Foo"));
-        entity.AddItem(new ShoppingCartItem(sessionId, "Bar"));
-        await _entityStore.SaveAsync(Versioned.New(entity));
+        cart.AddItem(new ShoppingCartItem(sessionId, "Foo"));
+        cart.AddItem(new ShoppingCartItem(sessionId, "Bar"));
+        await _stateStore.SaveNewAsync(cart);
 
-        var reloaded = await _entityStore.LoadAsync<MutableShoppingCart>(entity.Id.ToString()).AsEntity();
+        var (reloaded, _) = await _stateStore.LoadRequiredAsync<MutableShoppingCart>(cart.Id.ToString());
 
-        reloaded.Id.ShouldBe(entity.Id);
-        reloaded.Items.ShouldBe(entity.Items);
+        reloaded.Id.ShouldBe(cart.Id);
+        reloaded.Items.ShouldBe(cart.Items);
     }
 
     [Test]
-    public async Task FunctionalEntityWrapperScenario()
+    public async Task FunctionalAggregateWrapperScenario()
     {
-        var entity = new FunctionalAggregateWrapper<FunctionalShoppingCart>();
-        entity.Execute(x => x.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Foo")));
-        entity.Execute(x => x.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Bar")));
-        await _entityStore.SaveAsync(Versioned.New(entity));
+        var cart = new FunctionalAggregateWrapper<FunctionalShoppingCart>();
+        var sessionId = Guid.NewGuid();
+        cart.Execute(x => x.AddItem(new ShoppingCartItem(sessionId, "Foo")));
+        cart.Execute(x => x.AddItem(new ShoppingCartItem(sessionId, "Bar")));
+        await _stateStore.SaveNewAsync(cart);
 
-        var reloaded = await _entityStore
-            .LoadAsync<FunctionalAggregateWrapper<FunctionalShoppingCart>>(entity.Id.ToString())
-            .AsEntity();
+        var (reloaded, _) = await _stateStore
+            .LoadRequiredAsync<FunctionalAggregateWrapper<FunctionalShoppingCart>>(cart.Id.ToString());
 
-        reloaded.Id.ShouldBe(entity.Id);
-        reloaded.Entity.Items.ShouldBe(entity.Entity.Items);
+        reloaded.Id.ShouldBe(cart.Id);
+        reloaded.Value.Items.ShouldBe(cart.Value.Items);
     }
-    */
 }
