@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Codecs;
+using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using DomainBlocks.MongoDB.Sequencing;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
@@ -14,7 +15,8 @@ public static class MongoEventStore
 {
     private const string SequenceIdFieldName = "event_log_seq";
 
-    private static readonly StringFieldDefinition<BsonDocument, long> SequenceTargetField = new("_id");
+    private static readonly StringFieldDefinition<BsonDocument, long> SequenceTargetField =
+        new(EventLogEntry.FieldNames.Position);
 
     public static MongoEventStore<TEvent> Create<TEvent>(
         IMongoClient mongoClient,
@@ -57,6 +59,9 @@ public sealed class MongoEventStore<TEvent>(
     IMongoEventStore<TEvent>
     where TEvent : notnull
 {
+    private readonly RefCountedChangeStreamSubject<ChangeStreamDocument<BsonDocument>> _allEventsChangeStreamSubject =
+        CreateAllEventsChangeStreamSubject(eventLog);
+
     public async Task AppendAsync(
         string streamId,
         IEnumerable<AppendableEvent<TEvent>> events,
@@ -97,8 +102,35 @@ public sealed class MongoEventStore<TEvent>(
         ReadOrigin<LogPosition>? origin = null,
         ReadAllOptions? options = null)
     {
-        options ??= ReadAllOptions.Default;
-        return ReadCoreAsync(direction, origin, "_id", options.MaxCount);
+        return Impl();
+
+        async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Impl(
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            origin ??= direction == ReadDirection.Forward
+                ? ReadOrigin.Start<LogPosition>()
+                : ReadOrigin.End<LogPosition>();
+
+            options ??= ReadAllOptions.Default;
+
+            if (direction.ProducesEmptyReadFrom(origin))
+                yield break;
+
+            var query = GetReadQuery(direction, origin, EventLogEntry.FieldNames.Position);
+
+            using var cursor = await eventLog
+                .Find(query.Filter)
+                .Sort(query.Sort)
+                .Limit(options.MaxCount)
+                .ToCursorAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            while (await cursor.MoveNextAsync(cancellationToken).ConfigureAwait(false))
+            {
+                foreach (var doc in cursor.Current)
+                    yield return eventCodec.Decoder.Decode(doc);
+            }
+        }
     }
 
     public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadStream(
@@ -107,36 +139,51 @@ public sealed class MongoEventStore<TEvent>(
         ReadOrigin<StreamPosition>? origin = null,
         ReadStreamOptions? options = null)
     {
-        origin ??= direction == ReadDirection.Forward
-            ? ReadOrigin.Start<StreamPosition>()
-            : ReadOrigin.End<StreamPosition>();
+        return Impl();
 
-        options ??= ReadStreamOptions.Default;
-
-        return direction.ProducesEmptyReadFrom(origin)
-            ? ReadEmptyAsync()
-            : ReadCoreAsync(
-                direction,
-                origin,
-                EventLogEntry.FieldNames.StreamVersion,
-                options.MaxCount,
-                streamId,
-                emptyAction: () =>
-                {
-                    if (options.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw)
-                        throw new StreamNotFoundException(streamId);
-                });
-
-        async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadEmptyAsync(
+        async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Impl(
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            if (options.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw &&
-                !await StreamExistsAsync(streamId, cancellationToken).ConfigureAwait(false))
+            origin ??= direction == ReadDirection.Forward
+                ? ReadOrigin.Start<StreamPosition>()
+                : ReadOrigin.End<StreamPosition>();
+
+            options ??= ReadStreamOptions.Default;
+
+            if (direction.ProducesEmptyReadFrom(origin))
             {
-                throw new StreamNotFoundException(streamId);
+                if (options.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw &&
+                    !await StreamExistsAsync(streamId, cancellationToken).ConfigureAwait(false))
+                {
+                    throw new StreamNotFoundException(streamId);
+                }
+
+                yield break;
             }
 
-            yield break;
+            var query = GetReadQuery(direction, origin, EventLogEntry.FieldNames.StreamPosition);
+            var filter = query.Filter & Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, streamId);
+
+            using var cursor = await eventLog
+                .Find(filter)
+                .Sort(query.Sort)
+                .Limit(options.MaxCount)
+                .ToCursorAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            var isEmpty = true;
+
+            while (await cursor.MoveNextAsync(cancellationToken).ConfigureAwait(false))
+            {
+                foreach (var doc in cursor.Current)
+                {
+                    isEmpty = false;
+                    yield return eventCodec.Decoder.Decode(doc);
+                }
+            }
+
+            if (isEmpty && options.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw)
+                throw new StreamNotFoundException(streamId);
         }
     }
 
@@ -144,7 +191,16 @@ public sealed class MongoEventStore<TEvent>(
         SubscriptionOrigin<LogPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
-        throw new NotImplementedException();
+        return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
+            origin,
+            options,
+            catchUpFilter: Builders<BsonDocument>.Filter.Empty,
+            liveFilter: static _ => true,
+            positionFieldName: EventLogEntry.FieldNames.Position,
+            positionSelector: static ctx => ctx.LogPosition,
+            eventLog,
+            _allEventsChangeStreamSubject,
+            eventCodec.Decoder);
     }
 
     public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
@@ -152,20 +208,40 @@ public sealed class MongoEventStore<TEvent>(
         SubscriptionOrigin<StreamPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
-        throw new NotImplementedException();
+        return new SubscriptionAsyncEnumerable<TEvent, StreamPosition>(
+            origin,
+            options,
+            catchUpFilter: Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, streamId),
+            liveFilter: ctx => ctx.StreamId == streamId,
+            positionFieldName: EventLogEntry.FieldNames.StreamPosition,
+            positionSelector: static ctx => ctx.StreamPosition,
+            eventLog,
+            _allEventsChangeStreamSubject,
+            eventCodec.Decoder);
     }
 
     public ValueTask DisposeAsync() => sequencedAppender.DisposeAsync();
 
+    private static RefCountedChangeStreamSubject<ChangeStreamDocument<BsonDocument>> CreateAllEventsChangeStreamSubject(
+        IMongoCollection<BsonDocument> eventLog)
+    {
+        var insertsOnly = Builders<ChangeStreamDocument<BsonDocument>>.Filter.Eq(
+            x => x.OperationType,
+            ChangeStreamOperationType.Insert);
+
+        return RefCountedChangeStreamSubject.Create(
+            eventLog.WatchAsync,
+            new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(insertsOnly),
+            doc => doc.ResumeToken);
+    }
+
     private static ReadQuery GetReadQuery<TPos>(
         ReadDirection direction,
-        ReadOrigin<TPos>? origin,
+        ReadOrigin<TPos> origin,
         string positionFieldName)
         where TPos : struct,
         IPosition<TPos>
     {
-        origin ??= direction == ReadDirection.Forward ? ReadOrigin.Start<TPos>() : ReadOrigin.End<TPos>();
-
         return origin switch
         {
             ReadOrigin<TPos>.Start when direction == ReadDirection.Forward => new ReadQuery(
@@ -186,63 +262,6 @@ public sealed class MongoEventStore<TEvent>(
 
             _ => throw new UnreachableException($"Unexpected ReadOrigin type '{origin.GetType().Name}'.")
         };
-    }
-
-    private async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCoreAsync<TPos>(
-        ReadDirection direction,
-        ReadOrigin<TPos>? origin,
-        string positionFieldName,
-        int? maxCount,
-        string? streamId = null,
-        Action? emptyAction = null,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-        where TPos : struct,
-        IPosition<TPos>
-    {
-        var query = GetReadQuery(direction, origin, positionFieldName);
-
-        var filter = streamId is null
-            ? query.Filter
-            : query.Filter & Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, streamId);
-
-        using var cursor = await eventLog
-            .Find(filter)
-            .Sort(query.Sort)
-            .Limit(maxCount)
-            .ToCursorAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        var isEmpty = true;
-
-        while (await cursor.MoveNextAsync(cancellationToken).ConfigureAwait(false))
-        {
-            foreach (var doc in cursor.Current)
-            {
-                isEmpty = false;
-
-                var logPosition = LogPosition.FromInt64(doc["_id"].AsInt64);
-                var streamIdFromEvent = doc[EventLogEntry.FieldNames.StreamId].AsString;
-                var streamPosition = StreamPosition.FromInt64(doc[EventLogEntry.FieldNames.StreamVersion].AsInt64);
-                var eventName = doc[EventLogEntry.FieldNames.EventName].AsString;
-                var eventData = doc[EventLogEntry.FieldNames.EventData];
-                var metadata = doc[EventLogEntry.FieldNames.Metadata];
-                var writtenAtUtc = doc[EventLogEntry.FieldNames.WrittenAtUtc].AsBsonDateTime.ToUniversalTime();
-
-                var (@event, decodedMetadata) = eventCodec.Decoder.Decode(eventName, eventData, metadata);
-
-                var context = ReadEventContext.Create(
-                    streamIdFromEvent,
-                    decodedMetadata,
-                    writtenAtUtc,
-                    streamPosition,
-                    logPosition);
-
-                yield return ReadEvent.Create(@event, context);
-            }
-        }
-
-        if (isEmpty)
-            emptyAction?.Invoke();
     }
 
     private async Task<bool> StreamExistsAsync(string streamId, CancellationToken cancellationToken)

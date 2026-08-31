@@ -44,5 +44,5 @@ public abstract class EventStoreTestBase<TEvent, TStreamId, TStreamPos, TLogPos>
     protected abstract Task<ITestEventStoreFactory<TEvent, TStreamId, TStreamPos, TLogPos>> GetEventStoreFactoryAsync(
         CancellationToken cancellationToken = default);
 
-    protected abstract TStreamPos CreateStreamPosition(ulong value);
+    protected virtual TStreamPos CreateStreamPosition(ulong value) => throw new NotImplementedException();
 }

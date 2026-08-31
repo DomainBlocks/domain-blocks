@@ -15,6 +15,4 @@ public class KurrentDBEventStoreBenchmarkTests : EventStoreBenchmarkTests<Stream
         var factory = new TestKurrentDBEventStoreFactory<object>(TestConnectionStrings.Default, eventTypeMap);
         return Task.FromResult<ITestEventStoreFactory<object, string, StreamPosition, Position>>(factory);
     }
-
-    protected override StreamPosition CreateStreamPosition(ulong value) => StreamPosition.FromStreamRevision(value);
 }

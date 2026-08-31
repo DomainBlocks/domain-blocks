@@ -8,7 +8,7 @@ internal sealed class PreCommitQuery(IMongoCollection<BsonDocument> eventLog)
     private static readonly BsonDocument MaxStreamVersionsGroupStage = new("$group", new BsonDocument
     {
         { "_id", $"${EventLogEntry.FieldNames.StreamId}" },
-        { "version", new BsonDocument("$max", $"${EventLogEntry.FieldNames.StreamVersion}") }
+        { "version", new BsonDocument("$max", $"${EventLogEntry.FieldNames.StreamPosition}") }
     });
 
     private readonly IMongoCollection<BsonDocument> _eventLog = eventLog

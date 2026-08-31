@@ -6,6 +6,11 @@ public abstract class SubscriptionMessage
     {
     }
 
+    public static class Event
+    {
+        public static Event<TEvent> Create<TEvent>(TEvent @event) where TEvent : notnull => new(@event);
+    }
+
     public sealed class Event<TEvent>(TEvent @event) : SubscriptionMessage where TEvent : notnull
     {
         public TEvent Value { get; } = @event;

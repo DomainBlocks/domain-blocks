@@ -65,8 +65,8 @@ public sealed class AppenderPolicy(IMongoCollection<BsonDocument> eventLog) :
 
             foreach (var doc in request.Documents)
             {
-                doc[EventLogEntry.FieldNames.StreamVersion] = ++streamVersion;
-                doc[EventLogEntry.FieldNames.WrittenAtUtc] = writtenAtUtc;
+                doc[EventLogEntry.FieldNames.StreamPosition] = ++streamVersion;
+                doc[EventLogEntry.FieldNames.CreatedAtUtc] = writtenAtUtc;
             }
 
             _buffers.HeadStreamVersions[streamId] = streamVersion;

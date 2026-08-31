@@ -41,55 +41,6 @@ public class ChangeStreamSubjectTests
         _mockCollection = new Mock<IMongoCollection<BsonDocument>>();
     }
 
-    [Test]
-    [CancelAfter(TestTimeoutMillis)]
-    public async Task Connect_WhenSubjectCreatedWithoutResumeOption_ResumesFromAnchorToken(CancellationToken ct)
-    {
-        var anchorToken = new BsonDocument("_data", "1");
-
-        var batch = new ChangeStreamBatch
-        {
-            Items = [], // First batch can be empty
-            ResumeToken = anchorToken
-        };
-
-        // Capture the ChangeStreamOptions from the second WatchAsync call (the one made by the
-        // producer when Connect() is called), so we can assert the anchor token is used.
-        var connectCallTcs = new TaskCompletionSource<ChangeStreamOptions>(
-            TaskCreationOptions.RunContinuationsAsynchronously);
-
-        var callCount = 0;
-        var testCursor = new TestChangeStreamCursor<ChangeStreamDocument<BsonDocument>>([batch]);
-
-        _mockCollection
-            .Setup(x => x.WatchAsync(
-                It.IsAny<PipelineDefinition<ChangeStreamDocument<BsonDocument>, ChangeStreamDocument<BsonDocument>>>(),
-                It.IsAny<ChangeStreamOptions>(),
-                It.IsAny<CancellationToken>()))
-            .Callback<
-                PipelineDefinition<ChangeStreamDocument<BsonDocument>, ChangeStreamDocument<BsonDocument>>,
-                ChangeStreamOptions,
-                CancellationToken>((_, options, _) =>
-            {
-                // Call #1 is the anchoring call inside CreateSubjectAsync.
-                // Call #2 is the producer's first call after Connect().
-                if (++callCount == 2)
-                    connectCallTcs.TrySetResult(options);
-            })
-            .ReturnsAsync(testCursor);
-
-        var subject = await ChangeStreamSubjectFactory.CreateAsync(
-            _mockCollection.Object.WatchAsync,
-            new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
-            x => x.ResumeToken,
-            cancellationToken: ct);
-
-        await using var connection = subject.Connect();
-
-        var capturedOptions = await connectCallTcs.Task.WaitAsync(ct);
-        capturedOptions.ResumeAfter.ShouldBe(anchorToken);
-    }
-
     [TestCaseSource(nameof(ResumableExceptions))]
     [CancelAfter(TestTimeoutMillis)]
     public async Task Connect_WhenCursorFailsWithResumableError_ContinuesAfterReconnect(
@@ -109,18 +60,11 @@ public class ChangeStreamSubjectTests
         using var loggerFactory = LoggerFactory.Create(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug));
         var logger = loggerFactory.CreateLogger<ChangeStreamSubjectTests>();
 
-        // Pre-seed a ResumeAfter so CreateSubjectAsync skips its internal anchoring call,
-        // ensuring the test batches are consumed exclusively by the producer.
-        var subject = await ChangeStreamSubjectFactory.CreateAsync(
+        var subject = ChangeStreamSubject.Create(
             _mockCollection.Object.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
             x => x.ResumeToken,
-            new ChangeStreamSubjectOptions
-            {
-                MongoOptions = new ChangeStreamOptions { ResumeAfter = new BsonDocument("_data", "0") }
-            },
-            logger,
-            ct);
+            logger: logger);
 
         var observer = new TestObserver();
         using var _ = subject.Attach(observer);
@@ -155,8 +99,7 @@ public class ChangeStreamSubjectTests
         using var loggerFactory = LoggerFactory.Create(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug));
         var logger = loggerFactory.CreateLogger<ChangeStreamSubjectTests>();
 
-        // Pre-seed a ResumeAfter so CreateSubjectAsync skips its internal anchoring call.
-        var subject = await ChangeStreamSubjectFactory.CreateAsync(
+        var subject = ChangeStreamSubject.Create(
             _mockCollection.Object.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
             x => x.ResumeToken,
@@ -164,13 +107,89 @@ public class ChangeStreamSubjectTests
             {
                 MongoOptions = new ChangeStreamOptions { ResumeAfter = new BsonDocument("_data", "0") }
             },
-            logger,
-            ct);
+            logger);
 
         await using var connection = subject.Connect();
 
-        var thrownException = await connection.Completion.ShouldThrowAsync(exception.GetType());
-        thrownException.ShouldBe(exception);
+        var completion = connection.Completion.WaitAsync(ct);
+        var completionException = await completion.ShouldThrowAsync(exception.GetType());
+        completionException.ShouldBe(exception);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task Connect_WhenCursorFailsWithUnresumableError_NotifiesAttachedObservers(CancellationToken ct)
+    {
+        var exception = new InvalidOperationException();
+        SetupChangeStream([new ChangeStreamBatch { Exception = exception }]);
+
+        var subject = ChangeStreamSubject.Create(
+            _mockCollection.Object.WatchAsync,
+            new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
+            x => x.ResumeToken);
+
+        var observer1 = new TestObserver();
+        var observer2 = new TestObserver();
+        using var attachment1 = subject.Attach(observer1);
+        using var attachment2 = subject.Attach(observer2);
+
+        await using var connection = subject.Connect();
+        var completion = connection.Completion.WaitAsync(ct);
+
+        (await completion.ShouldThrowAsync(exception.GetType())).ShouldBeSameAs(exception);
+        (await observer1.Error.WaitAsync(ct)).ShouldBeSameAs(exception);
+        (await observer2.Error.WaitAsync(ct)).ShouldBeSameAs(exception);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task Attach_AfterUnresumableError_Throws(CancellationToken ct)
+    {
+        var exception = new InvalidOperationException();
+        SetupChangeStream([new ChangeStreamBatch { Exception = exception }]);
+
+        var subject = ChangeStreamSubject.Create(
+            _mockCollection.Object.WatchAsync,
+            new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
+            x => x.ResumeToken);
+
+        await using var connection = subject.Connect();
+        var completion = connection.Completion.WaitAsync(ct);
+
+        (await completion.ShouldThrowAsync(exception.GetType())).ShouldBeSameAs(exception);
+
+        var attachException = Should.Throw<InvalidOperationException>(() => subject.Attach(new TestObserver()));
+        attachException.InnerException.ShouldBeSameAs(exception);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task OnNextAsync_WhenObserverThrows_DetachesObserver(CancellationToken ct)
+    {
+        var change1 = CreateChange(new BsonDocument("_data", "1"));
+        var change2 = CreateChange(new BsonDocument("_data", "2"));
+
+        SetupChangeStream(
+        [
+            new ChangeStreamBatch { Items = [change1] },
+            new ChangeStreamBatch { Items = [change2] }
+        ]);
+
+        var subject = ChangeStreamSubject.Create(
+            _mockCollection.Object.WatchAsync,
+            new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
+            x => x.ResumeToken);
+
+        var throwingObserver = new ThrowingObserver();
+        var receivingObserver = new TestObserver();
+        using var throwingAttachment = subject.Attach(throwingObserver);
+        using var receivingAttachment = subject.Attach(receivingObserver);
+        await using var connection = subject.Connect();
+
+        var receivedItems = await receivingObserver.ReadAllAsync(ct).Take(2).ToArrayAsync(ct);
+
+        receivedItems.ShouldBe([change1, change2]);
+        throwingObserver.CallCount.ShouldBe(1);
     }
 
     private static MongoException CreateResumableMongoException()
@@ -259,14 +278,39 @@ public class ChangeStreamSubjectTests
         private readonly Channel<ChangeStreamDocument<BsonDocument>> _channel =
             Channel.CreateUnbounded<ChangeStreamDocument<BsonDocument>>();
 
+        private readonly TaskCompletionSource<Exception> _errorTcs =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<Exception> Error => _errorTcs.Task;
+
         public ValueTask OnNextAsync(ChangeStreamDocument<BsonDocument> change, CancellationToken cancellationToken)
         {
             _channel.Writer.TryWrite(change);
             return ValueTask.CompletedTask;
         }
 
+        public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken)
+        {
+            _errorTcs.TrySetResult(exception);
+            return ValueTask.CompletedTask;
+        }
+
         public IAsyncEnumerable<ChangeStreamDocument<BsonDocument>> ReadAllAsync(CancellationToken ct) =>
             _channel.Reader.ReadAllAsync(ct);
+    }
+
+    private sealed class ThrowingObserver : IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>
+    {
+        public int CallCount { get; private set; }
+
+        public ValueTask OnNextAsync(ChangeStreamDocument<BsonDocument> change, CancellationToken cancellationToken)
+        {
+            CallCount++;
+            throw new InvalidOperationException("The test observer failed.");
+        }
+
+        public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken) =>
+            ValueTask.CompletedTask;
     }
 
     private class TestMongoConnectionException(bool isNetworkException) :

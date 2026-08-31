@@ -1,11 +1,11 @@
-﻿using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.Testing.Integration;
 using NUnit.Framework;
 
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
 [TestFixture]
-public class MongoEventStoreBenchmarkTests : EventStoreBenchmarkTests<StreamPosition, LogPosition>
+public class MongoEventStoreSubscriptionTests : EventStoreSubscriptionTests<StreamPosition, LogPosition>
 {
     protected override Task<ITestEventStoreFactory<object, string, StreamPosition, LogPosition>>
         GetEventStoreFactoryAsync(CancellationToken cancellationToken = default)
