@@ -141,7 +141,7 @@ public sealed class MongoEventStore<TEvent>(
     }
 
     public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
-        ReadOrigin<LogPosition>? origin = null,
+        SubscriptionOrigin<LogPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
         throw new NotImplementedException();
@@ -149,7 +149,7 @@ public sealed class MongoEventStore<TEvent>(
 
     public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
         string streamId,
-        ReadOrigin<StreamPosition>? origin = null,
+        SubscriptionOrigin<StreamPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
         throw new NotImplementedException();
@@ -176,12 +176,12 @@ public sealed class MongoEventStore<TEvent>(
                 Builders<BsonDocument>.Filter.Empty,
                 Builders<BsonDocument>.Sort.Descending(positionFieldName)),
 
-            ReadOrigin<TPos>.Position p when direction == ReadDirection.Forward => new ReadQuery(
-                Builders<BsonDocument>.Filter.Gte(positionFieldName, p.Value.Value),
+            ReadOrigin<TPos>.At at when direction == ReadDirection.Forward => new ReadQuery(
+                Builders<BsonDocument>.Filter.Gte(positionFieldName, at.Position.Value),
                 Builders<BsonDocument>.Sort.Ascending(positionFieldName)),
 
-            ReadOrigin<TPos>.Position p when direction == ReadDirection.Backward => new ReadQuery(
-                Builders<BsonDocument>.Filter.Lte(positionFieldName, p.Value.Value),
+            ReadOrigin<TPos>.At at when direction == ReadDirection.Backward => new ReadQuery(
+                Builders<BsonDocument>.Filter.Lte(positionFieldName, at.Position.Value),
                 Builders<BsonDocument>.Sort.Descending(positionFieldName)),
 
             _ => throw new UnreachableException($"Unexpected ReadOrigin type '{origin.GetType().Name}'.")

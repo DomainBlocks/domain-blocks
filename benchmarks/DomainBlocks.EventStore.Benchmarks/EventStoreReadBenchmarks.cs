@@ -163,7 +163,7 @@ public class EventStoreReadBenchmarks
         }
 
         public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
-            ReadOrigin<Position>? origin = null,
+            SubscriptionOrigin<Position>? origin = null,
             SubscriptionOptions? options = null)
         {
             throw new NotImplementedException();
@@ -171,7 +171,7 @@ public class EventStoreReadBenchmarks
 
         public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
             string streamId,
-            ReadOrigin<StreamPosition>? origin = null,
+            SubscriptionOrigin<StreamPosition>? origin = null,
             SubscriptionOptions? options = null)
         {
             throw new NotImplementedException();

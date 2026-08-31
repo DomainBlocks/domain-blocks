@@ -67,14 +67,14 @@ public class KurrentDBEventStore<TEvent>(
     }
 
     public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
-        ReadOrigin<Position>? origin = null,
+        SubscriptionOrigin<Position>? origin = null,
         SubscriptionOptions? options = null)
     {
         throw new NotImplementedException();
     }
 
     public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(string streamId,
-        ReadOrigin<StreamPosition>? origin = null,
+        SubscriptionOrigin<StreamPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
         throw new NotImplementedException();
@@ -133,7 +133,7 @@ public class KurrentDBEventStore<TEvent>(
         {
             ReadOrigin<StreamPosition>.Start => StreamPosition.Start,
             ReadOrigin<StreamPosition>.End => StreamPosition.End,
-            ReadOrigin<StreamPosition>.Position p => p.Value,
+            ReadOrigin<StreamPosition>.At at => at.Position,
             _ => throw new UnreachableException($"Unknown ReadOrigin type '{origin.GetType().Name}'.")
         };
 
