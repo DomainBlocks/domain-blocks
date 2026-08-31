@@ -278,7 +278,7 @@ public abstract class EventStoreTests<TStreamPos, TLogPos> :
                 .ReadStream(
                     streamId,
                     direction,
-                    ReadOrigin.Position(CreateStreamPosition((ulong)position)))
+                    ReadOrigin.At(CreateStreamPosition((ulong)position)))
                 .Select(x => x.Payload)
                 .ToArrayAsync(cancellationToken);
         }

@@ -40,7 +40,8 @@ public interface IEventStore<TEvent, TStreamId, TStreamPos, TLogPos>
     /// The direction in which to read events. The default is <see cref="ReadDirection.Forward"/>.
     /// </param>
     /// <param name="origin">
-    /// The position from which to start reading. The default is <see cref="ReadOrigin{TLogPos}.Start"/>.
+    /// The read origin that determines where to begin reading events. The default is
+    /// <see cref="ReadOrigin{TLogPos}.Start"/>.
     /// </param>
     /// <param name="options">Options that configure the read operation.</param>
     /// <returns>An asynchronous sequence of events from all streams.</returns>
@@ -57,7 +58,8 @@ public interface IEventStore<TEvent, TStreamId, TStreamPos, TLogPos>
     /// The direction in which to read events. The default is <see cref="ReadDirection.Forward"/>.
     /// </param>
     /// <param name="origin">
-    /// The position from which to start reading. The default is <see cref="ReadOrigin{TStreamPos}.Start"/>.
+    /// The read origin that determines where to begin reading events. The default is
+    /// <see cref="ReadOrigin{TStreamPos}.Start"/>.
     /// </param>
     /// <param name="options">Options that configure the read operation.</param>
     /// <returns>An asynchronous sequence of events from the specified stream.</returns>
@@ -71,12 +73,13 @@ public interface IEventStore<TEvent, TStreamId, TStreamPos, TLogPos>
     /// Subscribes to events appended to any stream.
     /// </summary>
     /// <param name="origin">
-    /// The position from which to start receiving events. The default is <see cref="ReadOrigin{TLogPos}.Start"/>.
+    /// The subscription origin that determines where to begin receiving events. The default is
+    /// <see cref="SubscriptionOrigin{TLogPos}.End"/>.
     /// </param>
     /// <param name="options">Options that configure the subscription.</param>
     /// <returns>An asynchronous sequence of subscription messages.</returns>
     IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
-        ReadOrigin<TLogPos>? origin = null,
+        SubscriptionOrigin<TLogPos>? origin = null,
         SubscriptionOptions? options = null);
 
     /// <summary>
@@ -84,12 +87,13 @@ public interface IEventStore<TEvent, TStreamId, TStreamPos, TLogPos>
     /// </summary>
     /// <param name="streamId">The identifier of the stream to subscribe to.</param>
     /// <param name="origin">
-    /// The position from which to start receiving events. The default is <see cref="ReadOrigin{TStreamPos}.Start"/>.
+    /// The subscription origin that determines where to begin receiving events. The default is
+    /// <see cref="SubscriptionOrigin{TStreamPos}.End"/>.
     /// </param>
     /// <param name="options">Options that configure the subscription.</param>
     /// <returns>An asynchronous sequence of subscription messages.</returns>
     IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
         TStreamId streamId,
-        ReadOrigin<TStreamPos>? origin = null,
+        SubscriptionOrigin<TStreamPos>? origin = null,
         SubscriptionOptions? options = null);
 }
