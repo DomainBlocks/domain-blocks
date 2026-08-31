@@ -6,7 +6,7 @@ public static class MongoEventStoreAdmin
 {
     public static async Task EnsureInitializedAsync(
         IMongoClient mongoClient,
-        MongoEventStoreClientOptions options,
+        MongoEventStoreOptions options,
         CancellationToken cancellationToken = default)
     {
         var db = mongoClient.GetDatabase(options.DatabaseName);

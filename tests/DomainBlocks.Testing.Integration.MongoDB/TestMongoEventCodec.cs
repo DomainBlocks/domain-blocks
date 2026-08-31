@@ -1,5 +1,5 @@
-﻿using DomainBlocks.EventStore;
-using DomainBlocks.EventStore.Abstractions;
+﻿using DomainBlocks.EventStore.Abstractions.Codecs;
+using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using MongoDB.Bson;
@@ -13,14 +13,14 @@ public static class TestMongoEventCodec
     {
         var encoderOptions = new EventEncoderOptions<TEvent, BsonValue, BsonValue>
         {
-            TypeMap = eventTypeMap.Appends,
+            TypeMap = eventTypeMap,
             EventSerializer = new BsonDocumentObjectSerde(),
             MetadataSerializer = new BsonDocumentMetadataSerde()
         };
 
         var decoderOptions = new EventDecoderOptions<TEvent, BsonValue, BsonValue>
         {
-            TypeMap = eventTypeMap.Reads,
+            TypeMap = eventTypeMap,
             EventDeserializer = new BsonDocumentObjectSerde(),
             MetadataDeserializer = new BsonDocumentMetadataSerde()
         };

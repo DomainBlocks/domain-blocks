@@ -1,4 +1,4 @@
-using DomainBlocks.EventStore.Abstractions;
+﻿using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB;
 using DomainBlocks.EventStore.Transforms;
 using DomainBlocks.EventStore.TypeMapping;
@@ -19,15 +19,15 @@ public class ReadEventTransformTests
         var shipmentId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
         var dispatchedAt = new DateTime(2025, 08, 25, 14, 30, 0, DateTimeKind.Utc);
 
-        var eventTypeMap = EventTypeMap.Create(x => x.MapType<ShipmentDispatched>());
+        var eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<ShipmentDispatched>());
         var eventCodec = TestMongoEventCodec.Create<object>(eventTypeMap);
 
-        var options = new MongoEventStoreClientOptions
+        var options = new MongoEventStoreOptions
         {
             DatabaseName = "domainblocks_tests"
         };
 
-        await using var client = MongoEventStoreClient.Create(mongoClient, eventCodec, options);
+        await using var eventStore = MongoEventStore.Create(mongoClient, eventCodec, options);
 
         var legacyEvent = new ShipmentDispatched(
             shipmentId,
@@ -65,12 +65,12 @@ public class ReadEventTransformTests
         };
 
         var streamId = $"test-read-transform-{Guid.NewGuid()}";
-        await client.AppendToStreamAsync(streamId, [legacyEvent]);
+        await eventStore.AppendAsync(streamId, [legacyEvent]);
 
-        var readEvents = await client
-            .ReadStreamAsync(streamId)
+        var readEvents = await eventStore
+            .ReadStream(streamId)
             .Transform([new ShipmentDispatchedTransform()])
-            .Unwrap()
+            .Select(x => x.Payload)
             .ToArrayAsync();
 
         readEvents.ShouldBe(expectedEvents);
@@ -93,12 +93,12 @@ public class ReadEventTransformTests
         double WeightKg,
         string Destination);
 
-    private class ShipmentDispatchedTransform : ReadEventTransform<object, ShipmentDispatched>
+    private class ShipmentDispatchedTransform :
+        ReadEventTransform<object, ShipmentDispatched, string, StreamPosition, LogPosition>
     {
         protected override IEnumerable<object> Apply(
             ShipmentDispatched @event,
-            IReadOnlyDictionary<string, string> metadata,
-            ReadEventContext context)
+            ReadEventContext<string, StreamPosition, LogPosition> context)
         {
             yield return new ShipmentDispatchedV2(
                 @event.ShipmentId,

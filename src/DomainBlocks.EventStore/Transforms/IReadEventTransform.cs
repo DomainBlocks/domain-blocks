@@ -2,8 +2,13 @@ using DomainBlocks.EventStore.Abstractions;
 
 namespace DomainBlocks.EventStore.Transforms;
 
-public interface IReadEventTransform<TEventBase> where TEventBase : class
+public interface IReadEventTransform<TEvent, TStreamId, TStreamPos, TLogPos>
+    where TEvent : notnull
+    where TStreamId : notnull
+    where TStreamPos : notnull
+    where TLogPos : notnull
 {
     Type SourceEventType { get; }
-    IEnumerable<TEventBase> Apply(ReadEvent<TEventBase> sourceEvent);
+
+    IEnumerable<TEvent> Apply(ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos> sourceEvent);
 }

@@ -1,3 +1,4 @@
+﻿using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.ContractMapping;
 using DomainBlocks.EventStore.KurrentDB;
 using DomainBlocks.EventStore.TypeMapping;
@@ -17,7 +18,7 @@ public class EventContractMapperTests
         const string connectionString = "kurrentdb://admin:changeit@localhost:2113?tls=false&tlsVerifyCert=false";
         await using var kurrentClient = new KurrentDBClient(KurrentDBClientSettings.Create(connectionString));
 
-        var eventTypeMap = EventTypeMap.Create(x => x.MapType<Proto.UserCreated>());
+        var eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<Proto.UserCreated>());
 
         var codecOptions = new EventCodecOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
@@ -28,7 +29,7 @@ public class EventContractMapperTests
         };
 
         var codec = EventCodec.Create(codecOptions);
-        var client = new KurrentDBEventStoreClient<IDomainEvent>(kurrentClient, codec.Encoder, codec.Decoder);
+        var eventStore = new KurrentDBEventStore<IDomainEvent>(kurrentClient, codec);
 
         var originalEvent = new UserCreated
         {
@@ -38,9 +39,9 @@ public class EventContractMapperTests
 
         var streamId = $"test-contract-mapper-{Guid.NewGuid()}";
 
-        await client.AppendToStreamAsync(streamId, [originalEvent]);
+        await eventStore.AppendAsync(streamId, [originalEvent]);
 
-        var readEvents = await client.ReadStreamAsync(streamId).Unwrap().ToArrayAsync();
+        var readEvents = await eventStore.ReadStream(streamId).Select(x => x.Payload).ToArrayAsync();
 
         readEvents
             .ShouldHaveSingleItem()

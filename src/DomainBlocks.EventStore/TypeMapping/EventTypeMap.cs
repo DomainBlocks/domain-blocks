@@ -1,85 +1,53 @@
+using System.Collections.Frozen;
+using DomainBlocks.Core.Exceptions;
+
 namespace DomainBlocks.EventStore.TypeMapping;
 
 /// <summary>
 /// Defines the mapping between event CLR types and their string names used in storage.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Type-to-name mappings are used when writing events, and must be one-to-one.
-/// </para>
-/// <para>
-/// Name-to-type mappings are used when reading events, and may be many-to-one to support renamed events, or to
-/// deserialize events with a shared structure into a common CLR type.
-/// </para>
-/// </remarks>
-public class EventTypeMap
+public sealed class EventTypeMap
 {
-    private EventTypeMap(AppendEventTypeMap appends, ReadEventTypeMap reads)
+    private readonly FrozenDictionary<Type, string> _writes;
+    private readonly FrozenDictionary<string, Type> _reads;
+
+    private EventTypeMap(FrozenDictionary<Type, string> writes, FrozenDictionary<string, Type> reads)
     {
-        Appends = appends;
-        Reads = reads;
+        _writes = writes;
+        _reads = reads;
     }
 
-    public AppendEventTypeMap Appends { get; }
-    public ReadEventTypeMap Reads { get; }
+    public string GetEventName(Type eventType) =>
+        _writes.GetValueOrDefault(eventType) ?? throw new EventTypeNotMappedException(eventType);
 
-    public static EventTypeMap Create(Action<Builder> configure)
+    public Type GetEventType(string eventName) =>
+        _reads.GetValueOrDefault(eventName) ?? throw new EventNameNotMappedException(eventName);
+
+    public static EventTypeMap Create(params EventTypeMapping[] mappings)
     {
-        var builder = new Builder();
-        configure(builder);
-        return builder.Build();
-    }
+        var writes = new Dictionary<Type, string>();
+        var reads = new Dictionary<string, Type>();
 
-    /// <summary>
-    /// Builds an <see cref="EventTypeMap"/> by registering mappings between event CLR types and string names.
-    /// </summary>
-    public class Builder
-    {
-        private readonly AppendEventTypeMap.Builder _appendMapBuilder = new();
-        private readonly ReadEventTypeMap.Builder _readMapBuilder = new();
-
-        internal Builder()
+        foreach (var mapping in mappings)
         {
-        }
-
-        public Builder MapType<TEvent>(Action<Mapping>? configure = null)
-        {
-            var mapping = new Mapping(typeof(TEvent));
-            configure?.Invoke(mapping);
-
-            _appendMapBuilder.MapType<TEvent>(m => m.ToName(mapping.EventName));
-            _readMapBuilder.MapType<TEvent>(m => m.FromNames(mapping.EventName));
-
-            return this;
-        }
-
-        public Builder ForAppends(Action<AppendEventTypeMap.Builder> configure)
-        {
-            configure(_appendMapBuilder);
-            return this;
-        }
-
-        public Builder ForReads(Action<ReadEventTypeMap.Builder> configure)
-        {
-            configure(_readMapBuilder);
-            return this;
-        }
-
-        internal EventTypeMap Build() => new(_appendMapBuilder.Build(), _readMapBuilder.Build());
-
-        public sealed class Mapping
-        {
-            internal Mapping(Type eventType)
+            if (mapping.WriteName is { } writeName && !writes.TryAdd(mapping.EventType, writeName))
             {
-                EventName = eventType.Name;
+                throw new DomainBlocksException(
+                    $"Cannot add event type mapping ({mapping}): " +
+                    $"type '{mapping.EventType.Name}' is already mapped to name '{writes[mapping.EventType]}'.");
             }
 
-            public void WithName(string name)
+            foreach (var name in mapping.ReadNames)
             {
-                EventName = name;
+                if (!reads.TryAdd(name, mapping.EventType))
+                {
+                    throw new DomainBlocksException(
+                        $"Cannot add event type mapping ({mapping}): " +
+                        $"name '{name}' is already mapped to type '{reads[name].Name}'.");
+                }
             }
-
-            internal string EventName { get; private set; }
         }
+
+        return new EventTypeMap(writes.ToFrozenDictionary(), reads.ToFrozenDictionary());
     }
 }
