@@ -1,17 +1,22 @@
 ﻿namespace DomainBlocks.EventStore.Abstractions;
 
+/// <summary>
+/// Options for configuring a read across all event streams.
+/// </summary>
 public sealed class ReadAllOptions
 {
+    /// <summary>
+    /// The default options for reading across all streams.
+    /// </summary>
     public static readonly ReadAllOptions Default = new();
 
     /// <summary>
-    /// The maximum number of events to read, or <c>null</c> for no limit.
+    /// The maximum number of events to read, or <see langword="null"/> for no limit (default).
     /// </summary>
     public int? MaxCount { get; init; }
 
     /// <summary>
-    /// Gets a value indicating whether event metadata is included in the returned results. Excluding metadata can
-    /// significantly reduce allocations and improve throughput for large stream reads.
+    /// Specifies whether event metadata is included in the returned events. The default is <see langword="true"/>.
     /// </summary>
     public bool IncludeMetadata { get; init; } = true;
 }

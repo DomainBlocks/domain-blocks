@@ -112,8 +112,8 @@ public abstract class EventStoreTests<TStreamPos, TLogPos> :
 
         exception.StreamId.ShouldBe(streamId);
         exception.ExpectedState.ShouldBe(expectedState);
-        exception.ActualState.ShouldNotBeNull();
-        exception.ActualState.ShouldBe(StreamState.AtVersion(CreateStreamPosition(2)));
+        exception.ObservedState.ShouldNotBeNull();
+        exception.ObservedState.ShouldBe(ObservedStreamState.AtVersion(CreateStreamPosition(2)));
     }
 
     [Test]
@@ -137,8 +137,8 @@ public abstract class EventStoreTests<TStreamPos, TLogPos> :
 
         exception.StreamId.ShouldBe(streamId);
         exception.ExpectedState.ShouldBe(ExpectedStreamState.Exists<TStreamPos>());
-        exception.ActualState.ShouldNotBeNull();
-        exception.ActualState.ShouldBe(StreamState.DoesNotExist<TStreamPos>());
+        exception.ObservedState.ShouldNotBeNull();
+        exception.ObservedState.ShouldBe(ObservedStreamState.DoesNotExist<TStreamPos>());
     }
 
     [Test]
@@ -167,8 +167,8 @@ public abstract class EventStoreTests<TStreamPos, TLogPos> :
 
         exception.StreamId.ShouldBe(streamId);
         exception.ExpectedState.ShouldBe(ExpectedStreamState.DoesNotExist<TStreamPos>());
-        exception.ActualState.ShouldNotBeNull();
-        exception.ActualState.ShouldBe(StreamState.AtVersion(CreateStreamPosition(2)));
+        exception.ObservedState.ShouldNotBeNull();
+        exception.ObservedState.ShouldBe(ObservedStreamState.AtVersion(CreateStreamPosition(2)));
     }
 
     [TestCaseSource(nameof(DirectionAndOriginCases))]

@@ -11,20 +11,20 @@ public class StreamAppendConflictException(string streamId, string? message = nu
 public class StreamAppendConflictException<TStreamPos>(
     string streamId,
     ExpectedStreamState<TStreamPos> expectedState,
-    StreamState<TStreamPos>? actualState = null,
+    ObservedStreamState<TStreamPos>? observedState = null,
     Exception? innerException = null) :
-    StreamAppendConflictException(streamId, GetMessage(streamId, expectedState, actualState), innerException)
+    StreamAppendConflictException(streamId, GetMessage(streamId, expectedState, observedState), innerException)
     where TStreamPos : notnull
 {
     public ExpectedStreamState<TStreamPos> ExpectedState { get; } = expectedState;
-    public StreamState<TStreamPos>? ActualState { get; } = actualState;
+    public ObservedStreamState<TStreamPos>? ObservedState { get; } = observedState;
 
     private static string GetMessage(
         string streamId,
         ExpectedStreamState<TStreamPos> expectedState,
-        StreamState<TStreamPos>? actualState)
+        ObservedStreamState<TStreamPos>? observedState)
     {
         return $"Append to stream '{streamId}' failed due to a conflict. " +
-               $"ExpectedState: {expectedState}, ActualState: {actualState?.ToString() ?? "unavailable"}.";
+               $"ExpectedState: {expectedState}, ObservedState: {observedState?.ToString() ?? "unavailable"}.";
     }
 }

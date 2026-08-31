@@ -23,7 +23,7 @@ public class KurrentDBEventStore<TEvent>(
         AppendOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        expectedState ??= ExpectedStreamState<StreamPosition>.Any;
+        expectedState ??= ExpectedStreamState.Any<StreamPosition>();
         options ??= AppendOptions.Default;
 
         var kurrentExpectedState = ToKurrentStreamState(expectedState.Value);
@@ -44,8 +44,8 @@ public class KurrentDBEventStore<TEvent>(
         }
         catch (WrongExpectedVersionException ex)
         {
-            var actualState = ToStreamState(ex.ActualStreamState);
-            throw new StreamAppendConflictException<StreamPosition>(streamId, expectedState.Value, actualState, ex);
+            var observedState = ToObservedStreamState(ex.ActualStreamState);
+            throw new StreamAppendConflictException<StreamPosition>(streamId, expectedState.Value, observedState, ex);
         }
     }
 
@@ -63,7 +63,7 @@ public class KurrentDBEventStore<TEvent>(
         ReadOrigin<StreamPosition>? origin = null,
         ReadStreamOptions? options = null)
     {
-        return ReadStreamCoreAsync(streamId, direction, origin, options ?? ReadStreamOptions.Default);
+        return ReadStreamCoreAsync(streamId, direction, origin, options);
     }
 
     public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
@@ -90,16 +90,16 @@ public class KurrentDBEventStore<TEvent>(
             _ => throw new ArgumentOutOfRangeException(nameof(expected), expected, null)
         };
 
-    private static StreamState<StreamPosition>? ToStreamState(KurrentStreamState kurrentStreamState)
+    private static ObservedStreamState<StreamPosition>? ToObservedStreamState(KurrentStreamState kurrentStreamState)
     {
         if (kurrentStreamState == KurrentStreamState.NoStream)
-            return StreamState<StreamPosition>.DoesNotExist;
+            return ObservedStreamState.DoesNotExist<StreamPosition>();
 
         if (kurrentStreamState.HasPosition)
         {
             var value = kurrentStreamState.ToInt64();
             if (value >= 0)
-                return StreamState<StreamPosition>.AtVersion(StreamPosition.FromInt64(value));
+                return ObservedStreamState.AtVersion(StreamPosition.FromInt64(value));
         }
 
         return null;
@@ -109,17 +109,16 @@ public class KurrentDBEventStore<TEvent>(
         string streamId,
         ReadDirection direction,
         ReadOrigin<StreamPosition>? origin,
-        ReadStreamOptions options,
+        ReadStreamOptions? options,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         origin ??= direction == ReadDirection.Forward
             ? ReadOrigin.Start<StreamPosition>()
             : ReadOrigin.End<StreamPosition>();
 
-        var isEmptyEnumeration = direction == ReadDirection.Forward && origin is ReadOrigin<StreamPosition>.End ||
-                                 direction == ReadDirection.Backward && origin is ReadOrigin<StreamPosition>.Start;
+        options ??= ReadStreamOptions.Default;
 
-        if (isEmptyEnumeration)
+        if (direction.ProducesEmptyReadFrom(origin))
         {
             if (options.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw &&
                 !await StreamExistsAsync(streamId, cancellationToken).ConfigureAwait(false))

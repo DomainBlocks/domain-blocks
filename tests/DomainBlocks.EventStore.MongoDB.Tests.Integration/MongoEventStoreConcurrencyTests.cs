@@ -103,7 +103,7 @@ public class MongoEventStoreConcurrencyTests
             ex.ShouldNotBeNull();
             ex.StreamId.ShouldBe(streamId);
             ex.ExpectedState.ShouldBe(ExpectedStreamState.DoesNotExist<StreamPosition>());
-            ex.ActualState?.ShouldBe(StreamState.AtVersion(new StreamPosition(0)));
+            ex.ObservedState?.ShouldBe(ObservedStreamState.AtVersion(new StreamPosition(0)));
         }
 
         // Verify the stream contains exactly one event.

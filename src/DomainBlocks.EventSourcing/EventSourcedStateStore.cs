@@ -46,7 +46,7 @@ public sealed class EventSourcedStateStore<TEvent, TStreamId, TStreamPos, TLogPo
         where TState : notnull
     {
         var (state, version) = await LoadAsync<TState>(streamId, cancellationToken);
-        return version.HasValue ? (state, version.Value) : throw new StreamNotFoundException($"{streamId}");
+        return version.HasValue ? (state, version.Value) : throw new StreamNotFoundException(streamId);
     }
 
     public async Task SaveAsync<TState>(
@@ -72,8 +72,8 @@ public sealed class EventSourcedStateStore<TEvent, TStreamId, TStreamPos, TLogPo
             return;
 
         var expectedStreamState = expectedVersion.HasValue
-            ? ExpectedStreamState<TStreamPos>.AtVersion(expectedVersion.Value)
-            : ExpectedStreamState<TStreamPos>.DoesNotExist;
+            ? ExpectedStreamState.AtVersion(expectedVersion.Value)
+            : ExpectedStreamState.DoesNotExist<TStreamPos>();
 
         await eventStore
             .AppendAsync(streamId, uncommittedEvents, expectedStreamState, cancellationToken: cancellationToken)

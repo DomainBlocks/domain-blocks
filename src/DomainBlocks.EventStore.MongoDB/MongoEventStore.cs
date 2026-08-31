@@ -35,10 +35,10 @@ public static class MongoEventStore
 
         var eventLog = db.GetCollection<BsonDocument>(options.EventLogCollectionName);
 
-        var sequencedAppender = new MongoSequencedAppender<BsonDocument, AppendToStreamContext>(
+        var sequencedAppender = new MongoSequencedAppender<BsonDocument, AppendContext>(
             mongoClient,
             sequenceBinding,
-            new AppendToStreamPolicy(eventLog),
+            new AppenderPolicy(eventLog),
             new MongoSequencedAppenderOptions
             {
                 QueueCapacity = options.AppendQueueCapacity,
@@ -51,7 +51,7 @@ public static class MongoEventStore
 }
 
 public sealed class MongoEventStore<TEvent>(
-    IMongoSequencedAppender<BsonDocument, AppendToStreamContext> sequencedAppender,
+    IMongoSequencedAppender<BsonDocument, AppendContext> sequencedAppender,
     IMongoCollection<BsonDocument> eventLog,
     EventCodec<TEvent, BsonValue, BsonValue> eventCodec) :
     IMongoEventStore<TEvent>
@@ -65,7 +65,7 @@ public sealed class MongoEventStore<TEvent>(
         AppendOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        expectedState ??= ExpectedStreamState<StreamPosition>.Any;
+        expectedState ??= ExpectedStreamState.Any<StreamPosition>();
         commitId ??= Guid.NewGuid();
         options ??= new AppendOptions();
 
@@ -84,7 +84,7 @@ public sealed class MongoEventStore<TEvent>(
                 { EventLogEntry.FieldNames.Metadata, x.Metadata ?? BsonNull.Value }
             });
 
-        var context = new AppendToStreamContext(commitId.Value, streamId, expectedState.Value);
+        var context = new AppendContext(commitId.Value, streamId, expectedState.Value);
         var appendOptions = new DomainBlocks.MongoDB.Sequencing.AppendOptions { Timeout = options.Timeout };
 
         await sequencedAppender
@@ -107,12 +107,13 @@ public sealed class MongoEventStore<TEvent>(
         ReadOrigin<StreamPosition>? origin = null,
         ReadStreamOptions? options = null)
     {
+        origin ??= direction == ReadDirection.Forward
+            ? ReadOrigin.Start<StreamPosition>()
+            : ReadOrigin.End<StreamPosition>();
+
         options ??= ReadStreamOptions.Default;
 
-        var isEmptyEnumeration = direction == ReadDirection.Forward && origin is ReadOrigin<StreamPosition>.End ||
-                                 direction == ReadDirection.Backward && origin is ReadOrigin<StreamPosition>.Start;
-
-        return isEmptyEnumeration
+        return direction.ProducesEmptyReadFrom(origin)
             ? ReadEmptyAsync()
             : ReadCoreAsync(
                 direction,
@@ -183,7 +184,7 @@ public sealed class MongoEventStore<TEvent>(
                 Builders<BsonDocument>.Filter.Lte(positionFieldName, p.Value.Value),
                 Builders<BsonDocument>.Sort.Descending(positionFieldName)),
 
-            _ => throw new UnreachableException($"Unknown ReadOrigin type '{origin.GetType().Name}'.")
+            _ => throw new UnreachableException($"Unexpected ReadOrigin type '{origin.GetType().Name}'.")
         };
     }
 

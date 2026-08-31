@@ -5,14 +5,14 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
-public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog) :
-    IMongoSequencedAppenderPolicy<AppendToStreamContext>
+public sealed class AppenderPolicy(IMongoCollection<BsonDocument> eventLog) :
+    IMongoSequencedAppenderPolicy<AppendContext>
 {
     private readonly PreCommitQuery _preCommitQuery = new(eventLog);
     private readonly Buffers _buffers = new();
 
     public async Task OnBatchCommittingAsync(
-        IReadOnlyList<AppendRequest<AppendToStreamContext>> batch,
+        IReadOnlyList<AppendRequest<AppendContext>> batch,
         CancellationToken cancellationToken)
     {
         _buffers.ClearAll();
@@ -49,16 +49,16 @@ public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog
             var expectedStreamState = request.Context.ExpectedStreamState;
             var streamVersion = _buffers.HeadStreamVersions.GetValueOrDefault(streamId, -1L);
 
-            var actualStreamState = streamVersion < 0
-                ? StreamState<StreamPosition>.DoesNotExist
-                : StreamState<StreamPosition>.AtVersion(StreamPosition.FromInt64(streamVersion));
+            var observedStreamState = streamVersion < 0
+                ? ObservedStreamState.DoesNotExist<StreamPosition>()
+                : ObservedStreamState.AtVersion(StreamPosition.FromInt64(streamVersion));
 
-            if (!expectedStreamState.Matches(actualStreamState))
+            if (!expectedStreamState.Matches(observedStreamState))
             {
                 request.TryComplete(new StreamAppendConflictException<StreamPosition>(
                     streamId,
                     expectedStreamState,
-                    actualStreamState));
+                    observedStreamState));
 
                 continue;
             }
@@ -73,7 +73,7 @@ public sealed class AppendToStreamPolicy(IMongoCollection<BsonDocument> eventLog
         }
     }
 
-    public ConflictResolution OnConflict(AppendConflict<AppendToStreamContext> conflict)
+    public ConflictResolution OnConflict(AppendConflict<AppendContext> conflict)
     {
         // MongoDB does not populate WriteError.Details for duplicate key errors (code 11000). The only available signal
         // is the error message, which includes the index name. This is potentially fragile, but is the only option the
