@@ -25,6 +25,6 @@ public static class MongoEventStoreAdmin
             new(builder.Ascending(x => x.CommitId), new CreateIndexOptions { Name = EventLogIndexNames.CommitId })
         ];
 
-        await eventLog.Indexes.CreateManyAsync(indexModels, cancellationToken);
+        await eventLog.Indexes.CreateManyAsync(indexModels, cancellationToken).ConfigureAwait(false);
     }
 }

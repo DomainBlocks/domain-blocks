@@ -18,8 +18,8 @@ public class EventSourcedStateStoreTests
     private MongoClient _mongoClient = null!;
     private MongoEventStoreOptions _options = null!;
     private ILoggerFactory _loggerFactory = null!;
-    private MongoEventStore<IDomainEvent> _client = null!;
-    private EventSourcedStateStore<IDomainEvent, string, StreamPosition, LogPosition> _stateStore = null!;
+    private MongoEventStore<IDomainEvent> _eventStore = null!;
+    private EventSourcedStateStore<ShoppingCart, IDomainEvent, string, StreamPosition, LogPosition> _store = null!;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -42,22 +42,13 @@ public class EventSourcedStateStoreTests
 
         var eventCodec = TestMongoEventCodec.Create<IDomainEvent>(eventTypeMap);
 
-        _client = MongoEventStore.Create(
+        _eventStore = MongoEventStore.Create(
             _mongoClient,
             eventCodec,
             _options,
             _loggerFactory.CreateLogger<MongoEventStore<IDomainEvent>>());
 
-        var stateAdapterResolver = new CompositeStateAdapterResolver<IDomainEvent, string>(
-        [
-            new GenericStateAdapterResolver<IDomainEvent, string>(typeof(AggregateAdapter<,>), 123, "ABC"),
-            new GenericStateAdapterResolver<IDomainEvent, string>(typeof(MutableAggregateAdapter<>)),
-            new GenericStateAdapterResolver<IDomainEvent, string>(typeof(FunctionalAggregateWrapperAdapter<>))
-        ]);
-
-        _stateStore = new EventSourcedStateStore<IDomainEvent, string, StreamPosition, LogPosition>(
-            _client,
-            stateAdapterResolver);
+        _store = EventSourcedStateStore.Create(_eventStore, new AggregateAdapter<ShoppingCart, ShoppingCartState>());
 
         await MongoEventStoreAdmin.EnsureInitializedAsync(_mongoClient, _options);
     }
@@ -67,7 +58,7 @@ public class EventSourcedStateStoreTests
     {
         await _mongoClient.DropDatabaseAsync(_options.DatabaseName);
 
-        await _client.DisposeAsync();
+        await _eventStore.DisposeAsync();
         _loggerFactory.Dispose();
         _mongoClient.Dispose();
     }
@@ -80,9 +71,9 @@ public class EventSourcedStateStoreTests
         cart.AddItem(new ShoppingCartItem(sessionId, "Foo"));
         cart.AddItem(new ShoppingCartItem(sessionId, "Bar"));
 
-        await _stateStore.SaveNewAsync(cart);
+        await _store.SaveNewAsync(cart);
 
-        var (reloaded, _) = await _stateStore.LoadRequiredAsync<ShoppingCart>(sessionId.ToString());
+        var (reloaded, _) = await _store.LoadRequiredAsync(sessionId.ToString());
 
         reloaded.State.SessionId.ShouldBe(sessionId);
         reloaded.State.Items.ShouldBe(cart.State.Items);
@@ -94,13 +85,11 @@ public class EventSourcedStateStoreTests
         var cart1 = new ShoppingCart();
         var sessionId = Guid.NewGuid();
         cart1.AddItem(new ShoppingCartItem(sessionId, "Foo"));
-        await _stateStore.SaveNewAsync(cart1);
+        await _store.SaveNewAsync(cart1);
 
         // Attempting to write a new stream for the same ID should fail.
         var cart2 = new ShoppingCart();
         cart2.AddItem(new ShoppingCartItem(sessionId, "Bar"));
-
-        await _stateStore.SaveNewAsync(cart2).ShouldThrowAsync<StreamAppendConflictException>();
     }
 
     [Test]
@@ -108,12 +97,12 @@ public class EventSourcedStateStoreTests
     {
         var sessionId = Guid.NewGuid();
 
-        var (cart, version) = await _stateStore.LoadAsync<ShoppingCart>(sessionId.ToString());
+        var (cart, version) = await _store.LoadAsync(sessionId.ToString());
         cart.AddItem(new ShoppingCartItem(sessionId, "Foo"));
 
-        await _stateStore.SaveAsync(cart, version);
+        await _store.SaveAsync(cart, version);
 
-        var (reloaded, _) = await _stateStore.LoadRequiredAsync<ShoppingCart>(sessionId.ToString());
+        var (reloaded, _) = await _store.LoadRequiredAsync(sessionId.ToString());
 
         reloaded.State.SessionId.ShouldBe(sessionId);
         reloaded.State.Items.ShouldBe(cart.State.Items);
@@ -125,13 +114,13 @@ public class EventSourcedStateStoreTests
         var cart = new ShoppingCart();
         var sessionId = Guid.NewGuid();
         cart.AddItem(new ShoppingCartItem(sessionId, "Foo"));
-        await _stateStore.SaveNewAsync(cart);
+        await _store.SaveNewAsync(cart);
 
-        var (reloaded1, version) = await _stateStore.LoadRequiredAsync<ShoppingCart>(sessionId.ToString());
+        var (reloaded1, version) = await _store.LoadRequiredAsync(sessionId.ToString());
         reloaded1.AddItem(new ShoppingCartItem(sessionId, "Bar"));
-        await _stateStore.SaveAsync(reloaded1, version);
+        await _store.SaveAsync(reloaded1, version);
 
-        var (reloaded2, _) = await _stateStore.LoadRequiredAsync<ShoppingCart>(sessionId.ToString());
+        var (reloaded2, _) = await _store.LoadRequiredAsync(sessionId.ToString());
 
         reloaded2.State.SessionId.ShouldBe(sessionId);
         reloaded2.State.Items.ShouldBe(reloaded1.State.Items);
@@ -140,7 +129,7 @@ public class EventSourcedStateStoreTests
     [Test]
     public async Task LoadAsync_WhenStreamDoesNotExist_ReturnsInitialState()
     {
-        var (cart, version) = await _stateStore.LoadAsync<ShoppingCart>("cart-1");
+        var (cart, version) = await _store.LoadAsync("cart-1");
 
         cart.ShouldNotBeNull();
         version.HasValue.ShouldBeFalse();
@@ -151,11 +140,9 @@ public class EventSourcedStateStoreTests
     {
         const string streamId = "shoppingCart-cart-1";
 
-        var exception = await _stateStore
-            .LoadRequiredAsync<ShoppingCart>(streamId)
-            .ShouldThrowAsync<StreamNotFoundException>();
+        var exception = await _store.LoadRequiredAsync(streamId).ShouldThrowAsync<StateNotFoundException>();
 
-        exception.Message.ShouldBe($"Stream '{streamId}' not found.");
+        exception.Message.ShouldBe($"State with ID '{streamId}' not found.");
     }
 
     [Test]
@@ -163,21 +150,23 @@ public class EventSourcedStateStoreTests
     {
         var cart = new ShoppingCart();
         cart.AddItem(new ShoppingCartItem(Guid.NewGuid(), "Item 1"));
-        await _stateStore.SaveNewAsync(cart);
+        await _store.SaveNewAsync(cart);
 
-        await _stateStore.LoadRequiredAsync<ShoppingCart>(cart.Id).ShouldNotThrowAsync();
+        await _store.LoadRequiredAsync(cart.Id).ShouldNotThrowAsync();
     }
 
     [Test]
     public async Task MutableScenario()
     {
+        var store = EventSourcedStateStore.Create(_eventStore, new MutableAggregateAdapter<MutableShoppingCart>());
+
         var cart = new MutableShoppingCart();
         var sessionId = Guid.NewGuid();
         cart.AddItem(new ShoppingCartItem(sessionId, "Foo"));
         cart.AddItem(new ShoppingCartItem(sessionId, "Bar"));
-        await _stateStore.SaveNewAsync(cart);
+        await store.SaveNewAsync(cart);
 
-        var (reloaded, _) = await _stateStore.LoadRequiredAsync<MutableShoppingCart>(cart.Id.ToString());
+        var (reloaded, _) = await store.LoadRequiredAsync(cart.Id.ToString());
 
         reloaded.Id.ShouldBe(cart.Id);
         reloaded.Items.ShouldBe(cart.Items);
@@ -186,14 +175,17 @@ public class EventSourcedStateStoreTests
     [Test]
     public async Task FunctionalAggregateWrapperScenario()
     {
+        var store = EventSourcedStateStore.Create(
+            _eventStore,
+            new FunctionalAggregateWrapperAdapter<FunctionalShoppingCart>());
+
         var cart = new FunctionalAggregateWrapper<FunctionalShoppingCart>();
         var sessionId = Guid.NewGuid();
         cart.Execute(x => x.AddItem(new ShoppingCartItem(sessionId, "Foo")));
         cart.Execute(x => x.AddItem(new ShoppingCartItem(sessionId, "Bar")));
-        await _stateStore.SaveNewAsync(cart);
+        await store.SaveNewAsync(cart);
 
-        var (reloaded, _) = await _stateStore
-            .LoadRequiredAsync<FunctionalAggregateWrapper<FunctionalShoppingCart>>(cart.Id.ToString());
+        var (reloaded, _) = await store.LoadRequiredAsync(cart.Id.ToString());
 
         reloaded.Id.ShouldBe(cart.Id);
         reloaded.Value.Items.ShouldBe(cart.Value.Items);

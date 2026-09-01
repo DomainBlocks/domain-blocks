@@ -2,21 +2,36 @@
 
 namespace DomainBlocks.EventSourcing;
 
-public sealed class EventSourcedStateStore<TEvent, TStreamId, TStreamPos, TLogPos>(
+public static class EventSourcedStateStore
+{
+    public static EventSourcedStateStore<TState, TEvent, TStreamId, TStreamPos, TLogPos>
+        Create<TState, TEvent, TStreamId, TStreamPos, TLogPos>(
+            IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> eventStore,
+            IEventSourcedStateAdapter<TState, TEvent, TStreamId> adapter)
+        where TState : notnull
+        where TEvent : notnull
+        where TStreamId : notnull
+        where TStreamPos : notnull
+        where TLogPos : notnull
+    {
+        return new EventSourcedStateStore<TState, TEvent, TStreamId, TStreamPos, TLogPos>(eventStore, adapter);
+    }
+}
+
+public sealed class EventSourcedStateStore<TState, TEvent, TStreamId, TStreamPos, TLogPos>(
     IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> eventStore,
-    IEventSourcedStateAdapterResolver<TEvent, TStreamId> adapterResolver) :
-    IEventSourcedStateStore<TStreamId, TStreamPos>
+    IEventSourcedStateAdapter<TState, TEvent, TStreamId> adapter) :
+    IVersionedStateStore<TState, TStreamId, TStreamPos>
+    where TState : notnull
     where TEvent : notnull
     where TStreamId : notnull
     where TStreamPos : notnull
     where TLogPos : notnull
 {
-    public async Task<(TState State, Optional<TStreamPos> Version)> LoadAsync<TState>(
+    public async Task<(TState State, Optional<TStreamPos> Version)> LoadAsync(
         TStreamId streamId,
         CancellationToken cancellationToken = default)
-        where TState : notnull
     {
-        var adapter = GetRequiredAdapter<TState>();
         var initialState = adapter.CreateInitialState();
 
         Optional<TStreamPos> loadedVersion = default;
@@ -40,24 +55,19 @@ public sealed class EventSourcedStateStore<TEvent, TStreamId, TStreamPos, TLogPo
         }
     }
 
-    public async Task<(TState State, TStreamPos Version)> LoadRequiredAsync<TState>(
+    public async Task<(TState State, TStreamPos Version)> LoadRequiredAsync(
         TStreamId streamId,
         CancellationToken cancellationToken = default)
-        where TState : notnull
     {
-        var (state, version) = await LoadAsync<TState>(streamId, cancellationToken);
-        return version.HasValue ? (state, version.Value) : throw new StreamNotFoundException(streamId);
+        var (state, version) = await LoadAsync(streamId, cancellationToken).ConfigureAwait(false);
+        return version.HasValue ? (state, version.Value) : throw new StateNotFoundException(streamId);
     }
 
-    public async Task SaveAsync<TState>(
+    public async Task SaveAsync(
         TState state,
         Optional<TStreamPos> expectedVersion,
         CancellationToken cancellationToken = default)
-        where TState : notnull
     {
-        ArgumentNullException.ThrowIfNull(state);
-
-        var adapter = GetRequiredAdapter<TState>();
         var streamId = adapter.GetStreamId(state);
 
         // PoC for adding metadata.
@@ -75,21 +85,24 @@ public sealed class EventSourcedStateStore<TEvent, TStreamId, TStreamPos, TLogPo
             ? ExpectedStreamState.AtVersion(expectedVersion.Value)
             : ExpectedStreamState.DoesNotExist<TStreamPos>();
 
-        await eventStore
-            .AppendAsync(streamId, uncommittedEvents, expectedStreamState, cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
+        try
+        {
+            await eventStore
+                .AppendAsync(streamId, uncommittedEvents, expectedStreamState, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (StreamAppendConflictException<TStreamPos> ex)
+        {
+            Optional<TStreamPos>? observedVersion = ex.ObservedState is { HasVersion: true }
+                ? ex.ObservedState.Value.Version
+                : null;
+
+            throw new VersionConflictException<TStreamPos>(streamId, expectedVersion, observedVersion, ex);
+        }
     }
 
-    public Task SaveNewAsync<TState>(TState state, CancellationToken cancellationToken = default) where TState : notnull
+    public Task SaveNewAsync(TState state, CancellationToken cancellationToken = default)
     {
         return SaveAsync(state, Optional.None<TStreamPos>(), cancellationToken);
-    }
-
-    private IEventSourcedStateAdapter<TState, TEvent, TStreamId> GetRequiredAdapter<TState>()
-        where TState : notnull
-    {
-        return adapterResolver.Resolve<TState>() ?? throw new ArgumentException(
-            $"Event sourced state adapter not found for type '{typeof(TState)}'.",
-            nameof(TState));
     }
 }

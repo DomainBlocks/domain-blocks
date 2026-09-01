@@ -8,12 +8,6 @@ public sealed class AggregateAdapter<TAggregate, TState> :
     where TAggregate : Aggregate<TState>, new()
     where TState : StateBase<TState>, new()
 {
-#pragma warning disable IDE0060 // The unused parameters are used dynamically in tests
-    public AggregateAdapter(int i, string s)
-    {
-    }
-#pragma warning restore IDE0060
-
     public TAggregate CreateInitialState() => new();
 
     public async Task<TAggregate> LoadAsync(

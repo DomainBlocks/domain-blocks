@@ -56,4 +56,9 @@ public readonly struct Optional<T> where T : notnull
     /// <returns>An optional containing <paramref name="value"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
     public static implicit operator Optional<T>(T value) => Optional.From(value);
+
+    /// <summary>
+    /// Returns a string representation of this optional instance.
+    /// </summary>
+    public override string? ToString() => HasValue ? Value.ToString() : "None";
 }
