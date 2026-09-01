@@ -1,31 +1,16 @@
 ﻿namespace DomainBlocks.EventSourcing;
 
 /// <summary>
-/// Provides the runtime type of the state adapted by an event-sourced state adapter.
-/// </summary>
-public interface IEventSourcedStateAdapter
-{
-    /// <summary>
-    /// Gets the state type adapted by this adapter.
-    /// </summary>
-    Type StateType { get; }
-}
-
-/// <summary>
 /// Adapts event-sourced state of a given type to its events and stream identifier.
 /// </summary>
 /// <typeparam name="TState">The state type being adapted.</typeparam>
 /// <typeparam name="TEvent">The event type applied by the adapter.</typeparam>
 /// <typeparam name="TStreamId">The type of stream identifier used by the adapter.</typeparam>
-public interface IEventSourcedStateAdapter<TState, TEvent, out TStreamId> :
-    IEventSourcedStateAdapter
+public interface IEventSourcedStateAdapter<TState, TEvent, out TStreamId>
     where TState : notnull
     where TEvent : notnull
     where TStreamId : notnull
 {
-    /// <inheritdoc/>
-    Type IEventSourcedStateAdapter.StateType => typeof(TState);
-
     /// <summary>
     /// Creates the initial state to which events can be applied.
     /// </summary>

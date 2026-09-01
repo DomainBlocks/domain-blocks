@@ -2,14 +2,14 @@
 
 namespace DomainBlocks.EventStore.Abstractions;
 
-public class StreamAppendConflictException(string streamId, string? message = null, Exception? innerException = null) :
+public class StreamAppendConflictException(object streamId, string? message = null, Exception? innerException = null) :
     DomainBlocksException(message, innerException)
 {
-    public string StreamId { get; } = streamId;
+    public object StreamId { get; } = streamId;
 }
 
 public class StreamAppendConflictException<TStreamPos>(
-    string streamId,
+    object streamId,
     ExpectedStreamState<TStreamPos> expectedState,
     ObservedStreamState<TStreamPos>? observedState = null,
     Exception? innerException = null) :
@@ -20,7 +20,7 @@ public class StreamAppendConflictException<TStreamPos>(
     public ObservedStreamState<TStreamPos>? ObservedState { get; } = observedState;
 
     private static string GetMessage(
-        string streamId,
+        object streamId,
         ExpectedStreamState<TStreamPos> expectedState,
         ObservedStreamState<TStreamPos>? observedState)
     {
