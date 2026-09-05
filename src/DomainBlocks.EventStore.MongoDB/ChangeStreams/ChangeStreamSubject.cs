@@ -2,27 +2,98 @@
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using Polly;
+using Polly.Retry;
 
 namespace DomainBlocks.EventStore.MongoDB.ChangeStreams;
 
-internal sealed class ChangeStreamSubject<TDocument, TResult>(
-    ChangeStreamCursorFactory<TDocument, TResult> cursorFactory,
-    PipelineDefinition<ChangeStreamDocument<TDocument>, TResult> pipeline,
-    Func<TResult, BsonDocument> resumeTokenSelector,
-    ChangeStreamSubjectOptions options,
-    ILogger? logger) :
-    IChangeStreamSubject<TResult>
+internal static class ChangeStreamSubject
 {
-    private readonly ObserverRegistry<IChangeStreamObserver<TResult>> _observers = new();
+    public static ChangeStreamSubject<TDocument, TResult> Create<TDocument, TResult>(
+        ChangeStreamCursorFactory<TDocument, TResult> cursorFactory,
+        PipelineDefinition<ChangeStreamDocument<TDocument>, TResult> pipeline,
+        Func<TResult, BsonDocument> resumeTokenSelector,
+        ChangeStreamSubjectOptions? options = null,
+        ILogger? logger = null)
+    {
+        return new ChangeStreamSubject<TDocument, TResult>(
+            cursorFactory,
+            pipeline,
+            resumeTokenSelector,
+            options,
+            logger);
+    }
+}
+
+internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSubject<TResult>
+{
+    private readonly ObserverRegistry _observers = new();
     private int _connected;
+    private readonly ChangeStreamCursorFactory<TDocument, TResult> _cursorFactory;
+    private readonly PipelineDefinition<ChangeStreamDocument<TDocument>, TResult> _pipeline;
+    private readonly Func<TResult, BsonDocument> _resumeTokenSelector;
+    private readonly ChangeStreamSubjectOptions _options;
+    private readonly ILogger? _logger;
+
+    public ChangeStreamSubject(
+        ChangeStreamCursorFactory<TDocument, TResult> cursorFactory,
+        PipelineDefinition<ChangeStreamDocument<TDocument>, TResult> pipeline,
+        Func<TResult, BsonDocument> resumeTokenSelector,
+        ChangeStreamSubjectOptions? options = null,
+        ILogger? logger = null)
+    {
+        options ??= ChangeStreamSubjectOptions.Default;
+        cursorFactory = AddResilience(cursorFactory, options.MaxRetryAttempts, options.MaxRetryDelay);
+
+        _cursorFactory = cursorFactory;
+        _pipeline = pipeline;
+        _resumeTokenSelector = resumeTokenSelector;
+        _options = options;
+        _logger = logger;
+    }
 
     public IDisposable Attach(IChangeStreamObserver<TResult> observer) => _observers.Attach(observer);
 
     public IChangeStreamConnection Connect()
     {
         return Interlocked.Exchange(ref _connected, 1) == 0
-            ? new Connection(cursorFactory, pipeline, resumeTokenSelector, _observers, options, logger)
+            ? new Connection(_cursorFactory, _pipeline, _resumeTokenSelector, _observers, _options, _logger)
             : throw new InvalidOperationException("Connect may only be called once.");
+    }
+
+    private static ChangeStreamCursorFactory<TDocument, TResult> AddResilience(
+        ChangeStreamCursorFactory<TDocument, TResult> cursorFactory,
+        int maxRetryAttempts,
+        TimeSpan maxRetryDelay,
+        ILogger? logger = null)
+    {
+        var resiliencePipeline = new ResiliencePipelineBuilder()
+            .AddRetry(new RetryStrategyOptions
+            {
+                MaxRetryAttempts = maxRetryAttempts,
+                BackoffType = DelayBackoffType.Exponential,
+                UseJitter = true,
+                MaxDelay = maxRetryDelay,
+                ShouldHandle = args =>
+                    ValueTask.FromResult(args.Outcome.Exception is { } ex && ChangeStreamResumePolicy.CanResume(ex)),
+                OnRetry = args =>
+                {
+                    logger?.LogWarning(
+                        args.Outcome.Exception,
+                        "Attempt {Attempt}: Connection attempt failed; retrying in {Delay}",
+                        args.AttemptNumber + 1,
+                        args.RetryDelay);
+
+                    return ValueTask.CompletedTask;
+                }
+            })
+            .Build();
+
+        return async (pipeline, options, ct) => await resiliencePipeline
+            .ExecuteAsync(
+                async innerCt => await cursorFactory(pipeline, options, innerCt).ConfigureAwait(false),
+                ct)
+            .ConfigureAwait(false);
     }
 
     private sealed class Connection : IChangeStreamConnection
@@ -30,7 +101,7 @@ internal sealed class ChangeStreamSubject<TDocument, TResult>(
         private readonly ChangeStreamCursorFactory<TDocument, TResult> _cursorFactory;
         private readonly PipelineDefinition<ChangeStreamDocument<TDocument>, TResult> _pipeline;
         private readonly Func<TResult, BsonDocument> _resumeTokenSelector;
-        private readonly ObserverRegistry<IChangeStreamObserver<TResult>> _observers;
+        private readonly ObserverRegistry _observers;
         private readonly ChangeStreamSubjectOptions _options;
         private readonly ILogger? _logger;
         private readonly Task _producerTask;
@@ -43,7 +114,7 @@ internal sealed class ChangeStreamSubject<TDocument, TResult>(
             ChangeStreamCursorFactory<TDocument, TResult> cursorFactory,
             PipelineDefinition<ChangeStreamDocument<TDocument>, TResult> pipeline,
             Func<TResult, BsonDocument> resumeTokenSelector,
-            ObserverRegistry<IChangeStreamObserver<TResult>> observers,
+            ObserverRegistry observers,
             ChangeStreamSubjectOptions options,
             ILogger? logger)
         {
@@ -62,10 +133,7 @@ internal sealed class ChangeStreamSubject<TDocument, TResult>(
         public async ValueTask DisposeAsync()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0)
-            {
-                _logger?.LogDebug("Dispose ignored; already disposed");
                 return;
-            }
 
             _logger?.LogDebug("Disposing");
 
@@ -98,7 +166,7 @@ internal sealed class ChangeStreamSubject<TDocument, TResult>(
 
                             foreach (var result in cursor.Current)
                             {
-                                await NotifyObserversAsync(result).ConfigureAwait(false);
+                                await _observers.NotifyNextAsync(result, _logger, _stopCts.Token).ConfigureAwait(false);
                                 _lastResumeToken = _resumeTokenSelector(result);
                                 count++;
                             }
@@ -127,6 +195,16 @@ internal sealed class ChangeStreamSubject<TDocument, TResult>(
             catch (Exception ex)
             {
                 _logger?.LogError(ex, "Producer failed");
+
+                try
+                {
+                    await _observers.NotifyErrorAsync(ex, _logger, _stopCts.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (_stopCts.IsCancellationRequested)
+                {
+                    _logger?.LogDebug("Error notification raced with shutdown");
+                }
+
                 _completionTcs.TrySetException(ex);
             }
             finally
@@ -149,60 +227,115 @@ internal sealed class ChangeStreamSubject<TDocument, TResult>(
 
             return await _cursorFactory(_pipeline, options, _stopCts.Token).ConfigureAwait(false);
         }
+    }
 
-        private async Task NotifyObserversAsync(TResult result)
+    private sealed class ObserverRegistry
+    {
+        private State _state = new([]);
+
+        public IDisposable Attach(IChangeStreamObserver<TResult> observer)
         {
-            var observers = _observers.Snapshot();
+            var attachment = new Attachment(this, observer);
 
-            foreach (var observer in observers)
+            while (true)
+            {
+                var current = Volatile.Read(ref _state);
+                if (current.Error is not null)
+                    throw new InvalidOperationException("The change stream subject has faulted.", current.Error);
+
+                var next = new State(current.Attachments.Add(attachment));
+                if (ReferenceEquals(Interlocked.CompareExchange(ref _state, next, current), current))
+                    return attachment;
+            }
+        }
+
+        public async ValueTask NotifyNextAsync(TResult item, ILogger? logger, CancellationToken cancellationToken)
+        {
+            foreach (var attachment in Volatile.Read(ref _state).Attachments)
             {
                 try
                 {
-                    await observer.OnNextAsync(result, _stopCts.Token).ConfigureAwait(false);
+                    await attachment.Observer.OnNextAsync(item, cancellationToken).ConfigureAwait(false);
                 }
-                catch (Exception ex)
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
-                    _logger?.LogError(
-                        ex,
-                        "OnNextAsync failed for observer '{ObserverType}'",
-                        observer.GetType().FullName);
+                    throw;
+                }
+                catch (Exception observerException)
+                {
+                    logger?.LogError(
+                        observerException,
+                        "OnNextAsync failed for observer '{ObserverType}'; detaching",
+                        attachment.Observer.GetType().FullName);
+
+                    attachment.Dispose();
                 }
             }
         }
-    }
 
-    private sealed class ObserverRegistry<TObserver>
-    {
-        private ImmutableArray<TObserver> _observers = [];
-
-        public IDisposable Attach(TObserver observer)
+        public async ValueTask NotifyErrorAsync(Exception error, ILogger? logger, CancellationToken cancellationToken)
         {
-            ImmutableInterlocked.Update(
-                ref _observers,
-                static (current, item) => current.Add(item),
-                observer);
+            while (true)
+            {
+                var current = Volatile.Read(ref _state);
+                if (current.Error is not null)
+                    return;
 
-            return new ObserverAttachment(this, observer);
+                var faulted = new State(current.Attachments, error);
+                if (!ReferenceEquals(Interlocked.CompareExchange(ref _state, faulted, current), current))
+                    continue;
+
+                foreach (var attachment in faulted.Attachments)
+                {
+                    try
+                    {
+                        await attachment.Observer.OnErrorAsync(error, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception observerException)
+                    {
+                        logger?.LogError(
+                            observerException,
+                            "OnErrorAsync failed for observer '{ObserverType}'",
+                            attachment.Observer.GetType().FullName);
+                    }
+                }
+
+                return;
+            }
         }
 
-        private void Detach(TObserver observer)
+        private void Detach(Attachment attachment)
         {
-            ImmutableInterlocked.Update(
-                ref _observers,
-                static (current, item) => current.Remove(item),
-                observer);
+            while (true)
+            {
+                var current = Volatile.Read(ref _state);
+                var next = new State(current.Attachments.Remove(attachment), current.Error);
+                if (ReferenceEquals(Interlocked.CompareExchange(ref _state, next, current), current))
+                    return;
+            }
         }
 
-        public ImmutableArray<TObserver> Snapshot() => _observers;
+        private sealed class State(ImmutableArray<Attachment> attachments, Exception? error = null)
+        {
+            public ImmutableArray<Attachment> Attachments { get; } = attachments;
+            public Exception? Error { get; } = error;
+        }
 
-        private sealed class ObserverAttachment(ObserverRegistry<TObserver> registry, TObserver observer) : IDisposable
+        private sealed class Attachment(ObserverRegistry registry, IChangeStreamObserver<TResult> observer) :
+            IDisposable
         {
             private int _disposed;
+
+            public IChangeStreamObserver<TResult> Observer { get; } = observer;
 
             public void Dispose()
             {
                 if (Interlocked.Exchange(ref _disposed, 1) == 0)
-                    registry.Detach(observer);
+                    registry.Detach(this);
             }
         }
     }

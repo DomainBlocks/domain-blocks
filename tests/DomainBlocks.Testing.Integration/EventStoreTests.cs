@@ -35,11 +35,11 @@ public abstract class EventStoreTests<TStreamPos, TLogPos> :
     public async Task AppendAsync_ExpectedStateIsAnyAndStreamDoesNotExist_AppendsEvents(
         CancellationToken cancellationToken)
     {
-        AppendableEvent<object>[] events =
+        TestEvent[] events =
         [
-            CreateTestEvent("TestEvent1"),
-            CreateTestEvent("TestEvent2"),
-            CreateTestEvent("TestEvent3")
+            new() { Value = "TestEvent1" },
+            new() { Value = "TestEvent2" },
+            new() { Value = "TestEvent3" }
         ];
 
         var streamId = $"test-{Guid.NewGuid():N}";
@@ -49,25 +49,25 @@ public abstract class EventStoreTests<TStreamPos, TLogPos> :
         var readEvents = await EventStore.ReadStream(streamId).ToArrayAsync(cancellationToken);
 
         readEvents.ShouldAllBe(x => x.Context.StreamId == streamId);
-        readEvents.Select(x => x.Payload).ShouldBe(events.Select(x => x.Payload));
+        readEvents.Select(x => x.Payload).ShouldBe(events);
     }
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task AppendAsync_ExpectedStateIsAnyAndStreamExists_AppendsEvents(CancellationToken cancellationToken)
     {
-        AppendableEvent<object>[] events1 =
+        TestEvent[] events1 =
         [
-            CreateTestEvent("TestEvent1"),
-            CreateTestEvent("TestEvent2"),
-            CreateTestEvent("TestEvent3")
+            new() { Value = "TestEvent1" },
+            new() { Value = "TestEvent2" },
+            new() { Value = "TestEvent3" }
         ];
 
-        AppendableEvent<object>[] events2 =
+        TestEvent[] events2 =
         [
-            CreateTestEvent("TestEvent4"),
-            CreateTestEvent("TestEvent5"),
-            CreateTestEvent("TestEvent6")
+            new() { Value = "TestEvent4" },
+            new() { Value = "TestEvent5" },
+            new() { Value = "TestEvent6" }
         ];
 
         var streamId = $"test-{Guid.NewGuid():N}";
@@ -78,10 +78,7 @@ public abstract class EventStoreTests<TStreamPos, TLogPos> :
         var readEvents = await EventStore.ReadStream(streamId).ToArrayAsync(cancellationToken);
 
         readEvents.ShouldAllBe(x => x.Context.StreamId == streamId);
-
-        readEvents
-            .Select(x => x.Payload)
-            .ShouldBe(events1.Concat(events2).Select(x => x.Payload));
+        readEvents.Select(x => x.Payload).ShouldBe(events1.Concat(events2));
     }
 
     [Test]
@@ -94,9 +91,9 @@ public abstract class EventStoreTests<TStreamPos, TLogPos> :
         await EventStore.AppendAsync(
             streamId,
             [
-                CreateTestEvent("TestEvent1"),
-                CreateTestEvent("TestEvent2"),
-                CreateTestEvent("TestEvent3")
+                new TestEvent { Value = "TestEvent1" },
+                new TestEvent { Value = "TestEvent2" },
+                new TestEvent { Value = "TestEvent3" }
             ],
             cancellationToken: cancellationToken);
 
@@ -105,7 +102,7 @@ public abstract class EventStoreTests<TStreamPos, TLogPos> :
         var exception = await EventStore
             .AppendAsync(
                 streamId,
-                [CreateTestEvent("TestEvent4")],
+                [new TestEvent { Value = "TestEvent4" }],
                 expectedState,
                 cancellationToken: cancellationToken)
             .ShouldThrowAsync<StreamAppendConflictException<TStreamPos>>();
@@ -127,9 +124,9 @@ public abstract class EventStoreTests<TStreamPos, TLogPos> :
             .AppendAsync(
                 streamId,
                 [
-                    CreateTestEvent("TestEvent1"),
-                    CreateTestEvent("TestEvent2"),
-                    CreateTestEvent("TestEvent3")
+                    new TestEvent { Value = "TestEvent1" },
+                    new TestEvent { Value = "TestEvent2" },
+                    new TestEvent { Value = "TestEvent3" }
                 ],
                 ExpectedStreamState.Exists<TStreamPos>(),
                 cancellationToken: cancellationToken)
@@ -151,16 +148,16 @@ public abstract class EventStoreTests<TStreamPos, TLogPos> :
         await EventStore.AppendAsync(
             streamId,
             [
-                CreateTestEvent("TestEvent1"),
-                CreateTestEvent("TestEvent2"),
-                CreateTestEvent("TestEvent3")
+                new TestEvent { Value = "TestEvent1" },
+                new TestEvent { Value = "TestEvent2" },
+                new TestEvent { Value = "TestEvent3" }
             ],
             cancellationToken: cancellationToken);
 
         var exception = await EventStore
             .AppendAsync(
                 streamId,
-                [CreateTestEvent("TestEvent4")],
+                [new TestEvent { Value = "TestEvent4" }],
                 ExpectedStreamState.DoesNotExist<TStreamPos>(),
                 cancellationToken: cancellationToken)
             .ShouldThrowAsync<StreamAppendConflictException<TStreamPos>>();
@@ -205,8 +202,9 @@ public abstract class EventStoreTests<TStreamPos, TLogPos> :
         await EventStore.AppendAsync(
             streamId,
             [
-                CreateTestEvent("TestEvent1"),
-                CreateTestEvent("TestEvent2")
+                new TestEvent { Value = "TestEvent1" },
+                new TestEvent { Value = "TestEvent2" },
+                new TestEvent { Value = "TestEvent3" }
             ],
             cancellationToken: cancellationToken);
 
@@ -237,18 +235,18 @@ public abstract class EventStoreTests<TStreamPos, TLogPos> :
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task ReadStream_FromPosition_ReturnsExpectedEvents(CancellationToken cancellationToken)
     {
-        object[] events1 =
+        TestEvent[] events1 =
         [
-            CreateTestEvent("TestEvent1").Payload,
-            CreateTestEvent("TestEvent2").Payload,
-            CreateTestEvent("TestEvent3").Payload
+            new() { Value = "TestEvent1" },
+            new() { Value = "TestEvent2" },
+            new() { Value = "TestEvent3" }
         ];
 
-        object[] events2 =
+        TestEvent[] events2 =
         [
-            CreateTestEvent("TestEvent4").Payload,
-            CreateTestEvent("TestEvent5").Payload,
-            CreateTestEvent("TestEvent6").Payload
+            new() { Value = "TestEvent4" },
+            new() { Value = "TestEvent5" },
+            new() { Value = "TestEvent6" }
         ];
 
         var streamId = $"test-{Guid.NewGuid():N}";
@@ -282,10 +280,5 @@ public abstract class EventStoreTests<TStreamPos, TLogPos> :
                 .Select(x => x.Payload)
                 .ToArrayAsync(cancellationToken);
         }
-    }
-
-    private static AppendableEvent<object> CreateTestEvent(string value)
-    {
-        return new AppendableEvent<object>(new TestEvent { Value = value });
     }
 }

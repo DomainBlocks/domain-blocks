@@ -15,7 +15,7 @@ public static class MongoEventStoreAdmin
 
         CreateIndexModel<EventLogEntry>[] indexModels =
         [
-            new(builder.Ascending(x => x.StreamId).Ascending(x => x.StreamVersion),
+            new(builder.Ascending(x => x.StreamId).Ascending(x => x.StreamPosition),
                 new CreateIndexOptions
                 {
                     Name = EventLogIndexNames.UniqueStreamVersion,

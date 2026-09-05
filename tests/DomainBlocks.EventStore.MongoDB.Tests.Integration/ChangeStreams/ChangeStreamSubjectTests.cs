@@ -45,17 +45,13 @@ public class ChangeStreamSubjectTests
         using var loggerFactory = LoggerFactory.Create(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug));
         var logger = loggerFactory.CreateLogger<ChangeStreamSubjectTests>();
 
-        var subject = await ChangeStreamSubjectFactory.CreateAsync(
-            _collection.WatchAsync,
-            pipeline,
-            x => x.ResumeToken,
-            logger: logger,
-            cancellationToken: ct);
+        var subject = ChangeStreamSubject.Create(_collection.WatchAsync, pipeline, x => x.ResumeToken, logger: logger);
 
         var observer1 = new TestChangeStreamObserver(expectedCount: insertCount);
         var observer2 = new TestChangeStreamObserver(expectedCount: insertCount);
         using var attachment1 = subject.Attach(observer1);
         using var attachment2 = subject.Attach(observer2);
+        await using var connection = subject.Connect();
 
         var insertedDocs = Enumerable
             .Range(1, insertCount)
@@ -63,8 +59,6 @@ public class ChangeStreamSubjectTests
             .ToArray();
 
         await _collection.InsertManyAsync(insertedDocs, cancellationToken: ct);
-
-        await using var connection = subject.Connect();
 
         await Task.WhenAll(observer1.Completion, observer2.Completion).WaitAsync(ct);
 
@@ -92,5 +86,8 @@ public class ChangeStreamSubjectTests
 
             return ValueTask.CompletedTask;
         }
+
+        public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken) =>
+            ValueTask.CompletedTask;
     }
 }
