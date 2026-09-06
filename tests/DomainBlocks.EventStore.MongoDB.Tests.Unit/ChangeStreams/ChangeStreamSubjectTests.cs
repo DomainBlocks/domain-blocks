@@ -68,7 +68,7 @@ public class ChangeStreamSubjectTests
 
         var observer = new TestObserver();
         using var _ = subject.Attach(observer);
-        await using var connection = subject.Connect();
+        await using var connection = await subject.ConnectAsync(ct);
 
         var expectedCount = batches.Count(x => x.Exception is null);
 
@@ -109,7 +109,7 @@ public class ChangeStreamSubjectTests
             },
             logger);
 
-        await using var connection = subject.Connect();
+        await using var connection = await subject.ConnectAsync(ct);
 
         var completion = connection.Completion.WaitAsync(ct);
         var completionException = await completion.ShouldThrowAsync(exception.GetType());
@@ -133,7 +133,7 @@ public class ChangeStreamSubjectTests
         using var attachment1 = subject.Attach(observer1);
         using var attachment2 = subject.Attach(observer2);
 
-        await using var connection = subject.Connect();
+        await using var connection = await subject.ConnectAsync(ct);
         var completion = connection.Completion.WaitAsync(ct);
 
         (await completion.ShouldThrowAsync(exception.GetType())).ShouldBeSameAs(exception);
@@ -153,7 +153,7 @@ public class ChangeStreamSubjectTests
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
             x => x.ResumeToken);
 
-        await using var connection = subject.Connect();
+        await using var connection = await subject.ConnectAsync(ct);
         var completion = connection.Completion.WaitAsync(ct);
 
         (await completion.ShouldThrowAsync(exception.GetType())).ShouldBeSameAs(exception);
@@ -184,7 +184,7 @@ public class ChangeStreamSubjectTests
         var receivingObserver = new TestObserver();
         using var throwingAttachment = subject.Attach(throwingObserver);
         using var receivingAttachment = subject.Attach(receivingObserver);
-        await using var connection = subject.Connect();
+        await using var connection = await subject.ConnectAsync(ct);
 
         var receivedItems = await receivingObserver.ReadAllAsync(ct).Take(2).ToArrayAsync(ct);
 

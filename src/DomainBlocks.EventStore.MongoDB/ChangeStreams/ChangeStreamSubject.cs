@@ -32,8 +32,9 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
     private readonly Func<TResult, BsonDocument> _resumeTokenSelector;
     private readonly ChangeStreamSubjectOptions _options;
     private readonly ILogger? _logger;
-    private readonly ObserverRegistry _observers;
+    private readonly ConnectionState _connectionState;
     private readonly string _subjectId = CorrelationId.ReserveGenerated();
+    private readonly TaskCompletionSource _connectedTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _connected;
 
     public ChangeStreamSubject(
@@ -57,24 +58,28 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
         _resumeTokenSelector = resumeTokenSelector;
         _options = options;
         _logger = logger;
-        _observers = new ObserverRegistry(logger, _subjectId);
+        _connectionState = new ConnectionState(logger, _subjectId);
     }
 
     public IDisposable Attach(IChangeStreamObserver<TResult> observer, string correlationId = "unknown") =>
-        _observers.Attach(observer, correlationId);
+        _connectionState.Attach(observer, correlationId);
 
-    public IChangeStreamConnection Connect()
+    public async Task<IChangeStreamConnection> ConnectAsync(CancellationToken cancellationToken = default)
     {
-        return Interlocked.Exchange(ref _connected, 1) == 0
-            ? new Connection(
-                _cursorFactory,
-                _pipeline,
-                _resumeTokenSelector,
-                _observers,
-                _options,
-                _logger,
-                _subjectId)
+        var connection = Interlocked.Exchange(ref _connected, 1) == 0
+            ? new Connection(this)
             : throw new InvalidOperationException("Connect may only be called once.");
+
+        var task = await Task
+            .WhenAny(_connectedTcs.Task, connection.Completion)
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (task == _connectedTcs.Task)
+            return connection;
+
+        await connection.Completion.ConfigureAwait(false);
+        throw new InvalidOperationException("The change stream connection completed before it connected.");
     }
 
     private static ChangeStreamCursorFactory<TDocument, TResult> AddResilience(
@@ -112,35 +117,24 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
 
     private sealed class Connection : IChangeStreamConnection
     {
-        private readonly ChangeStreamCursorFactory<TDocument, TResult> _cursorFactory;
-        private readonly PipelineDefinition<ChangeStreamDocument<TDocument>, TResult> _pipeline;
+        private readonly ChangeStreamSubject<TDocument, TResult> _subject;
         private readonly Func<TResult, BsonDocument> _resumeTokenSelector;
-        private readonly ObserverRegistry _observers;
-        private readonly ChangeStreamSubjectOptions _options;
+        private readonly ConnectionState _state;
         private readonly ILogger? _logger;
-        private readonly string _changeStreamId;
+        private readonly string _subjectId;
         private readonly Task _producerTask;
         private readonly CancellationTokenSource _stopCts = new();
         private readonly TaskCompletionSource _completionTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private BsonDocument? _lastResumeToken;
         private int _disposed;
 
-        public Connection(
-            ChangeStreamCursorFactory<TDocument, TResult> cursorFactory,
-            PipelineDefinition<ChangeStreamDocument<TDocument>, TResult> pipeline,
-            Func<TResult, BsonDocument> resumeTokenSelector,
-            ObserverRegistry observers,
-            ChangeStreamSubjectOptions options,
-            ILogger? logger,
-            string changeStreamId)
+        public Connection(ChangeStreamSubject<TDocument, TResult> subject)
         {
-            _cursorFactory = cursorFactory;
-            _pipeline = pipeline;
-            _resumeTokenSelector = resumeTokenSelector;
-            _observers = observers;
-            _options = options;
-            _logger = logger;
-            _changeStreamId = changeStreamId;
+            _subject = subject;
+            _resumeTokenSelector = subject._resumeTokenSelector;
+            _state = subject._connectionState;
+            _logger = subject._logger;
+            _subjectId = subject._subjectId;
 
             _producerTask = RunProducerAsync();
         }
@@ -152,7 +146,7 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
             if (Interlocked.Exchange(ref _disposed, 1) != 0)
                 return;
 
-            _logger?.ChangeStreamStopping(_changeStreamId);
+            _logger?.ChangeStreamStopping(_subjectId);
 
             using (_stopCts)
             {
@@ -162,12 +156,12 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
                 await _producerTask.ConfigureAwait(false);
             }
 
-            CorrelationId.Release(_changeStreamId);
+            CorrelationId.Release(_subjectId);
         }
 
         private async Task RunProducerAsync()
         {
-            _logger?.ChangeStreamStarted(_changeStreamId);
+            _logger?.ChangeStreamStarted(_subjectId);
 
             try
             {
@@ -177,6 +171,8 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
 
                     using var cursor = await GetChangeStreamCursorAsync().ConfigureAwait(false);
 
+                    _subject._connectedTcs.TrySetResult();
+
                     try
                     {
                         while (await cursor.MoveNextAsync(_stopCts.Token).ConfigureAwait(false))
@@ -185,56 +181,57 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
 
                             foreach (var result in cursor.Current)
                             {
-                                await _observers.NotifyNextAsync(result, _stopCts.Token).ConfigureAwait(false);
+                                await _state.NotifyNextAsync(result, _stopCts.Token).ConfigureAwait(false);
                                 _lastResumeToken = _resumeTokenSelector(result);
                                 count++;
                             }
 
-                            _logger?.ChangeStreamBatchProcessed(_changeStreamId, count);
+                            _logger?.ChangeStreamBatchProcessed(_subjectId, count);
 
                             var batchResumeToken = cursor.GetResumeToken();
                             if (batchResumeToken is not null)
                                 _lastResumeToken = batchResumeToken;
                         }
 
-                        _logger?.ChangeStreamCursorEnded(_changeStreamId);
+                        _logger?.ChangeStreamCursorEnded(_subjectId);
                     }
                     catch (Exception ex) when (ChangeStreamResumePolicy.CanResume(ex))
                     {
-                        _logger?.ChangeStreamConnectionLost(ex, _changeStreamId);
+                        _logger?.ChangeStreamConnectionLost(ex, _subjectId);
                         // Continue outer loop (reconnect)
                     }
                 }
             }
             catch (OperationCanceledException) when (_stopCts.IsCancellationRequested)
             {
-                _logger?.ChangeStreamCanceled(_changeStreamId);
+                _logger?.ChangeStreamCanceled(_subjectId);
+                _state.SetComplete();
                 _completionTcs.TrySetResult();
             }
             catch (Exception ex)
             {
-                _logger?.ChangeStreamFailed(ex, _changeStreamId);
+                _logger?.ChangeStreamFailed(ex, _subjectId);
 
                 try
                 {
-                    await _observers.NotifyErrorAsync(ex, _stopCts.Token).ConfigureAwait(false);
+                    await _state.NotifyErrorAsync(ex, _stopCts.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (_stopCts.IsCancellationRequested)
                 {
-                    _logger?.ChangeStreamCanceled(_changeStreamId);
+                    _logger?.ChangeStreamCanceled(_subjectId);
                 }
 
                 _completionTcs.TrySetException(ex);
             }
             finally
             {
-                _logger?.ChangeStreamStopped(_changeStreamId);
+                _logger?.ChangeStreamStopped(_subjectId);
             }
         }
 
         private async Task<IChangeStreamCursor<TResult>> GetChangeStreamCursorAsync()
         {
-            var options = _options.MongoOptions;
+            var options = _subject._options.MongoOptions;
 
             if (_lastResumeToken is not null)
             {
@@ -244,23 +241,27 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
                 options.StartAtOperationTime = null;
             }
 
-            return await _cursorFactory(_pipeline, options, _stopCts.Token).ConfigureAwait(false);
+            return await _subject._cursorFactory(_subject._pipeline, options, _stopCts.Token).ConfigureAwait(false);
         }
     }
 
-    private sealed class ObserverRegistry(ILogger? logger, string subjectId)
+    private sealed class ConnectionState(ILogger? logger, string subjectId)
     {
         private State _state = new([]);
 
         public IDisposable Attach(IChangeStreamObserver<TResult> observer, string observerId)
         {
-            var attachment = new Attachment(this, observer, observerId);
+            var attachment = new Attachment(observer, observerId, Detach);
 
             while (true)
             {
                 var current = Volatile.Read(ref _state);
-                if (current.Error is not null)
-                    throw new InvalidOperationException("The change stream subject has faulted.", current.Error);
+
+                if (current.Completion is { Error: var error })
+                    throw new InvalidOperationException("Cannot attach to a faulted change stream connection.", error);
+
+                if (current.Completion is { Error: null })
+                    throw new InvalidOperationException("Cannot attach to a completed change stream connection.");
 
                 var next = new State(current.Attachments.Add(attachment));
                 if (!ReferenceEquals(Interlocked.CompareExchange(ref _state, next, current), current))
@@ -296,10 +297,10 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
             while (true)
             {
                 var current = Volatile.Read(ref _state);
-                if (current.Error is not null)
+                if (current.Completion is not null)
                     return;
 
-                var faulted = new State(current.Attachments, error);
+                var faulted = new State(current.Attachments, new Completion(error));
                 if (!ReferenceEquals(Interlocked.CompareExchange(ref _state, faulted, current), current))
                     continue;
 
@@ -323,12 +324,28 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
             }
         }
 
+        public void SetComplete()
+        {
+            while (true)
+            {
+                var current = Volatile.Read(ref _state);
+                if (current.Completion is not null)
+                    return;
+
+                var completed = new State(current.Attachments, new Completion());
+                if (!ReferenceEquals(Interlocked.CompareExchange(ref _state, completed, current), current))
+                    continue;
+
+                return;
+            }
+        }
+
         private void Detach(Attachment attachment)
         {
             while (true)
             {
                 var current = Volatile.Read(ref _state);
-                var next = new State(current.Attachments.Remove(attachment), current.Error);
+                var next = new State(current.Attachments.Remove(attachment), current.Completion);
 
                 if (!ReferenceEquals(Interlocked.CompareExchange(ref _state, next, current), current))
                     continue;
@@ -338,16 +355,16 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
             }
         }
 
-        private sealed class State(ImmutableArray<Attachment> attachments, Exception? error = null)
+        private sealed class State(ImmutableArray<Attachment> attachments, Completion? completion = null)
         {
             public ImmutableArray<Attachment> Attachments { get; } = attachments;
-            public Exception? Error { get; } = error;
+            public Completion? Completion { get; } = completion;
         }
 
         private sealed class Attachment(
-            ObserverRegistry registry,
             IChangeStreamObserver<TResult> observer,
-            string observerId) :
+            string observerId,
+            Action<Attachment> onDispose) :
             IDisposable
         {
             private int _disposed;
@@ -358,8 +375,13 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
             public void Dispose()
             {
                 if (Interlocked.Exchange(ref _disposed, 1) == 0)
-                    registry.Detach(this);
+                    onDispose(this);
             }
+        }
+
+        private sealed class Completion(Exception? error = null)
+        {
+            public Exception? Error { get; } = error;
         }
     }
 }

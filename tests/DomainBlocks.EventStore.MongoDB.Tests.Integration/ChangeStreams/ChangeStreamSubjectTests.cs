@@ -51,7 +51,7 @@ public class ChangeStreamSubjectTests
         var observer2 = new TestChangeStreamObserver(expectedCount: insertCount);
         using var attachment1 = subject.Attach(observer1);
         using var attachment2 = subject.Attach(observer2);
-        await using var connection = subject.Connect();
+        await using var connection = await subject.ConnectAsync(ct);
 
         var insertedDocs = Enumerable
             .Range(1, insertCount)

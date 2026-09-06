@@ -65,7 +65,7 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
             while (true)
             {
                 using var observer = new Observer(_options.QueueCapacity);
-                await using var _ = AttachObserver(observer).ConfigureAwait(false);
+                await using var _ = await AttachObserver(observer).ConfigureAwait(false);
 
                 var enumerator = ReadAllAsync(resumeOrigin, observer, cancellationToken)
                     .GetAsyncEnumerator(cancellationToken);
@@ -125,11 +125,11 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
         }
     }
 
-    private IAsyncDisposable AttachObserver(Observer observer)
+    private async Task<IAsyncDisposable> AttachObserver(Observer observer)
     {
         try
         {
-            return _changeStreamSubject.Attach(observer, _correlationId);
+            return await _changeStreamSubject.AttachAsync(observer, _correlationId).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

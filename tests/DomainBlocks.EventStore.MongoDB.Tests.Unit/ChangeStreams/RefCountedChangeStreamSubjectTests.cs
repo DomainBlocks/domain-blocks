@@ -12,7 +12,7 @@ public class RefCountedChangeStreamSubjectTests
         var subject = new TestSubject();
         var refCountedSubject = new RefCountedChangeStreamSubject<int>(() => subject);
 
-        await using var attachment = refCountedSubject.Attach(new TestObserver());
+        await using var attachment = await refCountedSubject.AttachAsync(new TestObserver());
 
         subject.ConnectCount.ShouldBe(1);
         subject.AttachCount.ShouldBe(1);
@@ -24,8 +24,8 @@ public class RefCountedChangeStreamSubjectTests
         var subject = new TestSubject();
         var refCountedSubject = new RefCountedChangeStreamSubject<int>(() => subject);
 
-        await using var attachment1 = refCountedSubject.Attach(new TestObserver());
-        await using var attachment2 = refCountedSubject.Attach(new TestObserver());
+        await using var attachment1 = await refCountedSubject.AttachAsync(new TestObserver());
+        await using var attachment2 = await refCountedSubject.AttachAsync(new TestObserver());
 
         subject.ConnectCount.ShouldBe(1);
         subject.AttachCount.ShouldBe(2);
@@ -38,8 +38,8 @@ public class RefCountedChangeStreamSubjectTests
         var subject = new TestSubject();
         var refCountedSubject = new RefCountedChangeStreamSubject<int>(() => subject);
 
-        var attachment1 = refCountedSubject.Attach(new TestObserver());
-        var attachment2 = refCountedSubject.Attach(new TestObserver());
+        var attachment1 = await refCountedSubject.AttachAsync(new TestObserver());
+        var attachment2 = await refCountedSubject.AttachAsync(new TestObserver());
 
         await attachment1.DisposeAsync();
 
@@ -57,7 +57,7 @@ public class RefCountedChangeStreamSubjectTests
     {
         var subject = new TestSubject();
         var refCountedSubject = new RefCountedChangeStreamSubject<int>(() => subject);
-        var attachment = refCountedSubject.Attach(new TestObserver());
+        var attachment = await refCountedSubject.AttachAsync(new TestObserver());
 
         await attachment.DisposeAsync();
         await attachment.DisposeAsync();
@@ -78,12 +78,12 @@ public class RefCountedChangeStreamSubjectTests
             return subject;
         });
 
-        var attachment1 = refCountedSubject.Attach(new TestObserver());
-        var attachment2 = refCountedSubject.Attach(new TestObserver());
+        var attachment1 = await refCountedSubject.AttachAsync(new TestObserver());
+        var attachment2 = await refCountedSubject.AttachAsync(new TestObserver());
         var connection1 = subjects[0].Connection;
         connection1!.Fault(new InvalidOperationException());
 
-        var attachment3 = refCountedSubject.Attach(new TestObserver());
+        var attachment3 = await refCountedSubject.AttachAsync(new TestObserver());
 
         subjects.Count.ShouldBe(2);
         subjects[0].ConnectCount.ShouldBe(1);
@@ -106,13 +106,14 @@ public class RefCountedChangeStreamSubjectTests
     {
         var subject = new TestSubject();
         var refCountedSubject = new RefCountedChangeStreamSubject<int>(() => subject);
-        var attachment = refCountedSubject.Attach(new TestObserver());
+        var attachment = await refCountedSubject.AttachAsync(new TestObserver());
         var exception = new InvalidOperationException();
         subject.FaultOnNextAttach(exception);
 
-        Should
-            .Throw<InvalidOperationException>(() => refCountedSubject.Attach(new TestObserver()))
-            .ShouldBeSameAs(exception);
+        var thrown = await Should.ThrowAsync<InvalidOperationException>(() =>
+            refCountedSubject.AttachAsync(new TestObserver()));
+
+        thrown.ShouldBeSameAs(exception);
 
         subject.ConnectCount.ShouldBe(1);
         subject.AttachCount.ShouldBe(2);
@@ -142,10 +143,11 @@ public class RefCountedChangeStreamSubjectTests
             return new TestAttachment(() => DetachCount++);
         }
 
-        public IChangeStreamConnection Connect()
+        public Task<IChangeStreamConnection> ConnectAsync(CancellationToken cancellationToken = default)
         {
             ConnectCount++;
-            return Connection = new TestConnection();
+            Connection = new TestConnection();
+            return Task.FromResult<IChangeStreamConnection>(Connection);
         }
 
         public void FaultOnNextAttach(Exception exception) => _attachException = exception;
