@@ -2,7 +2,7 @@
 
 internal interface IChangeStreamSubject<out TDocument>
 {
-    IDisposable Attach(IChangeStreamObserver<TDocument> observer);
+    IDisposable Attach(IChangeStreamObserver<TDocument> observer, string correlationId = "unknown");
 
     IChangeStreamConnection Connect();
 }

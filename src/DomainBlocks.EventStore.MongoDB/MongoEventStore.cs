@@ -48,19 +48,20 @@ public static class MongoEventStore
             },
             logger);
 
-        return new MongoEventStore<TEvent>(sequencedAppender, eventLog, codec);
+        return new MongoEventStore<TEvent>(sequencedAppender, eventLog, codec, logger);
     }
 }
 
 public sealed class MongoEventStore<TEvent>(
     IMongoSequencedAppender<BsonDocument, AppendContext> sequencedAppender,
     IMongoCollection<BsonDocument> eventLog,
-    EventCodec<TEvent, BsonValue, BsonValue> eventCodec) :
+    EventCodec<TEvent, BsonValue, BsonValue> eventCodec,
+    ILogger? logger = null) :
     IMongoEventStore<TEvent>
     where TEvent : notnull
 {
     private readonly RefCountedChangeStreamSubject<ChangeStreamDocument<BsonDocument>> _allEventsChangeStreamSubject =
-        CreateAllEventsChangeStreamSubject(eventLog);
+        CreateAllEventsChangeStreamSubject(eventLog, logger);
 
     public async Task AppendAsync(
         string streamId,
@@ -200,7 +201,8 @@ public sealed class MongoEventStore<TEvent>(
             positionSelector: static ctx => ctx.LogPosition,
             eventLog,
             _allEventsChangeStreamSubject,
-            eventCodec.Decoder);
+            eventCodec.Decoder,
+            logger);
     }
 
     public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
@@ -217,13 +219,15 @@ public sealed class MongoEventStore<TEvent>(
             positionSelector: static ctx => ctx.StreamPosition,
             eventLog,
             _allEventsChangeStreamSubject,
-            eventCodec.Decoder);
+            eventCodec.Decoder,
+            logger);
     }
 
     public ValueTask DisposeAsync() => sequencedAppender.DisposeAsync();
 
     private static RefCountedChangeStreamSubject<ChangeStreamDocument<BsonDocument>> CreateAllEventsChangeStreamSubject(
-        IMongoCollection<BsonDocument> eventLog)
+        IMongoCollection<BsonDocument> eventLog,
+        ILogger? logger)
     {
         var insertsOnly = Builders<ChangeStreamDocument<BsonDocument>>.Filter.Eq(
             x => x.OperationType,
@@ -232,7 +236,8 @@ public sealed class MongoEventStore<TEvent>(
         return RefCountedChangeStreamSubject.Create(
             eventLog.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(insertsOnly),
-            doc => doc.ResumeToken);
+            doc => doc.ResumeToken,
+            logger: logger);
     }
 
     private static ReadQuery GetReadQuery<TPos>(

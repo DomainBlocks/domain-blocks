@@ -45,6 +45,7 @@ public sealed class TestMongoEventStoreFactory<TEvent> :
             {
                 opt.IncludeScopes = true;
                 opt.TimestampFormat = "HH:mm:ss.fff ";
+                opt.SingleLine = true;
             })
             .SetMinimumLevel(LogLevel.Debug));
 

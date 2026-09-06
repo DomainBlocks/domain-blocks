@@ -29,7 +29,7 @@ internal sealed class RefCountedChangeStreamSubject<TDocument>(
     private readonly Lock _gate = new();
     private SubjectConnection? _currentSubjectConnection;
 
-    public IAsyncDisposable Attach(IChangeStreamObserver<TDocument> observer)
+    public IAsyncDisposable Attach(IChangeStreamObserver<TDocument> observer, string correlationId = "unknown")
     {
         lock (_gate)
         {
@@ -38,13 +38,13 @@ internal sealed class RefCountedChangeStreamSubject<TDocument>(
 
             if (_currentSubjectConnection is null || _currentSubjectConnection.Connection.Completion.IsFaulted)
             {
-                (subjectConnection, attachment) = CreateAndConnectSubject(observer);
+                (subjectConnection, attachment) = CreateAndConnectSubject(observer, correlationId);
                 _currentSubjectConnection = subjectConnection;
             }
             else
             {
                 subjectConnection = _currentSubjectConnection;
-                attachment = subjectConnection.Subject.Attach(observer);
+                attachment = subjectConnection.Subject.Attach(observer, correlationId);
             }
 
             subjectConnection.RefCount++;
@@ -54,10 +54,11 @@ internal sealed class RefCountedChangeStreamSubject<TDocument>(
     }
 
     private (SubjectConnection SubjectConnection, IDisposable Attachment) CreateAndConnectSubject(
-        IChangeStreamObserver<TDocument> observer)
+        IChangeStreamObserver<TDocument> observer,
+        string correlationId)
     {
         var subject = subjectFactory();
-        var attachment = subject.Attach(observer); // Attach first so no notifications are missed
+        var attachment = subject.Attach(observer, correlationId); // Attach first so no notifications are missed
         return (new SubjectConnection(subject, subject.Connect()), attachment);
     }
 
