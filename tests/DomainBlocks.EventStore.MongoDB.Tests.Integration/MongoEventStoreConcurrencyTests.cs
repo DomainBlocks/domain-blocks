@@ -1,5 +1,7 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Integration;
+using DomainBlocks.Testing.Integration.MongoDB;
 using NUnit.Framework;
 using Shouldly;
 
@@ -10,28 +12,37 @@ public class MongoEventStoreConcurrencyTests
     private const int InstanceCount = 3;
 
     private MongoEventStoreOptions _options = null!;
-    private TestMongoEventStoreFactory<object> _factory = null!;
-    private ITestEventStoreHandle<object, string, StreamPosition, LogPosition>[] _handles = null!;
+    private IEventStore<object, string, StreamPosition, LogPosition>[] _instances = null!;
+
+    [OneTimeSetUp]
+    public async Task OneTimeSetUp()
+    {
+        _options = new MongoEventStoreOptions { DatabaseName = "dbx_es_concurrency_tests" };
+        await MongoEventStoreAdmin.EnsureInitializedAsync(SetUpFixture.MongoClient, _options);
+    }
 
     [SetUp]
-    public async Task SetUp()
+    public void SetUp()
     {
-        _options = new MongoEventStoreOptions { DatabaseName = $"dbx_test_{Guid.NewGuid():N}" };
-        _factory = TestMongoEventStoreFactory.CreateDefault(_options);
+        _instances = new IEventStore<object, string, StreamPosition, LogPosition>[InstanceCount];
 
-        _handles = new ITestEventStoreHandle<object, string, StreamPosition, LogPosition>[InstanceCount];
+        var eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>());
+        var eventCodec = TestMongoEventCodec.Create<object>(eventTypeMap);
 
         for (var i = 0; i < InstanceCount; i++)
-            _handles[i] = await _factory.CreateAsync($"instance_{i}");
+        {
+            _instances[i] = MongoEventStore.Create(
+                SetUpFixture.MongoClient,
+                eventCodec, _options,
+                SetUpFixture.LoggerFactory.CreateLogger("MongoEventStore_{i}"));
+        }
     }
 
     [TearDown]
     public async Task TearDown()
     {
-        foreach (var handle in _handles)
-            await handle.DisposeAsync();
-
-        await _factory.DisposeAsync();
+        foreach (var instance in _instances.OfType<IAsyncDisposable>())
+            await instance.DisposeAsync();
     }
 
     [Test]
@@ -44,10 +55,10 @@ public class MongoEventStoreConcurrencyTests
         var streamId = $"shared-{Guid.NewGuid():N}";
 
         // All writers concurrently append to the same stream.
-        var tasks = _handles
-            .SelectMany((handle, index) => Enumerable
+        var tasks = _instances
+            .SelectMany((instance, index) => Enumerable
                 .Range(0, eventCountPerInstance)
-                .Select(i => handle.Instance.AppendAsync(
+                .Select(i => instance.AppendAsync(
                     streamId,
                     [new TestEvent { Value = $"w{index}-e{i}" }],
                     cancellationToken: ct)));
@@ -56,7 +67,7 @@ public class MongoEventStoreConcurrencyTests
         await Task.WhenAll(tasks);
 
         // Read back and verify.
-        var readEvents = await _handles[0].Instance.ReadStream(streamId).ToArrayAsync(ct);
+        var readEvents = await _instances[0].ReadStream(streamId).ToArrayAsync(ct);
 
         readEvents.Length.ShouldBe(expectedTotalEventCount, "All events must be committed");
 
@@ -73,11 +84,11 @@ public class MongoEventStoreConcurrencyTests
     {
         var streamId = $"new-{Guid.NewGuid():N}";
 
-        var results = await Task.WhenAll(_handles.Select(async handle =>
+        var results = await Task.WhenAll(_instances.Select(async instance =>
         {
             try
             {
-                await handle.Instance.AppendAsync(
+                await instance.AppendAsync(
                     streamId,
                     [new TestEvent { Value = "create" }],
                     ExpectedStreamState.DoesNotExist<StreamPosition>(),
@@ -107,7 +118,7 @@ public class MongoEventStoreConcurrencyTests
         }
 
         // Verify the stream contains exactly one event.
-        var readEvents = await _handles[0].Instance.ReadStream(streamId).ToArrayAsync(ct);
+        var readEvents = await _instances[0].ReadStream(streamId).ToArrayAsync(ct);
 
         readEvents.ShouldHaveSingleItem();
         readEvents[0].Context.StreamPosition.ShouldBe(new StreamPosition(0));
@@ -120,16 +131,16 @@ public class MongoEventStoreConcurrencyTests
         var streamId = $"versioned-{Guid.NewGuid():N}";
 
         // Seed the stream with one event so all writers can expect version 0.
-        await _handles[0].Instance.AppendAsync(
+        await _instances[0].AppendAsync(
             streamId,
             [new TestEvent { Value = "seed" }],
             cancellationToken: ct);
 
-        var results = await Task.WhenAll(_handles.Select(async handle =>
+        var results = await Task.WhenAll(_instances.Select(async instance =>
         {
             try
             {
-                await handle.Instance.AppendAsync(
+                await instance.AppendAsync(
                     streamId,
                     [new TestEvent { Value = "raced" }],
                     ExpectedStreamState.AtVersion(new StreamPosition(0)),
@@ -150,7 +161,7 @@ public class MongoEventStoreConcurrencyTests
         conflicts.ShouldBe(InstanceCount - 1, "All other writers must be rejected");
 
         // The stream must have exactly 2 events: the seed + the winner.
-        var readEvents = await _handles[0].Instance.ReadStream(streamId).ToArrayAsync(ct);
+        var readEvents = await _instances[0].ReadStream(streamId).ToArrayAsync(ct);
 
         readEvents.Length.ShouldBe(2);
         readEvents[0].Context.StreamPosition.ShouldBe(new StreamPosition(0));
@@ -163,11 +174,11 @@ public class MongoEventStoreConcurrencyTests
     {
         const int eventCountPerInstance = 50;
 
-        var streamIds = _handles.Select(_ => $"indep-{Guid.NewGuid():N}").ToList();
+        var streamIds = _instances.Select(_ => $"indep-{Guid.NewGuid():N}").ToList();
 
-        var tasks = _handles.Select((handle, i) =>
+        var tasks = _instances.Select((instance, i) =>
             Task.WhenAll(Enumerable.Range(0, eventCountPerInstance).Select(j =>
-                handle.Instance.AppendAsync(
+                instance.AppendAsync(
                     streamIds[i],
                     [new TestEvent { Value = $"e{j}" }],
                     cancellationToken: ct))));
@@ -177,7 +188,7 @@ public class MongoEventStoreConcurrencyTests
         // Each stream must have exactly eventCountPerInstance events with contiguous positions.
         foreach (var streamId in streamIds)
         {
-            var readEvents = await _handles[0].Instance.ReadStream(streamId).ToArrayAsync(ct);
+            var readEvents = await _instances[0].ReadStream(streamId).ToArrayAsync(ct);
 
             readEvents.Length.ShouldBe(
                 eventCountPerInstance,

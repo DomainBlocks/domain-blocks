@@ -11,7 +11,6 @@
 
   <ItemGroup>
     <PackageReference Include="DomainBlocks.MongoDB.Sequencing" />
-    <PackageReference Include="Microsoft.Bcl.TimeProvider" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Resilience" />
     <PackageReference Include="MongoDB.Driver" />

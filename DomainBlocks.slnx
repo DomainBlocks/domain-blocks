@@ -1,6 +1,5 @@
 <Solution>
   <Folder Name="/.solution/">
-    <File Path="compose.yaml" />
     <File Path=".gitattributes" />
     <File Path=".gitignore" />
     <File Path=".editorconfig" />
@@ -10,23 +9,8 @@
   <Folder Name="/benchmarks/">
     <Project Path="benchmarks/DomainBlocks.EventStore.Benchmarks/DomainBlocks.EventStore.Benchmarks.csproj" />
   </Folder>
-  <Folder Name="/deploy/" />
-  <Folder Name="/deploy/docker/" />
-  <Folder Name="/deploy/docker/benchmarks/">
-    <File Path="deploy/docker/benchmarks/Dockerfile" />
-  </Folder>
-  <Folder Name="/deploy/k8s/">
-    <File Path="deploy/k8s/mongo-benchmark-job.yaml" />
-    <File Path="deploy/k8s/mongo-init-job.yaml" />
-    <File Path="deploy/k8s/mongo-secret.yaml" />
-    <File Path="deploy/k8s/mongo-stateful-set.yaml" />
-    <File Path="deploy/k8s/namespace.yaml" />
-  </Folder>
   <Folder Name="/docs/">
     <File Path="docs/vision.md" />
-  </Folder>
-  <Folder Name="/scripts/">
-    <File Path="scripts/init-mongo-replica-set.sh" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/DomainBlocks.EventStore.Primitives/DomainBlocks.EventStore.Primitives.csproj" />
@@ -50,7 +34,6 @@
     <Project Path="tests/DomainBlocks.EventStore.Abstractions.Tests.Unit/DomainBlocks.EventStore.Abstractions.Tests.Unit.csproj" />
     <Project Path="tests/DomainBlocks.EventStore.KurrentDB.Tests.Integration/DomainBlocks.EventStore.KurrentDB.Tests.Integration.csproj" />
     <Project Path="tests/DomainBlocks.EventStore.MongoDB.Tests.Integration/DomainBlocks.EventStore.MongoDB.Tests.Integration.csproj" />
-    <Project Path="tests/DomainBlocks.EventStore.Tests.Integration/DomainBlocks.EventStore.Tests.Integration.csproj" />
     <Project Path="tests/DomainBlocks.EventStore.Tests.Unit/DomainBlocks.EventStore.Tests.Unit.csproj" />
     <Project Path="tests/DomainBlocks.Serialization.Google.Protobuf.Tests/DomainBlocks.Serialization.Google.Protobuf.Tests.csproj" />
     <Project Path="tests/DomainBlocks.Testing.Integration.MongoDB/DomainBlocks.Testing.Integration.MongoDB.csproj" />

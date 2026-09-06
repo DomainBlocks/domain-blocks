@@ -1,5 +1,4 @@
 ﻿using DomainBlocks.EventStore.MongoDB.ChangeStreams;
-using DomainBlocks.Testing.Integration.MongoDB;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -12,25 +11,19 @@ public class ChangeStreamSubjectTests
 {
     private const int TestTimeoutMillis = 30 * 1000;
 
-    private MongoClient _mongoClient = null!;
     private IMongoCollection<BsonDocument> _collection = null!;
 
     [SetUp]
     public void SetUp()
     {
-        var mongoClient = new MongoClient(TestMongoConnectionStrings.Default);
-        var db = mongoClient.GetDatabase("domainblocks_tests");
-        var collection = db.GetCollection<BsonDocument>("test_items");
-
-        _mongoClient = mongoClient;
-        _collection = collection;
+        var db = SetUpFixture.MongoClient.GetDatabase("domainblocks_tests");
+        _collection = db.GetCollection<BsonDocument>("test_items");
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
         await _collection.Database.DropCollectionAsync("test_items");
-        _mongoClient.Dispose();
     }
 
     [Test]

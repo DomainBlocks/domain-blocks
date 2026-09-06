@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.TypeMapping;
 using NUnit.Framework;
 
 namespace DomainBlocks.Testing.Integration;
@@ -12,6 +13,23 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos> :
     where TStreamPos : notnull
     where TLogPos : notnull
 {
+    private readonly EventTypeMap _eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>());
+
+    private IEventStore<object, string, TStreamPos, TLogPos> EventStore { get; set; } = null!;
+
+    [SetUp]
+    public void SetUp()
+    {
+        EventStore = CreateEventStore(_eventTypeMap);
+    }
+
+    [TearDown]
+    public async Task TearDown()
+    {
+        if (EventStore is IAsyncDisposable asyncDisposable)
+            await asyncDisposable.DisposeAsync();
+    }
+
     [Test]
     [Explicit("Benchmark")]
     [CancelAfter(TestTimeouts.DefaultMillis)]
@@ -58,11 +76,9 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos> :
         const int measureSeconds = 15;
 
         // Create a pool of event store instances
-        var handles = new ITestEventStoreHandle<object, string, TStreamPos, TLogPos>[instanceCount];
+        var instances = new IEventStore<object, string, TStreamPos, TLogPos>[instanceCount];
         for (var i = 0; i < instanceCount; i++)
-            handles[i] = await EventStoreFactory.CreateAsync($"instance_{i}", ct);
-
-        var instances = handles.Select(x => x.Instance).ToArray();
+            instances[i] = CreateEventStore(_eventTypeMap, $"instance_{i}");
 
         try
         {
@@ -144,8 +160,8 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos> :
         }
         finally
         {
-            foreach (var handle in handles)
-                await handle.DisposeAsync().AsTask().WaitAsync(ct);
+            foreach (var instance in instances.OfType<IAsyncDisposable>())
+                await instance.DisposeAsync().AsTask().WaitAsync(ct);
         }
     }
 

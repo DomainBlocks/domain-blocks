@@ -24,7 +24,7 @@ public class EventSourcedStateStoreTests
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
     {
-        _mongoClient = new MongoClient(TestMongoConnectionStrings.Default);
+        _mongoClient = new MongoClient(SetUpFixture.MongoConnectionString);
 
         _options = new MongoEventStoreOptions
         {

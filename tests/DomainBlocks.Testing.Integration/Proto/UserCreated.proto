@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option csharp_namespace = "DomainBlocks.EventStore.Tests.Integration.Proto";
+option csharp_namespace = "DomainBlocks.Testing.Integration.Proto";
 
 message UserCreated {
   string user_id = 1;

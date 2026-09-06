@@ -3,19 +3,28 @@ using DomainBlocks.EventStore.ContractMapping;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Integration;
 using DomainBlocks.Testing.Integration.MongoDB;
+using MongoDB.Bson.Serialization;
 using NUnit.Framework;
 
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
-[TestFixture]
-public class MongoEventStoreTests : EventStoreTests<StreamPosition, LogPosition>
+public class MongoEventStoreEventRepresentationTests : EventStoreEventRepresentationTests<StreamPosition, LogPosition>
 {
     private MongoEventStoreOptions _options = null!;
+
+    static MongoEventStoreEventRepresentationTests()
+    {
+        BsonClassMap.RegisterClassMap<LimitOrderEvent>(cm =>
+        {
+            cm.AutoMap();
+            cm.SetIgnoreExtraElements(true);
+        });
+    }
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
     {
-        _options = new MongoEventStoreOptions { DatabaseName = "dbx_es_tests" };
+        _options = new MongoEventStoreOptions { DatabaseName = "dbx_es_event_representation_tests" };
         await MongoEventStoreAdmin.EnsureInitializedAsync(SetUpFixture.MongoClient, _options);
     }
 
@@ -33,6 +42,4 @@ public class MongoEventStoreTests : EventStoreTests<StreamPosition, LogPosition>
             _options,
             SetUpFixture.LoggerFactory.CreateLogger($"MongoEventStore_{name}"));
     }
-
-    protected override StreamPosition CreateStreamPosition(ulong value) => new(value);
 }
