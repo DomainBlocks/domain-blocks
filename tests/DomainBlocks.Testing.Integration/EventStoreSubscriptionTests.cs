@@ -1,5 +1,6 @@
 using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.TypeMapping;
 using NUnit.Framework;
 using Shouldly;
 
@@ -10,6 +11,22 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos> :
     where TStreamPos : notnull
     where TLogPos : notnull
 {
+    private IEventStore<object, string, TStreamPos, TLogPos> EventStore { get; set; } = null!;
+
+    [SetUp]
+    public void SetUp()
+    {
+        var eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>());
+        EventStore = CreateEventStore(eventTypeMap);
+    }
+
+    [TearDown]
+    public async Task TearDown()
+    {
+        if (EventStore is IAsyncDisposable asyncDisposable)
+            await asyncDisposable.DisposeAsync();
+    }
+
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task SubscribeToAll_FromStart_ReadsCatchUpThenLiveEvents(CancellationToken cancellationToken)

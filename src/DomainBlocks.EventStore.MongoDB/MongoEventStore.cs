@@ -20,7 +20,7 @@ public static class MongoEventStore
 
     public static MongoEventStore<TEvent> Create<TEvent>(
         IMongoClient mongoClient,
-        EventCodec<TEvent, BsonValue, BsonValue> codec,
+        EventCodec<TEvent, BsonValue, BsonValue> eventCodec,
         MongoEventStoreOptions? options = null,
         ILogger? logger = null)
         where TEvent : notnull
@@ -44,11 +44,11 @@ public static class MongoEventStore
             new MongoSequencedAppenderOptions
             {
                 QueueCapacity = options.AppendQueueCapacity,
-                BatchSize = options.AppendBatchSize
+                MaxBatchSize = options.AppendBatchSize
             },
             logger);
 
-        return new MongoEventStore<TEvent>(sequencedAppender, eventLog, codec, logger);
+        return new MongoEventStore<TEvent>(sequencedAppender, eventLog, eventCodec, logger);
     }
 }
 

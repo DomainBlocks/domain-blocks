@@ -1,18 +1,16 @@
-﻿using DomainBlocks.EventStore.Abstractions.Codecs;
-using DomainBlocks.EventStore.Codecs;
-using DomainBlocks.EventStore.MongoDB;
+﻿using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.Abstractions;
 using DomainBlocks.Serialization.Google.Protobuf;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Serialization.SystemTextJson;
-using DomainBlocks.Testing.Integration.MongoDB;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using NUnit.Framework;
 using Shouldly;
+using ProtoUserCreated = DomainBlocks.Testing.Integration.Proto.UserCreated;
 
-namespace DomainBlocks.EventStore.Tests.Integration;
+namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
 public class MongoSerializationTests
 {
@@ -22,11 +20,20 @@ public class MongoSerializationTests
         Name = "Alice"
     };
 
-    private static readonly Proto.UserCreated TestProtoEvent = new()
+    private static readonly ProtoUserCreated TestProtoEvent = new()
     {
         UserId = "user-123",
         Name = "Alice"
     };
+
+    private MongoEventStoreOptions _options = null!;
+
+    [OneTimeSetUp]
+    public async Task OneTimeSetUp()
+    {
+        _options = new MongoEventStoreOptions { DatabaseName = "dbx_es_serialization_tests" };
+        await MongoEventStoreAdmin.EnsureInitializedAsync(SetUpFixture.MongoClient, _options);
+    }
 
     [Test]
     public async Task Should_write_and_read_event_as_bson_document()
@@ -62,18 +69,10 @@ public class MongoSerializationTests
         await Should_write_and_read_event(TestEvent, serde);
     }
 
-    private static async Task Should_write_and_read_event<TEvent>(
-        TEvent @event,
-        IObjectSerde<BsonValue> serde) where TEvent : class
+    private async Task Should_write_and_read_event<TEvent>(TEvent @event, IObjectSerde<BsonValue> serde)
+        where TEvent : class
     {
-        using var mongoClient = new MongoClient(TestMongoConnectionStrings.Default);
-
-        var options = new MongoEventStoreOptions
-        {
-            DatabaseName = "domainblocks_tests"
-        };
-
-        await using var eventStore = CreateEventStore(mongoClient, serde, options);
+        await using var eventStore = CreateEventStore(SetUpFixture.MongoClient, serde, _options);
 
         var streamId = $"test-{serde.GetType().Name}-{Guid.NewGuid()}";
         await eventStore.AppendAsync(streamId, [@event]);
@@ -87,33 +86,22 @@ public class MongoSerializationTests
     }
 
     private static MongoEventStore<object> CreateEventStore(
-        MongoClient mongoClient,
+        IMongoClient mongoClient,
         IObjectSerde<BsonValue> serde,
         MongoEventStoreOptions options)
     {
         var eventTypeMap = EventTypeMap.Create(
             EventTypeMapping.ReadWrite<UserCreated>(),
-            EventTypeMapping.ReadWrite<Proto.UserCreated>("ProtoUserCreated"));
+            EventTypeMapping.ReadWrite<ProtoUserCreated>(nameof(ProtoUserCreated)));
 
-        var encoderOptions = new EventEncoderOptions<object, BsonValue, BsonValue>
+        var codecOptions = new EventCodecOptions<object, BsonValue, BsonValue>
         {
             TypeMap = eventTypeMap,
-            EventSerializer = serde,
-            MetadataSerializer = new BsonDocumentMetadataSerde()
+            EventSerde = serde,
+            MetadataSerde = new BsonDocumentMetadataSerde()
         };
 
-        var decoderOptions = new EventDecoderOptions<object, BsonValue, BsonValue>
-        {
-            TypeMap = eventTypeMap,
-            EventDeserializer = serde,
-            MetadataDeserializer = new BsonDocumentMetadataSerde()
-        };
-
-        var eventCodec = new EventCodec<object, BsonValue, BsonValue>
-        {
-            Encoder = EventEncoder.Create(encoderOptions),
-            Decoder = EventDecoder.Create(decoderOptions)
-        };
+        var eventCodec = EventCodec.Create(codecOptions);
 
         return MongoEventStore.Create(mongoClient, eventCodec, options);
     }

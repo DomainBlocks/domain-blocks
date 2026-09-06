@@ -163,12 +163,8 @@ public class KurrentDbClientBenchmarkTests
 
     private static KurrentDBClient CreateClient(string connectionName)
     {
-        const string connectionString = "esdb://admin:changeit@localhost:2113?tls=false";
-
-        var settings = KurrentDBClientSettings.Create(connectionString);
+        var settings = KurrentDBClientSettings.Create(SetUpFixture.KurrentDBConnectionString);
         settings.ConnectionName = $"benchmark-{connectionName}-{Guid.NewGuid():N}";
-        settings.DefaultCredentials ??= new UserCredentials("admin", "changeit");
-
         return new KurrentDBClient(settings);
     }
 }
