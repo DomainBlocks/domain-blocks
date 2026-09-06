@@ -129,7 +129,7 @@ public class RefCountedChangeStreamSubjectTests
         public int ConnectCount { get; private set; }
         public TestConnection? Connection { get; private set; }
 
-        public IDisposable Attach(IChangeStreamObserver<int> observer)
+        public IDisposable Attach(IChangeStreamObserver<int> observer, string correlationId = "unknown")
         {
             AttachCount++;
 
