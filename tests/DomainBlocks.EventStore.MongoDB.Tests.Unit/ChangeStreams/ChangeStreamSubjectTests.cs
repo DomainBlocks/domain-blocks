@@ -1,6 +1,7 @@
 ﻿using System.Net;
 using System.Threading.Channels;
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
+using DomainBlocks.Testing;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
@@ -57,7 +58,10 @@ public class ChangeStreamSubjectTests
 
         SetupChangeStream(batches);
 
-        using var loggerFactory = LoggerFactory.Create(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug));
+        using var loggerFactory = LoggerFactory.Create(x => x
+            .AddProvider(new NUnitLoggerProvider())
+            .SetMinimumLevel(LogLevel.Debug));
+
         var logger = loggerFactory.CreateLogger<ChangeStreamSubjectTests>();
 
         var subject = ChangeStreamSubject.Create(
@@ -96,7 +100,10 @@ public class ChangeStreamSubjectTests
 
         SetupChangeStream(batches);
 
-        using var loggerFactory = LoggerFactory.Create(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug));
+        using var loggerFactory = LoggerFactory.Create(x => x
+            .AddProvider(new NUnitLoggerProvider())
+            .SetMinimumLevel(LogLevel.Debug));
+
         var logger = loggerFactory.CreateLogger<ChangeStreamSubjectTests>();
 
         var subject = ChangeStreamSubject.Create(

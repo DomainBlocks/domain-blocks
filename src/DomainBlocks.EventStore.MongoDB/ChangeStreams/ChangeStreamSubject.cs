@@ -170,7 +170,7 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
                     _stopCts.Token.ThrowIfCancellationRequested();
 
                     using var cursor = await GetChangeStreamCursorAsync().ConfigureAwait(false);
-
+                    _logger?.ChangeStreamConnected(_subjectId);
                     _subject._connectedTcs.TrySetResult();
 
                     try

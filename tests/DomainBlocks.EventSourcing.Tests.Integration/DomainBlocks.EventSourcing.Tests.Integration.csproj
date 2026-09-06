@@ -13,6 +13,7 @@
     <ProjectReference Include="..\..\src\DomainBlocks.EventSourcing\DomainBlocks.EventSourcing.csproj"/>
     <ProjectReference Include="..\..\src\DomainBlocks.EventStore.MongoDB\DomainBlocks.EventStore.MongoDB.csproj" />
     <ProjectReference Include="..\DomainBlocks.Testing.Integration.MongoDB\DomainBlocks.Testing.Integration.MongoDB.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Testing\DomainBlocks.Testing.csproj" />
   </ItemGroup>
 
 </Project>

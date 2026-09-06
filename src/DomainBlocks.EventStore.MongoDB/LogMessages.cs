@@ -43,6 +43,9 @@ internal static partial class LogMessages
     [LoggerMessage(LogLevel.Debug, "[chg: {SubjectId}] started")]
     internal static partial void ChangeStreamStarted(this ILogger logger, string subjectId);
 
+    [LoggerMessage(LogLevel.Debug, "[chg: {SubjectId}] connected")]
+    internal static partial void ChangeStreamConnected(this ILogger logger, string subjectId);
+
     [LoggerMessage(LogLevel.Debug, "[chg: {SubjectId}] stopping")]
     internal static partial void ChangeStreamStopping(this ILogger logger, string subjectId);
 

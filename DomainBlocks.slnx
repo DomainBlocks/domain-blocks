@@ -37,5 +37,6 @@
     <Project Path="tests/DomainBlocks.EventStore.Tests.Unit/DomainBlocks.EventStore.Tests.Unit.csproj" />
     <Project Path="tests/DomainBlocks.Serialization.Google.Protobuf.Tests/DomainBlocks.Serialization.Google.Protobuf.Tests.csproj" />
     <Project Path="tests/DomainBlocks.Testing.Integration.MongoDB/DomainBlocks.Testing.Integration.MongoDB.csproj" />
+    <Project Path="tests/DomainBlocks.Testing/DomainBlocks.Testing.csproj" />
   </Folder>
 </Solution>

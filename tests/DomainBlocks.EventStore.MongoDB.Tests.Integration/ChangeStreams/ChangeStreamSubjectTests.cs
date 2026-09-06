@@ -35,8 +35,7 @@ public class ChangeStreamSubjectTests
         var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>()
             .Match(x => x.OperationType == ChangeStreamOperationType.Insert);
 
-        using var loggerFactory = LoggerFactory.Create(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug));
-        var logger = loggerFactory.CreateLogger<ChangeStreamSubjectTests>();
+        var logger = SetUpFixture.LoggerFactory.CreateLogger<ChangeStreamSubjectTests>();
 
         var subject = ChangeStreamSubject.Create(_collection.WatchAsync, pipeline, x => x.ResumeToken, logger: logger);
 
