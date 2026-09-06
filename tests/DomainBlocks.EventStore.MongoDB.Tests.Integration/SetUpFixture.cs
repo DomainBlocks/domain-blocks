@@ -1,4 +1,5 @@
-﻿using DomainBlocks.Testing.Integration.MongoDB;
+﻿using DomainBlocks.Testing;
+using DomainBlocks.Testing.Integration.MongoDB;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using NUnit.Framework;
@@ -22,12 +23,7 @@ public class SetUpFixture
         MongoClient = new MongoClient(_mongoReplicaSet.ConnectionString);
 
         LoggerFactory = Microsoft.Extensions.Logging.LoggerFactory.Create(x => x
-            .AddSimpleConsole(opt =>
-            {
-                opt.IncludeScopes = true;
-                opt.TimestampFormat = "HH:mm:ss.fff ";
-                opt.SingleLine = true;
-            })
+            .AddProvider(new NUnitLoggerProvider())
             .SetMinimumLevel(LogLevel.Debug));
 
         TestMongoSerialization.Configure();

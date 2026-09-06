@@ -6,7 +6,6 @@ using DomainBlocks.EventStore.MongoDB;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Integration.MongoDB;
 using Microsoft.Extensions.Logging;
-using MongoDB.Driver;
 using NUnit.Framework;
 using Shouldly;
 
@@ -15,25 +14,14 @@ namespace DomainBlocks.EventSourcing.Tests.Integration;
 [TestFixture]
 public class EventSourcedStateStoreTests
 {
-    private MongoClient _mongoClient = null!;
     private MongoEventStoreOptions _options = null!;
-    private ILoggerFactory _loggerFactory = null!;
     private MongoEventStore<IDomainEvent> _eventStore = null!;
     private EventSourcedStateStore<ShoppingCart, IDomainEvent, string, StreamPosition, LogPosition> _store = null!;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
     {
-        _mongoClient = new MongoClient(SetUpFixture.MongoConnectionString);
-
-        _options = new MongoEventStoreOptions
-        {
-            DatabaseName = "domainblocks_tests"
-        };
-
-        _loggerFactory = LoggerFactory.Create(x => x
-            .AddSimpleConsole(o => o.TimestampFormat = "HH:mm:ss.fff ")
-            .SetMinimumLevel(LogLevel.Debug));
+        _options = new MongoEventStoreOptions { DatabaseName = "dbx_es_event_sourced_state_tests" };
 
         var eventTypeMap = EventTypeMap.Create(
             EventTypeMapping.ReadWrite<ShoppingSessionStarted>(),
@@ -43,24 +31,21 @@ public class EventSourcedStateStoreTests
         var eventCodec = TestMongoEventCodec.Create<IDomainEvent>(eventTypeMap);
 
         _eventStore = MongoEventStore.Create(
-            _mongoClient,
+            SetUpFixture.MongoClient,
             eventCodec,
             _options,
-            _loggerFactory.CreateLogger<MongoEventStore<IDomainEvent>>());
+            SetUpFixture.LoggerFactory.CreateLogger<MongoEventStore<IDomainEvent>>());
 
         _store = EventSourcedStateStore.Create(_eventStore, new AggregateAdapter<ShoppingCart, ShoppingCartState>());
 
-        await MongoEventStoreAdmin.EnsureInitializedAsync(_mongoClient, _options);
+        await MongoEventStoreAdmin.EnsureInitializedAsync(SetUpFixture.MongoClient, _options);
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await _mongoClient.DropDatabaseAsync(_options.DatabaseName);
-
+        await SetUpFixture.MongoClient.DropDatabaseAsync(_options.DatabaseName);
         await _eventStore.DisposeAsync();
-        _loggerFactory.Dispose();
-        _mongoClient.Dispose();
     }
 
     [Test]

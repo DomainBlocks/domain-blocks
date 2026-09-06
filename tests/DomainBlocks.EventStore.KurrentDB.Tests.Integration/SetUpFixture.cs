@@ -1,4 +1,5 @@
-﻿using KurrentDB.Client;
+﻿using DomainBlocks.Testing;
+using KurrentDB.Client;
 using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using Testcontainers.KurrentDb;
@@ -27,12 +28,7 @@ public class SetUpFixture
         KurrentDBClient = new KurrentDBClient(KurrentDBClientSettings.Create(KurrentDBConnectionString));
 
         LoggerFactory = Microsoft.Extensions.Logging.LoggerFactory.Create(x => x
-            .AddSimpleConsole(opt =>
-            {
-                opt.IncludeScopes = true;
-                opt.TimestampFormat = "HH:mm:ss.fff ";
-                opt.SingleLine = true;
-            })
+            .AddProvider(new NUnitLoggerProvider())
             .SetMinimumLevel(LogLevel.Debug));
     }
 
