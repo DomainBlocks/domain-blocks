@@ -34,7 +34,7 @@ public class MongoEventStoreConcurrencyTests
             _instances[i] = MongoEventStore.Create(
                 SetUpFixture.MongoClient,
                 eventCodec, _options,
-                SetUpFixture.LoggerFactory.CreateLogger("MongoEventStore_{i}"));
+                SetUpFixture.LoggerFactory.CreateLogger($"MongoEventStore_{i}"));
         }
     }
 
