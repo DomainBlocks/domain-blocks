@@ -26,19 +26,29 @@ internal sealed class RefCountedChangeStreamSubject<TDocument>(
     Func<IChangeStreamSubject<TDocument>> subjectFactory) :
     IRefCountedChangeStreamSubject<TDocument>
 {
-    private readonly Lock _gate = new();
+    private readonly SemaphoreSlim _gate = new(1, 1);
     private SubjectConnection? _currentSubjectConnection;
 
-    public IAsyncDisposable Attach(IChangeStreamObserver<TDocument> observer, string correlationId = "unknown")
+    public async Task<IAsyncDisposable> AttachAsync(
+        IChangeStreamObserver<TDocument> observer,
+        string correlationId = "unknown",
+        CancellationToken cancellationToken = default)
     {
-        lock (_gate)
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
         {
             SubjectConnection subjectConnection;
             IDisposable attachment;
 
-            if (_currentSubjectConnection is null || _currentSubjectConnection.Connection.Completion.IsFaulted)
+            if (_currentSubjectConnection is null || _currentSubjectConnection.Connection.Completion.IsCompleted)
             {
-                (subjectConnection, attachment) = CreateAndConnectSubject(observer, correlationId);
+                var subject = subjectFactory();
+                var connection = await subject.ConnectAsync(cancellationToken);
+
+                subjectConnection = new SubjectConnection(subject, connection);
+                attachment = subject.Attach(observer, correlationId);
+
                 _currentSubjectConnection = subjectConnection;
             }
             else
@@ -51,23 +61,20 @@ internal sealed class RefCountedChangeStreamSubject<TDocument>(
 
             return new AsyncDisposable(() => DetachAsync(attachment, subjectConnection));
         }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
-    private (SubjectConnection SubjectConnection, IDisposable Attachment) CreateAndConnectSubject(
-        IChangeStreamObserver<TDocument> observer,
-        string correlationId)
-    {
-        var subject = subjectFactory();
-        var attachment = subject.Attach(observer, correlationId); // Attach first so no notifications are missed
-        return (new SubjectConnection(subject, subject.Connect()), attachment);
-    }
-
-    private ValueTask DetachAsync(IDisposable attachment, SubjectConnection subjectConnection)
+    private async Task DetachAsync(IDisposable attachment, SubjectConnection subjectConnection)
     {
         attachment.Dispose();
         IChangeStreamConnection? connectionToDispose = null;
 
-        lock (_gate)
+        await _gate.WaitAsync().ConfigureAwait(false);
+
+        try
         {
             subjectConnection.RefCount--;
 
@@ -79,23 +86,34 @@ internal sealed class RefCountedChangeStreamSubject<TDocument>(
                 connectionToDispose = subjectConnection.Connection;
             }
         }
+        finally
+        {
+            _gate.Release();
+        }
 
-        return connectionToDispose?.DisposeAsync() ?? ValueTask.CompletedTask;
+        if (connectionToDispose is not null)
+            await connectionToDispose.DisposeAsync();
     }
 
-    private sealed class SubjectConnection(IChangeStreamSubject<TDocument> subject, IChangeStreamConnection connection)
+    private sealed class SubjectConnection(
+        IChangeStreamSubject<TDocument> subject,
+        IChangeStreamConnection connection)
     {
         public IChangeStreamSubject<TDocument> Subject { get; } = subject;
         public IChangeStreamConnection Connection { get; } = connection;
         public int RefCount { get; set; }
     }
 
-    private sealed class AsyncDisposable(Func<ValueTask> onDispose) : IAsyncDisposable
+    private sealed class AsyncDisposable(Func<Task> onDispose) : IAsyncDisposable
     {
         private int _disposed;
 
-        public ValueTask DisposeAsync() => Interlocked.Exchange(ref _disposed, 1) == 0
-            ? onDispose()
-            : ValueTask.CompletedTask;
+        public async ValueTask DisposeAsync()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+                return;
+
+            await onDispose();
+        }
     }
 }

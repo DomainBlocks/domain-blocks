@@ -4,5 +4,5 @@ internal interface IChangeStreamSubject<out TDocument>
 {
     IDisposable Attach(IChangeStreamObserver<TDocument> observer, string correlationId = "unknown");
 
-    IChangeStreamConnection Connect();
+    Task<IChangeStreamConnection> ConnectAsync(CancellationToken cancellationToken = default);
 }

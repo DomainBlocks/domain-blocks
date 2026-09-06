@@ -2,5 +2,8 @@ namespace DomainBlocks.EventStore.MongoDB.ChangeStreams;
 
 internal interface IRefCountedChangeStreamSubject<out TDocument>
 {
-    IAsyncDisposable Attach(IChangeStreamObserver<TDocument> observer, string correlationId = "unknown");
+    Task<IAsyncDisposable> AttachAsync(
+        IChangeStreamObserver<TDocument> observer,
+        string correlationId = "unknown",
+        CancellationToken cancellationToken = default);
 }
