@@ -223,7 +223,16 @@ public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> whe
         SubscriptionOrigin<StreamPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
-        throw new NotImplementedException();
+        ArgumentException.ThrowIfNullOrEmpty(streamId);
+
+        return new SubscriptionAsyncEnumerable<TEvent, StreamPosition>(
+            origin,
+            options,
+            new SingleStreamTarget(streamId),
+            _reader,
+            _feed,
+            _eventCodec.Decoder,
+            _logger);
     }
 
     public async ValueTask DisposeAsync()

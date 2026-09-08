@@ -38,6 +38,10 @@ internal sealed class EventLogSql
 
         ReadCatchUpAll = $"SELECT {Columns} FROM {eventLog} " +
                          "WHERE position > $1 AND position <= $2 ORDER BY position LIMIT $3";
+
+        ReadCatchUpStream = $"SELECT {Columns} FROM {eventLog} " +
+                            "WHERE stream_id = $1 AND stream_position > $2 AND position <= $3 " +
+                            "ORDER BY stream_position LIMIT $4";
     }
 
     public string ReadStreamForward { get; }
@@ -61,6 +65,8 @@ internal sealed class EventLogSql
     public string MaxPosition { get; }
 
     public string ReadCatchUpAll { get; }
+
+    public string ReadCatchUpStream { get; }
 
     public string ReadStream(ReadDirection direction, bool includeMetadata)
     {

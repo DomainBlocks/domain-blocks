@@ -75,6 +75,30 @@ internal sealed class EventLogReader(NpgsqlDataSource dataSource, EventLogSql sq
             cancellationToken);
     }
 
+    /// <summary>
+    /// Reads rows of one stream after a stream position, bounded by a global high-water mark.
+    /// </summary>
+    public IAsyncEnumerable<EventLogRow> ReadCatchUpStreamAsync(
+        string streamId,
+        long afterExclusive,
+        long highWaterMark,
+        CancellationToken cancellationToken)
+    {
+        return ReadPagesAsync(
+            sql.ReadCatchUpStream,
+            (parameters, key, limit) =>
+            {
+                parameters.Add(new NpgsqlParameter<string> { TypedValue = streamId });
+                parameters.Add(new NpgsqlParameter<long> { TypedValue = key });
+                parameters.Add(new NpgsqlParameter<long> { TypedValue = highWaterMark });
+                parameters.Add(new NpgsqlParameter<int> { TypedValue = limit });
+            },
+            afterExclusive,
+            static row => row.StreamPosition,
+            null,
+            cancellationToken);
+    }
+
     public async Task<long?> GetMaxPositionAsync(CancellationToken cancellationToken)
     {
         await using var command = dataSource.CreateCommand(sql.MaxPosition);
