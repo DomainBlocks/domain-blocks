@@ -199,6 +199,24 @@ public class ChangeStreamSubjectTests
         throwingObserver.CallCount.ShouldBe(1);
     }
 
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task Attach_AfterConnectionIsDisposed_Throws(CancellationToken ct)
+    {
+        SetupChangeStream([new ChangeStreamBatch { Items = [] }]);
+
+        var subject = ChangeStreamSubject.Create(
+            _mockCollection.Object.WatchAsync,
+            new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
+            x => x.ResumeToken);
+
+        var connection = await subject.ConnectAsync(ct);
+        await connection.DisposeAsync();
+
+        var exception = Should.Throw<InvalidOperationException>(() => subject.Attach(new TestObserver()));
+        exception.Message.ShouldBe("Cannot attach to a completed change stream connection.");
+    }
+
     private static MongoException CreateResumableMongoException()
     {
         var exception = new MongoException("Resumable error");
