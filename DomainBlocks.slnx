@@ -38,9 +38,11 @@
     <Project Path="tests/DomainBlocks.EventStore.Abstractions.Tests.Unit/DomainBlocks.EventStore.Abstractions.Tests.Unit.csproj" />
     <Project Path="tests/DomainBlocks.EventStore.KurrentDB.Tests.Integration/DomainBlocks.EventStore.KurrentDB.Tests.Integration.csproj" />
     <Project Path="tests/DomainBlocks.EventStore.MongoDB.Tests.Integration/DomainBlocks.EventStore.MongoDB.Tests.Integration.csproj" />
+    <Project Path="tests/DomainBlocks.EventStore.PostgreSQL.Tests.Integration/DomainBlocks.EventStore.PostgreSQL.Tests.Integration.csproj" />
     <Project Path="tests/DomainBlocks.EventStore.Tests.Unit/DomainBlocks.EventStore.Tests.Unit.csproj" />
     <Project Path="tests/DomainBlocks.Serialization.Google.Protobuf.Tests/DomainBlocks.Serialization.Google.Protobuf.Tests.csproj" />
     <Project Path="tests/DomainBlocks.Testing.Integration.MongoDB/DomainBlocks.Testing.Integration.MongoDB.csproj" />
+    <Project Path="tests/DomainBlocks.Testing.Integration.PostgreSQL/DomainBlocks.Testing.Integration.PostgreSQL.csproj" />
     <Project Path="tests/DomainBlocks.Testing/DomainBlocks.Testing.csproj" />
   </Folder>
 </Solution>
