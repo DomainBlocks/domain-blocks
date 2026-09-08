@@ -27,4 +27,10 @@ public sealed class PostgresEventStoreOptions
     /// The number of queued append requests that must be observed together before the batching delay applies.
     /// </summary>
     public int AppendBatchingDelayMinCount { get; set; }
+
+    /// <summary>
+    /// The number of events fetched per round trip when reading. Reads page through the log with keyset queries so
+    /// that a slow consumer does not hold a pooled connection open for the whole enumeration.
+    /// </summary>
+    public int ReadBatchSize { get; set; } = 1_000;
 }

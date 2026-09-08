@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Codecs;
 using Microsoft.Extensions.Logging;
@@ -26,19 +27,25 @@ public static class PostgresEventStore
 
         var names = new SqlNames(options.Schema);
         var appender = new BatchingAppender(dataSource, names, options, logger);
+        var reader = new EventLogReader(dataSource, new EventLogSql(names), options.ReadBatchSize);
 
-        return new PostgresEventStore<TEvent>(appender, eventCodec);
+        return new PostgresEventStore<TEvent>(appender, reader, eventCodec);
     }
 }
 
 public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> where TEvent : notnull
 {
     private readonly IAppender _appender;
+    private readonly EventLogReader _reader;
     private readonly EventCodec<TEvent, PostgresEventData, string> _eventCodec;
 
-    internal PostgresEventStore(IAppender appender, EventCodec<TEvent, PostgresEventData, string> eventCodec)
+    internal PostgresEventStore(
+        IAppender appender,
+        EventLogReader reader,
+        EventCodec<TEvent, PostgresEventData, string> eventCodec)
     {
         _appender = appender;
+        _reader = reader;
         _eventCodec = eventCodec;
     }
 
@@ -91,7 +98,47 @@ public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> whe
         ReadOrigin<StreamPosition>? origin = null,
         ReadStreamOptions? options = null)
     {
-        throw new NotImplementedException();
+        ArgumentException.ThrowIfNullOrEmpty(streamId);
+
+        return Impl();
+
+        async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Impl(
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            origin ??= direction == ReadDirection.Forward
+                ? ReadOrigin.Start<StreamPosition>()
+                : ReadOrigin.End<StreamPosition>();
+
+            options ??= ReadStreamOptions.Default;
+
+            if (direction.ProducesEmptyReadFrom(origin))
+            {
+                await ThrowIfStreamNotFoundAsync(streamId, options, cancellationToken).ConfigureAwait(false);
+                yield break;
+            }
+
+            var firstKeyExclusive = EventLogSql.FirstKeyExclusive(direction, origin);
+            var isEmpty = true;
+
+            var rows = _reader.ReadStreamAsync(
+                streamId,
+                direction,
+                firstKeyExclusive,
+                options.MaxCount,
+                options.IncludeMetadata,
+                cancellationToken);
+
+            await foreach (var row in rows.ConfigureAwait(false))
+            {
+                isEmpty = false;
+                yield return _eventCodec.Decoder.Decode(row);
+            }
+
+            // Unlike an empty edge-case read, an empty result here may simply mean the origin is beyond the end of an
+            // existing stream, so the stream's existence is checked rather than assumed.
+            if (isEmpty)
+                await ThrowIfStreamNotFoundAsync(streamId, options, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
@@ -110,6 +157,18 @@ public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> whe
     }
 
     public ValueTask DisposeAsync() => _appender.DisposeAsync();
+
+    private async Task ThrowIfStreamNotFoundAsync(
+        string streamId,
+        ReadStreamOptions options,
+        CancellationToken cancellationToken)
+    {
+        if (options.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw &&
+            !await _reader.StreamExistsAsync(streamId, cancellationToken).ConfigureAwait(false))
+        {
+            throw new StreamNotFoundException(streamId);
+        }
+    }
 
     /// <summary>
     /// PostgreSQL text and jsonb values cannot contain NUL. Rejecting it here, per caller, keeps one bad payload from
