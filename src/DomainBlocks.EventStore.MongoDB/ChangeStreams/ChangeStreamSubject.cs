@@ -97,7 +97,10 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
                 UseJitter = true,
                 MaxDelay = maxRetryDelay,
                 ShouldHandle = args =>
-                    ValueTask.FromResult(args.Outcome.Exception is { } ex && ChangeStreamResumePolicy.CanResume(ex)),
+                {
+                    var shouldHandle = args.Outcome.Exception is { } ex && ChangeStreamResumePolicy.CanResume(ex);
+                    return ValueTask.FromResult(shouldHandle);
+                },
                 OnRetry = args =>
                 {
                     if (args.Outcome.Exception is { } ex)
@@ -125,7 +128,6 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
         private readonly Task _producerTask;
         private readonly CancellationTokenSource _stopCts = new();
         private readonly TaskCompletionSource _completionTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private BsonDocument? _lastResumeToken;
         private int _disposed;
 
         public Connection(ChangeStreamSubject<TDocument, TResult> subject)
@@ -165,11 +167,13 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
 
             try
             {
+                BsonDocument? lastResumeToken = null;
+
                 while (true)
                 {
                     _stopCts.Token.ThrowIfCancellationRequested();
 
-                    using var cursor = await GetChangeStreamCursorAsync().ConfigureAwait(false);
+                    using var cursor = await GetChangeStreamCursorAsync(lastResumeToken).ConfigureAwait(false);
                     _logger?.ChangeStreamConnected(_subjectId);
                     _subject._connectedTcs.TrySetResult();
 
@@ -177,22 +181,23 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
                     {
                         while (await cursor.MoveNextAsync(_stopCts.Token).ConfigureAwait(false))
                         {
-                            var count = 0;
+                            var batchCount = 0;
 
                             foreach (var result in cursor.Current)
                             {
                                 await _state.NotifyNextAsync(result, _stopCts.Token).ConfigureAwait(false);
-                                _lastResumeToken = _resumeTokenSelector(result);
-                                count++;
+                                lastResumeToken = _resumeTokenSelector(result);
+                                batchCount++;
                             }
 
-                            _logger?.ChangeStreamBatchProcessed(_subjectId, count);
+                            _logger?.ChangeStreamBatchProcessed(_subjectId, batchCount);
 
                             var batchResumeToken = cursor.GetResumeToken();
                             if (batchResumeToken is not null)
-                                _lastResumeToken = batchResumeToken;
+                                lastResumeToken = batchResumeToken;
                         }
 
+                        // A live change stream is expected to remain open. Log a warning and reconnect.
                         _logger?.ChangeStreamCursorEnded(_subjectId);
                     }
                     catch (Exception ex) when (ChangeStreamResumePolicy.CanResume(ex))
@@ -229,14 +234,14 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
             }
         }
 
-        private async Task<IChangeStreamCursor<TResult>> GetChangeStreamCursorAsync()
+        private async Task<IChangeStreamCursor<TResult>> GetChangeStreamCursorAsync(BsonDocument? lastResumeToken)
         {
             var options = _subject._options.MongoOptions;
 
-            if (_lastResumeToken is not null)
+            if (lastResumeToken is not null)
             {
                 options = options.Copy();
-                options.ResumeAfter = _lastResumeToken;
+                options.ResumeAfter = lastResumeToken;
                 options.StartAfter = null;
                 options.StartAtOperationTime = null;
             }
@@ -253,23 +258,23 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
         {
             var attachment = new Attachment(observer, observerId, Detach);
 
-            while (true)
-            {
-                var current = Volatile.Read(ref _state);
+            TryUpdate(
+                static (current, attachment) => current.Completion switch
+                {
+                    { Error: { } error } => throw new InvalidOperationException(
+                        "Cannot attach to a faulted change stream connection.",
+                        error),
 
-                if (current.Completion is { Error: var error })
-                    throw new InvalidOperationException("Cannot attach to a faulted change stream connection.", error);
+                    { Error: null } => throw new InvalidOperationException(
+                        "Cannot attach to a completed change stream connection."),
 
-                if (current.Completion is { Error: null })
-                    throw new InvalidOperationException("Cannot attach to a completed change stream connection.");
+                    _ => new State(current.Attachments.Add(attachment))
+                },
+                attachment,
+                out var next);
 
-                var next = new State(current.Attachments.Add(attachment));
-                if (!ReferenceEquals(Interlocked.CompareExchange(ref _state, next, current), current))
-                    continue;
-
-                logger?.ObserverAttached(subjectId, observerId, next.Attachments.Length);
-                return attachment;
-            }
+            logger?.ObserverAttached(subjectId, observerId, next.Attachments.Length);
+            return attachment;
         }
 
         public async ValueTask NotifyNextAsync(TResult item, CancellationToken cancellationToken)
@@ -294,64 +299,71 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
 
         public async ValueTask NotifyErrorAsync(Exception error, CancellationToken cancellationToken)
         {
-            while (true)
+            if (!TryUpdate(
+                    static (current, error) => current.Completion is null
+                        ? new State(current.Attachments, new Completion(error))
+                        : null,
+                    error,
+                    out var faulted))
             {
-                var current = Volatile.Read(ref _state);
-                if (current.Completion is not null)
-                    return;
-
-                var faulted = new State(current.Attachments, new Completion(error));
-                if (!ReferenceEquals(Interlocked.CompareExchange(ref _state, faulted, current), current))
-                    continue;
-
-                foreach (var attachment in faulted.Attachments)
-                {
-                    try
-                    {
-                        await attachment.Observer.OnErrorAsync(error, cancellationToken).ConfigureAwait(false);
-                    }
-                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                    {
-                        throw;
-                    }
-                    catch (Exception observerException)
-                    {
-                        logger?.ObserverOnErrorFailed(observerException, subjectId, attachment.ObserverId);
-                    }
-                }
-
                 return;
+            }
+
+            foreach (var attachment in faulted.Attachments)
+            {
+                try
+                {
+                    await attachment.Observer.OnErrorAsync(error, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception observerException)
+                {
+                    logger?.ObserverOnErrorFailed(observerException, subjectId, attachment.ObserverId);
+                }
             }
         }
 
         public void SetComplete()
         {
-            while (true)
-            {
-                var current = Volatile.Read(ref _state);
-                if (current.Completion is not null)
-                    return;
-
-                var completed = new State(current.Attachments, new Completion());
-                if (!ReferenceEquals(Interlocked.CompareExchange(ref _state, completed, current), current))
-                    continue;
-
-                return;
-            }
+            TryUpdate(
+                static (current, completion) => current.Completion is null
+                    ? new State(current.Attachments, completion)
+                    : null,
+                new Completion(),
+                out _);
         }
 
         private void Detach(Attachment attachment)
         {
+            TryUpdate(
+                static (current, attachment) => new State(current.Attachments.Remove(attachment), current.Completion),
+                attachment,
+                out var next);
+
+            logger?.ObserverDetached(subjectId, attachment.ObserverId, next.Attachments.Length);
+        }
+
+        private bool TryUpdate<TArg>(Func<State, TArg, State?> updater, TArg argument, out State result)
+        {
             while (true)
             {
                 var current = Volatile.Read(ref _state);
-                var next = new State(current.Attachments.Remove(attachment), current.Completion);
+                var next = updater(current, argument);
+
+                if (next is null)
+                {
+                    result = current;
+                    return false;
+                }
 
                 if (!ReferenceEquals(Interlocked.CompareExchange(ref _state, next, current), current))
                     continue;
 
-                logger?.ObserverDetached(subjectId, attachment.ObserverId, next.Attachments.Length);
-                return;
+                result = next;
+                return true;
             }
         }
 
