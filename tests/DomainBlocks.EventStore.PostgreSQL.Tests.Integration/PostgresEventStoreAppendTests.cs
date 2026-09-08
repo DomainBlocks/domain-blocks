@@ -205,7 +205,8 @@ public class PostgresEventStoreAppendTests
     }
 
     [Test]
-    public async Task AppendAsync_SequenceRowLockedElsewhere_ThrowsTimeoutException()
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task AppendAsync_SequenceRowLockedElsewhere_TimesOutButStillCommits(CancellationToken ct)
     {
         await using var connection = await SetUpFixture.DataSource.OpenConnectionAsync();
         await using var transaction = await connection.BeginTransactionAsync();
@@ -220,9 +221,13 @@ public class PostgresEventStoreAppendTests
         await Should.ThrowAsync<TimeoutException>(() =>
             _eventStore.AppendAsync("s1", [Appendable("a")], options: options));
 
-        await transaction.RollbackAsync();
-
         (await _client.ReadRowsAsync()).ShouldBeEmpty();
+
+        // The caller has given up, but the request is already queued: once the lock is released the batch commits.
+        await transaction.RollbackAsync(ct);
+
+        while ((await _client.ReadRowsAsync()).Count == 0)
+            await Task.Delay(50, ct);
     }
 
     [Test]

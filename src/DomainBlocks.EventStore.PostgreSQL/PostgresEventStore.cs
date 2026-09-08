@@ -25,7 +25,7 @@ public static class PostgresEventStore
         options ??= new PostgresEventStoreOptions();
 
         var names = new SqlNames(options.Schema);
-        var appender = new DirectAppender(dataSource, names, logger);
+        var appender = new BatchingAppender(dataSource, names, options, logger);
 
         return new PostgresEventStore<TEvent>(appender, eventCodec);
     }
