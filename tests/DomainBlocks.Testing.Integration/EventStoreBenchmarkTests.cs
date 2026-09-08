@@ -78,7 +78,7 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos> :
         // Create a pool of event store instances
         var instances = new IEventStore<object, string, TStreamPos, TLogPos>[instanceCount];
         for (var i = 0; i < instanceCount; i++)
-            instances[i] = CreateEventStore(_eventTypeMap, $"instance_{i}");
+            instances[i] = CreateEventStore(_eventTypeMap, loggerNameSuffix: $"_{i}");
 
         try
         {

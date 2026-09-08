@@ -13,9 +13,9 @@ public class KurrentDBEventStoreTests : EventStoreTests<StreamPosition, Position
 {
     protected override Abstractions.IEventStore<object, string, StreamPosition, Position> CreateEventStore(
         EventTypeMap eventTypeMap,
-        string name = "default",
         EventFormat? eventFormat = null,
-        IEnumerable<IEventContractMapper<object>>? contractMappers = null)
+        IEnumerable<IEventContractMapper<object>>? contractMappers = null,
+        string loggerNameSuffix = "")
     {
         var codecOptions = new EventCodecOptions<object, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {

@@ -12,9 +12,9 @@ public abstract class EventStoreTestBase<TEvent, TStreamId, TStreamPos, TLogPos>
 {
     protected abstract IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> CreateEventStore(
         EventTypeMap eventTypeMap,
-        string name = "default",
         EventFormat? eventFormat = null,
-        IEnumerable<IEventContractMapper<TEvent>>? contractMappers = null);
+        IEnumerable<IEventContractMapper<TEvent>>? contractMappers = null,
+        string loggerNameSuffix = "");
 
     protected virtual TStreamPos CreateStreamPosition(ulong value) => throw new NotImplementedException();
 }

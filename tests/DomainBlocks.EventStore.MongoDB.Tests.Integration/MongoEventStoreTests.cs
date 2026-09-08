@@ -21,9 +21,9 @@ public class MongoEventStoreTests : EventStoreTests<StreamPosition, LogPosition>
 
     protected override IEventStore<object, string, StreamPosition, LogPosition> CreateEventStore(
         EventTypeMap eventTypeMap,
-        string name = "default",
         EventFormat? eventFormat = null,
-        IEnumerable<IEventContractMapper<object>>? contractMappers = null)
+        IEnumerable<IEventContractMapper<object>>? contractMappers = null,
+        string loggerNameSuffix = "")
     {
         var eventCodec = TestMongoEventCodec.Create(eventTypeMap, eventFormat, contractMappers);
 
@@ -31,7 +31,7 @@ public class MongoEventStoreTests : EventStoreTests<StreamPosition, LogPosition>
             SetUpFixture.MongoClient,
             eventCodec,
             _options,
-            SetUpFixture.LoggerFactory.CreateLogger($"MongoEventStore_{name}"));
+            SetUpFixture.LoggerFactory.CreateLogger($"MongoEventStore{loggerNameSuffix}"));
     }
 
     protected override StreamPosition CreateStreamPosition(ulong value) => new(value);

@@ -28,9 +28,9 @@ public class MongoEventStoreSubscriptionTests : EventStoreSubscriptionTests<Stre
 
     protected override IEventStore<object, string, StreamPosition, LogPosition> CreateEventStore(
         EventTypeMap eventTypeMap,
-        string name = "default",
         EventFormat? eventFormat = null,
-        IEnumerable<IEventContractMapper<object>>? contractMappers = null)
+        IEnumerable<IEventContractMapper<object>>? contractMappers = null,
+        string loggerNameSuffix = "")
     {
         var eventCodec = TestMongoEventCodec.Create(eventTypeMap, eventFormat, contractMappers);
 
@@ -38,6 +38,6 @@ public class MongoEventStoreSubscriptionTests : EventStoreSubscriptionTests<Stre
             SetUpFixture.MongoClient,
             eventCodec,
             _options,
-            SetUpFixture.LoggerFactory.CreateLogger($"MongoEventStore_{name}"));
+            SetUpFixture.LoggerFactory.CreateLogger($"MongoEventStore{loggerNameSuffix}"));
     }
 }

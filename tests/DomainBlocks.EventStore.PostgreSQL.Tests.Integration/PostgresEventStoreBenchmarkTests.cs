@@ -35,7 +35,7 @@ public class PostgresEventStoreBenchmarkTests : EventStoreBenchmarkTests<StreamP
         const int warmupIterations = 10;
         const int iterations = 100;
 
-        var eventStore = CreateEventStore(EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>()), "latency");
+        var eventStore = CreateEventStore(EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>()));
 
         try
         {
@@ -85,9 +85,9 @@ public class PostgresEventStoreBenchmarkTests : EventStoreBenchmarkTests<StreamP
 
     protected override IEventStore<object, string, StreamPosition, LogPosition> CreateEventStore(
         EventTypeMap eventTypeMap,
-        string name = "default",
         EventFormat? eventFormat = null,
-        IEnumerable<IEventContractMapper<object>>? contractMappers = null)
+        IEnumerable<IEventContractMapper<object>>? contractMappers = null,
+        string loggerNameSuffix = "")
     {
         var eventCodec = TestPostgresEventCodec.Create(eventTypeMap, eventFormat, contractMappers);
 
@@ -95,6 +95,6 @@ public class PostgresEventStoreBenchmarkTests : EventStoreBenchmarkTests<StreamP
             SetUpFixture.DataSource,
             eventCodec,
             _options,
-            SetUpFixture.LoggerFactory.CreateLogger($"PostgresEventStore_{name}"));
+            SetUpFixture.LoggerFactory.CreateLogger($"PostgresEventStore{loggerNameSuffix}"));
     }
 }

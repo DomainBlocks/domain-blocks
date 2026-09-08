@@ -27,9 +27,9 @@ public class PostgresEventStoreTests : EventStoreTests<StreamPosition, LogPositi
 
     protected override IEventStore<object, string, StreamPosition, LogPosition> CreateEventStore(
         EventTypeMap eventTypeMap,
-        string name = "default",
         EventFormat? eventFormat = null,
-        IEnumerable<IEventContractMapper<object>>? contractMappers = null)
+        IEnumerable<IEventContractMapper<object>>? contractMappers = null,
+        string loggerNameSuffix = "")
     {
         var eventCodec = TestPostgresEventCodec.Create(eventTypeMap, eventFormat, contractMappers);
 
@@ -37,7 +37,7 @@ public class PostgresEventStoreTests : EventStoreTests<StreamPosition, LogPositi
             SetUpFixture.DataSource,
             eventCodec,
             _options,
-            SetUpFixture.LoggerFactory.CreateLogger($"PostgresEventStore_{name}"));
+            SetUpFixture.LoggerFactory.CreateLogger($"PostgresEventStore{loggerNameSuffix}"));
     }
 
     protected override StreamPosition CreateStreamPosition(ulong value) => new(value);
