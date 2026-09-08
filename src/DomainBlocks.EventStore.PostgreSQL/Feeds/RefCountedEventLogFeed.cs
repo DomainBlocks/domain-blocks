@@ -4,10 +4,13 @@ namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 /// Connects the underlying feed when the first observer is attached and disconnects it when the last observer is
 /// detached. A feed whose connection has completed or faulted is replaced on the next attach.
 /// </summary>
-internal sealed class RefCountedEventLogFeed(Func<IEventLogFeed> feedFactory) : IRefCountedEventLogFeed
+internal sealed class RefCountedEventLogFeed(Func<IEventLogFeed> feedFactory) :
+    IRefCountedEventLogFeed,
+    IAsyncDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private FeedConnection? _current;
+    private bool _disposed;
 
     public async Task<IAsyncDisposable> AttachAsync(
         IEventLogObserver observer,
@@ -18,6 +21,8 @@ internal sealed class RefCountedEventLogFeed(Func<IEventLogFeed> feedFactory) : 
 
         try
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
             FeedConnection feedConnection;
             IDisposable attachment;
 
@@ -47,6 +52,37 @@ internal sealed class RefCountedEventLogFeed(Func<IEventLogFeed> feedFactory) : 
         }
     }
 
+    /// <summary>
+    /// Disconnects the current feed, if any, and rejects further attachments. Observers still attached are notified
+    /// through their attachment being invalidated by the feed completing.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        IEventLogFeedConnection? connectionToDispose;
+
+        await _gate.WaitAsync().ConfigureAwait(false);
+
+        try
+        {
+            if (_disposed)
+                return;
+
+            _disposed = true;
+            connectionToDispose = _current?.Connection;
+
+            _current?.IsDisposed = true;
+
+            _current = null;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        if (connectionToDispose is not null)
+            await connectionToDispose.DisposeAsync().ConfigureAwait(false);
+    }
+
     private async Task DetachAsync(IDisposable attachment, FeedConnection feedConnection)
     {
         attachment.Dispose();
@@ -58,8 +94,10 @@ internal sealed class RefCountedEventLogFeed(Func<IEventLogFeed> feedFactory) : 
         {
             feedConnection.RefCount--;
 
-            if (feedConnection.RefCount == 0)
+            if (feedConnection.RefCount == 0 && !feedConnection.IsDisposed)
             {
+                feedConnection.IsDisposed = true;
+
                 if (ReferenceEquals(_current, feedConnection))
                     _current = null;
 
@@ -80,6 +118,7 @@ internal sealed class RefCountedEventLogFeed(Func<IEventLogFeed> feedFactory) : 
         public IEventLogFeed Feed { get; } = feed;
         public IEventLogFeedConnection Connection { get; } = connection;
         public int RefCount { get; set; }
+        public bool IsDisposed { get; set; }
     }
 
     private sealed class AsyncDisposable(Func<Task> onDispose) : IAsyncDisposable

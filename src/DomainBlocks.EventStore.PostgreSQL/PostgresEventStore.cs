@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Codecs;
+using DomainBlocks.EventStore.PostgreSQL.Feeds;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 
@@ -28,8 +29,38 @@ public static class PostgresEventStore
         var names = new SqlNames(options.Schema);
         var appender = new BatchingAppender(dataSource, names, options, logger);
         var reader = new EventLogReader(dataSource, new EventLogSql(names), options.ReadBatchSize);
+        var feed = CreateFeed(dataSource, names, options, logger);
 
-        return new PostgresEventStore<TEvent>(appender, reader, eventCodec);
+        return new PostgresEventStore<TEvent>(appender, reader, feed, eventCodec);
+    }
+
+    private static RefCountedEventLogFeed CreateFeed(
+        NpgsqlDataSource dataSource,
+        SqlNames names,
+        PostgresEventStoreOptions options,
+        ILogger? logger)
+    {
+        var replicationOptions = options.Replication;
+        var connectionString = replicationOptions.ConnectionString ?? dataSource.ConnectionString;
+        var slotNames = new SlotNameGenerator(replicationOptions.SlotNamePrefix);
+
+        var feedOptions = new EventLogFeedOptions
+        {
+            RetryDelay = replicationOptions.RetryDelay,
+            MaxRetryDelay = replicationOptions.MaxRetryDelay,
+            MaxRetryAttempts = replicationOptions.MaxRetryAttempts
+        };
+
+        return new RefCountedEventLogFeed(() => new EventLogFeed(
+            cancellationToken => ReplicationEventLogSession.OpenAsync(
+                connectionString,
+                slotNames.Next(),
+                names,
+                replicationOptions,
+                logger,
+                cancellationToken),
+            feedOptions,
+            logger));
     }
 }
 
@@ -37,15 +68,18 @@ public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> whe
 {
     private readonly IAppender _appender;
     private readonly EventLogReader _reader;
+    private readonly RefCountedEventLogFeed _feed;
     private readonly EventCodec<TEvent, PostgresEventData, string> _eventCodec;
 
     internal PostgresEventStore(
         IAppender appender,
         EventLogReader reader,
+        RefCountedEventLogFeed feed,
         EventCodec<TEvent, PostgresEventData, string> eventCodec)
     {
         _appender = appender;
         _reader = reader;
+        _feed = feed;
         _eventCodec = eventCodec;
     }
 
@@ -181,7 +215,11 @@ public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> whe
         throw new NotImplementedException();
     }
 
-    public ValueTask DisposeAsync() => _appender.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+        await _appender.DisposeAsync().ConfigureAwait(false);
+        await _feed.DisposeAsync().ConfigureAwait(false);
+    }
 
     private async Task ThrowIfStreamNotFoundAsync(
         string streamId,

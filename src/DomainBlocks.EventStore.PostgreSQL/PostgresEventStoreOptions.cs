@@ -33,4 +33,9 @@ public sealed class PostgresEventStoreOptions
     /// that a slow consumer does not hold a pooled connection open for the whole enumeration.
     /// </summary>
     public int ReadBatchSize { get; set; } = 1_000;
+
+    /// <summary>
+    /// Configures the logical replication connection that feeds live subscriptions.
+    /// </summary>
+    public PostgresReplicationOptions Replication { get; set; } = new();
 }

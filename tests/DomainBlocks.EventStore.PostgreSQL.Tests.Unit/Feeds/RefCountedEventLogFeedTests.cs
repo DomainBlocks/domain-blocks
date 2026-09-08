@@ -121,6 +121,23 @@ public class RefCountedEventLogFeedTests
         await attachment.DisposeAsync();
     }
 
+    [Test]
+    public async Task DisposeAsync_DisposesConnectionAndRejectsFurtherAttachments()
+    {
+        var feed = new TestFeed();
+        var refCountedFeed = new RefCountedEventLogFeed(() => feed);
+        var attachment = await refCountedFeed.AttachAsync(new TestObserver());
+
+        await refCountedFeed.DisposeAsync();
+
+        feed.Connection!.DisposeCount.ShouldBe(1);
+        await Should.ThrowAsync<ObjectDisposedException>(() => refCountedFeed.AttachAsync(new TestObserver()));
+
+        // Detaching after disposal is harmless.
+        await attachment.DisposeAsync();
+        feed.Connection.DisposeCount.ShouldBe(1);
+    }
+
     private sealed class TestFeed : IEventLogFeed
     {
         private Exception? _attachException;

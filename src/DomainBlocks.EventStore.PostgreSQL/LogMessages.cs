@@ -44,6 +44,9 @@ internal static partial class LogMessages
     [LoggerMessage(LogLevel.Debug, "[feed: {FeedId}] started")]
     internal static partial void FeedStarted(this ILogger logger, string feedId);
 
+    [LoggerMessage(LogLevel.Debug, "[replication] created temporary slot {SlotName} (walsender pid {ProcessId})")]
+    internal static partial void ReplicationSlotCreated(this ILogger logger, string slotName, int processId);
+
     [LoggerMessage(LogLevel.Debug, "[feed: {FeedId}] connected ({Session})")]
     internal static partial void FeedConnected(this ILogger logger, string feedId, string session);
 
