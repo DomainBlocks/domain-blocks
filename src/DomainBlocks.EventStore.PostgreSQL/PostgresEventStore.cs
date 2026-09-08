@@ -89,7 +89,32 @@ public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> whe
         ReadOrigin<LogPosition>? origin = null,
         ReadAllOptions? options = null)
     {
-        throw new NotImplementedException();
+        return Impl();
+
+        async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Impl(
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            origin ??= direction == ReadDirection.Forward
+                ? ReadOrigin.Start<LogPosition>()
+                : ReadOrigin.End<LogPosition>();
+
+            options ??= ReadAllOptions.Default;
+
+            if (direction.ProducesEmptyReadFrom(origin))
+                yield break;
+
+            var firstKeyExclusive = EventLogSql.FirstKeyExclusive(direction, origin);
+
+            var rows = _reader.ReadAllAsync(
+                direction,
+                firstKeyExclusive,
+                options.MaxCount,
+                options.IncludeMetadata,
+                cancellationToken);
+
+            await foreach (var row in rows.ConfigureAwait(false))
+                yield return _eventCodec.Decoder.Decode(row);
+        }
     }
 
     public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadStream(

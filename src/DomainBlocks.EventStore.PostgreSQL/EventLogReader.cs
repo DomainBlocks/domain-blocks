@@ -32,6 +32,26 @@ internal sealed class EventLogReader(NpgsqlDataSource dataSource, EventLogSql sq
             cancellationToken);
     }
 
+    public IAsyncEnumerable<EventLogRow> ReadAllAsync(
+        ReadDirection direction,
+        long firstKeyExclusive,
+        long? maxCount,
+        bool includeMetadata,
+        CancellationToken cancellationToken)
+    {
+        return ReadPagesAsync(
+            sql.ReadAll(direction, includeMetadata),
+            (parameters, key, limit) =>
+            {
+                parameters.Add(new NpgsqlParameter<long> { TypedValue = key });
+                parameters.Add(new NpgsqlParameter<int> { TypedValue = limit });
+            },
+            firstKeyExclusive,
+            static row => row.Position,
+            maxCount,
+            cancellationToken);
+    }
+
     public async Task<bool> StreamExistsAsync(string streamId, CancellationToken cancellationToken)
     {
         await using var command = dataSource.CreateCommand(sql.StreamExists);

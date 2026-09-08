@@ -28,6 +28,11 @@ internal sealed class EventLogSql
         ReadStreamForwardWithoutMetadata = ReadStreamForward.Replace(Columns, ColumnsWithoutMetadata);
         ReadStreamBackwardWithoutMetadata = ReadStreamBackward.Replace(Columns, ColumnsWithoutMetadata);
 
+        ReadAllForward = $"SELECT {Columns} FROM {eventLog} WHERE position > $1 ORDER BY position LIMIT $2";
+        ReadAllBackward = $"SELECT {Columns} FROM {eventLog} WHERE position < $1 ORDER BY position DESC LIMIT $2";
+        ReadAllForwardWithoutMetadata = ReadAllForward.Replace(Columns, ColumnsWithoutMetadata);
+        ReadAllBackwardWithoutMetadata = ReadAllBackward.Replace(Columns, ColumnsWithoutMetadata);
+
         StreamExists = $"SELECT EXISTS (SELECT 1 FROM {eventLog} WHERE stream_id = $1)";
     }
 
@@ -39,6 +44,14 @@ internal sealed class EventLogSql
 
     public string ReadStreamBackwardWithoutMetadata { get; }
 
+    public string ReadAllForward { get; }
+
+    public string ReadAllBackward { get; }
+
+    public string ReadAllForwardWithoutMetadata { get; }
+
+    public string ReadAllBackwardWithoutMetadata { get; }
+
     public string StreamExists { get; }
 
     public string ReadStream(ReadDirection direction, bool includeMetadata)
@@ -49,6 +62,18 @@ internal sealed class EventLogSql
             (ReadDirection.Forward, false) => ReadStreamForwardWithoutMetadata,
             (ReadDirection.Backward, true) => ReadStreamBackward,
             (ReadDirection.Backward, false) => ReadStreamBackwardWithoutMetadata,
+            _ => throw new ArgumentOutOfRangeException(nameof(direction), direction, null)
+        };
+    }
+
+    public string ReadAll(ReadDirection direction, bool includeMetadata)
+    {
+        return (direction, includeMetadata) switch
+        {
+            (ReadDirection.Forward, true) => ReadAllForward,
+            (ReadDirection.Forward, false) => ReadAllForwardWithoutMetadata,
+            (ReadDirection.Backward, true) => ReadAllBackward,
+            (ReadDirection.Backward, false) => ReadAllBackwardWithoutMetadata,
             _ => throw new ArgumentOutOfRangeException(nameof(direction), direction, null)
         };
     }
