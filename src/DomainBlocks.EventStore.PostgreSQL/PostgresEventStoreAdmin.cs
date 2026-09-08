@@ -25,6 +25,7 @@ public static class PostgresEventStoreAdmin
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
         await ExecuteAsync(connection, SqlScripts.Schema(names), cancellationToken).ConfigureAwait(false);
+        await ExecuteAsync(connection, SqlScripts.AppendEvents(names), cancellationToken).ConfigureAwait(false);
 
         if (adminOptions.CreatePublication)
             await EnsurePublicationAsync(connection, names, cancellationToken).ConfigureAwait(false);

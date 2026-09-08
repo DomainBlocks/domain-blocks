@@ -9,6 +9,8 @@ internal static class SqlScripts
 
     public static string Schema(SqlNames names) => Load("schema.sql", names);
 
+    public static string AppendEvents(SqlNames names) => Load("append_events.sql", names);
+
     private static string Load(string fileName, SqlNames names)
     {
         var assembly = typeof(SqlScripts).Assembly;
