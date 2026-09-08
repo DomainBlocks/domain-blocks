@@ -52,6 +52,38 @@ internal sealed class EventLogReader(NpgsqlDataSource dataSource, EventLogSql sq
             cancellationToken);
     }
 
+    /// <summary>
+    /// Reads rows of the whole log after one position and up to another, inclusive. Used for subscription catch-up,
+    /// where the upper bound is the high-water mark read after attaching to the live feed.
+    /// </summary>
+    public IAsyncEnumerable<EventLogRow> ReadCatchUpAllAsync(
+        long afterExclusive,
+        long highWaterMark,
+        CancellationToken cancellationToken)
+    {
+        return ReadPagesAsync(
+            sql.ReadCatchUpAll,
+            (parameters, key, limit) =>
+            {
+                parameters.Add(new NpgsqlParameter<long> { TypedValue = key });
+                parameters.Add(new NpgsqlParameter<long> { TypedValue = highWaterMark });
+                parameters.Add(new NpgsqlParameter<int> { TypedValue = limit });
+            },
+            afterExclusive,
+            static row => row.Position,
+            null,
+            cancellationToken);
+    }
+
+    public async Task<long?> GetMaxPositionAsync(CancellationToken cancellationToken)
+    {
+        await using var command = dataSource.CreateCommand(sql.MaxPosition);
+
+        var result = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+
+        return result is DBNull or null ? null : (long)result;
+    }
+
     public async Task<bool> StreamExistsAsync(string streamId, CancellationToken cancellationToken)
     {
         await using var command = dataSource.CreateCommand(sql.StreamExists);

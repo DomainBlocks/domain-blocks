@@ -6,8 +6,9 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 public sealed class PostgresReplicationOptions
 {
     /// <summary>
-    /// The connection string for the replication connection. Defaults to the data source's connection string. The
-    /// role must have the REPLICATION attribute (or be a superuser) and the server must run with
+    /// The connection string for the replication connection. Defaults to the data source's connection string, which
+    /// only includes the password when <c>Persist Security Info=true</c>; otherwise set this explicitly. The role
+    /// must have the REPLICATION attribute (or be a superuser) and the server must run with
     /// <c>wal_level = logical</c>.
     /// </summary>
     public string? ConnectionString { get; set; }

@@ -34,6 +34,10 @@ internal sealed class EventLogSql
         ReadAllBackwardWithoutMetadata = ReadAllBackward.Replace(Columns, ColumnsWithoutMetadata);
 
         StreamExists = $"SELECT EXISTS (SELECT 1 FROM {eventLog} WHERE stream_id = $1)";
+        MaxPosition = $"SELECT max(position) FROM {eventLog}";
+
+        ReadCatchUpAll = $"SELECT {Columns} FROM {eventLog} " +
+                         "WHERE position > $1 AND position <= $2 ORDER BY position LIMIT $3";
     }
 
     public string ReadStreamForward { get; }
@@ -53,6 +57,10 @@ internal sealed class EventLogSql
     public string ReadAllBackwardWithoutMetadata { get; }
 
     public string StreamExists { get; }
+
+    public string MaxPosition { get; }
+
+    public string ReadCatchUpAll { get; }
 
     public string ReadStream(ReadDirection direction, bool includeMetadata)
     {

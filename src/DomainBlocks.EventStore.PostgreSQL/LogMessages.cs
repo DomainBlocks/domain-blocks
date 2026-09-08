@@ -27,6 +27,30 @@ internal static partial class LogMessages
     [LoggerMessage(LogLevel.Critical, "[append] loop failed; further appends will be rejected")]
     internal static partial void AppendLoopFailed(this ILogger logger, Exception exception);
 
+    [LoggerMessage(LogLevel.Information, "[sub: {SubscriptionId}] started")]
+    internal static partial void SubscriptionStarted(this ILogger logger, string subscriptionId);
+
+    [LoggerMessage(LogLevel.Debug, "[sub: {SubscriptionId}] catch-up boundary is {HighWaterMark}")]
+    internal static partial void CatchUpBoundary(this ILogger logger, string subscriptionId, long? highWaterMark);
+
+    [LoggerMessage(LogLevel.Information, "[sub: {SubscriptionId}] caught up")]
+    internal static partial void SubscriptionCaughtUp(this ILogger logger, string subscriptionId);
+
+    [LoggerMessage(LogLevel.Warning, "[sub: {SubscriptionId}] fell behind; restarting from last position")]
+    internal static partial void SubscriptionFellBehind(this ILogger logger, string subscriptionId);
+
+    [LoggerMessage(LogLevel.Warning, "[sub: {SubscriptionId}] feed was reset; restarting from last position")]
+    internal static partial void SubscriptionFeedReset(this ILogger logger, string subscriptionId);
+
+    [LoggerMessage(LogLevel.Debug, "[sub: {SubscriptionId}] canceled")]
+    internal static partial void SubscriptionCanceled(this ILogger logger, string subscriptionId);
+
+    [LoggerMessage(LogLevel.Error, "[sub: {SubscriptionId}] failed")]
+    internal static partial void SubscriptionFailed(this ILogger logger, Exception exception, string subscriptionId);
+
+    [LoggerMessage(LogLevel.Information, "[sub: {SubscriptionId}] stopped")]
+    internal static partial void SubscriptionStopped(this ILogger logger, string subscriptionId);
+
     [LoggerMessage(LogLevel.Debug, "[feed: {FeedId}, obs: {ObserverId}, count: {ObserverCount}] attached")]
     internal static partial void ObserverAttached(
         this ILogger logger,

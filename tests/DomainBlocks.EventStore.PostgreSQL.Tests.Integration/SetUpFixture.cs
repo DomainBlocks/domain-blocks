@@ -30,6 +30,10 @@ public class SetUpFixture
         var builder = new NpgsqlDataSourceBuilder(_server.ConnectionString);
         builder.ConnectionStringBuilder.MaxAutoPrepare = 16;
 
+        // The replication connection is built from the data source's connection string, which only carries the
+        // password when security info is persisted.
+        builder.ConnectionStringBuilder.PersistSecurityInfo = true;
+
         ConnectionString = builder.ConnectionStringBuilder.ConnectionString;
         DataSource = builder.Build();
 

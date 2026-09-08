@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Codecs;
 using DomainBlocks.EventStore.PostgreSQL.Feeds;
+using DomainBlocks.EventStore.PostgreSQL.Subscriptions;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 
@@ -31,7 +32,7 @@ public static class PostgresEventStore
         var reader = new EventLogReader(dataSource, new EventLogSql(names), options.ReadBatchSize);
         var feed = CreateFeed(dataSource, names, options, logger);
 
-        return new PostgresEventStore<TEvent>(appender, reader, feed, eventCodec);
+        return new PostgresEventStore<TEvent>(appender, reader, feed, eventCodec, logger);
     }
 
     private static RefCountedEventLogFeed CreateFeed(
@@ -70,17 +71,20 @@ public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> whe
     private readonly EventLogReader _reader;
     private readonly RefCountedEventLogFeed _feed;
     private readonly EventCodec<TEvent, PostgresEventData, string> _eventCodec;
+    private readonly ILogger? _logger;
 
     internal PostgresEventStore(
         IAppender appender,
         EventLogReader reader,
         RefCountedEventLogFeed feed,
-        EventCodec<TEvent, PostgresEventData, string> eventCodec)
+        EventCodec<TEvent, PostgresEventData, string> eventCodec,
+        ILogger? logger)
     {
         _appender = appender;
         _reader = reader;
         _feed = feed;
         _eventCodec = eventCodec;
+        _logger = logger;
     }
 
     public async Task AppendAsync(
@@ -204,7 +208,14 @@ public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> whe
         SubscriptionOrigin<LogPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
-        throw new NotImplementedException();
+        return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
+            origin,
+            options,
+            AllStreamsTarget.Instance,
+            _reader,
+            _feed,
+            _eventCodec.Decoder,
+            _logger);
     }
 
     public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
