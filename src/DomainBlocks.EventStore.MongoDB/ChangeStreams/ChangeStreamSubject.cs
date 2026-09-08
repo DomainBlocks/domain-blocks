@@ -167,13 +167,13 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
 
             try
             {
-                BsonDocument? lastResumeToken = null;
+                BsonDocument? resumeToken = null;
 
                 while (true)
                 {
                     _stopCts.Token.ThrowIfCancellationRequested();
 
-                    using var cursor = await GetChangeStreamCursorAsync(lastResumeToken).ConfigureAwait(false);
+                    using var cursor = await GetChangeStreamCursorAsync(resumeToken).ConfigureAwait(false);
                     _logger?.ChangeStreamConnected(_subjectId);
                     _subject._connectedTcs.TrySetResult();
 
@@ -186,7 +186,7 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
                             foreach (var result in cursor.Current)
                             {
                                 await _state.NotifyNextAsync(result, _stopCts.Token).ConfigureAwait(false);
-                                lastResumeToken = _resumeTokenSelector(result);
+                                resumeToken = _resumeTokenSelector(result);
                                 batchCount++;
                             }
 
@@ -194,7 +194,7 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
 
                             var batchResumeToken = cursor.GetResumeToken();
                             if (batchResumeToken is not null)
-                                lastResumeToken = batchResumeToken;
+                                resumeToken = batchResumeToken;
                         }
 
                         // A live change stream is expected to remain open. Log a warning and reconnect.
@@ -234,14 +234,14 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
             }
         }
 
-        private async Task<IChangeStreamCursor<TResult>> GetChangeStreamCursorAsync(BsonDocument? lastResumeToken)
+        private async Task<IChangeStreamCursor<TResult>> GetChangeStreamCursorAsync(BsonDocument? resumeToken)
         {
             var options = _subject._options.MongoOptions;
 
-            if (lastResumeToken is not null)
+            if (resumeToken is not null)
             {
                 options = options.Copy();
-                options.ResumeAfter = lastResumeToken;
+                options.ResumeAfter = resumeToken;
                 options.StartAfter = null;
                 options.StartAtOperationTime = null;
             }
