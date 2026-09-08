@@ -11,6 +11,7 @@
     <Project Path="benchmarks/DomainBlocks.EventStore.Benchmarks/DomainBlocks.EventStore.Benchmarks.csproj" />
   </Folder>
   <Folder Name="/docs/">
+    <File Path="docs/postgresql-event-store-plan.md" />
     <File Path="docs/vision.md" />
   </Folder>
   <Folder Name="/src/">
