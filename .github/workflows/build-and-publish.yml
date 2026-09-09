@@ -42,23 +42,8 @@ jobs:
       - name: Test
         run: dotnet test --no-build --configuration Release --verbosity normal
 
-      - name: Determine package version
-        id: version
-        shell: bash
-        run: |
-          BASE_VERSION=$(dotnet msbuild -getProperty:VersionPrefix)
-          SHORT_SHA="${GITHUB_SHA::7}"
-
-          if [[ "${{ github.event_name }}" == "push" ]]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-          else
-            VERSION="${BASE_VERSION}-dev.${SHORT_SHA}.${GITHUB_RUN_NUMBER}"
-          fi
-
-          echo "Publishing version: $VERSION"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
       - name: Pack
+        if: github.event_name == 'push'
         run: |
           dotnet pack \
             --no-build \
@@ -68,7 +53,20 @@ jobs:
             --include-symbols \
             --include-source \
             -p:SymbolPackageFormat=snupkg \
-            -p:PackageVersion="${{ steps.version.outputs.version }}"
+            -p:PackageVersion="${GITHUB_REF_NAME#v}"
+
+      - name: Pack development version
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          dotnet pack \
+            --no-build \
+            --no-restore \
+            --configuration Release \
+            --output ./packages \
+            --include-symbols \
+            --include-source \
+            -p:SymbolPackageFormat=snupkg \
+            -p:VersionSuffix="dev.${GITHUB_SHA::7}.${GITHUB_RUN_NUMBER}"
 
       - name: NuGet login
         if: github.event_name == 'push'
