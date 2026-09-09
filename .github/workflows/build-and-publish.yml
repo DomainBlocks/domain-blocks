@@ -1,0 +1,94 @@
+name: Build and Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch or ref to publish'
+        required: true
+        default: 'main'
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test --no-build --configuration Release --verbosity normal
+
+      - name: Determine package version
+        id: version
+        shell: bash
+        run: |
+          BASE_VERSION=$(dotnet msbuild -getProperty:VersionPrefix)
+          SHORT_SHA="${GITHUB_SHA::7}"
+
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="${BASE_VERSION}-dev.${SHORT_SHA}.${GITHUB_RUN_NUMBER}"
+          fi
+
+          echo "Publishing version: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Pack
+        run: |
+          dotnet pack \
+            --no-build \
+            --no-restore \
+            --configuration Release \
+            --output ./packages \
+            --include-symbols \
+            --include-source \
+            -p:SymbolPackageFormat=snupkg \
+            -p:PackageVersion="${{ steps.version.outputs.version }}"
+
+      - name: NuGet login
+        if: github.event_name == 'push'
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Publish to NuGet.org
+        if: github.event_name == 'push'
+        run: |
+          dotnet nuget push "./packages/*.nupkg" \
+            --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
+            --source "https://api.nuget.org/v3/index.json" \
+            --skip-duplicate
+
+      - name: Publish to GitHub Packages
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          dotnet nuget push "./packages/*.nupkg" \
+            --api-key "${{ secrets.GITHUB_TOKEN }}" \
+            --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
+            --skip-duplicate
