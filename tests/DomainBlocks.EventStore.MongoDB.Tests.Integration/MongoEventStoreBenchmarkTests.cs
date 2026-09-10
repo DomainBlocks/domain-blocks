@@ -1,4 +1,4 @@
-﻿using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.ContractMapping;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Integration;
@@ -10,14 +10,22 @@ namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 [TestFixture]
 public class MongoEventStoreBenchmarkTests : EventStoreBenchmarkTests<StreamPosition, LogPosition>
 {
-    private MongoEventStoreOptions _options = null!;
+    private readonly MongoEventStoreOptions _options = new() { DatabaseName = "dbx_es_benchmark_tests" };
 
-    [OneTimeSetUp]
-    public async Task OneTimeSetUp()
+    [OneTimeTearDown]
+    public async Task OneTimeTearDown()
     {
-        _options = new MongoEventStoreOptions { DatabaseName = "dbx_es_benchmark_tests" };
+        await SetUpFixture.MongoClient.DropDatabaseAsync(_options.DatabaseName);
+    }
+
+    protected override async Task ResetStoreAsync()
+    {
+        await SetUpFixture.MongoClient.DropDatabaseAsync(_options.DatabaseName);
         await MongoEventStoreAdmin.EnsureInitializedAsync(SetUpFixture.MongoClient, _options);
     }
+
+    protected override Task<string?> DescribeStoreAsync() =>
+        Task.FromResult<string?>($"MongoEventStore: database {_options.DatabaseName}");
 
     protected override IEventStore<object, string, StreamPosition, LogPosition> CreateEventStore(
         EventTypeMap eventTypeMap,
