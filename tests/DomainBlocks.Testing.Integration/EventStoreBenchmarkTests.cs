@@ -1,13 +1,17 @@
-﻿using System.Collections.Concurrent;
-using System.Diagnostics;
-using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.TypeMapping;
+using DomainBlocks.Testing.Integration.Benchmarking;
 using NUnit.Framework;
+using Shouldly;
 
 namespace DomainBlocks.Testing.Integration;
 
+/// <summary>
+/// Append benchmarks shared by every store. Each test writes one small event per append to a new stream, which is the
+/// cheapest possible append and therefore measures the store's ceiling rather than a workload. Results are printed
+/// to the test output; the tests only fail if an operation errors, since a throughput figure with errors is invalid.
+/// </summary>
 public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos> :
     EventStoreTestBase<object, string, TStreamPos, TLogPos>
     where TStreamPos : notnull
@@ -15,163 +19,91 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos> :
 {
     private readonly EventTypeMap _eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>());
 
-    private IEventStore<object, string, TStreamPos, TLogPos> EventStore { get; set; } = null!;
-
     [SetUp]
-    public void SetUp()
-    {
-        EventStore = CreateEventStore(_eventTypeMap);
-    }
+    public Task SetUp() => ResetStoreAsync();
 
-    [TearDown]
-    public async Task TearDown()
-    {
-        if (EventStore is IAsyncDisposable asyncDisposable)
-            await asyncDisposable.DisposeAsync();
-    }
+    /// <summary>
+    /// Returns the store to an empty log so that a benchmark's result does not depend on which tests ran before it.
+    /// </summary>
+    protected virtual Task ResetStoreAsync() => Task.CompletedTask;
 
+    /// <summary>
+    /// Describes the store and any options that affect the result, for the report header.
+    /// </summary>
+    protected virtual Task<string?> DescribeStoreAsync() => Task.FromResult<string?>(null);
+
+    /// <summary>
+    /// Unloaded append latency: one append in flight at a time.
+    /// </summary>
     [Test]
     [Explicit("Benchmark")]
-    [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task AppendAsync_SingleAppend_MeasureLatency(CancellationToken ct)
+    [CancelAfter(TestTimeouts.BenchmarkMillis)]
+    public async Task AppendAsync_MeasureLatency(CancellationToken ct)
     {
-        const int warmupIterations = 10;
-        const int iterations = 100;
+        var eventStore = CreateEventStore(_eventTypeMap);
+        await using var disposable = eventStore as IAsyncDisposable;
 
-        for (var i = 0; i < warmupIterations; i++)
-            await AppendAsync(EventStore, "warmup", ct);
+        var runner = new AppendBenchmarkRunner();
 
-        var latencies = new List<double>(iterations);
+        var result = await runner.MeasureLatencyAsync(
+            (_, streamId, token) => AppendAsync(eventStore, streamId, token),
+            new LatencyOptions(),
+            ct);
 
-        for (var i = 0; i < iterations; i++)
-        {
-            var streamId = $"test-{Guid.NewGuid():N}";
-            var sw = Stopwatch.StartNew();
-            await AppendAsync(EventStore, streamId, ct);
-            sw.Stop();
-            latencies.Add(sw.Elapsed.TotalMilliseconds);
-        }
+        await BenchmarkReport.WriteEnvironmentAsync(eventStore.GetType(), await DescribeStoreAsync());
+        await BenchmarkReport.WriteLatencyAsync("append latency, 1 in flight, 1 event per append, new stream per append", result);
 
-        var sorted = latencies.OrderBy(x => x).ToList();
-        await TestContext.Out.WriteLineAsync($"p50:  {sorted[Percentile(0.50)]:F1} ms");
-        await TestContext.Out.WriteLineAsync($"p90:  {sorted[Percentile(0.90)]:F1} ms");
-        await TestContext.Out.WriteLineAsync($"p99:  {sorted[Percentile(0.99)]:F1} ms");
-        await TestContext.Out.WriteLineAsync($"min:  {sorted[0]:F1} ms");
-        await TestContext.Out.WriteLineAsync($"max:  {sorted[^1]:F1} ms");
-        await TestContext.Out.WriteLineAsync($"mean: {latencies.Average():F1} ms");
-
-        return;
-
-        int Percentile(double p) => (int)Math.Ceiling(sorted.Count * p) - 1;
+        result.Errors.ShouldBe(0, "a latency figure with failed appends is not meaningful");
+        result.Latencies.Count.ShouldBeGreaterThan(0);
     }
 
-    [Test]
+    /// <summary>
+    /// Append throughput with a fixed number of closed-loop workers spread over one or more store instances. The
+    /// ceiling is the plateau across the cases, not any single case; latency under that load is reported alongside.
+    /// </summary>
+    [TestCase(1, 1)]
+    [TestCase(1, 10)]
+    [TestCase(1, 100)]
+    [TestCase(1, 1_000)]
+    [TestCase(4, 1_000)]
     [Explicit("Benchmark")]
-    [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task AppendAsync_MeasureThroughputCeiling(CancellationToken ct)
+    [CancelAfter(TestTimeouts.BenchmarkMillis)]
+    public async Task AppendAsync_MeasureThroughput(int instanceCount, int inFlight, CancellationToken ct)
     {
-        const int instanceCount = 1;
-        const int maxInFlight = 1000;
-        const int warmUpSeconds = 3;
-        const int measureSeconds = 15;
-
-        // Create a pool of event store instances
         var instances = new IEventStore<object, string, TStreamPos, TLogPos>[instanceCount];
         for (var i = 0; i < instanceCount; i++)
             instances[i] = CreateEventStore(_eventTypeMap, loggerNameSuffix: $"_{i}");
 
         try
         {
-            var semaphore = new SemaphoreSlim(maxInFlight, maxInFlight);
-            var ops = 0;
-            var errors = 0;
-            var isInMeasureWindow = new StrongBox<bool>(false);
-            var random = Random.Shared;
+            var runner = new AppendBenchmarkRunner();
 
-            var runCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            runCts.CancelAfter(TimeSpan.FromSeconds(warmUpSeconds + measureSeconds));
-
-            var pendingTasks = new ConcurrentBag<Task>();
-
-            var producerLoopTask = Task.Run(
-                async () =>
-                {
-                    using (runCts)
-                    {
-                        while (!runCts.IsCancellationRequested)
-                        {
-                            try
-                            {
-                                await semaphore.WaitAsync(runCts.Token);
-                            }
-                            catch (OperationCanceledException)
-                            {
-                                break;
-                            }
-
-                            var isMeasuring = isInMeasureWindow.Value;
-                            var instance = instances[random.Next(instanceCount)]; // randomly pick an instance
-
-                            var task = AppendAsync(instance, $"test-{Guid.NewGuid():N}", runCts.Token).ContinueWith(
-                                t =>
-                                {
-                                    semaphore.Release();
-
-                                    if (t.IsCompletedSuccessfully)
-                                    {
-                                        if (isMeasuring)
-                                            Interlocked.Increment(ref ops);
-                                    }
-                                    else if (t.IsFaulted)
-                                    {
-                                        Interlocked.Increment(ref errors);
-                                    }
-                                },
-                                TaskScheduler.Default);
-
-                            pendingTasks.Add(task);
-                        }
-                    }
-                },
+            var result = await runner.MeasureThroughputAsync(
+                (workerIndex, streamId, token) => AppendAsync(instances[workerIndex % instanceCount], streamId, token),
+                new ThroughputOptions { InFlight = inFlight },
                 ct);
 
-            // Warm-up
-            await Task.Delay(TimeSpan.FromSeconds(warmUpSeconds), ct);
+            await BenchmarkReport.WriteEnvironmentAsync(instances[0].GetType(), await DescribeStoreAsync());
+            await BenchmarkReport.WriteThroughputAsync(
+                $"append throughput, {instanceCount} instance(s), {inFlight:N0} in flight, 1 event per append, new stream per append",
+                result);
 
-            // Measure
-            isInMeasureWindow.Value = true;
-            var start = Stopwatch.GetTimestamp();
-            await Task.Delay(TimeSpan.FromSeconds(measureSeconds), ct);
-
-            // Stop
-            isInMeasureWindow.Value = false;
-            var elapsed = Stopwatch.GetElapsedTime(start);
-            await producerLoopTask;
-            await Task.WhenAll(pendingTasks).WaitAsync(ct);
-
-            var throughput = ops / elapsed.TotalSeconds;
-
-            await TestContext.Out.WriteLineAsync($"instances:     {instanceCount}");
-            await TestContext.Out.WriteLineAsync($"max in-flight: {maxInFlight:N0}");
-            await TestContext.Out.WriteLineAsync($"ops measured:  {ops:N0}");
-            await TestContext.Out.WriteLineAsync($"errors:        {errors:N0}");
-            await TestContext.Out.WriteLineAsync($"elapsed:       {elapsed.TotalMilliseconds:N0} ms");
-            await TestContext.Out.WriteLineAsync($"throughput:    {throughput:N0} ops/sec");
+            result.Errors.ShouldBe(0, "a throughput figure with failed appends is not meaningful");
+            result.Completed.ShouldBeGreaterThan(0);
         }
         finally
         {
             foreach (var instance in instances.OfType<IAsyncDisposable>())
-                await instance.DisposeAsync().AsTask().WaitAsync(ct);
+                await instance.DisposeAsync();
         }
     }
 
-    private static async Task AppendAsync(
+    private static Task AppendAsync(
         IEventStore<object, string, TStreamPos, TLogPos> instance,
         string streamId,
         CancellationToken ct)
     {
         object[] events = [new TestEvent { Value = "Benchmark" }];
-
-        await instance.AppendAsync(streamId, events, cancellationToken: ct);
+        return instance.AppendAsync(streamId, events, cancellationToken: ct);
     }
 }

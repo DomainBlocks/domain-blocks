@@ -128,13 +128,37 @@ a long-running transaction delays the first subscription and reconnects.
 
 ## Benchmarks
 
-Measured with the `[Explicit("Benchmark")]` tests against `postgres:17` in Docker Desktop on a Windows laptop; a real
-deployment with network latency and synchronous replication will differ.
+The `[Explicit("Benchmark")]` tests in `PostgresEventStoreBenchmarkTests` measure the store end to end (codec included)
+against a throw-away `postgres:17` container. They are skipped by a plain `dotnet test`; run them explicitly, in
+Release, and read the results from the test output:
 
-| Benchmark | Result |
-|---|---|
-| Append throughput, one instance, 1,000 in flight, one event per append | ~22,700 appends/s |
-| Append latency, sequential single-event appends | p50 0.8 ms, p99 1.0 ms |
+```shell
+dotnet test tests/DomainBlocks.EventStore.PostgreSQL.Tests.Integration -c Release \
+  --filter "FullyQualifiedName~PostgresEventStoreBenchmarkTests" --logger "console;verbosity=detailed"
+```
+
+Methodology:
+
+- Every append writes one small JSON event to a new stream, the cheapest possible append, so the figures are the
+  store's ceiling rather than a workload.
+- `AppendAsync_MeasureLatency` runs one append at a time after a warm-up on the same code path and reports
+  percentiles over 10,000 samples.
+- `AppendAsync_MeasureThroughput` runs a fixed number of closed-loop workers (1 to 1,000 in flight, over 1 or 4 store
+  instances), warms up for 5 s and measures for 15 s by snapshotting a completion counter, so no in-flight append is
+  cancelled or double counted. It also reports per-second stability and latency under that load. The throughput
+  ceiling is the plateau across the cases.
+- `SubscribeToAll_MeasureLiveLatency` appends one event and waits for a live subscription to deliver it, repeatedly.
+- `NoOpEventStoreBenchmarkTests` in `DomainBlocks.EventStore.Tests.Unit` runs the same tests against a store whose
+  appends do nothing, giving the harness's own ceiling. A store figure close to that ceiling is a harness limit.
+- Each report starts with the environment (OS, CPU count, runtime, GC mode, build configuration) and the store and
+  server settings that affect the result (`AppendBatchSize`, `wal_writer_delay`, `synchronous_commit`, `fsync`,
+  `shared_buffers`). A Debug build or attached debugger is flagged as non-representative.
+
+Results depend heavily on the machine: with Docker Desktop the server runs in a VM behind a virtual network and disk,
+and the container keeps PostgreSQL's defaults (`synchronous_commit = on`, `fsync = on`, `shared_buffers = 128MB`). A
+real deployment with network latency and synchronous replication will differ. Figures previously measured with an
+earlier, single-point version of these tests on a Windows laptop were ~22,700 appends/s at 1,000 in flight and
+p50 0.8 ms for sequential appends; re-run the suite for current numbers on your hardware.
 
 Append-to-observe latency for a live subscription was ~200 ms at p50 with the server defaults and ~10 ms with
 `wal_writer_delay = 10ms`: on this server the logical walsender is woken by the WAL writer's flush cycle, so
