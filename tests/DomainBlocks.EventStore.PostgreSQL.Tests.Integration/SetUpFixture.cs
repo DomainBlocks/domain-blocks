@@ -10,6 +10,8 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 [SetUpFixture]
 public class SetUpFixture
 {
+    public const string LogLevelEnvironmentVariable = "DBX_TEST_LOG_LEVEL";
+
     private static PostgresServer _server = null!;
 
     public static NpgsqlDataSource DataSource { get; private set; } = null!;
@@ -23,9 +25,15 @@ public class SetUpFixture
     {
         _server = await PostgresServer.StartAsync();
 
+        // Set DBX_TEST_LOG_LEVEL=Trace to see per-batch append logging, e.g. when investigating benchmark results.
+        var logLevel = Enum.TryParse<LogLevel>(
+            Environment.GetEnvironmentVariable(LogLevelEnvironmentVariable), true, out var configured)
+            ? configured
+            : LogLevel.Debug;
+
         LoggerFactory = Microsoft.Extensions.Logging.LoggerFactory.Create(x => x
-            .AddProvider(new NUnitLoggerProvider())
-            .SetMinimumLevel(LogLevel.Debug));
+            .AddProvider(new NUnitLoggerProvider(logLevel))
+            .SetMinimumLevel(logLevel));
 
         var builder = new NpgsqlDataSourceBuilder(_server.ConnectionString);
         builder.ConnectionStringBuilder.MaxAutoPrepare = 16;
