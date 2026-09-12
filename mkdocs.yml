@@ -1,0 +1,32 @@
+﻿site_name: DomainBlocks
+site_url: https://domainblocks.io
+
+repo_url: https://github.com/DomainBlocks/domain-blocks
+repo_name: domain-blocks
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
+  features:
+    - content.action.edit
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+
+nav:
+  - Home: index.md

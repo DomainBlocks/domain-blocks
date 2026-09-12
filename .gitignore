@@ -54,8 +54,11 @@ TestResult.xml
 nunit-*.xml
 
 # JetBrains Rider
-.idea
+.idea/
 *.user
 
 # Generated code
 **/[Gg]enerated/
+
+# MkDocs generated site
+site/
