@@ -10,7 +10,7 @@ public class RefCountedEventLogFeedTests
     public async Task Attach_FirstObserver_ConnectsFeed()
     {
         var feed = new TestFeed();
-        var refCountedFeed = new RefCountedEventLogFeed(() => feed);
+        var refCountedFeed = new RefCountedEventLogFeed<long>(() => feed);
 
         await using var attachment = await refCountedFeed.AttachAsync(new TestObserver());
 
@@ -22,7 +22,7 @@ public class RefCountedEventLogFeedTests
     public async Task Attach_MultipleObservers_SharesConnection()
     {
         var feed = new TestFeed();
-        var refCountedFeed = new RefCountedEventLogFeed(() => feed);
+        var refCountedFeed = new RefCountedEventLogFeed<long>(() => feed);
 
         await using var attachment1 = await refCountedFeed.AttachAsync(new TestObserver());
         await using var attachment2 = await refCountedFeed.AttachAsync(new TestObserver());
@@ -36,7 +36,7 @@ public class RefCountedEventLogFeedTests
     public async Task DisposeAsync_LastAttachment_DisposesConnection()
     {
         var feed = new TestFeed();
-        var refCountedFeed = new RefCountedEventLogFeed(() => feed);
+        var refCountedFeed = new RefCountedEventLogFeed<long>(() => feed);
 
         var attachment1 = await refCountedFeed.AttachAsync(new TestObserver());
         var attachment2 = await refCountedFeed.AttachAsync(new TestObserver());
@@ -56,7 +56,7 @@ public class RefCountedEventLogFeedTests
     public async Task DisposeAsync_DisposeMultipleTimes_DetachesOnlyOnce()
     {
         var feed = new TestFeed();
-        var refCountedFeed = new RefCountedEventLogFeed(() => feed);
+        var refCountedFeed = new RefCountedEventLogFeed<long>(() => feed);
         var attachment = await refCountedFeed.AttachAsync(new TestObserver());
 
         await attachment.DisposeAsync();
@@ -71,7 +71,7 @@ public class RefCountedEventLogFeedTests
     {
         var feeds = new List<TestFeed>();
 
-        var refCountedFeed = new RefCountedEventLogFeed(() =>
+        var refCountedFeed = new RefCountedEventLogFeed<long>(() =>
         {
             var feed = new TestFeed();
             feeds.Add(feed);
@@ -105,7 +105,7 @@ public class RefCountedEventLogFeedTests
     public async Task Attach_WhenAttachmentFails_PropagatesError()
     {
         var feed = new TestFeed();
-        var refCountedFeed = new RefCountedEventLogFeed(() => feed);
+        var refCountedFeed = new RefCountedEventLogFeed<long>(() => feed);
         var attachment = await refCountedFeed.AttachAsync(new TestObserver());
         var exception = new InvalidOperationException();
         feed.FaultOnNextAttach(exception);
@@ -125,7 +125,7 @@ public class RefCountedEventLogFeedTests
     public async Task DisposeAsync_DisposesConnectionAndRejectsFurtherAttachments()
     {
         var feed = new TestFeed();
-        var refCountedFeed = new RefCountedEventLogFeed(() => feed);
+        var refCountedFeed = new RefCountedEventLogFeed<long>(() => feed);
         var attachment = await refCountedFeed.AttachAsync(new TestObserver());
 
         await refCountedFeed.DisposeAsync();
@@ -138,7 +138,7 @@ public class RefCountedEventLogFeedTests
         feed.Connection.DisposeCount.ShouldBe(1);
     }
 
-    private sealed class TestFeed : IEventLogFeed
+    private sealed class TestFeed : IEventLogFeed<long>
     {
         private Exception? _attachException;
 
@@ -147,7 +147,7 @@ public class RefCountedEventLogFeedTests
         public int ConnectCount { get; private set; }
         public TestConnection? Connection { get; private set; }
 
-        public IDisposable Attach(IEventLogObserver observer, string correlationId = "unknown")
+        public IDisposable Attach(IEventLogObserver<long> observer, string correlationId = "unknown")
         {
             AttachCount++;
 
@@ -199,9 +199,9 @@ public class RefCountedEventLogFeedTests
         }
     }
 
-    private sealed class TestObserver : IEventLogObserver
+    private sealed class TestObserver : IEventLogObserver<long>
     {
-        public ValueTask OnNextAsync(EventLogRow row, CancellationToken cancellationToken) => default;
+        public ValueTask OnNextAsync(long position, CancellationToken cancellationToken) => default;
 
         public ValueTask OnResetAsync(CancellationToken cancellationToken) => default;
 

@@ -6,17 +6,18 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Unit.Feeds;
 /// <summary>
 /// Records what the feed delivers, in order, as readable strings: "row:{position}", "reset" or "error".
 /// </summary>
-internal sealed class RecordingObserver : IEventLogObserver
+internal sealed class RecordingObserver : IEventLogObserver<long>
 {
     private readonly Channel<string> _channel = Channel.CreateUnbounded<string>();
+
     private readonly TaskCompletionSource<Exception> _errorTcs =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public Task<Exception> Error => _errorTcs.Task;
 
-    public ValueTask OnNextAsync(EventLogRow row, CancellationToken cancellationToken)
+    public ValueTask OnNextAsync(long position, CancellationToken cancellationToken)
     {
-        _channel.Writer.TryWrite($"row:{row.Position}");
+        _channel.Writer.TryWrite($"row:{position}");
         return ValueTask.CompletedTask;
     }
 

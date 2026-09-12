@@ -4,8 +4,8 @@ namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 /// Connects the underlying feed when the first observer is attached and disconnects it when the last observer is
 /// detached. A feed whose connection has completed or faulted is replaced on the next attach.
 /// </summary>
-internal sealed class RefCountedEventLogFeed(Func<IEventLogFeed> feedFactory) :
-    IRefCountedEventLogFeed,
+internal sealed class RefCountedEventLogFeed<T>(Func<IEventLogFeed<T>> feedFactory) :
+    IRefCountedEventLogFeed<T>,
     IAsyncDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -13,7 +13,7 @@ internal sealed class RefCountedEventLogFeed(Func<IEventLogFeed> feedFactory) :
     private bool _disposed;
 
     public async Task<IAsyncDisposable> AttachAsync(
-        IEventLogObserver observer,
+        IEventLogObserver<T> observer,
         string correlationId = "unknown",
         CancellationToken cancellationToken = default)
     {
@@ -113,9 +113,9 @@ internal sealed class RefCountedEventLogFeed(Func<IEventLogFeed> feedFactory) :
             await connectionToDispose.DisposeAsync().ConfigureAwait(false);
     }
 
-    private sealed class FeedConnection(IEventLogFeed feed, IEventLogFeedConnection connection)
+    private sealed class FeedConnection(IEventLogFeed<T> feed, IEventLogFeedConnection connection)
     {
-        public IEventLogFeed Feed { get; } = feed;
+        public IEventLogFeed<T> Feed { get; } = feed;
         public IEventLogFeedConnection Connection { get; } = connection;
         public int RefCount { get; set; }
         public bool IsDisposed { get; set; }

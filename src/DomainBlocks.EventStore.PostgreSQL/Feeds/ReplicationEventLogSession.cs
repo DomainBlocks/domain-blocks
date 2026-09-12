@@ -1,4 +1,6 @@
 using System.Runtime.CompilerServices;
+using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.Abstractions.Codecs;
 using Microsoft.Extensions.Logging;
 using Npgsql.Replication;
 using Npgsql.Replication.PgOutput;
@@ -6,9 +8,33 @@ using Npgsql.Replication.PgOutput.Messages;
 
 namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 
+internal static class ReplicationEventLogSession
+{
+    public static Task<IEventLogSession<ReadEvent<TEvent, string, StreamPosition, LogPosition>>> OpenAsync<TEvent>(
+        string connectionString,
+        string slotName,
+        SqlNames names,
+        PostgresReplicationOptions options,
+        IEventDecoder<TEvent, PostgresEventData, string> decoder,
+        ILogger? logger,
+        CancellationToken cancellationToken)
+        where TEvent : notnull
+    {
+        return ReplicationEventLogSession<TEvent>.OpenAsync(
+            connectionString,
+            slotName,
+            names,
+            options,
+            decoder,
+            logger,
+            cancellationToken);
+    }
+}
+
 /// <summary>
-/// A logical replication session over a temporary pgoutput slot. Rows of committed event log inserts are yielded in
-/// commit order, which is also position order because appends serialize on the sequence row.
+/// A logical replication session over a temporary pgoutput slot. Committed event log inserts are decoded straight
+/// into events and yielded in commit order, which is also position order because appends serialize on the sequence
+/// row.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -20,32 +46,38 @@ namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 /// process, so no WAL is retained on behalf of a consumer that never returns.
 /// </para>
 /// </remarks>
-internal sealed class ReplicationEventLogSession : IEventLogSession
+internal sealed class ReplicationEventLogSession<TEvent> :
+    IEventLogSession<ReadEvent<TEvent, string, StreamPosition, LogPosition>>
+    where TEvent : notnull
 {
     private readonly LogicalReplicationConnection _connection;
     private readonly PgOutputReplicationSlot _slot;
     private readonly PgOutputReplicationOptions _pgOutputOptions;
     private readonly SqlNames _names;
+    private readonly IEventDecoder<TEvent, PostgresEventData, string> _decoder;
 
     private ReplicationEventLogSession(
         LogicalReplicationConnection connection,
         PgOutputReplicationSlot slot,
         PgOutputReplicationOptions pgOutputOptions,
-        SqlNames names)
+        SqlNames names,
+        IEventDecoder<TEvent, PostgresEventData, string> decoder)
     {
         _connection = connection;
         _slot = slot;
         _pgOutputOptions = pgOutputOptions;
         _names = names;
+        _decoder = decoder;
     }
 
     public string Description => $"slot {_slot.Name}";
 
-    public static async Task<IEventLogSession> OpenAsync(
+    public static async Task<IEventLogSession<ReadEvent<TEvent, string, StreamPosition, LogPosition>>> OpenAsync(
         string connectionString,
         string slotName,
         SqlNames names,
         PostgresReplicationOptions options,
+        IEventDecoder<TEvent, PostgresEventData, string> decoder,
         ILogger? logger,
         CancellationToken cancellationToken)
     {
@@ -76,7 +108,7 @@ internal sealed class ReplicationEventLogSession : IEventLogSession
                 binary: options.UseBinaryProtocol,
                 streamingMode: PgOutputStreamingMode.Off);
 
-            return new ReplicationEventLogSession(connection, slot, pgOutputOptions, names);
+            return new ReplicationEventLogSession<TEvent>(connection, slot, pgOutputOptions, names, decoder);
         }
         catch
         {
@@ -85,7 +117,7 @@ internal sealed class ReplicationEventLogSession : IEventLogSession
         }
     }
 
-    public async IAsyncEnumerable<EventLogRow> ReadRowsAsync(
+    public async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var messages = _connection.StartReplication(_slot, _pgOutputOptions, cancellationToken);
@@ -111,7 +143,8 @@ internal sealed class ReplicationEventLogSession : IEventLogSession
                         relationId = insert.Relation.RelationId;
                     }
 
-                    yield return await ReadRowAsync(insert.NewRow, columnMap, cancellationToken).ConfigureAwait(false);
+                    yield return await ReadEventAsync(insert.NewRow, columnMap, cancellationToken)
+                        .ConfigureAwait(false);
                     break;
 
                 case CommitMessage commit:
@@ -133,7 +166,7 @@ internal sealed class ReplicationEventLogSession : IEventLogSession
         return relation.Namespace == _names.Schema && relation.RelationName == SqlNames.EventLogTableName;
     }
 
-    private static async ValueTask<EventLogRow> ReadRowAsync(
+    private async ValueTask<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadEventAsync(
         ReplicationTuple tuple,
         ColumnMap columnMap,
         CancellationToken cancellationToken)
@@ -199,7 +232,7 @@ internal sealed class ReplicationEventLogSession : IEventLogSession
             ? PostgresEventData.FromJson(json)
             : PostgresEventData.FromBytes(bytes ?? []);
 
-        return new EventLogRow(
+        return _decoder.Decode(
             position,
             streamId,
             streamPosition,

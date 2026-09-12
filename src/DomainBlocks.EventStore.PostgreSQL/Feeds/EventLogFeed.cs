@@ -6,18 +6,18 @@ using Polly.Retry;
 namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 
 /// <summary>
-/// Pumps rows from an <see cref="IEventLogSession"/> to attached observers, re-establishing the session with backoff
+/// Pumps items from an <see cref="IEventLogSession{T}"/> to attached observers, re-establishing the session with backoff
 /// when it is lost. Observers are told about every re-established session via
-/// <see cref="IEventLogObserver.OnResetAsync"/>, before any row of the new session is delivered, because a new session
+/// <see cref="IEventLogObserver<T>{T}.OnResetAsync"/>, before any row of the new session is delivered, because a new session
 /// only sees rows committed after its own establishment point.
 /// </summary>
 /// <remarks>
 /// Ported from the MongoDB change stream subject. Unlike a change stream there is no resume token: recovering the
 /// rows missed during an outage is the observer's job, which it does by re-reading from its last position.
 /// </remarks>
-internal sealed class EventLogFeed : IEventLogFeed
+internal sealed class EventLogFeed<T> : IEventLogFeed<T>
 {
-    private readonly EventLogSessionFactory _sessionFactory;
+    private readonly EventLogSessionFactory<T> _sessionFactory;
     private readonly EventLogFeedOptions _options;
     private readonly ILogger? _logger;
     private readonly ConnectionState _connectionState;
@@ -26,7 +26,7 @@ internal sealed class EventLogFeed : IEventLogFeed
     private int _connected;
 
     public EventLogFeed(
-        EventLogSessionFactory sessionFactory,
+        EventLogSessionFactory<T> sessionFactory,
         EventLogFeedOptions? options = null,
         ILogger? logger = null)
     {
@@ -40,7 +40,7 @@ internal sealed class EventLogFeed : IEventLogFeed
         _connectionState = new ConnectionState(logger, _feedId);
     }
 
-    public IDisposable Attach(IEventLogObserver observer, string correlationId = "unknown")
+    public IDisposable Attach(IEventLogObserver<T> observer, string correlationId = "unknown")
     {
         return _connectionState.Attach(observer, correlationId);
     }
@@ -74,8 +74,8 @@ internal sealed class EventLogFeed : IEventLogFeed
         throw new InvalidOperationException("The event log feed completed before it connected.");
     }
 
-    private static EventLogSessionFactory AddResilience(
-        EventLogSessionFactory sessionFactory,
+    private static EventLogSessionFactory<T> AddResilience(
+        EventLogSessionFactory<T> sessionFactory,
         EventLogFeedOptions options,
         ILogger? logger,
         string feedId)
@@ -113,7 +113,7 @@ internal sealed class EventLogFeed : IEventLogFeed
 
     private sealed class Connection : IEventLogFeedConnection
     {
-        private readonly EventLogFeed _feed;
+        private readonly EventLogFeed<T> _feed;
         private readonly ConnectionState _state;
         private readonly ILogger? _logger;
         private readonly string _feedId;
@@ -122,7 +122,7 @@ internal sealed class EventLogFeed : IEventLogFeed
         private readonly TaskCompletionSource _completionTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _disposed;
 
-        public Connection(EventLogFeed feed)
+        public Connection(EventLogFeed<T> feed)
         {
             _feed = feed;
             _state = feed._connectionState;
@@ -181,8 +181,8 @@ internal sealed class EventLogFeed : IEventLogFeed
 
                         try
                         {
-                            await foreach (var row in session.ReadRowsAsync(_stopCts.Token).ConfigureAwait(false))
-                                await _state.NotifyNextAsync(row, _stopCts.Token).ConfigureAwait(false);
+                            await foreach (var item in session.ReadAsync(_stopCts.Token).ConfigureAwait(false))
+                                await _state.NotifyNextAsync(item, _stopCts.Token).ConfigureAwait(false);
 
                             // A live session is expected to remain open. Log a warning and reconnect.
                             _logger?.FeedEnded(_feedId);
@@ -227,7 +227,7 @@ internal sealed class EventLogFeed : IEventLogFeed
     {
         private State _state = new([]);
 
-        public IDisposable Attach(IEventLogObserver observer, string observerId)
+        public IDisposable Attach(IEventLogObserver<T> observer, string observerId)
         {
             var attachment = new Attachment(observer, observerId, Detach);
 
@@ -250,13 +250,13 @@ internal sealed class EventLogFeed : IEventLogFeed
             return attachment;
         }
 
-        public async ValueTask NotifyNextAsync(EventLogRow row, CancellationToken cancellationToken)
+        public async ValueTask NotifyNextAsync(T item, CancellationToken cancellationToken)
         {
             foreach (var attachment in Volatile.Read(ref _state).Attachments)
             {
                 try
                 {
-                    await attachment.Observer.OnNextAsync(row, cancellationToken).ConfigureAwait(false);
+                    await attachment.Observer.OnNextAsync(item, cancellationToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
@@ -369,12 +369,13 @@ internal sealed class EventLogFeed : IEventLogFeed
             public Completion? Completion { get; } = completion;
         }
 
-        private sealed class Attachment(IEventLogObserver observer, string observerId, Action<Attachment> onDispose) :
-            IDisposable
+        private sealed class Attachment(IEventLogObserver<T> observer, string observerId, Action<Attachment> onDispose)
+            :
+                IDisposable
         {
             private int _disposed;
 
-            public IEventLogObserver Observer { get; } = observer;
+            public IEventLogObserver<T> Observer { get; } = observer;
             public string ObserverId { get; } = observerId;
 
             public void Dispose()

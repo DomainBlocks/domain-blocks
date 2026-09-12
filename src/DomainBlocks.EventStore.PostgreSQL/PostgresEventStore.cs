@@ -28,17 +28,25 @@ public static class PostgresEventStore
 
         var names = new SqlNames(options.Schema);
         var appender = new BatchingAppender(dataSource, names, options, logger);
-        var reader = new EventLogReader(dataSource, new EventLogSql(names), options.ReadBatchSize);
-        var feed = CreateFeed(dataSource, names, options, logger);
+
+        var reader = new EventLogReader<TEvent>(
+            dataSource,
+            new EventLogSql(names),
+            options.ReadBatchSize,
+            eventCodec.Decoder);
+
+        var feed = CreateFeed(dataSource, names, options, eventCodec.Decoder, logger);
 
         return new PostgresEventStore<TEvent>(appender, reader, feed, eventCodec, logger);
     }
 
-    private static RefCountedEventLogFeed CreateFeed(
+    private static RefCountedEventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>> CreateFeed<TEvent>(
         NpgsqlDataSource dataSource,
         SqlNames names,
         PostgresEventStoreOptions options,
+        IEventDecoder<TEvent, PostgresEventData, string> decoder,
         ILogger? logger)
+        where TEvent : notnull
     {
         var replicationOptions = options.Replication;
         var connectionString = replicationOptions.ConnectionString ?? dataSource.ConnectionString;
@@ -51,31 +59,33 @@ public static class PostgresEventStore
             MaxRetryAttempts = replicationOptions.MaxRetryAttempts
         };
 
-        return new RefCountedEventLogFeed(() => new EventLogFeed(
-            cancellationToken => ReplicationEventLogSession.OpenAsync(
-                connectionString,
-                slotNames.Next(),
-                names,
-                replicationOptions,
-                logger,
-                cancellationToken),
-            feedOptions,
-            logger));
+        return new RefCountedEventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>>(() =>
+            new EventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>>(
+                cancellationToken => ReplicationEventLogSession.OpenAsync(
+                    connectionString,
+                    slotNames.Next(),
+                    names,
+                    replicationOptions,
+                    decoder,
+                    logger,
+                    cancellationToken),
+                feedOptions,
+                logger));
     }
 }
 
 public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> where TEvent : notnull
 {
     private readonly IAppender _appender;
-    private readonly EventLogReader _reader;
-    private readonly RefCountedEventLogFeed _feed;
+    private readonly EventLogReader<TEvent> _reader;
+    private readonly RefCountedEventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>> _feed;
     private readonly EventCodec<TEvent, PostgresEventData, string> _eventCodec;
     private readonly ILogger? _logger;
 
     internal PostgresEventStore(
         IAppender appender,
-        EventLogReader reader,
-        RefCountedEventLogFeed feed,
+        EventLogReader<TEvent> reader,
+        RefCountedEventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>> feed,
         EventCodec<TEvent, PostgresEventData, string> eventCodec,
         ILogger? logger)
     {
@@ -142,15 +152,15 @@ public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> whe
 
             var firstKeyExclusive = EventLogSql.FirstKeyExclusive(direction, origin);
 
-            var rows = _reader.ReadAllAsync(
+            var events = _reader.ReadAllAsync(
                 direction,
                 firstKeyExclusive,
                 options.MaxCount,
                 options.IncludeMetadata,
                 cancellationToken);
 
-            await foreach (var row in rows.ConfigureAwait(false))
-                yield return _eventCodec.Decoder.Decode(row);
+            await foreach (var e in events.ConfigureAwait(false))
+                yield return e;
         }
     }
 
@@ -182,7 +192,7 @@ public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> whe
             var firstKeyExclusive = EventLogSql.FirstKeyExclusive(direction, origin);
             var isEmpty = true;
 
-            var rows = _reader.ReadStreamAsync(
+            var events = _reader.ReadStreamAsync(
                 streamId,
                 direction,
                 firstKeyExclusive,
@@ -190,10 +200,10 @@ public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> whe
                 options.IncludeMetadata,
                 cancellationToken);
 
-            await foreach (var row in rows.ConfigureAwait(false))
+            await foreach (var e in events.ConfigureAwait(false))
             {
                 isEmpty = false;
-                yield return _eventCodec.Decoder.Decode(row);
+                yield return e;
             }
 
             // Unlike an empty edge-case read, an empty result here may simply mean the origin is beyond the end of an
@@ -210,7 +220,6 @@ public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> whe
         return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
             _reader,
             _feed,
-            _eventCodec.Decoder,
             static (reader, pos, hwMark, ct) => reader.ReadCatchUpAllAsync(pos, hwMark, ct),
             static _ => true,
             static ctx => ctx.LogPosition,
@@ -229,9 +238,8 @@ public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> whe
         return new SubscriptionAsyncEnumerable<TEvent, StreamPosition>(
             _reader,
             _feed,
-            _eventCodec.Decoder,
             (reader, pos, hwMark, ct) => reader.ReadCatchUpStreamAsync(streamId, pos, hwMark, ct),
-            row => row.StreamId == streamId,
+            ctx => ctx.StreamId == streamId,
             static ctx => ctx.StreamPosition,
             origin,
             options,

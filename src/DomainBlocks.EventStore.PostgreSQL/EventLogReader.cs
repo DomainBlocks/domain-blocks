@@ -1,16 +1,22 @@
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.Abstractions.Codecs;
 using Npgsql;
 
 namespace DomainBlocks.EventStore.PostgreSQL;
 
 /// <summary>
-/// Reads event log rows in pages so that a consumer-paced enumeration never pins a pooled connection for its whole
-/// duration.
+/// Reads events in pages so that a consumer-paced enumeration never pins a pooled connection for its whole duration.
+/// Rows are decoded straight from the data reader, without an intermediate row object.
 /// </summary>
-internal sealed class EventLogReader(NpgsqlDataSource dataSource, EventLogSql sql, int batchSize)
+internal sealed class EventLogReader<TEvent>(
+    NpgsqlDataSource dataSource,
+    EventLogSql sql,
+    int batchSize,
+    IEventDecoder<TEvent, PostgresEventData, string> decoder)
+    where TEvent : notnull
 {
-    public IAsyncEnumerable<EventLogRow> ReadStreamAsync(
+    public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadStreamAsync(
         string streamId,
         ReadDirection direction,
         long firstKeyExclusive,
@@ -27,12 +33,12 @@ internal sealed class EventLogReader(NpgsqlDataSource dataSource, EventLogSql sq
                 parameters.Add(new NpgsqlParameter<int> { TypedValue = limit });
             },
             firstKeyExclusive,
-            static row => row.StreamPosition,
+            static e => (long)e.Context.StreamPosition.Value,
             maxCount,
             cancellationToken);
     }
 
-    public IAsyncEnumerable<EventLogRow> ReadAllAsync(
+    public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAllAsync(
         ReadDirection direction,
         long firstKeyExclusive,
         long? maxCount,
@@ -47,16 +53,16 @@ internal sealed class EventLogReader(NpgsqlDataSource dataSource, EventLogSql sq
                 parameters.Add(new NpgsqlParameter<int> { TypedValue = limit });
             },
             firstKeyExclusive,
-            static row => row.Position,
+            static e => (long)e.Context.LogPosition.Value,
             maxCount,
             cancellationToken);
     }
 
     /// <summary>
-    /// Reads rows of the whole log after one position and up to another, inclusive. Used for subscription catch-up,
-    /// where the upper bound is the high-water mark read after attaching to the live feed.
+    /// Reads events of the whole log after one position and up to another, inclusive. Used for subscription
+    /// catch-up, where the upper bound is the high-water mark read after attaching to the live feed.
     /// </summary>
-    public IAsyncEnumerable<EventLogRow> ReadCatchUpAllAsync(
+    public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCatchUpAllAsync(
         long afterExclusive,
         long highWaterMark,
         CancellationToken cancellationToken)
@@ -70,15 +76,15 @@ internal sealed class EventLogReader(NpgsqlDataSource dataSource, EventLogSql sq
                 parameters.Add(new NpgsqlParameter<int> { TypedValue = limit });
             },
             afterExclusive,
-            static row => row.Position,
+            static e => (long)e.Context.LogPosition.Value,
             null,
             cancellationToken);
     }
 
     /// <summary>
-    /// Reads rows of one stream after a stream position, bounded by a global high-water mark.
+    /// Reads events of one stream after a stream position, bounded by a global high-water mark.
     /// </summary>
-    public IAsyncEnumerable<EventLogRow> ReadCatchUpStreamAsync(
+    public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCatchUpStreamAsync(
         string streamId,
         long afterExclusive,
         long highWaterMark,
@@ -94,7 +100,7 @@ internal sealed class EventLogReader(NpgsqlDataSource dataSource, EventLogSql sq
                 parameters.Add(new NpgsqlParameter<int> { TypedValue = limit });
             },
             afterExclusive,
-            static row => row.StreamPosition,
+            static e => (long)e.Context.StreamPosition.Value,
             null,
             cancellationToken);
     }
@@ -116,11 +122,11 @@ internal sealed class EventLogReader(NpgsqlDataSource dataSource, EventLogSql sq
         return (bool)(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
     }
 
-    private async IAsyncEnumerable<EventLogRow> ReadPagesAsync(
+    private async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadPagesAsync(
         string pageSql,
         Action<NpgsqlParameterCollection, long, int> bindPage,
         long firstKeyExclusive,
-        Func<EventLogRow, long> keyOf,
+        Func<ReadEvent<TEvent, string, StreamPosition, LogPosition>, long> keyOf,
         long? maxCount,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
@@ -140,10 +146,10 @@ internal sealed class EventLogReader(NpgsqlDataSource dataSource, EventLogSql sq
 
                 while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                 {
-                    var row = ReadRow(reader);
-                    key = keyOf(row);
+                    var readEvent = ReadEvent(reader);
+                    key = keyOf(readEvent);
                     count++;
-                    yield return row;
+                    yield return readEvent;
                 }
             }
 
@@ -155,7 +161,7 @@ internal sealed class EventLogReader(NpgsqlDataSource dataSource, EventLogSql sq
     }
 
     // Columns are read in ascending ordinal order so that CommandBehavior.SequentialAccess could be enabled later.
-    private static EventLogRow ReadRow(NpgsqlDataReader reader)
+    private ReadEvent<TEvent, string, StreamPosition, LogPosition> ReadEvent(NpgsqlDataReader reader)
     {
         var position = reader.GetInt64(0);
         var streamId = reader.GetString(1);
@@ -169,6 +175,6 @@ internal sealed class EventLogReader(NpgsqlDataSource dataSource, EventLogSql sq
         var metadata = reader.IsDBNull(6) ? null : reader.GetString(6);
         var createdAt = reader.GetFieldValue<DateTimeOffset>(7);
 
-        return new EventLogRow(position, streamId, streamPosition, eventName, eventData, metadata, createdAt);
+        return decoder.Decode(position, streamId, streamPosition, eventName, eventData, metadata, createdAt);
     }
 }

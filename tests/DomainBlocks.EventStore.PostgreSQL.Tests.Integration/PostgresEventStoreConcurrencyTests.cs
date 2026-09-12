@@ -92,24 +92,25 @@ public class PostgresEventStoreConcurrencyTests
     {
         var streamId = $"new-{Guid.NewGuid():N}";
 
-        var results = await Task.WhenAll(_instances.Select(
-            async Task<(bool Success, StreamAppendConflictException<StreamPosition>? Exception)> (instance) =>
-        {
-            try
+        var results = await Task.WhenAll(
+            _instances.Select(async
+                Task<(bool Success, StreamAppendConflictException<StreamPosition>? Exception)> (instance) =>
             {
-                await instance.AppendAsync(
-                    streamId,
-                    [new TestEvent { Value = "create" }],
-                    ExpectedStreamState.DoesNotExist<StreamPosition>(),
-                    cancellationToken: ct);
+                try
+                {
+                    await instance.AppendAsync(
+                        streamId,
+                        [new TestEvent { Value = "create" }],
+                        ExpectedStreamState.DoesNotExist<StreamPosition>(),
+                        cancellationToken: ct);
 
-                return (true, null);
-            }
-            catch (StreamAppendConflictException<StreamPosition> ex)
-            {
-                return (false, ex);
-            }
-        }));
+                    return (true, null);
+                }
+                catch (StreamAppendConflictException<StreamPosition> ex)
+                {
+                    return (false, ex);
+                }
+            }));
 
         results.Count(r => r.Success).ShouldBe(1, "Exactly one writer must succeed in creating the stream");
         results.Count(r => !r.Success).ShouldBe(InstanceCount - 1, "All other writers must receive a conflict");
@@ -136,24 +137,24 @@ public class PostgresEventStoreConcurrencyTests
 
         await _instances[0].AppendAsync(streamId, [new TestEvent { Value = "seed" }], cancellationToken: ct);
 
-        var results = await Task.WhenAll(_instances.Select(
-            async Task<(bool Success, StreamAppendConflictException? Exception)> (instance) =>
-        {
-            try
+        var results = await Task.WhenAll(
+            _instances.Select(async Task<(bool Success, StreamAppendConflictException? Exception)> (instance) =>
             {
-                await instance.AppendAsync(
-                    streamId,
-                    [new TestEvent { Value = "raced" }],
-                    ExpectedStreamState.AtVersion(new StreamPosition(0)),
-                    cancellationToken: ct);
+                try
+                {
+                    await instance.AppendAsync(
+                        streamId,
+                        [new TestEvent { Value = "raced" }],
+                        ExpectedStreamState.AtVersion(new StreamPosition(0)),
+                        cancellationToken: ct);
 
-                return (true, null);
-            }
-            catch (StreamAppendConflictException ex)
-            {
-                return (false, ex);
-            }
-        }));
+                    return (true, null);
+                }
+                catch (StreamAppendConflictException ex)
+                {
+                    return (false, ex);
+                }
+            }));
 
         results.Count(r => r.Success).ShouldBe(1, "Exactly one writer must win the version race");
         results.Count(r => !r.Success).ShouldBe(InstanceCount - 1, "All other writers must be rejected");
@@ -172,9 +173,13 @@ public class PostgresEventStoreConcurrencyTests
 
         var streamIds = _instances.Select(_ => $"indep-{Guid.NewGuid():N}").ToList();
 
-        var tasks = _instances.Select((instance, i) =>
-            Task.WhenAll(Enumerable.Range(0, eventCountPerInstance).Select(j =>
-                instance.AppendAsync(streamIds[i], [new TestEvent { Value = $"e{j}" }], cancellationToken: ct))));
+        var tasks = _instances
+            .Select((instance, i) => Task.WhenAll(Enumerable
+                .Range(0, eventCountPerInstance)
+                .Select(j => instance.AppendAsync(
+                    streamIds[i],
+                    [new TestEvent { Value = $"e{j}" }],
+                    cancellationToken: ct))));
 
         await Task.WhenAll(tasks);
 
@@ -183,7 +188,9 @@ public class PostgresEventStoreConcurrencyTests
             var rows = await _client.ReadRowsAsync(streamId);
 
             rows.Count.ShouldBe(eventCountPerInstance, $"Stream {streamId} must have {eventCountPerInstance} events");
-            rows.Select(x => x.StreamPosition)
+
+            rows
+                .Select(x => x.StreamPosition)
                 .ShouldBe(Enumerable.Range(0, eventCountPerInstance).Select(i => (long)i));
         }
     }

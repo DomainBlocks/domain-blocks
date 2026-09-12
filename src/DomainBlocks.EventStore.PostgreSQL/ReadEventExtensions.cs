@@ -7,16 +7,23 @@ internal static class ReadEventExtensions
 {
     extension<TEvent>(IEventDecoder<TEvent, PostgresEventData, string> decoder) where TEvent : notnull
     {
-        public ReadEvent<TEvent, string, StreamPosition, LogPosition> Decode(EventLogRow row)
+        public ReadEvent<TEvent, string, StreamPosition, LogPosition> Decode(
+            long position,
+            string streamId,
+            long streamPosition,
+            string eventName,
+            PostgresEventData eventData,
+            string? rawMetadata,
+            DateTimeOffset createdAt)
         {
-            var (payload, metadata) = decoder.Decode(row.EventName, row.EventData, row.Metadata);
+            var (payload, metadata) = decoder.Decode(eventName, eventData, rawMetadata);
 
             var context = ReadEventContext.Create(
-                row.StreamId,
+                streamId,
                 metadata,
-                row.CreatedAt,
-                StreamPosition.FromInt64(row.StreamPosition),
-                LogPosition.FromInt64(row.Position));
+                createdAt,
+                StreamPosition.FromInt64(streamPosition),
+                LogPosition.FromInt64(position));
 
             return ReadEvent.Create(payload, context);
         }

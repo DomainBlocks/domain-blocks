@@ -1,9 +1,9 @@
 namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 
-internal interface IRefCountedEventLogFeed
+internal interface IRefCountedEventLogFeed<out T>
 {
     Task<IAsyncDisposable> AttachAsync(
-        IEventLogObserver observer,
+        IEventLogObserver<T> observer,
         string correlationId = "unknown",
         CancellationToken cancellationToken = default);
 }

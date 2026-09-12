@@ -107,13 +107,13 @@ public class EventLogFeedTests
     {
         var attempts = 0;
 
-        var feed = new EventLogFeed(
+        var feed = new EventLogFeed<long>(
             _ =>
             {
                 attempts++;
                 return attempts < 3
                     ? throw new IOException("not yet")
-                    : Task.FromResult<IEventLogSession>(new ScriptedSession("s1", Row(1)));
+                    : Task.FromResult<IEventLogSession<long>>(new ScriptedSession("s1", Row(1)));
             },
             FastRetryOptions,
             _logger);
@@ -132,7 +132,7 @@ public class EventLogFeedTests
     {
         var exception = new IOException("still down");
 
-        var feed = new EventLogFeed(
+        var feed = new EventLogFeed<long>(
             _ => throw exception,
             new EventLogFeedOptions
             {
@@ -204,7 +204,7 @@ public class EventLogFeedTests
     {
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        var feed = new EventLogFeed(
+        var feed = new EventLogFeed<long>(
             async _ =>
             {
                 await release.Task;
@@ -227,7 +227,7 @@ public class EventLogFeedTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task ConnectAsync_WhenCancelledDuringRetryBackoff_StopsTheFeed(CancellationToken ct)
     {
-        var feed = new EventLogFeed(
+        var feed = new EventLogFeed<long>(
             _ => throw new IOException("down"),
             new EventLogFeedOptions { RetryDelay = TimeSpan.FromMinutes(1), MaxRetryDelay = TimeSpan.FromMinutes(1) },
             _logger);
@@ -268,11 +268,11 @@ public class EventLogFeedTests
         await feed.ConnectAsync(ct).ShouldThrowAsync<InvalidOperationException>();
     }
 
-    private EventLogFeed CreateFeed(params IEventLogSession[] sessions)
+    private EventLogFeed<long> CreateFeed(params IEventLogSession<long>[] sessions)
     {
-        var queue = new Queue<IEventLogSession>(sessions);
+        var queue = new Queue<IEventLogSession<long>>(sessions);
 
-        return new EventLogFeed(
+        return new EventLogFeed<long>(
             _ => Task.FromResult(queue.Count > 0
                 ? queue.Dequeue()
                 : throw new InvalidOperationException("The test ran out of scripted sessions.")),
@@ -280,12 +280,12 @@ public class EventLogFeedTests
             _logger);
     }
 
-    private sealed class ThrowingObserver(bool throwOnNext = false, bool throwOnReset = false) : IEventLogObserver
+    private sealed class ThrowingObserver(bool throwOnNext = false, bool throwOnReset = false) : IEventLogObserver<long>
     {
         public int NextCount { get; private set; }
         public int ResetCount { get; private set; }
 
-        public ValueTask OnNextAsync(EventLogRow row, CancellationToken cancellationToken)
+        public ValueTask OnNextAsync(long position, CancellationToken cancellationToken)
         {
             NextCount++;
             return throwOnNext ? throw new InvalidOperationException("The test observer failed.") : default;

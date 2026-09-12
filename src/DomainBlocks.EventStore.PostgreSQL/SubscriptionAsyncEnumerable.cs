@@ -1,7 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.Abstractions.Codecs;
 using DomainBlocks.EventStore.PostgreSQL.Feeds;
 using Microsoft.Extensions.Logging;
 
@@ -27,11 +26,10 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> : IAsyncEnumerab
     where TEvent : notnull
     where TPos : struct, IPosition<TPos>
 {
-    private readonly EventLogReader _reader;
-    private readonly IRefCountedEventLogFeed _feed;
-    private readonly IEventDecoder<TEvent, PostgresEventData, string> _decoder;
-    private readonly Func<EventLogReader, long, long, CancellationToken, IAsyncEnumerable<EventLogRow>> _catchUpReader;
-    private readonly Func<EventLogRow, bool> _livePredicate;
+    private readonly EventLogReader<TEvent> _reader;
+    private readonly IRefCountedEventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>> _feed;
+    private readonly CatchUpReader _catchUpReader;
+    private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, bool> _livePredicate;
     private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> _positionSelector;
     private readonly SubscriptionOrigin<TPos> _origin;
     private readonly SubscriptionOptions _options;
@@ -39,11 +37,10 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> : IAsyncEnumerab
     private readonly string _correlationId;
 
     public SubscriptionAsyncEnumerable(
-        EventLogReader reader,
-        IRefCountedEventLogFeed feed,
-        IEventDecoder<TEvent, PostgresEventData, string> decoder,
-        Func<EventLogReader, long, long, CancellationToken, IAsyncEnumerable<EventLogRow>> catchUpReader,
-        Func<EventLogRow, bool> livePredicate,
+        EventLogReader<TEvent> reader,
+        IRefCountedEventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>> feed,
+        CatchUpReader catchUpReader,
+        Func<ReadEventContext<string, StreamPosition, LogPosition>, bool> livePredicate,
         Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> positionSelector,
         SubscriptionOrigin<TPos>? origin,
         SubscriptionOptions? options,
@@ -56,7 +53,6 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> : IAsyncEnumerab
         _positionSelector = positionSelector;
         _reader = reader;
         _feed = feed;
-        _decoder = decoder;
         _logger = logger;
 
         _correlationId = _options.CorrelationId is { } id
@@ -224,10 +220,10 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> : IAsyncEnumerab
                     ? checked((long)after.Position.Value)
                     : -1;
 
-                var rows = _catchUpReader(_reader, afterExclusive, highWaterMark.Value, catchUpCts.Token);
+                var events = _catchUpReader(_reader, afterExclusive, highWaterMark.Value, catchUpCts.Token);
 
-                await foreach (var row in rows.ConfigureAwait(false))
-                    yield return SubscriptionMessage.Event.Create(_decoder.Decode(row));
+                await foreach (var e in events.ConfigureAwait(false))
+                    yield return SubscriptionMessage.Event.Create(e);
             }
         }
 
@@ -235,14 +231,20 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> : IAsyncEnumerab
 
         yield return new SubscriptionMessage.CaughtUp();
 
-        await foreach (var row in observer.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+        await foreach (var e in observer.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
         {
-            if (row.Position <= highWaterMark || !_livePredicate(row))
+            if ((long)e.Context.LogPosition.Value <= highWaterMark || !_livePredicate(e.Context))
                 continue;
 
-            yield return SubscriptionMessage.Event.Create(_decoder.Decode(row));
+            yield return SubscriptionMessage.Event.Create(e);
         }
     }
+
+    public delegate IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> CatchUpReader(
+        EventLogReader<TEvent> reader,
+        long afterExclusive,
+        long highWaterMark,
+        CancellationToken cancellationToken);
 
     private enum RestartReason
     {
@@ -252,30 +254,35 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> : IAsyncEnumerab
     }
 
     /// <summary>
-    /// Buffers live rows for one subscription cycle. Never blocks the feed: an overflow, like a feed reset, cancels the
-    /// restart token and completes the channel so that the cycle ends and a new one starts from the last position.
+    /// Buffers live events for one subscription cycle. Never blocks the feed: an overflow, like a feed reset, cancels
+    /// the restart token and completes the channel so that the cycle ends and a new one starts from the last position.
     /// </summary>
-    private sealed class Observer(int queueCapacity) : IEventLogObserver, IDisposable
+    private sealed class Observer(int queueCapacity) :
+        IEventLogObserver<ReadEvent<TEvent, string, StreamPosition, LogPosition>>,
+        IDisposable
     {
-        private readonly Channel<EventLogRow> _channel = Channel.CreateBounded<EventLogRow>(
-            new BoundedChannelOptions(queueCapacity)
-            {
-                SingleWriter = true,
-                SingleReader = true
-            });
+        private readonly Channel<ReadEvent<TEvent, string, StreamPosition, LogPosition>> _channel =
+            Channel.CreateBounded<ReadEvent<TEvent, string, StreamPosition, LogPosition>>(
+                new BoundedChannelOptions(queueCapacity)
+                {
+                    SingleWriter = true,
+                    SingleReader = true
+                });
 
         private readonly CancellationTokenSource _restartCts = new();
         private int _restartReason;
 
-        public ChannelReader<EventLogRow> Reader => _channel.Reader;
+        public ChannelReader<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Reader => _channel.Reader;
 
         public CancellationToken RestartToken => _restartCts.Token;
 
         public RestartReason RestartReason => (RestartReason)Volatile.Read(ref _restartReason);
 
-        public ValueTask OnNextAsync(EventLogRow row, CancellationToken cancellationToken)
+        public ValueTask OnNextAsync(
+            ReadEvent<TEvent, string, StreamPosition, LogPosition> e,
+            CancellationToken cancellationToken)
         {
-            if (!_channel.Writer.TryWrite(row))
+            if (!_channel.Writer.TryWrite(e))
                 Restart(RestartReason.QueueOverflow);
 
             return ValueTask.CompletedTask;

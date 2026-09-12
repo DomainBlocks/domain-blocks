@@ -1,11 +1,11 @@
 namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 
 /// <summary>
-/// A single live feed of event log rows that fans out to any number of observers.
+/// A single live feed of event log items that fans out to any number of observers.
 /// </summary>
-internal interface IEventLogFeed
+internal interface IEventLogFeed<out T>
 {
-    IDisposable Attach(IEventLogObserver observer, string correlationId = "unknown");
+    IDisposable Attach(IEventLogObserver<T> observer, string correlationId = "unknown");
 
     Task<IEventLogFeedConnection> ConnectAsync(CancellationToken cancellationToken = default);
 }
