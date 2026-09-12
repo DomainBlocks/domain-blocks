@@ -109,7 +109,8 @@ public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> whe
         ThrowIfContainsNul(streamId, nameof(streamId));
 
         expectedState ??= ExpectedStreamState.Any<StreamPosition>();
-        commitId ??= Guid.NewGuid();
+        // Time-ordered ids keep inserts into the commit id index append-mostly rather than scattered across it.
+        commitId ??= Guid.CreateVersion7();
         options ??= AppendOptions.Default;
 
         var encodedEvents = _eventCodec.Encoder.Encode(events).ToArray();

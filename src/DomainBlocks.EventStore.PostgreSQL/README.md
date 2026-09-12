@@ -67,6 +67,14 @@ All writes must go through `append_events`; writing to `event_log` directly brea
 to `append_events`. Because appends serialize on the sequence row, batching is what recovers throughput under
 concurrent load. Every request in a batch is evaluated independently: one conflict never aborts the others.
 
+A batch whose stream ids are all distinct is committed by a single set-based statement. A batch that repeats a stream
+id is processed request by request inside the function, so that later requests observe the head left by earlier
+ones; this path is several times slower per request, so a workload that appends to few streams from many callers
+gets less benefit from batching than one spread across many streams.
+
+When no `commitId` is supplied the store generates a time-ordered (version 7) UUID, which keeps inserts into the
+`commit_id` index append-mostly.
+
 `AppendOptions.Timeout` bounds how long the caller waits. A request whose caller times out or cancels after it was
 queued is still committed when its batch runs.
 

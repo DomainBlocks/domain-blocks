@@ -7,6 +7,11 @@
 -- Each request is evaluated independently: a conflict or duplicate is reported as a result row and does not abort
 -- the batch. Only protocol violations (mismatched arrays, invalid kinds) raise, which faults the whole batch.
 --
+-- A batch whose stream ids are all distinct is committed by one set-based statement (the common case under load,
+-- and the fast one: PL/pgSQL statement overhead is paid once per batch rather than twice per request). A batch that
+-- repeats a stream id falls back to a per-request loop, because a later request must observe the head left by an
+-- earlier request to the same stream, and whether that earlier request appended depends on its own observed head.
+--
 -- Codes:
 --   expected kind: 0 Any, 1 DoesNotExist, 2 Exists, 3 AtVersion
 --   status:        0 Appended, 1 Conflict, 2 Duplicate
@@ -40,6 +45,7 @@ DECLARE
     v_created_at       timestamptz;
     v_existing_commits uuid[];
     v_seen_commits     uuid[] := '{}';
+    v_distinct_streams bigint;
 
     v_stream_id        text;
     v_expected_kind    smallint;
@@ -120,6 +126,107 @@ BEGIN
         FROM __schema__.event_log AS e
         WHERE e.commit_id = ANY (p_commit_ids));
 
+    SELECT count(DISTINCT s.stream_id) INTO v_distinct_streams
+    FROM unnest(p_stream_ids) AS s(stream_id);
+
+    IF v_distinct_streams = v_request_count THEN
+        -- Fast path. Every step is a set operation over the batch; the data-modifying CTEs run exactly once
+        -- regardless of what the final SELECT consumes. Output aliases avoid the RETURNS TABLE column names so that
+        -- PL/pgSQL never sees an ambiguous reference.
+        RETURN QUERY
+        WITH request AS (
+            SELECT
+                r.ord::integer AS idx,
+                r.stream_id,
+                r.kind,
+                r.version,
+                r.commit_id,
+                r.event_count,
+                -- Offset of the request's first event in the flattened event arrays (1-based).
+                1 + coalesce(
+                    sum(r.event_count) OVER (ORDER BY r.ord ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
+                    0) AS event_offset,
+                -- The first occurrence of a commit id in the batch wins; later ones are duplicates.
+                row_number() OVER (PARTITION BY r.commit_id ORDER BY r.ord) AS commit_occurrence
+            FROM unnest(p_stream_ids, p_expected_kinds, p_expected_versions, p_commit_ids, p_event_counts)
+                WITH ORDINALITY AS r(stream_id, kind, version, commit_id, event_count, ord)
+        ),
+        evaluated AS (
+            SELECT
+                r.*,
+                h.head_pos,
+                CASE
+                    WHEN r.commit_occurrence > 1 OR r.commit_id = ANY (v_existing_commits) THEN 2::smallint
+                    WHEN CASE r.kind
+                             WHEN 0 THEN true
+                             WHEN 1 THEN h.head_pos IS NULL
+                             WHEN 2 THEN h.head_pos IS NOT NULL
+                             WHEN 3 THEN h.head_pos IS NOT NULL AND h.head_pos = r.version
+                         END THEN 0::smallint
+                    ELSE 1::smallint
+                END AS req_status
+            FROM request AS r
+            CROSS JOIN LATERAL (
+                SELECT max(e.stream_position) AS head_pos
+                FROM __schema__.event_log AS e
+                WHERE e.stream_id = r.stream_id) AS h
+        ),
+        assigned AS (
+            SELECT
+                e.*,
+                -- Global positions are contiguous over appended requests only, in request order.
+                v_position_start + coalesce(
+                    sum(e.event_count) FILTER (WHERE e.req_status = 0)
+                        OVER (ORDER BY e.idx ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
+                    0) AS first_pos
+            FROM evaluated AS e
+        ),
+        batch_event AS (
+            SELECT ev.ord, ev.event_name, ev.event_data, ev.event_data_bytes, ev.metadata
+            FROM unnest(p_event_names, p_event_data, p_event_data_bytes, p_metadata)
+                WITH ORDINALITY AS ev(event_name, event_data, event_data_bytes, metadata, ord)
+        ),
+        inserted AS (
+            INSERT INTO __schema__.event_log (
+                position, stream_id, stream_position, commit_id, commit_index,
+                event_name, event_data, event_data_bytes, metadata, created_at)
+            SELECT
+                a.first_pos + g.k,
+                a.stream_id,
+                coalesce(a.head_pos, -1) + 1 + g.k,
+                a.commit_id,
+                g.k,
+                ev.event_name,
+                ev.event_data,
+                ev.event_data_bytes,
+                ev.metadata,
+                v_created_at
+            FROM assigned AS a
+            CROSS JOIN LATERAL generate_series(0, a.event_count - 1) AS g(k)
+            JOIN batch_event AS ev ON ev.ord = a.event_offset + g.k
+            WHERE a.req_status = 0
+            RETURNING 1
+        ),
+        advanced AS (
+            -- Advance by exactly the number of rows inserted: conflicts and duplicates leave no gap.
+            UPDATE __schema__.sequences AS s
+            SET next = v_position_start + (SELECT count(*) FROM inserted)
+            WHERE s.name = c_sequence_name AND (SELECT count(*) FROM inserted) > 0
+        )
+        SELECT
+            a.idx - 1,
+            a.req_status,
+            (CASE WHEN a.head_pos IS NULL THEN 0 ELSE 1 END)::smallint,
+            a.head_pos,
+            CASE WHEN a.req_status = 0 THEN a.first_pos END,
+            CASE WHEN a.req_status = 0 THEN a.first_pos + a.event_count - 1 END
+        FROM assigned AS a
+        ORDER BY a.idx;
+
+        RETURN;
+    END IF;
+
+    -- Slow path: a stream id repeats within the batch.
     FOR i IN 1 .. v_request_count LOOP
         v_stream_id := p_stream_ids[i];
         v_expected_kind := p_expected_kinds[i];
