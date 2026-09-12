@@ -98,7 +98,7 @@ public class MongoEventStoreConcurrencyTests
             }
             catch (StreamAppendConflictException<StreamPosition> ex)
             {
-                return (Success: false, Exception: ex);
+                return (Success: false, Exception: (StreamAppendConflictException<StreamPosition>?)ex);
             }
         }));
 
@@ -150,7 +150,7 @@ public class MongoEventStoreConcurrencyTests
             }
             catch (StreamAppendConflictException ex)
             {
-                return (Success: false, Exception: ex);
+                return (Success: false, Exception: (StreamAppendConflictException?)ex);
             }
         }));
 

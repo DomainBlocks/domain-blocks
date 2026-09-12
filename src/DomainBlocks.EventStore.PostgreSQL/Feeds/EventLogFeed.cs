@@ -6,14 +6,14 @@ using Polly.Retry;
 namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 
 /// <summary>
-/// Pumps items from an <see cref="IEventLogSession{T}"/> to attached observers, re-establishing the session with backoff
-/// when it is lost. Observers are told about every re-established session via
-/// <see cref="IEventLogObserver<T>{T}.OnResetAsync"/>, before any row of the new session is delivered, because a new session
-/// only sees rows committed after its own establishment point.
+/// Pumps items from an <see cref="IEventLogSession{T}"/> to attached observers, re-establishing the session with
+/// backoff when it is lost. Observers are told about every re-established session via
+/// <see cref="IEventLogObserver{T}.OnResetAsync"/>, before any row of the new session is delivered, because a new
+/// session only sees rows committed after its own establishment point.
 /// </summary>
 /// <remarks>
-/// Ported from the MongoDB change stream subject. Unlike a change stream there is no resume token: recovering the
-/// rows missed during an outage is the observer's job, which it does by re-reading from its last position.
+/// Ported from the MongoDB change stream subject. Unlike a change stream there is no resume token: recovering the rows
+/// missed during an outage is the observer's job, which it does by re-reading from its last position.
 /// </remarks>
 internal sealed class EventLogFeed<T> : IEventLogFeed<T>
 {
