@@ -2,7 +2,6 @@ using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Codecs;
 using DomainBlocks.EventStore.PostgreSQL.Feeds;
-using DomainBlocks.EventStore.PostgreSQL.Subscriptions;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 
@@ -209,12 +208,14 @@ public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> whe
         SubscriptionOptions? options = null)
     {
         return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
-            origin,
-            options,
-            AllStreamsTarget.Instance,
             _reader,
             _feed,
             _eventCodec.Decoder,
+            static (reader, pos, hwMark, ct) => reader.ReadCatchUpAllAsync(pos, hwMark, ct),
+            static _ => true,
+            static ctx => ctx.LogPosition,
+            origin,
+            options,
             _logger);
     }
 
@@ -226,12 +227,14 @@ public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> whe
         ArgumentException.ThrowIfNullOrEmpty(streamId);
 
         return new SubscriptionAsyncEnumerable<TEvent, StreamPosition>(
-            origin,
-            options,
-            new SingleStreamTarget(streamId),
             _reader,
             _feed,
             _eventCodec.Decoder,
+            (reader, pos, hwMark, ct) => reader.ReadCatchUpStreamAsync(streamId, pos, hwMark, ct),
+            row => row.StreamId == streamId,
+            static ctx => ctx.StreamPosition,
+            origin,
+            options,
             _logger);
     }
 

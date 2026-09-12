@@ -21,15 +21,12 @@ internal static class AppendProtocol
     public const short ObservedDoesNotExist = 0;
     public const short ObservedAtVersion = 1;
 
-    public static short ToExpectedKind(ExpectedStreamStateKind kind)
+    public static short ToExpectedKind(ExpectedStreamStateKind kind) => kind switch
     {
-        return kind switch
-        {
-            ExpectedStreamStateKind.Any => ExpectedAny,
-            ExpectedStreamStateKind.DoesNotExist => ExpectedDoesNotExist,
-            ExpectedStreamStateKind.Exists => ExpectedExists,
-            ExpectedStreamStateKind.AtVersion => ExpectedAtVersion,
-            _ => throw new UnreachableException($"Unexpected expected stream state kind '{kind}'.")
-        };
-    }
+        ExpectedStreamStateKind.Any => ExpectedAny,
+        ExpectedStreamStateKind.DoesNotExist => ExpectedDoesNotExist,
+        ExpectedStreamStateKind.Exists => ExpectedExists,
+        ExpectedStreamStateKind.AtVersion => ExpectedAtVersion,
+        _ => throw new UnreachableException($"Unexpected expected stream state kind '{kind}'.")
+    };
 }

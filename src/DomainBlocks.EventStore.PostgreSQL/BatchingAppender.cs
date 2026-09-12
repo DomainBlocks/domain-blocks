@@ -178,8 +178,8 @@ internal sealed class BatchingAppender : IAppender
         }
         catch (NpgsqlException ex) when (ex.IsTransient && !ct.IsCancellationRequested)
         {
-            // Re-running the identical batch is safe: commit ids make already-committed requests report as
-            // duplicates, so nothing is written twice.
+            // Re-running the identical batch is safe: commit ids make already-committed requests report as duplicates,
+            // so nothing is written twice.
             _logger?.AppendBatchRetrying(ex, batch.Count);
             await _command.ExecuteAsync(batch, ct).ConfigureAwait(false);
         }

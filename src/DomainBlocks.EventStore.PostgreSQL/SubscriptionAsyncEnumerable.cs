@@ -5,7 +5,7 @@ using DomainBlocks.EventStore.Abstractions.Codecs;
 using DomainBlocks.EventStore.PostgreSQL.Feeds;
 using Microsoft.Extensions.Logging;
 
-namespace DomainBlocks.EventStore.PostgreSQL.Subscriptions;
+namespace DomainBlocks.EventStore.PostgreSQL;
 
 /// <summary>
 /// A catch-up-then-live subscription, ported from the MongoDB implementation.
@@ -27,27 +27,33 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> : IAsyncEnumerab
     where TEvent : notnull
     where TPos : struct, IPosition<TPos>
 {
-    private readonly SubscriptionOrigin<TPos> _origin;
-    private readonly SubscriptionOptions _options;
-    private readonly SubscriptionTarget<TPos> _target;
     private readonly EventLogReader _reader;
     private readonly IRefCountedEventLogFeed _feed;
     private readonly IEventDecoder<TEvent, PostgresEventData, string> _decoder;
+    private readonly Func<EventLogReader, long, long, CancellationToken, IAsyncEnumerable<EventLogRow>> _catchUpReader;
+    private readonly Func<EventLogRow, bool> _livePredicate;
+    private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> _positionSelector;
+    private readonly SubscriptionOrigin<TPos> _origin;
+    private readonly SubscriptionOptions _options;
     private readonly ILogger? _logger;
     private readonly string _correlationId;
 
     public SubscriptionAsyncEnumerable(
-        SubscriptionOrigin<TPos>? origin,
-        SubscriptionOptions? options,
-        SubscriptionTarget<TPos> target,
         EventLogReader reader,
         IRefCountedEventLogFeed feed,
         IEventDecoder<TEvent, PostgresEventData, string> decoder,
+        Func<EventLogReader, long, long, CancellationToken, IAsyncEnumerable<EventLogRow>> catchUpReader,
+        Func<EventLogRow, bool> livePredicate,
+        Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> positionSelector,
+        SubscriptionOrigin<TPos>? origin,
+        SubscriptionOptions? options,
         ILogger? logger)
     {
         _origin = origin ?? SubscriptionOrigin.End<TPos>();
         _options = options ?? SubscriptionOptions.Default;
-        _target = target;
+        _catchUpReader = catchUpReader;
+        _livePredicate = livePredicate;
+        _positionSelector = positionSelector;
         _reader = reader;
         _feed = feed;
         _decoder = decoder;
@@ -98,7 +104,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> : IAsyncEnumerab
                         if (message is SubscriptionMessage.CaughtUp)
                             fellBehindPending = false;
                         else if (TryGetContext(message, out var context))
-                            resumeOrigin = SubscriptionOrigin.After(_target.PositionOf(context));
+                            resumeOrigin = SubscriptionOrigin.After(_positionSelector(context));
                     }
                 }
 
@@ -218,7 +224,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> : IAsyncEnumerab
                     ? checked((long)after.Position.Value)
                     : -1;
 
-                var rows = _target.ReadCatchUpAsync(_reader, afterExclusive, highWaterMark.Value, catchUpCts.Token);
+                var rows = _catchUpReader(_reader, afterExclusive, highWaterMark.Value, catchUpCts.Token);
 
                 await foreach (var row in rows.ConfigureAwait(false))
                     yield return SubscriptionMessage.Event.Create(_decoder.Decode(row));
@@ -231,7 +237,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> : IAsyncEnumerab
 
         await foreach (var row in observer.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
         {
-            if (row.Position <= highWaterMark || !_target.IsLiveMatch(row))
+            if (row.Position <= highWaterMark || !_livePredicate(row))
                 continue;
 
             yield return SubscriptionMessage.Event.Create(_decoder.Decode(row));
@@ -240,7 +246,6 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> : IAsyncEnumerab
 
     private enum RestartReason
     {
-        None,
         QueueOverflow,
         FeedReset,
         Disposed

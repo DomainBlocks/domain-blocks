@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using DomainBlocks.EventStore.Abstractions;
 using Npgsql;
 using NpgsqlTypes;
@@ -32,15 +31,15 @@ internal sealed class AppendBatchCommand : IDisposable
             "SELECT request_index, status, observed_kind, observed_version " +
             $"FROM {names.AppendEventsFunction}($1, $2, $3, $4, $5, $6, $7, $8, $9)");
 
-        _streamIds = new NpgsqlParameter<string[]> { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Text };
-        _expectedKinds = new NpgsqlParameter<short[]> { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Smallint };
-        _expectedVersions = new NpgsqlParameter<long?[]> { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Bigint };
-        _commitIds = new NpgsqlParameter<Guid[]> { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Uuid };
-        _eventCounts = new NpgsqlParameter<int[]> { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Integer };
-        _eventNames = new NpgsqlParameter<string[]> { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Text };
-        _eventData = new NpgsqlParameter<string?[]> { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Jsonb };
-        _eventDataBytes = new NpgsqlParameter<byte[]?[]> { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Bytea };
-        _metadata = new NpgsqlParameter<string?[]> { NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Jsonb };
+        _streamIds = new NpgsqlParameter<string[]> { NpgsqlDbType = ArrayOf(NpgsqlDbType.Text) };
+        _expectedKinds = new NpgsqlParameter<short[]> { NpgsqlDbType = ArrayOf(NpgsqlDbType.Smallint) };
+        _expectedVersions = new NpgsqlParameter<long?[]> { NpgsqlDbType = ArrayOf(NpgsqlDbType.Bigint) };
+        _commitIds = new NpgsqlParameter<Guid[]> { NpgsqlDbType = ArrayOf(NpgsqlDbType.Uuid) };
+        _eventCounts = new NpgsqlParameter<int[]> { NpgsqlDbType = ArrayOf(NpgsqlDbType.Integer) };
+        _eventNames = new NpgsqlParameter<string[]> { NpgsqlDbType = ArrayOf(NpgsqlDbType.Text) };
+        _eventData = new NpgsqlParameter<string?[]> { NpgsqlDbType = ArrayOf(NpgsqlDbType.Jsonb) };
+        _eventDataBytes = new NpgsqlParameter<byte[]?[]> { NpgsqlDbType = ArrayOf(NpgsqlDbType.Bytea) };
+        _metadata = new NpgsqlParameter<string?[]> { NpgsqlDbType = ArrayOf(NpgsqlDbType.Jsonb) };
 
         _command.Parameters.AddRange(new NpgsqlParameter[]
         {
@@ -54,6 +53,9 @@ internal sealed class AppendBatchCommand : IDisposable
             _eventDataBytes,
             _metadata
         });
+
+        // ReSharper disable once BitwiseOperatorOnEnumWithoutFlags
+        static NpgsqlDbType ArrayOf(NpgsqlDbType elementType) => NpgsqlDbType.Array | elementType;
     }
 
     /// <summary>
@@ -141,7 +143,7 @@ internal sealed class AppendBatchCommand : IDisposable
             {
                 eventNames[eventIndex] = eventName;
                 eventData[eventIndex] = data.IsJson ? data.Json : null;
-                eventDataBytes[eventIndex] = data.IsBytes ? ToArray(data.Bytes) : null;
+                eventDataBytes[eventIndex] = data.IsBytes ? data.Bytes.GetArrayOrCopy() : null;
                 metadata[eventIndex] = eventMetadata;
                 eventIndex++;
             }
@@ -156,16 +158,5 @@ internal sealed class AppendBatchCommand : IDisposable
         _eventData.TypedValue = eventData;
         _eventDataBytes.TypedValue = eventDataBytes;
         _metadata.TypedValue = metadata;
-    }
-
-    private static byte[] ToArray(ReadOnlyMemory<byte> bytes)
-    {
-        // Avoid a copy when the memory is a whole array.
-        return MemoryMarshal.TryGetArray(bytes, out var segment) &&
-               segment.Offset == 0 &&
-               segment.Array is { } wholeArray &&
-               wholeArray.Length == segment.Count
-            ? wholeArray
-            : bytes.ToArray();
     }
 }

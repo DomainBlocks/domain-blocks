@@ -18,8 +18,3 @@ internal interface IEventLogSession : IAsyncDisposable
 
     IAsyncEnumerable<EventLogRow> ReadRowsAsync(CancellationToken cancellationToken);
 }
-
-/// <summary>
-/// Establishes a new <see cref="IEventLogSession"/>.
-/// </summary>
-internal delegate Task<IEventLogSession> EventLogSessionFactory(CancellationToken cancellationToken);

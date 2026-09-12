@@ -60,7 +60,7 @@ public sealed class MongoEventStore<TEvent>(
     IMongoEventStore<TEvent>
     where TEvent : notnull
 {
-    private readonly RefCountedChangeStreamSubject<ChangeStreamDocument<BsonDocument>> _allEventsChangeStreamSubject =
+    private readonly RefCountedChangeStreamSubject<ChangeStreamDocument<BsonDocument>> _allEventsSubject =
         CreateAllEventsChangeStreamSubject(eventLog, logger);
 
     public async Task AppendAsync(
@@ -193,15 +193,15 @@ public sealed class MongoEventStore<TEvent>(
         SubscriptionOptions? options = null)
     {
         return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
+            eventLog,
+            _allEventsSubject,
+            eventCodec.Decoder,
+            Builders<BsonDocument>.Filter.Empty,
+            static _ => true,
+            EventLogEntry.FieldNames.Position,
+            static ctx => ctx.LogPosition,
             origin,
             options,
-            catchUpFilter: Builders<BsonDocument>.Filter.Empty,
-            liveFilter: static _ => true,
-            positionFieldName: EventLogEntry.FieldNames.Position,
-            positionSelector: static ctx => ctx.LogPosition,
-            eventLog,
-            _allEventsChangeStreamSubject,
-            eventCodec.Decoder,
             logger);
     }
 
@@ -211,15 +211,15 @@ public sealed class MongoEventStore<TEvent>(
         SubscriptionOptions? options = null)
     {
         return new SubscriptionAsyncEnumerable<TEvent, StreamPosition>(
+            eventLog,
+            _allEventsSubject,
+            eventCodec.Decoder,
+            Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, streamId),
+            ctx => ctx.StreamId == streamId,
+            EventLogEntry.FieldNames.StreamPosition,
+            static ctx => ctx.StreamPosition,
             origin,
             options,
-            catchUpFilter: Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, streamId),
-            liveFilter: ctx => ctx.StreamId == streamId,
-            positionFieldName: EventLogEntry.FieldNames.StreamPosition,
-            positionSelector: static ctx => ctx.StreamPosition,
-            eventLog,
-            _allEventsChangeStreamSubject,
-            eventCodec.Decoder,
             logger);
     }
 
