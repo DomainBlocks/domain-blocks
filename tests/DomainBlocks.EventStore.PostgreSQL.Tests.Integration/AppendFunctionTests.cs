@@ -223,7 +223,7 @@ public class AppendFunctionTests
     [Test]
     public async Task RepeatedCommitIdInBatch_OnDistinctStreams_WritesFirstOnly()
     {
-        // Distinct streams take the set-based path, which must detect in-batch duplicates the same way as the loop.
+        // In-batch duplicates on distinct streams: the first occurrence wins, later ones report Duplicate.
         var request = Any("s1", JsonEvent());
 
         var results = await _client.AppendAsync(
@@ -425,8 +425,8 @@ public class AppendFunctionTests
     [TestCase(false)]
     public async Task LargeBatch_CompletesInLinearTime(bool distinctStreams)
     {
-        // 500 requests x 10 events, on both the set-based path (distinct streams) and the per-request loop (repeated
-        // streams). A quadratic array-subscript cost inside the function would make this take seconds.
+        // 500 requests x 10 events, with distinct and with repeated streams. A quadratic cost inside the function
+        // would make this take seconds.
         var requests = Enumerable
             .Range(0, 500)
             .Select(i => Any(

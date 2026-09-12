@@ -67,10 +67,10 @@ All writes must go through `append_events`; writing to `event_log` directly brea
 to `append_events`. Because appends serialize on the sequence row, batching is what recovers throughput under
 concurrent load. Every request in a batch is evaluated independently: one conflict never aborts the others.
 
-A batch whose stream ids are all distinct is committed by a single set-based statement. A batch that repeats a stream
-id is processed request by request inside the function, so that later requests observe the head left by earlier
-ones; this path is several times slower per request, so a workload that appends to few streams from many callers
-gets less benefit from batching than one spread across many streams.
+`append_events` commits a batch with a fixed number of statements regardless of its size, the same shape as the
+MongoDB appender policy: it probes the commit ids that already exist, prefetches the head of every stream in the
+batch, evaluates the requests in memory while keeping those heads current (so repeated streams chain correctly),
+then inserts every accepted event in one statement.
 
 When no `commitId` is supplied the store generates a time-ordered (version 7) UUID, which keeps inserts into the
 `commit_id` index append-mostly.
@@ -164,9 +164,19 @@ Methodology:
 
 Results depend heavily on the machine: with Docker Desktop the server runs in a VM behind a virtual network and disk,
 and the container keeps PostgreSQL's defaults (`synchronous_commit = on`, `fsync = on`, `shared_buffers = 128MB`). A
-real deployment with network latency and synchronous replication will differ. Figures previously measured with an
-earlier, single-point version of these tests on a Windows laptop were ~22,700 appends/s at 1,000 in flight and
-p50 0.8 ms for sequential appends; re-run the suite for current numbers on your hardware.
+real deployment with network latency and synchronous replication will differ. For orientation, one small JSON event
+per append to a new stream, `postgres:17` under Docker Desktop on an Apple silicon laptop, September 2026:
+
+| Case | Appends/s | Latency p50 / p99 |
+|---|---|---|
+| 1 in flight, 1 instance | ~4,100 | 0.23 ms / 0.33 ms |
+| 10 in flight, 1 instance | ~15,400 | 0.64 ms / 0.89 ms |
+| 100 in flight, 1 instance | ~32,200 | 3.1 ms / 5.4 ms |
+| 1,000 in flight, 1 instance | ~33,300 | 29 ms / 37 ms |
+| 1,000 in flight, 4 instances | ~40,200 | 27 ms / 47 ms |
+
+Batches of 500 single-event appends commit in about 5 ms of server time; the rest of each round trip is parameter
+transfer, the commit flush and result decoding.
 
 Append-to-observe latency for a live subscription was ~200 ms at p50 with the server defaults and ~10 ms with
 `wal_writer_delay = 10ms`: on this server the logical walsender is woken by the WAL writer's flush cycle, so
