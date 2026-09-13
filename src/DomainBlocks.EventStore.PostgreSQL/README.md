@@ -68,9 +68,11 @@ to `append_events`. Because appends serialize on the sequence row, batching is w
 concurrent load. Every request in a batch is evaluated independently: one conflict never aborts the others.
 
 `append_events` commits a batch with a fixed number of statements regardless of its size, the same shape as the
-MongoDB appender policy: it probes the commit ids that already exist, prefetches the head of every stream in the
-batch, evaluates the requests in memory while keeping those heads current (so repeated streams chain correctly),
-then inserts every accepted event in one statement.
+MongoDB appender policy: it validates the arrays in one pass, takes the sequence row lock, probes the commit ids that
+already exist, then runs a single statement that prefetches the head of every stream in the batch, evaluates the
+requests, inserts every accepted event and advances the sequence row. Requests to the same stream chain through a
+recursive CTE that advances every stream one request per iteration, so a later request observes the rows an earlier
+one will insert; a batch whose streams are all distinct completes in one iteration.
 
 When no `commitId` is supplied the store generates a time-ordered (version 7) UUID, which keeps inserts into the
 `commit_id` index append-mostly.
