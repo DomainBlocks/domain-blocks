@@ -1,4 +1,4 @@
-namespace DomainBlocks.Testing.Integration.Benchmarking;
+namespace DomainBlocks.Benchmarking;
 
 /// <summary>
 /// Garbage collection counts per generation, used to attribute latency outliers to GC pauses.

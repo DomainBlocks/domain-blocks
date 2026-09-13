@@ -8,7 +8,12 @@
     <File Path="README.md" />
   </Folder>
   <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/DomainBlocks.Benchmarking/DomainBlocks.Benchmarking.csproj" />
     <Project Path="benchmarks/DomainBlocks.EventStore.Benchmarks/DomainBlocks.EventStore.Benchmarks.csproj" />
+    <Project Path="benchmarks/DomainBlocks.EventStore.KurrentDB.Benchmarks/DomainBlocks.EventStore.KurrentDB.Benchmarks.csproj" />
+    <Project Path="benchmarks/DomainBlocks.EventStore.MongoDB.Benchmarks/DomainBlocks.EventStore.MongoDB.Benchmarks.csproj" />
+    <Project Path="benchmarks/DomainBlocks.EventStore.NoOp.Benchmarks/DomainBlocks.EventStore.NoOp.Benchmarks.csproj" />
+    <Project Path="benchmarks/DomainBlocks.EventStore.PostgreSQL.Benchmarks/DomainBlocks.EventStore.PostgreSQL.Benchmarks.csproj" />
   </Folder>
   <Folder Name="/docs/">
     <File Path="docs/postgresql-event-store-plan.md" />

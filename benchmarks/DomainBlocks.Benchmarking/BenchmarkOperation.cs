@@ -1,4 +1,4 @@
-﻿namespace DomainBlocks.Testing.Integration.Benchmarking;
+namespace DomainBlocks.Benchmarking;
 
 /// <summary>
 /// One append (or append-shaped) operation against the system under test. <paramref name="workerIndex"/> lets callers

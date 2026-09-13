@@ -1,6 +1,6 @@
 using DomainBlocks.EventStore.Abstractions;
 
-namespace DomainBlocks.Testing.Integration.Benchmarking;
+namespace DomainBlocks.Benchmarking;
 
 /// <summary>
 /// An event store whose appends do nothing beyond a thread-pool hop, as a real store's do when its append loop

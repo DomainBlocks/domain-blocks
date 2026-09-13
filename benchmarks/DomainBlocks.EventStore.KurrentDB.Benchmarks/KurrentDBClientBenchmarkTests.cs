@@ -1,17 +1,18 @@
+using DomainBlocks.Benchmarking;
 using DomainBlocks.Testing.Integration;
-using DomainBlocks.Testing.Integration.Benchmarking;
 using DomainBlocks.Testing.Integration.KurrentDB;
 using KurrentDB.Client;
 using NUnit.Framework;
 using Shouldly;
 
-namespace DomainBlocks.EventStore.KurrentDB.Tests.Integration;
+namespace DomainBlocks.EventStore.KurrentDB.Benchmarks;
 
 /// <summary>
 /// Raw <see cref="KurrentDBClient"/> baselines, measured with the same harness and shapes as
 /// <see cref="KurrentDBEventStoreBenchmarkTests"/> so the store's overhead can be read off directly.
 /// </summary>
 [TestFixture]
+[Category("Benchmark")]
 public class KurrentDbClientBenchmarkTests
 {
     private const string Description = "raw KurrentDBClient, StreamState.Any, one 24-byte JSON event per append";

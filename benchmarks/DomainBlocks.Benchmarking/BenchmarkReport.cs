@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 using HdrHistogram;
 using NUnit.Framework;
 
-namespace DomainBlocks.Testing.Integration.Benchmarking;
+namespace DomainBlocks.Benchmarking;
 
 /// <summary>
 /// Writes benchmark results in a fixed layout, preceded by environment detail needed to interpret the results.

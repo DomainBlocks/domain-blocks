@@ -1,8 +1,9 @@
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.ContractMapping;
 using DomainBlocks.EventStore.TypeMapping;
+using DomainBlocks.Testing.Integration;
 
-namespace DomainBlocks.Testing.Integration.Benchmarking;
+namespace DomainBlocks.Benchmarking;
 
 /// <summary>
 /// Binds the shared benchmarks to <see cref="NoOpEventStore"/>. There is no store to initialise or reset.

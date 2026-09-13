@@ -4,11 +4,10 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="NUnit" />
     <PackageReference Include="NUnit3TestAdapter" />
-    <PackageReference Include="Shouldly" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Benchmarking\DomainBlocks.Benchmarking.csproj" />
   </ItemGroup>
 
 </Project>

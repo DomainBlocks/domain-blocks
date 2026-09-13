@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using HdrHistogram;
 
-namespace DomainBlocks.Testing.Integration.Benchmarking;
+namespace DomainBlocks.Benchmarking;
 
 /// <summary>
 /// Store-agnostic closed-loop benchmark harness. Every run uses a fresh stream id per operation, generated outside the

@@ -1,17 +1,18 @@
 using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.TypeMapping;
-using DomainBlocks.Testing.Integration.Benchmarking;
+using DomainBlocks.Testing.Integration;
 using NUnit.Framework;
 using Shouldly;
 
-namespace DomainBlocks.Testing.Integration;
+namespace DomainBlocks.Benchmarking;
 
 /// <summary>
 /// Append benchmarks shared by every store. Each test writes one small event per append to a new stream, which is the
 /// cheapest possible append and therefore measures the store's ceiling rather than a workload. Results are printed
 /// to the test output; the tests only fail if an operation errors, since a throughput figure with errors is invalid.
 /// </summary>
+[Category("Benchmark")]
 public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(IEventStoreHarness<TStreamPos, TLogPos> harness) :
     EventStoreTestBase<TStreamPos, TLogPos>(harness)
     where TStreamPos : notnull

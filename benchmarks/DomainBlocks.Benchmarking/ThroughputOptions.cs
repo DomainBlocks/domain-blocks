@@ -1,4 +1,4 @@
-﻿namespace DomainBlocks.Testing.Integration.Benchmarking;
+namespace DomainBlocks.Benchmarking;
 
 public sealed record ThroughputOptions
 {

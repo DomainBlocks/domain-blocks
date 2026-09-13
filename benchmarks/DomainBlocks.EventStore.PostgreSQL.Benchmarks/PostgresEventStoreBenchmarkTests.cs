@@ -1,14 +1,14 @@
 using System.Diagnostics;
+using DomainBlocks.Benchmarking;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Integration;
-using DomainBlocks.Testing.Integration.Benchmarking;
 using DomainBlocks.Testing.Integration.PostgreSQL;
 using Npgsql;
 using NUnit.Framework;
 using Shouldly;
 
-namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
+namespace DomainBlocks.EventStore.PostgreSQL.Benchmarks;
 
 [TestFixture]
 public class PostgresEventStoreBenchmarkTests() :

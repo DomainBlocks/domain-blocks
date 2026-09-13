@@ -1,9 +1,8 @@
+using DomainBlocks.Benchmarking;
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.Testing.Integration;
-using DomainBlocks.Testing.Integration.Benchmarking;
 using NUnit.Framework;
 
-namespace DomainBlocks.EventStore.Tests.Unit;
+namespace DomainBlocks.EventStore.NoOp.Benchmarks;
 
 /// <summary>
 /// Runs the shared append benchmarks against <see cref="NoOpEventStore"/> to measure the harness's own ceiling. Compare
