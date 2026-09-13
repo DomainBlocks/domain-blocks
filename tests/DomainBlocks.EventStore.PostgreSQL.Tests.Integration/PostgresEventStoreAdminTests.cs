@@ -35,6 +35,20 @@ public class PostgresEventStoreAdminTests
     }
 
     [Test]
+    public async Task EnsureInitializedAsync_StreamIdUsesByteWiseCollation()
+    {
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(SetUpFixture.DataSource, _options);
+
+        await using var command = SetUpFixture.DataSource.CreateCommand(
+            "SELECT collation_name FROM information_schema.columns " +
+            "WHERE table_schema = $1 AND table_name = 'event_log' AND column_name = 'stream_id'");
+
+        command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = _options.Schema });
+
+        (await command.ExecuteScalarAsync()).ShouldBe("C");
+    }
+
+    [Test]
     public async Task EnsureInitializedAsync_CommitIdIndexIsPartialOnFirstEvent()
     {
         await PostgresEventStoreAdmin.EnsureInitializedAsync(SetUpFixture.DataSource, _options);

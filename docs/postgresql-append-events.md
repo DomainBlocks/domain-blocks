@@ -51,7 +51,7 @@ From `schema.sql`:
 ```sql
 CREATE TABLE __schema__.event_log (
     position         bigint      NOT NULL,   -- global, gap-free, commit-ordered
-    stream_id        text        NOT NULL,
+    stream_id        text        COLLATE "C" NOT NULL,   -- byte-wise comparison: see below
     stream_position  bigint      NOT NULL,   -- 0-based version within the stream
     commit_id        uuid        NOT NULL,   -- idempotency key, one per request
     commit_index     integer     NOT NULL,   -- 0-based index of the event within its request
@@ -78,6 +78,12 @@ Three indexes matter to the function:
 | `event_log_pkey (position)` | The final `INSERT` (uniqueness check on every new row). |
 | `event_log_stream_id_stream_position_key (stream_id, stream_position)` | The head prefetch (one backwards probe per distinct stream) and the `INSERT` uniqueness check. |
 | `event_log_commit_id_idx (commit_id) WHERE commit_index = 0` | The idempotency probe. Partial: one entry per request rather than per event, since every request writes exactly one row with `commit_index = 0`. |
+
+`stream_id` carries the `"C"` collation ([Collation support](https://www.postgresql.org/docs/17/collation.html)).
+The column is only ever compared for equality, and under a locale collation every btree comparison on the stream
+index runs the collator over the ids' common prefix. With ids shaped like `<category>-<guid>` that doubled the cost
+of a batch; byte-wise comparison removes it. The function's own orderings over stream id (lines 135 and 147) sort the
+parameter array, not the column, so they use the parameter's collation and stay consistent with each other.
 
 The `sequences` table holds a single hot row. Its low `fillfactor` leaves free space on the page so that every
 `UPDATE` can be a HOT update that never has to touch an index. See
