@@ -123,6 +123,7 @@ public sealed class MongoEventStore<TEvent>(
                 .Find(query.Filter)
                 .Sort(query.Sort)
                 .Limit(options.MaxCount)
+                .ProjectMetadata(options.IncludeMetadata)
                 .ToCursorAsync(cancellationToken)
                 .ConfigureAwait(false);
 
@@ -169,6 +170,7 @@ public sealed class MongoEventStore<TEvent>(
                 .Find(filter)
                 .Sort(query.Sort)
                 .Limit(options.MaxCount)
+                .ProjectMetadata(options.IncludeMetadata)
                 .ToCursorAsync(cancellationToken)
                 .ConfigureAwait(false);
 
