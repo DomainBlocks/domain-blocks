@@ -43,6 +43,15 @@ public abstract class EventStoreTestBase<TStreamPos, TLogPos>(IEventStoreHarness
         return Harness.CreateEventStore(eventTypeMap, eventFormat, contractMappers, loggerNameSuffix);
     }
 
+    /// <summary>
+    /// Ignores the current test, with the reason in the results, when the store lacks a capability it needs.
+    /// </summary>
+    protected void RequireCapability(StoreCapabilities capability)
+    {
+        if (!Harness.Capabilities.HasFlag(capability))
+            Assert.Ignore($"The store does not support {capability}.");
+    }
+
     protected TStreamPos CreateStreamPosition(ulong value) => Harness.CreateStreamPosition(value);
 
     protected TLogPos CreateLogPosition(ulong value) => Harness.CreateLogPosition(value);

@@ -15,6 +15,9 @@ namespace DomainBlocks.Testing.Integration.KurrentDB;
 /// </summary>
 public sealed class KurrentDBEventStoreHarness : IEventStoreHarness<StreamPosition, Position>
 {
+    // The store passes the commit id through to nothing, so repeated appends are not deduplicated.
+    public StoreCapabilities Capabilities => StoreCapabilities.None;
+
     public IReadOnlyList<EventFormat> SupportedFormats { get; } = [EventFormat.Json];
 
     public Task InitializeAsync(string name) => Task.CompletedTask;

@@ -16,6 +16,8 @@ public sealed class PostgresEventStoreHarness(Action<PostgresEventStoreOptions>?
 {
     public PostgresEventStoreOptions Options { get; private set; } = null!;
 
+    public StoreCapabilities Capabilities => StoreCapabilities.IdempotentAppends;
+
     public IReadOnlyList<EventFormat> SupportedFormats { get; } = [EventFormat.Json, EventFormat.Protobuf];
 
     public async Task InitializeAsync(string name)

@@ -14,6 +14,11 @@ public interface IEventStoreHarness<TStreamPos, TLogPos>
     where TLogPos : notnull
 {
     /// <summary>
+    /// The optional behaviour the store offers; see <see cref="StoreCapabilities"/>.
+    /// </summary>
+    StoreCapabilities Capabilities { get; }
+
+    /// <summary>
     /// The event formats the backend's codec can be created with, for suites that cover each of them.
     /// </summary>
     IReadOnlyList<EventFormat> SupportedFormats { get; }

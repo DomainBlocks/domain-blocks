@@ -11,7 +11,9 @@ using Shouldly;
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
 /// <summary>
-/// Verifies AppendAsync by inspecting the event log table directly, since reads are implemented separately.
+/// PostgreSQL-specific append behaviour, verified against the event log table: how rows are stored, the input the
+/// server rejects and the append's interaction with the sequence row. Behaviour every store shares is in the contract
+/// suites.
 /// </summary>
 [TestFixture]
 public class PostgresEventStoreAppendTests : PostgresIntegrationTest
@@ -55,74 +57,7 @@ public class PostgresEventStoreAppendTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task AppendAsync_ExistingStream_ContinuesStreamPosition()
-    {
-        await _eventStore.AppendAsync("s1", [Appendable("a"), Appendable("b")]);
-        await _eventStore.AppendAsync("s1", [Appendable("c")]);
-
-        (await Client.ReadRowsAsync()).Select(x => x.StreamPosition).ShouldBe([0, 1, 2]);
-    }
-
-    [Test]
-    public async Task AppendAsync_ExpectedAtVersionMismatch_ThrowsConflictWithObservedState()
-    {
-        await _eventStore.AppendAsync("s1", [Appendable("a"), Appendable("b"), Appendable("c")]);
-
-        var expectedState = ExpectedStreamState.AtVersion(new StreamPosition(1));
-
-        var ex = await Should.ThrowAsync<StreamAppendConflictException<StreamPosition>>(() =>
-            _eventStore.AppendAsync("s1", [Appendable("d")], expectedState));
-
-        ex.StreamId.ShouldBe("s1");
-        ex.ExpectedState.ShouldBe(expectedState);
-        ex.ObservedState.ShouldBe(ObservedStreamState.AtVersion(new StreamPosition(2)));
-        (await Client.ReadRowsAsync()).Count.ShouldBe(3);
-    }
-
-    [Test]
-    public async Task AppendAsync_ExpectedExistsAndStreamMissing_ThrowsConflictDoesNotExist()
-    {
-        var ex = await Should.ThrowAsync<StreamAppendConflictException<StreamPosition>>(() =>
-            _eventStore.AppendAsync("s1", [Appendable("a")], ExpectedStreamState.Exists<StreamPosition>()));
-
-        ex.ObservedState.ShouldBe(ObservedStreamState.DoesNotExist<StreamPosition>());
-        (await Client.ReadRowsAsync()).ShouldBeEmpty();
-    }
-
-    [Test]
-    public async Task AppendAsync_ExpectedDoesNotExistAndStreamExists_ThrowsConflictAtVersion()
-    {
-        await _eventStore.AppendAsync("s1", [Appendable("a")]);
-
-        var ex = await Should.ThrowAsync<StreamAppendConflictException<StreamPosition>>(() =>
-            _eventStore.AppendAsync("s1", [Appendable("b")], ExpectedStreamState.DoesNotExist<StreamPosition>()));
-
-        ex.ObservedState.ShouldBe(ObservedStreamState.AtVersion(new StreamPosition(0)));
-    }
-
-    [Test]
-    public async Task AppendAsync_ExpectedAtVersionMatches_Appends()
-    {
-        await _eventStore.AppendAsync("s1", [Appendable("a")]);
-
-        await _eventStore.AppendAsync("s1", [Appendable("b")], ExpectedStreamState.AtVersion(new StreamPosition(0)));
-
-        (await Client.ReadRowsAsync()).Count.ShouldBe(2);
-    }
-
-    [Test]
-    public async Task AppendAsync_SameCommitIdTwice_WritesOnce()
-    {
-        var commitId = Guid.NewGuid();
-
-        await _eventStore.AppendAsync("s1", [Appendable("a")], commitId: commitId);
-        await _eventStore.AppendAsync("s1", [Appendable("a")], commitId: commitId);
-
-        (await Client.ReadRowsAsync()).Count.ShouldBe(1);
-    }
-
-    [Test]
-    public async Task AppendAsync_EmptyEvents_WritesNothing()
+    public async Task AppendAsync_EmptyEvents_DoesNotAdvanceSequence()
     {
         await _eventStore.AppendAsync("s1", []);
 
@@ -208,16 +143,6 @@ public class PostgresEventStoreAppendTests : PostgresIntegrationTest
 
         while ((await Client.ReadRowsAsync()).Count == 0)
             await Task.Delay(50, ct);
-    }
-
-    [Test]
-    public async Task AppendAsync_CallerCancels_ThrowsOperationCanceled()
-    {
-        using var cts = new CancellationTokenSource();
-        await cts.CancelAsync();
-
-        await Should.ThrowAsync<OperationCanceledException>(() =>
-            _eventStore.AppendAsync("s1", [Appendable("a")], cancellationToken: cts.Token));
     }
 
     private PostgresEventStore<object> CreateBytesEventStore()

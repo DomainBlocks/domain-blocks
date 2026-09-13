@@ -16,6 +16,8 @@ public sealed class MongoEventStoreHarness(Action<MongoEventStoreOptions>? confi
 {
     public MongoEventStoreOptions Options { get; private set; } = null!;
 
+    public StoreCapabilities Capabilities => StoreCapabilities.IdempotentAppends;
+
     public IReadOnlyList<EventFormat> SupportedFormats { get; } =
         [EventFormat.Bson, EventFormat.Json, EventFormat.Protobuf];
 

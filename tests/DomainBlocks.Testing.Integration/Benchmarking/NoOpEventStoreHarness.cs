@@ -9,6 +9,8 @@ namespace DomainBlocks.Testing.Integration.Benchmarking;
 /// </summary>
 public sealed class NoOpEventStoreHarness : IEventStoreHarness<StreamPosition, LogPosition>
 {
+    public StoreCapabilities Capabilities => StoreCapabilities.None;
+
     public IReadOnlyList<EventFormat> SupportedFormats { get; } = [];
 
     public Task InitializeAsync(string name) => Task.CompletedTask;
