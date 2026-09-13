@@ -16,7 +16,7 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
     where TLogPos : notnull
 {
     [Test]
-    public async Task Should_read_multiple_events_as_common_type()
+    public async Task ReadStream_TypesMappedToCommonReadType_ReturnsCommonType()
     {
         var orderId = Guid.NewGuid();
         var streamId = $"order-{orderId}";
@@ -92,7 +92,7 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
     }
 
     [Test]
-    public async Task Should_map_to_and_from_contract()
+    public async Task AppendAsync_WithContractMapper_RoundTripsThroughContract()
     {
         var eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<ProtoUserCreated>());
         var streamId = $"test-contract-mapper-{Guid.NewGuid()}";
@@ -128,7 +128,7 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
     }
 
     [Test]
-    public async Task Should_transform_read_event()
+    public async Task ReadStream_WithTransform_ReturnsTransformedEvents()
     {
         var eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<ShipmentDispatched>());
         var streamId = $"test-read-transform-{Guid.NewGuid()}";
