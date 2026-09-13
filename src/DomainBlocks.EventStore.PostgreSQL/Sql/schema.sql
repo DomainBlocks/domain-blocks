@@ -29,8 +29,9 @@ CREATE TABLE IF NOT EXISTS __schema__.event_log (
 );
 
 -- Idempotency probe. Every request writes a row with commit_index 0, so indexing only those rows is enough to detect
--- a repeated commit id and keeps the index to one entry per request rather than one per event.
-CREATE INDEX IF NOT EXISTS event_log_commit_id_idx ON __schema__.event_log (commit_id) WHERE commit_index = 0;
+-- a repeated commit id and keeps the index to one entry per request rather than one per event. It is unique so that
+-- the invariant append_events relies on holds even if another writer inserts into the table.
+CREATE UNIQUE INDEX IF NOT EXISTS event_log_commit_id_idx ON __schema__.event_log (commit_id) WHERE commit_index = 0;
 
 -- A single hot row per sequence. The low fill factor leaves room for HOT updates so the row never leaves its page.
 CREATE TABLE IF NOT EXISTS __schema__.sequences (

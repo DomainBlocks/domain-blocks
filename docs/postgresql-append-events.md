@@ -65,7 +65,7 @@ CREATE TABLE __schema__.event_log (
     CHECK ((event_data IS NULL) <> (event_data_bytes IS NULL)),
     ...
 );
-CREATE INDEX event_log_commit_id_idx ON __schema__.event_log (commit_id) WHERE commit_index = 0;
+CREATE UNIQUE INDEX event_log_commit_id_idx ON __schema__.event_log (commit_id) WHERE commit_index = 0;
 
 CREATE TABLE __schema__.sequences (name text PRIMARY KEY, next bigint NOT NULL) WITH (fillfactor = 50);
 INSERT INTO __schema__.sequences VALUES ('event_log', 0) ON CONFLICT DO NOTHING;
@@ -77,7 +77,7 @@ Three indexes matter to the function:
 |---|---|
 | `event_log_pkey (position)` | The final `INSERT` (uniqueness check on every new row). |
 | `event_log_stream_id_stream_position_key (stream_id, stream_position)` | The head prefetch (one backwards probe per distinct stream) and the `INSERT` uniqueness check. |
-| `event_log_commit_id_idx (commit_id) WHERE commit_index = 0` | The idempotency probe. Partial: one entry per request rather than per event, since every request writes exactly one row with `commit_index = 0`. |
+| `event_log_commit_id_idx (commit_id) WHERE commit_index = 0` | The idempotency probe. Partial: one entry per request rather than per event, since every request writes exactly one row with `commit_index = 0`. Unique, so a commit id can only ever be appended once even by a writer that bypasses the function. |
 
 `stream_id` carries the `"C"` collation ([Collation support](https://www.postgresql.org/docs/17/collation.html)).
 The column is only ever compared for equality, and under a locale collation every btree comparison on the stream
@@ -468,7 +468,9 @@ and the planner can drive it from `event_log_commit_id_idx` as an index scan wit
 The index is partial on `commit_index = 0` ([Partial indexes](https://www.postgresql.org/docs/17/indexes-partial.html)),
 so the query must repeat that predicate for the planner to consider the index. Because every request writes exactly
 one row with `commit_index = 0`, the predicate also guarantees at most one row per commit id, which is why no
-`DISTINCT` is needed even though a commit with N events occupies N rows.
+`DISTINCT` is needed even though a commit with N events occupies N rows. The index is also unique, so that guarantee
+does not depend on this function being the only writer: a direct insert that repeats a committed id fails on the
+index rather than turning a later probe into a false negative.
 
 The result is stable for the rest of the function because no other appender can insert while the lock is held. This
 single statement replaces R separate lookups. It is kept separate from the statement below because an array-keyed
@@ -689,9 +691,9 @@ ordinal to fetch the payload. Row by row:
 - `created_at = v_created_at`, identical for the whole batch.
 
 `RETURNING 1` is what makes the CTE's row count available to the next one. The arrays are read through `unnest`
-rather than subscripted so the cost is linear in E. The two unique constraints on `event_log` are checked as each row
-is inserted; given the lock and the head prefetch they should never fail, and if they ever do it indicates a write
-path that bypassed this function, and the whole batch rolls back.
+rather than subscripted so the cost is linear in E. The two unique constraints on `event_log` and the unique commit id
+index are checked as each row is inserted; given the lock, the head prefetch and the commit id probe they should never
+fail, and if they ever do it indicates a write path that bypassed this function, and the whole batch rolls back.
 
 ### Lines 225–229: `advanced`
 

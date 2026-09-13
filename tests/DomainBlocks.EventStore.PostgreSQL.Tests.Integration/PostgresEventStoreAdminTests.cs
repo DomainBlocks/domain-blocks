@@ -49,11 +49,31 @@ public class PostgresEventStoreAdminTests
     }
 
     [Test]
-    public async Task EnsureInitializedAsync_CommitIdIndexIsPartialOnFirstEvent()
+    public async Task EnsureInitializedAsync_CommitIdIndexIsUniqueAndPartialOnFirstEvent()
     {
         await PostgresEventStoreAdmin.EnsureInitializedAsync(SetUpFixture.DataSource, _options);
 
-        (await GetIndexDefinitionAsync("event_log_commit_id_idx")).ShouldEndWith("WHERE (commit_index = 0)");
+        var definition = (await GetIndexDefinitionAsync("event_log_commit_id_idx")).ShouldNotBeNull();
+        definition.ShouldStartWith("CREATE UNIQUE INDEX");
+        definition.ShouldEndWith("WHERE (commit_index = 0)");
+    }
+
+    [Test]
+    public async Task EnsureInitializedAsync_CommitIdIndexRejectsRepeatedCommitIdFromAnotherWriter()
+    {
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(SetUpFixture.DataSource, _options);
+
+        var commitId = Guid.NewGuid();
+        await InsertRowAsync(position: 0, streamId: "s1", streamPosition: 0, commitId, commitIndex: 0);
+
+        // A second event of the same commit is fine: only the first row of a commit is indexed.
+        await InsertRowAsync(position: 1, streamId: "s1", streamPosition: 1, commitId, commitIndex: 1);
+
+        var ex = await Should.ThrowAsync<PostgresException>(() =>
+            InsertRowAsync(position: 2, streamId: "s2", streamPosition: 0, commitId, commitIndex: 0));
+
+        ex.SqlState.ShouldBe(PostgresErrorCodes.UniqueViolation);
+        ex.ConstraintName.ShouldBe("event_log_commit_id_idx");
     }
 
     [Test]
@@ -153,6 +173,22 @@ public class PostgresEventStoreAdminTests
         command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = $"{_options.Schema}_event_log_pub" });
 
         return (bool)(await command.ExecuteScalarAsync())!;
+    }
+
+    private async Task InsertRowAsync(long position, string streamId, long streamPosition, Guid commitId, int commitIndex)
+    {
+        await using var command = SetUpFixture.DataSource.CreateCommand(
+            $"INSERT INTO {_options.Schema}.event_log " +
+            "(position, stream_id, stream_position, commit_id, commit_index, event_name, event_data, created_at) " +
+            "VALUES ($1, $2, $3, $4, $5, 'e', '{}'::jsonb, now())");
+
+        command.Parameters.Add(new NpgsqlParameter<long> { TypedValue = position });
+        command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = streamId });
+        command.Parameters.Add(new NpgsqlParameter<long> { TypedValue = streamPosition });
+        command.Parameters.Add(new NpgsqlParameter<Guid> { TypedValue = commitId });
+        command.Parameters.Add(new NpgsqlParameter<int> { TypedValue = commitIndex });
+
+        await command.ExecuteNonQueryAsync();
     }
 
     private async Task<string?> GetIndexDefinitionAsync(string index)
