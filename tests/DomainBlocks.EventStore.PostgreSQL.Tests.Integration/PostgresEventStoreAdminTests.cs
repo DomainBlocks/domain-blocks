@@ -35,6 +35,14 @@ public class PostgresEventStoreAdminTests
     }
 
     [Test]
+    public async Task EnsureInitializedAsync_CommitIdIndexIsPartialOnFirstEvent()
+    {
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(SetUpFixture.DataSource, _options);
+
+        (await GetIndexDefinitionAsync("event_log_commit_id_idx")).ShouldEndWith("WHERE (commit_index = 0)");
+    }
+
+    [Test]
     public async Task EnsureInitializedAsync_CalledTwice_IsIdempotent()
     {
         await PostgresEventStoreAdmin.EnsureInitializedAsync(SetUpFixture.DataSource, _options);
@@ -131,6 +139,17 @@ public class PostgresEventStoreAdminTests
         command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = $"{_options.Schema}_event_log_pub" });
 
         return (bool)(await command.ExecuteScalarAsync())!;
+    }
+
+    private async Task<string?> GetIndexDefinitionAsync(string index)
+    {
+        await using var command = SetUpFixture.DataSource.CreateCommand(
+            "SELECT indexdef FROM pg_indexes WHERE schemaname = $1 AND indexname = $2");
+
+        command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = _options.Schema });
+        command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = index });
+
+        return (string?)await command.ExecuteScalarAsync();
     }
 
     private async Task<long> GetSequenceNextAsync()

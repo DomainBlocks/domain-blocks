@@ -54,7 +54,7 @@ Everything lives in the configured schema (default `dbx`), which is also the uni
 
 | Object | Purpose |
 |---|---|
-| `event_log` | One row per event: `position` (PK), `stream_id`, `stream_position`, `commit_id`, `commit_index`, `event_name`, `event_data jsonb`, `event_data_bytes bytea`, `metadata jsonb`, `created_at`. `UNIQUE (stream_id, stream_position)`. |
+| `event_log` | One row per event: `position` (PK), `stream_id`, `stream_position`, `commit_id`, `commit_index`, `event_name`, `event_data jsonb`, `event_data_bytes bytea`, `metadata jsonb`, `created_at`. `UNIQUE (stream_id, stream_position)`; partial index on `commit_id` for the first event of each commit. |
 | `sequences` | The `event_log` counter row that all appends lock. |
 | `append_events(...)` | PL/pgSQL function that commits a batch of appends in one round trip. |
 | `<schema>_event_log_pub` | Publication of `event_log` inserts for logical replication. |

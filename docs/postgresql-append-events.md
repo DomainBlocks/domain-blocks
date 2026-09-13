@@ -65,7 +65,7 @@ CREATE TABLE __schema__.event_log (
     CHECK ((event_data IS NULL) <> (event_data_bytes IS NULL)),
     ...
 );
-CREATE INDEX event_log_commit_id_idx ON __schema__.event_log (commit_id);
+CREATE INDEX event_log_commit_id_idx ON __schema__.event_log (commit_id) WHERE commit_index = 0;
 
 CREATE TABLE __schema__.sequences (name text PRIMARY KEY, next bigint NOT NULL) WITH (fillfactor = 50);
 INSERT INTO __schema__.sequences VALUES ('event_log', 0) ON CONFLICT DO NOTHING;
@@ -77,7 +77,7 @@ Three indexes matter to the function:
 |---|---|
 | `event_log_pkey (position)` | The final `INSERT` (uniqueness check on every new row). |
 | `event_log_stream_id_stream_position_key (stream_id, stream_position)` | The head prefetch (one backwards probe per distinct stream) and the `INSERT` uniqueness check. |
-| `event_log_commit_id_idx (commit_id)` | The idempotency probe. |
+| `event_log_commit_id_idx (commit_id) WHERE commit_index = 0` | The idempotency probe. Partial: one entry per request rather than per event, since every request writes exactly one row with `commit_index = 0`. |
 
 The `sequences` table holds a single hot row. Its low `fillfactor` leaves free space on the page so that every
 `UPDATE` can be a HOT update that never has to touch an index. See
@@ -437,9 +437,9 @@ timestamp earlier than the batch it queued behind.
 
 ```sql
 v_existing_commits := ARRAY(
-    SELECT DISTINCT e.commit_id
+    SELECT e.commit_id
     FROM __schema__.event_log AS e
-    WHERE e.commit_id = ANY (p_commit_ids));
+    WHERE e.commit_id = ANY (p_commit_ids) AND e.commit_index = 0);
 ```
 
 `ARRAY(subquery)` builds an array from a single-column result
@@ -448,7 +448,10 @@ v_existing_commits := ARRAY(
 ([`ANY`/`SOME` (array)](https://www.postgresql.org/docs/17/functions-comparisons.html#FUNCTIONS-COMPARISONS-ANY-SOME)),
 and the planner can drive it from `event_log_commit_id_idx` as an index scan with an array of keys.
 
-`DISTINCT` is needed because a commit id that was previously committed with N events appears N times in `event_log`.
+The index is partial on `commit_index = 0` ([Partial indexes](https://www.postgresql.org/docs/17/indexes-partial.html)),
+so the query must repeat that predicate for the planner to consider the index. Because every request writes exactly
+one row with `commit_index = 0`, the predicate also guarantees at most one row per commit id, which is why no
+`DISTINCT` is needed even though a commit with N events occupies N rows.
 
 The result is stable for the rest of the function because no other appender can insert while the lock is held. This
 single statement replaces R separate lookups.

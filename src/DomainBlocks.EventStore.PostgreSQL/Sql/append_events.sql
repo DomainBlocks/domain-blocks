@@ -124,11 +124,13 @@ BEGIN
     v_position := v_position_start;
     v_created_at := clock_timestamp(); -- After the lock, so that it is monotone with position.
 
-    -- Idempotency: one index probe for every commit id in the batch. Stable while the lock is held.
+    -- Idempotency: one index probe for every commit id in the batch. Stable while the lock is held. The commit id
+    -- index is partial on commit_index = 0, which every request has exactly one row for, so the predicate is what
+    -- lets the planner use it and also makes the result distinct.
     v_existing_commits := ARRAY(
-        SELECT DISTINCT e.commit_id
+        SELECT e.commit_id
         FROM __schema__.event_log AS e
-        WHERE e.commit_id = ANY (p_commit_ids));
+        WHERE e.commit_id = ANY (p_commit_ids) AND e.commit_index = 0);
 
     -- Heads: one index probe per distinct stream. The lateral max() lets the planner use the (stream_id,
     -- stream_position) index backwards with a limit, so each probe is O(1) however long the stream is.

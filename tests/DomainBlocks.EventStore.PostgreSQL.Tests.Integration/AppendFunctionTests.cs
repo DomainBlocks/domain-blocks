@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Npgsql;
+using NpgsqlTypes;
 using NUnit.Framework;
 using Shouldly;
 using static DomainBlocks.EventStore.PostgreSQL.Tests.Integration.AppendFunctionClient;
@@ -188,6 +189,31 @@ public class AppendFunctionTests
         results.ShouldBe(
             [new Result(0, AppendProtocol.StatusDuplicate, AppendProtocol.ObservedAtVersion, 1, null, null)]);
         (await _client.ReadRowsAsync()).Count.ShouldBe(2);
+    }
+
+    [Test]
+    public async Task ExistingCommitId_ProbeUsesPartialIndex()
+    {
+        // The probe must repeat the index predicate; without it the planner falls back to a sequential scan.
+        await _client.AppendAsync(Any("s1", JsonEvent(), JsonEvent()), Any("s2", JsonEvent()));
+
+        await using var command = SetUpFixture.DataSource.CreateCommand(
+            $"EXPLAIN (FORMAT TEXT) SELECT e.commit_id FROM {Schema}.event_log AS e " +
+            "WHERE e.commit_id = ANY ($1) AND e.commit_index = 0");
+
+        command.Parameters.Add(new NpgsqlParameter<Guid[]>
+        {
+            NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Uuid,
+            TypedValue = [Guid.NewGuid()]
+        });
+
+        await using var reader = await command.ExecuteReaderAsync();
+        var plan = new List<string>();
+
+        while (await reader.ReadAsync())
+            plan.Add(reader.GetString(0));
+
+        plan.ShouldContain(line => line.Contains("event_log_commit_id_idx"), string.Join('\n', plan));
     }
 
     [Test]
