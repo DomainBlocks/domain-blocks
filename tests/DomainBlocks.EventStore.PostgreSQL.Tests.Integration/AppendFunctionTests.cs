@@ -423,6 +423,19 @@ public class AppendFunctionTests
     }
 
     [Test]
+    public async Task EmptyBatchWithEvents_RaisesInvalidParameterValue()
+    {
+        await using var command = SetUpFixture.DataSource.CreateCommand(
+            $"SELECT * FROM {Schema}.append_events(" +
+            "ARRAY[]::text[], ARRAY[]::smallint[], ARRAY[]::bigint[], ARRAY[]::uuid[], ARRAY[]::integer[], " +
+            "ARRAY['e'], ARRAY['{}'::jsonb], ARRAY[NULL::bytea], ARRAY[NULL::jsonb])");
+
+        var ex = await Should.ThrowAsync<PostgresException>(command.ExecuteNonQueryAsync);
+
+        ex.SqlState.ShouldBe(PostgresErrorCodes.InvalidParameterValue);
+    }
+
+    [Test]
     public async Task ArrayLengthMismatch_RaisesInvalidParameterValue()
     {
         await using var command = SetUpFixture.DataSource.CreateCommand(

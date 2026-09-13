@@ -59,10 +59,6 @@ BEGIN
 
     v_request_count := coalesce(cardinality(p_stream_ids), 0);
 
-    IF v_request_count = 0 THEN
-        RETURN;
-    END IF;
-
     IF coalesce(cardinality(p_expected_kinds), 0) <> v_request_count OR
        coalesce(cardinality(p_expected_versions), 0) <> v_request_count OR
        coalesce(cardinality(p_commit_ids), 0) <> v_request_count OR
@@ -73,7 +69,7 @@ BEGIN
 
     -- One pass over the request arrays: the event total and both validity checks.
     SELECT
-        sum(r.event_count),
+        coalesce(sum(r.event_count), 0),
         bool_or(r.event_count IS NULL OR r.event_count <= 0),
         bool_or(r.stream_id IS NULL OR r.stream_id = ''
             OR r.commit_id IS NULL
@@ -100,6 +96,11 @@ BEGIN
     IF v_invalid_request THEN
         RAISE EXCEPTION 'invalid request: check stream ids, commit ids, expected kinds and versions'
             USING ERRCODE = 'invalid_parameter_value';
+    END IF;
+
+    -- An empty batch is valid once every array has been checked against it.
+    IF v_request_count = 0 THEN
+        RETURN;
     END IF;
 
     -- Serialize all appenders. This blocks until any in-flight batch has committed or rolled back.

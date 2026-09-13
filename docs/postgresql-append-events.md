@@ -164,11 +164,11 @@ CTE that advances every stream by one request per iteration.
 
 The comment is the design summary. Three claims in it are worth pinning to the code:
 
-- "All appenders serialize on the event_log sequence row, whose lock is held until commit" → lines 106–109 and the
+- "All appenders serialize on the event_log sequence row, whose lock is held until commit" → lines 107–110 and the
   autocommit call site.
-- "Each request is evaluated independently ... Only protocol violations raise" → the validation block (lines 60–103)
-  raises; the evaluating statement (lines 127–237) never does.
-- "fixed number of statements regardless of its size" → the table statements at lines 106, 121 and 127.
+- "Each request is evaluated independently ... Only protocol violations raise" → the validation block (lines 60–99)
+  raises; the evaluating statement (lines 128–238) never does.
+- "fixed number of statements regardless of its size" → the table statements at lines 107, 122 and 128.
 
 ### Lines 21–30: signature
 
@@ -200,7 +200,7 @@ RETURNS TABLE (
 ```
 
 This declares a set-returning function. In PL/pgSQL the six output columns double as **local variables**, which is why
-the query at line 127 avoids using those names for anything it computes: an unqualified `status` inside it would be
+the query at line 128 avoids using those names for anything it computes: an unqualified `status` inside it would be
 substituted with the variable. See
 [Returning from a function](https://www.postgresql.org/docs/17/plpgsql-control-structures.html#PLPGSQL-STATEMENTS-RETURNING).
 
@@ -261,7 +261,7 @@ See [Declarations](https://www.postgresql.org/docs/17/plpgsql-declarations.html)
 | `v_created_at timestamptz` | One timestamp stamped on every event in the batch. |
 | `v_existing_commits uuid[]` | Commit ids from the batch that are already in `event_log`. |
 
-Everything per-request lives inside the query at line 127; nothing per-request is held in a PL/pgSQL variable.
+Everything per-request lives inside the query at line 128; nothing per-request is held in a PL/pgSQL variable.
 
 ### Lines 52–58: isolation-level guard
 
@@ -276,12 +276,12 @@ END IF;
 `transaction_isolation` reports the isolation level of the current transaction
 ([`transaction_isolation`](https://www.postgresql.org/docs/17/runtime-config-client.html#GUC-TRANSACTION-ISOLATION)).
 
-Why the guard exists: the `SELECT ... FOR UPDATE` at line 106 may block behind another batch. When that batch commits,
+Why the guard exists: the `SELECT ... FOR UPDATE` at line 107 may block behind another batch. When that batch commits,
 what happens next depends on the isolation level:
 
 - Under **READ COMMITTED**, the blocked statement wakes up, re-reads the *newly committed* version of the row and
   locks that. This is the behaviour the design relies on: the next batch sees the updated `next` value. Just as
-  important, every later statement in the function takes a fresh snapshot, so the heads read at line 152 include
+  important, every later statement in the function takes a fresh snapshot, so the heads read at line 153 include
   the rows the previous batch committed.
 - Under **REPEATABLE READ** or **SERIALIZABLE**, the row has changed since the transaction's snapshot, so the statement
   fails with `could not serialize access due to concurrent update` instead.
@@ -301,27 +301,11 @@ from [Appendix A. Error Codes](https://www.postgresql.org/docs/17/errcodes-appen
 aborts the function and, because the call is autocommit, rolls back the entire statement. No partial batch is ever
 visible.
 
-### Lines 60–64: request count and the empty batch
+### Lines 60–68: request count and request arrays must agree
 
 ```sql
 v_request_count := coalesce(cardinality(p_stream_ids), 0);
 
-IF v_request_count = 0 THEN
-    RETURN;
-END IF;
-```
-
-`cardinality` returns the total element count of an array, and returns `NULL` for a `NULL` array; `coalesce` turns
-that into 0 so a `NULL` argument is treated as an empty batch. See
-[`cardinality`](https://www.postgresql.org/docs/17/functions-array.html) and
-[`COALESCE`](https://www.postgresql.org/docs/17/functions-conditional.html#FUNCTIONS-COALESCE-NVL-IFNULL).
-
-A bare `RETURN` in a set-returning function ends execution and returns whatever has been accumulated: here, nothing.
-The lock is never taken for an empty batch. (The client never sends one, but the function is defensive.)
-
-### Lines 66–72: request arrays must agree
-
-```sql
 IF coalesce(cardinality(p_expected_kinds), 0) <> v_request_count OR
    ... THEN
     RAISE EXCEPTION 'request arrays must all have length %', v_request_count
@@ -329,16 +313,21 @@ IF coalesce(cardinality(p_expected_kinds), 0) <> v_request_count OR
 END IF;
 ```
 
+`cardinality` returns the total element count of an array, and returns `NULL` for a `NULL` array; `coalesce` turns
+that into 0 so a `NULL` argument is treated as an empty array. See
+[`cardinality`](https://www.postgresql.org/docs/17/functions-array.html) and
+[`COALESCE`](https://www.postgresql.org/docs/17/functions-conditional.html#FUNCTIONS-COALESCE-NVL-IFNULL).
+
 Structure-of-arrays encoding is only meaningful if the parallel arrays line up. Note `cardinality` counts `NULL`
 elements, so `p_expected_versions` (which legitimately contains `NULL`s for non-`AtVersion` requests) still has length R.
 This check has to come first: the multi-array `unnest` on the next statement pads shorter arrays with `NULL`s
 rather than failing, so it would mask a length mismatch.
 
-### Lines 74–85: one validation pass over the requests
+### Lines 70–81: one validation pass over the requests
 
 ```sql
 SELECT
-    sum(r.event_count),
+    coalesce(sum(r.event_count), 0),
     bool_or(r.event_count IS NULL OR r.event_count <= 0),
     bool_or(r.stream_id IS NULL OR r.stream_id = ''
         OR r.commit_id IS NULL
@@ -355,7 +344,8 @@ Multi-argument `unnest` zips several arrays into one row set, one row per reques
 Three things are computed in the single pass, using aggregates
 ([Aggregate functions](https://www.postgresql.org/docs/17/functions-aggregate.html)):
 
-- `sum(event_count)` is E. `sum` ignores `NULL`s, which is why the null check is separate.
+- `sum(event_count)` is E. `sum` ignores `NULL`s, which is why the null check is separate, and returns `NULL` over
+  no rows, which the `coalesce` turns into 0 so that an empty batch compares equal to empty event arrays below.
 - `bool_or(...)` is true if any event count is missing or non-positive. A zero count would make a request occupy no
   events yet still "append", which would break the position arithmetic (`last_position = first_position + count - 1`
   would be less than `first_position`).
@@ -365,7 +355,7 @@ Three things are computed in the single pass, using aggregates
 |---|---|
 | `stream_id` not null or empty | Mirrors the `CHECK (stream_id <> '')` on `event_log`; failing here is a clean protocol error rather than a constraint violation mid-insert. |
 | `commit_id` not null | It is the idempotency key and an `= ANY` test against `NULL` would never match. |
-| `kind` in 0..3 | Any other value would make the `CASE` at line 176 yield `NULL`, which the outer `CASE` would treat as false and silently report as a conflict. Validating up front keeps that path unreachable. |
+| `kind` in 0..3 | Any other value would make the `CASE` at line 177 yield `NULL`, which the outer `CASE` would treat as false and silently report as a conflict. Validating up front keeps that path unreachable. |
 | kind 3 ⇒ version present and ≥ 0 | `AtVersion` needs a version; stream positions are 0-based. |
 | kind ≠ 3 ⇒ version null | Catches a client that sends a version with the wrong kind. |
 
@@ -373,7 +363,7 @@ Three things are computed in the single pass, using aggregates
 [Executing a query with a single-row result](https://www.postgresql.org/docs/17/plpgsql-statements.html#PLPGSQL-STATEMENTS-SQL-ONEROW).
 Previously these were three separate statements; folding them saves two executor start-ups per batch.
 
-### Lines 87–103: raising in a fixed order
+### Lines 83–99: raising in a fixed order
 
 ```sql
 IF v_invalid_count THEN
@@ -394,7 +384,20 @@ first error it always did. The event-array length check sits in the middle becau
 counts are known to be valid. If the client's flattening were ever wrong, the `JOIN ... ON ev.ord = d.event_offset +
 g.k` in the insert would silently drop rows or attach the wrong payloads, so this is caught up front.
 
-### Lines 105–114: the lock
+### Lines 101–104: the empty batch
+
+```sql
+IF v_request_count = 0 THEN
+    RETURN;
+END IF;
+```
+
+A bare `RETURN` in a set-returning function ends execution and returns whatever has been accumulated: here, nothing.
+The lock is never taken for an empty batch. (The client never sends one, but the function is defensive.) The return
+sits after the validation rather than before it so that an empty batch is held to the same contract as any other:
+zero requests with non-empty event arrays is a protocol violation and raises, rather than being silently accepted.
+
+### Lines 106–115: the lock
 
 ```sql
 SELECT s.next INTO v_position_start
@@ -417,14 +420,14 @@ end of this function call.
 
 The consequence is a queue: every concurrent `append_events` call from any connection blocks at this line until the
 one holding the lock commits or rolls back. When it wakes, READ COMMITTED semantics make it re-read the row and pick up
-the `next` value the previous batch wrote at line 224. Hence:
+the `next` value the previous batch wrote at line 225. Hence:
 
 - global positions are handed out in commit order;
 - there are no gaps, because a rolled-back batch never updated the row;
 - throughput of the whole store is bounded by the critical section between this line and commit, which is why the
   client batches.
 
-**This must stay a separate statement from the one at line 127.** Under READ COMMITTED each statement takes its own
+**This must stay a separate statement from the one at line 128.** Under READ COMMITTED each statement takes its own
 snapshot. If the head prefetch were part of the same statement as the `FOR UPDATE`, it would read from a snapshot
 taken before the lock was acquired, and after waiting behind another batch it would see stale heads. Keeping the lock
 in its own statement is what guarantees the evaluating statement sees the previous batch's rows.
@@ -433,7 +436,7 @@ in its own statement is what guarantees the evaluating statement sees the previo
 ([Obtaining the result status](https://www.postgresql.org/docs/17/plpgsql-statements.html#PLPGSQL-STATEMENTS-DIAGNOSTICS)).
 A missing row means `schema.sql` was never run.
 
-### Line 116: timestamp
+### Line 117: timestamp
 
 ```sql
 v_created_at := clock_timestamp(); -- After the lock, so that it is monotone with position.
@@ -447,7 +450,7 @@ Taking it *after* the lock is acquired guarantees that if batch A got lower posi
 is also earlier, because A held the lock first. With `now()` a batch that waited a long time for the lock could carry a
 timestamp earlier than the batch it queued behind.
 
-### Lines 118–125: idempotency probe
+### Lines 119–126: idempotency probe
 
 ```sql
 v_existing_commits := ARRAY(
@@ -471,7 +474,7 @@ The result is stable for the rest of the function because no other appender can 
 single statement replaces R separate lookups. It is kept separate from the statement below because an array-keyed
 index scan is cheaper than a correlated `EXISTS` per request row would be.
 
-### Lines 127–237: the evaluating statement
+### Lines 128–238: the evaluating statement
 
 ```sql
 RETURN QUERY
@@ -499,7 +502,7 @@ design:
 ([`RETURN QUERY`](https://www.postgresql.org/docs/17/plpgsql-control-structures.html#PLPGSQL-STATEMENTS-RETURNING-RETURN-QUERY)).
 The CTEs are walked in order below.
 
-### Lines 128–151: `request`
+### Lines 129–152: `request`
 
 ```sql
 request AS (
@@ -537,7 +540,7 @@ R rows up to three times. R is small, so this is a fixed cost of well under a mi
 three later CTEs, so the planner materialises it once
 ([CTE materialization](https://www.postgresql.org/docs/17/queries-with.html#QUERIES-WITH-CTE-MATERIALIZATION)).
 
-### Lines 152–162: `head`
+### Lines 153–163: `head`
 
 ```sql
 head AS (
@@ -570,7 +573,7 @@ array.
 This is where the stream id collation matters (section 2): each index descent compares the parameter's stream id
 against index keys, and with a locale collation over long common prefixes those comparisons dominated the batch.
 
-### Lines 163–185: `chain`
+### Lines 164–186: `chain`
 
 ```sql
 chain AS (
@@ -627,7 +630,7 @@ afterwards in `ord` order, so nothing observable depends on evaluation order.
 Restrictions worth knowing when editing: the recursive term may reference `chain` only once, and may not contain
 aggregates or window functions over it. The lateral subquery and the `CASE` expressions are fine.
 
-### Lines 186–198: `decided`
+### Lines 187–199: `decided`
 
 ```sql
 decided AS (
@@ -650,7 +653,7 @@ order, so accepted requests get contiguous positions in `ord` order and conflict
 ([Aggregate expressions](https://www.postgresql.org/docs/17/sql-expressions.html#SYNTAX-AGGREGATES)); combined with
 the same window frame as `event_offset` it is a running sum over accepted rows only.
 
-### Lines 199–223: `inserted`
+### Lines 200–224: `inserted`
 
 ```sql
 inserted AS (
@@ -690,7 +693,7 @@ rather than subscripted so the cost is linear in E. The two unique constraints o
 is inserted; given the lock and the head prefetch they should never fail, and if they ever do it indicates a write
 path that bypassed this function, and the whole batch rolls back.
 
-### Lines 224–228: `advanced`
+### Lines 225–229: `advanced`
 
 ```sql
 advanced AS (
@@ -704,10 +707,10 @@ Advances the sequence by exactly the number of rows inserted ([UPDATE](https://w
 Conflicts and duplicates consumed no positions, hence no gaps. The `WHERE` clause leaves the row untouched when
 nothing was inserted, so a batch of pure conflicts does not create a dead tuple on the hot row.
 
-This is the same row that was locked at line 106, so the `UPDATE` does not block. With `fillfactor = 50` and no
+This is the same row that was locked at line 107, so the `UPDATE` does not block. With `fillfactor = 50` and no
 indexed column changing, it should be a HOT update, keeping the primary-key index untouched.
 
-### Lines 229–237: the result rows
+### Lines 230–238: the result rows
 
 ```sql
 SELECT
@@ -725,7 +728,7 @@ One row per request in batch order, mapped to the protocol: 0-based `request_ind
 translated into kind plus version, and the position range only for appended requests. The casts make the column
 types match `RETURNS TABLE` exactly, which `RETURN QUERY` requires.
 
-### Lines 239–240: end
+### Lines 240–241: end
 
 ```sql
 RETURN;
@@ -772,7 +775,7 @@ observe it.
 ## 7. Correctness properties and why they hold
 
 **Global positions are gap-free and in commit order.** The only writer of `sequences.next` is the `advanced` CTE,
-executed under the row lock taken at line 106 and held to commit. A batch that raises never reaches it and rolls back
+executed under the row lock taken at line 107 and held to commit. A batch that raises never reaches it and rolls back
 its inserts, so the counter only moves when rows are committed. Waiting batches re-read the committed value under READ
 COMMITTED (guarded at line 54).
 
@@ -799,14 +802,14 @@ For a batch of R requests, S distinct streams, and E events, of which E′ are a
 
 | Step | Lines | Table access | Cost driver |
 |---|---|---|---|
-| Argument validation | 60–103 | none | O(R) in one statement over the arrays. |
-| Lock | 106 | 1 row of `sequences` | Wait time behind the previous batch. This is the serialisation point. |
-| Commit-id probe | 121 | index scan on `commit_id` with R keys | O(R log N) index probes, normally all misses. |
-| `request` | 128 | none | Up to three sorts of R rows for the window functions. |
-| `head` | 152 | S backwards index probes on `(stream_id, stream_position)` | O(S log N), independent of stream length. |
-| `chain` | 163 | none | One join per iteration; iterations = max requests to one stream, usually 1. |
-| `inserted` | 199 | E′ heap inserts, index entries: 2 per event + 1 per request | O(E′ log N) plus WAL volume proportional to payload size. |
-| `advanced` | 224 | 1 HOT update | Constant. |
+| Argument validation | 60–99 | none | O(R) in one statement over the arrays. |
+| Lock | 107 | 1 row of `sequences` | Wait time behind the previous batch. This is the serialisation point. |
+| Commit-id probe | 122 | index scan on `commit_id` with R keys | O(R log N) index probes, normally all misses. |
+| `request` | 129 | none | Up to three sorts of R rows for the window functions. |
+| `head` | 153 | S backwards index probes on `(stream_id, stream_position)` | O(S log N), independent of stream length. |
+| `chain` | 164 | none | One join per iteration; iterations = max requests to one stream, usually 1. |
+| `inserted` | 200 | E′ heap inserts, index entries: 2 per event + 1 per request | O(E′ log N) plus WAL volume proportional to payload size. |
+| `advanced` | 225 | 1 HOT update | Constant. |
 | Commit | | | WAL flush (`fsync`), a fixed cost per batch. |
 
 Measured on `postgres:17` under Docker Desktop (Ryzen AI MAX+ 395, September 2026) for 500 single-event requests to
