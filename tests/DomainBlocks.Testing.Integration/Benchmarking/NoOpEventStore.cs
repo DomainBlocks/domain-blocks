@@ -19,6 +19,7 @@ public sealed class NoOpEventStore : IEventStore<object, string, StreamPosition,
         CancellationToken cancellationToken = default)
     {
         return YieldAsync();
+        static async Task YieldAsync() => await Task.Yield();
     }
 
     public IAsyncEnumerable<ReadEvent<object, string, StreamPosition, LogPosition>> ReadAll(
@@ -52,6 +53,4 @@ public sealed class NoOpEventStore : IEventStore<object, string, StreamPosition,
     {
         throw new NotSupportedException();
     }
-
-    private static async Task YieldAsync() => await Task.Yield();
 }

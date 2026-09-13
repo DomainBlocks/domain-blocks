@@ -85,8 +85,10 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos> :
                 ct);
 
             await BenchmarkReport.WriteEnvironmentAsync(instances[0].GetType(), await DescribeStoreAsync());
+
             await BenchmarkReport.WriteThroughputAsync(
-                $"append throughput, {instanceCount} instance(s), {inFlight:N0} in flight, 1 event per append, new stream per append",
+                $"append throughput, {instanceCount} instance(s), {inFlight:N0} in flight, " +
+                "1 event per append, new stream per append",
                 result);
 
             result.Errors.ShouldBe(0, "a throughput figure with failed appends is not meaningful");

@@ -44,7 +44,8 @@ public class PostgresEventStoreBenchmarkTests : EventStoreBenchmarkTests<StreamP
         var result = await runner.MeasureLatencyAsync(
             async (_, streamId, token) =>
             {
-                await eventStore.AppendAsync(streamId, [new TestEvent { Value = "Benchmark" }], cancellationToken: token);
+                await eventStore.AppendAsync(streamId, [new TestEvent { Value = "Benchmark" }],
+                    cancellationToken: token);
 
                 (await enumerator.MoveNextAsync()).ShouldBeTrue();
                 enumerator.Current.ShouldBeOfType<
