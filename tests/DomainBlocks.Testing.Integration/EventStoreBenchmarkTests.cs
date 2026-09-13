@@ -51,7 +51,8 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos> :
             ct);
 
         await BenchmarkReport.WriteEnvironmentAsync(eventStore.GetType(), await DescribeStoreAsync());
-        await BenchmarkReport.WriteLatencyAsync("append latency, 1 in flight, 1 event per append, new stream per append", result);
+        await BenchmarkReport.WriteLatencyAsync(
+            "append latency, 1 in flight, 1 event per append, new stream per append", result);
 
         result.Errors.ShouldBe(0, "a latency figure with failed appends is not meaningful");
         result.Latencies.Count.ShouldBeGreaterThan(0);

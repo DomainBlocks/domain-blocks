@@ -3,49 +3,6 @@ using System.Diagnostics;
 namespace DomainBlocks.Testing.Integration.Benchmarking;
 
 /// <summary>
-/// One append (or append-shaped) operation against the system under test. <paramref name="workerIndex"/> lets callers
-/// spread workers over several store instances without synchronisation; <paramref name="streamId"/> is unique per call.
-/// </summary>
-public delegate Task BenchmarkOperation(int workerIndex, string streamId, CancellationToken cancellationToken);
-
-public sealed record LatencyOptions
-{
-    /// <summary>Warm-up runs until both this duration and <see cref="MinWarmUpOperations"/> have elapsed.</summary>
-    public TimeSpan WarmUp { get; init; } = TimeSpan.FromSeconds(2);
-
-    public int MinWarmUpOperations { get; init; } = 1_000;
-
-    /// <summary>Measurement stops at this many samples or at <see cref="MaxDuration"/>, whichever comes first.</summary>
-    public int SampleCount { get; init; } = 10_000;
-
-    public TimeSpan MaxDuration { get; init; } = TimeSpan.FromSeconds(30);
-}
-
-public sealed record ThroughputOptions
-{
-    /// <summary>The number of closed-loop workers, i.e. the maximum number of operations in flight.</summary>
-    public required int InFlight { get; init; }
-
-    public TimeSpan WarmUp { get; init; } = TimeSpan.FromSeconds(5);
-
-    public TimeSpan Measure { get; init; } = TimeSpan.FromSeconds(15);
-}
-
-public sealed record LatencyResult(LatencyHistogram Latencies, TimeSpan Duration, int Errors, GcSnapshot Gc);
-
-public sealed record ThroughputResult(
-    int InFlight,
-    long Completed,
-    TimeSpan Duration,
-    IReadOnlyList<double> PerSecondOps,
-    LatencyHistogram Latencies,
-    int Errors,
-    GcSnapshot Gc)
-{
-    public double OpsPerSecond => Completed / Duration.TotalSeconds;
-}
-
-/// <summary>
 /// Store-agnostic closed-loop benchmark harness. Every run uses a fresh stream id per operation, generated outside the
 /// timed region, so the store sees the same "new stream" path during warm-up and measurement.
 /// </summary>
@@ -190,7 +147,10 @@ public sealed class AppendBenchmarkRunner
             while (Stopwatch.GetElapsedTime(windowStart) < options.Measure)
             {
                 var remaining = options.Measure - Stopwatch.GetElapsedTime(windowStart);
-                await Task.Delay(remaining < TimeSpan.FromSeconds(1) ? remaining : TimeSpan.FromSeconds(1), cancellationToken);
+
+                await Task.Delay(remaining < TimeSpan.FromSeconds(1)
+                    ? remaining
+                    : TimeSpan.FromSeconds(1), cancellationToken);
 
                 var now = Stopwatch.GetTimestamp();
                 var count = Volatile.Read(ref completed);
