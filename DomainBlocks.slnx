@@ -39,7 +39,6 @@
     <Project Path="tests/DomainBlocks.EventStore.Primitives.Tests.Unit/DomainBlocks.EventStore.Primitives.Tests.Unit.csproj" />
     <Project Path="tests/DomainBlocks.Testing.Integration/DomainBlocks.Testing.Integration.csproj" />
     <Project Path="tests/DomainBlocks.EventSourcing.Tests.Integration/DomainBlocks.EventSourcing.Tests.Integration.csproj" />
-    <Project Path="tests/DomainBlocks.EventSourcing.Tests.Unit/DomainBlocks.EventSourcing.Tests.Unit.csproj" />
     <Project Path="tests/DomainBlocks.EventStore.Abstractions.Tests.Unit/DomainBlocks.EventStore.Abstractions.Tests.Unit.csproj" />
     <Project Path="tests/DomainBlocks.EventStore.KurrentDB.Tests.Integration/DomainBlocks.EventStore.KurrentDB.Tests.Integration.csproj" />
     <Project Path="tests/DomainBlocks.EventStore.MongoDB.Tests.Integration/DomainBlocks.EventStore.MongoDB.Tests.Integration.csproj" />

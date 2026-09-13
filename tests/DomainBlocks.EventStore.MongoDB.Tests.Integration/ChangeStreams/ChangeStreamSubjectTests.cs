@@ -1,4 +1,5 @@
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
+using DomainBlocks.Testing.Integration;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -8,10 +9,9 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration.ChangeStreams;
 
+[TestFixture]
 public class ChangeStreamSubjectTests
 {
-    private const int TestTimeoutMillis = 30 * 1000;
-
     private IMongoCollection<BsonDocument> _collection = null!;
 
     [SetUp]
@@ -28,7 +28,7 @@ public class ChangeStreamSubjectTests
     }
 
     [Test]
-    [CancelAfter(TestTimeoutMillis)]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task Connect_WhenResultsAreAvailable_NotifiesAttachedObservers(CancellationToken ct)
     {
         const int insertCount = 10;
