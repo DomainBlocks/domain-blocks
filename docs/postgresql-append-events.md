@@ -788,9 +788,15 @@ consecutive requests to one stream chain correctly. No other writer can change a
 **Expectations are checked against the true head.** Same reasoning; `c.head` at iteration n is the exact value that
 will exist once the first n − 1 requests to that stream have been applied.
 
-**Retrying a batch is safe.** If the client's statement fails after the server committed (for example, the connection
-drops while the result set is in flight), the retry finds every commit id in `event_log` (line 121) and reports each
-request as Duplicate. Requests that conflicted the first time still conflict, because the head has not moved for them.
+**Retrying a batch is idempotent for appended requests.** If the client's statement fails after the server committed
+(for example, the connection drops while the result set is in flight), the retry finds the commit id of every
+appended request in `event_log` (line 122) and reports it as Duplicate, so nothing is written twice and nothing is
+lost. A request that conflicted the first time is re-evaluated against the head as it stands on the retry. Usually
+that is the same head and it conflicts again, but if another request in the same batch appended to that stream, the
+head has moved and the request may now succeed: an `Exists` request that lost the race against the stream's creation
+on the first attempt appends on the second. That outcome is exactly what the request would have got had it arrived
+one batch later, and the caller never saw the first result, so no observed history is contradicted. What is not
+preserved is the first attempt's Conflict verdict itself; a conflict is not persisted, so it cannot be replayed.
 
 **One result row per request.** Every request has exactly one `nth`, so it appears in exactly one iteration of
 `chain` and therefore exactly once in `decided`. `AppendBatchCommand` still checks for missing rows defensively.
