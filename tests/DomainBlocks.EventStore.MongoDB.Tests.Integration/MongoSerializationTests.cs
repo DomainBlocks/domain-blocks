@@ -1,4 +1,4 @@
-﻿using DomainBlocks.EventStore.Codecs;
+using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.Abstractions;
 using DomainBlocks.Serialization.Google.Protobuf;
@@ -6,6 +6,7 @@ using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Serialization.SystemTextJson;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using DomainBlocks.Testing.Integration.MongoDB;
 using NUnit.Framework;
 using Shouldly;
 using ProtoUserCreated = DomainBlocks.Testing.Integration.Proto.UserCreated;
@@ -32,7 +33,7 @@ public class MongoSerializationTests
     public async Task OneTimeSetUp()
     {
         _options = new MongoEventStoreOptions { DatabaseName = "dbx_es_serialization_tests" };
-        await MongoEventStoreAdmin.EnsureInitializedAsync(SetUpFixture.MongoClient, _options);
+        await MongoEventStoreAdmin.EnsureInitializedAsync(MongoTestEnvironment.MongoClient, _options);
     }
 
     [Test]
@@ -72,7 +73,7 @@ public class MongoSerializationTests
     private async Task Should_write_and_read_event<TEvent>(TEvent @event, IObjectSerde<BsonValue> serde)
         where TEvent : class
     {
-        await using var eventStore = CreateEventStore(SetUpFixture.MongoClient, serde, _options);
+        await using var eventStore = CreateEventStore(MongoTestEnvironment.MongoClient, serde, _options);
 
         var streamId = $"test-{serde.GetType().Name}-{Guid.NewGuid()}";
         await eventStore.AppendAsync(streamId, [@event]);

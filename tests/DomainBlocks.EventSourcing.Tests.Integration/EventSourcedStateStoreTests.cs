@@ -31,20 +31,20 @@ public class EventSourcedStateStoreTests
         var eventCodec = TestMongoEventCodec.Create<IDomainEvent>(eventTypeMap);
 
         _eventStore = MongoEventStore.Create(
-            SetUpFixture.MongoClient,
+            MongoTestEnvironment.MongoClient,
             eventCodec,
             _options,
-            SetUpFixture.LoggerFactory.CreateLogger<MongoEventStore<IDomainEvent>>());
+            MongoTestEnvironment.LoggerFactory.CreateLogger<MongoEventStore<IDomainEvent>>());
 
         _store = EventSourcedStateStore.Create(_eventStore, new AggregateAdapter<ShoppingCart, ShoppingCartState>());
 
-        await MongoEventStoreAdmin.EnsureInitializedAsync(SetUpFixture.MongoClient, _options);
+        await MongoEventStoreAdmin.EnsureInitializedAsync(MongoTestEnvironment.MongoClient, _options);
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await SetUpFixture.MongoClient.DropDatabaseAsync(_options.DatabaseName);
+        await MongoTestEnvironment.MongoClient.DropDatabaseAsync(_options.DatabaseName);
         await _eventStore.DisposeAsync();
     }
 

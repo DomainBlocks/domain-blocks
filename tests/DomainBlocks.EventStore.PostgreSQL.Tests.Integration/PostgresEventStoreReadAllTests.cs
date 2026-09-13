@@ -1,47 +1,22 @@
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.TypeMapping;
+using DomainBlocks.EventStore.PostgreSQL.Tests.Integration.Support;
 using DomainBlocks.Testing.Integration;
-using DomainBlocks.Testing.Integration.PostgreSQL;
 using NUnit.Framework;
 using Shouldly;
 
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
 [TestFixture]
-public class PostgresEventStoreReadAllTests
+public class PostgresEventStoreReadAllTests() : PostgresIntegrationTest(x => x.ReadBatchSize = BatchSize)
 {
     private const int BatchSize = 7;
-    private const string Schema = "dbx_es_read_all_tests";
 
-    private static readonly PostgresEventStoreOptions Options = new() { Schema = Schema, ReadBatchSize = BatchSize };
-    private static readonly EventTypeMap EventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>());
-
-    private AppendFunctionClient _client = null!;
     private PostgresEventStore<object> _eventStore = null!;
 
-    [OneTimeSetUp]
-    public async Task OneTimeSetUp()
-    {
-        await PostgresEventStoreAdmin.EnsureInitializedAsync(SetUpFixture.DataSource, Options);
-        _client = new AppendFunctionClient(SetUpFixture.DataSource, Schema);
-    }
-
-    [OneTimeTearDown]
-    public async Task OneTimeTearDown()
-    {
-        await PostgresEventStoreAdmin.DropAsync(SetUpFixture.DataSource, Options);
-    }
-
     [SetUp]
-    public async Task SetUp()
+    public void SetUp()
     {
-        await _client.ResetAsync();
-
-        _eventStore = PostgresEventStore.Create(
-            SetUpFixture.DataSource,
-            TestPostgresEventCodec.Create<object>(EventTypeMap),
-            Options,
-            SetUpFixture.LoggerFactory.CreateLogger("PostgresEventStore"));
+        _eventStore = CreateEventStore();
     }
 
     [TearDown]
@@ -174,10 +149,5 @@ public class PostgresEventStoreReadAllTests
             await _eventStore.AppendAsync($"s{i % 3}", [AppendableEvent.Create<object>(e)], cancellationToken: ct);
 
         return events;
-    }
-
-    private static AppendableEvent<object> Appendable(string value)
-    {
-        return AppendableEvent.Create<object>(new TestEvent { Value = value });
     }
 }

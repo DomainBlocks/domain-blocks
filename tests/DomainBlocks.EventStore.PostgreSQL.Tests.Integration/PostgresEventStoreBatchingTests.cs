@@ -1,7 +1,6 @@
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.TypeMapping;
+using DomainBlocks.EventStore.PostgreSQL.Tests.Integration.Support;
 using DomainBlocks.Testing.Integration;
-using DomainBlocks.Testing.Integration.PostgreSQL;
 using Npgsql;
 using NUnit.Framework;
 using Shouldly;
@@ -9,33 +8,8 @@ using Shouldly;
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
 [TestFixture]
-public class PostgresEventStoreBatchingTests
+public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
 {
-    private const string Schema = "dbx_es_batching_tests";
-    private static readonly PostgresEventStoreOptions Options = new() { Schema = Schema };
-    private static readonly EventTypeMap EventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>());
-
-    private AppendFunctionClient _client = null!;
-
-    [OneTimeSetUp]
-    public async Task OneTimeSetUp()
-    {
-        await PostgresEventStoreAdmin.EnsureInitializedAsync(SetUpFixture.DataSource, Options);
-        _client = new AppendFunctionClient(SetUpFixture.DataSource, Schema);
-    }
-
-    [OneTimeTearDown]
-    public async Task OneTimeTearDown()
-    {
-        await PostgresEventStoreAdmin.DropAsync(SetUpFixture.DataSource, Options);
-    }
-
-    [SetUp]
-    public async Task SetUp()
-    {
-        await _client.ResetAsync();
-    }
-
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task ConcurrentAppends_GlobalPositionsAreGapFree(CancellationToken ct)
@@ -44,7 +18,7 @@ public class PostgresEventStoreBatchingTests
         const int appendsPerInstance = 100;
         const int streamCount = 10;
 
-        var instances = Enumerable.Range(0, instanceCount).Select(i => CreateEventStore($"gapfree-{i}")).ToArray();
+        var instances = Enumerable.Range(0, instanceCount).Select(i => CreateEventStore($"_gapfree-{i}")).ToArray();
 
         try
         {
@@ -63,12 +37,12 @@ public class PostgresEventStoreBatchingTests
                 await instance.DisposeAsync();
         }
 
-        var rows = await _client.ReadRowsAsync();
+        var rows = await Client.ReadRowsAsync();
         const int expectedCount = instanceCount * appendsPerInstance * 2;
 
         rows.Count.ShouldBe(expectedCount);
         rows.Select(x => x.Position).ShouldBe(Enumerable.Range(0, expectedCount).Select(i => (long)i));
-        (await _client.GetSequenceNextAsync()).ShouldBe(expectedCount);
+        (await Client.GetSequenceNextAsync()).ShouldBe(expectedCount);
 
         foreach (var stream in rows.GroupBy(x => x.StreamId))
             stream.Select(x => x.StreamPosition).ShouldBe(Enumerable.Range(0, stream.Count()).Select(i => (long)i));
@@ -78,7 +52,7 @@ public class PostgresEventStoreBatchingTests
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task ConcurrentAppends_MixedOutcomesInBatch_CompleteIndividually(CancellationToken ct)
     {
-        await using var eventStore = CreateEventStore("mixed", new PostgresEventStoreOptions
+        await using var eventStore = CreateEventStore("_mixed", new PostgresEventStoreOptions
         {
             Schema = Schema,
             AppendBatchingDelay = TimeSpan.FromMilliseconds(50)
@@ -111,10 +85,10 @@ public class PostgresEventStoreBatchingTests
         foreach (var task in createTasks.Concat(staleTasks))
             await Should.ThrowAsync<StreamAppendConflictException<StreamPosition>>(() => task);
 
-        var rows = await _client.ReadRowsAsync();
+        var rows = await Client.ReadRowsAsync();
         rows.Count.ShouldBe(11);
         rows.Select(x => x.StreamPosition).ShouldBe(Enumerable.Range(0, 11).Select(i => (long)i));
-        (await _client.GetSequenceNextAsync()).ShouldBe(11);
+        (await Client.GetSequenceNextAsync()).ShouldBe(11);
     }
 
     [Test]
@@ -123,7 +97,7 @@ public class PostgresEventStoreBatchingTests
     {
         const int appendCount = 50;
 
-        await using var eventStore = CreateEventStore("coalesced", new PostgresEventStoreOptions
+        await using var eventStore = CreateEventStore("_coalesced", new PostgresEventStoreOptions
         {
             Schema = Schema,
             AppendBatchingDelay = TimeSpan.FromMilliseconds(50)
@@ -136,7 +110,7 @@ public class PostgresEventStoreBatchingTests
 
         // Every row in a batch shares the batch's created_at, so the number of distinct timestamps is the number of
         // batches that were committed.
-        var rows = await _client.ReadRowsAsync();
+        var rows = await Client.ReadRowsAsync();
         var batchCount = rows.Select(x => x.CreatedAt).Distinct().Count();
 
         TestContext.Out.WriteLine($"{appendCount} appends were committed in {batchCount} batch(es)");
@@ -149,10 +123,10 @@ public class PostgresEventStoreBatchingTests
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task DisposeAsync_WithQueuedRequests_FaultsThem(CancellationToken ct)
     {
-        var eventStore = CreateEventStore("dispose");
+        var eventStore = CreateEventStore("_dispose");
 
         // Hold the sequence row so that the appender's batch blocks inside the database.
-        await using var connection = await SetUpFixture.DataSource.OpenConnectionAsync(ct);
+        await using var connection = await DataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
 
         await using (var lockCommand = new NpgsqlCommand($"SELECT next FROM {Schema}.sequences FOR UPDATE", connection))
@@ -174,29 +148,15 @@ public class PostgresEventStoreBatchingTests
 
         await transaction.RollbackAsync(ct);
 
-        (await _client.ReadRowsAsync()).ShouldBeEmpty();
+        (await Client.ReadRowsAsync()).ShouldBeEmpty();
     }
 
     [Test]
     public async Task AppendAsync_AfterDispose_Throws()
     {
-        var eventStore = CreateEventStore("disposed");
+        var eventStore = CreateEventStore("_disposed");
         await eventStore.DisposeAsync();
 
         await Should.ThrowAsync<ObjectDisposedException>(() => eventStore.AppendAsync("s1", [Appendable("a")]));
-    }
-
-    private static AppendableEvent<object> Appendable(string value)
-    {
-        return AppendableEvent.Create<object>(new TestEvent { Value = value });
-    }
-
-    private static PostgresEventStore<object> CreateEventStore(string name, PostgresEventStoreOptions? options = null)
-    {
-        return PostgresEventStore.Create(
-            SetUpFixture.DataSource,
-            TestPostgresEventCodec.Create<object>(EventTypeMap),
-            options ?? Options,
-            SetUpFixture.LoggerFactory.CreateLogger($"PostgresEventStore_{name}"));
     }
 }

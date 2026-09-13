@@ -1,4 +1,4 @@
-﻿using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Integration;
 using DomainBlocks.Testing.Integration.MongoDB;
@@ -18,7 +18,7 @@ public class MongoEventStoreConcurrencyTests
     public async Task OneTimeSetUp()
     {
         _options = new MongoEventStoreOptions { DatabaseName = "dbx_es_concurrency_tests" };
-        await MongoEventStoreAdmin.EnsureInitializedAsync(SetUpFixture.MongoClient, _options);
+        await MongoEventStoreAdmin.EnsureInitializedAsync(MongoTestEnvironment.MongoClient, _options);
     }
 
     [SetUp]
@@ -32,9 +32,9 @@ public class MongoEventStoreConcurrencyTests
         for (var i = 0; i < InstanceCount; i++)
         {
             _instances[i] = MongoEventStore.Create(
-                SetUpFixture.MongoClient,
+                MongoTestEnvironment.MongoClient,
                 eventCodec, _options,
-                SetUpFixture.LoggerFactory.CreateLogger($"MongoEventStore_{i}"));
+                MongoTestEnvironment.LoggerFactory.CreateLogger($"MongoEventStore_{i}"));
         }
     }
 

@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.ContractMapping;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Integration;
 using DomainBlocks.Testing.Integration.Benchmarking;
@@ -12,15 +11,12 @@ using Shouldly;
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
 [TestFixture]
-public class PostgresEventStoreBenchmarkTests : EventStoreBenchmarkTests<StreamPosition, LogPosition>
+public class PostgresEventStoreBenchmarkTests() :
+    EventStoreBenchmarkTests<StreamPosition, LogPosition>(new PostgresEventStoreHarness())
 {
-    private readonly PostgresEventStoreOptions _options = new() { Schema = "dbx_es_benchmark_tests" };
+    private static readonly EventTypeMap EventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>());
 
-    [OneTimeTearDown]
-    public async Task OneTimeTearDown()
-    {
-        await PostgresEventStoreAdmin.DropAsync(SetUpFixture.DataSource, _options);
-    }
+    private PostgresEventStoreHarness Postgres => (PostgresEventStoreHarness)Harness;
 
     /// <summary>
     /// Append-to-observe latency for a live subscription: each sample appends one event and waits for it to arrive.
@@ -31,7 +27,7 @@ public class PostgresEventStoreBenchmarkTests : EventStoreBenchmarkTests<StreamP
     [CancelAfter(TestTimeouts.BenchmarkMillis)]
     public async Task SubscribeToAll_MeasureLiveLatency(CancellationToken ct)
     {
-        var eventStore = CreateEventStore(EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>()));
+        var eventStore = CreateEventStore(EventTypeMap);
         await using var disposable = eventStore as IAsyncDisposable;
 
         await using var enumerator = eventStore.SubscribeToAll().GetAsyncEnumerator(ct);
@@ -61,7 +57,7 @@ public class PostgresEventStoreBenchmarkTests : EventStoreBenchmarkTests<StreamP
             },
             ct);
 
-        await BenchmarkReport.WriteEnvironmentAsync(eventStore.GetType(), await DescribeStoreAsync());
+        await BenchmarkReport.WriteEnvironmentAsync(eventStore.GetType(), await Harness.DescribeAsync());
         await BenchmarkReport.WriteLatencyAsync("append-to-observe latency, live SubscribeToAll, 1 in flight", result);
 
         result.Errors.ShouldBe(0);
@@ -85,13 +81,12 @@ public class PostgresEventStoreBenchmarkTests : EventStoreBenchmarkTests<StreamP
     {
         var options = new PostgresEventStoreOptions
         {
-            Schema = _options.Schema,
+            Schema = Postgres.Options.Schema,
             AppendBatchSize = batchSize,
-            AppendQueueCapacity = Math.Max(inFlight, _options.AppendQueueCapacity)
+            AppendQueueCapacity = Math.Max(inFlight, Postgres.Options.AppendQueueCapacity)
         };
 
-        var eventStore = CreateEventStore(EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>()), options);
-        await using var disposable = eventStore as IAsyncDisposable;
+        await using var eventStore = Postgres.CreateEventStore(TestPostgresEventCodec.Create<object>(EventTypeMap), options);
 
         // Server-side time inside append_events per batch, to separate the function from the rest of the cycle.
         await ExecuteAsync("ALTER SYSTEM SET track_functions = 'pl'; SELECT pg_reload_conf()");
@@ -110,7 +105,10 @@ public class PostgresEventStoreBenchmarkTests : EventStoreBenchmarkTests<StreamP
         var (nextAfter, callsAfter, millisAfter) = await ReadAppendStatsAsync();
         var batches = callsAfter - callsBefore;
 
-        await BenchmarkReport.WriteEnvironmentAsync(eventStore.GetType(), await DescribeStoreAsync(options));
+        await BenchmarkReport.WriteEnvironmentAsync(
+            eventStore.GetType(),
+            await PostgresEventStoreHarness.DescribeAsync(options));
+
         await BenchmarkReport.WriteThroughputAsync(
             $"append throughput, batch size {batchSize:N0}, 1 instance, {inFlight:N0} in flight, " +
             "1 event per append, new stream per append",
@@ -131,13 +129,13 @@ public class PostgresEventStoreBenchmarkTests : EventStoreBenchmarkTests<StreamP
 
     private async Task<(long Next, long Calls, double TotalMillis)> ReadAppendStatsAsync()
     {
-        await using var command = SetUpFixture.DataSource.CreateCommand(
+        await using var command = PostgresTestEnvironment.DataSource.CreateCommand(
             $"SELECT s.next, coalesce(f.calls, 0), coalesce(f.total_time, 0) " +
-            $"FROM {_options.Schema}.sequences AS s " +
+            $"FROM {Postgres.Options.Schema}.sequences AS s " +
             "LEFT JOIN pg_stat_user_functions AS f ON f.schemaname = $1 AND f.funcname = 'append_events' " +
             "WHERE s.name = 'event_log'");
 
-        command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = _options.Schema });
+        command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = Postgres.Options.Schema });
 
         await using var reader = await command.ExecuteReaderAsync();
         (await reader.ReadAsync()).ShouldBeTrue();
@@ -147,62 +145,7 @@ public class PostgresEventStoreBenchmarkTests : EventStoreBenchmarkTests<StreamP
 
     private static async Task ExecuteAsync(string sql)
     {
-        await using var command = SetUpFixture.DataSource.CreateCommand(sql);
+        await using var command = PostgresTestEnvironment.DataSource.CreateCommand(sql);
         await command.ExecuteNonQueryAsync();
-    }
-
-    protected override async Task ResetStoreAsync()
-    {
-        await PostgresEventStoreAdmin.DropAsync(SetUpFixture.DataSource, _options);
-        await PostgresEventStoreAdmin.EnsureInitializedAsync(SetUpFixture.DataSource, _options);
-    }
-
-    protected override Task<string?> DescribeStoreAsync() => DescribeStoreAsync(_options);
-
-    private static async Task<string?> DescribeStoreAsync(PostgresEventStoreOptions options)
-    {
-        var version = await ShowAsync("server_version");
-        var walWriterDelay = await ShowAsync("wal_writer_delay");
-        var synchronousCommit = await ShowAsync("synchronous_commit");
-        var fsync = await ShowAsync("fsync");
-        var sharedBuffers = await ShowAsync("shared_buffers");
-
-        return
-            $"PostgresEventStore: schema {options.Schema}, append batch size {options.AppendBatchSize}, " +
-            $"append queue capacity {options.AppendQueueCapacity}, batching delay {options.AppendBatchingDelay} " +
-            $"(min count {options.AppendBatchingDelayMinCount}); " +
-            $"server {version}: wal_writer_delay {walWriterDelay}, synchronous_commit {synchronousCommit}, " +
-            $"fsync {fsync}, shared_buffers {sharedBuffers}";
-    }
-
-    protected override IEventStore<object, string, StreamPosition, LogPosition> CreateEventStore(
-        EventTypeMap eventTypeMap,
-        EventFormat? eventFormat = null,
-        IEnumerable<IEventContractMapper<object>>? contractMappers = null,
-        string loggerNameSuffix = "")
-    {
-        return CreateEventStore(eventTypeMap, _options, eventFormat, contractMappers, loggerNameSuffix);
-    }
-
-    private static IEventStore<object, string, StreamPosition, LogPosition> CreateEventStore(
-        EventTypeMap eventTypeMap,
-        PostgresEventStoreOptions options,
-        EventFormat? eventFormat = null,
-        IEnumerable<IEventContractMapper<object>>? contractMappers = null,
-        string loggerNameSuffix = "")
-    {
-        var eventCodec = TestPostgresEventCodec.Create(eventTypeMap, eventFormat, contractMappers);
-
-        return PostgresEventStore.Create(
-            SetUpFixture.DataSource,
-            eventCodec,
-            options,
-            SetUpFixture.LoggerFactory.CreateLogger($"PostgresEventStore{loggerNameSuffix}"));
-    }
-
-    private static async Task<string> ShowAsync(string setting)
-    {
-        await using var command = SetUpFixture.DataSource.CreateCommand($"SHOW {setting}");
-        return (await command.ExecuteScalarAsync())?.ToString() ?? "?";
     }
 }

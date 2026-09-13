@@ -1,5 +1,6 @@
 using DomainBlocks.Testing.Integration;
 using DomainBlocks.Testing.Integration.Benchmarking;
+using DomainBlocks.Testing.Integration.KurrentDB;
 using KurrentDB.Client;
 using NUnit.Framework;
 using Shouldly;
@@ -90,7 +91,7 @@ public class KurrentDbClientBenchmarkTests
 
     private static KurrentDBClient CreateClient(string connectionName)
     {
-        var settings = KurrentDBClientSettings.Create(SetUpFixture.KurrentDBConnectionString);
+        var settings = KurrentDBClientSettings.Create(KurrentDBTestEnvironment.ConnectionString);
         settings.ConnectionName = $"benchmark-{connectionName}-{Guid.NewGuid():N}";
         return new KurrentDBClient(settings);
     }

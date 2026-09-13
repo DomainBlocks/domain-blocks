@@ -1,12 +1,12 @@
 using Npgsql;
 using NpgsqlTypes;
 
-namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
+namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration.Support;
 
 /// <summary>
 /// Calls the append_events function directly, so that its contract can be tested independently of the event store.
 /// </summary>
-internal sealed class AppendFunctionClient(NpgsqlDataSource dataSource, string schema)
+public sealed class AppendFunctionClient(NpgsqlDataSource dataSource, string schema)
 {
     public sealed record Request(
         string StreamId,
@@ -187,13 +187,5 @@ internal sealed class AppendFunctionClient(NpgsqlDataSource dataSource, string s
             $"SELECT next FROM {schema}.sequences WHERE name = 'event_log'");
 
         return (long)(await command.ExecuteScalarAsync())!;
-    }
-
-    public async Task ResetAsync()
-    {
-        await using var command = dataSource.CreateCommand(
-            $"TRUNCATE {schema}.event_log; UPDATE {schema}.sequences SET next = 0 WHERE name = 'event_log'");
-
-        await command.ExecuteNonQueryAsync();
     }
 }

@@ -1,4 +1,5 @@
 using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.PostgreSQL.Tests.Integration.Support;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Integration;
 using DomainBlocks.Testing.Integration.PostgreSQL;
@@ -23,14 +24,14 @@ public class PostgresEventStoreConcurrencyTests
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
     {
-        await PostgresEventStoreAdmin.EnsureInitializedAsync(SetUpFixture.DataSource, Options);
-        _client = new AppendFunctionClient(SetUpFixture.DataSource, Schema);
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(PostgresTestEnvironment.DataSource, Options);
+        _client = new AppendFunctionClient(PostgresTestEnvironment.DataSource, Schema);
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        await PostgresEventStoreAdmin.DropAsync(SetUpFixture.DataSource, Options);
+        await PostgresEventStoreAdmin.DropAsync(PostgresTestEnvironment.DataSource, Options);
     }
 
     [SetUp]
@@ -44,10 +45,10 @@ public class PostgresEventStoreConcurrencyTests
         for (var i = 0; i < InstanceCount; i++)
         {
             _instances[i] = PostgresEventStore.Create(
-                SetUpFixture.DataSource,
+                PostgresTestEnvironment.DataSource,
                 eventCodec,
                 Options,
-                SetUpFixture.LoggerFactory.CreateLogger($"PostgresEventStore_{i}"));
+                PostgresTestEnvironment.LoggerFactory.CreateLogger($"PostgresEventStore_{i}"));
         }
     }
 

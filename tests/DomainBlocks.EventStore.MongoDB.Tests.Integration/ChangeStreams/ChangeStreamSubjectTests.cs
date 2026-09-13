@@ -1,7 +1,8 @@
-﻿using DomainBlocks.EventStore.MongoDB.ChangeStreams;
+using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using DomainBlocks.Testing.Integration.MongoDB;
 using NUnit.Framework;
 using Shouldly;
 
@@ -16,7 +17,7 @@ public class ChangeStreamSubjectTests
     [SetUp]
     public void SetUp()
     {
-        var db = SetUpFixture.MongoClient.GetDatabase("domainblocks_tests");
+        var db = MongoTestEnvironment.MongoClient.GetDatabase("domainblocks_tests");
         _collection = db.GetCollection<BsonDocument>("test_items");
     }
 
@@ -35,7 +36,7 @@ public class ChangeStreamSubjectTests
         var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>()
             .Match(x => x.OperationType == ChangeStreamOperationType.Insert);
 
-        var logger = SetUpFixture.LoggerFactory.CreateLogger<ChangeStreamSubjectTests>();
+        var logger = MongoTestEnvironment.LoggerFactory.CreateLogger<ChangeStreamSubjectTests>();
 
         var subject = ChangeStreamSubject.Create(_collection.WatchAsync, pipeline, x => x.ResumeToken, logger: logger);
 

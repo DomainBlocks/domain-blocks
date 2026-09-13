@@ -1,7 +1,6 @@
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.TypeMapping;
+using DomainBlocks.EventStore.PostgreSQL.Tests.Integration.Support;
 using DomainBlocks.Testing.Integration;
-using DomainBlocks.Testing.Integration.PostgreSQL;
 using NUnit.Framework;
 using Shouldly;
 
@@ -11,36 +10,16 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 /// PostgreSQL-specific ReadStream cases beyond the shared suite, mainly around keyset paging.
 /// </summary>
 [TestFixture]
-public class PostgresEventStoreReadStreamTests
+public class PostgresEventStoreReadStreamTests() : PostgresIntegrationTest(x => x.ReadBatchSize = BatchSize)
 {
     private const int BatchSize = 7;
-    private const string Schema = "dbx_es_read_stream_tests";
-
-    private static readonly PostgresEventStoreOptions Options = new() { Schema = Schema, ReadBatchSize = BatchSize };
-    private static readonly EventTypeMap EventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>());
 
     private PostgresEventStore<object> _eventStore = null!;
-
-    [OneTimeSetUp]
-    public async Task OneTimeSetUp()
-    {
-        await PostgresEventStoreAdmin.EnsureInitializedAsync(SetUpFixture.DataSource, Options);
-    }
-
-    [OneTimeTearDown]
-    public async Task OneTimeTearDown()
-    {
-        await PostgresEventStoreAdmin.DropAsync(SetUpFixture.DataSource, Options);
-    }
 
     [SetUp]
     public void SetUp()
     {
-        _eventStore = PostgresEventStore.Create(
-            SetUpFixture.DataSource,
-            TestPostgresEventCodec.Create<object>(EventTypeMap),
-            Options,
-            SetUpFixture.LoggerFactory.CreateLogger("PostgresEventStore"));
+        _eventStore = CreateEventStore();
     }
 
     [TearDown]

@@ -1,4 +1,4 @@
-﻿using DomainBlocks.EventStore;
+using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.ContractMapping;
 using DomainBlocks.EventStore.Transforms;
@@ -9,8 +9,9 @@ using ProtoUserCreated = DomainBlocks.Testing.Integration.Proto.UserCreated;
 
 namespace DomainBlocks.Testing.Integration;
 
-public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos> :
-    EventStoreTestBase<object, string, TStreamPos, TLogPos>
+public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
+    IEventStoreHarness<TStreamPos, TLogPos> harness) :
+    EventStoreTestBase<TStreamPos, TLogPos>(harness)
     where TStreamPos : notnull
     where TLogPos : notnull
 {

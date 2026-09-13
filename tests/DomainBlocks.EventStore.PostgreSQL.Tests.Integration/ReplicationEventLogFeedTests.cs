@@ -2,11 +2,13 @@ using System.Threading.Channels;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Codecs;
 using DomainBlocks.EventStore.PostgreSQL.Feeds;
+using DomainBlocks.EventStore.PostgreSQL.Tests.Integration.Support;
 using DomainBlocks.Testing.Integration;
+using DomainBlocks.Testing.Integration.PostgreSQL;
 using Npgsql;
 using NUnit.Framework;
 using Shouldly;
-using static DomainBlocks.EventStore.PostgreSQL.Tests.Integration.AppendFunctionClient;
+using static DomainBlocks.EventStore.PostgreSQL.Tests.Integration.Support.AppendFunctionClient;
 
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
@@ -21,33 +23,11 @@ using RawReadEvent = ReadEvent<
 /// pass-through decoder so that the raw column values can be asserted on.
 /// </summary>
 [TestFixture]
-public class ReplicationEventLogFeedTests
+public class ReplicationEventLogFeedTests : PostgresIntegrationTest
 {
-    private const string Schema = "dbx_replication_feed_tests";
-    private static readonly PostgresEventStoreOptions Options = new() { Schema = Schema };
-    private static readonly SqlNames Names = new(Schema);
-
-    private AppendFunctionClient _client = null!;
     private int _slotCounter;
 
-    [OneTimeSetUp]
-    public async Task OneTimeSetUp()
-    {
-        await PostgresEventStoreAdmin.EnsureInitializedAsync(SetUpFixture.DataSource, Options);
-        _client = new AppendFunctionClient(SetUpFixture.DataSource, Schema);
-    }
-
-    [OneTimeTearDown]
-    public async Task OneTimeTearDown()
-    {
-        await PostgresEventStoreAdmin.DropAsync(SetUpFixture.DataSource, Options);
-    }
-
-    [SetUp]
-    public async Task SetUp()
-    {
-        await _client.ResetAsync();
-    }
+    private SqlNames Names => new(Schema);
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
@@ -61,7 +41,7 @@ public class ReplicationEventLogFeedTests
         await using var connection = await feed.ConnectAsync(ct);
 
         var events = Enumerable.Range(0, 10).Select(i => JsonEvent($"e{i}", $"{{\"i\": {i}}}")).ToArray();
-        await _client.AppendAsync(Any("s1", events[..6]), Any("s2", events[6..]));
+        await Client.AppendAsync(Any("s1", events[..6]), Any("s2", events[6..]));
 
         var events1 = await observer1.ReadAsync(10, ct);
         var events2 = await observer2.ReadAsync(10, ct);
@@ -85,14 +65,14 @@ public class ReplicationEventLogFeedTests
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task Connect_OnlyDeliversRowsCommittedAfterConnect(CancellationToken ct)
     {
-        await _client.AppendAsync(Any("s1", JsonEvent("before")));
+        await Client.AppendAsync(Any("s1", JsonEvent("before")));
 
         var feed = CreateFeed();
         var observer = new CollectingObserver();
         using var attachment = feed.Attach(observer);
         await using var connection = await feed.ConnectAsync(ct);
 
-        await _client.AppendAsync(Any("s1", JsonEvent("after")));
+        await Client.AppendAsync(Any("s1", JsonEvent("after")));
 
         var events = await observer.ReadAsync(1, ct);
         events[0].Payload.EventName.ShouldBe("after");
@@ -111,7 +91,7 @@ public class ReplicationEventLogFeedTests
         byte[] bytes = [1, 2, 3, 255];
         var before = DateTimeOffset.UtcNow.AddSeconds(-1);
 
-        await _client.AppendAsync(Any(
+        await Client.AppendAsync(Any(
             "stream-1",
             Event.WithJson("json-event", "{\"a\": 1}", "{\"tenant\": \"x\"}"),
             Event.WithBytes("bytes-event", bytes)));
@@ -164,22 +144,22 @@ public class ReplicationEventLogFeedTests
 
         var feed = new EventLogFeed<RawReadEvent>(
             token => ReplicationEventLogSession.OpenAsync(
-                SetUpFixture.ConnectionString,
+                PostgresTestEnvironment.ConnectionString,
                 NextSlotName(),
                 missingNames,
                 Options.Replication,
                 RawDecoder.Instance,
-                SetUpFixture.LoggerFactory.CreateLogger("ReplicationEventLogSession"),
+                LoggerFactory.CreateLogger("ReplicationEventLogSession"),
                 token),
             new EventLogFeedOptions { RetryDelay = TimeSpan.FromMilliseconds(10), MaxRetryAttempts = 1 },
-            SetUpFixture.LoggerFactory.CreateLogger("EventLogFeed"));
+            LoggerFactory.CreateLogger("EventLogFeed"));
 
         var observer = new CollectingObserver();
         using var attachment = feed.Attach(observer);
 
         // The slot is created fine: pgoutput only resolves publications when it decodes the first change.
         await using var connection = await feed.ConnectAsync(ct);
-        await _client.AppendAsync(Any("s1", JsonEvent("trigger")));
+        await Client.AppendAsync(Any("s1", JsonEvent("trigger")));
 
         var ex = await observer.Error.WaitAsync(ct);
         ex.ShouldBeOfType<PostgresException>().SqlState.ShouldBe(PostgresErrorCodes.UndefinedObject);
@@ -190,15 +170,15 @@ public class ReplicationEventLogFeedTests
     {
         return new EventLogFeed<RawReadEvent>(
             ct => ReplicationEventLogSession.OpenAsync(
-                SetUpFixture.ConnectionString,
+                PostgresTestEnvironment.ConnectionString,
                 NextSlotName(),
                 Names,
                 Options.Replication,
                 RawDecoder.Instance,
-                SetUpFixture.LoggerFactory.CreateLogger("ReplicationEventLogSession"),
+                LoggerFactory.CreateLogger("ReplicationEventLogSession"),
                 ct),
             new EventLogFeedOptions { RetryDelay = TimeSpan.FromMilliseconds(100) },
-            SetUpFixture.LoggerFactory.CreateLogger("EventLogFeed"));
+            LoggerFactory.CreateLogger("EventLogFeed"));
     }
 
     private string NextSlotName() => $"dbx_test_{Interlocked.Increment(ref _slotCounter)}_{Guid.NewGuid():N}"[..40];
@@ -206,7 +186,7 @@ public class ReplicationEventLogFeedTests
     private static async Task<List<(string Name, string Plugin, bool Temporary, bool Active)>> GetSlotsAsync(
         CancellationToken ct)
     {
-        await using var command = SetUpFixture.DataSource.CreateCommand(
+        await using var command = DataSource.CreateCommand(
             "SELECT slot_name, plugin, temporary, active FROM pg_replication_slots WHERE slot_name LIKE 'dbx_test_%'");
 
         var slots = new List<(string, string, bool, bool)>();

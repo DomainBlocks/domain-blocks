@@ -6,12 +6,15 @@ using Shouldly;
 
 namespace DomainBlocks.Testing.Integration;
 
-public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos> :
-    EventStoreTestBase<object, string, TStreamPos, TLogPos>
+public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(IEventStoreHarness<TStreamPos, TLogPos> harness) :
+    EventStoreTestBase<TStreamPos, TLogPos>(harness)
     where TStreamPos : notnull
     where TLogPos : notnull
 {
     private IEventStore<object, string, TStreamPos, TLogPos> EventStore { get; set; } = null!;
+
+    // The subscription tests read the whole log, so each starts from an empty one.
+    protected override bool ResetLogBeforeEachTest => true;
 
     [SetUp]
     public void SetUp()

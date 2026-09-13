@@ -12,25 +12,15 @@ namespace DomainBlocks.Testing.Integration;
 /// cheapest possible append and therefore measures the store's ceiling rather than a workload. Results are printed
 /// to the test output; the tests only fail if an operation errors, since a throughput figure with errors is invalid.
 /// </summary>
-public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos> :
-    EventStoreTestBase<object, string, TStreamPos, TLogPos>
+public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(IEventStoreHarness<TStreamPos, TLogPos> harness) :
+    EventStoreTestBase<TStreamPos, TLogPos>(harness)
     where TStreamPos : notnull
     where TLogPos : notnull
 {
     private readonly EventTypeMap _eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>());
 
-    [SetUp]
-    public Task SetUp() => ResetStoreAsync();
-
-    /// <summary>
-    /// Returns the store to an empty log so that a benchmark's result does not depend on which tests ran before it.
-    /// </summary>
-    protected virtual Task ResetStoreAsync() => Task.CompletedTask;
-
-    /// <summary>
-    /// Describes the store and any options that affect the result, for the report header.
-    /// </summary>
-    protected virtual Task<string?> DescribeStoreAsync() => Task.FromResult<string?>(null);
+    // A benchmark's result must not depend on which tests ran before it.
+    protected override bool ResetLogBeforeEachTest => true;
 
     /// <summary>
     /// Unloaded append latency: one append in flight at a time.
@@ -50,7 +40,7 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos> :
             new LatencyOptions(),
             ct);
 
-        await BenchmarkReport.WriteEnvironmentAsync(eventStore.GetType(), await DescribeStoreAsync());
+        await BenchmarkReport.WriteEnvironmentAsync(eventStore.GetType(), await Harness.DescribeAsync());
         await BenchmarkReport.WriteLatencyAsync(
             "append latency, 1 in flight, 1 event per append, new stream per append", result);
 
@@ -84,7 +74,7 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos> :
                 new ThroughputOptions { InFlight = inFlight },
                 ct);
 
-            await BenchmarkReport.WriteEnvironmentAsync(instances[0].GetType(), await DescribeStoreAsync());
+            await BenchmarkReport.WriteEnvironmentAsync(instances[0].GetType(), await Harness.DescribeAsync());
 
             await BenchmarkReport.WriteThroughputAsync(
                 $"append throughput, {instanceCount} instance(s), {inFlight:N0} in flight, " +
