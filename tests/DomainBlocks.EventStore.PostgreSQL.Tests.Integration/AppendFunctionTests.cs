@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Npgsql;
+using NpgsqlTypes;
 using NUnit.Framework;
 using Shouldly;
 using static DomainBlocks.EventStore.PostgreSQL.Tests.Integration.AppendFunctionClient;
@@ -191,6 +192,31 @@ public class AppendFunctionTests
     }
 
     [Test]
+    public async Task ExistingCommitId_ProbeUsesPartialIndex()
+    {
+        // The probe must repeat the index predicate; without it the planner falls back to a sequential scan.
+        await _client.AppendAsync(Any("s1", JsonEvent(), JsonEvent()), Any("s2", JsonEvent()));
+
+        await using var command = SetUpFixture.DataSource.CreateCommand(
+            $"EXPLAIN (FORMAT TEXT) SELECT e.commit_id FROM {Schema}.event_log AS e " +
+            "WHERE e.commit_id = ANY ($1) AND e.commit_index = 0");
+
+        command.Parameters.Add(new NpgsqlParameter<Guid[]>
+        {
+            NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Uuid,
+            TypedValue = [Guid.NewGuid()]
+        });
+
+        await using var reader = await command.ExecuteReaderAsync();
+        var plan = new List<string>();
+
+        while (await reader.ReadAsync())
+            plan.Add(reader.GetString(0));
+
+        plan.ShouldContain(line => line.Contains("event_log_commit_id_idx"), string.Join('\n', plan));
+    }
+
+    [Test]
     public async Task ExistingCommitId_OnDifferentStream_ReturnsDuplicate()
     {
         var request = Any("s1", JsonEvent());
@@ -218,6 +244,83 @@ public class AppendFunctionTests
 
         (await _client.ReadRowsAsync()).Count.ShouldBe(1);
         (await _client.GetSequenceNextAsync()).ShouldBe(1);
+    }
+
+    [Test]
+    public async Task RepeatedCommitIdInBatch_OnDistinctStreams_WritesFirstOnly()
+    {
+        // In-batch duplicates on distinct streams: the first occurrence wins, later ones report Duplicate.
+        var request = Any("s1", JsonEvent());
+
+        var results = await _client.AppendAsync(
+            request,
+            request with { StreamId = "s2" },
+            Any("s3", JsonEvent()),
+            request with { StreamId = "s4" });
+
+        results.Select(x => (x.Status, x.FirstPosition)).ShouldBe(
+        [
+            (AppendProtocol.StatusAppended, 0L),
+            (AppendProtocol.StatusDuplicate, null),
+            (AppendProtocol.StatusAppended, 1L),
+            (AppendProtocol.StatusDuplicate, null)
+        ]);
+
+        (await _client.ReadRowsAsync()).Select(x => x.StreamId).ShouldBe(["s1", "s3"]);
+        (await _client.GetSequenceNextAsync()).ShouldBe(2);
+    }
+
+    [Test]
+    public async Task DistinctStreams_MixedOutcomes_AssignsPositionsAndEventsInRequestOrder()
+    {
+        // A multi-event conflict and a duplicate in the middle of the batch must not shift the events of later
+        // requests, and positions must be contiguous over appended requests only.
+        var existing = Any("s2", JsonEvent("e0"));
+        await _client.AppendAsync(existing, Any("s4", JsonEvent("f0"), JsonEvent("f1")));
+
+        var results = await _client.AppendAsync(
+            Any("s1", JsonEvent("a0"), JsonEvent("a1")),
+            DoesNotExist("s2", JsonEvent("b0"), JsonEvent("b1"), JsonEvent("b2")),
+            Any("s3", JsonEvent("c0")),
+            existing with { StreamId = "s5" },
+            AtVersion("s4", 1, JsonEvent("d0"), JsonEvent("d1")));
+
+        results.ShouldBe(
+        [
+            new Result(0, AppendProtocol.StatusAppended, AppendProtocol.ObservedDoesNotExist, null, 3, 4),
+            new Result(1, AppendProtocol.StatusConflict, AppendProtocol.ObservedAtVersion, 0, null, null),
+            new Result(2, AppendProtocol.StatusAppended, AppendProtocol.ObservedDoesNotExist, null, 5, 5),
+            new Result(3, AppendProtocol.StatusDuplicate, AppendProtocol.ObservedDoesNotExist, null, null, null),
+            new Result(4, AppendProtocol.StatusAppended, AppendProtocol.ObservedAtVersion, 1, 6, 7)
+        ]);
+
+        var rows = (await _client.ReadRowsAsync()).Where(x => x.Position >= 3).ToList();
+
+        rows.Select(x => (x.Position, x.StreamId, x.StreamPosition, x.CommitIndex, x.EventName)).ShouldBe(
+        [
+            (3L, "s1", 0L, 0, "a0"),
+            (4L, "s1", 1L, 1, "a1"),
+            (5L, "s3", 0L, 0, "c0"),
+            (6L, "s4", 2L, 0, "d0"),
+            (7L, "s4", 3L, 1, "d1")
+        ]);
+
+        (await _client.GetSequenceNextAsync()).ShouldBe(8);
+    }
+
+    [Test]
+    public async Task DistinctStreams_AllConflictOrDuplicate_LeavesSequenceUntouched()
+    {
+        var existing = Any("s1", JsonEvent());
+        await _client.AppendAsync(existing);
+
+        var results = await _client.AppendAsync(
+            existing with { StreamId = "s2" },
+            Exists("s3", JsonEvent()));
+
+        results.Select(x => x.Status).ShouldBe([AppendProtocol.StatusDuplicate, AppendProtocol.StatusConflict]);
+        (await _client.GetSequenceNextAsync()).ShouldBe(1);
+        (await _client.ReadRowsAsync()).Count.ShouldBe(1);
     }
 
     [Test]
@@ -344,13 +447,17 @@ public class AppendFunctionTests
         ex.SqlState.ShouldBe(PostgresErrorCodes.InvalidTransactionState);
     }
 
-    [Test]
-    public async Task LargeBatch_CompletesInLinearTime()
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task LargeBatch_CompletesInLinearTime(bool distinctStreams)
     {
-        // 500 requests x 10 events. A quadratic array-subscript cost inside the function would make this take seconds.
+        // 500 requests x 10 events, with distinct and with repeated streams. A quadratic cost inside the function
+        // would make this take seconds.
         var requests = Enumerable
             .Range(0, 500)
-            .Select(i => Any($"s{i % 50}", Enumerable.Range(0, 10).Select(_ => JsonEvent()).ToArray()))
+            .Select(i => Any(
+                distinctStreams ? $"s{i}" : $"s{i % 50}",
+                Enumerable.Range(0, 10).Select(_ => JsonEvent()).ToArray()))
             .ToArray();
 
         var start = Stopwatch.GetTimestamp();

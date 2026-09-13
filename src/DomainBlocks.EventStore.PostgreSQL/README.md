@@ -54,7 +54,7 @@ Everything lives in the configured schema (default `dbx`), which is also the uni
 
 | Object | Purpose |
 |---|---|
-| `event_log` | One row per event: `position` (PK), `stream_id`, `stream_position`, `commit_id`, `commit_index`, `event_name`, `event_data jsonb`, `event_data_bytes bytea`, `metadata jsonb`, `created_at`. `UNIQUE (stream_id, stream_position)`. |
+| `event_log` | One row per event: `position` (PK), `stream_id`, `stream_position`, `commit_id`, `commit_index`, `event_name`, `event_data jsonb`, `event_data_bytes bytea`, `metadata jsonb`, `created_at`. `stream_id` is `COLLATE "C"` (compared byte-wise). `UNIQUE (stream_id, stream_position)`; partial index on `commit_id` for the first event of each commit. |
 | `sequences` | The `event_log` counter row that all appends lock. |
 | `append_events(...)` | PL/pgSQL function that commits a batch of appends in one round trip. |
 | `<schema>_event_log_pub` | Publication of `event_log` inserts for logical replication. |
@@ -66,6 +66,16 @@ All writes must go through `append_events`; writing to `event_log` directly brea
 `AppendAsync` queues the request; a single loop per store instance commits queued requests in batches with one call
 to `append_events`. Because appends serialize on the sequence row, batching is what recovers throughput under
 concurrent load. Every request in a batch is evaluated independently: one conflict never aborts the others.
+
+`append_events` commits a batch with a fixed number of statements regardless of its size, the same shape as the
+MongoDB appender policy: it validates the arrays in one pass, takes the sequence row lock, probes the commit ids that
+already exist, then runs a single statement that prefetches the head of every stream in the batch, evaluates the
+requests, inserts every accepted event and advances the sequence row. Requests to the same stream chain through a
+recursive CTE that advances every stream one request per iteration, so a later request observes the rows an earlier
+one will insert; a batch whose streams are all distinct completes in one iteration.
+
+When no `commitId` is supplied the store generates a time-ordered (version 7) UUID, which keeps inserts into the
+`commit_id` index append-mostly.
 
 `AppendOptions.Timeout` bounds how long the caller waits. A request whose caller times out or cancels after it was
 queued is still committed when its batch runs.
@@ -128,13 +138,47 @@ a long-running transaction delays the first subscription and reconnects.
 
 ## Benchmarks
 
-Measured with the `[Explicit("Benchmark")]` tests against `postgres:17` in Docker Desktop on a Windows laptop; a real
-deployment with network latency and synchronous replication will differ.
+The `[Explicit("Benchmark")]` tests in `PostgresEventStoreBenchmarkTests` measure the store end to end (codec included)
+against a throw-away `postgres:17` container. They are skipped by a plain `dotnet test`; run them explicitly, in
+Release, and read the results from the test output:
 
-| Benchmark | Result |
-|---|---|
-| Append throughput, one instance, 1,000 in flight, one event per append | ~22,700 appends/s |
-| Append latency, sequential single-event appends | p50 0.8 ms, p99 1.0 ms |
+```shell
+dotnet test tests/DomainBlocks.EventStore.PostgreSQL.Tests.Integration -c Release \
+  --filter "FullyQualifiedName~PostgresEventStoreBenchmarkTests" --logger "console;verbosity=detailed"
+```
+
+Methodology:
+
+- Every append writes one small JSON event to a new stream, the cheapest possible append, so the figures are the
+  store's ceiling rather than a workload.
+- `AppendAsync_MeasureLatency` runs one append at a time after a warm-up on the same code path and reports
+  percentiles over 10,000 samples.
+- `AppendAsync_MeasureThroughput` runs a fixed number of closed-loop workers (1 to 1,000 in flight, over 1 or 4 store
+  instances), warms up for 5 s and measures for 15 s by snapshotting a completion counter, so no in-flight append is
+  cancelled or double counted. It also reports per-second stability and latency under that load. The throughput
+  ceiling is the plateau across the cases.
+- `SubscribeToAll_MeasureLiveLatency` appends one event and waits for a live subscription to deliver it, repeatedly.
+- `NoOpEventStoreBenchmarkTests` in `DomainBlocks.EventStore.Tests.Unit` runs the same tests against a store whose
+  appends do nothing, giving the harness's own ceiling. A store figure close to that ceiling is a harness limit.
+- Each report starts with the environment (OS, CPU count, runtime, GC mode, build configuration) and the store and
+  server settings that affect the result (`AppendBatchSize`, `wal_writer_delay`, `synchronous_commit`, `fsync`,
+  `shared_buffers`). A Debug build or attached debugger is flagged as non-representative.
+
+Results depend heavily on the machine: with Docker Desktop the server runs in a VM behind a virtual network and disk,
+and the container keeps PostgreSQL's defaults (`synchronous_commit = on`, `fsync = on`, `shared_buffers = 128MB`). A
+real deployment with network latency and synchronous replication will differ. For orientation, one small JSON event
+per append to a new stream, `postgres:17` under Docker Desktop on an Apple silicon laptop, September 2026:
+
+| Case | Appends/s | Latency p50 / p99 |
+|---|---|---|
+| 1 in flight, 1 instance | ~4,100 | 0.23 ms / 0.33 ms |
+| 10 in flight, 1 instance | ~15,400 | 0.64 ms / 0.89 ms |
+| 100 in flight, 1 instance | ~32,200 | 3.1 ms / 5.4 ms |
+| 1,000 in flight, 1 instance | ~33,300 | 29 ms / 37 ms |
+| 1,000 in flight, 4 instances | ~40,200 | 27 ms / 47 ms |
+
+Batches of 500 single-event appends commit in about 5 ms of server time; the rest of each round trip is parameter
+transfer, the commit flush and result decoding.
 
 Append-to-observe latency for a live subscription was ~200 ms at p50 with the server defaults and ~10 ms with
 `wal_writer_delay = 10ms`: on this server the logical walsender is woken by the WAL writer's flush cycle, so
