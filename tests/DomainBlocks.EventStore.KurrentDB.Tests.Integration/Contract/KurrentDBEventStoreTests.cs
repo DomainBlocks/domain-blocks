@@ -1,4 +1,4 @@
-using DomainBlocks.Testing.Integration;
+using DomainBlocks.Testing.Integration.Contract;
 using DomainBlocks.Testing.Integration.KurrentDB;
 using KurrentDB.Client;
 using NUnit.Framework;

@@ -1,5 +1,5 @@
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.Testing.Integration;
+using DomainBlocks.Testing.Integration.Contract;
 using DomainBlocks.Testing.Integration.MongoDB;
 using MongoDB.Bson.Serialization;
 using NUnit.Framework;

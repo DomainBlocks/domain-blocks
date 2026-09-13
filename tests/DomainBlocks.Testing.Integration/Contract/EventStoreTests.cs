@@ -4,7 +4,7 @@ using DomainBlocks.EventStore.TypeMapping;
 using NUnit.Framework;
 using Shouldly;
 
-namespace DomainBlocks.Testing.Integration;
+namespace DomainBlocks.Testing.Integration.Contract;
 
 public abstract class EventStoreTests<TStreamPos, TLogPos>(IEventStoreHarness<TStreamPos, TLogPos> harness) :
     EventStoreTestBase<TStreamPos, TLogPos>(harness)

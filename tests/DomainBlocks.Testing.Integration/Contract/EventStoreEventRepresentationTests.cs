@@ -7,7 +7,7 @@ using NUnit.Framework;
 using Shouldly;
 using ProtoUserCreated = DomainBlocks.Testing.Integration.Proto.UserCreated;
 
-namespace DomainBlocks.Testing.Integration;
+namespace DomainBlocks.Testing.Integration.Contract;
 
 public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
     IEventStoreHarness<TStreamPos, TLogPos> harness) :
