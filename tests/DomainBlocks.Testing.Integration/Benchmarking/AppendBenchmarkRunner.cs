@@ -1,13 +1,19 @@
 using System.Diagnostics;
+using HdrHistogram;
 
 namespace DomainBlocks.Testing.Integration.Benchmarking;
 
 /// <summary>
 /// Store-agnostic closed-loop benchmark harness. Every run uses a fresh stream id per operation, generated outside the
-/// timed region, so the store sees the same "new stream" path during warm-up and measurement.
+/// timed region, so the store sees the same "new stream" path during warm-up and measurement. Latencies are recorded
+/// in <see cref="Stopwatch"/> ticks to an HdrHistogram with microsecond resolution and three significant digits.
 /// </summary>
 public sealed class AppendBenchmarkRunner
 {
+    private const int SignificantDigits = 3;
+    private static readonly long LowestTrackableTicks = Math.Max(1, Stopwatch.Frequency / 1_000_000);
+    private static readonly long HighestTrackableTicks = TimeStamp.Hours(1);
+
     private readonly string _runId = $"bench-{Guid.NewGuid():N}";
     private long _nextStreamNumber;
     private bool _stop;
@@ -34,7 +40,7 @@ public sealed class AppendBenchmarkRunner
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
-        var latencies = new LatencyHistogram();
+        var latencies = new LongHistogram(LowestTrackableTicks, HighestTrackableTicks, SignificantDigits);
         var errors = 0;
         var gcBefore = GcSnapshot.Capture();
         var start = Stopwatch.GetTimestamp();
@@ -58,7 +64,7 @@ public sealed class AppendBenchmarkRunner
                 continue;
             }
 
-            latencies.RecordStopwatchTicks(Stopwatch.GetTimestamp() - operationStart);
+            latencies.RecordValue(Stopwatch.GetTimestamp() - operationStart);
         }
 
         var duration = Stopwatch.GetElapsedTime(start);
@@ -82,13 +88,12 @@ public sealed class AppendBenchmarkRunner
 
         var completed = 0L;
         var errors = 0;
-        var histograms = new LatencyHistogram[options.InFlight];
+        var latencies = new LongConcurrentHistogram(LowestTrackableTicks, HighestTrackableTicks, SignificantDigits);
         var workers = new Task[options.InFlight];
 
         for (var i = 0; i < options.InFlight; i++)
         {
             var workerIndex = i;
-            var histogram = histograms[i] = new LatencyHistogram();
 
             workers[i] = Task.Run(
                 async () =>
@@ -123,7 +128,7 @@ public sealed class AppendBenchmarkRunner
                         Interlocked.Increment(ref completed);
 
                         if (Volatile.Read(ref _measuring))
-                            histogram.RecordStopwatchTicks(Stopwatch.GetTimestamp() - operationStart);
+                            latencies.RecordValue(Stopwatch.GetTimestamp() - operationStart);
                     }
                 },
                 cancellationToken);
@@ -172,16 +177,12 @@ public sealed class AppendBenchmarkRunner
             Volatile.Write(ref _stop, true);
             await workersTask;
 
-            var merged = new LatencyHistogram();
-            foreach (var histogram in histograms)
-                merged.Merge(histogram);
-
             return new ThroughputResult(
                 options.InFlight,
                 windowEndCount - windowStartCount,
                 Stopwatch.GetElapsedTime(windowStart, windowEnd),
                 perSecond,
-                merged,
+                latencies,
                 Volatile.Read(ref errors),
                 gc);
         }

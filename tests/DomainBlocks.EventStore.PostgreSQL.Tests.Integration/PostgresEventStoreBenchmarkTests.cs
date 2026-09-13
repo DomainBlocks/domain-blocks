@@ -64,7 +64,7 @@ public class PostgresEventStoreBenchmarkTests : EventStoreBenchmarkTests<StreamP
         await BenchmarkReport.WriteLatencyAsync("append-to-observe latency, live SubscribeToAll, 1 in flight", result);
 
         result.Errors.ShouldBe(0);
-        result.Latencies.Count.ShouldBeGreaterThan(0);
+        result.Latencies.TotalCount.ShouldBeGreaterThan(0);
     }
 
     /// <summary>

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Runtime;
 using System.Runtime.InteropServices;
+using HdrHistogram;
 using NUnit.Framework;
 
 namespace DomainBlocks.Testing.Integration.Benchmarking;
@@ -46,7 +47,7 @@ public static class BenchmarkReport
         var output = TestContext.Out;
 
         await output.WriteLineAsync($"--- {title} ---");
-        await output.WriteLineAsync($"samples:       {result.Latencies.Count:N0} in {result.Duration.TotalSeconds:F1} s");
+        await output.WriteLineAsync($"samples:       {result.Latencies.TotalCount:N0} in {result.Duration.TotalSeconds:F1} s");
         await output.WriteLineAsync($"errors:        {result.Errors:N0}");
         await WritePercentilesAsync(result.Latencies);
         await output.WriteLineAsync($"gc:            {result.Gc}");
@@ -78,22 +79,25 @@ public static class BenchmarkReport
         await output.WriteLineAsync("latency under load:");
         await WritePercentilesAsync(result.Latencies);
         await output.WriteLineAsync(
-            $"little's law:  in-flight / throughput = {expectedMeanMillis:F3} ms, measured mean {result.Latencies.MeanMillis:F3} ms");
+            $"little's law:  in-flight / throughput = {expectedMeanMillis:F3} ms, measured mean {Millis(result.Latencies.GetMean()):F3} ms");
         await output.WriteLineAsync($"gc:            {result.Gc}");
     }
 
-    private static async Task WritePercentilesAsync(LatencyHistogram latencies)
+    private static async Task WritePercentilesAsync(HistogramBase latencies)
     {
         var output = TestContext.Out;
 
-        await output.WriteLineAsync($"mean:          {latencies.MeanMillis:F3} ms (stddev {latencies.StdDevMillis:F3} ms)");
-        await output.WriteLineAsync($"min:           {latencies.MinMillis:F3} ms");
-        await output.WriteLineAsync($"p50:           {latencies.PercentileMillis(0.50):F3} ms");
-        await output.WriteLineAsync($"p90:           {latencies.PercentileMillis(0.90):F3} ms");
-        await output.WriteLineAsync($"p99:           {latencies.PercentileMillis(0.99):F3} ms");
-        await output.WriteLineAsync($"p99.9:         {latencies.PercentileMillis(0.999):F3} ms");
-        await output.WriteLineAsync($"max:           {latencies.MaxMillis:F3} ms");
+        await output.WriteLineAsync($"mean:          {Millis(latencies.GetMean()):F3} ms (stddev {Millis(latencies.GetStdDeviation()):F3} ms)");
+        await output.WriteLineAsync($"min:           {Millis(latencies.GetValueAtPercentile(0)):F3} ms");
+        await output.WriteLineAsync($"p50:           {Millis(latencies.GetValueAtPercentile(50)):F3} ms");
+        await output.WriteLineAsync($"p90:           {Millis(latencies.GetValueAtPercentile(90)):F3} ms");
+        await output.WriteLineAsync($"p99:           {Millis(latencies.GetValueAtPercentile(99)):F3} ms");
+        await output.WriteLineAsync($"p99.9:         {Millis(latencies.GetValueAtPercentile(99.9)):F3} ms");
+        await output.WriteLineAsync($"max:           {Millis(latencies.GetMaxValue()):F3} ms");
     }
+
+    /// <summary>Converts a histogram value recorded in <see cref="Stopwatch"/> ticks to milliseconds.</summary>
+    private static double Millis(double stopwatchTicks) => stopwatchTicks / OutputScalingFactor.TimeStampToMilliseconds;
 
     private static string DescribeBuild(Assembly assembly, List<string> warnings)
     {

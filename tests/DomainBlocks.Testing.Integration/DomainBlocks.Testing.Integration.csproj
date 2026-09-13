@@ -6,6 +6,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="HdrHistogram"/>
     <PackageReference Include="NUnit"/>
     <PackageReference Include="Shouldly"/>
   </ItemGroup>

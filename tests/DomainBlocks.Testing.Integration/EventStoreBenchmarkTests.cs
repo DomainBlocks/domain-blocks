@@ -55,7 +55,7 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos> :
             "append latency, 1 in flight, 1 event per append, new stream per append", result);
 
         result.Errors.ShouldBe(0, "a latency figure with failed appends is not meaningful");
-        result.Latencies.Count.ShouldBeGreaterThan(0);
+        result.Latencies.TotalCount.ShouldBeGreaterThan(0);
     }
 
     /// <summary>

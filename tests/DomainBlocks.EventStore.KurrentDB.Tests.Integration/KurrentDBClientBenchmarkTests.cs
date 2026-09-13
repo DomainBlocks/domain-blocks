@@ -33,7 +33,7 @@ public class KurrentDbClientBenchmarkTests
         await BenchmarkReport.WriteLatencyAsync("append latency, 1 in flight, new stream per append", result);
 
         result.Errors.ShouldBe(0);
-        result.Latencies.Count.ShouldBeGreaterThan(0);
+        result.Latencies.TotalCount.ShouldBeGreaterThan(0);
     }
 
     [TestCase(1, 1)]
