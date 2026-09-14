@@ -4,12 +4,13 @@ using DomainBlocks.Serialization.Abstractions;
 using DomainBlocks.Serialization.Google.Protobuf;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Serialization.SystemTextJson;
-using DomainBlocks.Testing.Integration;
-using DomainBlocks.Testing.Integration.MongoDB;
+using DomainBlocks.Testing.Events;
+using DomainBlocks.Testing.Events.Proto;
+using DomainBlocks.Testing.Integration.EventStore;
+using DomainBlocks.Testing.Integration.EventStore.MongoDB;
 using MongoDB.Bson;
 using NUnit.Framework;
 using Shouldly;
-using ProtoUserCreated = DomainBlocks.Testing.Integration.Proto.UserCreated;
 
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
@@ -31,7 +32,7 @@ public class MongoBsonValueSerdeTests
     [Test]
     public async Task AppendAsync_JsonStringSerde_RoundTripsEvent()
     {
-        var @event = new UserCreated { UserId = "user-123", Name = "Alice" };
+        var @event = new TestEvent { Value = "test-123" };
 
         await ShouldRoundTripAsync(@event, new JsonObjectSerde().AsBsonValueSerde());
     }
@@ -39,7 +40,7 @@ public class MongoBsonValueSerdeTests
     [Test]
     public async Task AppendAsync_ProtobufJsonStringSerde_RoundTripsEvent()
     {
-        var @event = new ProtoUserCreated { UserId = "user-123", Name = "Alice" };
+        var @event = new ProtoTestEvent { Value = "test-123" };
 
         await ShouldRoundTripAsync(@event, new ProtobufJsonObjectSerde().AsBsonValueSerde());
     }
@@ -48,8 +49,8 @@ public class MongoBsonValueSerdeTests
         where TEvent : class
     {
         var eventTypeMap = EventTypeMap.Create(
-            EventTypeMapping.ReadWrite<UserCreated>(),
-            EventTypeMapping.ReadWrite<ProtoUserCreated>(nameof(ProtoUserCreated)));
+            EventTypeMapping.ReadWrite<TestEvent>(),
+            EventTypeMapping.ReadWrite<ProtoTestEvent>(nameof(ProtoTestEvent)));
 
         var eventCodec = EventCodec.Create(new EventCodecOptions<object, BsonValue, BsonValue>
         {
@@ -74,12 +75,5 @@ public class MongoBsonValueSerdeTests
             .Payload
             .ShouldBeOfType<TEvent>()
             .ShouldBe(@event);
-    }
-
-    private record UserCreated
-    {
-        public required string UserId { get; init; }
-
-        public required string Name { get; init; }
     }
 }

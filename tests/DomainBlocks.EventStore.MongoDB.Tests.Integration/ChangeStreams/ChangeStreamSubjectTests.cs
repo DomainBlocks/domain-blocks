@@ -1,9 +1,9 @@
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
-using DomainBlocks.Testing.Integration;
+using DomainBlocks.Testing.Integration.EventStore;
+using DomainBlocks.Testing.Integration.EventStore.MongoDB;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
-using DomainBlocks.Testing.Integration.MongoDB;
 using NUnit.Framework;
 using Shouldly;
 

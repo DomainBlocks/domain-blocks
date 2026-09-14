@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="NUnit"/>
+    <PackageReference Include="Shouldly"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj"/>
+    <ProjectReference Include="..\DomainBlocks.Testing\DomainBlocks.Testing.csproj" />
+  </ItemGroup>
+
+</Project>

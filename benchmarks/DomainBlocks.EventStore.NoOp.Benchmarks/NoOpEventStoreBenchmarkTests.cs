@@ -1,4 +1,4 @@
-using DomainBlocks.Benchmarking;
+using DomainBlocks.Benchmarking.EventStore;
 using DomainBlocks.EventStore.Abstractions;
 using NUnit.Framework;
 

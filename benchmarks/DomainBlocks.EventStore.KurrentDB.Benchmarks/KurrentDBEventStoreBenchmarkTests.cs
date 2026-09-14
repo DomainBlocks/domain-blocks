@@ -1,5 +1,5 @@
-using DomainBlocks.Benchmarking;
-using DomainBlocks.Testing.Integration.KurrentDB;
+using DomainBlocks.Benchmarking.EventStore;
+using DomainBlocks.Testing.Integration.EventStore.KurrentDB;
 using KurrentDB.Client;
 using NUnit.Framework;
 

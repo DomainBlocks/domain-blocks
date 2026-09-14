@@ -8,8 +8,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\tests\DomainBlocks.Testing.Integration.KurrentDB\DomainBlocks.Testing.Integration.KurrentDB.csproj" />
-    <ProjectReference Include="..\DomainBlocks.Benchmarking\DomainBlocks.Benchmarking.csproj" />
+    <ProjectReference Include="..\..\tests\DomainBlocks.Testing.Integration.EventStore.KurrentDB\DomainBlocks.Testing.Integration.EventStore.KurrentDB.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Benchmarking.EventStore\DomainBlocks.Benchmarking.EventStore.csproj" />
   </ItemGroup>
 
 </Project>

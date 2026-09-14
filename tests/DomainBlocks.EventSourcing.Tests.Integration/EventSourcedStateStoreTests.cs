@@ -4,7 +4,7 @@ using DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.MongoDB;
 using DomainBlocks.EventStore.TypeMapping;
-using DomainBlocks.Testing.Integration.MongoDB;
+using DomainBlocks.Testing.Integration.EventStore.MongoDB;
 using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using Shouldly;

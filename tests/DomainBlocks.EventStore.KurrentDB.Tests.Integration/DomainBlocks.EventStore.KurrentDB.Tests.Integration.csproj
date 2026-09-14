@@ -9,8 +9,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\DomainBlocks.EventStore.KurrentDB\DomainBlocks.EventStore.KurrentDB.csproj"/>
-    <ProjectReference Include="..\DomainBlocks.Testing.Integration.KurrentDB\DomainBlocks.Testing.Integration.KurrentDB.csproj"/>
-    <ProjectReference Include="..\DomainBlocks.Testing.Integration\DomainBlocks.Testing.Integration.csproj"/>
+    <ProjectReference Include="..\DomainBlocks.Testing.Integration.EventStore.KurrentDB\DomainBlocks.Testing.Integration.EventStore.KurrentDB.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Testing.Integration.EventStore\DomainBlocks.Testing.Integration.EventStore.csproj" />
   </ItemGroup>
 
 </Project>

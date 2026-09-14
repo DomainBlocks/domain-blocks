@@ -1,6 +1,6 @@
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.Testing.Integration.Contract;
-using DomainBlocks.Testing.Integration.PostgreSQL;
+using DomainBlocks.Testing.Integration.EventStore.Contract;
+using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
 using NUnit.Framework;
 
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration.Contract;

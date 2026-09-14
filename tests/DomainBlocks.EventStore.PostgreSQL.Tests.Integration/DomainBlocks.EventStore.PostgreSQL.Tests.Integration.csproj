@@ -12,8 +12,8 @@
     <ProjectReference Include="..\..\src\DomainBlocks.EventStore.PostgreSQL\DomainBlocks.EventStore.PostgreSQL.csproj" />
     <ProjectReference Include="..\..\src\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj" />
     <ProjectReference Include="..\..\src\DomainBlocks.Serialization.SystemTextJson\DomainBlocks.Serialization.SystemTextJson.csproj" />
-    <ProjectReference Include="..\DomainBlocks.Testing.Integration.PostgreSQL\DomainBlocks.Testing.Integration.PostgreSQL.csproj" />
-    <ProjectReference Include="..\DomainBlocks.Testing.Integration\DomainBlocks.Testing.Integration.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Testing.Integration.EventStore.PostgreSQL\DomainBlocks.Testing.Integration.EventStore.PostgreSQL.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Testing.Integration.EventStore\DomainBlocks.Testing.Integration.EventStore.csproj" />
     <ProjectReference Include="..\DomainBlocks.Testing\DomainBlocks.Testing.csproj" />
   </ItemGroup>
 

@@ -1,6 +1,6 @@
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.Testing.Integration.Contract;
-using DomainBlocks.Testing.Integration.MongoDB;
+using DomainBlocks.Testing.Integration.EventStore.Contract;
+using DomainBlocks.Testing.Integration.EventStore.MongoDB;
 using NUnit.Framework;
 
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration.Contract;

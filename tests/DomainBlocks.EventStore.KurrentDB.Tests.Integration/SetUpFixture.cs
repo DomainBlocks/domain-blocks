@@ -1,4 +1,4 @@
-using DomainBlocks.Testing.Integration.KurrentDB;
+using DomainBlocks.Testing.Integration.EventStore.KurrentDB;
 using NUnit.Framework;
 
 namespace DomainBlocks.EventStore.KurrentDB.Tests.Integration;

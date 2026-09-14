@@ -1,4 +1,4 @@
-using DomainBlocks.Testing.Integration.PostgreSQL;
+using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
 using Npgsql;
 using NUnit.Framework;
 using Shouldly;

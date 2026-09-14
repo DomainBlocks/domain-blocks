@@ -1,9 +1,9 @@
 using System.Diagnostics;
-using DomainBlocks.Benchmarking;
+using DomainBlocks.Benchmarking.EventStore;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.TypeMapping;
-using DomainBlocks.Testing;
-using DomainBlocks.Testing.Integration.PostgreSQL;
+using DomainBlocks.Testing.Events;
+using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
 using Npgsql;
 using NUnit.Framework;
 using Shouldly;

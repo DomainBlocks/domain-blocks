@@ -1,7 +1,7 @@
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.PostgreSQL.Tests.Integration.Support;
-using DomainBlocks.Testing;
-using DomainBlocks.Testing.Integration;
+using DomainBlocks.Testing.Events;
+using DomainBlocks.Testing.Integration.EventStore;
 using NUnit.Framework;
 using Shouldly;
 

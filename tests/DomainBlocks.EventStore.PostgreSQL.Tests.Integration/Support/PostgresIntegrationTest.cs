@@ -1,8 +1,8 @@
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.TypeMapping;
-using DomainBlocks.Testing;
-using DomainBlocks.Testing.Integration;
-using DomainBlocks.Testing.Integration.PostgreSQL;
+using DomainBlocks.Testing.Events;
+using DomainBlocks.Testing.Integration.EventStore;
+using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using NUnit.Framework;

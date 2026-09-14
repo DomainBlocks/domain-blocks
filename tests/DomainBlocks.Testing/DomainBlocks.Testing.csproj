@@ -1,8 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Tools">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
     <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="NUnit"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="Events\Proto\TestEvent.proto" GrpcServices="None" />
   </ItemGroup>
 
 </Project>

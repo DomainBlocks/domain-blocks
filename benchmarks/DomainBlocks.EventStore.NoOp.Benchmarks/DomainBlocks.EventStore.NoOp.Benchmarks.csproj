@@ -7,7 +7,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DomainBlocks.Benchmarking\DomainBlocks.Benchmarking.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Benchmarking.EventStore\DomainBlocks.Benchmarking.EventStore.csproj" />
   </ItemGroup>
 
 </Project>
