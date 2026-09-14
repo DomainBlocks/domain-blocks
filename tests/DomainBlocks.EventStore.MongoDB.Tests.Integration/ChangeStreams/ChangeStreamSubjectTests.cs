@@ -1,4 +1,6 @@
-﻿using DomainBlocks.EventStore.MongoDB.ChangeStreams;
+using DomainBlocks.EventStore.MongoDB.ChangeStreams;
+using DomainBlocks.Testing.Integration.EventStore;
+using DomainBlocks.Testing.Integration.EventStore.MongoDB;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -7,16 +9,15 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration.ChangeStreams;
 
+[TestFixture]
 public class ChangeStreamSubjectTests
 {
-    private const int TestTimeoutMillis = 30 * 1000;
-
     private IMongoCollection<BsonDocument> _collection = null!;
 
     [SetUp]
     public void SetUp()
     {
-        var db = SetUpFixture.MongoClient.GetDatabase("domainblocks_tests");
+        var db = MongoTestEnvironment.MongoClient.GetDatabase("domainblocks_tests");
         _collection = db.GetCollection<BsonDocument>("test_items");
     }
 
@@ -27,7 +28,7 @@ public class ChangeStreamSubjectTests
     }
 
     [Test]
-    [CancelAfter(TestTimeoutMillis)]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task Connect_WhenResultsAreAvailable_NotifiesAttachedObservers(CancellationToken ct)
     {
         const int insertCount = 10;
@@ -35,7 +36,7 @@ public class ChangeStreamSubjectTests
         var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>()
             .Match(x => x.OperationType == ChangeStreamOperationType.Insert);
 
-        var logger = SetUpFixture.LoggerFactory.CreateLogger<ChangeStreamSubjectTests>();
+        var logger = MongoTestEnvironment.LoggerFactory.CreateLogger<ChangeStreamSubjectTests>();
 
         var subject = ChangeStreamSubject.Create(_collection.WatchAsync, pipeline, x => x.ResumeToken, logger: logger);
 

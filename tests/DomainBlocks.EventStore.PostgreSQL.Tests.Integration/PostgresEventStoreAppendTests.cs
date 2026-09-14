@@ -1,10 +1,10 @@
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Codecs;
-using DomainBlocks.EventStore.TypeMapping;
+using DomainBlocks.EventStore.PostgreSQL.Tests.Integration.Support;
 using DomainBlocks.Serialization.Abstractions;
 using DomainBlocks.Serialization.SystemTextJson;
-using DomainBlocks.Testing.Integration;
-using DomainBlocks.Testing.Integration.PostgreSQL;
+using DomainBlocks.Testing.Events;
+using DomainBlocks.Testing.Integration.EventStore;
 using Npgsql;
 using NUnit.Framework;
 using Shouldly;
@@ -12,35 +12,18 @@ using Shouldly;
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
 /// <summary>
-/// Verifies AppendAsync by inspecting the event log table directly, since reads are implemented separately.
+/// PostgreSQL-specific append behaviour, verified against the event log table: how rows are stored, the input the
+/// server rejects and the append's interaction with the sequence row. Behaviour every store shares is in the contract
+/// suites.
 /// </summary>
 [TestFixture]
-public class PostgresEventStoreAppendTests
+public class PostgresEventStoreAppendTests : PostgresIntegrationTest
 {
-    private const string Schema = "dbx_es_append_tests";
-    private static readonly PostgresEventStoreOptions Options = new() { Schema = Schema };
-    private static readonly EventTypeMap EventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>());
-
-    private AppendFunctionClient _client = null!;
     private PostgresEventStore<object> _eventStore = null!;
 
-    [OneTimeSetUp]
-    public async Task OneTimeSetUp()
-    {
-        await PostgresEventStoreAdmin.EnsureInitializedAsync(SetUpFixture.DataSource, Options);
-        _client = new AppendFunctionClient(SetUpFixture.DataSource, Schema);
-    }
-
-    [OneTimeTearDown]
-    public async Task OneTimeTearDown()
-    {
-        await PostgresEventStoreAdmin.DropAsync(SetUpFixture.DataSource, Options);
-    }
-
     [SetUp]
-    public async Task SetUp()
+    public void SetUp()
     {
-        await _client.ResetAsync();
         _eventStore = CreateEventStore();
     }
 
@@ -60,7 +43,7 @@ public class PostgresEventStoreAppendTests
             [Appendable("a"), Appendable("b")],
             commitId: commitId);
 
-        var rows = await _client.ReadRowsAsync();
+        var rows = await Client.ReadRowsAsync();
 
         rows.Count.ShouldBe(2);
         rows.Select(x => x.Position).ShouldBe([0, 1]);
@@ -75,89 +58,22 @@ public class PostgresEventStoreAppendTests
     }
 
     [Test]
-    public async Task AppendAsync_ExistingStream_ContinuesStreamPosition()
-    {
-        await _eventStore.AppendAsync("s1", [Appendable("a"), Appendable("b")]);
-        await _eventStore.AppendAsync("s1", [Appendable("c")]);
-
-        (await _client.ReadRowsAsync()).Select(x => x.StreamPosition).ShouldBe([0, 1, 2]);
-    }
-
-    [Test]
-    public async Task AppendAsync_ExpectedAtVersionMismatch_ThrowsConflictWithObservedState()
-    {
-        await _eventStore.AppendAsync("s1", [Appendable("a"), Appendable("b"), Appendable("c")]);
-
-        var expectedState = ExpectedStreamState.AtVersion(new StreamPosition(1));
-
-        var ex = await Should.ThrowAsync<StreamAppendConflictException<StreamPosition>>(() =>
-            _eventStore.AppendAsync("s1", [Appendable("d")], expectedState));
-
-        ex.StreamId.ShouldBe("s1");
-        ex.ExpectedState.ShouldBe(expectedState);
-        ex.ObservedState.ShouldBe(ObservedStreamState.AtVersion(new StreamPosition(2)));
-        (await _client.ReadRowsAsync()).Count.ShouldBe(3);
-    }
-
-    [Test]
-    public async Task AppendAsync_ExpectedExistsAndStreamMissing_ThrowsConflictDoesNotExist()
-    {
-        var ex = await Should.ThrowAsync<StreamAppendConflictException<StreamPosition>>(() =>
-            _eventStore.AppendAsync("s1", [Appendable("a")], ExpectedStreamState.Exists<StreamPosition>()));
-
-        ex.ObservedState.ShouldBe(ObservedStreamState.DoesNotExist<StreamPosition>());
-        (await _client.ReadRowsAsync()).ShouldBeEmpty();
-    }
-
-    [Test]
-    public async Task AppendAsync_ExpectedDoesNotExistAndStreamExists_ThrowsConflictAtVersion()
-    {
-        await _eventStore.AppendAsync("s1", [Appendable("a")]);
-
-        var ex = await Should.ThrowAsync<StreamAppendConflictException<StreamPosition>>(() =>
-            _eventStore.AppendAsync("s1", [Appendable("b")], ExpectedStreamState.DoesNotExist<StreamPosition>()));
-
-        ex.ObservedState.ShouldBe(ObservedStreamState.AtVersion(new StreamPosition(0)));
-    }
-
-    [Test]
-    public async Task AppendAsync_ExpectedAtVersionMatches_Appends()
-    {
-        await _eventStore.AppendAsync("s1", [Appendable("a")]);
-
-        await _eventStore.AppendAsync("s1", [Appendable("b")], ExpectedStreamState.AtVersion(new StreamPosition(0)));
-
-        (await _client.ReadRowsAsync()).Count.ShouldBe(2);
-    }
-
-    [Test]
-    public async Task AppendAsync_SameCommitIdTwice_WritesOnce()
-    {
-        var commitId = Guid.NewGuid();
-
-        await _eventStore.AppendAsync("s1", [Appendable("a")], commitId: commitId);
-        await _eventStore.AppendAsync("s1", [Appendable("a")], commitId: commitId);
-
-        (await _client.ReadRowsAsync()).Count.ShouldBe(1);
-    }
-
-    [Test]
-    public async Task AppendAsync_EmptyEvents_WritesNothing()
+    public async Task AppendAsync_EmptyEvents_DoesNotAdvanceSequence()
     {
         await _eventStore.AppendAsync("s1", []);
 
-        (await _client.ReadRowsAsync()).ShouldBeEmpty();
-        (await _client.GetSequenceNextAsync()).ShouldBe(0);
+        (await Client.ReadRowsAsync()).ShouldBeEmpty();
+        (await Client.GetSequenceNextAsync()).ShouldBe(0);
     }
 
     [Test]
     public async Task AppendAsync_BytesEventData_StoredInByteaColumn()
     {
-        await using var bytesStore = CreateEventStore(bytes: true);
+        await using var bytesStore = CreateBytesEventStore();
 
         await bytesStore.AppendAsync("s1", [Appendable("a")]);
 
-        var rows = await _client.ReadRowsAsync();
+        var rows = await Client.ReadRowsAsync();
         rows[0].EventData.ShouldBeNull();
         rows[0].EventDataBytes.ShouldNotBeNull().ShouldNotBeEmpty();
     }
@@ -172,7 +88,7 @@ public class PostgresEventStoreAppendTests
                 Appendable("b")
             ]);
 
-        var rows = await _client.ReadRowsAsync();
+        var rows = await Client.ReadRowsAsync();
         rows[0].Metadata.ShouldBe("{\"tenant\": \"acme\"}");
         rows[1].Metadata.ShouldBeNull();
     }
@@ -184,7 +100,7 @@ public class PostgresEventStoreAppendTests
 
         await _eventStore.AppendAsync("s1", [Appendable("a")]);
 
-        var rows = await _client.ReadRowsAsync();
+        var rows = await Client.ReadRowsAsync();
         rows[0].CreatedAt.Kind.ShouldBe(DateTimeKind.Utc);
         rows[0].CreatedAt.ShouldBeInRange(before, DateTime.UtcNow.AddSeconds(1));
     }
@@ -201,14 +117,14 @@ public class PostgresEventStoreAppendTests
     {
         await Should.ThrowAsync<ArgumentException>(() => _eventStore.AppendAsync("s1", [Appendable("a\0b")]));
 
-        (await _client.ReadRowsAsync()).ShouldBeEmpty();
+        (await Client.ReadRowsAsync()).ShouldBeEmpty();
     }
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task AppendAsync_SequenceRowLockedElsewhere_TimesOutButStillCommits(CancellationToken ct)
     {
-        await using var connection = await SetUpFixture.DataSource.OpenConnectionAsync();
+        await using var connection = await DataSource.OpenConnectionAsync();
         await using var transaction = await connection.BeginTransactionAsync();
 
         await using (var lockCommand = new NpgsqlCommand($"SELECT next FROM {Schema}.sequences FOR UPDATE", connection))
@@ -221,45 +137,24 @@ public class PostgresEventStoreAppendTests
         await Should.ThrowAsync<TimeoutException>(() =>
             _eventStore.AppendAsync("s1", [Appendable("a")], options: options));
 
-        (await _client.ReadRowsAsync()).ShouldBeEmpty();
+        (await Client.ReadRowsAsync()).ShouldBeEmpty();
 
         // The caller has given up, but the request is already queued: once the lock is released the batch commits.
         await transaction.RollbackAsync(ct);
 
-        while ((await _client.ReadRowsAsync()).Count == 0)
+        while ((await Client.ReadRowsAsync()).Count == 0)
             await Task.Delay(50, ct);
     }
 
-    [Test]
-    public async Task AppendAsync_CallerCancels_ThrowsOperationCanceled()
+    private PostgresEventStore<object> CreateBytesEventStore()
     {
-        using var cts = new CancellationTokenSource();
-        await cts.CancelAsync();
+        var eventCodec = EventCodec.Create(new EventCodecOptions<object, PostgresEventData, string>
+        {
+            TypeMap = DefaultEventTypeMap,
+            EventSerde = ((IObjectSerde<byte[]>)new JsonUtf8BytesObjectSerde()).AsPostgresEventDataSerde(),
+            MetadataSerde = new JsonMetadataSerde()
+        });
 
-        await Should.ThrowAsync<OperationCanceledException>(() =>
-            _eventStore.AppendAsync("s1", [Appendable("a")], cancellationToken: cts.Token));
-    }
-
-    private static AppendableEvent<object> Appendable(string value)
-    {
-        return AppendableEvent.Create<object>(new TestEvent { Value = value });
-    }
-
-    private static PostgresEventStore<object> CreateEventStore(bool bytes = false)
-    {
-        var eventCodec = bytes
-            ? EventCodec.Create(new EventCodecOptions<object, PostgresEventData, string>
-            {
-                TypeMap = EventTypeMap,
-                EventSerde = ((IObjectSerde<byte[]>)new JsonUtf8BytesObjectSerde()).AsPostgresEventDataSerde(),
-                MetadataSerde = new JsonMetadataSerde()
-            })
-            : TestPostgresEventCodec.Create<object>(EventTypeMap);
-
-        return PostgresEventStore.Create(
-            SetUpFixture.DataSource,
-            eventCodec,
-            Options,
-            SetUpFixture.LoggerFactory.CreateLogger("PostgresEventStore"));
+        return Harness.CreateEventStore(eventCodec);
     }
 }

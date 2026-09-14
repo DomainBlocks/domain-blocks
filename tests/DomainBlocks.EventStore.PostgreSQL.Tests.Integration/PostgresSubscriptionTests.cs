@@ -1,7 +1,7 @@
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.TypeMapping;
-using DomainBlocks.Testing.Integration;
-using DomainBlocks.Testing.Integration.PostgreSQL;
+using DomainBlocks.EventStore.PostgreSQL.Tests.Integration.Support;
+using DomainBlocks.Testing.Events;
+using DomainBlocks.Testing.Integration.EventStore;
 using NUnit.Framework;
 using Shouldly;
 
@@ -11,38 +11,14 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 /// PostgreSQL-specific subscription behaviour beyond the shared suite: slot sharing and stream-position resume.
 /// </summary>
 [TestFixture]
-public class PostgresSubscriptionTests
+public class PostgresSubscriptionTests : PostgresIntegrationTest
 {
-    private const string Schema = "dbx_es_pg_subscription_tests";
-    private static readonly PostgresEventStoreOptions Options = new() { Schema = Schema };
-    private static readonly EventTypeMap EventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>());
-
-    private AppendFunctionClient _client = null!;
     private PostgresEventStore<object> _eventStore = null!;
 
-    [OneTimeSetUp]
-    public async Task OneTimeSetUp()
-    {
-        await PostgresEventStoreAdmin.EnsureInitializedAsync(SetUpFixture.DataSource, Options);
-        _client = new AppendFunctionClient(SetUpFixture.DataSource, Schema);
-    }
-
-    [OneTimeTearDown]
-    public async Task OneTimeTearDown()
-    {
-        await PostgresEventStoreAdmin.DropAsync(SetUpFixture.DataSource, Options);
-    }
-
     [SetUp]
-    public async Task SetUp()
+    public void SetUp()
     {
-        await _client.ResetAsync();
-
-        _eventStore = PostgresEventStore.Create(
-            SetUpFixture.DataSource,
-            TestPostgresEventCodec.Create<object>(EventTypeMap),
-            Options,
-            SetUpFixture.LoggerFactory.CreateLogger("PostgresEventStore"));
+        _eventStore = CreateEventStore();
     }
 
     [TearDown]
@@ -142,13 +118,11 @@ public class PostgresSubscriptionTests
 
     private static async Task<long> CountSlotsAsync(CancellationToken ct)
     {
-        await using var command = SetUpFixture.DataSource.CreateCommand(
+        await using var command = DataSource.CreateCommand(
             "SELECT count(*) FROM pg_replication_slots WHERE slot_name LIKE 'dbx_%'");
 
         return (long)(await command.ExecuteScalarAsync(ct))!;
     }
-
-    private static AppendableEvent<object> Appendable(TestEvent e) => AppendableEvent.Create<object>(e);
 
     private static async Task<ReadEvent<object, string, StreamPosition, LogPosition>> NextEventAsync(
         IAsyncEnumerator<SubscriptionMessage> enumerator)

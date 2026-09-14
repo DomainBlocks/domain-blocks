@@ -123,6 +123,7 @@ public sealed class MongoEventStore<TEvent>(
                 .Find(query.Filter)
                 .Sort(query.Sort)
                 .Limit(options.MaxCount)
+                .ProjectMetadata(options.IncludeMetadata)
                 .ToCursorAsync(cancellationToken)
                 .ConfigureAwait(false);
 
@@ -169,6 +170,7 @@ public sealed class MongoEventStore<TEvent>(
                 .Find(filter)
                 .Sort(query.Sort)
                 .Limit(options.MaxCount)
+                .ProjectMetadata(options.IncludeMetadata)
                 .ToCursorAsync(cancellationToken)
                 .ConfigureAwait(false);
 
@@ -183,8 +185,13 @@ public sealed class MongoEventStore<TEvent>(
                 }
             }
 
-            if (isEmpty && options.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw)
+            // An empty range of an existing stream is not a missing stream.
+            if (isEmpty &&
+                options.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw &&
+                !await StreamExistsAsync(streamId, cancellationToken).ConfigureAwait(false))
+            {
                 throw new StreamNotFoundException(streamId);
+            }
         }
     }
 

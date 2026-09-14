@@ -1,19 +1,16 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Logging.Console" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="NUnit" />
     <PackageReference Include="NUnit3TestAdapter" />
     <PackageReference Include="Shouldly" />
-    <PackageReference Include="Testcontainers.KurrentDb" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\DomainBlocks.EventStore.KurrentDB\DomainBlocks.EventStore.KurrentDB.csproj"/>
-    <ProjectReference Include="..\..\src\DomainBlocks.Serialization.SystemTextJson\DomainBlocks.Serialization.SystemTextJson.csproj" />
-    <ProjectReference Include="..\DomainBlocks.Testing.Integration\DomainBlocks.Testing.Integration.csproj"/>
-    <ProjectReference Include="..\DomainBlocks.Testing\DomainBlocks.Testing.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Testing.Integration.EventStore.KurrentDB\DomainBlocks.Testing.Integration.EventStore.KurrentDB.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Testing.Integration.EventStore\DomainBlocks.Testing.Integration.EventStore.csproj" />
   </ItemGroup>
-  
+
 </Project>

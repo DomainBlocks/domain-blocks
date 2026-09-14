@@ -1,7 +1,7 @@
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.TypeMapping;
-using DomainBlocks.Testing.Integration;
-using DomainBlocks.Testing.Integration.PostgreSQL;
+using DomainBlocks.EventStore.PostgreSQL.Tests.Integration.Support;
+using DomainBlocks.Testing.Events;
+using DomainBlocks.Testing.Integration.EventStore;
 using NUnit.Framework;
 using Shouldly;
 
@@ -12,43 +12,18 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 /// events committed in the meantime from their last position.
 /// </summary>
 [TestFixture]
-public class PostgresFeedRecoveryTests
+public class PostgresFeedRecoveryTests() : PostgresIntegrationTest(x =>
 {
-    private const string Schema = "dbx_es_feed_recovery_tests";
-    private static readonly EventTypeMap EventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>());
-
-    private static readonly PostgresEventStoreOptions Options = new()
-    {
-        Schema = Schema,
-        Replication = { RetryDelay = TimeSpan.FromMilliseconds(100), MaxRetryDelay = TimeSpan.FromMilliseconds(500) }
-    };
-
-    private AppendFunctionClient _client = null!;
+    x.Replication.RetryDelay = TimeSpan.FromMilliseconds(100);
+    x.Replication.MaxRetryDelay = TimeSpan.FromMilliseconds(500);
+})
+{
     private PostgresEventStore<object> _eventStore = null!;
 
-    [OneTimeSetUp]
-    public async Task OneTimeSetUp()
-    {
-        await PostgresEventStoreAdmin.EnsureInitializedAsync(SetUpFixture.DataSource, Options);
-        _client = new AppendFunctionClient(SetUpFixture.DataSource, Schema);
-    }
-
-    [OneTimeTearDown]
-    public async Task OneTimeTearDown()
-    {
-        await PostgresEventStoreAdmin.DropAsync(SetUpFixture.DataSource, Options);
-    }
-
     [SetUp]
-    public async Task SetUp()
+    public void SetUp()
     {
-        await _client.ResetAsync();
-
-        _eventStore = PostgresEventStore.Create(
-            SetUpFixture.DataSource,
-            TestPostgresEventCodec.Create<object>(EventTypeMap),
-            Options,
-            SetUpFixture.LoggerFactory.CreateLogger("PostgresEventStore"));
+        _eventStore = CreateEventStore();
     }
 
     [TearDown]
@@ -156,7 +131,7 @@ public class PostgresFeedRecoveryTests
 
     private static async Task<string> TerminateWalSenderAsync(CancellationToken ct)
     {
-        await using var command = SetUpFixture.DataSource.CreateCommand(
+        await using var command = DataSource.CreateCommand(
             "SELECT slot_name, pg_terminate_backend(active_pid) FROM pg_replication_slots " +
             "WHERE slot_name LIKE 'dbx_%' AND active_pid IS NOT NULL");
 
@@ -170,7 +145,7 @@ public class PostgresFeedRecoveryTests
 
     private static async Task<List<string>> GetSlotNamesAsync(CancellationToken ct)
     {
-        await using var command = SetUpFixture.DataSource.CreateCommand(
+        await using var command = DataSource.CreateCommand(
             "SELECT slot_name FROM pg_replication_slots WHERE slot_name LIKE 'dbx_%'");
 
         var names = new List<string>();
@@ -182,8 +157,6 @@ public class PostgresFeedRecoveryTests
 
         return names;
     }
-
-    private static AppendableEvent<object> Appendable(TestEvent e) => AppendableEvent.Create<object>(e);
 
     private static async Task<ReadEvent<object, string, StreamPosition, LogPosition>> NextEventAsync(
         IAsyncEnumerator<SubscriptionMessage> enumerator)

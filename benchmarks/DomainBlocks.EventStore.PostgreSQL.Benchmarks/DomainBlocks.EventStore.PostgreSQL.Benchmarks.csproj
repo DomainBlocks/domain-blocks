@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit3TestAdapter" />
+    <PackageReference Include="Shouldly" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\tests\DomainBlocks.Testing.Integration.EventStore.PostgreSQL\DomainBlocks.Testing.Integration.EventStore.PostgreSQL.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Benchmarking.EventStore\DomainBlocks.Benchmarking.EventStore.csproj" />
+  </ItemGroup>
+
+</Project>
