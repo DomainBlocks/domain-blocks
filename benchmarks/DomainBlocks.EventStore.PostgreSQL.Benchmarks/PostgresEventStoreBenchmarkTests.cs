@@ -2,7 +2,7 @@ using System.Diagnostics;
 using DomainBlocks.Benchmarking;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.TypeMapping;
-using DomainBlocks.Testing.Integration;
+using DomainBlocks.Testing;
 using DomainBlocks.Testing.Integration.PostgreSQL;
 using Npgsql;
 using NUnit.Framework;
@@ -12,11 +12,11 @@ namespace DomainBlocks.EventStore.PostgreSQL.Benchmarks;
 
 [TestFixture]
 public class PostgresEventStoreBenchmarkTests() :
-    EventStoreBenchmarkTests<StreamPosition, LogPosition>(new PostgresEventStoreHarness())
+    EventStoreBenchmarkTests<StreamPosition, LogPosition>(new PostgresEventStoreTestHarness())
 {
     private static readonly EventTypeMap EventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>());
 
-    private PostgresEventStoreHarness Postgres => (PostgresEventStoreHarness)Harness;
+    private PostgresEventStoreTestHarness Postgres => (PostgresEventStoreTestHarness)Harness;
 
     /// <summary>
     /// Append-to-observe latency for a live subscription: each sample appends one event and waits for it to arrive.
@@ -24,7 +24,7 @@ public class PostgresEventStoreBenchmarkTests() :
     /// </summary>
     [Test]
     [Explicit("Benchmark")]
-    [CancelAfter(TestTimeouts.BenchmarkMillis)]
+    [CancelAfter(BenchmarkTimeouts.DefaultMillis)]
     public async Task SubscribeToAll_MeasureLiveLatency(CancellationToken ct)
     {
         var eventStore = CreateEventStore(EventTypeMap);
@@ -76,7 +76,7 @@ public class PostgresEventStoreBenchmarkTests() :
     [TestCase(1_000, 2_000)]
     [TestCase(2_000, 2_000)]
     [Explicit("Benchmark")]
-    [CancelAfter(TestTimeouts.BenchmarkMillis)]
+    [CancelAfter(BenchmarkTimeouts.DefaultMillis)]
     public async Task AppendAsync_MeasureThroughput_BatchSizeSweep(int batchSize, int inFlight, CancellationToken ct)
     {
         var options = new PostgresEventStoreOptions
@@ -86,7 +86,8 @@ public class PostgresEventStoreBenchmarkTests() :
             AppendQueueCapacity = Math.Max(inFlight, Postgres.Options.AppendQueueCapacity)
         };
 
-        await using var eventStore = Postgres.CreateEventStore(TestPostgresEventCodec.Create<object>(EventTypeMap), options);
+        await using var eventStore =
+            Postgres.CreateEventStore(TestPostgresEventCodec.Create<object>(EventTypeMap), options);
 
         // Server-side time inside append_events per batch, to separate the function from the rest of the cycle.
         await ExecuteAsync("ALTER SYSTEM SET track_functions = 'pl'; SELECT pg_reload_conf()");
@@ -107,7 +108,7 @@ public class PostgresEventStoreBenchmarkTests() :
 
         await BenchmarkReport.WriteEnvironmentAsync(
             eventStore.GetType(),
-            await PostgresEventStoreHarness.DescribeAsync(options));
+            await PostgresEventStoreTestHarness.DescribeAsync(options));
 
         await BenchmarkReport.WriteThroughputAsync(
             $"append throughput, batch size {batchSize:N0}, 1 instance, {inFlight:N0} in flight, " +

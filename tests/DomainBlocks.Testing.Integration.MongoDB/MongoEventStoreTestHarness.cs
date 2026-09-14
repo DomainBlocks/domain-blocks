@@ -11,8 +11,8 @@ namespace DomainBlocks.Testing.Integration.MongoDB;
 /// <see cref="MongoTestEnvironment"/>. The database is named after the fixture unless <paramref name="configure"/>
 /// sets one.
 /// </summary>
-public sealed class MongoEventStoreHarness(Action<MongoEventStoreOptions>? configure = null) :
-    IEventStoreHarness<StreamPosition, LogPosition>
+public sealed class MongoEventStoreTestHarness(Action<MongoEventStoreOptions>? configure = null) :
+    IEventStoreTestHarness<StreamPosition, LogPosition>
 {
     public MongoEventStoreOptions Options { get; private set; } = null!;
 

@@ -8,7 +8,7 @@ namespace DomainBlocks.EventStore.MongoDB.Tests.Integration.Contract;
 
 [TestFixture]
 public class MongoEventStoreEventRepresentationTests() :
-    EventStoreEventRepresentationTests<StreamPosition, LogPosition>(new MongoEventStoreHarness())
+    EventStoreEventRepresentationTests<StreamPosition, LogPosition>(new MongoEventStoreTestHarness())
 {
     static MongoEventStoreEventRepresentationTests()
     {

@@ -10,15 +10,12 @@ namespace DomainBlocks.Testing.Integration.Contract;
 /// Every event format the store's test codec can be created with round-trips an event. Formats the codec does not
 /// support are reported as ignored.
 /// </summary>
-public abstract class EventStoreEventFormatTests<TStreamPos, TLogPos>(IEventStoreHarness<TStreamPos, TLogPos> harness) :
+public abstract class EventStoreEventFormatTests<TStreamPos, TLogPos>(
+    IEventStoreTestHarness<TStreamPos, TLogPos> harness) :
     EventStoreTestBase<TStreamPos, TLogPos>(harness)
     where TStreamPos : notnull
     where TLogPos : notnull
 {
-    private static readonly UserCreated TestEvent = new() { UserId = "user-123", Name = "Alice" };
-
-    private static readonly ProtoUserCreated TestProtoEvent = new() { UserId = "user-123", Name = "Alice" };
-
     [TestCase(EventFormat.Json)]
     [TestCase(EventFormat.Bson)]
     [TestCase(EventFormat.Protobuf)]
@@ -31,7 +28,9 @@ public abstract class EventStoreEventFormatTests<TStreamPos, TLogPos>(IEventStor
             Assert.Ignore($"The store's test codec does not support {format}.");
 
         // Protobuf can only serialise generated message types; the other formats take a plain record.
-        object @event = format == EventFormat.Protobuf ? TestProtoEvent : TestEvent;
+        object @event = format == EventFormat.Protobuf
+            ? new ProtoUserCreated { UserId = "user-123", Name = "Alice" }
+            : new UserCreated { UserId = "user-123", Name = "Alice" };
 
         var eventTypeMap = EventTypeMap.Create(
             EventTypeMapping.ReadWrite<UserCreated>(),

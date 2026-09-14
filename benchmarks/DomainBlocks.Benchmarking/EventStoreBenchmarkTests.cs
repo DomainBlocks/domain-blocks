@@ -1,6 +1,7 @@
 using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.TypeMapping;
+using DomainBlocks.Testing;
 using DomainBlocks.Testing.Integration;
 using NUnit.Framework;
 using Shouldly;
@@ -13,7 +14,7 @@ namespace DomainBlocks.Benchmarking;
 /// to the test output; the tests only fail if an operation errors, since a throughput figure with errors is invalid.
 /// </summary>
 [Category("Benchmark")]
-public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(IEventStoreHarness<TStreamPos, TLogPos> harness) :
+public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(IEventStoreTestHarness<TStreamPos, TLogPos> harness) :
     EventStoreTestBase<TStreamPos, TLogPos>(harness)
     where TStreamPos : notnull
     where TLogPos : notnull
@@ -28,7 +29,7 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(IEventStoreH
     /// </summary>
     [Test]
     [Explicit("Benchmark")]
-    [CancelAfter(TestTimeouts.BenchmarkMillis)]
+    [CancelAfter(BenchmarkTimeouts.DefaultMillis)]
     public async Task AppendAsync_MeasureLatency(CancellationToken ct)
     {
         var eventStore = CreateEventStore(_eventTypeMap);
@@ -59,7 +60,7 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(IEventStoreH
     [TestCase(1, 1_000)]
     [TestCase(4, 1_000)]
     [Explicit("Benchmark")]
-    [CancelAfter(TestTimeouts.BenchmarkMillis)]
+    [CancelAfter(BenchmarkTimeouts.DefaultMillis)]
     public async Task AppendAsync_MeasureThroughput(int instanceCount, int inFlight, CancellationToken ct)
     {
         var instances = new IEventStore<object, string, TStreamPos, TLogPos>[instanceCount];

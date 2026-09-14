@@ -6,7 +6,7 @@ using Shouldly;
 
 namespace DomainBlocks.Testing.Integration.Contract;
 
-public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(IEventStoreHarness<TStreamPos, TLogPos> harness) :
+public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(IEventStoreTestHarness<TStreamPos, TLogPos> harness) :
     EventStoreTestBase<TStreamPos, TLogPos>(harness)
     where TStreamPos : notnull
     where TLogPos : notnull

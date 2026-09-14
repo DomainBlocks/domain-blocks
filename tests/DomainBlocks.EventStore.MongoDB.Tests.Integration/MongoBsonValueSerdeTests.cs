@@ -20,7 +20,7 @@ namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 [TestFixture]
 public class MongoBsonValueSerdeTests
 {
-    private readonly MongoEventStoreHarness _harness = new();
+    private readonly MongoEventStoreTestHarness _harness = new();
 
     [OneTimeSetUp]
     public Task InitializeDatabaseAsync() => _harness.InitializeAsync(TestStoreName.For(this));

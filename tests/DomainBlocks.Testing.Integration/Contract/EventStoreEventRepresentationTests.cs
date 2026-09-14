@@ -10,7 +10,7 @@ using ProtoUserCreated = DomainBlocks.Testing.Integration.Proto.UserCreated;
 namespace DomainBlocks.Testing.Integration.Contract;
 
 public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
-    IEventStoreHarness<TStreamPos, TLogPos> harness) :
+    IEventStoreTestHarness<TStreamPos, TLogPos> harness) :
     EventStoreTestBase<TStreamPos, TLogPos>(harness)
     where TStreamPos : notnull
     where TLogPos : notnull

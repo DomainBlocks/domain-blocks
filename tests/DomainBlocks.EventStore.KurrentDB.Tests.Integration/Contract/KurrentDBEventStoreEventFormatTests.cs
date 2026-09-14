@@ -7,4 +7,4 @@ namespace DomainBlocks.EventStore.KurrentDB.Tests.Integration.Contract;
 
 [TestFixture]
 public class KurrentDBEventStoreEventFormatTests() :
-    EventStoreEventFormatTests<StreamPosition, Position>(new KurrentDBEventStoreHarness());
+    EventStoreEventFormatTests<StreamPosition, Position>(new KurrentDBEventStoreTestHarness());

@@ -9,7 +9,7 @@ namespace DomainBlocks.Testing.Integration.Contract;
 /// <summary>
 /// Several store instances appending concurrently to one store, as separate processes would.
 /// </summary>
-public abstract class EventStoreConcurrencyTests<TStreamPos, TLogPos>(IEventStoreHarness<TStreamPos, TLogPos> harness) :
+public abstract class EventStoreConcurrencyTests<TStreamPos, TLogPos>(IEventStoreTestHarness<TStreamPos, TLogPos> harness) :
     EventStoreTestBase<TStreamPos, TLogPos>(harness)
     where TStreamPos : notnull
     where TLogPos : notnull

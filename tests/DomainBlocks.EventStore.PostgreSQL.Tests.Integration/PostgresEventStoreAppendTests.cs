@@ -3,6 +3,7 @@ using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.PostgreSQL.Tests.Integration.Support;
 using DomainBlocks.Serialization.Abstractions;
 using DomainBlocks.Serialization.SystemTextJson;
+using DomainBlocks.Testing;
 using DomainBlocks.Testing.Integration;
 using Npgsql;
 using NUnit.Framework;

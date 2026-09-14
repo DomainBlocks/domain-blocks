@@ -11,4 +11,4 @@ namespace DomainBlocks.EventStore.NoOp.Benchmarks;
 /// </summary>
 [TestFixture]
 public class NoOpEventStoreBenchmarkTests() :
-    EventStoreBenchmarkTests<StreamPosition, LogPosition>(new NoOpEventStoreHarness());
+    EventStoreBenchmarkTests<StreamPosition, LogPosition>(new NoOpEventStoreTestHarness());

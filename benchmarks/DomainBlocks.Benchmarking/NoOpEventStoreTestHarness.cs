@@ -8,7 +8,7 @@ namespace DomainBlocks.Benchmarking;
 /// <summary>
 /// Binds the shared benchmarks to <see cref="NoOpEventStore"/>. There is no store to initialise or reset.
 /// </summary>
-public sealed class NoOpEventStoreHarness : IEventStoreHarness<StreamPosition, LogPosition>
+public sealed class NoOpEventStoreTestHarness : IEventStoreTestHarness<StreamPosition, LogPosition>
 {
     public StoreCapabilities Capabilities => StoreCapabilities.None;
 

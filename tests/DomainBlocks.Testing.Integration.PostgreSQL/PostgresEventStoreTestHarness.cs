@@ -11,8 +11,8 @@ namespace DomainBlocks.Testing.Integration.PostgreSQL;
 /// <see cref="PostgresTestEnvironment"/>. The schema is named after the fixture unless <paramref name="configure"/>
 /// sets one.
 /// </summary>
-public sealed class PostgresEventStoreHarness(Action<PostgresEventStoreOptions>? configure = null) :
-    IEventStoreHarness<StreamPosition, LogPosition>
+public sealed class PostgresEventStoreTestHarness(Action<PostgresEventStoreOptions>? configure = null) :
+    IEventStoreTestHarness<StreamPosition, LogPosition>
 {
     public PostgresEventStoreOptions Options { get; private set; } = null!;
 

@@ -7,4 +7,4 @@ namespace DomainBlocks.EventStore.MongoDB.Tests.Integration.Contract;
 
 [TestFixture]
 public class MongoEventStoreSubscriptionTests() :
-    EventStoreSubscriptionTests<StreamPosition, LogPosition>(new MongoEventStoreHarness());
+    EventStoreSubscriptionTests<StreamPosition, LogPosition>(new MongoEventStoreTestHarness());

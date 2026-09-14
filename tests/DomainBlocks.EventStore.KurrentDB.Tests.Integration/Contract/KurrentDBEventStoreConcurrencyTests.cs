@@ -7,4 +7,4 @@ namespace DomainBlocks.EventStore.KurrentDB.Tests.Integration.Contract;
 
 [TestFixture]
 public class KurrentDBEventStoreConcurrencyTests() :
-    EventStoreConcurrencyTests<StreamPosition, Position>(new KurrentDBEventStoreHarness());
+    EventStoreConcurrencyTests<StreamPosition, Position>(new KurrentDBEventStoreTestHarness());

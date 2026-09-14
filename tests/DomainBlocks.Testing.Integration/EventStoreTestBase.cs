@@ -9,11 +9,11 @@ namespace DomainBlocks.Testing.Integration;
 /// Base of every shared suite. Owns the store's lifecycle through a backend harness, so that a concrete fixture only
 /// has to say which harness it uses.
 /// </summary>
-public abstract class EventStoreTestBase<TStreamPos, TLogPos>(IEventStoreHarness<TStreamPos, TLogPos> harness)
+public abstract class EventStoreTestBase<TStreamPos, TLogPos>(IEventStoreTestHarness<TStreamPos, TLogPos> harness)
     where TStreamPos : notnull
     where TLogPos : notnull
 {
-    protected IEventStoreHarness<TStreamPos, TLogPos> Harness { get; } = harness;
+    protected IEventStoreTestHarness<TStreamPos, TLogPos> Harness { get; } = harness;
 
     /// <summary>
     /// Whether the event log is emptied before each test. Suites whose tests assume an empty log override this; the

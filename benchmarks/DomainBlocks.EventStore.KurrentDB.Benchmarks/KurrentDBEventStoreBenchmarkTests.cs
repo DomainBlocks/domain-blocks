@@ -7,4 +7,4 @@ namespace DomainBlocks.EventStore.KurrentDB.Benchmarks;
 
 [TestFixture]
 public class KurrentDBEventStoreBenchmarkTests() :
-    EventStoreBenchmarkTests<StreamPosition, Position>(new KurrentDBEventStoreHarness());
+    EventStoreBenchmarkTests<StreamPosition, Position>(new KurrentDBEventStoreTestHarness());

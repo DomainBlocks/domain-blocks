@@ -1,5 +1,4 @@
 using DomainBlocks.Benchmarking;
-using DomainBlocks.Testing.Integration;
 using DomainBlocks.Testing.Integration.KurrentDB;
 using KurrentDB.Client;
 using NUnit.Framework;
@@ -19,7 +18,7 @@ public class KurrentDbClientBenchmarkTests
 
     [Test]
     [Explicit("Benchmark")]
-    [CancelAfter(TestTimeouts.BenchmarkMillis)]
+    [CancelAfter(BenchmarkTimeouts.DefaultMillis)]
     public async Task AppendAsync_MeasureLatency(CancellationToken ct)
     {
         await using var client = CreateClient("client_0");
@@ -44,7 +43,7 @@ public class KurrentDbClientBenchmarkTests
     [TestCase(1, 1_000)]
     [TestCase(4, 1_000)]
     [Explicit("Benchmark")]
-    [CancelAfter(TestTimeouts.BenchmarkMillis)]
+    [CancelAfter(BenchmarkTimeouts.DefaultMillis)]
     public async Task AppendAsync_MeasureThroughput(int clientCount, int inFlight, CancellationToken ct)
     {
         var clients = new KurrentDBClient[clientCount];

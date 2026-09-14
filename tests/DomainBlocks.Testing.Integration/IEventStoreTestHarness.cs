@@ -9,7 +9,7 @@ namespace DomainBlocks.Testing.Integration;
 /// store over it. A concrete fixture binds a suite to a backend by passing its harness, so the suites stay
 /// backend-agnostic and the fixtures stay one line.
 /// </summary>
-public interface IEventStoreHarness<TStreamPos, TLogPos>
+public interface IEventStoreTestHarness<TStreamPos, TLogPos>
     where TStreamPos : notnull
     where TLogPos : notnull
 {

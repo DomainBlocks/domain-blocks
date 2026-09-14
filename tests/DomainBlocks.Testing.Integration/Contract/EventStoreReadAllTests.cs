@@ -1,4 +1,3 @@
-using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.TypeMapping;
 using NUnit.Framework;
@@ -9,7 +8,7 @@ namespace DomainBlocks.Testing.Integration.Contract;
 /// <summary>
 /// Reading the whole log: order, positions, origins and options.
 /// </summary>
-public abstract class EventStoreReadAllTests<TStreamPos, TLogPos>(IEventStoreHarness<TStreamPos, TLogPos> harness) :
+public abstract class EventStoreReadAllTests<TStreamPos, TLogPos>(IEventStoreTestHarness<TStreamPos, TLogPos> harness) :
     EventStoreTestBase<TStreamPos, TLogPos>(harness)
     where TStreamPos : notnull
     where TLogPos : notnull

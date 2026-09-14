@@ -10,4 +10,4 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration.Contract;
 /// </summary>
 [TestFixture]
 public class PostgresEventStoreReadAllTests() :
-    EventStoreReadAllTests<StreamPosition, LogPosition>(new PostgresEventStoreHarness(x => x.ReadBatchSize = 7));
+    EventStoreReadAllTests<StreamPosition, LogPosition>(new PostgresEventStoreTestHarness(x => x.ReadBatchSize = 7));

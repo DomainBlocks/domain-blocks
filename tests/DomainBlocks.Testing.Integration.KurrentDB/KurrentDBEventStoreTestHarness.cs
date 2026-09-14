@@ -13,7 +13,7 @@ namespace DomainBlocks.Testing.Integration.KurrentDB;
 /// their tests with unique stream ids, and the store implements neither reads across the log nor subscriptions,
 /// which are the operations that would assume an empty log.
 /// </summary>
-public sealed class KurrentDBEventStoreHarness : IEventStoreHarness<StreamPosition, Position>
+public sealed class KurrentDBEventStoreTestHarness : IEventStoreTestHarness<StreamPosition, Position>
 {
     // The store passes the commit id through to nothing, so repeated appends are not deduplicated.
     public StoreCapabilities Capabilities => StoreCapabilities.None;

@@ -7,4 +7,4 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration.Contract;
 
 [TestFixture]
 public class PostgresEventStoreConcurrencyTests() :
-    EventStoreConcurrencyTests<StreamPosition, LogPosition>(new PostgresEventStoreHarness());
+    EventStoreConcurrencyTests<StreamPosition, LogPosition>(new PostgresEventStoreTestHarness());

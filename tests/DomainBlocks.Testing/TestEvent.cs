@@ -1,4 +1,4 @@
-﻿namespace DomainBlocks.Testing.Integration;
+﻿namespace DomainBlocks.Testing;
 
 public record TestEvent
 {

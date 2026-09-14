@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\tests\DomainBlocks.Testing.Integration\DomainBlocks.Testing.Integration.csproj" />
+    <ProjectReference Include="..\..\tests\DomainBlocks.Testing\DomainBlocks.Testing.csproj" />
   </ItemGroup>
 
 </Project>

@@ -7,4 +7,4 @@ namespace DomainBlocks.EventStore.MongoDB.Benchmarks;
 
 [TestFixture]
 public class MongoEventStoreBenchmarkTests() :
-    EventStoreBenchmarkTests<StreamPosition, LogPosition>(new MongoEventStoreHarness());
+    EventStoreBenchmarkTests<StreamPosition, LogPosition>(new MongoEventStoreTestHarness());
