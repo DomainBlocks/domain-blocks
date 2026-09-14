@@ -40,12 +40,12 @@ BEGIN
            bool_or(r.event_count IS NULL OR r.event_count <= 0),
            bool_or(r.stream_id IS NULL OR r.stream_id = ''
                OR r.commit_id IS NULL
-               OR r.kind IS NULL OR r.kind NOT BETWEEN 0 AND 3
-               OR (r.kind = 3 AND (r.version IS NULL OR r.version < 0))
-               OR (r.kind <> 3 AND r.version IS NOT NULL))
+               OR r.expected_kind IS NULL OR r.expected_kind NOT BETWEEN 0 AND 3
+               OR (r.expected_kind = 3 AND (r.expected_version IS NULL OR r.expected_version < 0))
+               OR (r.expected_kind <> 3 AND r.expected_version IS NOT NULL))
     INTO v_event_total, v_invalid_count, v_invalid_request
     FROM unnest(p_stream_ids, p_expected_kinds, p_expected_versions, p_commit_ids, p_event_counts)
-             AS r(stream_id, kind, version, commit_id, event_count);
+             AS r(stream_id, expected_kind, expected_version, commit_id, event_count);
 
     IF v_invalid_count THEN
         RAISE EXCEPTION 'event counts must be positive'
@@ -102,15 +102,15 @@ CREATE OR REPLACE FUNCTION __schema__.zip_requests(
     p_existing_commits uuid[])
     RETURNS TABLE
             (
-                ord          bigint,
-                stream_id    text,
-                kind         smallint,
-                version      bigint,
-                commit_id    uuid,
-                event_count  integer,
-                nth          bigint,
-                duplicate    boolean,
-                event_offset bigint
+                ord              bigint,
+                stream_id        text,
+                expected_kind    smallint,
+                expected_version bigint,
+                commit_id        uuid,
+                event_count      integer,
+                nth              bigint,
+                duplicate        boolean,
+                event_offset     bigint
             )
     LANGUAGE sql
     IMMUTABLE
@@ -119,8 +119,8 @@ $fn$
 SELECT r.ord,
        -- Unnest yields the database collation; "C" keeps the partition sort below byte-wise, like the column.
        r.stream_id COLLATE "C",
-       r.kind,
-       r.version,
+       r.expected_kind,
+       r.expected_version,
        r.commit_id,
        r.event_count,
        -- Position of the request among the requests to its stream, in batch order.
@@ -130,7 +130,7 @@ SELECT r.ord,
        -- 1-based offset of the request's first event in the flattened event arrays.
        1 + coalesce(sum(r.event_count) OVER (ORDER BY r.ord ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0)
 FROM unnest(p_stream_ids, p_expected_kinds, p_expected_versions, p_commit_ids, p_event_counts)
-         WITH ORDINALITY AS r(stream_id, kind, version, commit_id, event_count, ord)
+         WITH ORDINALITY AS r(stream_id, expected_kind, expected_version, commit_id, event_count, ord)
 $fn$;
 
 -- The head of every distinct stream in the batch, -1 if the stream has no events. The lateral max() lets the planner

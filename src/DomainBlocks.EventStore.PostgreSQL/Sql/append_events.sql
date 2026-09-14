@@ -127,8 +127,8 @@ BEGIN
                       FROM chain AS c
                                JOIN request AS r ON r.stream_id = c.stream_id AND r.nth = c.nth + 1
                                CROSS JOIN LATERAL (SELECT __schema__.get_append_status(r.duplicate,
-                                                                                       r.kind,
-                                                                                       r.version,
+                                                                                       r.expected_kind,
+                                                                                       r.expected_version,
                                                                                        c.head_after)) AS d(status)),
             -- Global positions are contiguous over appended requests, in batch order.
             decided AS (SELECT r.ord,
