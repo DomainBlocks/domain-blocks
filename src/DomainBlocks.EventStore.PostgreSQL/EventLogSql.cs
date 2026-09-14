@@ -15,7 +15,7 @@ internal sealed class EventLogSql
     private const string ColumnsWithoutMetadata =
         "position, stream_id, stream_position, event_name, event_data, event_data_bytes, NULL::jsonb, created_at";
 
-    public EventLogSql(SqlNames names)
+    public EventLogSql(SchemaObjectNames names)
     {
         var eventLog = names.EventLog;
 

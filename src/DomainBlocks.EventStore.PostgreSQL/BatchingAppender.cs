@@ -27,7 +27,7 @@ internal sealed class BatchingAppender : IAppender
 
     public BatchingAppender(
         NpgsqlDataSource dataSource,
-        SqlNames names,
+        SchemaObjectNames names,
         PostgresEventStoreOptions options,
         ILogger? logger)
     {

@@ -26,7 +26,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
 {
     private int _slotCounter;
 
-    private SqlNames Names => new(Schema);
+    private SchemaObjectNames Names => new(Schema);
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
@@ -143,7 +143,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task Connect_WhenPublicationIsMissing_Faults(CancellationToken ct)
     {
-        var missingNames = new SqlNames("dbx_no_such_schema");
+        var missingNames = new SchemaObjectNames("dbx_no_such_schema");
 
         var feed = new EventLogFeed<RawReadEvent>(
             token => ReplicationEventLogSession.OpenAsync(

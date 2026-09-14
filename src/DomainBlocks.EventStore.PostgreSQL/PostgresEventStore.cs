@@ -26,7 +26,7 @@ public static class PostgresEventStore
 
         options ??= new PostgresEventStoreOptions();
 
-        var names = new SqlNames(options.Schema);
+        var names = new SchemaObjectNames(options.Schema);
         var appender = new BatchingAppender(dataSource, names, options, logger);
 
         var reader = new EventLogReader<TEvent>(
@@ -42,7 +42,7 @@ public static class PostgresEventStore
 
     private static RefCountedEventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>> CreateFeed<TEvent>(
         NpgsqlDataSource dataSource,
-        SqlNames names,
+        SchemaObjectNames names,
         PostgresEventStoreOptions options,
         IEventDecoder<TEvent, PostgresEventData, string> decoder,
         ILogger? logger)

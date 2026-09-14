@@ -25,7 +25,7 @@ internal sealed class AppendBatchCommand : IDisposable
     private readonly NpgsqlParameter<byte[]?[]> _eventDataBytes;
     private readonly NpgsqlParameter<string?[]> _metadata;
 
-    public AppendBatchCommand(NpgsqlDataSource dataSource, SqlNames names)
+    public AppendBatchCommand(NpgsqlDataSource dataSource, SchemaObjectNames names)
     {
         _command = dataSource.CreateCommand(
             "SELECT request_index, status, observed_kind, observed_version " +

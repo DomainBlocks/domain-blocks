@@ -25,12 +25,17 @@ public static class PostgresTestEnvironment
         _server = await PostgresServer.StartAsync();
         LoggerFactory = TestLoggerFactory.Create();
 
-        var builder = new NpgsqlDataSourceBuilder(_server.ConnectionString);
-        builder.ConnectionStringBuilder.MaxAutoPrepare = 16;
+        var builder = new NpgsqlDataSourceBuilder(_server.ConnectionString)
+        {
+            ConnectionStringBuilder =
+            {
+                // The replication connection is built from the data source's connection string, which only carries the
+                // password when security info is persisted.
+                PersistSecurityInfo = true,
 
-        // The replication connection is built from the data source's connection string, which only carries the
-        // password when security info is persisted.
-        builder.ConnectionStringBuilder.PersistSecurityInfo = true;
+                MaxAutoPrepare = 16
+            }
+        };
 
         ConnectionString = builder.ConnectionStringBuilder.ConnectionString;
         DataSource = builder.Build();

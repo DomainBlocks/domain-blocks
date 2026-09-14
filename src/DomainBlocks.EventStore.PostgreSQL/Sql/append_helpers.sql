@@ -2,29 +2,6 @@
 -- inlined by the planner into the statement that calls it, or called once per batch, so the split costs nothing at
 -- run time. The codes the helpers interpret are listed in append_events.sql.
 
--- Decides one request against the head of its stream, where a head of -1 means the stream does not exist. A scalar
--- SQL function whose body is a single expression is inlined by the planner, so this costs nothing at run time; it
--- exists to keep the decision, and the codes it interprets, in one place.
-CREATE OR REPLACE FUNCTION __schema__.get_append_status(
-    p_duplicate boolean,
-    p_expected_kind smallint,
-    p_expected_version bigint,
-    p_head bigint)
-    RETURNS smallint
-    LANGUAGE sql
-    IMMUTABLE
-AS
-$fn$
-SELECT CASE
-           WHEN p_duplicate THEN 2
-           WHEN p_expected_kind = 0 THEN 0
-           WHEN p_expected_kind = 1 AND p_head < 0 THEN 0
-           WHEN p_expected_kind = 2 AND p_head >= 0 THEN 0
-           WHEN p_expected_kind = 3 AND p_head = p_expected_version THEN 0
-           ELSE 1
-       END::smallint
-$fn$;
-
 -- Rejects a batch that violates the protocol: request or event arrays of different lengths, an event count that is
 -- not positive, or a request whose fields are missing or inconsistent. One pass over the request arrays computes the
 -- event total and both validity checks.
@@ -90,6 +67,29 @@ BEGIN
 END
 $fn$;
 
+-- Decides one request against the head of its stream, where a head of -1 means the stream does not exist. A scalar
+-- SQL function whose body is a single expression is inlined by the planner, so this costs nothing at run time; it
+-- exists to keep the decision, and the codes it interprets, in one place.
+CREATE OR REPLACE FUNCTION __schema__.get_append_status(
+    p_duplicate boolean,
+    p_expected_kind smallint,
+    p_expected_version bigint,
+    p_head bigint)
+    RETURNS smallint
+    LANGUAGE sql
+    IMMUTABLE
+AS
+$fn$
+SELECT CASE
+           WHEN p_duplicate THEN 2
+           WHEN p_expected_kind = 0 THEN 0
+           WHEN p_expected_kind = 1 AND p_head < 0 THEN 0
+           WHEN p_expected_kind = 2 AND p_head >= 0 THEN 0
+           WHEN p_expected_kind = 3 AND p_head = p_expected_version THEN 0
+           ELSE 1
+           END::smallint
+$fn$;
+
 -- The requests of a batch, one row each with the derived columns the append needs. A set-returning SQL function that
 -- is a single SELECT, not volatile and not strict, is inlined by the planner as a subquery of the calling statement,
 -- so this shapes the query without adding a function call or a plan boundary.
@@ -147,7 +147,8 @@ CREATE OR REPLACE FUNCTION __schema__.get_stream_heads(p_stream_ids text[])
 AS
 $fn$
 SELECT s.stream_id, coalesce(h.head, -1)
-FROM (SELECT DISTINCT u.stream_id COLLATE "C" AS stream_id FROM unnest(p_stream_ids) AS u(stream_id)) AS s
+FROM (SELECT DISTINCT u.stream_id COLLATE "C" AS stream_id
+      FROM unnest(p_stream_ids) AS u(stream_id)) AS s
          CROSS JOIN LATERAL (SELECT max(e.stream_position) AS head
                              FROM __schema__.event_log AS e
                              WHERE e.stream_id = s.stream_id) AS h

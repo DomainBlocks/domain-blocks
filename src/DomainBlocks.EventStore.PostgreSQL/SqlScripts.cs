@@ -7,13 +7,13 @@ internal static class SqlScripts
 {
     public const string SchemaToken = "__schema__";
 
-    public static string Schema(SqlNames names) => Load("schema.sql", names);
+    public static string Schema(SchemaObjectNames names) => Load("schema.sql", names);
 
-    public static string AppendHelpers(SqlNames names) => Load("append_helpers.sql", names);
+    public static string AppendHelpers(SchemaObjectNames names) => Load("append_helpers.sql", names);
 
-    public static string AppendEvents(SqlNames names) => Load("append_events.sql", names);
+    public static string AppendEvents(SchemaObjectNames names) => Load("append_events.sql", names);
 
-    private static string Load(string fileName, SqlNames names)
+    private static string Load(string fileName, SchemaObjectNames names)
     {
         var assembly = typeof(SqlScripts).Assembly;
         var resourceName = $"{typeof(SqlScripts).Namespace}.Sql.{fileName}";

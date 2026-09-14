@@ -19,7 +19,7 @@ public static class PostgresEventStoreAdmin
         options ??= new PostgresEventStoreOptions();
         adminOptions ??= new PostgresEventStoreAdminOptions();
 
-        var names = new SqlNames(options.Schema);
+        var names = new SchemaObjectNames(options.Schema);
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
@@ -45,31 +45,31 @@ public static class PostgresEventStoreAdmin
         ArgumentNullException.ThrowIfNull(dataSource);
 
         options ??= new PostgresEventStoreOptions();
-        var names = new SqlNames(options.Schema);
+        var names = new SchemaObjectNames(options.Schema);
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         await ExecuteAsync(
                 connection,
-                $"DROP PUBLICATION IF EXISTS {names.PublicationName}; DROP SCHEMA IF EXISTS {names.Schema} CASCADE;",
+                $"DROP PUBLICATION IF EXISTS {names.Publication}; DROP SCHEMA IF EXISTS {names.Schema} CASCADE;",
                 cancellationToken)
             .ConfigureAwait(false);
     }
 
     private static async Task EnsurePublicationAsync(
         NpgsqlConnection connection,
-        SqlNames names,
+        SchemaObjectNames names,
         CancellationToken cancellationToken)
     {
         await using var exists = new NpgsqlCommand("SELECT 1 FROM pg_publication WHERE pubname = $1", connection);
-        exists.Parameters.Add(new NpgsqlParameter<string> { TypedValue = names.PublicationName });
+        exists.Parameters.Add(new NpgsqlParameter<string> { TypedValue = names.Publication });
 
         if (await exists.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is not null)
             return;
 
         await ExecuteAsync(
                 connection,
-                $"CREATE PUBLICATION {names.PublicationName} FOR TABLE {names.EventLog} WITH (publish = 'insert')",
+                $"CREATE PUBLICATION {names.Publication} FOR TABLE {names.EventLog} WITH (publish = 'insert')",
                 cancellationToken)
             .ConfigureAwait(false);
     }

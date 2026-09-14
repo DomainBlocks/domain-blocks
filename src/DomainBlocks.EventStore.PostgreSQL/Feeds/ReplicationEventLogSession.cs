@@ -13,7 +13,7 @@ internal static class ReplicationEventLogSession
     public static Task<IEventLogSession<ReadEvent<TEvent, string, StreamPosition, LogPosition>>> OpenAsync<TEvent>(
         string connectionString,
         string slotName,
-        SqlNames names,
+        SchemaObjectNames names,
         PostgresReplicationOptions options,
         IEventDecoder<TEvent, PostgresEventData, string> decoder,
         ILogger? logger,
@@ -53,14 +53,14 @@ internal sealed class ReplicationEventLogSession<TEvent> :
     private readonly LogicalReplicationConnection _connection;
     private readonly PgOutputReplicationSlot _slot;
     private readonly PgOutputReplicationOptions _pgOutputOptions;
-    private readonly SqlNames _names;
+    private readonly SchemaObjectNames _names;
     private readonly IEventDecoder<TEvent, PostgresEventData, string> _decoder;
 
     private ReplicationEventLogSession(
         LogicalReplicationConnection connection,
         PgOutputReplicationSlot slot,
         PgOutputReplicationOptions pgOutputOptions,
-        SqlNames names,
+        SchemaObjectNames names,
         IEventDecoder<TEvent, PostgresEventData, string> decoder)
     {
         _connection = connection;
@@ -75,7 +75,7 @@ internal sealed class ReplicationEventLogSession<TEvent> :
     public static async Task<IEventLogSession<ReadEvent<TEvent, string, StreamPosition, LogPosition>>> OpenAsync(
         string connectionString,
         string slotName,
-        SqlNames names,
+        SchemaObjectNames names,
         PostgresReplicationOptions options,
         IEventDecoder<TEvent, PostgresEventData, string> decoder,
         ILogger? logger,
@@ -103,7 +103,7 @@ internal sealed class ReplicationEventLogSession<TEvent> :
             logger?.ReplicationSlotCreated(slotName, connection.ProcessID);
 
             var pgOutputOptions = new PgOutputReplicationOptions(
-                names.PublicationName,
+                names.Publication,
                 PgOutputProtocolVersion.V1,
                 binary: options.UseBinaryProtocol,
                 streamingMode: PgOutputStreamingMode.Off);
@@ -163,7 +163,7 @@ internal sealed class ReplicationEventLogSession<TEvent> :
 
     private bool IsEventLog(RelationMessage relation)
     {
-        return relation.Namespace == _names.Schema && relation.RelationName == SqlNames.EventLogTableName;
+        return relation.Namespace == _names.Schema && relation.RelationName == SchemaObjectNames.EventLogTableName;
     }
 
     private async ValueTask<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadEventAsync(

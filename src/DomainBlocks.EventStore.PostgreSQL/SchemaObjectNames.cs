@@ -6,14 +6,12 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// The fully qualified, quoted names of the database objects used by the event store, derived from a validated schema
 /// name so that they are safe to interpolate into SQL.
 /// </summary>
-internal sealed partial class SqlNames
+internal sealed partial class SchemaObjectNames
 {
     public const string EventLogTableName = "event_log";
-    public const string SequencesTableName = "sequences";
-    public const string AppendEventsFunctionName = "append_events";
-    public const string EventLogSequenceName = "event_log";
+    private const string AppendEventsFunctionName = "append_events";
 
-    public SqlNames(string schema)
+    public SchemaObjectNames(string schema)
     {
         ArgumentNullException.ThrowIfNull(schema);
 
@@ -27,9 +25,8 @@ internal sealed partial class SqlNames
         Schema = schema;
         QuotedSchema = $"\"{schema}\"";
         EventLog = $"{QuotedSchema}.\"{EventLogTableName}\"";
-        Sequences = $"{QuotedSchema}.\"{SequencesTableName}\"";
         AppendEventsFunction = $"{QuotedSchema}.\"{AppendEventsFunctionName}\"";
-        PublicationName = $"{schema}_{EventLogTableName}_pub";
+        Publication = $"{schema}_{EventLogTableName}_pub";
     }
 
     public string Schema { get; }
@@ -38,14 +35,12 @@ internal sealed partial class SqlNames
 
     public string EventLog { get; }
 
-    public string Sequences { get; }
-
     public string AppendEventsFunction { get; }
 
     /// <summary>
     /// The name of the logical replication publication. Publication names are database-wide, so the schema is embedded.
     /// </summary>
-    public string PublicationName { get; }
+    public string Publication { get; }
 
     [GeneratedRegex("^[a-z_][a-z0-9_]{0,62}$")]
     private static partial Regex SchemaNameRegex();

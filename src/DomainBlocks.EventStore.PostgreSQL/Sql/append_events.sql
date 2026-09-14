@@ -7,12 +7,12 @@
 -- Each request is evaluated independently: a conflict or duplicate is reported as a result row and does not abort the
 -- batch. Only protocol violations (mismatched arrays, invalid kinds) raise, which faults the whole batch.
 --
--- The batch is committed with a fixed number of statements regardless of its size: one validation pass over the
--- arrays, the lock, one probe for commit IDs that already exist, then a single statement that prefetches the head of
--- every stream in the batch, evaluates the requests, inserts every accepted event, advances the sequence row and
--- returns the result rows. Requests to the same stream chain through a recursive CTE that advances every stream one
--- request per iteration, carrying the running head, so a later request observes the rows an earlier one will insert.
--- A batch whose streams are all distinct completes in one iteration.
+-- The batch is committed with a fixed number of statements regardless of its size: one validation pass over the arrays,
+-- the lock, one probe for commit IDs that already exist, then a single statement that prefetches the head of every
+-- stream in the batch, evaluates the requests, inserts every accepted event, advances the sequence row and returns the
+-- result rows. Requests to the same stream chain through a recursive CTE that advances every stream one request per
+-- iteration, carrying the running head, so a later request observes the rows an earlier one will insert. A batch whose
+-- streams are all distinct completes in one iteration.
 --
 -- Codes:
 --   expected kind: 0 Any, 1 DoesNotExist, 2 Exists, 3 AtVersion
@@ -57,8 +57,15 @@ BEGIN
     END IF;
 
     PERFORM __schema__.validate_append_batch(
-            p_stream_ids, p_expected_kinds, p_expected_versions, p_commit_ids, p_event_counts,
-            p_event_names, p_event_data, p_event_data_bytes, p_metadata);
+            p_stream_ids,
+            p_expected_kinds,
+            p_expected_versions,
+            p_commit_ids,
+            p_event_counts,
+            p_event_names,
+            p_event_data,
+            p_event_data_bytes,
+            p_metadata);
 
     -- An empty batch is valid once every array has been checked against it.
     IF coalesce(cardinality(p_stream_ids), 0) = 0 THEN
@@ -93,8 +100,12 @@ BEGIN
     RETURN QUERY
         WITH RECURSIVE
             request AS (SELECT *
-                        FROM __schema__.unnest_requests(p_stream_ids, p_expected_kinds, p_expected_versions,
-                                                        p_commit_ids, p_event_counts, v_existing_commits)),
+                        FROM __schema__.unnest_requests(p_stream_ids,
+                                                        p_expected_kinds,
+                                                        p_expected_versions,
+                                                        p_commit_ids,
+                                                        p_event_counts,
+                                                        v_existing_commits)),
             -- Evaluate the requests, carrying the head of each stream forward. The seed row of a stream holds its
             -- current head; iteration n decides the n-th request of every stream against the head left by the previous
             -- n - 1, so a batch with no repeated stream needs one iteration. Streams are independent, so evaluating
@@ -115,8 +126,10 @@ BEGIN
                              CASE WHEN d.status = 0 THEN c.head_after + r.event_count ELSE c.head_after END
                       FROM chain AS c
                                JOIN request AS r ON r.stream_id = c.stream_id AND r.nth = c.nth + 1
-                               CROSS JOIN LATERAL (
-                                   SELECT __schema__.get_append_status(r.duplicate, r.kind, r.version, c.head_after)) AS d(status)),
+                               CROSS JOIN LATERAL (SELECT __schema__.get_append_status(r.duplicate,
+                                                                                       r.kind,
+                                                                                       r.version,
+                                                                                       c.head_after)) AS d(status)),
             -- Global positions are contiguous over appended requests, in batch order.
             decided AS (SELECT r.ord,
                                r.stream_id,
@@ -135,8 +148,16 @@ BEGIN
             -- One insert for every accepted event. Arrays are read through unnest rather than subscripted, so the cost
             -- is linear in the batch size.
             inserted AS (
-                INSERT INTO __schema__.event_log (position, stream_id, stream_position, commit_id, commit_index,
-                                                  event_name, event_data, event_data_bytes, metadata, created_at)
+                INSERT INTO __schema__.event_log (position,
+                                                  stream_id,
+                                                  stream_position,
+                                                  commit_id,
+                                                  commit_index,
+                                                  event_name,
+                                                  event_data,
+                                                  event_data_bytes,
+                                                  metadata,
+                                                  created_at)
                     SELECT d.first_pos + g.k,
                            d.stream_id,
                            d.head_before + 1 + g.k,
@@ -161,11 +182,11 @@ BEGIN
                     SET next = v_position_start + (SELECT count(*) FROM inserted)
                     WHERE s.name = c_sequence_name AND (SELECT count(*) FROM inserted) > 0)
         -- The head before the request is what the caller observed: -1 reports as DoesNotExist with no version.
-        SELECT (d.ord - 1)::integer                                           AS request_index,
+        SELECT (d.ord - 1)::integer                                            AS request_index,
                d.status,
-               (CASE WHEN d.head_before < 0 THEN 0 ELSE 1 END)::smallint     AS observed_kind,
-               nullif(d.head_before, -1)                                     AS observed_version,
-               CASE WHEN d.status = 0 THEN d.first_pos END                    AS first_position,
+               (CASE WHEN d.head_before < 0 THEN 0 ELSE 1 END)::smallint       AS observed_kind,
+               nullif(d.head_before, -1)                                       AS observed_version,
+               CASE WHEN d.status = 0 THEN d.first_pos END                     AS first_position,
                CASE WHEN d.status = 0 THEN d.first_pos + d.event_count - 1 END AS last_position
         FROM decided AS d
         ORDER BY d.ord;
