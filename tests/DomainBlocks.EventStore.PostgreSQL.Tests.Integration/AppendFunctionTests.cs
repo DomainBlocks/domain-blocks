@@ -443,66 +443,120 @@ public class AppendFunctionTests : PostgresIntegrationTest
         (await Client.GetSequenceNextAsync()).ShouldBe(0);
     }
 
-    [Test]
-    public async Task ZeroEventCount_RaisesInvalidParameterValue()
-    {
-        var ex = await Should.ThrowAsync<PostgresException>(() => Client.AppendAsync([Any("s1")]));
+    // Validation errors name the offending request by the 0-based index the caller used, so each case below puts a
+    // valid request first and the offender second. Cases the typed client cannot express go through raw SQL.
 
-        ex.SqlState.ShouldBe(PostgresErrorCodes.InvalidParameterValue);
+    [Test]
+    public async Task RequestArrayLengthMismatch_RaisesWithExpectedLength()
+    {
+        await ShouldRaiseInvalidParameterValueAsync(
+            () => AppendRawAsync(
+                "ARRAY['s1'], ARRAY[0::smallint, 0::smallint], ARRAY[NULL::bigint], ARRAY[gen_random_uuid()], " +
+                "ARRAY[1], ARRAY['e'], ARRAY['{}'::jsonb], ARRAY[NULL::bytea], ARRAY[NULL::jsonb]"),
+            "request arrays must all have length 1, the length of p_stream_ids");
     }
 
     [Test]
-    public async Task AtVersionWithoutVersion_RaisesInvalidParameterValue()
+    public async Task ZeroEventCount_RaisesWithRequestIndex()
     {
-        var request = new Request("s1", AppendProtocol.ExpectedAtVersion, null, Guid.NewGuid(), JsonEvent());
-
-        var ex = await Should.ThrowAsync<PostgresException>(() => Client.AppendAsync([request]));
-
-        ex.SqlState.ShouldBe(PostgresErrorCodes.InvalidParameterValue);
+        await ShouldRaiseInvalidParameterValueAsync(
+            () => Client.AppendAsync([Any("s1", JsonEvent()), Any("s2")]),
+            "request 1: event count must be positive");
     }
 
     [Test]
-    public async Task VersionWithoutAtVersion_RaisesInvalidParameterValue()
+    public async Task EventArrayLengthMismatch_RaisesWithExpectedLength()
     {
-        var request = new Request("s1", AppendProtocol.ExpectedAny, 3, Guid.NewGuid(), JsonEvent());
-
-        var ex = await Should.ThrowAsync<PostgresException>(() => Client.AppendAsync([request]));
-
-        ex.SqlState.ShouldBe(PostgresErrorCodes.InvalidParameterValue);
+        await ShouldRaiseInvalidParameterValueAsync(
+            () => AppendRawAsync(
+                "ARRAY['s1', 's2'], ARRAY[0::smallint, 0::smallint], ARRAY[NULL::bigint, NULL::bigint], " +
+                "ARRAY[gen_random_uuid(), gen_random_uuid()], ARRAY[1, 2], " +
+                "ARRAY['e', 'e'], ARRAY['{}'::jsonb, '{}'::jsonb], ARRAY[NULL::bytea, NULL::bytea], " +
+                "ARRAY[NULL::jsonb, NULL::jsonb]"),
+            "event arrays must all have length 3, the sum of p_event_counts");
     }
 
     [Test]
-    public async Task EmptyStreamId_RaisesInvalidParameterValue()
+    public async Task EmptyBatchWithEvents_RaisesWithExpectedLength()
     {
-        var ex = await Should.ThrowAsync<PostgresException>(() => Client.AppendAsync([Any("", JsonEvent())]));
-
-        ex.SqlState.ShouldBe(PostgresErrorCodes.InvalidParameterValue);
+        await ShouldRaiseInvalidParameterValueAsync(
+            () => AppendRawAsync(
+                "ARRAY[]::text[], ARRAY[]::smallint[], ARRAY[]::bigint[], ARRAY[]::uuid[], ARRAY[]::integer[], " +
+                "ARRAY['e'], ARRAY['{}'::jsonb], ARRAY[NULL::bytea], ARRAY[NULL::jsonb]"),
+            "event arrays must all have length 0, the sum of p_event_counts");
     }
 
     [Test]
-    public async Task EmptyBatchWithEvents_RaisesInvalidParameterValue()
+    public async Task EmptyStreamId_RaisesWithRequestIndex()
     {
-        await using var command = DataSource.CreateCommand(
-            $"SELECT * FROM {Schema}.append_events(" +
-            "ARRAY[]::text[], ARRAY[]::smallint[], ARRAY[]::bigint[], ARRAY[]::uuid[], ARRAY[]::integer[], " +
-            "ARRAY['e'], ARRAY['{}'::jsonb], ARRAY[NULL::bytea], ARRAY[NULL::jsonb])");
-
-        var ex = await Should.ThrowAsync<PostgresException>(command.ExecuteNonQueryAsync);
-
-        ex.SqlState.ShouldBe(PostgresErrorCodes.InvalidParameterValue);
+        await ShouldRaiseInvalidParameterValueAsync(
+            () => Client.AppendAsync([Any("s1", JsonEvent()), Any("", JsonEvent())]),
+            "request 1: stream id must not be null or empty");
     }
 
     [Test]
-    public async Task ArrayLengthMismatch_RaisesInvalidParameterValue()
+    public async Task NullCommitId_RaisesWithRequestIndex()
     {
-        await using var command = DataSource.CreateCommand(
-            $"SELECT * FROM {Schema}.append_events(" +
-            "ARRAY['s1'], ARRAY[0::smallint, 0::smallint], ARRAY[NULL::bigint], ARRAY[gen_random_uuid()], ARRAY[1], " +
-            "ARRAY['e'], ARRAY['{}'::jsonb], ARRAY[NULL::bytea], ARRAY[NULL::jsonb])");
+        await ShouldRaiseInvalidParameterValueAsync(
+            () => AppendRawAsync(
+                "ARRAY['s1', 's2'], ARRAY[0::smallint, 0::smallint], ARRAY[NULL::bigint, NULL::bigint], " +
+                "ARRAY[gen_random_uuid(), NULL::uuid], ARRAY[1, 1], " +
+                "ARRAY['e', 'e'], ARRAY['{}'::jsonb, '{}'::jsonb], ARRAY[NULL::bytea, NULL::bytea], " +
+                "ARRAY[NULL::jsonb, NULL::jsonb]"),
+            "request 1: commit id must not be null");
+    }
 
-        var ex = await Should.ThrowAsync<PostgresException>(command.ExecuteNonQueryAsync);
+    [Test]
+    public async Task UnknownExpectedKind_RaisesWithRequestIndex()
+    {
+        await ShouldRaiseInvalidParameterValueAsync(
+            () => Client.AppendAsync([Any("s1", JsonEvent()), new Request("s2", 4, null, Guid.NewGuid(), JsonEvent())]),
+            "request 1: expected kind must be 0 (Any), 1 (DoesNotExist), 2 (Exists) or 3 (AtVersion)");
+    }
 
-        ex.SqlState.ShouldBe(PostgresErrorCodes.InvalidParameterValue);
+    [Test]
+    public async Task AtVersionWithoutVersion_RaisesWithRequestIndex()
+    {
+        var request = new Request("s2", AppendProtocol.ExpectedAtVersion, null, Guid.NewGuid(), JsonEvent());
+
+        await ShouldRaiseInvalidParameterValueAsync(
+            () => Client.AppendAsync([Any("s1", JsonEvent()), request]),
+            "request 1: expected version must be non-negative when expected kind is 3 (AtVersion)");
+    }
+
+    [Test]
+    public async Task AtVersionWithNegativeVersion_RaisesWithRequestIndex()
+    {
+        await ShouldRaiseInvalidParameterValueAsync(
+            () => Client.AppendAsync([Any("s1", JsonEvent()), AtVersion("s2", -1, JsonEvent())]),
+            "request 1: expected version must be non-negative when expected kind is 3 (AtVersion)");
+    }
+
+    [Test]
+    public async Task VersionWithoutAtVersion_RaisesWithRequestIndex()
+    {
+        var request = new Request("s2", AppendProtocol.ExpectedAny, 3, Guid.NewGuid(), JsonEvent());
+
+        await ShouldRaiseInvalidParameterValueAsync(
+            () => Client.AppendAsync([Any("s1", JsonEvent()), request]),
+            "request 1: expected version must be null unless expected kind is 3 (AtVersion)");
+    }
+
+    [Test]
+    public async Task MultipleInvalidRequests_ReportsTheFirst()
+    {
+        await ShouldRaiseInvalidParameterValueAsync(
+            () => Client.AppendAsync([Any("s1", JsonEvent()), Any("", JsonEvent()), Any("", JsonEvent())]),
+            "request 1: stream id must not be null or empty");
+    }
+
+    [Test]
+    public async Task InvalidBatch_AppendsNothing()
+    {
+        await Should.ThrowAsync<PostgresException>(() => Client.AppendAsync([Any("s1", JsonEvent()), Any("s2")]));
+
+        (await Client.ReadRowsAsync()).ShouldBeEmpty();
+        (await Client.GetSequenceNextAsync()).ShouldBe(0);
     }
 
     [Test]
@@ -540,6 +594,20 @@ public class AppendFunctionTests : PostgresIntegrationTest
         results.ShouldAllBe(x => x.Status == AppendProtocol.StatusAppended);
         (await Client.GetSequenceNextAsync()).ShouldBe(5000);
         elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(5));
+    }
+
+    private async Task AppendRawAsync(string arguments)
+    {
+        await using var command = DataSource.CreateCommand($"SELECT * FROM {Schema}.append_events({arguments})");
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task ShouldRaiseInvalidParameterValueAsync(Func<Task> append, string expectedMessage)
+    {
+        var ex = await Should.ThrowAsync<PostgresException>(append);
+
+        ex.SqlState.ShouldBe(PostgresErrorCodes.InvalidParameterValue);
+        ex.MessageText.ShouldBe(expectedMessage);
     }
 
     private static async Task<List<string>> ExplainAsync(NpgsqlCommand command)

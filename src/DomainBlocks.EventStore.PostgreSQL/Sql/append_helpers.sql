@@ -4,7 +4,8 @@
 
 -- Rejects a batch that violates the protocol: request or event arrays of different lengths, an event count that is
 -- not positive, or a request whose fields are missing or inconsistent. One pass over the request arrays computes the
--- event total and both validity checks.
+-- event total and, for each rule, the first request that breaks it, so the error names the request by the 0-based
+-- index the caller used.
 CREATE OR REPLACE FUNCTION __schema__.validate_append_batch(
     p_stream_ids text[],
     p_expected_kinds smallint[],
@@ -21,10 +22,14 @@ CREATE OR REPLACE FUNCTION __schema__.validate_append_batch(
 AS
 $fn$
 DECLARE
-    v_request_count   integer;
-    v_event_total     bigint;
-    v_invalid_count   boolean;
-    v_invalid_request boolean;
+    v_request_count     integer;
+    v_event_total       bigint;
+    v_bad_event_count   bigint;
+    v_bad_stream_id     bigint;
+    v_bad_commit_id     bigint;
+    v_bad_expected_kind bigint;
+    v_missing_version   bigint;
+    v_stray_version     bigint;
 BEGIN
     v_request_count := coalesce(cardinality(p_stream_ids), 0);
 
@@ -32,23 +37,30 @@ BEGIN
        coalesce(cardinality(p_expected_versions), 0) <> v_request_count OR
        coalesce(cardinality(p_commit_ids), 0) <> v_request_count OR
        coalesce(cardinality(p_event_counts), 0) <> v_request_count THEN
-        RAISE EXCEPTION 'request arrays must all have length %', v_request_count
+        RAISE EXCEPTION 'request arrays must all have length %, the length of p_stream_ids', v_request_count
             USING ERRCODE = 'invalid_parameter_value';
     END IF;
 
+    -- The ordinal of the first request that breaks each rule, NULL if none does.
     SELECT coalesce(sum(r.event_count), 0),
-           bool_or(r.event_count IS NULL OR r.event_count <= 0),
-           bool_or(r.stream_id IS NULL OR r.stream_id = ''
-               OR r.commit_id IS NULL
-               OR r.expected_kind IS NULL OR r.expected_kind NOT BETWEEN 0 AND 3
-               OR (r.expected_kind = 3 AND (r.expected_version IS NULL OR r.expected_version < 0))
-               OR (r.expected_kind <> 3 AND r.expected_version IS NOT NULL))
-    INTO v_event_total, v_invalid_count, v_invalid_request
+           min(r.ord) FILTER (WHERE r.event_count IS NULL OR r.event_count <= 0),
+           min(r.ord) FILTER (WHERE r.stream_id IS NULL OR r.stream_id = ''),
+           min(r.ord) FILTER (WHERE r.commit_id IS NULL),
+           min(r.ord) FILTER (WHERE r.expected_kind IS NULL OR r.expected_kind NOT BETWEEN 0 AND 3),
+           min(r.ord) FILTER (WHERE r.expected_kind = 3 AND (r.expected_version IS NULL OR r.expected_version < 0)),
+           min(r.ord) FILTER (WHERE r.expected_kind <> 3 AND r.expected_version IS NOT NULL)
+    INTO v_event_total,
+        v_bad_event_count,
+        v_bad_stream_id,
+        v_bad_commit_id,
+        v_bad_expected_kind,
+        v_missing_version,
+        v_stray_version
     FROM unnest(p_stream_ids, p_expected_kinds, p_expected_versions, p_commit_ids, p_event_counts)
-             AS r(stream_id, expected_kind, expected_version, commit_id, event_count);
+             WITH ORDINALITY AS r(stream_id, expected_kind, expected_version, commit_id, event_count, ord);
 
-    IF v_invalid_count THEN
-        RAISE EXCEPTION 'event counts must be positive'
+    IF v_bad_event_count IS NOT NULL THEN
+        RAISE EXCEPTION 'request %: event count must be positive', v_bad_event_count - 1
             USING ERRCODE = 'invalid_parameter_value';
     END IF;
 
@@ -56,12 +68,35 @@ BEGIN
        coalesce(cardinality(p_event_data), 0) <> v_event_total OR
        coalesce(cardinality(p_event_data_bytes), 0) <> v_event_total OR
        coalesce(cardinality(p_metadata), 0) <> v_event_total THEN
-        RAISE EXCEPTION 'event arrays must all have length %', v_event_total
+        RAISE EXCEPTION 'event arrays must all have length %, the sum of p_event_counts', v_event_total
             USING ERRCODE = 'invalid_parameter_value';
     END IF;
 
-    IF v_invalid_request THEN
-        RAISE EXCEPTION 'invalid request: check stream ids, commit ids, expected kinds and versions'
+    IF v_bad_stream_id IS NOT NULL THEN
+        RAISE EXCEPTION 'request %: stream id must not be null or empty', v_bad_stream_id - 1
+            USING ERRCODE = 'invalid_parameter_value';
+    END IF;
+
+    IF v_bad_commit_id IS NOT NULL THEN
+        RAISE EXCEPTION 'request %: commit id must not be null', v_bad_commit_id - 1
+            USING ERRCODE = 'invalid_parameter_value';
+    END IF;
+
+    IF v_bad_expected_kind IS NOT NULL THEN
+        RAISE EXCEPTION 'request %: expected kind must be 0 (Any), 1 (DoesNotExist), 2 (Exists) or 3 (AtVersion)',
+            v_bad_expected_kind - 1
+            USING ERRCODE = 'invalid_parameter_value';
+    END IF;
+
+    IF v_missing_version IS NOT NULL THEN
+        RAISE EXCEPTION 'request %: expected version must be non-negative when expected kind is 3 (AtVersion)',
+            v_missing_version - 1
+            USING ERRCODE = 'invalid_parameter_value';
+    END IF;
+
+    IF v_stray_version IS NOT NULL THEN
+        RAISE EXCEPTION 'request %: expected version must be null unless expected kind is 3 (AtVersion)',
+            v_stray_version - 1
             USING ERRCODE = 'invalid_parameter_value';
     END IF;
 END
