@@ -1,26 +1,11 @@
 ﻿using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Codecs;
 using MongoDB.Bson;
-using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
 internal static class ReadEventExtensions
 {
-    extension(IFindFluent<BsonDocument, BsonDocument> find)
-    {
-        /// <summary>
-        /// Leaves the metadata field out of the documents returned when the caller does not want it.
-        /// </summary>
-        public IFindFluent<BsonDocument, BsonDocument> ProjectMetadata(bool includeMetadata)
-        {
-            return includeMetadata
-                ? find
-                : find.Project<BsonDocument>(
-                    Builders<BsonDocument>.Projection.Exclude(EventLogEntry.FieldNames.Metadata));
-        }
-    }
-
     extension<TEvent>(IEventDecoder<TEvent, BsonValue, BsonValue> decoder) where TEvent : notnull
     {
         public ReadEvent<TEvent, string, StreamPosition, LogPosition> Decode(BsonDocument doc)
