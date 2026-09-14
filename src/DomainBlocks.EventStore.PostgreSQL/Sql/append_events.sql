@@ -42,7 +42,10 @@ SELECT CASE
        END::smallint
 $fn$;
 
-CREATE OR REPLACE FUNCTION __schema__.append_events(
+-- Rejects a batch that violates the protocol: request or event arrays of different lengths, an event count that is
+-- not positive, or a request whose fields are missing or inconsistent. One pass over the request arrays computes the
+-- event total and both validity checks.
+CREATE OR REPLACE FUNCTION __schema__.validate_append_batch(
     p_stream_ids text[],
     p_expected_kinds smallint[],
     p_expected_versions bigint[],
@@ -52,37 +55,17 @@ CREATE OR REPLACE FUNCTION __schema__.append_events(
     p_event_data jsonb[],
     p_event_data_bytes bytea[],
     p_metadata jsonb[])
-    RETURNS TABLE
-            (
-                request_index    integer,
-                status           smallint,
-                observed_kind    smallint,
-                observed_version bigint,
-                first_position   bigint,
-                last_position    bigint
-            )
+    RETURNS void
     LANGUAGE plpgsql
     SET plan_cache_mode = force_generic_plan
 AS
 $fn$
 DECLARE
-    c_sequence_name CONSTANT text := 'event_log';
-    v_request_count          integer;
-    v_event_total            bigint;
-    v_invalid_count          boolean;
-    v_invalid_request        boolean;
-    v_position_start         bigint;
-    v_created_at             timestamptz;
-    v_existing_commits       uuid[];
+    v_request_count   integer;
+    v_event_total     bigint;
+    v_invalid_count   boolean;
+    v_invalid_request boolean;
 BEGIN
-    -- The blocking SELECT ... FOR UPDATE below re-reads the newest committed row after waiting, which is READ COMMITTED
-    -- behaviour. Under REPEATABLE READ or SERIALIZABLE the same wait would end in a serialization failure.
-    IF current_setting('transaction_isolation') <> 'read committed' THEN
-        RAISE EXCEPTION 'append_events requires READ COMMITTED isolation (current: %)',
-            current_setting('transaction_isolation')
-            USING ERRCODE = 'invalid_transaction_state';
-    END IF;
-
     v_request_count := coalesce(cardinality(p_stream_ids), 0);
 
     IF coalesce(cardinality(p_expected_kinds), 0) <> v_request_count OR
@@ -93,7 +76,6 @@ BEGIN
             USING ERRCODE = 'invalid_parameter_value';
     END IF;
 
-    -- One pass over the request arrays: the event total and both validity checks.
     SELECT coalesce(sum(r.event_count), 0),
            bool_or(r.event_count IS NULL OR r.event_count <= 0),
            bool_or(r.stream_id IS NULL OR r.stream_id = ''
@@ -122,9 +104,52 @@ BEGIN
         RAISE EXCEPTION 'invalid request: check stream ids, commit ids, expected kinds and versions'
             USING ERRCODE = 'invalid_parameter_value';
     END IF;
+END
+$fn$;
+
+CREATE OR REPLACE FUNCTION __schema__.append_events(
+    p_stream_ids text[],
+    p_expected_kinds smallint[],
+    p_expected_versions bigint[],
+    p_commit_ids uuid[],
+    p_event_counts integer[],
+    p_event_names text[],
+    p_event_data jsonb[],
+    p_event_data_bytes bytea[],
+    p_metadata jsonb[])
+    RETURNS TABLE
+            (
+                request_index    integer,
+                status           smallint,
+                observed_kind    smallint,
+                observed_version bigint,
+                first_position   bigint,
+                last_position    bigint
+            )
+    LANGUAGE plpgsql
+    SET plan_cache_mode = force_generic_plan
+AS
+$fn$
+DECLARE
+    c_sequence_name CONSTANT text := 'event_log';
+    v_position_start         bigint;
+    v_created_at             timestamptz;
+    v_existing_commits       uuid[];
+BEGIN
+    -- The blocking SELECT ... FOR UPDATE below re-reads the newest committed row after waiting, which is READ COMMITTED
+    -- behaviour. Under REPEATABLE READ or SERIALIZABLE the same wait would end in a serialization failure.
+    IF current_setting('transaction_isolation') <> 'read committed' THEN
+        RAISE EXCEPTION 'append_events requires READ COMMITTED isolation (current: %)',
+            current_setting('transaction_isolation')
+            USING ERRCODE = 'invalid_transaction_state';
+    END IF;
+
+    PERFORM __schema__.validate_append_batch(
+            p_stream_ids, p_expected_kinds, p_expected_versions, p_commit_ids, p_event_counts,
+            p_event_names, p_event_data, p_event_data_bytes, p_metadata);
 
     -- An empty batch is valid once every array has been checked against it.
-    IF v_request_count = 0 THEN
+    IF coalesce(cardinality(p_stream_ids), 0) = 0 THEN
         RETURN;
     END IF;
 
