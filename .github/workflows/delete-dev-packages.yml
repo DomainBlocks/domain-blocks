@@ -1,0 +1,42 @@
+name: Delete Dev Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      before:
+        description: 'Delete dev versions with a run number below this (10 deletes everything before 2.0.0-dev.10.*)'
+        required: true
+        type: number
+      dry_run:
+        description: 'Only list what would be deleted'
+        type: boolean
+        default: true
+
+permissions:
+  packages: write
+
+jobs:
+  delete:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      OWNER: ${{ github.repository_owner }}
+      BEFORE: ${{ inputs.before }}
+      DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      - name: Delete versions
+        run: |
+          set -euo pipefail
+          for pkg in $(gh api "/orgs/$OWNER/packages?package_type=nuget" --paginate --jq '.[].name'); do
+            gh api "/orgs/$OWNER/packages/nuget/$pkg/versions" --paginate --jq '.[] | "\(.id) \(.name)"' |
+            while read -r id name; do
+              run=$(sed -nE 's/^.*-dev\.([0-9]+)\..*$/\1/p' <<< "$name")
+              [[ -z "$run" || "$run" -ge "$BEFORE" ]] && continue
+              if [[ "$DRY_RUN" == "true" ]]; then
+                echo "would delete $pkg $name"
+              else
+                echo "deleting $pkg $name"
+                gh api -X DELETE "/orgs/$OWNER/packages/nuget/$pkg/versions/$id"
+              fi
+            done
+          done
