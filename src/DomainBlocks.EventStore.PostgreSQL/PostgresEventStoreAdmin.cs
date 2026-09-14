@@ -5,7 +5,7 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 public static class PostgresEventStoreAdmin
 {
     /// <summary>
-    /// Creates the schema, tables, sequence row, append function and publication used by the event store if they do
+    /// Creates the schema, tables, sequence row, append functions and publication used by the event store if they do
     /// not already exist. Safe to call on every start-up and from multiple processes concurrently.
     /// </summary>
     public static async Task EnsureInitializedAsync(
@@ -25,6 +25,7 @@ public static class PostgresEventStoreAdmin
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
         await ExecuteAsync(connection, SqlScripts.Schema(names), cancellationToken).ConfigureAwait(false);
+        await ExecuteAsync(connection, SqlScripts.AppendHelpers(names), cancellationToken).ConfigureAwait(false);
         await ExecuteAsync(connection, SqlScripts.AppendEvents(names), cancellationToken).ConfigureAwait(false);
 
         if (adminOptions.CreatePublication)
