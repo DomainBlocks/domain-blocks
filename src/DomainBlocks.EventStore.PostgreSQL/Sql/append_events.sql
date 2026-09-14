@@ -93,7 +93,7 @@ BEGIN
     RETURN QUERY
         WITH RECURSIVE
             request AS (SELECT *
-                        FROM __schema__.append_requests(p_stream_ids, p_expected_kinds, p_expected_versions,
+                        FROM __schema__.unnest_requests(p_stream_ids, p_expected_kinds, p_expected_versions,
                                                         p_commit_ids, p_event_counts, v_existing_commits)),
             -- Evaluate the requests, carrying the head of each stream forward. The seed row of a stream holds its
             -- current head; iteration n decides the n-th request of every stream against the head left by the previous
@@ -105,7 +105,7 @@ BEGIN
                              NULL::bigint   AS head_before,
                              NULL::smallint AS status,
                              h.head         AS head_after
-                      FROM __schema__.stream_heads(p_stream_ids) AS h
+                      FROM __schema__.get_stream_heads(p_stream_ids) AS h
                       UNION ALL
                       SELECT r.stream_id,
                              r.nth,
@@ -116,7 +116,7 @@ BEGIN
                       FROM chain AS c
                                JOIN request AS r ON r.stream_id = c.stream_id AND r.nth = c.nth + 1
                                CROSS JOIN LATERAL (
-                                   SELECT __schema__.append_status(r.duplicate, r.kind, r.version, c.head_after)) AS d(status)),
+                                   SELECT __schema__.get_append_status(r.duplicate, r.kind, r.version, c.head_after)) AS d(status)),
             -- Global positions are contiguous over appended requests, in batch order.
             decided AS (SELECT r.ord,
                                r.stream_id,

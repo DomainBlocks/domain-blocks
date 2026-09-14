@@ -201,47 +201,47 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task AppendStatus_CalledPerRow_IsInlined()
+    public async Task GetAppendStatus_CalledPerRow_IsInlined()
     {
         // The helper must be inlined so that the decision is planned as part of the calling statement rather than
         // evaluated as a function call per request. An inlined call leaves no trace of the function in the plan.
         // Column arguments keep the planner from constant-folding the call, which would hide a missing inline.
         await using var command = DataSource.CreateCommand(
-            $"EXPLAIN (VERBOSE, COSTS OFF) SELECT {Schema}.append_status(false, k::smallint, NULL, -1) " +
+            $"EXPLAIN (VERBOSE, COSTS OFF) SELECT {Schema}.get_append_status(false, k::smallint, NULL, -1) " +
             "FROM generate_series(0, 3) AS k");
 
         var plan = await ExplainAsync(command);
 
-        plan.ShouldNotContain(line => line.Contains("append_status"), string.Join('\n', plan));
+        plan.ShouldNotContain(line => line.Contains("get_append_status"), string.Join('\n', plan));
         plan.ShouldContain(line => line.Contains("CASE WHEN"), string.Join('\n', plan));
     }
 
     [Test]
-    public async Task AppendRequests_CalledInFrom_IsInlined()
+    public async Task UnnestRequests_CalledInFrom_IsInlined()
     {
         // A set-returning helper must be inlined as a subquery; a Function Scan on it would mean the planner runs it
         // as a black box. The probe passes constants only, since a volatile argument such as gen_random_uuid() blocks
         // inlining by itself and would fail the test for the wrong reason.
         await using var command = DataSource.CreateCommand(
-            $"EXPLAIN (COSTS OFF) SELECT * FROM {Schema}.append_requests(" +
+            $"EXPLAIN (COSTS OFF) SELECT * FROM {Schema}.unnest_requests(" +
             "ARRAY['s1'], ARRAY[0::smallint], ARRAY[NULL::bigint], " +
             "ARRAY['00000000-0000-0000-0000-000000000001'::uuid], ARRAY[1], ARRAY[]::uuid[])");
 
         var plan = await ExplainAsync(command);
 
-        plan.ShouldNotContain(line => line.Contains("Function Scan on append_requests"), string.Join('\n', plan));
+        plan.ShouldNotContain(line => line.Contains("Function Scan on unnest_requests"), string.Join('\n', plan));
         plan.ShouldContain(line => line.Contains("WindowAgg"), string.Join('\n', plan));
     }
 
     [Test]
-    public async Task StreamHeads_CalledInFrom_IsInlinedAndProbesIndexBackwards()
+    public async Task GetStreamHeads_CalledInFrom_IsInlinedAndProbesIndexBackwards()
     {
         await using var command = DataSource.CreateCommand(
-            $"EXPLAIN (COSTS OFF) SELECT * FROM {Schema}.stream_heads(ARRAY['s1', 's2'])");
+            $"EXPLAIN (COSTS OFF) SELECT * FROM {Schema}.get_stream_heads(ARRAY['s1', 's2'])");
 
         var plan = await ExplainAsync(command);
 
-        plan.ShouldNotContain(line => line.Contains("Function Scan on stream_heads"), string.Join('\n', plan));
+        plan.ShouldNotContain(line => line.Contains("Function Scan on get_stream_heads"), string.Join('\n', plan));
 
         plan.ShouldContain(
             line => line.Contains("Index Only Scan Backward using event_log_stream_id_stream_position_key"),

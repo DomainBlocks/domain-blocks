@@ -5,7 +5,7 @@
 -- Decides one request against the head of its stream, where a head of -1 means the stream does not exist. A scalar
 -- SQL function whose body is a single expression is inlined by the planner, so this costs nothing at run time; it
 -- exists to keep the decision, and the codes it interprets, in one place.
-CREATE OR REPLACE FUNCTION __schema__.append_status(
+CREATE OR REPLACE FUNCTION __schema__.get_append_status(
     p_duplicate boolean,
     p_expected_kind smallint,
     p_expected_version bigint,
@@ -93,7 +93,7 @@ $fn$;
 -- The requests of a batch, one row each with the derived columns the append needs. A set-returning SQL function that
 -- is a single SELECT, not volatile and not strict, is inlined by the planner as a subquery of the calling statement,
 -- so this shapes the query without adding a function call or a plan boundary.
-CREATE OR REPLACE FUNCTION __schema__.append_requests(
+CREATE OR REPLACE FUNCTION __schema__.unnest_requests(
     p_stream_ids text[],
     p_expected_kinds smallint[],
     p_expected_versions bigint[],
@@ -135,8 +135,8 @@ $fn$;
 
 -- The head of every distinct stream in the batch, -1 if the stream has no events. The lateral max() lets the planner
 -- use the (stream_id, stream_position) index backwards with a limit, so each probe is O(1) however long the stream
--- is. Inlined like append_requests.
-CREATE OR REPLACE FUNCTION __schema__.stream_heads(p_stream_ids text[])
+-- is. Inlined like unnest_requests.
+CREATE OR REPLACE FUNCTION __schema__.get_stream_heads(p_stream_ids text[])
     RETURNS TABLE
             (
                 stream_id text,
