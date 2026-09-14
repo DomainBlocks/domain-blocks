@@ -1,12 +1,4 @@
 <Solution>
-  <Folder Name="/.solution/">
-    <File Path=".gitattributes" />
-    <File Path=".gitignore" />
-    <File Path=".editorconfig" />
-    <File Path="Directory.Build.props" />
-    <File Path="Directory.Packages.props" />
-    <File Path="README.md" />
-  </Folder>
   <Folder Name="/benchmarks/">
     <Project Path="benchmarks/DomainBlocks.Benchmarking.EventStore/DomainBlocks.Benchmarking.EventStore.csproj" />
     <Project Path="benchmarks/DomainBlocks.EventStore.Benchmarks/DomainBlocks.EventStore.Benchmarks.csproj" />
@@ -14,10 +6,6 @@
     <Project Path="benchmarks/DomainBlocks.EventStore.MongoDB.Benchmarks/DomainBlocks.EventStore.MongoDB.Benchmarks.csproj" />
     <Project Path="benchmarks/DomainBlocks.EventStore.NoOp.Benchmarks/DomainBlocks.EventStore.NoOp.Benchmarks.csproj" />
     <Project Path="benchmarks/DomainBlocks.EventStore.PostgreSQL.Benchmarks/DomainBlocks.EventStore.PostgreSQL.Benchmarks.csproj" />
-  </Folder>
-  <Folder Name="/docs/">
-    <File Path="docs/postgresql-event-store-plan.md" />
-    <File Path="docs/vision.md" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/DomainBlocks.EventStore.Primitives/DomainBlocks.EventStore.Primitives.csproj" />

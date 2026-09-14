@@ -2,11 +2,12 @@
 
 ## Vision
 
-Lowering the barrier to entry for building event-sourced applications using DDD principles.
+Lowering the barrier to entry for building applications using DDD principles.
 
 ## Goals
 
-* Provide a lightweight, composable foundation for building event-sourced DDD systems in .NET.
+* Provide a lightweight, composable foundation for building domain-centric systems in .NET.
+* Make event sourcing easy to reason about and operate.
 * Prioritise correctness and consistency guarantees, particularly around event storage and concurrency.
 * Simplify the creation and management of aggregates and domain events.
 * Offer clean abstractions for storing and replaying events.
@@ -20,7 +21,7 @@ Lowering the barrier to entry for building event-sourced applications using DDD 
 
 ## Target Audience
 
-Anyone who wants to build event-sourced applications using DDD principles in .NET.
+Anyone who wants to build applications using DDD principles in .NET.
 
 ## Guiding Principles
 

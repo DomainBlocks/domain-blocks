@@ -1,5 +1,10 @@
 # PostgreSQL implementation of IEventStore
 
+> **Archived implementation plan.** The prompt below was written by the author. The plan that follows it was generated
+> from that prompt with Claude Code (Claude Fable 5.1) on 8 September 2026 and executed on a `feat/postgres` branch.
+> It records what was decided before implementation began. Where it disagrees with the code, the code is right. The
+> commit history is the record of what was actually built.
+
 ## Prompt
 
 The following prompt was used to generate this plan:
