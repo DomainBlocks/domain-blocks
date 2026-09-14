@@ -8,11 +8,12 @@ on:
         required: true
         type: number
       dry_run:
-        description: 'Only list what would be deleted'
+        description: 'Dry run'
         type: boolean
         default: true
 
 permissions:
+  contents: read
   packages: write
 
 jobs:
@@ -24,19 +25,34 @@ jobs:
       BEFORE: ${{ inputs.before }}
       DRY_RUN: ${{ inputs.dry_run }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
       - name: Delete versions
         run: |
           set -euo pipefail
-          for pkg in $(gh api "/orgs/$OWNER/packages?package_type=nuget" --paginate --jq '.[].name'); do
-            gh api "/orgs/$OWNER/packages/nuget/$pkg/versions" --paginate --jq '.[] | "\(.id) \(.name)"' |
+
+          # The repo-scoped GITHUB_TOKEN cannot list packages at the org level,
+          # so derive package names from the packable projects instead.
+          packages=$(grep -l '<IsPackable>true</IsPackable>' src/*/*.csproj | xargs -n1 basename | sed 's/\.csproj$//')
+          echo "Packages: $(echo "$packages" | wc -l)"
+
+          for pkg in $packages; do
+            if ! versions=$(gh api "/orgs/$OWNER/packages/nuget/$pkg/versions" --paginate --jq '.[] | "\(.id) \(.name)"'); then
+              echo "$pkg: not found, skipping"
+              continue
+            fi
+            echo "$pkg: $(echo "$versions" | grep -c .) versions"
+
             while read -r id name; do
+              [[ -z "$name" ]] && continue
               run=$(sed -nE 's/^.*-dev\.([0-9]+)\..*$/\1/p' <<< "$name")
               [[ -z "$run" || "$run" -ge "$BEFORE" ]] && continue
               if [[ "$DRY_RUN" == "true" ]]; then
-                echo "would delete $pkg $name"
+                echo "  would delete $name"
               else
-                echo "deleting $pkg $name"
+                echo "  deleting $name"
                 gh api -X DELETE "/orgs/$OWNER/packages/nuget/$pkg/versions/$id"
               fi
-            done
+            done <<< "$versions"
           done
