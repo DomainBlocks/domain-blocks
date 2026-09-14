@@ -93,7 +93,7 @@ $fn$;
 -- The requests of a batch, one row each with the derived columns the append needs. A set-returning SQL function that
 -- is a single SELECT, not volatile and not strict, is inlined by the planner as a subquery of the calling statement,
 -- so this shapes the query without adding a function call or a plan boundary.
-CREATE OR REPLACE FUNCTION __schema__.unnest_requests(
+CREATE OR REPLACE FUNCTION __schema__.zip_requests(
     p_stream_ids text[],
     p_expected_kinds smallint[],
     p_expected_versions bigint[],
@@ -135,7 +135,7 @@ $fn$;
 
 -- The head of every distinct stream in the batch, -1 if the stream has no events. The lateral max() lets the planner
 -- use the (stream_id, stream_position) index backwards with a limit, so each probe is O(1) however long the stream
--- is. Inlined like unnest_requests.
+-- is. Inlined like zip_requests.
 CREATE OR REPLACE FUNCTION __schema__.get_stream_heads(p_stream_ids text[])
     RETURNS TABLE
             (

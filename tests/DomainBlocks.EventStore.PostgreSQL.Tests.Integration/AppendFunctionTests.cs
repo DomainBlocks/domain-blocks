@@ -217,19 +217,19 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task UnnestRequests_CalledInFrom_IsInlined()
+    public async Task ZipRequests_CalledInFrom_IsInlined()
     {
         // A set-returning helper must be inlined as a subquery; a Function Scan on it would mean the planner runs it
         // as a black box. The probe passes constants only, since a volatile argument such as gen_random_uuid() blocks
         // inlining by itself and would fail the test for the wrong reason.
         await using var command = DataSource.CreateCommand(
-            $"EXPLAIN (COSTS OFF) SELECT * FROM {Schema}.unnest_requests(" +
+            $"EXPLAIN (COSTS OFF) SELECT * FROM {Schema}.zip_requests(" +
             "ARRAY['s1'], ARRAY[0::smallint], ARRAY[NULL::bigint], " +
             "ARRAY['00000000-0000-0000-0000-000000000001'::uuid], ARRAY[1], ARRAY[]::uuid[])");
 
         var plan = await ExplainAsync(command);
 
-        plan.ShouldNotContain(line => line.Contains("Function Scan on unnest_requests"), string.Join('\n', plan));
+        plan.ShouldNotContain(line => line.Contains("Function Scan on zip_requests"), string.Join('\n', plan));
         plan.ShouldContain(line => line.Contains("WindowAgg"), string.Join('\n', plan));
     }
 

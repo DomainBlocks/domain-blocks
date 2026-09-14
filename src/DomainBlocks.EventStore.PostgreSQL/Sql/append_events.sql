@@ -100,12 +100,12 @@ BEGIN
     RETURN QUERY
         WITH RECURSIVE
             request AS (SELECT *
-                        FROM __schema__.unnest_requests(p_stream_ids,
-                                                        p_expected_kinds,
-                                                        p_expected_versions,
-                                                        p_commit_ids,
-                                                        p_event_counts,
-                                                        v_existing_commits)),
+                        FROM __schema__.zip_requests(p_stream_ids,
+                                                     p_expected_kinds,
+                                                     p_expected_versions,
+                                                     p_commit_ids,
+                                                     p_event_counts,
+                                                     v_existing_commits)),
             -- Evaluate the requests, carrying the head of each stream forward. The seed row of a stream holds its
             -- current head; iteration n decides the n-th request of every stream against the head left by the previous
             -- n - 1, so a batch with no repeated stream needs one iteration. Streams are independent, so evaluating
