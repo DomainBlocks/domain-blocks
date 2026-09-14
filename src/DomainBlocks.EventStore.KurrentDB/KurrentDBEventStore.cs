@@ -143,12 +143,15 @@ public class KurrentDBEventStore<TEvent>(
             kurrentDirection,
             streamId,
             revision,
+            maxCount: options.MaxCount ?? long.MaxValue,
             cancellationToken: cancellationToken);
 
-        if (options.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw &&
-            await result.ReadState.ConfigureAwait(false) == ReadState.StreamNotFound)
+        if (await result.ReadState.ConfigureAwait(false) == ReadState.StreamNotFound)
         {
-            throw new StreamNotFoundException(streamId);
+            if (options.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw)
+                throw new StreamNotFoundException(streamId);
+
+            yield break;
         }
 
         await foreach (var resolvedEvent in result.ConfigureAwait(false))

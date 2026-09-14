@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+option csharp_namespace = "DomainBlocks.Testing.Events.Proto";
+
+message ProtoTestEvent {
+  string value = 1;
+}

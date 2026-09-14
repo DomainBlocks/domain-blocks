@@ -1,17 +1,11 @@
 <Solution>
-  <Folder Name="/.solution/">
-    <File Path=".gitattributes" />
-    <File Path=".gitignore" />
-    <File Path=".editorconfig" />
-    <File Path="Directory.Build.props" />
-    <File Path="Directory.Packages.props" />
-    <File Path="README.md" />
-  </Folder>
   <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/DomainBlocks.Benchmarking.EventStore/DomainBlocks.Benchmarking.EventStore.csproj" />
     <Project Path="benchmarks/DomainBlocks.EventStore.Benchmarks/DomainBlocks.EventStore.Benchmarks.csproj" />
-  </Folder>
-  <Folder Name="/docs/">
-    <File Path="docs/vision.md" />
+    <Project Path="benchmarks/DomainBlocks.EventStore.KurrentDB.Benchmarks/DomainBlocks.EventStore.KurrentDB.Benchmarks.csproj" />
+    <Project Path="benchmarks/DomainBlocks.EventStore.MongoDB.Benchmarks/DomainBlocks.EventStore.MongoDB.Benchmarks.csproj" />
+    <Project Path="benchmarks/DomainBlocks.EventStore.NoOp.Benchmarks/DomainBlocks.EventStore.NoOp.Benchmarks.csproj" />
+    <Project Path="benchmarks/DomainBlocks.EventStore.PostgreSQL.Benchmarks/DomainBlocks.EventStore.PostgreSQL.Benchmarks.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/DomainBlocks.EventStore.Primitives/DomainBlocks.EventStore.Primitives.csproj" />
@@ -20,6 +14,7 @@
     <Project Path="src/DomainBlocks.EventStore.Abstractions/DomainBlocks.EventStore.Abstractions.csproj" />
     <Project Path="src/DomainBlocks.EventStore.KurrentDB/DomainBlocks.EventStore.KurrentDB.csproj" />
     <Project Path="src/DomainBlocks.EventStore.MongoDB/DomainBlocks.EventStore.MongoDB.csproj" />
+    <Project Path="src/DomainBlocks.EventStore.PostgreSQL/DomainBlocks.EventStore.PostgreSQL.csproj" />
     <Project Path="src/DomainBlocks.EventStore/DomainBlocks.EventStore.csproj" />
     <Project Path="src/DomainBlocks.Serialization.Abstractions/DomainBlocks.Serialization.Abstractions.csproj" />
     <Project Path="src/DomainBlocks.Serialization.Google.Protobuf/DomainBlocks.Serialization.Google.Protobuf.csproj" />
@@ -28,16 +23,19 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/DomainBlocks.EventStore.MongoDB.Tests.Unit/DomainBlocks.EventStore.MongoDB.Tests.Unit.csproj" />
+    <Project Path="tests/DomainBlocks.EventStore.PostgreSQL.Tests.Unit/DomainBlocks.EventStore.PostgreSQL.Tests.Unit.csproj" />
     <Project Path="tests/DomainBlocks.EventStore.Primitives.Tests.Unit/DomainBlocks.EventStore.Primitives.Tests.Unit.csproj" />
-    <Project Path="tests/DomainBlocks.Testing.Integration/DomainBlocks.Testing.Integration.csproj" />
     <Project Path="tests/DomainBlocks.EventSourcing.Tests.Integration/DomainBlocks.EventSourcing.Tests.Integration.csproj" />
-    <Project Path="tests/DomainBlocks.EventSourcing.Tests.Unit/DomainBlocks.EventSourcing.Tests.Unit.csproj" />
     <Project Path="tests/DomainBlocks.EventStore.Abstractions.Tests.Unit/DomainBlocks.EventStore.Abstractions.Tests.Unit.csproj" />
     <Project Path="tests/DomainBlocks.EventStore.KurrentDB.Tests.Integration/DomainBlocks.EventStore.KurrentDB.Tests.Integration.csproj" />
     <Project Path="tests/DomainBlocks.EventStore.MongoDB.Tests.Integration/DomainBlocks.EventStore.MongoDB.Tests.Integration.csproj" />
+    <Project Path="tests/DomainBlocks.EventStore.PostgreSQL.Tests.Integration/DomainBlocks.EventStore.PostgreSQL.Tests.Integration.csproj" />
     <Project Path="tests/DomainBlocks.EventStore.Tests.Unit/DomainBlocks.EventStore.Tests.Unit.csproj" />
-    <Project Path="tests/DomainBlocks.Serialization.Google.Protobuf.Tests/DomainBlocks.Serialization.Google.Protobuf.Tests.csproj" />
-    <Project Path="tests/DomainBlocks.Testing.Integration.MongoDB/DomainBlocks.Testing.Integration.MongoDB.csproj" />
+    <Project Path="tests/DomainBlocks.Serialization.Google.Protobuf.Tests.Unit/DomainBlocks.Serialization.Google.Protobuf.Tests.Unit.csproj" />
+    <Project Path="tests/DomainBlocks.Testing.Integration.EventStore.KurrentDB/DomainBlocks.Testing.Integration.EventStore.KurrentDB.csproj" />
+    <Project Path="tests/DomainBlocks.Testing.Integration.EventStore.MongoDB/DomainBlocks.Testing.Integration.EventStore.MongoDB.csproj" />
+    <Project Path="tests/DomainBlocks.Testing.Integration.EventStore.PostgreSQL/DomainBlocks.Testing.Integration.EventStore.PostgreSQL.csproj" />
+    <Project Path="tests/DomainBlocks.Testing.Integration.EventStore/DomainBlocks.Testing.Integration.EventStore.csproj" />
     <Project Path="tests/DomainBlocks.Testing/DomainBlocks.Testing.csproj" />
   </Folder>
 </Solution>

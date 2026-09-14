@@ -3,15 +3,19 @@ using NUnit.Framework;
 
 namespace DomainBlocks.Testing;
 
-public sealed class NUnitLoggerProvider : ILoggerProvider
+/// <summary>
+/// Writes log messages to the NUnit progress output. Messages below <paramref name="minimumLevel"/> are dropped here
+/// regardless of the logger factory's own minimum level, so both must be lowered to see Trace output.
+/// </summary>
+public sealed class NUnitLoggerProvider(LogLevel minimumLevel = LogLevel.Debug) : ILoggerProvider
 {
-    public ILogger CreateLogger(string categoryName) => new NUnitLogger(categoryName);
+    public ILogger CreateLogger(string categoryName) => new NUnitLogger(categoryName, minimumLevel);
 
     public void Dispose()
     {
     }
 
-    private sealed class NUnitLogger(string categoryName) : ILogger
+    private sealed class NUnitLogger(string categoryName, LogLevel minimumLevel) : ILogger
     {
         public void Log<TState>(
             LogLevel logLevel,
@@ -28,7 +32,7 @@ public sealed class NUnitLoggerProvider : ILoggerProvider
                 TestContext.Progress.WriteLine(exception);
         }
 
-        public bool IsEnabled(LogLevel logLevel) => logLevel >= LogLevel.Debug;
+        public bool IsEnabled(LogLevel logLevel) => logLevel >= minimumLevel;
 
         public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
 

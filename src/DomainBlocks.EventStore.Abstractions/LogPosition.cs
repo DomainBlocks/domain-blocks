@@ -1,7 +1,8 @@
 namespace DomainBlocks.EventStore.Abstractions;
 
 /// <summary>
-/// Represents an event position in the event log across all streams. Values increase in append order but may have gaps.
+/// Represents an event position in the event log across all streams. Values increase in commit order, and no event is
+/// visible at a position until every event at a lower position is visible. Values may have gaps.
 /// </summary>
 /// <param name="Value">The non-negative log position.</param>
 public readonly record struct LogPosition(ulong Value) : IPosition<LogPosition>

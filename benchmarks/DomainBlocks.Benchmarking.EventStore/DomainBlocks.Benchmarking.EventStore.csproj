@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="HdrHistogram" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="Shouldly" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\tests\DomainBlocks.Testing.Integration.EventStore\DomainBlocks.Testing.Integration.EventStore.csproj" />
+    <ProjectReference Include="..\..\tests\DomainBlocks.Testing\DomainBlocks.Testing.csproj" />
+  </ItemGroup>
+
+</Project>

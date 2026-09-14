@@ -14,34 +14,34 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
     where TEvent : notnull
     where TPos : struct, IPosition<TPos>
 {
-    private readonly SubscriptionOrigin<TPos> _origin;
-    private readonly SubscriptionOptions _options;
-    private readonly FilterDefinition<BsonDocument> _catchUpFilter;
-    private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, bool> _liveFilter;
-    private readonly string _positionFieldName;
-    private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> _positionSelector;
     private readonly IMongoCollection<BsonDocument> _eventLog;
     private readonly RefCountedChangeStreamSubject<ChangeStreamDocument<BsonDocument>> _changeStreamSubject;
     private readonly IEventDecoder<TEvent, BsonValue, BsonValue> _eventDecoder;
+    private readonly FilterDefinition<BsonDocument> _catchUpFilter;
+    private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, bool> _livePredicate;
+    private readonly string _positionFieldName;
+    private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> _positionSelector;
+    private readonly SubscriptionOrigin<TPos> _origin;
+    private readonly SubscriptionOptions _options;
     private readonly ILogger? _logger;
     private readonly string _correlationId;
 
     public SubscriptionAsyncEnumerable(
-        SubscriptionOrigin<TPos>? origin,
-        SubscriptionOptions? options,
-        FilterDefinition<BsonDocument> catchUpFilter,
-        Func<ReadEventContext<string, StreamPosition, LogPosition>, bool> liveFilter,
-        string positionFieldName,
-        Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> positionSelector,
         IMongoCollection<BsonDocument> eventLog,
         RefCountedChangeStreamSubject<ChangeStreamDocument<BsonDocument>> changeStreamSubject,
         IEventDecoder<TEvent, BsonValue, BsonValue> eventDecoder,
+        FilterDefinition<BsonDocument> catchUpFilter,
+        Func<ReadEventContext<string, StreamPosition, LogPosition>, bool> livePredicate,
+        string positionFieldName,
+        Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> positionSelector,
+        SubscriptionOrigin<TPos>? origin,
+        SubscriptionOptions? options,
         ILogger? logger)
     {
         _origin = origin ?? SubscriptionOrigin.End<TPos>();
         _options = options ?? SubscriptionOptions.Default;
         _catchUpFilter = catchUpFilter;
-        _liveFilter = liveFilter;
+        _livePredicate = livePredicate;
         _positionFieldName = positionFieldName;
         _positionSelector = positionSelector;
         _eventLog = eventLog;
@@ -172,7 +172,7 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
             var readEvent = _eventDecoder.Decode(doc);
             var context = readEvent.Context;
 
-            if (context.LogPosition.Value <= highWaterMark?.Value || !_liveFilter(context))
+            if (context.LogPosition.Value <= highWaterMark?.Value || !_livePredicate(context))
                 continue;
 
             yield return SubscriptionMessage.Event.Create(readEvent);

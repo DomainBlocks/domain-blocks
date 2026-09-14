@@ -5,6 +5,8 @@ repo_url: https://github.com/DomainBlocks/domain-blocks
 repo_name: domain-blocks
 edit_uri: edit/main/docs/
 
+exclude_docs: unpublished/**
+
 theme:
   name: material
   logo: assets/logo.svg

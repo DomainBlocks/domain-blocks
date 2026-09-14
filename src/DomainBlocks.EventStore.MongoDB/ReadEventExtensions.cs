@@ -15,7 +15,8 @@ internal static class ReadEventExtensions
             var streamPosition = StreamPosition.FromInt64(doc[EventLogEntry.FieldNames.StreamPosition].AsInt64);
             var eventName = doc[EventLogEntry.FieldNames.EventName].AsString;
             var eventData = doc[EventLogEntry.FieldNames.EventData];
-            var rawMetadata = doc[EventLogEntry.FieldNames.Metadata];
+            // Reads that exclude metadata project the field out of the document.
+            var rawMetadata = doc.GetValue(EventLogEntry.FieldNames.Metadata, BsonNull.Value);
             var createdAtUtc = doc[EventLogEntry.FieldNames.CreatedAtUtc].AsBsonDateTime.ToUniversalTime();
 
             var (payload, metadata) = decoder.Decode(eventName, eventData, rawMetadata);
