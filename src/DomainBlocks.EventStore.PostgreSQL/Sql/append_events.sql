@@ -107,6 +107,69 @@ BEGIN
 END
 $fn$;
 
+-- The requests of a batch, one row each with the derived columns the append needs. A set-returning SQL function that
+-- is a single SELECT, not volatile and not strict, is inlined by the planner as a subquery of the calling statement,
+-- so this shapes the query without adding a function call or a plan boundary.
+CREATE OR REPLACE FUNCTION __schema__.append_requests(
+    p_stream_ids text[],
+    p_expected_kinds smallint[],
+    p_expected_versions bigint[],
+    p_commit_ids uuid[],
+    p_event_counts integer[],
+    p_existing_commits uuid[])
+    RETURNS TABLE
+            (
+                ord          bigint,
+                stream_id    text,
+                kind         smallint,
+                version      bigint,
+                commit_id    uuid,
+                event_count  integer,
+                nth          bigint,
+                duplicate    boolean,
+                event_offset bigint
+            )
+    LANGUAGE sql
+    IMMUTABLE
+AS
+$fn$
+SELECT r.ord,
+       -- Unnest yields the database collation; "C" keeps the partition sort below byte-wise, like the column.
+       r.stream_id COLLATE "C",
+       r.kind,
+       r.version,
+       r.commit_id,
+       r.event_count,
+       -- Position of the request among the requests to its stream, in batch order.
+       row_number() OVER (PARTITION BY r.stream_id COLLATE "C" ORDER BY r.ord),
+       -- The first occurrence of a commit id in the batch wins; later ones and already committed ones are duplicates.
+       row_number() OVER (PARTITION BY r.commit_id ORDER BY r.ord) > 1 OR r.commit_id = ANY (p_existing_commits),
+       -- 1-based offset of the request's first event in the flattened event arrays.
+       1 + coalesce(sum(r.event_count) OVER (ORDER BY r.ord ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0)
+FROM unnest(p_stream_ids, p_expected_kinds, p_expected_versions, p_commit_ids, p_event_counts)
+         WITH ORDINALITY AS r(stream_id, kind, version, commit_id, event_count, ord)
+$fn$;
+
+-- The head of every distinct stream in the batch, -1 if the stream has no events. The lateral max() lets the planner
+-- use the (stream_id, stream_position) index backwards with a limit, so each probe is O(1) however long the stream
+-- is. Inlined like append_requests.
+CREATE OR REPLACE FUNCTION __schema__.stream_heads(p_stream_ids text[])
+    RETURNS TABLE
+            (
+                stream_id text,
+                head      bigint
+            )
+    LANGUAGE sql
+    STABLE
+AS
+$fn$
+SELECT s.stream_id, coalesce(h.head, -1)
+FROM (SELECT DISTINCT u.stream_id COLLATE "C" AS stream_id FROM unnest(p_stream_ids) AS u(stream_id)) AS s
+         CROSS JOIN LATERAL (SELECT max(e.stream_position) AS head
+                             FROM __schema__.event_log AS e
+                             WHERE e.stream_id = s.stream_id) AS h
+$fn$;
+
 CREATE OR REPLACE FUNCTION __schema__.append_events(
     p_stream_ids text[],
     p_expected_kinds smallint[],
@@ -180,44 +243,20 @@ BEGIN
     -- Everything else is one statement. Its snapshot is taken after the lock, so the heads it reads are current.
     RETURN QUERY
         WITH RECURSIVE
-            request AS (SELECT r.ord,
-                               -- Unnest yields the database collation; "C" keeps the partition sort below byte-wise,
-                               -- like the column.
-                               r.stream_id COLLATE "C"                                                 AS stream_id,
-                               r.kind,
-                               r.version,
-                               r.commit_id,
-                               r.event_count,
-                               -- Position of the request among the requests to its stream, in batch order.
-                               row_number() OVER (PARTITION BY r.stream_id COLLATE "C" ORDER BY r.ord) AS nth,
-                               -- The first occurrence of a commit id in the batch wins; later ones and already
-                               -- committed ones are duplicates.
-                               (row_number() OVER (PARTITION BY r.commit_id ORDER BY r.ord) > 1
-                                   OR r.commit_id = ANY (v_existing_commits))                          AS duplicate,
-                               -- 1-based offset of the request's first event in the flattened event arrays.
-                               1 + coalesce(sum(r.event_count)
-                                            OVER (ORDER BY r.ord ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
-                                            0)                                                         AS event_offset
-                        FROM unnest(p_stream_ids, p_expected_kinds, p_expected_versions, p_commit_ids, p_event_counts)
-                                 WITH ORDINALITY AS r(stream_id, kind, version, commit_id, event_count, ord)),
-            -- Heads: one index probe per distinct stream, -1 if the stream has no events. The lateral max() lets the
-            -- planner use the (stream_id, stream_position) index backwards with a limit, so each probe is O(1) however
-            -- long the stream is.
-            head AS (SELECT s.stream_id, coalesce(h.head, -1) AS head
-                     FROM (SELECT DISTINCT r.stream_id FROM request AS r) AS s
-                              CROSS JOIN LATERAL (SELECT max(e.stream_position) AS head
-                                                  FROM __schema__.event_log AS e
-                                                  WHERE e.stream_id = s.stream_id) AS h),
-            -- Evaluate the requests. Iteration n decides the n-th request of every stream against the head left by the
-            -- previous n - 1, so a batch with no repeated stream needs one iteration. Streams are independent, so 
-            -- evaluating them side by side gives the same outcome as evaluating the batch in order.
+            request AS (SELECT *
+                        FROM __schema__.append_requests(p_stream_ids, p_expected_kinds, p_expected_versions,
+                                                        p_commit_ids, p_event_counts, v_existing_commits)),
+            -- Evaluate the requests, seeded with the head of every stream in the batch. Iteration n decides the n-th
+            -- request of every stream against the head left by the previous n - 1, so a batch with no repeated stream
+            -- needs one iteration. Streams are independent, so evaluating them side by side gives the same outcome as
+            -- evaluating the batch in order.
             chain AS (SELECT h.stream_id,
                              0::bigint      AS nth,
                              h.head,
                              NULL::bigint   AS ord,
                              NULL::smallint AS req_status,
                              NULL::bigint   AS observed
-                      FROM head AS h
+                      FROM __schema__.stream_heads(p_stream_ids) AS h
                       UNION ALL
                       SELECT r.stream_id,
                              r.nth,

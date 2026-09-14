@@ -217,6 +217,38 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
+    public async Task AppendRequests_CalledInFrom_IsInlined()
+    {
+        // A set-returning helper must be inlined as a subquery; a Function Scan on it would mean the planner runs it
+        // as a black box. The probe passes constants only, since a volatile argument such as gen_random_uuid() blocks
+        // inlining by itself and would fail the test for the wrong reason.
+        await using var command = DataSource.CreateCommand(
+            $"EXPLAIN (COSTS OFF) SELECT * FROM {Schema}.append_requests(" +
+            "ARRAY['s1'], ARRAY[0::smallint], ARRAY[NULL::bigint], " +
+            "ARRAY['00000000-0000-0000-0000-000000000001'::uuid], ARRAY[1], ARRAY[]::uuid[])");
+
+        var plan = await ExplainAsync(command);
+
+        plan.ShouldNotContain(line => line.Contains("Function Scan on append_requests"), string.Join('\n', plan));
+        plan.ShouldContain(line => line.Contains("WindowAgg"), string.Join('\n', plan));
+    }
+
+    [Test]
+    public async Task StreamHeads_CalledInFrom_IsInlinedAndProbesIndexBackwards()
+    {
+        await using var command = DataSource.CreateCommand(
+            $"EXPLAIN (COSTS OFF) SELECT * FROM {Schema}.stream_heads(ARRAY['s1', 's2'])");
+
+        var plan = await ExplainAsync(command);
+
+        plan.ShouldNotContain(line => line.Contains("Function Scan on stream_heads"), string.Join('\n', plan));
+
+        plan.ShouldContain(
+            line => line.Contains("Index Only Scan Backward using event_log_stream_id_stream_position_key"),
+            string.Join('\n', plan));
+    }
+
+    [Test]
     public async Task ExistingCommitId_OnDifferentStream_ReturnsDuplicate()
     {
         var request = Any("s1", JsonEvent());
