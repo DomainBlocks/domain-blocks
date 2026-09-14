@@ -1,5 +1,4 @@
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.PostgreSQL.Tests.Integration.Support;
 using DomainBlocks.Testing.Integration.EventStore;
 using Npgsql;
 using NUnit.Framework;
@@ -113,7 +112,7 @@ public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
         var rows = await Client.ReadRowsAsync();
         var batchCount = rows.Select(x => x.CreatedAt).Distinct().Count();
 
-        TestContext.Out.WriteLine($"{appendCount} appends were committed in {batchCount} batch(es)");
+        await TestContext.Out.WriteLineAsync($"{appendCount} appends were committed in {batchCount} batch(es)");
 
         rows.Count.ShouldBe(appendCount);
         batchCount.ShouldBeLessThan(appendCount);
@@ -148,7 +147,7 @@ public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
 
         await transaction.RollbackAsync(ct);
 
-        (await Client.ReadRowsAsync()).ShouldBeEmpty();
+        (await Client.ReadRowsAsync(cancellationToken: ct)).ShouldBeEmpty();
     }
 
     [Test]

@@ -1,5 +1,4 @@
 using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.PostgreSQL.Tests.Integration.Support;
 using DomainBlocks.Testing.Events;
 using DomainBlocks.Testing.Integration.EventStore;
 using NUnit.Framework;
@@ -85,6 +84,7 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
                 "other",
                 [Appendable(new TestEvent { Value = $"other-{i}" })],
                 cancellationToken: ct);
+
             await _eventStore.AppendAsync("target", [Appendable(targetEvent)], cancellationToken: ct);
         }
 

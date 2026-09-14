@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 using Npgsql;
 using NUnit.Framework;
 
-namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration.Support;
+namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
 /// <summary>
 /// Base of the PostgreSQL-specific tests: one schema per fixture, named after the fixture and emptied before each

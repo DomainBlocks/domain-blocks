@@ -61,14 +61,14 @@ public static class PostgresEventStore
 
         return new RefCountedEventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>>(() =>
             new EventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>>(
-                cancellationToken => ReplicationEventLogSession.OpenAsync(
+                ct => ReplicationEventLogSession.OpenAsync(
                     connectionString,
                     slotNames.Next(),
                     names,
                     replicationOptions,
                     decoder,
                     logger,
-                    cancellationToken),
+                    ct),
                 feedOptions,
                 logger));
     }

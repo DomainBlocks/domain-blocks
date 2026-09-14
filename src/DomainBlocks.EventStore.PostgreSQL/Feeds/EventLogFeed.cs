@@ -17,7 +17,7 @@ namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 /// </remarks>
 internal sealed class EventLogFeed<T> : IEventLogFeed<T>
 {
-    private readonly EventLogSessionFactory<T> _sessionFactory;
+    private readonly Func<CancellationToken, Task<IEventLogSession<T>>> _sessionFactory;
     private readonly EventLogFeedOptions _options;
     private readonly ILogger? _logger;
     private readonly ConnectionState _connectionState;
@@ -26,7 +26,7 @@ internal sealed class EventLogFeed<T> : IEventLogFeed<T>
     private int _connected;
 
     public EventLogFeed(
-        EventLogSessionFactory<T> sessionFactory,
+        Func<CancellationToken, Task<IEventLogSession<T>>> sessionFactory,
         EventLogFeedOptions? options = null,
         ILogger? logger = null)
     {
@@ -74,8 +74,8 @@ internal sealed class EventLogFeed<T> : IEventLogFeed<T>
         throw new InvalidOperationException("The event log feed completed before it connected.");
     }
 
-    private static EventLogSessionFactory<T> AddResilience(
-        EventLogSessionFactory<T> sessionFactory,
+    private static Func<CancellationToken, Task<IEventLogSession<T>>> AddResilience(
+        Func<CancellationToken, Task<IEventLogSession<T>>> sessionFactory,
         EventLogFeedOptions options,
         ILogger? logger,
         string feedId)

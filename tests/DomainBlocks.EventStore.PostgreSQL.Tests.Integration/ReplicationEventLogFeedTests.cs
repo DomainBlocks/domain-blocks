@@ -2,13 +2,12 @@ using System.Threading.Channels;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Codecs;
 using DomainBlocks.EventStore.PostgreSQL.Feeds;
-using DomainBlocks.EventStore.PostgreSQL.Tests.Integration.Support;
 using DomainBlocks.Testing.Integration.EventStore;
 using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
 using Npgsql;
 using NUnit.Framework;
 using Shouldly;
-using static DomainBlocks.EventStore.PostgreSQL.Tests.Integration.Support.AppendFunctionClient;
+using static DomainBlocks.EventStore.PostgreSQL.Tests.Integration.AppendFunctionClient;
 
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
@@ -41,7 +40,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
         await using var connection = await feed.ConnectAsync(ct);
 
         var events = Enumerable.Range(0, 10).Select(i => JsonEvent($"e{i}", $"{{\"i\": {i}}}")).ToArray();
-        await Client.AppendAsync(Any("s1", events[..6]), Any("s2", events[6..]));
+        await Client.AppendAsync([Any("s1", events[..6]), Any("s2", events[6..])], ct);
 
         var events1 = await observer1.ReadAsync(10, ct);
         var events2 = await observer2.ReadAsync(10, ct);
@@ -65,14 +64,14 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task Connect_OnlyDeliversRowsCommittedAfterConnect(CancellationToken ct)
     {
-        await Client.AppendAsync(Any("s1", JsonEvent("before")));
+        await Client.AppendAsync([Any("s1", JsonEvent("before"))], ct);
 
         var feed = CreateFeed();
         var observer = new CollectingObserver();
         using var attachment = feed.Attach(observer);
         await using var connection = await feed.ConnectAsync(ct);
 
-        await Client.AppendAsync(Any("s1", JsonEvent("after")));
+        await Client.AppendAsync([Any("s1", JsonEvent("after"))], ct);
 
         var events = await observer.ReadAsync(1, ct);
         events[0].Payload.EventName.ShouldBe("after");
@@ -91,10 +90,14 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
         byte[] bytes = [1, 2, 3, 255];
         var before = DateTimeOffset.UtcNow.AddSeconds(-1);
 
-        await Client.AppendAsync(Any(
-            "stream-1",
-            Event.WithJson("json-event", "{\"a\": 1}", "{\"tenant\": \"x\"}"),
-            Event.WithBytes("bytes-event", bytes)));
+        await Client.AppendAsync(
+            [
+                Any(
+                    "stream-1",
+                    Event.WithJson("json-event", "{\"a\": 1}", "{\"tenant\": \"x\"}"),
+                    Event.WithBytes("bytes-event", bytes))
+            ],
+            ct);
 
         var events = await observer.ReadAsync(2, ct);
 
@@ -159,7 +162,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
 
         // The slot is created fine: pgoutput only resolves publications when it decodes the first change.
         await using var connection = await feed.ConnectAsync(ct);
-        await Client.AppendAsync(Any("s1", JsonEvent("trigger")));
+        await Client.AppendAsync([Any("s1", JsonEvent("trigger"))], ct);
 
         var ex = await observer.Error.WaitAsync(ct);
         ex.ShouldBeOfType<PostgresException>().SqlState.ShouldBe(PostgresErrorCodes.UndefinedObject);

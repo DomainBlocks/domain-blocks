@@ -1,6 +1,5 @@
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Codecs;
-using DomainBlocks.EventStore.PostgreSQL.Tests.Integration.Support;
 using DomainBlocks.Serialization.Abstractions;
 using DomainBlocks.Serialization.SystemTextJson;
 using DomainBlocks.Testing.Events;
@@ -124,25 +123,25 @@ public class PostgresEventStoreAppendTests : PostgresIntegrationTest
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task AppendAsync_SequenceRowLockedElsewhere_TimesOutButStillCommits(CancellationToken ct)
     {
-        await using var connection = await DataSource.OpenConnectionAsync();
-        await using var transaction = await connection.BeginTransactionAsync();
+        await using var connection = await DataSource.OpenConnectionAsync(ct);
+        await using var transaction = await connection.BeginTransactionAsync(ct);
 
         await using (var lockCommand = new NpgsqlCommand($"SELECT next FROM {Schema}.sequences FOR UPDATE", connection))
         {
-            await lockCommand.ExecuteNonQueryAsync();
+            await lockCommand.ExecuteNonQueryAsync(ct);
         }
 
         var options = new AppendOptions { Timeout = TimeSpan.FromMilliseconds(500) };
 
         await Should.ThrowAsync<TimeoutException>(() =>
-            _eventStore.AppendAsync("s1", [Appendable("a")], options: options));
+            _eventStore.AppendAsync("s1", [Appendable("a")], options: options, cancellationToken: ct));
 
-        (await Client.ReadRowsAsync()).ShouldBeEmpty();
+        (await Client.ReadRowsAsync(cancellationToken: ct)).ShouldBeEmpty();
 
         // The caller has given up, but the request is already queued: once the lock is released the batch commits.
         await transaction.RollbackAsync(ct);
 
-        while ((await Client.ReadRowsAsync()).Count == 0)
+        while ((await Client.ReadRowsAsync(cancellationToken: ct)).Count == 0)
             await Task.Delay(50, ct);
     }
 

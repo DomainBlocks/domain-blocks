@@ -176,7 +176,12 @@ public class PostgresEventStoreAdminTests
         return (bool)(await command.ExecuteScalarAsync())!;
     }
 
-    private async Task InsertRowAsync(long position, string streamId, long streamPosition, Guid commitId, int commitIndex)
+    private async Task InsertRowAsync(
+        long position,
+        string streamId,
+        long streamPosition,
+        Guid commitId,
+        int commitIndex)
     {
         await using var command = PostgresTestEnvironment.DataSource.CreateCommand(
             $"INSERT INTO {_options.Schema}.event_log " +

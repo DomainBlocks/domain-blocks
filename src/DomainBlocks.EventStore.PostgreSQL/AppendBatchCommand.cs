@@ -31,15 +31,15 @@ internal sealed class AppendBatchCommand : IDisposable
             "SELECT request_index, status, observed_kind, observed_version " +
             $"FROM {names.AppendEventsFunction}($1, $2, $3, $4, $5, $6, $7, $8, $9)");
 
-        _streamIds = new NpgsqlParameter<string[]> { NpgsqlDbType = ArrayOf(NpgsqlDbType.Text) };
-        _expectedKinds = new NpgsqlParameter<short[]> { NpgsqlDbType = ArrayOf(NpgsqlDbType.Smallint) };
-        _expectedVersions = new NpgsqlParameter<long?[]> { NpgsqlDbType = ArrayOf(NpgsqlDbType.Bigint) };
-        _commitIds = new NpgsqlParameter<Guid[]> { NpgsqlDbType = ArrayOf(NpgsqlDbType.Uuid) };
-        _eventCounts = new NpgsqlParameter<int[]> { NpgsqlDbType = ArrayOf(NpgsqlDbType.Integer) };
-        _eventNames = new NpgsqlParameter<string[]> { NpgsqlDbType = ArrayOf(NpgsqlDbType.Text) };
-        _eventData = new NpgsqlParameter<string?[]> { NpgsqlDbType = ArrayOf(NpgsqlDbType.Jsonb) };
-        _eventDataBytes = new NpgsqlParameter<byte[]?[]> { NpgsqlDbType = ArrayOf(NpgsqlDbType.Bytea) };
-        _metadata = new NpgsqlParameter<string?[]> { NpgsqlDbType = ArrayOf(NpgsqlDbType.Jsonb) };
+        _streamIds = new NpgsqlParameter<string[]> { NpgsqlDbType = NpgsqlDbType.Text.AsArray() };
+        _expectedKinds = new NpgsqlParameter<short[]> { NpgsqlDbType = NpgsqlDbType.Smallint.AsArray() };
+        _expectedVersions = new NpgsqlParameter<long?[]> { NpgsqlDbType = NpgsqlDbType.Bigint.AsArray() };
+        _commitIds = new NpgsqlParameter<Guid[]> { NpgsqlDbType = NpgsqlDbType.Uuid.AsArray() };
+        _eventCounts = new NpgsqlParameter<int[]> { NpgsqlDbType = NpgsqlDbType.Integer.AsArray() };
+        _eventNames = new NpgsqlParameter<string[]> { NpgsqlDbType = NpgsqlDbType.Text.AsArray() };
+        _eventData = new NpgsqlParameter<string?[]> { NpgsqlDbType = NpgsqlDbType.Jsonb.AsArray() };
+        _eventDataBytes = new NpgsqlParameter<byte[]?[]> { NpgsqlDbType = NpgsqlDbType.Bytea.AsArray() };
+        _metadata = new NpgsqlParameter<string?[]> { NpgsqlDbType = NpgsqlDbType.Jsonb.AsArray() };
 
         _command.Parameters.AddRange(new NpgsqlParameter[]
         {
@@ -53,9 +53,6 @@ internal sealed class AppendBatchCommand : IDisposable
             _eventDataBytes,
             _metadata
         });
-
-        // ReSharper disable once BitwiseOperatorOnEnumWithoutFlags
-        static NpgsqlDbType ArrayOf(NpgsqlDbType elementType) => NpgsqlDbType.Array | elementType;
     }
 
     /// <summary>
