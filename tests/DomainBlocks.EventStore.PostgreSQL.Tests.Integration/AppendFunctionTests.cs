@@ -195,13 +195,25 @@ public class AppendFunctionTests : PostgresIntegrationTest
             TypedValue = [Guid.NewGuid()]
         });
 
-        await using var reader = await command.ExecuteReaderAsync();
-        var plan = new List<string>();
-
-        while (await reader.ReadAsync())
-            plan.Add(reader.GetString(0));
+        var plan = await ExplainAsync(command);
 
         plan.ShouldContain(line => line.Contains("event_log_commit_id_idx"), string.Join('\n', plan));
+    }
+
+    [Test]
+    public async Task AppendStatus_CalledPerRow_IsInlined()
+    {
+        // The helper must be inlined so that the decision is planned as part of the calling statement rather than
+        // evaluated as a function call per request. An inlined call leaves no trace of the function in the plan.
+        // Column arguments keep the planner from constant-folding the call, which would hide a missing inline.
+        await using var command = DataSource.CreateCommand(
+            $"EXPLAIN (VERBOSE, COSTS OFF) SELECT {Schema}.append_status(false, k::smallint, NULL, -1) " +
+            "FROM generate_series(0, 3) AS k");
+
+        var plan = await ExplainAsync(command);
+
+        plan.ShouldNotContain(line => line.Contains("append_status"), string.Join('\n', plan));
+        plan.ShouldContain(line => line.Contains("CASE WHEN"), string.Join('\n', plan));
     }
 
     [Test]
@@ -496,5 +508,16 @@ public class AppendFunctionTests : PostgresIntegrationTest
         results.ShouldAllBe(x => x.Status == AppendProtocol.StatusAppended);
         (await Client.GetSequenceNextAsync()).ShouldBe(5000);
         elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(5));
+    }
+
+    private static async Task<List<string>> ExplainAsync(NpgsqlCommand command)
+    {
+        await using var reader = await command.ExecuteReaderAsync();
+        var plan = new List<string>();
+
+        while (await reader.ReadAsync())
+            plan.Add(reader.GetString(0));
+
+        return plan;
     }
 }

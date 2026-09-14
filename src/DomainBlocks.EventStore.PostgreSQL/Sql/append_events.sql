@@ -18,6 +18,30 @@
 --   expected kind: 0 Any, 1 DoesNotExist, 2 Exists, 3 AtVersion
 --   status:        0 Appended, 1 Conflict, 2 Duplicate
 --   observed kind: 0 DoesNotExist, 1 AtVersion
+
+-- Decides one request against the head of its stream, where a head of -1 means the stream does not exist. A scalar
+-- SQL function whose body is a single expression is inlined by the planner, so this costs nothing at run time; it
+-- exists to keep the decision, and the codes it interprets, in one place.
+CREATE OR REPLACE FUNCTION __schema__.append_status(
+    p_duplicate boolean,
+    p_expected_kind smallint,
+    p_expected_version bigint,
+    p_head bigint)
+    RETURNS smallint
+    LANGUAGE sql
+    IMMUTABLE
+AS
+$fn$
+SELECT CASE
+           WHEN p_duplicate THEN 2
+           WHEN p_expected_kind = 0 THEN 0
+           WHEN p_expected_kind = 1 AND p_head < 0 THEN 0
+           WHEN p_expected_kind = 2 AND p_head >= 0 THEN 0
+           WHEN p_expected_kind = 3 AND p_head = p_expected_version THEN 0
+           ELSE 1
+       END::smallint
+$fn$;
+
 CREATE OR REPLACE FUNCTION __schema__.append_events(
     p_stream_ids text[],
     p_expected_kinds smallint[],
@@ -178,16 +202,8 @@ BEGIN
                              c.head
                       FROM chain AS c
                                JOIN request AS r ON r.stream_id = c.stream_id AND r.nth = c.nth + 1
-                               CROSS JOIN LATERAL (SELECT (CASE
-                                                               WHEN r.duplicate THEN 2
-                                                               WHEN CASE r.kind
-                                                                        WHEN 0 THEN true
-                                                                        WHEN 1 THEN c.head < 0
-                                                                        WHEN 2 THEN c.head >= 0
-                                                                        WHEN 3 THEN c.head = r.version
-                                                                   END THEN 0
-                                                               ELSE 1
-                          END)::smallint AS req_status) AS d),
+                               CROSS JOIN LATERAL (
+                                   SELECT __schema__.append_status(r.duplicate, r.kind, r.version, c.head)) AS d(req_status)),
             -- Global positions are contiguous over appended requests, in batch order.
             decided AS (SELECT r.ord,
                                r.stream_id,
