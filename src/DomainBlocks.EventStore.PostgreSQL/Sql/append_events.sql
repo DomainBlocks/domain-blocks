@@ -129,13 +129,14 @@ BEGIN
     WITH RECURSIVE request AS (
         SELECT
             r.ord,
-            r.stream_id,
+            -- Unnest yields the database collation; "C" keeps the partition sort below byte-wise, like the column.
+            r.stream_id COLLATE "C" AS stream_id,
             r.kind,
             r.version,
             r.commit_id,
             r.event_count,
             -- Position of the request among the requests to its stream, in batch order.
-            row_number() OVER (PARTITION BY r.stream_id ORDER BY r.ord) AS nth,
+            row_number() OVER (PARTITION BY r.stream_id COLLATE "C" ORDER BY r.ord) AS nth,
             -- The first occurrence of a commit id in the batch wins; later ones and already committed ones are
             -- duplicates.
             (row_number() OVER (PARTITION BY r.commit_id ORDER BY r.ord) > 1
