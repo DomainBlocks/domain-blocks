@@ -2,13 +2,6 @@
 -- inlined by the planner into the statement that calls it, or called once per batch, so the split costs nothing at
 -- run time. The enums the helpers take and return are created in schema.sql.
 
--- Earlier versions expressed the codes as smallint. CREATE OR REPLACE cannot change a function's return type, and the
--- old overloads would otherwise stay callable, so they are dropped first.
-DROP FUNCTION IF EXISTS __schema__.append_events(text[], smallint[], bigint[], uuid[], integer[], text[], jsonb[], bytea[], jsonb[]);
-DROP FUNCTION IF EXISTS __schema__.validate_append_batch(text[], smallint[], bigint[], uuid[], integer[], text[], jsonb[], bytea[], jsonb[]);
-DROP FUNCTION IF EXISTS __schema__.zip_requests(text[], smallint[], bigint[], uuid[], integer[], uuid[]);
-DROP FUNCTION IF EXISTS __schema__.get_append_status(boolean, smallint, bigint, bigint);
-
 -- Rejects a batch that violates the protocol: request or event arrays of different lengths, an event count that is
 -- not positive, or a request whose fields are missing or inconsistent. One pass over the request arrays computes the
 -- event total and, for each rule, the first request that breaks it, so the error names the request by the 0-based
