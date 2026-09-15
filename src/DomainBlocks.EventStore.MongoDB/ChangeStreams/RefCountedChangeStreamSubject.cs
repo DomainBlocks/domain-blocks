@@ -7,6 +7,7 @@ namespace DomainBlocks.EventStore.MongoDB.ChangeStreams;
 internal static class RefCountedChangeStreamSubject
 {
     public static RefCountedChangeStreamSubject<TResult> Create<TDocument, TResult>(
+        IMongoClient mongoClient,
         ChangeStreamCursorFactory<TDocument, TResult> cursorFactory,
         PipelineDefinition<ChangeStreamDocument<TDocument>, TResult> pipeline,
         Func<TResult, BsonDocument> resumeTokenSelector,
@@ -14,7 +15,7 @@ internal static class RefCountedChangeStreamSubject
         ILogger? logger = null)
     {
         return new RefCountedChangeStreamSubject<TResult>(() =>
-            ChangeStreamSubject.Create(cursorFactory, pipeline, resumeTokenSelector, options, logger));
+            ChangeStreamSubject.Create(mongoClient, cursorFactory, pipeline, resumeTokenSelector, options, logger));
     }
 }
 
@@ -29,7 +30,7 @@ internal sealed class RefCountedChangeStreamSubject<TDocument>(
     private readonly SemaphoreSlim _gate = new(1, 1);
     private SubjectConnection? _currentSubjectConnection;
 
-    public async Task<IAsyncDisposable> AttachAsync(
+    public async Task<IChangeStreamAttachment> AttachAsync(
         IChangeStreamObserver<TDocument> observer,
         string correlationId = "unknown",
         CancellationToken cancellationToken = default)
@@ -59,7 +60,9 @@ internal sealed class RefCountedChangeStreamSubject<TDocument>(
 
             subjectConnection.RefCount++;
 
-            return new AsyncDisposable(() => DetachAsync(attachment, subjectConnection));
+            return new Attachment(
+                subjectConnection.Connection.OperationTime,
+                () => DetachAsync(attachment, subjectConnection));
         }
         finally
         {
@@ -104,9 +107,11 @@ internal sealed class RefCountedChangeStreamSubject<TDocument>(
         public int RefCount { get; set; }
     }
 
-    private sealed class AsyncDisposable(Func<Task> onDispose) : IAsyncDisposable
+    private sealed class Attachment(BsonTimestamp operationTime, Func<Task> onDispose) : IChangeStreamAttachment
     {
         private int _disposed;
+
+        public BsonTimestamp OperationTime { get; } = operationTime;
 
         public async ValueTask DisposeAsync()
         {

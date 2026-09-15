@@ -5,7 +5,7 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
-public sealed class AppenderPolicy(IMongoCollection<BsonDocument> eventLog) :
+internal sealed class AppenderPolicy(IMongoCollection<BsonDocument> eventLog) :
     IMongoSequencedAppenderPolicy<AppendContext>
 {
     private readonly PreCommitQuery _preCommitQuery = new(eventLog);

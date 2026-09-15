@@ -63,12 +63,18 @@ A historical query issued after an observer is attached to the feed must see eve
 observer was attached. This is what makes the two halves join without a hole: an event committed before attachment is
 not on the feed, so it has to be in the query.
 
-The guarantee is trivially met when the query and the feed are served by the same node. The PostgreSQL store uses one
-data source for both, and the MongoDB store relies on the client's default read preference of primary, which the
-connection string can override. It fails silently when the query is served by a lagging replica. An event committed before attachment but not yet
-replicated is in neither the query nor the feed, and is lost. MongoDB secondary reads and PostgreSQL streaming replicas
-are exactly this trap, and an implementation that reads from a replica must route the catch-up query to the primary or
-prove the replica has caught up to the feed's start point.
+The guarantee is trivially met when the query and the feed are served by the same node and observe the same level of
+durability. It would fail silently if the query were served by a lagging replica: an event committed before attachment
+but not yet replicated would be in neither the query nor the feed. The PostgreSQL store meets the guarantee with one
+data source for query and feed, both on the primary; pointing the data source at a streaming replica while replicating
+from the primary would reintroduce the trap.
+
+MongoDB needs one more step, because a change stream and a query on the same primary observe different levels of
+durability: a change stream starts just after the primary's last applied operation and emits changes only once they are
+majority-committed, while a majority read can lag behind that start point and a local read can see a write that a
+failover later rolls back. The store therefore anchors both halves to one optime: the stream starts after it, and the
+high-water mark is read at majority in a causally consistent session that waits for it. How the anchor is obtained, and
+the constraints on it, live in `ChangeStreamSubject`.
 
 ## Why the three are sufficient
 
@@ -116,13 +122,13 @@ Two further properties concern the correctness of appends rather than reads:
 
 ## How the two stores map onto the contract
 
-| Guarantee               | PostgreSQL                                              | MongoDB                                      |
-|-------------------------|---------------------------------------------------------|----------------------------------------------|
-| Commit-ordered position | `FOR UPDATE` on one sequence row, held to commit        | Sequencing package, single sequenced writer  |
-| Ordered committed feed  | `pgoutput`, temporary slot, streaming off               | Change stream, inserts only, resume token    |
-| Reads current with feed | Same data source for query and feed                     | Default read preference, primary; not pinned |
-| Feed continuity         | Not guaranteed across reconnect; reset triggers restart | Resume token covers reconnect; no reset path |
-| Idempotency             | Unique partial index on commit id                       | Pre-commit probe on commit id                |
+| Guarantee               | PostgreSQL                                              | MongoDB                                                                 |
+|-------------------------|---------------------------------------------------------|-------------------------------------------------------------------------|
+| Commit-ordered position | `FOR UPDATE` on one sequence row, held to commit        | Sequencing package, single sequenced writer                             |
+| Ordered committed feed  | `pgoutput`, temporary slot, streaming off               | Change stream, inserts only, resume token                               |
+| Reads current with feed | Same data source for query and feed                     | Majority read anchored to primary's last applied optime; primary pinned |
+| Feed continuity         | Not guaranteed across reconnect; reset triggers restart | Resume token covers reconnect; no reset path                            |
+| Idempotency             | Unique partial index on commit id                       | Pre-commit probe on commit id                                           |
 
 ## What the abstraction requires
 
@@ -130,5 +136,5 @@ Two further properties concern the correctness of appends rather than reads:
 position until every event at a lower position is visible. Gaps are permitted, because they are harmless to the
 algorithm above.
 
-A store that offers a native position with this property (a server-assigned commit position, say) can use it directly.
-A store that does not must construct one, as both current implementations do.
+A store that offers a native position with this property (a server-assigned commit position, say) can use it directly. A
+store that does not must construct one, as both current implementations do.

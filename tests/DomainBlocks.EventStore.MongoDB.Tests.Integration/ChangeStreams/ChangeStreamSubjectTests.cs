@@ -38,7 +38,12 @@ public class ChangeStreamSubjectTests
 
         var logger = MongoTestEnvironment.LoggerFactory.CreateLogger<ChangeStreamSubjectTests>();
 
-        var subject = ChangeStreamSubject.Create(_collection.WatchAsync, pipeline, x => x.ResumeToken, logger: logger);
+        var subject = ChangeStreamSubject.Create(
+            MongoTestEnvironment.MongoClient,
+            _collection.WatchAsync,
+            pipeline,
+            x => x.ResumeToken,
+            logger: logger);
 
         var observer1 = new TestChangeStreamObserver(expectedCount: insertCount);
         var observer2 = new TestChangeStreamObserver(expectedCount: insertCount);
