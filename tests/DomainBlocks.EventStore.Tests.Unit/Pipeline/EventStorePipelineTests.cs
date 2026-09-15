@@ -40,7 +40,7 @@ public class EventStorePipelineTests
 
         var appended = _inner.Appends.ShouldHaveSingleItem().Events.ShouldHaveSingleItem();
         appended.Payload.ShouldBe(new Current("a"));
-        appended.Metadata.ToArray().ShouldBe([new("source", "pipeline"), new("user", "bob")]);
+        appended.Metadata.ShouldBe([new("source", "pipeline"), new("user", "bob")]);
     }
 
     [Test]
@@ -50,7 +50,7 @@ public class EventStorePipelineTests
 
         await store.AppendAsync("s", [AppendableEvent.Create<object>(new Current("a"), [new("user", "bob")])]);
 
-        _inner.Appends.Single().Events.Single().Metadata.ToArray().ShouldBe([new("user", "bob")]);
+        _inner.Appends.Single().Events.Single().Metadata.ShouldBe([new("user", "bob")]);
     }
 
     [Test]
@@ -62,7 +62,7 @@ public class EventStorePipelineTests
 
         await store.AppendAsync("s", [AppendableEvent.Create<object>(new Current("a"))]);
 
-        _inner.Appends.Single().Events.Single().Metadata.ToArray().ShouldBe([new("k", "second")]);
+        _inner.Appends.Single().Events.Single().Metadata.ShouldBe([new("k", "second")]);
     }
 
     [Test]
@@ -75,15 +75,15 @@ public class EventStorePipelineTests
 
         await store.AppendAsync("s", [AppendableEvent.Create<object>(new Current("a"))]);
 
-        _inner.Appends.Single().Events.Single().Metadata.ToArray()
+        _inner.Appends.Single().Events.Single().Metadata
             .ShouldBe([new("k", "first"), new("other", "added")]);
     }
 
     [Test]
     public async Task AppendAsync_ManyEvents_EachEventKeepsItsOwnMetadataSlice()
     {
-        // Enough entries to force the shared buffer to grow several times.
-        const int eventCount = 100;
+        // Enough entries to span several pooled chunks.
+        const int eventCount = 1000;
         var store = _inner.WithPipeline(p => p.ContributeMetadata(new IndexContributor()));
 
         var events = Enumerable.Range(0, eventCount)
@@ -98,8 +98,44 @@ public class EventStorePipelineTests
         for (var i = 0; i < eventCount; i++)
         {
             appended[i].Payload.ShouldBe(new Current($"e{i}"));
-            appended[i].Metadata.ToArray().ShouldBe([new("index", i.ToString()), new("explicit", $"x{i}")]);
+            appended[i].Metadata.ShouldBe([new("index", i.ToString()), new("explicit", $"x{i}")]);
         }
+    }
+
+    [Test]
+    public async Task AppendAsync_EventWithMoreEntriesThanAChunk_KeepsAllEntries()
+    {
+        const int entryCount = 700;
+        var store = _inner.WithPipeline(p => p.ContributeMetadata(new WideContributor(entryCount)));
+
+        await store.AppendAsync("s", [
+            AppendableEvent.Create<object>(new Current("before")),
+            AppendableEvent.Create<object>(new Current("wide"), [new("explicit", "x")]),
+            AppendableEvent.Create<object>(new Current("after"))
+        ]);
+
+        var appended = _inner.Appends.Single().Events;
+        appended.Length.ShouldBe(3);
+
+        foreach (var e in appended)
+        {
+            e.Metadata.Take(entryCount).ShouldBe(Enumerable.Range(0, entryCount).Select(i => new KeyValuePair<string, string>($"k{i}", $"v{i}")));
+        }
+
+        appended[1].Metadata.Length.ShouldBe(entryCount + 1);
+        appended[1].Metadata[^1].ShouldBe(new KeyValuePair<string, string>("explicit", "x"));
+    }
+
+    [Test]
+    public async Task AppendAsync_TwoBatches_DoNotShareBuffers()
+    {
+        var store = _inner.WithPipeline(p => p.ContributeMetadata(new IndexContributor()));
+
+        await store.AppendAsync("s", [AppendableEvent.Create<object>(new Current("a"))]);
+        await store.AppendAsync("s", [AppendableEvent.Create<object>(new Current("b"))]);
+
+        _inner.Appends[0].Events.Single().Metadata.ShouldBe([new("index", "0")]);
+        _inner.Appends[1].Events.Single().Metadata.ShouldBe([new("index", "1")]);
     }
 
     [Test]
@@ -288,6 +324,15 @@ public class EventStorePipelineTests
     private sealed class TryAddContributor(string key, string value) : IMetadataContributor<object>
     {
         public void Contribute(object @event, MetadataWriter metadata) => metadata.TryAdd(key, value);
+    }
+
+    private sealed class WideContributor(int entryCount) : IMetadataContributor<object>
+    {
+        public void Contribute(object @event, MetadataWriter metadata)
+        {
+            for (var i = 0; i < entryCount; i++)
+                metadata.Set($"k{i}", $"v{i}");
+        }
     }
 
     private sealed class IndexContributor : IMetadataContributor<object>

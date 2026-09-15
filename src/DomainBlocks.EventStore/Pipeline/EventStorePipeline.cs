@@ -62,10 +62,26 @@ internal sealed class EventStorePipeline<TEvent, TStreamId, TStreamPos, TLogPos>
     {
         ArgumentNullException.ThrowIfNull(events);
 
-        if (_contributors.Length > 0)
-            events = ContributeMetadata(events);
+        return _contributors.Length == 0
+            ? _inner.AppendAsync(streamId, events, expectedState, commitId, options, cancellationToken)
+            : AppendWithMetadataAsync(streamId, events, expectedState, commitId, options, cancellationToken);
+    }
 
-        return _inner.AppendAsync(streamId, events, expectedState, commitId, options, cancellationToken);
+    private async Task AppendWithMetadataAsync(
+        TStreamId streamId,
+        IEnumerable<AppendableEvent<TEvent>> events,
+        ExpectedStreamState<TStreamPos>? expectedState,
+        Guid? commitId,
+        AppendOptions? options,
+        CancellationToken cancellationToken)
+    {
+        // The store has consumed every event by the time its append completes, so the buffer can go back to the
+        // pool here. The events handed to the store are valid only for the duration of the append.
+        using var buffer = new MetadataBuffer();
+
+        await _inner
+            .AppendAsync(streamId, ContributeMetadata(events, buffer), expectedState, commitId, options, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public IAsyncEnumerable<ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>> ReadAll(
@@ -111,13 +127,13 @@ internal sealed class EventStorePipeline<TEvent, TStreamId, TStreamPos, TLogPos>
     }
 
     /// <summary>
-    /// Merges contributed and explicit metadata for each event into one buffer shared by the batch, so no per-event
-    /// allocation is made. Explicit entries win. Lazy, so a store that streams its input keeps streaming.
+    /// Merges contributed and explicit metadata for each event into pooled chunks shared by the batch, so no
+    /// per-event allocation is made. Explicit entries win. Lazy, so a store that streams its input keeps streaming.
     /// </summary>
-    private IEnumerable<AppendableEvent<TEvent>> ContributeMetadata(IEnumerable<AppendableEvent<TEvent>> events)
+    private IEnumerable<AppendableEvent<TEvent>> ContributeMetadata(
+        IEnumerable<AppendableEvent<TEvent>> events,
+        MetadataBuffer buffer)
     {
-        var buffer = new MetadataBuffer();
-
         foreach (var @event in events)
             yield return AppendableEvent.Create(@event.Payload, ContributeMetadata(@event, buffer));
     }

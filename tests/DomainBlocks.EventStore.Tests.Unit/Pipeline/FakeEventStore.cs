@@ -4,12 +4,14 @@ using DomainBlocks.EventStore.Abstractions;
 namespace DomainBlocks.EventStore.Tests.Unit.Pipeline;
 
 /// <summary>
-/// An in-memory stand-in for a store: records what is appended (materialized at append time, as a real store
-/// would) and replays configured read events and subscription messages.
+/// An in-memory stand-in for a store: snapshots what is appended during the append, as a real store encodes it,
+/// and replays configured read events and subscription messages.
 /// </summary>
 internal sealed class FakeEventStore : IEventStore<object, string, StreamPosition, LogPosition>, IAsyncDisposable
 {
-    public List<(string StreamId, AppendableEvent<object>[] Events)> Appends { get; } = [];
+    public sealed record AppendedEvent(object Payload, KeyValuePair<string, string>[] Metadata);
+
+    public List<(string StreamId, AppendedEvent[] Events)> Appends { get; } = [];
 
     public IEnumerable<AppendableEvent<object>>? LastAppendedEnumerable { get; private set; }
 
@@ -28,7 +30,7 @@ internal sealed class FakeEventStore : IEventStore<object, string, StreamPositio
         CancellationToken cancellationToken = default)
     {
         LastAppendedEnumerable = events;
-        Appends.Add((streamId, events.ToArray()));
+        Appends.Add((streamId, events.Select(e => new AppendedEvent(e.Payload, e.Metadata.ToArray())).ToArray()));
         return Task.CompletedTask;
     }
 
