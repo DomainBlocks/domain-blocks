@@ -60,8 +60,14 @@ public static class EventStoreExtensions
                 decorated.Inner,
                 [.. decorated.Contributors, .. contributors],
                 decorated.Transforms,
-                decorated.AllowDroppingEvents)
-            : new EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos>(eventStore, contributors, [], false);
+                decorated.HasDroppedEventPlaceholder,
+                decorated.DroppedEventPlaceholder)
+            : new EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos>(
+                eventStore,
+                contributors,
+                [],
+                hasDroppedEventPlaceholder: false,
+                droppedEventPlaceholder: default!);
     }
 
     /// <summary>
@@ -71,9 +77,9 @@ public static class EventStoreExtensions
     /// <see cref="IAsyncDisposable"/> to the store.
     /// </summary>
     /// <remarks>
-    /// A transform that returns no events throws, because a dropped event hides its stream position from consumers
-    /// that track the last observed position, such as an event-sourced state store. Use the overload with
-    /// <c>allowDroppingEvents</c> to permit it.
+    /// A transform that returns no events throws, because a dropped event would hide its stream position from
+    /// consumers that track the last observed position, such as an event-sourced state store. Use the overload with
+    /// <c>droppedEventPlaceholder</c> to retire events instead.
     /// </remarks>
     public static IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> WithReadTransforms<
         TEvent, TStreamId, TStreamPos, TLogPos>(
@@ -84,43 +90,73 @@ public static class EventStoreExtensions
         where TStreamPos : notnull
         where TLogPos : notnull
     {
-        return eventStore.WithReadTransforms(transforms, allowDroppingEvents: false);
+        ArgumentNullException.ThrowIfNull(transforms);
+
+        return WithReadTransforms(eventStore, transforms, hasDroppedEventPlaceholder: false, default!);
     }
 
     /// <summary>
     /// Returns a store that applies the given transforms to events read through <c>ReadStream</c>, <c>ReadAll</c>
-    /// and both subscriptions, optionally permitting a transform to drop its source event.
+    /// and both subscriptions, and emits <paramref name="droppedEventPlaceholder"/> in place of any event a
+    /// transform drops by returning no events. The placeholder carries the dropped event's context, so consumers
+    /// still observe its position; they need only ignore this one type. For stores whose event type is
+    /// <see cref="object"/>, <see cref="DroppedEvent.Instance"/> can serve as the placeholder.
     /// </summary>
     /// <param name="eventStore">The store to decorate.</param>
     /// <param name="transforms">The transforms to apply; at most one per source event type.</param>
-    /// <param name="allowDroppingEvents">
-    /// Whether a transform may return no events, dropping the source event. A dropped event hides its stream
-    /// position from consumers that track the last observed position, such as an event-sourced state store, so
-    /// "ignore this event" normally belongs in the consumer rather than in a transform.
+    /// <param name="droppedEventPlaceholder">
+    /// The event emitted in place of a dropped one. Must not itself have a transform registered.
     /// </param>
     public static IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> WithReadTransforms<
         TEvent, TStreamId, TStreamPos, TLogPos>(
         this IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> eventStore,
         IEnumerable<IReadEventTransform<TEvent>> transforms,
-        bool allowDroppingEvents)
+        TEvent droppedEventPlaceholder)
         where TEvent : notnull
         where TStreamId : notnull
         where TStreamPos : notnull
         where TLogPos : notnull
     {
         ArgumentNullException.ThrowIfNull(transforms);
+        ArgumentNullException.ThrowIfNull(droppedEventPlaceholder);
 
+        return WithReadTransforms(eventStore, transforms, hasDroppedEventPlaceholder: true, droppedEventPlaceholder);
+    }
+
+    private static IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> WithReadTransforms<
+        TEvent, TStreamId, TStreamPos, TLogPos>(
+        IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> eventStore,
+        IEnumerable<IReadEventTransform<TEvent>> transforms,
+        bool hasDroppedEventPlaceholder,
+        TEvent droppedEventPlaceholder)
+        where TEvent : notnull
+        where TStreamId : notnull
+        where TStreamPos : notnull
+        where TLogPos : notnull
+    {
         var added = transforms.ToArray();
 
-        if (added.Length == 0)
+        if (added.Length == 0 && !hasDroppedEventPlaceholder)
             return eventStore;
 
-        return eventStore is EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos> decorated
-            ? new EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos>(
+        if (eventStore is EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos> decorated)
+        {
+            // A later placeholder replaces an earlier one; otherwise the existing one is kept.
+            var keepExisting = !hasDroppedEventPlaceholder && decorated.HasDroppedEventPlaceholder;
+
+            return new EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos>(
                 decorated.Inner,
                 decorated.Contributors,
                 [.. decorated.Transforms, .. added],
-                decorated.AllowDroppingEvents || allowDroppingEvents)
-            : new EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos>(eventStore, [], added, allowDroppingEvents);
+                keepExisting || hasDroppedEventPlaceholder,
+                keepExisting ? decorated.DroppedEventPlaceholder : droppedEventPlaceholder);
+        }
+
+        return new EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos>(
+            eventStore,
+            [],
+            added,
+            hasDroppedEventPlaceholder,
+            droppedEventPlaceholder);
     }
 }

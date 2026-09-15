@@ -27,18 +27,21 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
     private readonly IMetadataContributor<TEvent>[] _contributors;
     private readonly IReadEventTransform<TEvent>[] _transformList;
     private readonly FrozenDictionary<Type, IReadEventTransform<TEvent>> _transforms;
-    private readonly bool _allowDroppingEvents;
+    private readonly bool _hasDroppedEventPlaceholder;
+    private readonly TEvent _droppedEventPlaceholder;
 
     public EventStoreDecorator(
         IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> inner,
         IEnumerable<IMetadataContributor<TEvent>> contributors,
         IEnumerable<IReadEventTransform<TEvent>> transforms,
-        bool allowDroppingEvents)
+        bool hasDroppedEventPlaceholder,
+        TEvent droppedEventPlaceholder)
     {
         _inner = inner;
         _contributors = contributors.ToArray();
         _transformList = transforms.ToArray();
-        _allowDroppingEvents = allowDroppingEvents;
+        _hasDroppedEventPlaceholder = hasDroppedEventPlaceholder;
+        _droppedEventPlaceholder = droppedEventPlaceholder;
 
         var transformsByType = new Dictionary<Type, IReadEventTransform<TEvent>>();
 
@@ -54,6 +57,14 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         }
 
         _transforms = transformsByType.ToFrozenDictionary();
+
+        if (hasDroppedEventPlaceholder && _transforms.ContainsKey(droppedEventPlaceholder.GetType()))
+        {
+            throw new ArgumentException(
+                $"The dropped event placeholder type '{droppedEventPlaceholder.GetType().Name}' must not have a " +
+                "read event transform registered.",
+                nameof(droppedEventPlaceholder));
+        }
     }
 
     public IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> Inner => _inner;
@@ -62,7 +73,9 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
 
     public IReadOnlyList<IReadEventTransform<TEvent>> Transforms => _transformList;
 
-    public bool AllowDroppingEvents => _allowDroppingEvents;
+    public bool HasDroppedEventPlaceholder => _hasDroppedEventPlaceholder;
+
+    public TEvent DroppedEventPlaceholder => _droppedEventPlaceholder;
 
     public Task AppendAsync(
         TStreamId streamId,
@@ -217,7 +230,9 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
 
     /// <summary>
     /// Applies <paramref name="transform"/> to <paramref name="event"/> and, depth first so that order is preserved,
-    /// any transform that applies to what it produced. Derived events share the source event's context.
+    /// any transform that applies to what it produced. Derived events share the source event's context. A transform
+    /// that produces nothing yields the dropped event placeholder in the source event's place, so the position is
+    /// still observed, or throws if no placeholder is configured.
     /// </summary>
     private void Expand(
         ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos> @event,
@@ -255,12 +270,17 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
                 output.Add(derived);
         }
 
-        if (!produced && !_allowDroppingEvents)
+        if (produced)
+            return;
+
+        if (!_hasDroppedEventPlaceholder)
         {
             throw new InvalidOperationException(
-                $"Read event transform '{transform.GetType().Name}' produced no events for " +
-                $"'{sourceType.Name}'. Dropping events hides their positions from consumers that track the last " +
-                $"observed position; pass allowDroppingEvents to WithReadTransforms to permit it.");
+                $"Read event transform '{transform.GetType().Name}' produced no events for '{sourceType.Name}'. " +
+                "Dropping an event would hide its position from consumers that track the last observed position; " +
+                "pass a droppedEventPlaceholder to WithReadTransforms to have it emitted in the event's place.");
         }
+
+        output.Add(ReadEvent.Create(_droppedEventPlaceholder, context));
     }
 }

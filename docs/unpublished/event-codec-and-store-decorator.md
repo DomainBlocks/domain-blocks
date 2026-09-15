@@ -119,11 +119,14 @@ public abstract class ReadEventTransform<TEventBase, TSourceEvent> : IReadEventT
   siblings. A transform that yields its own source type, or a chain deeper than 32, throws.
 * Untransformed events and non-event subscription messages pass through by reference. The lookup table is built once
   in the decorator, not per enumeration.
-* **A transform that yields nothing throws** unless `WithReadTransforms(transforms, allowDroppingEvents: true)`
-  is used. A dropped tail event would make
-  `EventSourcedStateStore` under-report the stream version on every load, so every save would conflict; dropping
-  every event would make `LoadRequiredAsync` throw for an existing stream. "Ignore this event" belongs in the
-  `IEventSourcedStateAdapter`, which sees every event and keeps the version right.
+* **A transform that yields nothing throws** unless a placeholder is configured with
+  `WithReadTransforms(transforms, droppedEventPlaceholder: ...)`. With one, the placeholder is emitted in the
+  dropped event's place, carrying its context, so consumers still observe the position and need only ignore that
+  one type. `DroppedEvent.Instance` serves stores over `object`; a store over a narrower event type supplies its own.
+  The reason drops are never silent: a dropped tail event would make `EventSourcedStateStore` under-report the
+  stream version on every load, so every save would conflict, and dropping every event would make
+  `LoadRequiredAsync` throw for an existing stream. The placeholder moves the "ignore this" decision from every
+  consumer knowing every retired type to every consumer ignoring one type.
 
 ### Subscriptions and 1→N
 
@@ -144,6 +147,11 @@ ever needed, an ordinal or last-in-group flag on `ReadEventContext` is the follo
 * Metadata contribution as a codec or encoder decorator with a thread-static dictionary: zero-allocation, but puts
   append policy in the wire layer. The pooled buffer in the store decorator is also zero-allocation per event.
 * A merged `KeyValuePair[]` per event in the store decorator: one allocation per event.
+* An `allowDroppingEvents` flag on the read transforms: permitted a mode in which a dropped tail event silently
+  lost its position. Replaced by the placeholder, which has no such mode.
+* Emitting the placeholder only when a position would otherwise be lost (holding it back until the next event or a
+  `CaughtUp` shows it is not needed): precise, but makes the output depend on what follows. The always-emit rule is
+  deterministic and costs one struct copy of a shared instance per dropped event.
 
 ## Benchmarks
 
