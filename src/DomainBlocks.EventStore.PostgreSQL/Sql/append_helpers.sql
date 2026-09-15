@@ -1,6 +1,6 @@
 -- Helpers of append_events. The __schema__ token is replaced with the validated schema name. Each helper is either
 -- inlined by the planner into the statement that calls it, or called once per batch, so the split costs nothing at
--- run time. The codes the helpers interpret are listed in append_events.sql.
+-- run time. The enums the helpers take and return are created in schema.sql.
 
 -- Rejects a batch that violates the protocol: request or event arrays of different lengths, an event count that is
 -- not positive, or a request whose fields are missing or inconsistent. One pass over the request arrays computes the
@@ -8,7 +8,7 @@
 -- index the caller used.
 CREATE OR REPLACE FUNCTION __schema__.validate_append_batch(
     p_stream_ids text[],
-    p_expected_kinds smallint[],
+    p_expected_kinds __schema__.expected_state_kind[],
     p_expected_versions bigint[],
     p_commit_ids uuid[],
     p_event_counts integer[],
@@ -46,9 +46,10 @@ BEGIN
            min(r.ord) FILTER (WHERE r.event_count IS NULL OR r.event_count <= 0),
            min(r.ord) FILTER (WHERE r.stream_id IS NULL OR r.stream_id = ''),
            min(r.ord) FILTER (WHERE r.commit_id IS NULL),
-           min(r.ord) FILTER (WHERE r.expected_kind IS NULL OR r.expected_kind NOT BETWEEN 0 AND 3),
-           min(r.ord) FILTER (WHERE r.expected_kind = 3 AND (r.expected_version IS NULL OR r.expected_version < 0)),
-           min(r.ord) FILTER (WHERE r.expected_kind <> 3 AND r.expected_version IS NOT NULL)
+           min(r.ord) FILTER (WHERE r.expected_kind IS NULL),
+           min(r.ord) FILTER (WHERE r.expected_kind = 'at_version' AND
+                                    (r.expected_version IS NULL OR r.expected_version < 0)),
+           min(r.ord) FILTER (WHERE r.expected_kind <> 'at_version' AND r.expected_version IS NOT NULL)
     INTO v_event_total,
         v_bad_event_count,
         v_bad_stream_id,
@@ -83,19 +84,18 @@ BEGIN
     END IF;
 
     IF v_bad_expected_kind IS NOT NULL THEN
-        RAISE EXCEPTION 'request %: expected kind must be 0 (Any), 1 (DoesNotExist), 2 (Exists) or 3 (AtVersion)',
-            v_bad_expected_kind - 1
+        RAISE EXCEPTION 'request %: expected kind must not be null', v_bad_expected_kind - 1
             USING ERRCODE = 'invalid_parameter_value';
     END IF;
 
     IF v_missing_version IS NOT NULL THEN
-        RAISE EXCEPTION 'request %: expected version must be non-negative when expected kind is 3 (AtVersion)',
+        RAISE EXCEPTION 'request %: expected version must be non-negative when expected kind is ''at_version''',
             v_missing_version - 1
             USING ERRCODE = 'invalid_parameter_value';
     END IF;
 
     IF v_stray_version IS NOT NULL THEN
-        RAISE EXCEPTION 'request %: expected version must be null unless expected kind is 3 (AtVersion)',
+        RAISE EXCEPTION 'request %: expected version must be null unless expected kind is ''at_version''',
             v_stray_version - 1
             USING ERRCODE = 'invalid_parameter_value';
     END IF;
@@ -104,25 +104,26 @@ $fn$;
 
 -- Decides one request against the head of its stream, where a head of -1 means the stream does not exist. A scalar
 -- SQL function whose body is a single expression is inlined by the planner, so this costs nothing at run time; it
--- exists to keep the decision, and the codes it interprets, in one place.
+-- exists to keep the decision in one place.
 CREATE OR REPLACE FUNCTION __schema__.get_append_status(
     p_duplicate boolean,
-    p_expected_kind smallint,
+    p_expected_kind __schema__.expected_state_kind,
     p_expected_version bigint,
     p_head bigint)
-    RETURNS smallint
+    RETURNS __schema__.append_status
     LANGUAGE sql
     IMMUTABLE
 AS
 $fn$
+-- The cast on the first branch types the CASE; the other labels resolve to the same enum.
 SELECT CASE
-           WHEN p_duplicate THEN 2
-           WHEN p_expected_kind = 0 THEN 0
-           WHEN p_expected_kind = 1 AND p_head < 0 THEN 0
-           WHEN p_expected_kind = 2 AND p_head >= 0 THEN 0
-           WHEN p_expected_kind = 3 AND p_head = p_expected_version THEN 0
-           ELSE 1
-           END::smallint
+           WHEN p_duplicate THEN 'duplicate'::__schema__.append_status
+           WHEN p_expected_kind = 'any' THEN 'appended'
+           WHEN p_expected_kind = 'does_not_exist' AND p_head < 0 THEN 'appended'
+           WHEN p_expected_kind = 'exists' AND p_head >= 0 THEN 'appended'
+           WHEN p_expected_kind = 'at_version' AND p_head = p_expected_version THEN 'appended'
+           ELSE 'conflict'
+           END
 $fn$;
 
 -- The requests of a batch, one row each with the derived columns the append needs. A set-returning SQL function that
@@ -130,7 +131,7 @@ $fn$;
 -- so this shapes the query without adding a function call or a plan boundary.
 CREATE OR REPLACE FUNCTION __schema__.zip_requests(
     p_stream_ids text[],
-    p_expected_kinds smallint[],
+    p_expected_kinds __schema__.expected_state_kind[],
     p_expected_versions bigint[],
     p_commit_ids uuid[],
     p_event_counts integer[],
@@ -139,7 +140,7 @@ CREATE OR REPLACE FUNCTION __schema__.zip_requests(
             (
                 ord              bigint,
                 stream_id        text,
-                expected_kind    smallint,
+                expected_kind    __schema__.expected_state_kind,
                 expected_version bigint,
                 commit_id        uuid,
                 event_count      integer,

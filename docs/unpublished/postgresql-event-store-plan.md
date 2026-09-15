@@ -165,6 +165,13 @@ RETURNS TABLE (request_index integer, status smallint, observed_kind smallint, o
 Protocol constants (C# `AppendProtocol`, never cast enums directly): expected kind 0 Any / 1 DoesNotExist / 2 Exists /
 3 AtVersion; status 0 Appended / 1 Conflict / 2 Duplicate; observed kind 0 DoesNotExist / 1 AtVersion.
 
+> Changed on 15 September 2026: the codes are now the PostgreSQL enums `expected_state_kind` ('any', 'does_not_exist',
+> 'exists', 'at_version') and `append_status` ('appended', 'conflict', 'duplicate'), and `observed_kind` was dropped in
+> favour of a NULL `observed_version`. The parallel arrays stay: a spike measured Npgsql composite parameters at 2-3x
+> the client encoding cost of arrays, which cost 10-19% of the single-connection throughput ceiling. The C# side uses
+> enums mapped with `MapEnum`, registered on the application's data source by
+> `NpgsqlDataSourceBuilder.UsePostgresEventStore`; enum arrays encode as cheaply as text.
+
 Body, in order:
 
 1. Guard `current_setting('transaction_isolation') = 'read committed'` (the `FOR UPDATE` re-read relies on it); validate

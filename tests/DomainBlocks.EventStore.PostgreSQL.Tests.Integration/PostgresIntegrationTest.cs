@@ -10,8 +10,8 @@ using NUnit.Framework;
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
 /// <summary>
-/// Base of the PostgreSQL-specific tests: one schema per fixture, named after the fixture and emptied before each
-/// test, with direct access to the schema through <see cref="Client"/>.
+/// Base of the PostgreSQL-specific tests: one schema and one data source per fixture, named after the fixture and
+/// emptied before each test, with direct access to the schema through <see cref="Client"/>.
 /// </summary>
 public abstract class PostgresIntegrationTest(Action<PostgresEventStoreOptions>? configure = null)
 {
@@ -24,9 +24,9 @@ public abstract class PostgresIntegrationTest(Action<PostgresEventStoreOptions>?
 
     protected string Schema => Options.Schema;
 
-    protected AppendFunctionClient Client { get; private set; } = null!;
+    internal AppendFunctionClient Client { get; private set; } = null!;
 
-    protected static NpgsqlDataSource DataSource => PostgresTestEnvironment.DataSource;
+    protected NpgsqlDataSource DataSource => Harness.DataSource;
 
     protected static ILoggerFactory LoggerFactory => PostgresTestEnvironment.LoggerFactory;
 

@@ -1,3 +1,6 @@
+using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore.TypeMapping;
+using DomainBlocks.Testing.Events;
 using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
 using Npgsql;
 using NUnit.Framework;
@@ -33,6 +36,38 @@ public class PostgresEventStoreAdminTests
         (await TableExistsAsync("sequences")).ShouldBeTrue();
         (await PublicationExistsAsync()).ShouldBeTrue();
         (await GetSequenceNextAsync()).ShouldBe(0);
+    }
+
+    [Test]
+    public async Task EnsureInitializedAsync_CreatesAppendProtocolEnums()
+    {
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(PostgresTestEnvironment.DataSource, _options);
+
+        // The labels are the wire protocol of append_events.
+        (await GetEnumLabelsAsync("expected_state_kind")).ShouldBe(["any", "does_not_exist", "exists", "at_version"]);
+        (await GetEnumLabelsAsync("append_status")).ShouldBe(["appended", "conflict", "duplicate"]);
+    }
+
+    [Test]
+    public async Task EnsureInitializedAsync_DataSourceLoadedTypesBeforeInit_StoreCanAppend()
+    {
+        await using var dataSource =
+            PostgresTestEnvironment.CreateDataSource(builder => builder.UsePostgresEventStore(_options));
+
+        // Opening a connection makes the data source load the database's types, before the schema exists.
+        await using (await dataSource.OpenConnectionAsync())
+        {
+        }
+
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options);
+
+        var eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>());
+        var codec = TestPostgresEventCodec.Create<object>(eventTypeMap);
+        await using var eventStore = PostgresEventStore.Create(dataSource, codec, _options);
+
+        await eventStore.AppendAsync("s1", [AppendableEvent.Create<object>(new TestEvent { Value = "v" })]);
+
+        (await GetSequenceNextAsync()).ShouldBe(1);
     }
 
     [Test]
@@ -195,6 +230,23 @@ public class PostgresEventStoreAdminTests
         command.Parameters.Add(new NpgsqlParameter<int> { TypedValue = commitIndex });
 
         await command.ExecuteNonQueryAsync();
+    }
+
+    private async Task<List<string>> GetEnumLabelsAsync(string type)
+    {
+        await using var command = PostgresTestEnvironment.DataSource.CreateCommand(
+            "SELECT e.enumlabel FROM pg_enum AS e WHERE e.enumtypid = to_regtype($1) ORDER BY e.enumsortorder");
+
+        command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = $"{_options.Schema}.{type}" });
+
+        var labels = new List<string>();
+
+        await using var reader = await command.ExecuteReaderAsync();
+
+        while (await reader.ReadAsync())
+            labels.Add(reader.GetString(0));
+
+        return labels;
     }
 
     private async Task<string?> GetIndexDefinitionAsync(string index)

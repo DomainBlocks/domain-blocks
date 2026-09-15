@@ -1,7 +1,8 @@
 # Walking through `append_events`
 
-Written by Claude (Fable 5.1) in a Claude Code session on 14 September 2026, at the request of the repository author.
-Unpublished; it reflects the scripts as they were on that date.
+Written by Claude (Fable 5.1) in a Claude Code session on 14 September 2026, at the request of the repository author,
+and updated on 15 September 2026 when the codes became enums. Unpublished; it reflects the scripts as they were on
+that date.
 
 A hands-on tour of `dbx.append_events`, one stage at a time, against a throwaway PostgreSQL container. Every query below
 was run against `postgres:17` and the outputs shown are what it returned.
@@ -24,8 +25,8 @@ docker run --name dbx-pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres:
 
 Install the schema. The scripts contain a `__schema__` token that `SqlScripts.Load` replaces with the configured schema
 name (default `dbx`, see `PostgresEventStoreOptions.Schema`); this does the same substitution and pipes the three
-scripts through psql in one transaction, exactly as `PostgresEventStoreAdmin.InitializeAsync` does. Run it from the repo
-root.
+scripts through psql in one transaction, exactly as `PostgresEventStoreAdmin.EnsureInitializedAsync` does. Run it from
+the repo root.
 
 ```powershell
 $sqlDir = "src/DomainBlocks.EventStore.PostgreSQL/Sql"
@@ -57,8 +58,11 @@ Useful in the console: `Ctrl+B` on any `dbx.` function name opens its source; ri
 
 ## 3. Read the schema first
 
-Expand `dbx` in the Database window. The three things `append_events` depends on:
+Expand `dbx` in the Database window. The things `append_events` depends on:
 
+- **`expected_state_kind`** and **`append_status`** are the enums of the protocol: what a request expects of its
+  stream (`any`, `does_not_exist`, `exists`, `at_version`) and what became of it (`appended`, `conflict`,
+  `duplicate`). Rider shows the labels under the type; `SELECT enum_range(NULL::dbx.append_status)` lists them too.
 - **`sequences`** has one row, `('event_log', 0)`. Its `next` column is the next global position. Every append locks
   this row `FOR UPDATE`, which is what serializes writers. Fill factor 50 keeps the hot row's updates on one page.
 - **`event_log_commit_id_idx`** is unique and partial on `commit_index = 0`. Every request writes exactly one row with
@@ -72,14 +76,16 @@ One batch is used throughout. Five requests, six events, chosen so every branch 
 
 | ord | stream    | expected kind  | version | commit id | events | what should happen                         |
 |----:|-----------|----------------|--------:|-----------|-------:|--------------------------------------------|
-|   1 | account-1 | 1 DoesNotExist |         | ...c1     |      2 | appended, stream created                   |
-|   2 | account-2 | 0 Any          |         | ...c2     |      1 | appended                                   |
-|   3 | account-1 | 3 AtVersion    |       1 | ...c3     |      1 | appended, sees the head left by request 1  |
-|   4 | account-2 | 3 AtVersion    |       5 | ...c4     |      1 | conflict, head is 0                        |
-|   5 | account-3 | 0 Any          |         | ...c2     |      1 | duplicate, commit id already used by ord 2 |
+|   1 | account-1 | does_not_exist |         | ...c1     |      2 | appended, stream created                   |
+|   2 | account-2 | any            |         | ...c2     |      1 | appended                                   |
+|   3 | account-1 | at_version     |       1 | ...c3     |      1 | appended, sees the head left by request 1  |
+|   4 | account-2 | at_version     |       5 | ...c4     |      1 | conflict, head is 0                        |
+|   5 | account-3 | any            |         | ...c2     |      1 | duplicate, commit id already used by ord 2 |
 
-Codes, from the header of `append_events.sql`: expected kind 0 Any, 1 DoesNotExist, 2 Exists, 3 AtVersion. Status 0
-Appended, 1 Conflict, 2 Duplicate. Observed kind 0 DoesNotExist, 1 AtVersion.
+The expected kinds are passed as an array of labels cast to the enum. A bare `ARRAY['any']` is `text[]`, which the
+function does not accept, so every call below carries `::dbx.expected_state_kind[]`; the C# client sends the enum
+array directly. The status comes back as `append_status` labels, and a conflict reports the head the request saw
+as `observed_version`, NULL when the stream did not exist.
 
 ## 5. The helpers, one at a time
 
@@ -92,24 +98,25 @@ Event arrays shorter than the event count:
 
 ```sql
 SELECT dbx.validate_append_batch(
-    ARRAY['account-1'], ARRAY[0]::smallint[], ARRAY[NULL]::bigint[],
+    ARRAY['account-1'], ARRAY['any']::dbx.expected_state_kind[], ARRAY[NULL]::bigint[],
     ARRAY['00000000-0000-0000-0000-0000000000c1']::uuid[], ARRAY[2],
     ARRAY['e1'], ARRAY['{}']::jsonb[], ARRAY[NULL]::bytea[], ARRAY[NULL]::jsonb[]);
 -- ERROR:  event arrays must all have length 2, the sum of p_event_counts
 ```
 
-AtVersion without a version:
+`at_version` without a version:
 
 ```sql
 SELECT dbx.validate_append_batch(
-    ARRAY['account-1'], ARRAY[3]::smallint[], ARRAY[NULL]::bigint[],
+    ARRAY['account-1'], ARRAY['at_version']::dbx.expected_state_kind[], ARRAY[NULL]::bigint[],
     ARRAY['00000000-0000-0000-0000-0000000000c1']::uuid[], ARRAY[1],
     ARRAY['e1'], ARRAY['{}']::jsonb[], ARRAY[NULL]::bytea[], ARRAY[NULL]::jsonb[]);
--- ERROR:  request 0: expected version must be non-negative when expected kind is 3 (AtVersion)
+-- ERROR:  request 0: expected version must be non-negative when expected kind is 'at_version'
 ```
 
 Change the `NULL` version to `0` and it returns void. These are the only errors a well-formed caller can hit; every
-other outcome is reported per request, not raised.
+other outcome is reported per request, not raised. A label the enum does not have never reaches the function: the
+cast rejects it first, with `invalid input value for enum dbx.expected_state_kind: "maybe"`.
 
 ### B. `zip_requests`
 
@@ -120,7 +127,7 @@ Turns the parallel arrays into rows and derives the three columns the rest of th
 SELECT *
 FROM dbx.zip_requests(
         ARRAY['account-1', 'account-2', 'account-1', 'account-2', 'account-3'],
-        ARRAY[1, 0, 3, 3, 0]::smallint[],
+        ARRAY['does_not_exist', 'any', 'at_version', 'at_version', 'any']::dbx.expected_state_kind[],
         ARRAY[NULL, NULL, 1, 5, NULL]::bigint[],
         ARRAY['00000000-0000-0000-0000-0000000000c1',
               '00000000-0000-0000-0000-0000000000c2',
@@ -133,13 +140,13 @@ ORDER BY ord;
 ```
 
 ```
- ord | stream_id | expected_kind | expected_version | commit_id | event_count | nth | duplicate | event_offset
------+-----------+---------------+------------------+-----------+-------------+-----+-----------+--------------
-   1 | account-1 |             1 |                  | ...c1     |           2 |   1 | f         |            1
-   2 | account-2 |             0 |                  | ...c2     |           1 |   1 | f         |            3
-   3 | account-1 |             3 |                1 | ...c3     |           1 |   2 | f         |            4
-   4 | account-2 |             3 |                5 | ...c4     |           1 |   2 | f         |            5
-   5 | account-3 |             0 |                  | ...c2     |           1 |   1 | t         |            6
+ ord | stream_id | expected_kind  | expected_version | commit_id | event_count | nth | duplicate | event_offset
+-----+-----------+----------------+------------------+-----------+-------------+-----+-----------+--------------
+   1 | account-1 | does_not_exist |                  | ...c1     |           2 |   1 | f         |            1
+   2 | account-2 | any            |                  | ...c2     |           1 |   1 | f         |            3
+   3 | account-1 | at_version     |                1 | ...c3     |           1 |   2 | f         |            4
+   4 | account-2 | at_version     |                5 | ...c4     |           1 |   2 | f         |            5
+   5 | account-3 | any            |                  | ...c2     |           1 |   1 | t         |            6
 ```
 
 What to look at:
@@ -171,36 +178,36 @@ which is why the probe does not get slower as streams grow.
 
 ### D. `get_append_status`
 
-The whole decision in a truth table. Expected version fixed at 1:
+The whole decision in a truth table. Expected version fixed at 1; `enum_range` yields the kinds in declaration order:
 
 ```sql
 SELECT k.kind, h.head,
        dbx.get_append_status(false, k.kind, 1, h.head) AS status,
        dbx.get_append_status(true, k.kind, 1, h.head)  AS status_if_duplicate
-FROM (VALUES (0::smallint), (1::smallint), (2::smallint), (3::smallint)) AS k(kind)
+FROM unnest(enum_range(NULL::dbx.expected_state_kind)) AS k(kind)
          CROSS JOIN (VALUES (-1::bigint), (1::bigint), (3::bigint)) AS h(head)
 ORDER BY k.kind, h.head;
 ```
 
 ```
- kind | head | status | status_if_duplicate
-------+------+--------+---------------------
-    0 |   -1 |      0 |                   2
-    0 |    1 |      0 |                   2
-    0 |    3 |      0 |                   2
-    1 |   -1 |      0 |                   2
-    1 |    1 |      1 |                   2
-    1 |    3 |      1 |                   2
-    2 |   -1 |      1 |                   2
-    2 |    1 |      0 |                   2
-    2 |    3 |      0 |                   2
-    3 |   -1 |      1 |                   2
-    3 |    1 |      0 |                   2
-    3 |    3 |      1 |                   2
+      kind      | head |  status  | status_if_duplicate
+----------------+------+----------+---------------------
+ any            |   -1 | appended | duplicate
+ any            |    1 | appended | duplicate
+ any            |    3 | appended | duplicate
+ does_not_exist |   -1 | appended | duplicate
+ does_not_exist |    1 | conflict | duplicate
+ does_not_exist |    3 | conflict | duplicate
+ exists         |   -1 | conflict | duplicate
+ exists         |    1 | appended | duplicate
+ exists         |    3 | appended | duplicate
+ at_version     |   -1 | conflict | duplicate
+ at_version     |    1 | appended | duplicate
+ at_version     |    3 | conflict | duplicate
 ```
 
-Duplicate wins over everything else. Any always appends. DoesNotExist needs head -1, Exists needs head >= 0, AtVersion
-needs an exact match.
+Duplicate wins over everything else. `any` always appends. `does_not_exist` needs head -1, `exists` needs head >= 0,
+`at_version` needs an exact match.
 
 ## 6. The recursive chain, as a dry run
 
@@ -209,26 +216,26 @@ The `chain` CTE is the heart of the function. Here it is lifted out of the funct
 
 ```sql
 WITH RECURSIVE
-    batch AS (SELECT ARRAY['account-1', 'account-2', 'account-1', 'account-2', 'account-3'] AS stream_ids,
-                     ARRAY[1, 0, 3, 3, 0]::smallint[]                                       AS kinds,
-                     ARRAY[NULL, NULL, 1, 5, NULL]::bigint[]                                AS versions,
+    batch AS (SELECT ARRAY['account-1', 'account-2', 'account-1', 'account-2', 'account-3']                    AS stream_ids,
+                     ARRAY['does_not_exist', 'any', 'at_version', 'at_version', 'any']::dbx.expected_state_kind[] AS kinds,
+                     ARRAY[NULL, NULL, 1, 5, NULL]::bigint[]                                                   AS versions,
                      ARRAY['00000000-0000-0000-0000-0000000000c1',
                            '00000000-0000-0000-0000-0000000000c2',
                            '00000000-0000-0000-0000-0000000000c3',
                            '00000000-0000-0000-0000-0000000000c4',
-                           '00000000-0000-0000-0000-0000000000c2']::uuid[]                  AS commit_ids,
-                     ARRAY[2, 1, 1, 1, 1]                                                   AS event_counts,
-                     '{}'::uuid[]                                                           AS existing_commits),
+                           '00000000-0000-0000-0000-0000000000c2']::uuid[]                                     AS commit_ids,
+                     ARRAY[2, 1, 1, 1, 1]                                                                      AS event_counts,
+                     '{}'::uuid[]                                                                              AS existing_commits),
     request AS (SELECT r.*
                 FROM batch AS b
                          CROSS JOIN LATERAL dbx.zip_requests(b.stream_ids, b.kinds, b.versions, b.commit_ids,
                                                              b.event_counts, b.existing_commits) AS r),
     chain AS (SELECT h.stream_id, 0::bigint AS nth, NULL::bigint AS ord, NULL::bigint AS head_before,
-                     NULL::smallint AS status, h.head AS head_after
+                     NULL::dbx.append_status AS status, h.head AS head_after
               FROM batch AS b CROSS JOIN LATERAL dbx.get_stream_heads(b.stream_ids) AS h
               UNION ALL
               SELECT r.stream_id, r.nth, r.ord, c.head_after, d.status,
-                     CASE WHEN d.status = 0 THEN c.head_after + r.event_count ELSE c.head_after END
+                     CASE WHEN d.status = 'appended' THEN c.head_after + r.event_count ELSE c.head_after END
               FROM chain AS c
                        JOIN request AS r ON r.stream_id = c.stream_id AND r.nth = c.nth + 1
                        CROSS JOIN LATERAL (SELECT dbx.get_append_status(r.duplicate, r.expected_kind, r.expected_version, c.head_after)) AS d(status))
@@ -236,16 +243,16 @@ SELECT * FROM chain ORDER BY stream_id, nth;
 ```
 
 ```
- stream_id | nth | ord | head_before | status | head_after
------------+-----+-----+-------------+--------+------------
- account-1 |   0 |     |             |        |         -1
- account-1 |   1 |   1 |          -1 |      0 |          1
- account-1 |   2 |   3 |           1 |      0 |          2
- account-2 |   0 |     |             |        |         -1
- account-2 |   1 |   2 |          -1 |      0 |          0
- account-2 |   2 |   4 |           0 |      1 |          0
- account-3 |   0 |     |             |        |         -1
- account-3 |   1 |   5 |          -1 |      2 |         -1
+ stream_id | nth | ord | head_before |  status   | head_after
+-----------+-----+-----+-------------+-----------+------------
+ account-1 |   0 |     |             |           |         -1
+ account-1 |   1 |   1 |          -1 | appended  |          1
+ account-1 |   2 |   3 |           1 | appended  |          2
+ account-2 |   0 |     |             |           |         -1
+ account-2 |   1 |   2 |          -1 | appended  |          0
+ account-2 |   2 |   4 |           0 | conflict  |          0
+ account-3 |   0 |     |             |           |         -1
+ account-3 |   1 |   5 |          -1 | duplicate |         -1
 ```
 
 How to read it:
@@ -254,8 +261,8 @@ How to read it:
 - Each recursion step joins the previous row of every stream to that stream's next request (`r.nth = c.nth + 1`) and
   decides it against `head_after` of the previous row. Iteration 1 decides ord 1, 2 and 5 together; iteration 2 decides
   ord 3 and 4. A batch with no repeated stream finishes in one iteration.
-- `head_after` only advances on status 0. Request 3 sees head 1 (left by request 1's two events) and its AtVersion 1
-  matches, so it appends. Request 4 sees head 0, wanted 5, conflict, and the head stays 0.
+- `head_after` only advances on `appended`. Request 3 sees head 1 (left by request 1's two events) and its
+  `at_version` 1 matches, so it appends. Request 4 sees head 0, wanted 5, conflict, and the head stays 0.
 - Streams never interact, which is why evaluating them side by side gives the same result as evaluating the batch in
   order.
 
@@ -269,63 +276,63 @@ which is what the function does under the lock.
 
 ```sql
 WITH RECURSIVE
-    batch AS (SELECT ARRAY['account-1', 'account-2', 'account-1', 'account-2', 'account-3'] AS stream_ids,
-                     ARRAY[1, 0, 3, 3, 0]::smallint[]                                       AS kinds,
-                     ARRAY[NULL, NULL, 1, 5, NULL]::bigint[]                                AS versions,
+    batch AS (SELECT ARRAY['account-1', 'account-2', 'account-1', 'account-2', 'account-3']                    AS stream_ids,
+                     ARRAY['does_not_exist', 'any', 'at_version', 'at_version', 'any']::dbx.expected_state_kind[] AS kinds,
+                     ARRAY[NULL, NULL, 1, 5, NULL]::bigint[]                                                   AS versions,
                      ARRAY['00000000-0000-0000-0000-0000000000c1',
                            '00000000-0000-0000-0000-0000000000c2',
                            '00000000-0000-0000-0000-0000000000c3',
                            '00000000-0000-0000-0000-0000000000c4',
-                           '00000000-0000-0000-0000-0000000000c2']::uuid[]                  AS commit_ids,
-                     ARRAY[2, 1, 1, 1, 1]                                                   AS event_counts,
-                     '{}'::uuid[]                                                           AS existing_commits,
-                     (SELECT s.next FROM dbx.sequences AS s WHERE s.name = 'event_log')     AS position_start),
+                           '00000000-0000-0000-0000-0000000000c2']::uuid[]                                     AS commit_ids,
+                     ARRAY[2, 1, 1, 1, 1]                                                                      AS event_counts,
+                     '{}'::uuid[]                                                                              AS existing_commits,
+                     (SELECT s.next FROM dbx.sequences AS s WHERE s.name = 'event_log')                        AS position_start),
     request AS (SELECT r.*
                 FROM batch AS b
                          CROSS JOIN LATERAL dbx.zip_requests(b.stream_ids, b.kinds, b.versions, b.commit_ids,
                                                              b.event_counts, b.existing_commits) AS r),
     chain AS (SELECT h.stream_id, 0::bigint AS nth, NULL::bigint AS ord, NULL::bigint AS head_before,
-                     NULL::smallint AS status, h.head AS head_after
+                     NULL::dbx.append_status AS status, h.head AS head_after
               FROM batch AS b CROSS JOIN LATERAL dbx.get_stream_heads(b.stream_ids) AS h
               UNION ALL
               SELECT r.stream_id, r.nth, r.ord, c.head_after, d.status,
-                     CASE WHEN d.status = 0 THEN c.head_after + r.event_count ELSE c.head_after END
+                     CASE WHEN d.status = 'appended' THEN c.head_after + r.event_count ELSE c.head_after END
               FROM chain AS c
                        JOIN request AS r ON r.stream_id = c.stream_id AND r.nth = c.nth + 1
                        CROSS JOIN LATERAL (SELECT dbx.get_append_status(r.duplicate, r.expected_kind, r.expected_version, c.head_after)) AS d(status)),
     decided AS (SELECT r.ord, r.stream_id, r.commit_id, r.event_count, r.event_offset, c.status, c.head_before,
                        b.position_start +
-                       coalesce(sum(r.event_count) FILTER (WHERE c.status = 0)
+                       coalesce(sum(r.event_count) FILTER (WHERE c.status = 'appended')
                                 OVER (ORDER BY r.ord ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0) AS first_pos
                 FROM chain AS c
                          JOIN request AS r ON r.ord = c.ord
                          CROSS JOIN batch AS b)
 SELECT d.*,
-       (d.ord - 1)::integer                                            AS request_index,
-       CASE WHEN d.head_before < 0 THEN 0 ELSE 1 END                   AS observed_kind,
-       nullif(d.head_before, -1)                                       AS observed_version,
-       CASE WHEN d.status = 0 THEN d.first_pos END                     AS first_position,
-       CASE WHEN d.status = 0 THEN d.first_pos + d.event_count - 1 END AS last_position
+       (d.ord - 1)::integer                                                     AS request_index,
+       nullif(d.head_before, -1)                                                AS observed_version,
+       CASE WHEN d.status = 'appended' THEN d.first_pos END                     AS first_position,
+       CASE WHEN d.status = 'appended' THEN d.first_pos + d.event_count - 1 END AS last_position
 FROM decided AS d
 ORDER BY d.ord;
 ```
 
 ```
- ord | stream_id | event_count | event_offset | status | head_before | first_pos | request_index | observed_kind | observed_version | first_position | last_position
------+-----------+-------------+--------------+--------+-------------+-----------+---------------+---------------+------------------+----------------+---------------
-   1 | account-1 |           2 |            1 |      0 |          -1 |         0 |             0 |             0 |                  |              0 |             1
-   2 | account-2 |           1 |            3 |      0 |          -1 |         2 |             1 |             0 |                  |              2 |             2
-   3 | account-1 |           1 |            4 |      0 |           1 |         3 |             2 |             1 |                1 |              3 |             3
-   4 | account-2 |           1 |            5 |      1 |           0 |         4 |             3 |             1 |                0 |                |
-   5 | account-3 |           1 |            6 |      2 |          -1 |         4 |             4 |             0 |                  |                |
+ ord | stream_id | commit_id | event_count | event_offset |  status   | head_before | first_pos | request_index | observed_version | first_position | last_position
+-----+-----------+-----------+-------------+--------------+-----------+-------------+-----------+---------------+------------------+----------------+---------------
+   1 | account-1 | ...c1     |           2 |            1 | appended  |          -1 |         0 |             0 |                  |              0 |             1
+   2 | account-2 | ...c2     |           1 |            3 | appended  |          -1 |         2 |             1 |                  |              2 |             2
+   3 | account-1 | ...c3     |           1 |            4 | appended  |           1 |         3 |             2 |                1 |              3 |             3
+   4 | account-2 | ...c4     |           1 |            5 | conflict  |           0 |         4 |             3 |                0 |                |
+   5 | account-3 | ...c2     |           1 |            6 | duplicate |          -1 |         4 |             4 |                  |                |
 ```
 
 - `first_pos` is a running sum of event counts over appended requests only, in batch order. Requests 4 and 5 still get a
   `first_pos` of 4 but it is unused, and the next batch will start at 4: no gaps.
-- The insert CTE (not reproduced here because it writes) takes each row with status 0, generates `k = 0 ..
+- The insert CTE (not reproduced here because it writes) takes each appended row, generates `k = 0 ..
   event_count - 1`, and joins the flattened event arrays at `event_offset + k`. Global position is `first_pos + k`,
   stream position is `head_before + 1 + k`, commit index is `k`.
-- The result columns report `head_before`, the head the caller would have observed, not the head after.
+- The result columns report `head_before`, the head the caller would have observed, not the head after; -1 becomes a
+  NULL `observed_version`, which is how a conflict says the stream did not exist.
 
 ## 8. The real thing
 
@@ -335,7 +342,7 @@ Call the function with the same batch plus its six events:
 SELECT *
 FROM dbx.append_events(
         ARRAY['account-1', 'account-2', 'account-1', 'account-2', 'account-3'],
-        ARRAY[1, 0, 3, 3, 0]::smallint[],
+        ARRAY['does_not_exist', 'any', 'at_version', 'at_version', 'any']::dbx.expected_state_kind[],
         ARRAY[NULL, NULL, 1, 5, NULL]::bigint[],
         ARRAY['00000000-0000-0000-0000-0000000000c1',
               '00000000-0000-0000-0000-0000000000c2',
@@ -350,13 +357,13 @@ FROM dbx.append_events(
 ```
 
 ```
- request_index | status | observed_kind | observed_version | first_position | last_position
----------------+--------+---------------+------------------+----------------+---------------
-             0 |      0 |             0 |                  |              0 |             1
-             1 |      0 |             0 |                  |              2 |             2
-             2 |      0 |             1 |                1 |              3 |             3
-             3 |      1 |             1 |                0 |                |
-             4 |      2 |             0 |                  |                |
+ request_index |  status   | observed_version | first_position | last_position
+---------------+-----------+------------------+----------------+---------------
+             0 | appended  |                  |              0 |             1
+             1 | appended  |                  |              2 |             2
+             2 | appended  |                1 |              3 |             3
+             3 | conflict  |                0 |                |
+             4 | duplicate |                  |                |
 ```
 
 Identical to the dry run. Now look at what landed:
@@ -380,17 +387,17 @@ Four rows, `sequences.next` is 4, all four share one `created_at` (taken once af
 input (`Closed`, `Opened`) were never inserted because their requests were rejected.
 
 **Replay the exact same call.** Every commit id is now in the partial index, so `v_existing_commits` holds them all and
-everything reports status 2, except request 4 which is still a conflict (it never got a `commit_index = 0` row).
+everything reports `duplicate`, except request 4 which is still a conflict (it never got a `commit_index = 0` row).
 `sequences.next` stays 4. Notice `observed_version` now reports the current heads (2 and 0): a duplicate is decided
 against the live head, it just does not write.
 
-**Conflict then success on one stream.** Two AtVersion requests to `account-1`, the first wrong, the second right:
+**Conflict then success on one stream.** Two `at_version` requests to `account-1`, the first wrong, the second right:
 
 ```sql
 SELECT *
 FROM dbx.append_events(
         ARRAY['account-1', 'account-1'],
-        ARRAY[3, 3]::smallint[],
+        ARRAY['at_version', 'at_version']::dbx.expected_state_kind[],
         ARRAY[7, 2]::bigint[],
         ARRAY['00000000-0000-0000-0000-0000000000d1', '00000000-0000-0000-0000-0000000000d2']::uuid[],
         ARRAY[1, 1],
@@ -401,10 +408,10 @@ FROM dbx.append_events(
 ```
 
 ```
- request_index | status | observed_kind | observed_version | first_position | last_position
----------------+--------+---------------+------------------+----------------+---------------
-             0 |      1 |             1 |                2 |                |
-             1 |      0 |             1 |                2 |              4 |             4
+ request_index |  status  | observed_version | first_position | last_position
+---------------+----------+------------------+----------------+---------------
+             0 | conflict |                2 |                |
+             1 | appended |                2 |              4 |             4
 ```
 
 The conflict did not advance the head, so the second request still sees version 2 and appends at position 4.
@@ -414,7 +421,7 @@ re-read the row another writer just committed:
 
 ```sql
 BEGIN ISOLATION LEVEL REPEATABLE READ;
-SELECT * FROM dbx.append_events(ARRAY['x'], ARRAY[0]::smallint[], ARRAY[NULL]::bigint[],
+SELECT * FROM dbx.append_events(ARRAY['x'], ARRAY['any']::dbx.expected_state_kind[], ARRAY[NULL]::bigint[],
     ARRAY['00000000-0000-0000-0000-0000000000e1']::uuid[], ARRAY[1],
     ARRAY['e'], ARRAY['{}']::jsonb[], ARRAY[NULL]::bytea[], ARRAY[NULL]::jsonb[]);
 -- ERROR:  append_events requires READ COMMITTED isolation (current: repeatable read)
@@ -429,13 +436,13 @@ the rest.
 Terminal, session A. Everything in one `-c` runs as one transaction; the sleep keeps it open for 30 seconds:
 
 ```powershell
-docker exec dbx-pg psql -U postgres -c "BEGIN; SELECT * FROM dbx.append_events(ARRAY['lock-demo'], ARRAY[0]::smallint[], ARRAY[NULL]::bigint[], ARRAY['00000000-0000-0000-0000-0000000000a1']::uuid[], ARRAY[1], ARRAY['e'], ARRAY['{}']::jsonb[], ARRAY[NULL]::bytea[], ARRAY[NULL]::jsonb[]); SELECT pg_sleep(30); COMMIT;"
+docker exec dbx-pg psql -U postgres -c "BEGIN; SELECT * FROM dbx.append_events(ARRAY['lock-demo'], ARRAY['any']::dbx.expected_state_kind[], ARRAY[NULL]::bigint[], ARRAY['00000000-0000-0000-0000-0000000000a1']::uuid[], ARRAY[1], ARRAY['e'], ARRAY['{}']::jsonb[], ARRAY[NULL]::bytea[], ARRAY[NULL]::jsonb[]); SELECT pg_sleep(30); COMMIT;"
 ```
 
 Rider console, session B, straight away. It hangs until A commits:
 
 ```sql
-SELECT * FROM dbx.append_events(ARRAY['lock-demo'], ARRAY[0]::smallint[], ARRAY[NULL]::bigint[],
+SELECT * FROM dbx.append_events(ARRAY['lock-demo'], ARRAY['any']::dbx.expected_state_kind[], ARRAY[NULL]::bigint[],
     ARRAY['00000000-0000-0000-0000-0000000000a2']::uuid[], ARRAY[1],
     ARRAY['e'], ARRAY['{}']::jsonb[], ARRAY[NULL]::bytea[], ARRAY[NULL]::jsonb[]);
 ```
@@ -488,7 +495,7 @@ SET auto_explain.log_analyze = on;
 SET auto_explain.log_verbose = on;
 SET client_min_messages = log;
 
-SELECT * FROM dbx.append_events(ARRAY['account-9'], ARRAY[0]::smallint[], ARRAY[NULL]::bigint[],
+SELECT * FROM dbx.append_events(ARRAY['account-9'], ARRAY['any']::dbx.expected_state_kind[], ARRAY[NULL]::bigint[],
     ARRAY['00000000-0000-0000-0000-0000000000e9']::uuid[], ARRAY[1],
     ARRAY['e'], ARRAY['{}']::jsonb[], ARRAY[NULL]::bytea[], ARRAY[NULL]::jsonb[]);
 ```
@@ -514,11 +521,15 @@ postgres` and paste it.
 
 ## 11. Back to the C# side
 
+- `AppendProtocol.cs` holds the C# enums `ExpectedKind` and `Status`, each member carrying its PostgreSQL label, and
+  `NpgsqlDataSourceBuilder.UsePostgresEventStore` maps them to `expected_state_kind` and `append_status` on the data
+  source the application builds. That is why the C# client sends the enum array where this guide writes
+  `::dbx.expected_state_kind[]`.
 - `tests/.../AppendFunctionClient.cs` builds the nine array parameters from `Request` records and calls the function by
   name. `AppendFunctionTests.cs` exercises the same cases as this guide, and is the place to add a test if you find an
   edge while exploring.
 - `BatchingAppender.cs` queues append requests on a channel and drains them in batches; `AppendBatchCommand.cs` turns
   one batch into one call of the function, in autocommit mode so the sequence row lock is released the moment the batch
   commits. Batching is why the function takes request arrays rather than one request per call.
-- `PostgresEventStoreAdmin.InitializeAsync` runs the three scripts in one transaction under an advisory lock, the same
-  thing the PowerShell block in step 1 does by hand.
+- `PostgresEventStoreAdmin.EnsureInitializedAsync` runs the three scripts in one transaction under an advisory lock,
+  the same thing the PowerShell block in step 1 does by hand.

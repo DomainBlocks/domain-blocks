@@ -1,6 +1,7 @@
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.Testing.Events;
 using DomainBlocks.Testing.Integration.EventStore;
+using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
 using NUnit.Framework;
 using Shouldly;
 
@@ -130,7 +131,7 @@ public class PostgresFeedRecoveryTests() : PostgresIntegrationTest(x =>
 
     private static async Task<string> TerminateWalSenderAsync(CancellationToken ct)
     {
-        await using var command = DataSource.CreateCommand(
+        await using var command = PostgresTestEnvironment.DataSource.CreateCommand(
             "SELECT slot_name, pg_terminate_backend(active_pid) FROM pg_replication_slots " +
             "WHERE slot_name LIKE 'dbx_%' AND active_pid IS NOT NULL");
 
@@ -144,7 +145,7 @@ public class PostgresFeedRecoveryTests() : PostgresIntegrationTest(x =>
 
     private static async Task<List<string>> GetSlotNamesAsync(CancellationToken ct)
     {
-        await using var command = DataSource.CreateCommand(
+        await using var command = PostgresTestEnvironment.DataSource.CreateCommand(
             "SELECT slot_name FROM pg_replication_slots WHERE slot_name LIKE 'dbx_%'");
 
         var names = new List<string>();
