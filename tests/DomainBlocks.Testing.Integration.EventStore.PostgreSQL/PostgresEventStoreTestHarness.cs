@@ -3,11 +3,12 @@ using DomainBlocks.EventStore.Abstractions.Codecs;
 using DomainBlocks.EventStore.ContractMapping;
 using DomainBlocks.EventStore.PostgreSQL;
 using DomainBlocks.EventStore.TypeMapping;
+using Npgsql;
 
 namespace DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
 
 /// <summary>
-/// Binds a suite to the PostgreSQL event store: one schema per fixture on the server started by
+/// Binds a suite to the PostgreSQL event store: one schema and one data source per fixture on the server started by
 /// <see cref="PostgresTestEnvironment"/>. The schema is named after the fixture unless <paramref name="configure"/>
 /// sets one.
 /// </summary>
@@ -15,6 +16,12 @@ public sealed class PostgresEventStoreTestHarness(Action<PostgresEventStoreOptio
     IEventStoreTestHarness<StreamPosition, LogPosition>
 {
     public PostgresEventStoreOptions Options { get; private set; } = null!;
+
+    /// <summary>
+    /// The data source the fixture's stores are created over. It lives from <see cref="InitializeAsync"/> to
+    /// <see cref="DropAsync"/>, so that it can be built with settings that depend on the fixture's schema.
+    /// </summary>
+    public NpgsqlDataSource DataSource { get; private set; } = null!;
 
     public StoreCapabilities Capabilities => StoreCapabilities.IdempotentAppends;
 
@@ -25,20 +32,26 @@ public sealed class PostgresEventStoreTestHarness(Action<PostgresEventStoreOptio
         var options = new PostgresEventStoreOptions { Schema = name };
         configure?.Invoke(options);
 
-        await PostgresEventStoreAdmin.EnsureInitializedAsync(PostgresTestEnvironment.DataSource, options);
+        DataSource = PostgresTestEnvironment.CreateDataSource();
+
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(DataSource, options);
         Options = options;
     }
 
     public async Task ResetAsync()
     {
-        await using var command = PostgresTestEnvironment.DataSource.CreateCommand(
+        await using var command = DataSource.CreateCommand(
             $"TRUNCATE {Options.Schema}.event_log; " +
             $"UPDATE {Options.Schema}.sequences SET next = 0 WHERE name = 'event_log'");
 
         await command.ExecuteNonQueryAsync();
     }
 
-    public Task DropAsync() => PostgresEventStoreAdmin.DropAsync(PostgresTestEnvironment.DataSource, Options);
+    public async Task DropAsync()
+    {
+        await PostgresEventStoreAdmin.DropAsync(DataSource, Options);
+        await DataSource.DisposeAsync();
+    }
 
     public IEventStore<object, string, StreamPosition, LogPosition> CreateEventStore(
         EventTypeMap eventTypeMap,
@@ -62,7 +75,7 @@ public sealed class PostgresEventStoreTestHarness(Action<PostgresEventStoreOptio
         string loggerNameSuffix = "")
     {
         return PostgresEventStore.Create(
-            PostgresTestEnvironment.DataSource,
+            DataSource,
             eventCodec,
             options ?? Options,
             PostgresTestEnvironment.LoggerFactory.CreateLogger($"PostgresEventStore{loggerNameSuffix}"));

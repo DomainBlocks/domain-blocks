@@ -11,6 +11,10 @@ public static class PostgresTestEnvironment
 {
     private static PostgresServer? _server;
 
+    /// <summary>
+    /// A data source for administration and raw SQL against any schema on the server. A fixture's store uses the
+    /// fixture's own data source, see <see cref="PostgresEventStoreTestHarness.DataSource"/>.
+    /// </summary>
     public static NpgsqlDataSource DataSource { get; private set; } = null!;
 
     /// <summary>
@@ -25,25 +29,33 @@ public static class PostgresTestEnvironment
         _server = await PostgresServer.StartAsync();
         LoggerFactory = TestLoggerFactory.Create();
 
-        var builder = new NpgsqlDataSourceBuilder(_server.ConnectionString)
+        var connectionString = new NpgsqlConnectionStringBuilder(_server.ConnectionString)
         {
-            ConnectionStringBuilder =
-            {
-                // The replication connection is built from the data source's connection string, which only carries the
-                // password when security info is persisted.
-                PersistSecurityInfo = true,
+            // The replication connection is built from the data source's connection string, which only carries the
+            // password when security info is persisted.
+            PersistSecurityInfo = true,
 
-                MaxAutoPrepare = 16
-            }
+            MaxAutoPrepare = 16
         };
 
-        ConnectionString = builder.ConnectionStringBuilder.ConnectionString;
-        DataSource = builder.Build();
+        ConnectionString = connectionString.ConnectionString;
+        DataSource = CreateDataSource();
 
         await using var command = DataSource.CreateCommand("SHOW wal_level");
 
         if (await command.ExecuteScalarAsync() is not "logical")
             throw new InvalidOperationException("The test server must be started with wal_level=logical.");
+    }
+
+    /// <summary>
+    /// Builds a data source for the server with the shared connection settings. What a data source is built with,
+    /// such as type mappings, is fixed for its lifetime, so a fixture that needs settings of its own builds its own.
+    /// </summary>
+    public static NpgsqlDataSource CreateDataSource(Action<NpgsqlDataSourceBuilder>? configure = null)
+    {
+        var builder = new NpgsqlDataSourceBuilder(ConnectionString);
+        configure?.Invoke(builder);
+        return builder.Build();
     }
 
     public static async Task StopAsync()

@@ -1,6 +1,7 @@
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.Testing.Events;
 using DomainBlocks.Testing.Integration.EventStore;
+using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
 using NUnit.Framework;
 using Shouldly;
 
@@ -118,7 +119,7 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
 
     private static async Task<long> CountSlotsAsync(CancellationToken ct)
     {
-        await using var command = DataSource.CreateCommand(
+        await using var command = PostgresTestEnvironment.DataSource.CreateCommand(
             "SELECT count(*) FROM pg_replication_slots WHERE slot_name LIKE 'dbx_%'");
 
         return (long)(await command.ExecuteScalarAsync(ct))!;

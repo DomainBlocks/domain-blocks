@@ -189,7 +189,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
     private static async Task<List<(string Name, string Plugin, bool Temporary, bool Active)>> GetSlotsAsync(
         CancellationToken ct)
     {
-        await using var command = DataSource.CreateCommand(
+        await using var command = PostgresTestEnvironment.DataSource.CreateCommand(
             "SELECT slot_name, plugin, temporary, active FROM pg_replication_slots WHERE slot_name LIKE 'dbx_test_%'");
 
         var slots = new List<(string, string, bool, bool)>();
