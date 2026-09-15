@@ -16,7 +16,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
         var results = await Client.AppendAsync([Any("s1", JsonEvent(), JsonEvent(), JsonEvent())]);
 
         results.ShouldBe(
-            [new Result(0, AppendProtocol.StatusAppended, null, 0, 2)]);
+            [new Result(0, AppendProtocol.Status.Appended, null, 0, 2)]);
 
         var rows = await Client.ReadRowsAsync();
         rows.Select(x => x.StreamPosition).ShouldBe([0, 1, 2]);
@@ -31,7 +31,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
 
         var results = await Client.AppendAsync([Any("s1", JsonEvent())]);
 
-        results.ShouldBe([new Result(0, AppendProtocol.StatusAppended, 1, 2, 2)]);
+        results.ShouldBe([new Result(0, AppendProtocol.Status.Appended, 1, 2, 2)]);
         (await Client.ReadRowsAsync()).Select(x => x.StreamPosition).ShouldBe([0, 1, 2]);
     }
 
@@ -47,9 +47,9 @@ public class AppendFunctionTests : PostgresIntegrationTest
 
         results.Select(x => (x.Status, x.FirstPosition, x.LastPosition)).ShouldBe(
         [
-            (AppendProtocol.StatusAppended, 0L, 1L),
-            (AppendProtocol.StatusAppended, 2L, 2L),
-            (AppendProtocol.StatusAppended, 3L, 3L)
+            (AppendProtocol.Status.Appended, 0L, 1L),
+            (AppendProtocol.Status.Appended, 2L, 2L),
+            (AppendProtocol.Status.Appended, 3L, 3L)
         ]);
 
         var rows = await Client.ReadRowsAsync();
@@ -75,7 +75,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
         var results = await Client.AppendAsync([DoesNotExist("s1", JsonEvent())]);
 
         results.ShouldBe(
-            [new Result(0, AppendProtocol.StatusConflict, 1, null, null)]);
+            [new Result(0, AppendProtocol.Status.Conflict, 1, null, null)]);
 
         (await Client.ReadRowsAsync()).Count.ShouldBe(2);
     }
@@ -86,7 +86,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
         var results = await Client.AppendAsync([Exists("s1", JsonEvent())]);
 
         results.ShouldBe(
-            [new Result(0, AppendProtocol.StatusConflict, null, null, null)]);
+            [new Result(0, AppendProtocol.Status.Conflict, null, null, null)]);
 
         (await Client.ReadRowsAsync()).ShouldBeEmpty();
     }
@@ -99,7 +99,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
         var results = await Client.AppendAsync([AtVersion("s1", 1, JsonEvent())]);
 
         results.ShouldBe(
-            [new Result(0, AppendProtocol.StatusConflict, 2, null, null)]);
+            [new Result(0, AppendProtocol.Status.Conflict, 2, null, null)]);
     }
 
     [Test]
@@ -108,7 +108,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
         var results = await Client.AppendAsync([AtVersion("s1", 0, JsonEvent())]);
 
         results.ShouldBe(
-            [new Result(0, AppendProtocol.StatusConflict, null, null, null)]);
+            [new Result(0, AppendProtocol.Status.Conflict, null, null, null)]);
     }
 
     [Test]
@@ -119,7 +119,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
         var results = await Client.AppendAsync([AtVersion("s1", 1, JsonEvent())]);
 
         results.ShouldBe(
-            [new Result(0, AppendProtocol.StatusAppended, 1, 2, 2)]);
+            [new Result(0, AppendProtocol.Status.Appended, 1, 2, 2)]);
     }
 
     [Test]
@@ -136,9 +136,9 @@ public class AppendFunctionTests : PostgresIntegrationTest
 
         results.Select(x => (x.Status, x.FirstPosition, x.LastPosition)).ShouldBe(
         [
-            (AppendProtocol.StatusAppended, 1L, 1L),
-            (AppendProtocol.StatusConflict, null, null),
-            (AppendProtocol.StatusAppended, 2L, 3L)
+            (AppendProtocol.Status.Appended, 1L, 1L),
+            (AppendProtocol.Status.Conflict, null, null),
+            (AppendProtocol.Status.Appended, 2L, 3L)
         ]);
 
         (await Client.ReadRowsAsync()).Select(x => x.Position).ShouldBe([0, 1, 2, 3]);
@@ -170,7 +170,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
         var results = await Client.AppendAsync([request]);
 
         results.ShouldBe(
-            [new Result(0, AppendProtocol.StatusDuplicate, 1, null, null)]);
+            [new Result(0, AppendProtocol.Status.Duplicate, 1, null, null)]);
 
         (await Client.ReadRowsAsync()).Count.ShouldBe(2);
     }
@@ -257,7 +257,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
 
         var results = await Client.AppendAsync([request with { StreamId = "s2" }]);
 
-        results[0].Status.ShouldBe(AppendProtocol.StatusDuplicate);
+        results[0].Status.ShouldBe(AppendProtocol.Status.Duplicate);
         (await Client.ReadRowsAsync()).Count.ShouldBe(1);
     }
 
@@ -275,9 +275,9 @@ public class AppendFunctionTests : PostgresIntegrationTest
 
         results.Select(x => x.Status).ShouldBe(
         [
-            AppendProtocol.StatusAppended,
-            AppendProtocol.StatusDuplicate,
-            AppendProtocol.StatusDuplicate
+            AppendProtocol.Status.Appended,
+            AppendProtocol.Status.Duplicate,
+            AppendProtocol.Status.Duplicate
         ]);
 
         (await Client.ReadRowsAsync()).Count.ShouldBe(1);
@@ -300,10 +300,10 @@ public class AppendFunctionTests : PostgresIntegrationTest
 
         results.Select(x => (x.Status, x.FirstPosition)).ShouldBe(
         [
-            (AppendProtocol.StatusAppended, 0L),
-            (AppendProtocol.StatusDuplicate, null),
-            (AppendProtocol.StatusAppended, 1L),
-            (AppendProtocol.StatusDuplicate, null)
+            (AppendProtocol.Status.Appended, 0L),
+            (AppendProtocol.Status.Duplicate, null),
+            (AppendProtocol.Status.Appended, 1L),
+            (AppendProtocol.Status.Duplicate, null)
         ]);
 
         (await Client.ReadRowsAsync()).Select(x => x.StreamId).ShouldBe(["s1", "s3"]);
@@ -334,11 +334,11 @@ public class AppendFunctionTests : PostgresIntegrationTest
 
         results.ShouldBe(
         [
-            new Result(0, AppendProtocol.StatusAppended, null, 3, 4),
-            new Result(1, AppendProtocol.StatusConflict, 0, null, null),
-            new Result(2, AppendProtocol.StatusAppended, null, 5, 5),
-            new Result(3, AppendProtocol.StatusDuplicate, null, null, null),
-            new Result(4, AppendProtocol.StatusAppended, 1, 6, 7)
+            new Result(0, AppendProtocol.Status.Appended, null, 3, 4),
+            new Result(1, AppendProtocol.Status.Conflict, 0, null, null),
+            new Result(2, AppendProtocol.Status.Appended, null, 5, 5),
+            new Result(3, AppendProtocol.Status.Duplicate, null, null, null),
+            new Result(4, AppendProtocol.Status.Appended, 1, 6, 7)
         ]);
 
         var rows = (await Client.ReadRowsAsync()).Where(x => x.Position >= 3).ToList();
@@ -367,7 +367,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
             Exists("s3", JsonEvent())
         ]);
 
-        results.Select(x => x.Status).ShouldBe([AppendProtocol.StatusDuplicate, AppendProtocol.StatusConflict]);
+        results.Select(x => x.Status).ShouldBe([AppendProtocol.Status.Duplicate, AppendProtocol.Status.Conflict]);
         (await Client.GetSequenceNextAsync()).ShouldBe(1);
         (await Client.ReadRowsAsync()).Count.ShouldBe(1);
     }
@@ -384,9 +384,9 @@ public class AppendFunctionTests : PostgresIntegrationTest
 
         results.Select(x => (x.Status, x.ObservedVersion)).ShouldBe(
         [
-            (AppendProtocol.StatusAppended, null),
-            (AppendProtocol.StatusConflict, 0L),
-            (AppendProtocol.StatusAppended, 0L)
+            (AppendProtocol.Status.Appended, null),
+            (AppendProtocol.Status.Conflict, 0L),
+            (AppendProtocol.Status.Appended, 0L)
         ]);
 
         (await Client.ReadRowsAsync()).Select(x => x.StreamPosition).ShouldBe([0, 1]);
@@ -510,11 +510,14 @@ public class AppendFunctionTests : PostgresIntegrationTest
     [Test]
     public async Task UnknownExpectedKind_RaisesInvalidTextRepresentation()
     {
-        // The enum rejects a label it does not have when the kinds are cast, before the function runs.
-        var request = new Request("s2", "maybe", null, Guid.NewGuid(), JsonEvent());
-
+        // The enum rejects a label it does not have while the batch is read, before the function runs. The typed
+        // client cannot express it, so this goes through raw SQL.
         var ex = await Should.ThrowAsync<PostgresException>(() =>
-            Client.AppendAsync([Any("s1", JsonEvent()), request]));
+            AppendRawAsync(
+                $"ARRAY['s1', 's2'], {Kinds("'any', 'maybe'")}, ARRAY[NULL::bigint, NULL::bigint], " +
+                "ARRAY[gen_random_uuid(), gen_random_uuid()], ARRAY[1, 1], " +
+                "ARRAY['e', 'e'], ARRAY['{}'::jsonb, '{}'::jsonb], ARRAY[NULL::bytea, NULL::bytea], " +
+                "ARRAY[NULL::jsonb, NULL::jsonb]"));
 
         ex.SqlState.ShouldBe(PostgresErrorCodes.InvalidTextRepresentation);
     }
@@ -534,7 +537,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     [Test]
     public async Task AtVersionWithoutVersion_RaisesWithRequestIndex()
     {
-        var request = new Request("s2", AppendProtocol.ExpectedAtVersion, null, Guid.NewGuid(), JsonEvent());
+        var request = new Request("s2", AppendProtocol.ExpectedKind.AtVersion, null, Guid.NewGuid(), JsonEvent());
 
         await ShouldRaiseInvalidParameterValueAsync(
             () => Client.AppendAsync([Any("s1", JsonEvent()), request]),
@@ -552,7 +555,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     [Test]
     public async Task VersionWithoutAtVersion_RaisesWithRequestIndex()
     {
-        var request = new Request("s2", AppendProtocol.ExpectedAny, 3, Guid.NewGuid(), JsonEvent());
+        var request = new Request("s2", AppendProtocol.ExpectedKind.Any, 3, Guid.NewGuid(), JsonEvent());
 
         await ShouldRaiseInvalidParameterValueAsync(
             () => Client.AppendAsync([Any("s1", JsonEvent()), request]),
@@ -608,7 +611,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
         await TestContext.Out.WriteLineAsync($"Appended 5000 events in {elapsed.TotalMilliseconds:F0} ms");
 
         results.Count.ShouldBe(500);
-        results.ShouldAllBe(x => x.Status == AppendProtocol.StatusAppended);
+        results.ShouldAllBe(x => x.Status == AppendProtocol.Status.Appended);
         (await Client.GetSequenceNextAsync()).ShouldBe(5000);
         elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(5));
     }

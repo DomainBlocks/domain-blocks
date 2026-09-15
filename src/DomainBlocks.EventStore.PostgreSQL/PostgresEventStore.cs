@@ -10,8 +10,9 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 public static class PostgresEventStore
 {
     /// <summary>
-    /// Creates an event store over an existing data source. The caller owns the data source's lifetime; the store only
-    /// borrows connections from it. The schema must have been initialized with
+    /// Creates an event store over an existing data source, which must have been built with
+    /// <see cref="NpgsqlDataSourceBuilderExtensions.UsePostgresEventStore"/> for the same schema. The caller owns the
+    /// data source's lifetime; the store only borrows connections from it. The schema must have been initialized with
     /// <see cref="PostgresEventStoreAdmin.EnsureInitializedAsync"/>.
     /// </summary>
     public static PostgresEventStore<TEvent> Create<TEvent>(

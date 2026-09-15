@@ -11,6 +11,7 @@ internal sealed partial class SchemaObjectNames
     public const string EventLogTableName = "event_log";
     private const string AppendEventsFunctionName = "append_events";
     private const string ExpectedStateKindTypeName = "expected_state_kind";
+    private const string AppendStatusTypeName = "append_status";
 
     public SchemaObjectNames(string schema)
     {
@@ -27,7 +28,9 @@ internal sealed partial class SchemaObjectNames
         QuotedSchema = $"\"{schema}\"";
         EventLog = $"{QuotedSchema}.\"{EventLogTableName}\"";
         AppendEventsFunction = $"{QuotedSchema}.\"{AppendEventsFunctionName}\"";
-        ExpectedStateKindType = $"{QuotedSchema}.\"{ExpectedStateKindTypeName}\"";
+        ExpectedStateKindType = $"{schema}.{ExpectedStateKindTypeName}";
+        ExpectedStateKindArrayType = $"{ExpectedStateKindType}[]";
+        AppendStatusType = $"{schema}.{AppendStatusTypeName}";
         Publication = $"{schema}_{EventLogTableName}_pub";
     }
 
@@ -39,7 +42,15 @@ internal sealed partial class SchemaObjectNames
 
     public string AppendEventsFunction { get; }
 
+    /// <summary>
+    /// The names of the append protocol enums, unquoted and schema-qualified, which is the form Npgsql's type
+    /// mapping takes.
+    /// </summary>
     public string ExpectedStateKindType { get; }
+
+    public string ExpectedStateKindArrayType { get; }
+
+    public string AppendStatusType { get; }
 
     /// <summary>
     /// The name of the logical replication publication. Publication names are database-wide, so the schema is embedded.

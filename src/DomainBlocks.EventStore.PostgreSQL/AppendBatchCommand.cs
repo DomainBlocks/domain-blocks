@@ -16,7 +16,7 @@ internal sealed class AppendBatchCommand : IDisposable
 {
     private readonly NpgsqlCommand _command;
     private readonly NpgsqlParameter<string[]> _streamIds;
-    private readonly NpgsqlParameter<string[]> _expectedKinds;
+    private readonly NpgsqlParameter<AppendProtocol.ExpectedKind[]> _expectedKinds;
     private readonly NpgsqlParameter<long?[]> _expectedVersions;
     private readonly NpgsqlParameter<Guid[]> _commitIds;
     private readonly NpgsqlParameter<int[]> _eventCounts;
@@ -27,14 +27,18 @@ internal sealed class AppendBatchCommand : IDisposable
 
     public AppendBatchCommand(NpgsqlDataSource dataSource, SchemaObjectNames names)
     {
-        // The expected kinds travel as text and are cast to the enum here; the status comes back as text. Both keep
-        // the data source free of type mappings for the enums.
         _command = dataSource.CreateCommand(
-            "SELECT request_index, status::text, observed_version " +
-            $"FROM {names.AppendEventsFunction}($1, $2::{names.ExpectedStateKindType}[], $3, $4, $5, $6, $7, $8, $9)");
+            "SELECT request_index, status, observed_version " +
+            $"FROM {names.AppendEventsFunction}($1, $2, $3, $4, $5, $6, $7, $8, $9)");
 
         _streamIds = new NpgsqlParameter<string[]> { NpgsqlDbType = NpgsqlDbType.Text.AsArray() };
-        _expectedKinds = new NpgsqlParameter<string[]> { NpgsqlDbType = NpgsqlDbType.Text.AsArray() };
+
+        // Naming the type selects this schema's mapping of it, for a data source that maps more than one schema.
+        _expectedKinds = new NpgsqlParameter<AppendProtocol.ExpectedKind[]>
+        {
+            DataTypeName = names.ExpectedStateKindArrayType
+        };
+
         _expectedVersions = new NpgsqlParameter<long?[]> { NpgsqlDbType = NpgsqlDbType.Bigint.AsArray() };
         _commitIds = new NpgsqlParameter<Guid[]> { NpgsqlDbType = NpgsqlDbType.Uuid.AsArray() };
         _eventCounts = new NpgsqlParameter<int[]> { NpgsqlDbType = NpgsqlDbType.Integer.AsArray() };
@@ -70,16 +74,16 @@ internal sealed class AppendBatchCommand : IDisposable
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
             var request = batch[reader.GetInt32(0)];
-            var status = reader.GetString(1);
+            var status = reader.GetFieldValue<AppendProtocol.Status>(1);
 
             switch (status)
             {
-                case AppendProtocol.StatusAppended:
-                case AppendProtocol.StatusDuplicate:
+                case AppendProtocol.Status.Appended:
+                case AppendProtocol.Status.Duplicate:
                     request.TryComplete();
                     break;
 
-                case AppendProtocol.StatusConflict:
+                case AppendProtocol.Status.Conflict:
                     // A NULL observed version means the stream did not exist when the request was evaluated.
                     var observedState = reader.IsDBNull(2)
                         ? ObservedStreamState.DoesNotExist<StreamPosition>()
@@ -117,7 +121,7 @@ internal sealed class AppendBatchCommand : IDisposable
             eventCount += batch[i].Events.Length;
 
         var streamIds = new string[requestCount];
-        var expectedKinds = new string[requestCount];
+        var expectedKinds = new AppendProtocol.ExpectedKind[requestCount];
         var expectedVersions = new long?[requestCount];
         var commitIds = new Guid[requestCount];
         var eventCounts = new int[requestCount];

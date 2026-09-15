@@ -5,8 +5,9 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 public static class PostgresEventStoreAdmin
 {
     /// <summary>
-    /// Creates the schema, tables, sequence row, append functions and publication used by the event store if they do
-    /// not already exist. Safe to call on every start-up and from multiple processes concurrently.
+    /// Creates the schema, types, tables, sequence row, append functions and publication used by the event store if
+    /// they do not already exist. Safe to call on every start-up and from multiple processes concurrently. The data
+    /// source's type cache is reloaded afterwards, so a store created over the same data source can use the types.
     /// </summary>
     public static async Task EnsureInitializedAsync(
         NpgsqlDataSource dataSource,
@@ -21,17 +22,23 @@ public static class PostgresEventStoreAdmin
 
         var names = new SchemaObjectNames(options.Schema);
 
-        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await using (var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false))
+        await using (var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+        {
+            await ExecuteAsync(connection, SqlScripts.Schema(names), cancellationToken).ConfigureAwait(false);
+            await ExecuteAsync(connection, SqlScripts.AppendHelpers(names), cancellationToken).ConfigureAwait(false);
+            await ExecuteAsync(connection, SqlScripts.AppendEvents(names), cancellationToken).ConfigureAwait(false);
 
-        await ExecuteAsync(connection, SqlScripts.Schema(names), cancellationToken).ConfigureAwait(false);
-        await ExecuteAsync(connection, SqlScripts.AppendHelpers(names), cancellationToken).ConfigureAwait(false);
-        await ExecuteAsync(connection, SqlScripts.AppendEvents(names), cancellationToken).ConfigureAwait(false);
+            if (adminOptions.CreatePublication)
+                await EnsurePublicationAsync(connection, names, cancellationToken).ConfigureAwait(false);
 
-        if (adminOptions.CreatePublication)
-            await EnsurePublicationAsync(connection, names, cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
 
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        // Npgsql loads the database's types when a data source opens its first physical connection, which is before
+        // the enums above exist when the same data source initializes the schema. Connections opened from now on see
+        // them; the initializing connection has been returned to the pool.
+        await dataSource.ReloadTypesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

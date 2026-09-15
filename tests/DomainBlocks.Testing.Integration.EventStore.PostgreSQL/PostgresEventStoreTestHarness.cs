@@ -18,8 +18,8 @@ public sealed class PostgresEventStoreTestHarness(Action<PostgresEventStoreOptio
     public PostgresEventStoreOptions Options { get; private set; } = null!;
 
     /// <summary>
-    /// The data source the fixture's stores are created over. It lives from <see cref="InitializeAsync"/> to
-    /// <see cref="DropAsync"/>, so that it can be built with settings that depend on the fixture's schema.
+    /// The data source the fixture's stores are created over, with the type mappings of the fixture's schema. It
+    /// lives from <see cref="InitializeAsync"/> to <see cref="DropAsync"/>.
     /// </summary>
     public NpgsqlDataSource DataSource { get; private set; } = null!;
 
@@ -32,7 +32,7 @@ public sealed class PostgresEventStoreTestHarness(Action<PostgresEventStoreOptio
         var options = new PostgresEventStoreOptions { Schema = name };
         configure?.Invoke(options);
 
-        DataSource = PostgresTestEnvironment.CreateDataSource();
+        DataSource = PostgresTestEnvironment.CreateDataSource(builder => builder.UsePostgresEventStore(options));
 
         await PostgresEventStoreAdmin.EnsureInitializedAsync(DataSource, options);
         Options = options;

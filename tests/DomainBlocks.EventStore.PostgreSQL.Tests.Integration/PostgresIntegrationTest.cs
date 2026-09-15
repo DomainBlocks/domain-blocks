@@ -24,7 +24,7 @@ public abstract class PostgresIntegrationTest(Action<PostgresEventStoreOptions>?
 
     protected string Schema => Options.Schema;
 
-    protected AppendFunctionClient Client { get; private set; } = null!;
+    internal AppendFunctionClient Client { get; private set; } = null!;
 
     protected NpgsqlDataSource DataSource => Harness.DataSource;
 

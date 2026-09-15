@@ -6,19 +6,19 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 /// <summary>
 /// Calls the append_events function directly, so that its contract can be tested independently of the event store.
 /// </summary>
-public sealed class AppendFunctionClient(NpgsqlDataSource dataSource, string schema)
+internal sealed class AppendFunctionClient(NpgsqlDataSource dataSource, string schema)
 {
     public static Request Any(string streamId, params Event[] events) =>
-        new(streamId, AppendProtocol.ExpectedAny, null, Guid.NewGuid(), events);
+        new(streamId, AppendProtocol.ExpectedKind.Any, null, Guid.NewGuid(), events);
 
     public static Request DoesNotExist(string streamId, params Event[] events) =>
-        new(streamId, AppendProtocol.ExpectedDoesNotExist, null, Guid.NewGuid(), events);
+        new(streamId, AppendProtocol.ExpectedKind.DoesNotExist, null, Guid.NewGuid(), events);
 
     public static Request Exists(string streamId, params Event[] events) =>
-        new(streamId, AppendProtocol.ExpectedExists, null, Guid.NewGuid(), events);
+        new(streamId, AppendProtocol.ExpectedKind.Exists, null, Guid.NewGuid(), events);
 
     public static Request AtVersion(string streamId, long version, params Event[] events) =>
-        new(streamId, AppendProtocol.ExpectedAtVersion, version, Guid.NewGuid(), events);
+        new(streamId, AppendProtocol.ExpectedKind.AtVersion, version, Guid.NewGuid(), events);
 
     public static Event JsonEvent(string name = "test", string json = "{\"v\":1}") => Event.WithJson(name, json);
 
@@ -34,8 +34,8 @@ public sealed class AppendFunctionClient(NpgsqlDataSource dataSource, string sch
     {
         var events = requests.SelectMany(x => x.Events).ToArray();
 
-        var sql = $"SELECT request_index, status::text, observed_version, first_position, last_position " +
-                  $"FROM {schema}.append_events($1, $2::{schema}.expected_state_kind[], $3, $4, $5, $6, $7, $8, $9)";
+        var sql = $"SELECT request_index, status, observed_version, first_position, last_position " +
+                  $"FROM {schema}.append_events($1, $2, $3, $4, $5, $6, $7, $8, $9)";
 
         await using var command = connection is null
             ? dataSource.CreateCommand(sql)
@@ -47,9 +47,9 @@ public sealed class AppendFunctionClient(NpgsqlDataSource dataSource, string sch
             TypedValue = [.. requests.Select(x => x.StreamId)]
         });
 
-        command.Parameters.Add(new NpgsqlParameter<string[]>
+        command.Parameters.Add(new NpgsqlParameter<AppendProtocol.ExpectedKind[]>
         {
-            NpgsqlDbType = NpgsqlDbType.Text.AsArray(),
+            DataTypeName = $"{schema}.expected_state_kind[]",
             TypedValue = [.. requests.Select(x => x.ExpectedKind)]
         });
 
@@ -103,7 +103,7 @@ public sealed class AppendFunctionClient(NpgsqlDataSource dataSource, string sch
         {
             results.Add(new Result(
                 reader.GetInt32(0),
-                reader.GetString(1),
+                reader.GetFieldValue<AppendProtocol.Status>(1),
                 reader.IsDBNull(2) ? null : reader.GetInt64(2),
                 reader.IsDBNull(3) ? null : reader.GetInt64(3),
                 reader.IsDBNull(4) ? null : reader.GetInt64(4)));
@@ -159,7 +159,7 @@ public sealed class AppendFunctionClient(NpgsqlDataSource dataSource, string sch
 
     public sealed record Request(
         string StreamId,
-        string ExpectedKind,
+        AppendProtocol.ExpectedKind ExpectedKind,
         long? ExpectedVersion,
         Guid CommitId,
         params Event[] Events);
@@ -175,7 +175,7 @@ public sealed class AppendFunctionClient(NpgsqlDataSource dataSource, string sch
 
     public sealed record Result(
         int RequestIndex,
-        string Status,
+        AppendProtocol.Status Status,
         long? ObservedVersion,
         long? FirstPosition,
         long? LastPosition);
