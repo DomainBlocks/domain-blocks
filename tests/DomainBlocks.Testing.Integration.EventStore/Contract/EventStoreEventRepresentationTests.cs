@@ -1,7 +1,6 @@
 using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.ContractMapping;
-using DomainBlocks.EventStore.Pipeline;
 using DomainBlocks.EventStore.Transforms;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Events;
@@ -168,8 +167,7 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
                 Destination: "Madrid, ES")
         };
 
-        var eventStore = CreateEventStore(eventTypeMap)
-            .WithPipeline(pipeline => pipeline.Transform(new ShipmentDispatchedTransform()));
+        var eventStore = CreateEventStore(eventTypeMap).WithReadTransforms(new ShipmentDispatchedTransform());
 
         object[] readEvents;
 

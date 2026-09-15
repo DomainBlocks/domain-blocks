@@ -4,7 +4,6 @@ using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Codecs;
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Metadata;
-using DomainBlocks.EventStore.Pipeline;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.SystemTextJson;
 using KurrentDB.Client;
@@ -50,14 +49,11 @@ public class EventStoreWriteBenchmarks
         };
 
         var codec = EventCodec.Create(codecOptions);
-        var eventCount = EventCount;
+        var store = new FakeKurrentDBEventStore<IDomainEvent>(codec, new Consumer());
 
-        _eventStore = new FakeKurrentDBEventStore<IDomainEvent>(codec, new Consumer())
-            .WithPipeline(pipeline =>
-            {
-                if (WithMetadata)
-                    pipeline.ContributeMetadata(new MetadataContributor(eventCount));
-            });
+        _eventStore = WithMetadata
+            ? store.WithMetadataContributors(new MetadataContributor(EventCount))
+            : store;
 
         _appendEvents = CreateAppendEvents(EventCount, WithMetadata);
     }

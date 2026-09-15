@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Abstractions;
 
-namespace DomainBlocks.EventStore.Tests.Unit.Pipeline;
+namespace DomainBlocks.EventStore.Tests.Unit.Decoration;
 
 /// <summary>
 /// An in-memory stand-in for a store: snapshots what is appended during the append, as a real store encodes it,

@@ -2,7 +2,6 @@ using BenchmarkDotNet.Attributes;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Codecs;
 using DomainBlocks.EventStore.Codecs;
-using DomainBlocks.EventStore.Pipeline;
 using DomainBlocks.EventStore.Transforms;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.SystemTextJson;
@@ -63,8 +62,7 @@ public class EventStoreReadBenchmarks
             _ => throw new ArgumentOutOfRangeException()
         };
 
-        _eventStore = new FakeKurrentDBEventStore<IDomainEvent>(kurrentEvents, codec)
-            .WithPipeline(pipeline => pipeline.Transform(transforms));
+        _eventStore = new FakeKurrentDBEventStore<IDomainEvent>(kurrentEvents, codec).WithReadTransforms(transforms);
 
         _readStreamOptions = new ReadStreamOptions { IncludeMetadata = IncludeMetadata };
     }

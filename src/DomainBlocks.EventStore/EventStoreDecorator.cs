@@ -4,13 +4,15 @@ using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Metadata;
 using DomainBlocks.EventStore.Transforms;
 
-namespace DomainBlocks.EventStore.Pipeline;
+namespace DomainBlocks.EventStore;
 
 /// <summary>
-/// Decorates an event store with domain-facing stages. The store underneath sees only encoded events; this type
-/// contributes metadata on the way in and applies read transforms on the way out, on reads and subscriptions alike.
+/// Decorates an event store with the domain-facing hooks configured through <see cref="EventStoreExtensions"/>:
+/// metadata contributors on append and read transforms on reads and subscriptions. The store underneath sees only
+/// encoded events. One instance carries the whole configuration; adding a hook to a decorated store rebuilds it
+/// rather than stacking another layer.
 /// </summary>
-internal sealed class EventStorePipeline<TEvent, TStreamId, TStreamPos, TLogPos> :
+internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos> :
     IEventStore<TEvent, TStreamId, TStreamPos, TLogPos>,
     IAsyncDisposable
     where TEvent : notnull
@@ -23,10 +25,11 @@ internal sealed class EventStorePipeline<TEvent, TStreamId, TStreamPos, TLogPos>
 
     private readonly IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> _inner;
     private readonly IMetadataContributor<TEvent>[] _contributors;
+    private readonly IReadEventTransform<TEvent>[] _transformList;
     private readonly FrozenDictionary<Type, IReadEventTransform<TEvent>> _transforms;
     private readonly bool _allowDroppingEvents;
 
-    public EventStorePipeline(
+    public EventStoreDecorator(
         IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> inner,
         IEnumerable<IMetadataContributor<TEvent>> contributors,
         IEnumerable<IReadEventTransform<TEvent>> transforms,
@@ -34,11 +37,12 @@ internal sealed class EventStorePipeline<TEvent, TStreamId, TStreamPos, TLogPos>
     {
         _inner = inner;
         _contributors = contributors.ToArray();
+        _transformList = transforms.ToArray();
         _allowDroppingEvents = allowDroppingEvents;
 
         var transformsByType = new Dictionary<Type, IReadEventTransform<TEvent>>();
 
-        foreach (var transform in transforms)
+        foreach (var transform in _transformList)
         {
             if (!transformsByType.TryAdd(transform.SourceEventType, transform))
             {
@@ -51,6 +55,14 @@ internal sealed class EventStorePipeline<TEvent, TStreamId, TStreamPos, TLogPos>
 
         _transforms = transformsByType.ToFrozenDictionary();
     }
+
+    public IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> Inner => _inner;
+
+    public IReadOnlyList<IMetadataContributor<TEvent>> Contributors => _contributors;
+
+    public IReadOnlyList<IReadEventTransform<TEvent>> Transforms => _transformList;
+
+    public bool AllowDroppingEvents => _allowDroppingEvents;
 
     public Task AppendAsync(
         TStreamId streamId,
@@ -248,7 +260,7 @@ internal sealed class EventStorePipeline<TEvent, TStreamId, TStreamPos, TLogPos>
             throw new InvalidOperationException(
                 $"Read event transform '{transform.GetType().Name}' produced no events for " +
                 $"'{sourceType.Name}'. Dropping events hides their positions from consumers that track the last " +
-                $"observed position; call AllowDroppingEvents() on the pipeline to permit it.");
+                $"observed position; pass allowDroppingEvents to WithReadTransforms to permit it.");
         }
     }
 }

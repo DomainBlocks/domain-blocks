@@ -1,4 +1,4 @@
-# Event codec and store pipeline
+# Event codec and store decorator
 
 September 2026. Records the shape of the event translation layers after the codec refactor, the reasoning behind
 where each concern lives, and the before/after measurements.
@@ -10,9 +10,9 @@ where each concern lives, and the before/after measurements.
 ```
 EventSourcedStateStore / projections                agnostic
 ────────────────────────────────────────────────────────────────────────────
-EventStorePipeline (IEventStore decorator)          DomainBlocks.EventStore.Pipeline
-  append stage: metadata contributors, pooled chunks per batch
-  read stage:   read transforms on reads and subscriptions, 1→N, context preserved
+EventStoreDecorator (internal)                      DomainBlocks.EventStore
+  WithMetadataContributors: contributors on append, pooled chunks per batch
+  WithReadTransforms:       transforms on reads and subscriptions, 1→N, context preserved
 ────────────────────────────────────────────────────────────────────────────
 Store (PostgreSQL / MongoDB / KurrentDB)            takes IEventCodec<TEvent, TData, TMetadata>
 ────────────────────────────────────────────────────────────────────────────
@@ -57,20 +57,22 @@ Metadata that is absent, or excluded by a read, arrives as `default` (`null` for
 for KurrentDB) and decodes to `FrozenDictionary<string, string>.Empty`. MongoDB projects the field out, which
 surfaces as `BsonNull`; the BSON metadata serializer handles that itself.
 
-## Store pipeline
+## Store decorator
 
 ```csharp
 var store = PostgresEventStore.Create(dataSource, codec)
-    .WithPipeline(p => p
-        .ContributeMetadata(new CorrelationContributor())
-        .Transform(new ShipmentDispatchedTransform()));
+    .WithMetadataContributors(new CorrelationContributor())
+    .WithReadTransforms(new ShipmentDispatchedTransform());
 ```
 
-`WithPipeline` returns the store itself when no stage is configured, and otherwise an `IEventStore` decorator that
-forwards `IAsyncDisposable`. Stages that are not configured are not installed: a pipeline with only contributors
-returns the inner store's read enumerables untouched.
+Two extension methods on `IEventStore`, one per hook, each returning `IEventStore`. There is no umbrella noun: the
+hooks are a fixed pair, not a user-ordered chain, so "pipeline" or "middleware" would over-promise. Both are backed
+by one internal `EventStoreDecorator`; calling either on an already decorated store rebuilds that single decorator
+with the merged configuration rather than stacking a second layer. With nothing to add, each method returns the
+store itself, and a decorator with only contributors returns the inner store's read enumerables untouched. The
+decorator forwards `IAsyncDisposable`.
 
-### Append stage: metadata contribution
+### Metadata contributors
 
 ```csharp
 public interface IMetadataContributor<in TEvent> { void Contribute(TEvent @event, MetadataWriter metadata); }
@@ -79,11 +81,11 @@ public interface IMetadataContributor<in TEvent> { void Contribute(TEvent @event
 Contributors run in order for every event. The merge happens in pooled 4 KB chunks shared by the batch: each
 event gets a slice of one chunk, keys are de-duplicated within the slice by a linear scan, and explicit
 `AppendableEvent` metadata is overlaid last so it wins. `AppendableEvent` holds its metadata as `ReadOnlyMemory` so
-events share a chunk without copying; its `Metadata` span is unchanged. The stage is lazy, so a store that streams
+events share a chunk without copying; its `Metadata` span is unchanged. The hook is lazy, so a store that streams
 its input keeps streaming.
 
 The chunks go back to `ArrayPool` when the inner append completes, which is the point at which the store has
-consumed every event (it cannot append what it has not encoded). So the events the pipeline hands a store are valid
+consumed every event (it cannot append what it has not encoded). So the events the decorator hands a store are valid
 for the duration of the append only, and a warmed-up batch allocates nothing for the merge. The first version used
 one growing array per batch instead; it retained 16 bytes per entry for the whole batch and its doubling landed on
 the large object heap, which showed up in the benchmark as +20 % allocated and Gen2 collections. Deferring the
@@ -92,7 +94,7 @@ merge to the store layer is only free if the storage is recycled at the batch bo
 The previous contributor signature also passed the contract and wire name. Nothing used them and they tied domain
 policy to the codec, so they are gone; a contributor that needs the wire name can hold the `EventTypeMap`.
 
-### Read stage: transforms
+### Read transforms
 
 ```csharp
 public interface IReadEventTransform<TEvent>
@@ -117,7 +119,8 @@ public abstract class ReadEventTransform<TEventBase, TSourceEvent> : IReadEventT
   siblings. A transform that yields its own source type, or a chain deeper than 32, throws.
 * Untransformed events and non-event subscription messages pass through by reference. The lookup table is built once
   in the decorator, not per enumeration.
-* **A transform that yields nothing throws** unless `AllowDroppingEvents()` is set. A dropped tail event would make
+* **A transform that yields nothing throws** unless `WithReadTransforms(transforms, allowDroppingEvents: true)`
+  is used. A dropped tail event would make
   `EventSourcedStateStore` under-report the stream version on every load, so every save would conflict; dropping
   every event would make `LoadRequiredAsync` throw for an existing stream. "Ignore this event" belongs in the
   `IEventSourcedStateAdapter`, which sees every event and keeps the version right.
@@ -134,11 +137,13 @@ ever needed, an ordinal or last-in-group flag on `ReadEventContext` is the follo
 * Keeping policy in the codec and calling a transform helper from each store's read paths: 12+ call sites across
   three store projects plus the replication feed, and stores gain a dependency on domain policy.
 * One "pipeline" object replacing the codec in every store `Create`: the same call-site problem, under a new name.
+* A `WithPipeline(p => p.ContributeMetadata(...).Transform(...))` builder: the first shape of this decorator.
+  Dropped because "pipeline" suggests an ordered, extensible chain and there are exactly two fixed hooks.
 * Contract mapping as a codec decorator over `IEventCodec<object, …>`: changes the type parameter, so it is an
   adapter dressed as a decorator, and the object-typed inner codec is a type nothing else wants.
 * Metadata contribution as a codec or encoder decorator with a thread-static dictionary: zero-allocation, but puts
-  append policy in the wire layer. The batch buffer in the store stage is also zero-allocation per event.
-* A merged `KeyValuePair[]` per event in the store stage: one allocation per event.
+  append policy in the wire layer. The pooled buffer in the store decorator is also zero-allocation per event.
+* A merged `KeyValuePair[]` per event in the store decorator: one allocation per event.
 
 ## Benchmarks
 

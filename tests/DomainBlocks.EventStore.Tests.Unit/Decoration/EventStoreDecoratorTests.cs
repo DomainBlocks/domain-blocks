@@ -1,13 +1,12 @@
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Metadata;
-using DomainBlocks.EventStore.Pipeline;
 using DomainBlocks.EventStore.Transforms;
 using NUnit.Framework;
 using Shouldly;
 
-namespace DomainBlocks.EventStore.Tests.Unit.Pipeline;
+namespace DomainBlocks.EventStore.Tests.Unit.Decoration;
 
-public class EventStorePipelineTests
+public class EventStoreDecoratorTests
 {
     private FakeEventStore _inner = null!;
 
@@ -15,15 +14,56 @@ public class EventStorePipelineTests
     public void SetUp() => _inner = new FakeEventStore();
 
     [Test]
-    public void WithPipeline_NoStages_ReturnsInnerStore()
+    public void WithMetadataContributors_None_ReturnsInnerStore()
     {
-        _inner.WithPipeline(_ => { }).ShouldBeSameAs(_inner);
+        _inner.WithMetadataContributors().ShouldBeSameAs(_inner);
+    }
+
+    [Test]
+    public void WithReadTransforms_None_ReturnsInnerStore()
+    {
+        _inner.WithReadTransforms().ShouldBeSameAs(_inner);
+    }
+
+    [Test]
+    public async Task WithMetadataContributors_ThenWithReadTransforms_AppliesBothInEitherOrder()
+    {
+        _inner.ReadEvents.Add(FakeEventStore.ReadEventAt(new Legacy("a;b"), 0));
+
+        IEventStore<object, string, StreamPosition, LogPosition>[] stores =
+        [
+            _inner.WithMetadataContributors(new FixedContributor("k", "v")).WithReadTransforms(new SplitTransform()),
+            _inner.WithReadTransforms(new SplitTransform()).WithMetadataContributors(new FixedContributor("k", "v"))
+        ];
+
+        foreach (var store in stores)
+        {
+            await store.AppendAsync("s", [AppendableEvent.Create<object>(new Current("x"))]);
+            _inner.Appends[^1].Events.Single().Metadata.ShouldBe([new("k", "v")]);
+
+            var events = await store.ReadStream("s").ToArrayAsync();
+            events.Select(x => x.Payload).ShouldBe([new Current("a"), new Current("b")]);
+        }
+    }
+
+    [Test]
+    public async Task WithReadTransforms_Twice_MergesTransforms()
+    {
+        _inner.ReadEvents.Add(FakeEventStore.ReadEventAt(new Older("x;y", "z"), 0));
+
+        var store = _inner
+            .WithReadTransforms(new OlderTransform())
+            .WithReadTransforms(new SplitTransform());
+
+        var events = await store.ReadStream("s").ToArrayAsync();
+
+        events.Select(x => x.Payload).ShouldBe([new Current("x"), new Current("y"), new Current("z")]);
     }
 
     [Test]
     public async Task AppendAsync_NoContributors_PassesEventsThroughUntouched()
     {
-        var store = _inner.WithPipeline(p => p.Transform(new SplitTransform()));
+        var store = _inner.WithReadTransforms(new SplitTransform());
         AppendableEvent<object>[] events = [AppendableEvent.Create<object>(new Legacy("a"))];
 
         await store.AppendAsync("s", events);
@@ -34,7 +74,7 @@ public class EventStorePipelineTests
     [Test]
     public async Task AppendAsync_WithContributors_MergesContributedAndExplicitMetadata()
     {
-        var store = _inner.WithPipeline(p => p.ContributeMetadata(new FixedContributor("source", "pipeline")));
+        var store = _inner.WithMetadataContributors(new FixedContributor("source", "pipeline"));
 
         await store.AppendAsync("s", [AppendableEvent.Create<object>(new Current("a"), [new("user", "bob")])]);
 
@@ -46,7 +86,7 @@ public class EventStorePipelineTests
     [Test]
     public async Task AppendAsync_ExplicitMetadata_OverridesContributedEntryWithSameKey()
     {
-        var store = _inner.WithPipeline(p => p.ContributeMetadata(new FixedContributor("user", "system")));
+        var store = _inner.WithMetadataContributors(new FixedContributor("user", "system"));
 
         await store.AppendAsync("s", [AppendableEvent.Create<object>(new Current("a"), [new("user", "bob")])]);
 
@@ -56,9 +96,9 @@ public class EventStorePipelineTests
     [Test]
     public async Task AppendAsync_LaterContributorSet_OverridesEarlierContributor()
     {
-        var store = _inner.WithPipeline(p => p.ContributeMetadata(
+        var store = _inner.WithMetadataContributors(
             new FixedContributor("k", "first"),
-            new FixedContributor("k", "second")));
+            new FixedContributor("k", "second"));
 
         await store.AppendAsync("s", [AppendableEvent.Create<object>(new Current("a"))]);
 
@@ -68,10 +108,10 @@ public class EventStorePipelineTests
     [Test]
     public async Task AppendAsync_ContributorTryAdd_DoesNotOverrideExistingKey()
     {
-        var store = _inner.WithPipeline(p => p.ContributeMetadata(
+        var store = _inner.WithMetadataContributors(
             new FixedContributor("k", "first"),
             new TryAddContributor("k", "second"),
-            new TryAddContributor("other", "added")));
+            new TryAddContributor("other", "added"));
 
         await store.AppendAsync("s", [AppendableEvent.Create<object>(new Current("a"))]);
 
@@ -84,7 +124,7 @@ public class EventStorePipelineTests
     {
         // Enough entries to span several pooled chunks.
         const int eventCount = 1000;
-        var store = _inner.WithPipeline(p => p.ContributeMetadata(new IndexContributor()));
+        var store = _inner.WithMetadataContributors(new IndexContributor());
 
         var events = Enumerable.Range(0, eventCount)
             .Select(i => AppendableEvent.Create<object>(new Current($"e{i}"), [new("explicit", $"x{i}")]))
@@ -106,7 +146,7 @@ public class EventStorePipelineTests
     public async Task AppendAsync_EventWithMoreEntriesThanAChunk_KeepsAllEntries()
     {
         const int entryCount = 700;
-        var store = _inner.WithPipeline(p => p.ContributeMetadata(new WideContributor(entryCount)));
+        var store = _inner.WithMetadataContributors(new WideContributor(entryCount));
 
         await store.AppendAsync("s", [
             AppendableEvent.Create<object>(new Current("before")),
@@ -129,7 +169,7 @@ public class EventStorePipelineTests
     [Test]
     public async Task AppendAsync_TwoBatches_DoNotShareBuffers()
     {
-        var store = _inner.WithPipeline(p => p.ContributeMetadata(new IndexContributor()));
+        var store = _inner.WithMetadataContributors(new IndexContributor());
 
         await store.AppendAsync("s", [AppendableEvent.Create<object>(new Current("a"))]);
         await store.AppendAsync("s", [AppendableEvent.Create<object>(new Current("b"))]);
@@ -142,7 +182,7 @@ public class EventStorePipelineTests
     public async Task ReadStream_EventWithoutTransform_PassesThrough()
     {
         _inner.ReadEvents.Add(FakeEventStore.ReadEventAt(new Current("a"), 0));
-        var store = _inner.WithPipeline(p => p.Transform(new SplitTransform()));
+        var store = _inner.WithReadTransforms(new SplitTransform());
 
         var events = await store.ReadStream("s").ToArrayAsync();
 
@@ -154,7 +194,7 @@ public class EventStorePipelineTests
     {
         var metadata = new Dictionary<string, string> { ["user"] = "bob" };
         _inner.ReadEvents.Add(FakeEventStore.ReadEventAt(new Legacy("a;b"), 7, metadata));
-        var store = _inner.WithPipeline(p => p.Transform(new SplitTransform()));
+        var store = _inner.WithReadTransforms(new SplitTransform());
 
         var events = await store.ReadStream("s").ToArrayAsync();
 
@@ -175,7 +215,7 @@ public class EventStorePipelineTests
         var readEvent = FakeEventStore.ReadEventAt(new Legacy("a"), 3, metadata);
         _inner.ReadEvents.Add(readEvent);
         var recorder = new RecordingTransform();
-        var store = _inner.WithPipeline(p => p.Transform(recorder));
+        var store = _inner.WithReadTransforms(recorder);
 
         await store.ReadStream("s").ToArrayAsync();
 
@@ -189,7 +229,7 @@ public class EventStorePipelineTests
     {
         // Older -> Legacy("x;y") -> Current("x"), Current("y"); a sibling Current("z") must come after both.
         _inner.ReadEvents.Add(FakeEventStore.ReadEventAt(new Older("x;y", "z"), 0));
-        var store = _inner.WithPipeline(p => p.Transform(new OlderTransform(), new SplitTransform()));
+        var store = _inner.WithReadTransforms(new OlderTransform(), new SplitTransform());
 
         var events = await store.ReadAll().ToArrayAsync();
 
@@ -200,7 +240,7 @@ public class EventStorePipelineTests
     public async Task ReadStream_TransformDropsEvent_Throws()
     {
         _inner.ReadEvents.Add(FakeEventStore.ReadEventAt(new Legacy(""), 0));
-        var store = _inner.WithPipeline(p => p.Transform(new SplitTransform()));
+        var store = _inner.WithReadTransforms(new SplitTransform());
 
         var ex = await Should.ThrowAsync<InvalidOperationException>(() => store.ReadStream("s").ToArrayAsync().AsTask());
 
@@ -212,7 +252,7 @@ public class EventStorePipelineTests
     {
         _inner.ReadEvents.Add(FakeEventStore.ReadEventAt(new Legacy(""), 0));
         _inner.ReadEvents.Add(FakeEventStore.ReadEventAt(new Current("kept"), 1));
-        var store = _inner.WithPipeline(p => p.Transform(new SplitTransform()).AllowDroppingEvents());
+        var store = _inner.WithReadTransforms([new SplitTransform()], allowDroppingEvents: true);
 
         var events = await store.ReadStream("s").ToArrayAsync();
 
@@ -223,7 +263,7 @@ public class EventStorePipelineTests
     public async Task ReadStream_TransformProducesItsOwnSourceType_Throws()
     {
         _inner.ReadEvents.Add(FakeEventStore.ReadEventAt(new Legacy("a"), 0));
-        var store = _inner.WithPipeline(p => p.Transform(new IdentityTransform()));
+        var store = _inner.WithReadTransforms(new IdentityTransform());
 
         await Should.ThrowAsync<InvalidOperationException>(() => store.ReadStream("s").ToArrayAsync().AsTask());
     }
@@ -236,7 +276,7 @@ public class EventStorePipelineTests
         _inner.SubscriptionMessages.Add(SubscriptionMessage.Event.Create(FakeEventStore.ReadEventAt(new Legacy("a;b"), 0)));
         _inner.SubscriptionMessages.Add(caughtUp);
         _inner.SubscriptionMessages.Add(untouched);
-        var store = _inner.WithPipeline(p => p.Transform(new SplitTransform()));
+        var store = _inner.WithReadTransforms(new SplitTransform());
 
         var messages = await store.SubscribeToAll().ToArrayAsync();
 
@@ -250,7 +290,7 @@ public class EventStorePipelineTests
     [Test]
     public async Task SubscribeToStream_NoTransforms_ReturnsInnerEnumerable()
     {
-        var store = _inner.WithPipeline(p => p.ContributeMetadata(new FixedContributor("k", "v")));
+        var store = _inner.WithMetadataContributors(new FixedContributor("k", "v"));
 
         _inner.SubscriptionMessages.Add(new SubscriptionMessage.CaughtUp());
 
@@ -259,16 +299,23 @@ public class EventStorePipelineTests
     }
 
     [Test]
-    public void WithPipeline_DuplicateSourceType_Throws()
+    public void WithReadTransforms_DuplicateSourceType_Throws()
     {
         Should.Throw<ArgumentException>(() =>
-            _inner.WithPipeline(p => p.Transform(new SplitTransform(), new IdentityTransform())));
+            _inner.WithReadTransforms(new SplitTransform(), new IdentityTransform()));
+    }
+
+    [Test]
+    public void WithReadTransforms_DuplicateSourceTypeAcrossCalls_Throws()
+    {
+        Should.Throw<ArgumentException>(() =>
+            _inner.WithReadTransforms(new SplitTransform()).WithReadTransforms(new IdentityTransform()));
     }
 
     [Test]
     public async Task DisposeAsync_ForwardsToInnerStore()
     {
-        var store = _inner.WithPipeline(p => p.ContributeMetadata(new FixedContributor("k", "v")));
+        var store = _inner.WithMetadataContributors(new FixedContributor("k", "v"));
 
         await store.ShouldBeAssignableTo<IAsyncDisposable>()!.DisposeAsync();
 
