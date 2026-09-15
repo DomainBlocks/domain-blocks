@@ -11,19 +11,19 @@ CREATE SCHEMA IF NOT EXISTS __schema__;
 -- effectively frozen: a label added with ALTER TYPE cannot be used in the transaction that adds it.
 DO
 $init$
-BEGIN
-    -- What a request expects of its stream: anything, that it does not exist, that it exists, or that its head is at
-    -- a given version.
-    IF to_regtype('__schema__.expected_state_kind') IS NULL THEN
-        CREATE TYPE __schema__.expected_state_kind AS ENUM ('any', 'does_not_exist', 'exists', 'at_version');
-    END IF;
+    BEGIN
+        -- What a request expects of its stream: anything, that it does not exist, that it exists, or that its head is
+        -- at a given version.
+        IF to_regtype('__schema__.expected_state_kind') IS NULL THEN
+            CREATE TYPE __schema__.expected_state_kind AS ENUM ('any', 'does_not_exist', 'exists', 'at_version');
+        END IF;
 
-    -- The outcome of a request: appended, rejected because the stream was not in the expected state, or skipped
-    -- because its commit id had already been appended.
-    IF to_regtype('__schema__.append_status') IS NULL THEN
-        CREATE TYPE __schema__.append_status AS ENUM ('appended', 'conflict', 'duplicate');
-    END IF;
-END
+        -- The outcome of a request: appended, rejected because the stream was not in the expected state, or skipped
+        -- because its commit id had already been appended.
+        IF to_regtype('__schema__.append_status') IS NULL THEN
+            CREATE TYPE __schema__.append_status AS ENUM ('appended', 'conflict', 'duplicate');
+        END IF;
+    END
 $init$;
 
 -- stream_id is only ever compared for equality, so it uses the byte-wise "C" collation: under a locale collation every
