@@ -10,6 +10,7 @@ internal sealed partial class SchemaObjectNames
 {
     public const string EventLogTableName = "event_log";
     private const string AppendEventsFunctionName = "append_events";
+    private const string ExpectedStateKindTypeName = "expected_state_kind";
 
     public SchemaObjectNames(string schema)
     {
@@ -26,6 +27,7 @@ internal sealed partial class SchemaObjectNames
         QuotedSchema = $"\"{schema}\"";
         EventLog = $"{QuotedSchema}.\"{EventLogTableName}\"";
         AppendEventsFunction = $"{QuotedSchema}.\"{AppendEventsFunctionName}\"";
+        ExpectedStateKindType = $"{QuotedSchema}.\"{ExpectedStateKindTypeName}\"";
         Publication = $"{schema}_{EventLogTableName}_pub";
     }
 
@@ -36,6 +38,8 @@ internal sealed partial class SchemaObjectNames
     public string EventLog { get; }
 
     public string AppendEventsFunction { get; }
+
+    public string ExpectedStateKindType { get; }
 
     /// <summary>
     /// The name of the logical replication publication. Publication names are database-wide, so the schema is embedded.

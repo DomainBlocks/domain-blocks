@@ -34,8 +34,8 @@ public sealed class AppendFunctionClient(NpgsqlDataSource dataSource, string sch
     {
         var events = requests.SelectMany(x => x.Events).ToArray();
 
-        var sql = $"SELECT request_index, status, observed_version, first_position, last_position " +
-                  $"FROM {schema}.append_events($1, $2, $3, $4, $5, $6, $7, $8, $9)";
+        var sql = $"SELECT request_index, status::text, observed_version, first_position, last_position " +
+                  $"FROM {schema}.append_events($1, $2::{schema}.expected_state_kind[], $3, $4, $5, $6, $7, $8, $9)";
 
         await using var command = connection is null
             ? dataSource.CreateCommand(sql)
@@ -47,9 +47,9 @@ public sealed class AppendFunctionClient(NpgsqlDataSource dataSource, string sch
             TypedValue = [.. requests.Select(x => x.StreamId)]
         });
 
-        command.Parameters.Add(new NpgsqlParameter<short[]>
+        command.Parameters.Add(new NpgsqlParameter<string[]>
         {
-            NpgsqlDbType = NpgsqlDbType.Smallint.AsArray(),
+            NpgsqlDbType = NpgsqlDbType.Text.AsArray(),
             TypedValue = [.. requests.Select(x => x.ExpectedKind)]
         });
 
@@ -103,7 +103,7 @@ public sealed class AppendFunctionClient(NpgsqlDataSource dataSource, string sch
         {
             results.Add(new Result(
                 reader.GetInt32(0),
-                reader.GetInt16(1),
+                reader.GetString(1),
                 reader.IsDBNull(2) ? null : reader.GetInt64(2),
                 reader.IsDBNull(3) ? null : reader.GetInt64(3),
                 reader.IsDBNull(4) ? null : reader.GetInt64(4)));
@@ -159,7 +159,7 @@ public sealed class AppendFunctionClient(NpgsqlDataSource dataSource, string sch
 
     public sealed record Request(
         string StreamId,
-        short ExpectedKind,
+        string ExpectedKind,
         long? ExpectedVersion,
         Guid CommitId,
         params Event[] Events);
@@ -175,7 +175,7 @@ public sealed class AppendFunctionClient(NpgsqlDataSource dataSource, string sch
 
     public sealed record Result(
         int RequestIndex,
-        short Status,
+        string Status,
         long? ObservedVersion,
         long? FirstPosition,
         long? LastPosition);

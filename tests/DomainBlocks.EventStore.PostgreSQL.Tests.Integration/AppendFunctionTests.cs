@@ -207,8 +207,9 @@ public class AppendFunctionTests : PostgresIntegrationTest
         // evaluated as a function call per request. An inlined call leaves no trace of the function in the plan.
         // Column arguments keep the planner from constant-folding the call, which would hide a missing inline.
         await using var command = DataSource.CreateCommand(
-            $"EXPLAIN (VERBOSE, COSTS OFF) SELECT {Schema}.get_append_status(false, k::smallint, NULL, -1) " +
-            "FROM generate_series(0, 3) AS k");
+            $"EXPLAIN (VERBOSE, COSTS OFF) SELECT {Schema}.get_append_status(" +
+            $"false, (enum_range(NULL::{Schema}.expected_state_kind))[k], NULL, -1) " +
+            "FROM generate_series(1, 4) AS k");
 
         var plan = await ExplainAsync(command);
 
@@ -224,7 +225,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
         // inlining by itself and would fail the test for the wrong reason.
         await using var command = DataSource.CreateCommand(
             $"EXPLAIN (COSTS OFF) SELECT * FROM {Schema}.zip_requests(" +
-            "ARRAY['s1'], ARRAY[0::smallint], ARRAY[NULL::bigint], " +
+            $"ARRAY['s1'], ARRAY['any']::{Schema}.expected_state_kind[], ARRAY[NULL::bigint], " +
             "ARRAY['00000000-0000-0000-0000-000000000001'::uuid], ARRAY[1], ARRAY[]::uuid[])");
 
         var plan = await ExplainAsync(command);
@@ -451,7 +452,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     {
         await ShouldRaiseInvalidParameterValueAsync(
             () => AppendRawAsync(
-                "ARRAY['s1'], ARRAY[0::smallint, 0::smallint], ARRAY[NULL::bigint], ARRAY[gen_random_uuid()], " +
+                $"ARRAY['s1'], {Kinds("'any', 'any'")}, ARRAY[NULL::bigint], ARRAY[gen_random_uuid()], " +
                 "ARRAY[1], ARRAY['e'], ARRAY['{}'::jsonb], ARRAY[NULL::bytea], ARRAY[NULL::jsonb]"),
             "request arrays must all have length 1, the length of p_stream_ids");
     }
@@ -469,7 +470,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     {
         await ShouldRaiseInvalidParameterValueAsync(
             () => AppendRawAsync(
-                "ARRAY['s1', 's2'], ARRAY[0::smallint, 0::smallint], ARRAY[NULL::bigint, NULL::bigint], " +
+                $"ARRAY['s1', 's2'], {Kinds("'any', 'any'")}, ARRAY[NULL::bigint, NULL::bigint], " +
                 "ARRAY[gen_random_uuid(), gen_random_uuid()], ARRAY[1, 2], " +
                 "ARRAY['e', 'e'], ARRAY['{}'::jsonb, '{}'::jsonb], ARRAY[NULL::bytea, NULL::bytea], " +
                 "ARRAY[NULL::jsonb, NULL::jsonb]"),
@@ -481,7 +482,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     {
         await ShouldRaiseInvalidParameterValueAsync(
             () => AppendRawAsync(
-                "ARRAY[]::text[], ARRAY[]::smallint[], ARRAY[]::bigint[], ARRAY[]::uuid[], ARRAY[]::integer[], " +
+                $"ARRAY[]::text[], {Kinds("")}, ARRAY[]::bigint[], ARRAY[]::uuid[], ARRAY[]::integer[], " +
                 "ARRAY['e'], ARRAY['{}'::jsonb], ARRAY[NULL::bytea], ARRAY[NULL::jsonb]"),
             "event arrays must all have length 0, the sum of p_event_counts");
     }
@@ -499,7 +500,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     {
         await ShouldRaiseInvalidParameterValueAsync(
             () => AppendRawAsync(
-                "ARRAY['s1', 's2'], ARRAY[0::smallint, 0::smallint], ARRAY[NULL::bigint, NULL::bigint], " +
+                $"ARRAY['s1', 's2'], {Kinds("'any', 'any'")}, ARRAY[NULL::bigint, NULL::bigint], " +
                 "ARRAY[gen_random_uuid(), NULL::uuid], ARRAY[1, 1], " +
                 "ARRAY['e', 'e'], ARRAY['{}'::jsonb, '{}'::jsonb], ARRAY[NULL::bytea, NULL::bytea], " +
                 "ARRAY[NULL::jsonb, NULL::jsonb]"),
@@ -507,11 +508,27 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task UnknownExpectedKind_RaisesWithRequestIndex()
+    public async Task UnknownExpectedKind_RaisesInvalidTextRepresentation()
+    {
+        // The enum rejects a label it does not have when the kinds are cast, before the function runs.
+        var request = new Request("s2", "maybe", null, Guid.NewGuid(), JsonEvent());
+
+        var ex = await Should.ThrowAsync<PostgresException>(() =>
+            Client.AppendAsync([Any("s1", JsonEvent()), request]));
+
+        ex.SqlState.ShouldBe(PostgresErrorCodes.InvalidTextRepresentation);
+    }
+
+    [Test]
+    public async Task NullExpectedKind_RaisesWithRequestIndex()
     {
         await ShouldRaiseInvalidParameterValueAsync(
-            () => Client.AppendAsync([Any("s1", JsonEvent()), new Request("s2", 4, null, Guid.NewGuid(), JsonEvent())]),
-            "request 1: expected kind must be 0 (Any), 1 (DoesNotExist), 2 (Exists) or 3 (AtVersion)");
+            () => AppendRawAsync(
+                $"ARRAY['s1', 's2'], {Kinds("'any', NULL")}, ARRAY[NULL::bigint, NULL::bigint], " +
+                "ARRAY[gen_random_uuid(), gen_random_uuid()], ARRAY[1, 1], " +
+                "ARRAY['e', 'e'], ARRAY['{}'::jsonb, '{}'::jsonb], ARRAY[NULL::bytea, NULL::bytea], " +
+                "ARRAY[NULL::jsonb, NULL::jsonb]"),
+            "request 1: expected kind must not be null");
     }
 
     [Test]
@@ -521,7 +538,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
 
         await ShouldRaiseInvalidParameterValueAsync(
             () => Client.AppendAsync([Any("s1", JsonEvent()), request]),
-            "request 1: expected version must be non-negative when expected kind is 3 (AtVersion)");
+            "request 1: expected version must be non-negative when expected kind is 'at_version'");
     }
 
     [Test]
@@ -529,7 +546,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     {
         await ShouldRaiseInvalidParameterValueAsync(
             () => Client.AppendAsync([Any("s1", JsonEvent()), AtVersion("s2", -1, JsonEvent())]),
-            "request 1: expected version must be non-negative when expected kind is 3 (AtVersion)");
+            "request 1: expected version must be non-negative when expected kind is 'at_version'");
     }
 
     [Test]
@@ -539,7 +556,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
 
         await ShouldRaiseInvalidParameterValueAsync(
             () => Client.AppendAsync([Any("s1", JsonEvent()), request]),
-            "request 1: expected version must be null unless expected kind is 3 (AtVersion)");
+            "request 1: expected version must be null unless expected kind is 'at_version'");
     }
 
     [Test]
@@ -595,6 +612,11 @@ public class AppendFunctionTests : PostgresIntegrationTest
         (await Client.GetSequenceNextAsync()).ShouldBe(5000);
         elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(5));
     }
+
+    /// <summary>
+    /// The SQL of an expected kinds array: labels are text until cast to the enum.
+    /// </summary>
+    private string Kinds(string labels) => $"ARRAY[{labels}]::{Schema}.expected_state_kind[]";
 
     private async Task AppendRawAsync(string arguments)
     {
