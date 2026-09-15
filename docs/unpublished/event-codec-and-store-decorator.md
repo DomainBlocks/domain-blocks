@@ -65,12 +65,15 @@ var store = PostgresEventStore.Create(dataSource, codec)
     .WithReadTransforms(new ShipmentDispatchedTransform());
 ```
 
+These are the primitives. The usual way in is a store builder, which applies the same hooks at `Build()` and returns
+the concrete store; see [event-store-creation.md](event-store-creation.md).
+
 Two extension methods on `IEventStore`, one per hook, each returning `IEventStore`. There is no umbrella noun: the
 hooks are a fixed pair, not a user-ordered chain, so "pipeline" or "middleware" would over-promise. Both are backed
 by one internal `EventStoreDecorator`; calling either on an already decorated store rebuilds that single decorator
 with the merged configuration rather than stacking a second layer. With nothing to add, each method returns the
 store itself, and a decorator with only contributors returns the inner store's read enumerables untouched. The
-decorator forwards `IAsyncDisposable`.
+decorator forwards disposal to the store; `IEventStore` itself extends `IAsyncDisposable`.
 
 ### Metadata contributors
 
