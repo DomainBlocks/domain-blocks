@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using DomainBlocks.EventStore.Abstractions;
 
 namespace DomainBlocks.EventStore.Tests.Unit.Decoration;
 
@@ -93,6 +92,7 @@ internal sealed class FakeEventStore : IEventStore<object, string, StreamPositio
     {
         foreach (var item in items)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             await Task.Yield();
             yield return item;
         }

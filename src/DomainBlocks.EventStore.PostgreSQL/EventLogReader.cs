@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
-using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.Abstractions.Codecs;
+using DomainBlocks.EventStore.Codecs;
 using Npgsql;
 
 namespace DomainBlocks.EventStore.PostgreSQL;

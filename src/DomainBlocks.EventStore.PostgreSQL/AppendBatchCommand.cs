@@ -1,4 +1,3 @@
-using DomainBlocks.EventStore.Abstractions;
 using Npgsql;
 using NpgsqlTypes;
 

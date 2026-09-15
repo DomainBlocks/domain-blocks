@@ -1,14 +1,14 @@
 using BenchmarkDotNet.Attributes;
-using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.Abstractions.Codecs;
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Transforms;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.SystemTextJson;
 using KurrentDB.Client;
-using StreamPosition = KurrentDB.Client.StreamPosition;
 
 namespace DomainBlocks.EventStore.Benchmarks;
+
+// Inside the namespace so that it shadows DomainBlocks.EventStore.StreamPosition from the parent namespace.
+using StreamPosition = global::KurrentDB.Client.StreamPosition;
 
 /// <summary>
 /// Measures the read path without I/O: type mapping, payload and metadata deserialization, and optionally the read

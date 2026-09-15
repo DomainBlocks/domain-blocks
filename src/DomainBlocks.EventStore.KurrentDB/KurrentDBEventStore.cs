@@ -1,13 +1,13 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.Abstractions.Codecs;
+using DomainBlocks.EventStore.Codecs;
 using KurrentDB.Client;
 using KurrentStreamState = KurrentDB.Client.StreamState;
-using StreamNotFoundException = DomainBlocks.EventStore.Abstractions.StreamNotFoundException;
-using StreamPosition = KurrentDB.Client.StreamPosition;
 
 namespace DomainBlocks.EventStore.KurrentDB;
+
+// Inside the namespace so that it shadows DomainBlocks.EventStore.StreamPosition from the parent namespace.
+using StreamPosition = global::KurrentDB.Client.StreamPosition;
 
 public class KurrentDBEventStore<TEvent>(
     KurrentDBClient client,

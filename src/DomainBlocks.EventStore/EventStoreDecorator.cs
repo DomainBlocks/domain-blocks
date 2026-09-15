@@ -1,6 +1,5 @@
 using System.Collections.Frozen;
 using System.Runtime.CompilerServices;
-using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Metadata;
 using DomainBlocks.EventStore.Transforms;
 

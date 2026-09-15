@@ -1,15 +1,15 @@
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
-using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.Abstractions.Codecs;
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Metadata;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.SystemTextJson;
 using KurrentDB.Client;
-using StreamPosition = KurrentDB.Client.StreamPosition;
 
 namespace DomainBlocks.EventStore.Benchmarks;
+
+// Inside the namespace so that it shadows DomainBlocks.EventStore.StreamPosition from the parent namespace.
+using StreamPosition = global::KurrentDB.Client.StreamPosition;
 
 /// <summary>
 /// Measures the append path without I/O: contract/type mapping, payload serialization, metadata contribution and

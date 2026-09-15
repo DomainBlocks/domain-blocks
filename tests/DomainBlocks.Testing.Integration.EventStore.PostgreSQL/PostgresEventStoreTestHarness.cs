@@ -1,5 +1,5 @@
-using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.Abstractions.Codecs;
+using DomainBlocks.EventStore;
+using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.ContractMapping;
 using DomainBlocks.EventStore.PostgreSQL;
 using DomainBlocks.EventStore.TypeMapping;

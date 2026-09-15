@@ -1,4 +1,3 @@
-using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.Testing.Events;
 using DomainBlocks.Testing.Integration.EventStore;
 using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;

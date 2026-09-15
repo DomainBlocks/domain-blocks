@@ -1,4 +1,3 @@
-using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.Serialization.Abstractions;
 using DomainBlocks.Serialization.SystemTextJson;

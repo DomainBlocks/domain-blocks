@@ -1,4 +1,4 @@
-using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.ContractMapping;
 using DomainBlocks.EventStore.TypeMapping;
 

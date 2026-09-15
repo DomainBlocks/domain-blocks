@@ -1,4 +1,3 @@
-using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.MongoDB.Sequencing;
 using MongoDB.Bson;
 using MongoDB.Driver;

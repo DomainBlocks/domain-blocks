@@ -1,5 +1,3 @@
-using DomainBlocks.EventStore.Abstractions;
-
 namespace DomainBlocks.EventStore.Transforms;
 
 /// <summary>

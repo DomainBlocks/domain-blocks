@@ -1,13 +1,11 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.Abstractions.Codecs;
+using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using DomainBlocks.MongoDB.Sequencing;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
-using AppendOptions = DomainBlocks.EventStore.Abstractions.AppendOptions;
 
 namespace DomainBlocks.EventStore.MongoDB;
 

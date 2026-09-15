@@ -5,7 +5,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DomainBlocks.EventStore.Abstractions\DomainBlocks.EventStore.Abstractions.csproj"/>
+    <ProjectReference Include="..\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj"/>
   </ItemGroup>
 
 </Project>

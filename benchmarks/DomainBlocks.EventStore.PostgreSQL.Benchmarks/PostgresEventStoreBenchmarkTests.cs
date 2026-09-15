@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using DomainBlocks.Benchmarking.EventStore;
-using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Events;
 using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;

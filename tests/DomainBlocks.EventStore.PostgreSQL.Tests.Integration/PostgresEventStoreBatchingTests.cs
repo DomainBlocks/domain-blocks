@@ -1,4 +1,3 @@
-using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.Testing.Integration.EventStore;
 using Npgsql;
 using NUnit.Framework;

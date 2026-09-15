@@ -1,5 +1,4 @@
-using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.Abstractions.Codecs;
+using DomainBlocks.EventStore.Codecs;
 
 namespace DomainBlocks.EventStore.PostgreSQL;
 

@@ -1,7 +1,7 @@
 using DomainBlocks.EventSourcing.Tests.Integration.Adapters;
 using DomainBlocks.EventSourcing.Tests.Integration.DomainEvents;
 using DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
-using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.MongoDB;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Integration.EventStore.MongoDB;

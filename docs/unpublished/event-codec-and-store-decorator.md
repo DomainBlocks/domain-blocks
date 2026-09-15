@@ -17,7 +17,7 @@ EventStoreDecorator (internal)                      DomainBlocks.EventStore
 Store (PostgreSQL / MongoDB / KurrentDB)            takes IEventCodec<TEvent, TData, TMetadata>
 ────────────────────────────────────────────────────────────────────────────
 EventCodec = EventTypeMap + serializers + contract mappers      DomainBlocks.EventStore.Codecs
-IEventEncoder / IEventDecoder / IEventCodec                     DomainBlocks.EventStore.Abstractions.Codecs
+IEventEncoder / IEventDecoder / IEventCodec                     DomainBlocks.EventStore.Codecs
 ────────────────────────────────────────────────────────────────────────────
 IObjectSerializer<TData> / IMetadataSerializer<TData>            DomainBlocks.Serialization.Abstractions
 ```

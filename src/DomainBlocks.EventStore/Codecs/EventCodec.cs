@@ -1,5 +1,4 @@
 using System.Collections.Frozen;
-using DomainBlocks.EventStore.Abstractions.Codecs;
 using DomainBlocks.EventStore.ContractMapping;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.Abstractions;
