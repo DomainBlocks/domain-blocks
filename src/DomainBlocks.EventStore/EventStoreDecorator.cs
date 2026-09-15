@@ -12,8 +12,7 @@ namespace DomainBlocks.EventStore;
 /// rather than stacking another layer.
 /// </summary>
 internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos> :
-    IEventStore<TEvent, TStreamId, TStreamPos, TLogPos>,
-    IAsyncDisposable
+    IEventStore<TEvent, TStreamId, TStreamPos, TLogPos>
     where TEvent : notnull
     where TStreamId : notnull
     where TStreamPos : notnull
@@ -142,11 +141,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         return _transforms.Count == 0 ? messages : TransformSubscriptionAsync(messages);
     }
 
-    public async ValueTask DisposeAsync()
-    {
-        if (Inner is IAsyncDisposable disposable)
-            await disposable.DisposeAsync().ConfigureAwait(false);
-    }
+    public ValueTask DisposeAsync() => Inner.DisposeAsync();
 
     /// <summary>
     /// Merges contributed and explicit metadata for each event into pooled chunks shared by the batch, so no

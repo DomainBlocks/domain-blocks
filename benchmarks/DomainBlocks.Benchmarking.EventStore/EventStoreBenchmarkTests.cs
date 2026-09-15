@@ -32,8 +32,7 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(IEventStoreT
     [CancelAfter(BenchmarkTimeouts.DefaultMillis)]
     public async Task AppendAsync_MeasureLatency(CancellationToken ct)
     {
-        var eventStore = CreateEventStore(_eventTypeMap);
-        await using var disposable = eventStore as IAsyncDisposable;
+        await using var eventStore = CreateEventStore(_eventTypeMap);
 
         var runner = new AppendBenchmarkRunner();
 
@@ -88,7 +87,7 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(IEventStoreT
         }
         finally
         {
-            foreach (var instance in instances.OfType<IAsyncDisposable>())
+            foreach (var instance in instances)
                 await instance.DisposeAsync();
         }
     }

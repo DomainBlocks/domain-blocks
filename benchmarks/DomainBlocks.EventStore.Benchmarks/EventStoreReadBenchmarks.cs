@@ -228,5 +228,7 @@ public class EventStoreReadBenchmarks
         {
             throw new NotImplementedException();
         }
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }

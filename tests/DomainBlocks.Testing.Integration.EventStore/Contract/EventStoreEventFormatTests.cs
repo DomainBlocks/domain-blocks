@@ -37,8 +37,7 @@ public abstract class EventStoreEventFormatTests<TStreamPos, TLogPos>(
             EventTypeMapping.ReadWrite<TestEvent>(),
             EventTypeMapping.ReadWrite<ProtoTestEvent>(nameof(ProtoTestEvent)));
 
-        var eventStore = CreateEventStore(eventTypeMap, format);
-        await using var disposable = eventStore as IAsyncDisposable;
+        await using var eventStore = CreateEventStore(eventTypeMap, format);
 
         var streamId = $"test-{format}-{Guid.NewGuid():N}";
 

@@ -6,7 +6,7 @@ namespace DomainBlocks.EventStore.Tests.Unit.Decoration;
 /// An in-memory stand-in for a store: snapshots what is appended during the append, as a real store encodes it,
 /// and replays configured read events and subscription messages.
 /// </summary>
-internal sealed class FakeEventStore : IEventStore<object, string, StreamPosition, LogPosition>, IAsyncDisposable
+internal sealed class FakeEventStore : IEventStore<object, string, StreamPosition, LogPosition>
 {
     public sealed record AppendedEvent(object Payload, KeyValuePair<string, string>[] Metadata);
 

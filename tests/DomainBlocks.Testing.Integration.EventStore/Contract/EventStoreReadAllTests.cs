@@ -29,8 +29,8 @@ public abstract class EventStoreReadAllTests<TStreamPos, TLogPos>(IEventStoreTes
     [TearDown]
     public async Task TearDown()
     {
-        if (EventStore is IAsyncDisposable asyncDisposable)
-            await asyncDisposable.DisposeAsync();
+        if (EventStore is { } eventStore)
+            await eventStore.DisposeAsync();
     }
 
     [Test]

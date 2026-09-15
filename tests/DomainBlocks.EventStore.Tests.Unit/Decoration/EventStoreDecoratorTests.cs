@@ -373,7 +373,7 @@ public class EventStoreDecoratorTests
     {
         var store = _inner.WithMetadataContributors(new FixedContributor("k", "v"));
 
-        await store.ShouldBeAssignableTo<IAsyncDisposable>().DisposeAsync();
+        await store.DisposeAsync();
 
         _inner.Disposed.ShouldBeTrue();
     }

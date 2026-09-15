@@ -12,7 +12,7 @@ using StreamPosition = global::KurrentDB.Client.StreamPosition;
 public class KurrentDBEventStore<TEvent>(
     KurrentDBClient client,
     IEventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec) :
-    IKurrentDBEventStore<TEvent>
+    IEventStore<TEvent, string, StreamPosition, Position>
     where TEvent : notnull
 {
     public async Task AppendAsync(
@@ -79,6 +79,9 @@ public class KurrentDBEventStore<TEvent>(
     {
         throw new NotImplementedException();
     }
+
+    // The client is borrowed and the store holds no other resources yet.
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
     private static KurrentStreamState ToKurrentStreamState(ExpectedStreamState<StreamPosition> expected) =>
         expected switch

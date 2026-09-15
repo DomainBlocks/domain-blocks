@@ -53,4 +53,6 @@ public sealed class NoOpEventStore : IEventStore<object, string, StreamPosition,
     {
         throw new NotSupportedException();
     }
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }

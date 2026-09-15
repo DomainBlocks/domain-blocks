@@ -37,8 +37,8 @@ public static class EventStoreExtensions
     /// <summary>
     /// Returns a store that runs the given contributors, in order, for every appended event. Entries supplied
     /// explicitly on an <see cref="AppendableEvent{TPayload}"/> override contributed entries with the same key.
-    /// Reads are unaffected. With no contributors the store itself is returned. The result forwards
-    /// <see cref="IAsyncDisposable"/> to the store.
+    /// Reads are unaffected. With no contributors the store itself is returned. Disposing the result
+    /// disposes the store.
     /// </summary>
     public static IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> WithMetadataContributors<
         TEvent, TStreamId, TStreamPos, TLogPos>(
@@ -75,8 +75,8 @@ public static class EventStoreExtensions
     /// <summary>
     /// Returns a store that applies the given transforms to events read through <c>ReadStream</c>, <c>ReadAll</c>
     /// and both subscriptions. At most one transform may be registered per source event type. Appends are
-    /// unaffected. With no transforms the store itself is returned. The result forwards
-    /// <see cref="IAsyncDisposable"/> to the store.
+    /// unaffected. With no transforms the store itself is returned. Disposing the result
+    /// disposes the store.
     /// </summary>
     /// <remarks>
     /// A transform that returns no events throws, because a dropped event would hide its stream position from

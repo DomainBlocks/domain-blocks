@@ -1,13 +1,14 @@
 ﻿namespace DomainBlocks.EventStore;
 
 /// <summary>
-/// Defines operations for appending to and reading from an event store.
+/// Defines operations for appending to and reading from an event store. Disposing a store releases the resources
+/// it owns, such as append queues and feeds; a client the store merely borrows is never disposed.
 /// </summary>
 /// <typeparam name="TEvent">The type of events stored by the event store.</typeparam>
 /// <typeparam name="TStreamId">The type used to identify event streams.</typeparam>
 /// <typeparam name="TStreamPos">The type used to represent positions within a stream.</typeparam>
 /// <typeparam name="TLogPos">The type used to represent positions in the global event log.</typeparam>
-public interface IEventStore<TEvent, TStreamId, TStreamPos, TLogPos>
+public interface IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> : IAsyncDisposable
     where TEvent : notnull
     where TStreamId : notnull
     where TStreamPos : notnull

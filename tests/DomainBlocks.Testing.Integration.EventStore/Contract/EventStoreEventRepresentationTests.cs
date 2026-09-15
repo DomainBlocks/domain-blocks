@@ -72,8 +72,7 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
         }
         finally
         {
-            if (eventStore is IAsyncDisposable d)
-                await d.DisposeAsync();
+            await eventStore.DisposeAsync();
         }
 
         orderEvents.Length.ShouldBe(3);
@@ -113,8 +112,7 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
         }
         finally
         {
-            if (eventStore is IAsyncDisposable d)
-                await d.DisposeAsync();
+            await eventStore.DisposeAsync();
         }
 
         readEvents
@@ -181,8 +179,7 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
         }
         finally
         {
-            if (eventStore is IAsyncDisposable d)
-                await d.DisposeAsync();
+            await eventStore.DisposeAsync();
         }
 
         readEvents.ShouldBe(expectedEvents);

@@ -147,6 +147,8 @@ public class EventStoreWriteBenchmarks
         {
             throw new NotImplementedException();
         }
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     private sealed class MetadataContributor(int eventCount) : IMetadataContributor<IDomainEvent>

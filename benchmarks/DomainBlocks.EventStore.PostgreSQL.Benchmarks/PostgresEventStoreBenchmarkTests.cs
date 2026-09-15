@@ -26,8 +26,7 @@ public class PostgresEventStoreBenchmarkTests() :
     [CancelAfter(BenchmarkTimeouts.DefaultMillis)]
     public async Task SubscribeToAll_MeasureLiveLatency(CancellationToken ct)
     {
-        var eventStore = CreateEventStore(EventTypeMap);
-        await using var disposable = eventStore as IAsyncDisposable;
+        await using var eventStore = CreateEventStore(EventTypeMap);
 
         await using var enumerator = eventStore.SubscribeToAll().GetAsyncEnumerator(ct);
 

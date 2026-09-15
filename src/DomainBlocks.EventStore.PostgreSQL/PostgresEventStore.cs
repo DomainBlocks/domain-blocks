@@ -74,7 +74,8 @@ public static class PostgresEventStore
     }
 }
 
-public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> where TEvent : notnull
+public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, StreamPosition, LogPosition>
+    where TEvent : notnull
 {
     private readonly IAppender _appender;
     private readonly EventLogReader<TEvent> _reader;

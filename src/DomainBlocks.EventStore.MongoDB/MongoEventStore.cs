@@ -50,7 +50,8 @@ public static class MongoEventStore
     }
 }
 
-public sealed class MongoEventStore<TEvent> : IMongoEventStore<TEvent> where TEvent : notnull
+public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, StreamPosition, LogPosition>
+    where TEvent : notnull
 {
     private readonly IMongoSequencedAppender<BsonDocument, AppendContext> _sequencedAppender;
     private readonly IMongoCollection<BsonDocument> _eventLog;
