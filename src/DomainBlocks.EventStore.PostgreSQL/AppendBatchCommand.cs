@@ -28,7 +28,7 @@ internal sealed class AppendBatchCommand : IDisposable
     public AppendBatchCommand(NpgsqlDataSource dataSource, SchemaObjectNames names)
     {
         _command = dataSource.CreateCommand(
-            "SELECT request_index, status, observed_kind, observed_version " +
+            "SELECT request_index, status, observed_version " +
             $"FROM {names.AppendEventsFunction}($1, $2, $3, $4, $5, $6, $7, $8, $9)");
 
         _streamIds = new NpgsqlParameter<string[]> { NpgsqlDbType = NpgsqlDbType.Text.AsArray() };
@@ -78,9 +78,10 @@ internal sealed class AppendBatchCommand : IDisposable
                     break;
 
                 case AppendProtocol.StatusConflict:
-                    var observedState = reader.GetInt16(2) == AppendProtocol.ObservedAtVersion
-                        ? ObservedStreamState.AtVersion(StreamPosition.FromInt64(reader.GetInt64(3)))
-                        : ObservedStreamState.DoesNotExist<StreamPosition>();
+                    // A NULL observed version means the stream did not exist when the request was evaluated.
+                    var observedState = reader.IsDBNull(2)
+                        ? ObservedStreamState.DoesNotExist<StreamPosition>()
+                        : ObservedStreamState.AtVersion(StreamPosition.FromInt64(reader.GetInt64(2)));
 
                     request.TryComplete(new StreamAppendConflictException<StreamPosition>(
                         request.StreamId,

@@ -17,7 +17,6 @@
 -- Codes:
 --   expected kind: 0 Any, 1 DoesNotExist, 2 Exists, 3 AtVersion
 --   status:        0 Appended, 1 Conflict, 2 Duplicate
---   observed kind: 0 DoesNotExist, 1 AtVersion
 
 CREATE OR REPLACE FUNCTION __schema__.append_events(
     p_stream_ids text[],
@@ -33,7 +32,6 @@ CREATE OR REPLACE FUNCTION __schema__.append_events(
             (
                 request_index    integer,
                 status           smallint,
-                observed_kind    smallint,
                 observed_version bigint,
                 first_position   bigint,
                 last_position    bigint
@@ -181,10 +179,10 @@ BEGIN
                 UPDATE __schema__.sequences AS s
                     SET next = v_position_start + (SELECT count(*) FROM inserted)
                     WHERE s.name = c_sequence_name AND (SELECT count(*) FROM inserted) > 0)
-        -- The head before the request is what the caller observed: -1 reports as DoesNotExist with no version.
+        -- The head before the request is what the caller observed; a head of -1 means the stream did not exist,
+        -- which is reported as a NULL observed version.
         SELECT (d.ord - 1)::integer                                            AS request_index,
                d.status,
-               (CASE WHEN d.head_before < 0 THEN 0 ELSE 1 END)::smallint       AS observed_kind,
                nullif(d.head_before, -1)                                       AS observed_version,
                CASE WHEN d.status = 0 THEN d.first_pos END                     AS first_position,
                CASE WHEN d.status = 0 THEN d.first_pos + d.event_count - 1 END AS last_position

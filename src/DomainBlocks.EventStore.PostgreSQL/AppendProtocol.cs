@@ -18,9 +18,6 @@ internal static class AppendProtocol
     public const short StatusConflict = 1;
     public const short StatusDuplicate = 2;
 
-    public const short ObservedDoesNotExist = 0;
-    public const short ObservedAtVersion = 1;
-
     public static short ToExpectedKind(ExpectedStreamStateKind kind) => kind switch
     {
         ExpectedStreamStateKind.Any => ExpectedAny,

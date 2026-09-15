@@ -34,7 +34,7 @@ public sealed class AppendFunctionClient(NpgsqlDataSource dataSource, string sch
     {
         var events = requests.SelectMany(x => x.Events).ToArray();
 
-        var sql = $"SELECT request_index, status, observed_kind, observed_version, first_position, last_position " +
+        var sql = $"SELECT request_index, status, observed_version, first_position, last_position " +
                   $"FROM {schema}.append_events($1, $2, $3, $4, $5, $6, $7, $8, $9)";
 
         await using var command = connection is null
@@ -104,10 +104,9 @@ public sealed class AppendFunctionClient(NpgsqlDataSource dataSource, string sch
             results.Add(new Result(
                 reader.GetInt32(0),
                 reader.GetInt16(1),
-                reader.GetInt16(2),
+                reader.IsDBNull(2) ? null : reader.GetInt64(2),
                 reader.IsDBNull(3) ? null : reader.GetInt64(3),
-                reader.IsDBNull(4) ? null : reader.GetInt64(4),
-                reader.IsDBNull(5) ? null : reader.GetInt64(5)));
+                reader.IsDBNull(4) ? null : reader.GetInt64(4)));
         }
 
         return results;
@@ -177,7 +176,6 @@ public sealed class AppendFunctionClient(NpgsqlDataSource dataSource, string sch
     public sealed record Result(
         int RequestIndex,
         short Status,
-        short ObservedKind,
         long? ObservedVersion,
         long? FirstPosition,
         long? LastPosition);
