@@ -1,4 +1,4 @@
-﻿using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Codecs;
@@ -11,6 +11,10 @@ using StreamPosition = KurrentDB.Client.StreamPosition;
 
 namespace DomainBlocks.EventStore.Benchmarks;
 
+/// <summary>
+/// Measures the append path without I/O: contract/type mapping, payload serialization, metadata contribution and
+/// metadata serialization for <see cref="EventCount"/> events per operation.
+/// </summary>
 [MemoryDiagnoser]
 public class EventStoreWriteBenchmarks
 {
@@ -26,6 +30,14 @@ public class EventStoreWriteBenchmarks
     [Params(10_000)]
     public int EventCount { get; set; }
 
+    /// <summary>
+    /// When <see langword="true"/>, every event carries one explicit metadata entry and one metadata contributor adds
+    /// a second, so the metadata merge and serialization paths are exercised. When <see langword="false"/>, events
+    /// carry no metadata and no contributors are configured.
+    /// </summary>
+    [Params(false, true)]
+    public bool WithMetadata { get; set; }
+
     [GlobalSetup]
     public void GlobalSetup()
     {
@@ -34,13 +46,13 @@ public class EventStoreWriteBenchmarks
             TypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>()),
             EventSerializer = EventSerde,
             MetadataSerializer = MetadataSerde,
-            MetadataContributors = [new MetadataContributor(EventCount)]
+            MetadataContributors = WithMetadata ? [new MetadataContributor(EventCount)] : []
         };
 
         var encoder = EventEncoder.Create(encoderOptions);
 
         _eventStore = new FakeKurrentDBEventStore<IDomainEvent>(encoder, new Consumer());
-        _appendEvents = CreateAppendEvents(EventCount);
+        _appendEvents = CreateAppendEvents(EventCount, WithMetadata);
     }
 
     [Benchmark]
@@ -49,19 +61,21 @@ public class EventStoreWriteBenchmarks
         return _eventStore.AppendAsync(StreamId, _appendEvents);
     }
 
-    private static AppendableEvent<IDomainEvent>[] CreateAppendEvents(int count)
+    private static AppendableEvent<IDomainEvent>[] CreateAppendEvents(int count, bool withMetadata)
     {
         var events = new AppendableEvent<IDomainEvent>[count];
 
         for (var i = 0; i < count; i++)
         {
-            events[i] = new AppendableEvent<IDomainEvent>(
-                new TestEvent
-                {
-                    Value1 = $"value1-{i}",
-                    Value2 = $"value2-{i}"
-                },
-                [KeyValuePair.Create("Value1", $"value1-{i}")]);
+            var @event = new TestEvent
+            {
+                Value1 = $"value1-{i}",
+                Value2 = $"value2-{i}"
+            };
+
+            events[i] = withMetadata
+                ? new AppendableEvent<IDomainEvent>(@event, [KeyValuePair.Create("Value1", $"value1-{i}")])
+                : new AppendableEvent<IDomainEvent>(@event);
         }
 
         return events;

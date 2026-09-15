@@ -1,7 +1,8 @@
-﻿using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Attributes;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Codecs;
 using DomainBlocks.EventStore.Codecs;
+using DomainBlocks.EventStore.Transforms;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.SystemTextJson;
 using KurrentDB.Client;
@@ -9,6 +10,10 @@ using StreamPosition = KurrentDB.Client.StreamPosition;
 
 namespace DomainBlocks.EventStore.Benchmarks;
 
+/// <summary>
+/// Measures the read path without I/O: type mapping, payload and metadata deserialization, and optionally the read
+/// transform stage, for <see cref="EventCount"/> events per operation.
+/// </summary>
 [MemoryDiagnoser]
 public class EventStoreReadBenchmarks
 {
@@ -19,9 +24,18 @@ public class EventStoreReadBenchmarks
 
     private FakeKurrentDBEventStore<IDomainEvent> _eventStore = null!;
     private ReadStreamOptions _readStreamOptions = null!;
+    private IReadEventTransform<IDomainEvent, string, StreamPosition, Position>[] _transforms = [];
 
     [Params(false, true)]
     public bool IncludeMetadata { get; set; }
+
+    /// <summary>
+    /// <see cref="TransformMode.None"/> reads decoded events as-is. <see cref="TransformMode.Probe"/> registers a
+    /// transform for a type that never occurs, so only the per-event lookup is paid. <see cref="TransformMode.FanOut"/>
+    /// registers a transform that turns every event into two.
+    /// </summary>
+    [Params(TransformMode.None, TransformMode.Probe, TransformMode.FanOut)]
+    public TransformMode Transforms { get; set; }
 
     //[Params(100, 1_000, 10_000)]
     [Params(10_000)]
@@ -43,13 +57,26 @@ public class EventStoreReadBenchmarks
 
         _eventStore = new FakeKurrentDBEventStore<IDomainEvent>(kurrentEvents, decoder);
         _readStreamOptions = new ReadStreamOptions { IncludeMetadata = IncludeMetadata };
+
+        _transforms = Transforms switch
+        {
+            TransformMode.None => [],
+            TransformMode.Probe => [new UnusedEventTransform()],
+            TransformMode.FanOut => [new TestEventFanOutTransform()],
+            _ => throw new ArgumentOutOfRangeException()
+        };
     }
 
     [Benchmark]
     public async Task ReadStream_NoIO()
     {
+        var events = _eventStore.ReadStream(StreamId, options: _readStreamOptions);
+
+        if (Transforms != TransformMode.None)
+            events = events.Transform(_transforms);
+
         // Force enumeration
-        await foreach (var _ in _eventStore.ReadStream(StreamId, options: _readStreamOptions))
+        await foreach (var _ in events)
         {
         }
     }
@@ -98,12 +125,48 @@ public class EventStoreReadBenchmarks
         return resolvedEvents;
     }
 
+    public enum TransformMode
+    {
+        None,
+        Probe,
+        FanOut
+    }
+
     private interface IDomainEvent;
 
     private sealed class TestEvent : IDomainEvent
     {
         public required string Value1 { get; init; }
         public required string Value2 { get; init; }
+    }
+
+    private sealed class TestEventPart : IDomainEvent
+    {
+        public required string Value { get; init; }
+    }
+
+    private sealed class UnusedEvent : IDomainEvent;
+
+    private sealed class UnusedEventTransform :
+        ReadEventTransform<IDomainEvent, UnusedEvent, string, StreamPosition, Position>
+    {
+        protected override IEnumerable<IDomainEvent> Apply(
+            UnusedEvent @event,
+            ReadEventContext<string, StreamPosition, Position> context)
+        {
+            throw new InvalidOperationException("This transform should never be applied.");
+        }
+    }
+
+    private sealed class TestEventFanOutTransform :
+        ReadEventTransform<IDomainEvent, TestEvent, string, StreamPosition, Position>
+    {
+        protected override IEnumerable<IDomainEvent> Apply(
+            TestEvent @event,
+            ReadEventContext<string, StreamPosition, Position> context)
+        {
+            return [new TestEventPart { Value = @event.Value1 }, new TestEventPart { Value = @event.Value2 }];
+        }
     }
 
     private sealed class FakeKurrentDBEventStore<TEvent>(
