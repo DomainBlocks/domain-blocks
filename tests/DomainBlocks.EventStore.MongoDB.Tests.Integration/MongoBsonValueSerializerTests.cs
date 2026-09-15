@@ -52,17 +52,10 @@ public class MongoBsonValueSerializerTests
             EventTypeMapping.ReadWrite<TestEvent>(),
             EventTypeMapping.ReadWrite<ProtoTestEvent>(nameof(ProtoTestEvent)));
 
-        var eventCodec = EventCodec.Create(new EventCodecOptions<object, BsonValue, BsonValue>
-        {
-            TypeMap = eventTypeMap,
-            EventSerializer = serializer,
-            MetadataSerializer = new BsonDocumentMetadataSerializer()
-        });
-
-        await using var eventStore = MongoEventStore.Create(
-            MongoTestEnvironment.MongoClient,
-            eventCodec,
-            _harness.Options);
+        await using var eventStore = _harness.CreateBuilder()
+            .UseEventTypeMap(eventTypeMap)
+            .UseEventSerializer(serializer)
+            .Build();
 
         var streamId = $"test-{serializer.GetType().Name}-{Guid.NewGuid():N}";
 

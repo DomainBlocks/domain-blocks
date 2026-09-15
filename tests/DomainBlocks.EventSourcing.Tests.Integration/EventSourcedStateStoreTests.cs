@@ -5,7 +5,6 @@ using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.MongoDB;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Integration.EventStore.MongoDB;
-using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using Shouldly;
 
@@ -28,13 +27,12 @@ public class EventSourcedStateStoreTests
             EventTypeMapping.ReadWrite<ItemAddedToShoppingCart>(),
             EventTypeMapping.ReadWrite<ItemRemovedFromShoppingCart>());
 
-        var eventCodec = TestMongoEventCodec.Create<IDomainEvent>(eventTypeMap);
-
-        _eventStore = MongoEventStore.Create(
-            MongoTestEnvironment.MongoClient,
-            eventCodec,
-            _options,
-            MongoTestEnvironment.LoggerFactory.CreateLogger<MongoEventStore<IDomainEvent>>());
+        _eventStore = new MongoEventStoreBuilder<IDomainEvent>()
+            .UseClient(MongoTestEnvironment.MongoClient)
+            .UseOptions(_options)
+            .UseEventTypeMap(eventTypeMap)
+            .UseLoggerFactory(MongoTestEnvironment.LoggerFactory)
+            .Build();
 
         _store = EventSourcedStateStore.Create(_eventStore, new AggregateAdapter<ShoppingCart, ShoppingCartState>());
 
