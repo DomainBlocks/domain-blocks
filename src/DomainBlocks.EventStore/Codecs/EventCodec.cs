@@ -29,8 +29,8 @@ public sealed class EventCodec<TEvent, TEventData, TMetadata> : IEventCodec<TEve
     private readonly EventTypeMap _typeMap;
     private readonly IObjectSerializer<TEventData> _eventSerializer;
     private readonly IMetadataSerializer<TMetadata> _metadataSerializer;
-    private readonly FrozenDictionary<Type, IAppendEventContractMapper<TEvent>> _appendMappers;
-    private readonly FrozenDictionary<Type, IReadEventContractMapper<TEvent>> _readMappers;
+    private readonly FrozenDictionary<Type, IEventContractMapper<TEvent>> _appendMappers;
+    private readonly FrozenDictionary<Type, IEventContractMapper<TEvent>> _readMappers;
 
     public EventCodec(EventCodecOptions<TEvent, TEventData, TMetadata> options)
     {
@@ -41,8 +41,8 @@ public sealed class EventCodec<TEvent, TEventData, TMetadata> : IEventCodec<TEve
         _metadataSerializer = options.MetadataSerializer;
 
         var mappers = options.ContractMappers.ToArray();
-        _appendMappers = mappers.ToFrozenDictionary(x => x.EventType, x => (IAppendEventContractMapper<TEvent>)x);
-        _readMappers = mappers.ToFrozenDictionary(x => x.ContractType, x => (IReadEventContractMapper<TEvent>)x);
+        _appendMappers = mappers.ToFrozenDictionary(x => x.EventType, x => x);
+        _readMappers = mappers.ToFrozenDictionary(x => x.ContractType, x => x);
     }
 
     public EncodedEvent<TEventData, TMetadata> Encode(

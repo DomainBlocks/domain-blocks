@@ -159,7 +159,8 @@ public class EventStoreDecoratorTests
 
         foreach (var e in appended)
         {
-            e.Metadata.Take(entryCount).ShouldBe(Enumerable.Range(0, entryCount).Select(i => new KeyValuePair<string, string>($"k{i}", $"v{i}")));
+            e.Metadata.Take(entryCount).ShouldBe(Enumerable.Range(0, entryCount)
+                .Select(i => new KeyValuePair<string, string>($"k{i}", $"v{i}")));
         }
 
         appended[1].Metadata.Length.ShouldBe(entryCount + 1);
@@ -242,7 +243,8 @@ public class EventStoreDecoratorTests
         _inner.ReadEvents.Add(FakeEventStore.ReadEventAt(new Legacy(""), 0));
         var store = _inner.WithReadTransforms(new SplitTransform());
 
-        var ex = await Should.ThrowAsync<InvalidOperationException>(() => store.ReadStream("s").ToArrayAsync().AsTask());
+        var ex = await Should.ThrowAsync<InvalidOperationException>(() =>
+            store.ReadStream("s").ToArrayAsync().AsTask());
 
         ex.Message.ShouldContain("droppedEventPlaceholder");
     }
@@ -279,7 +281,8 @@ public class EventStoreDecoratorTests
     [Test]
     public async Task SubscribeToAll_DroppedEvent_WithPlaceholder_EmitsPlaceholderMessage()
     {
-        _inner.SubscriptionMessages.Add(SubscriptionMessage.Event.Create(FakeEventStore.ReadEventAt(new Legacy(""), 9)));
+        _inner.SubscriptionMessages.Add(
+            SubscriptionMessage.Event.Create(FakeEventStore.ReadEventAt(new Legacy(""), 9)));
         var store = _inner.WithReadTransforms([new SplitTransform()], DroppedEvent.Instance);
 
         var messages = await store.SubscribeToAll().ToArrayAsync();
@@ -324,7 +327,10 @@ public class EventStoreDecoratorTests
     {
         var caughtUp = new SubscriptionMessage.CaughtUp();
         var untouched = SubscriptionMessage.Event.Create(FakeEventStore.ReadEventAt(new Current("c"), 1));
-        _inner.SubscriptionMessages.Add(SubscriptionMessage.Event.Create(FakeEventStore.ReadEventAt(new Legacy("a;b"), 0)));
+
+        _inner.SubscriptionMessages.Add(
+            SubscriptionMessage.Event.Create(FakeEventStore.ReadEventAt(new Legacy("a;b"), 0)));
+
         _inner.SubscriptionMessages.Add(caughtUp);
         _inner.SubscriptionMessages.Add(untouched);
         var store = _inner.WithReadTransforms(new SplitTransform());
@@ -368,14 +374,14 @@ public class EventStoreDecoratorTests
     {
         var store = _inner.WithMetadataContributors(new FixedContributor("k", "v"));
 
-        await store.ShouldBeAssignableTo<IAsyncDisposable>()!.DisposeAsync();
+        await store.ShouldBeAssignableTo<IAsyncDisposable>().DisposeAsync();
 
         _inner.Disposed.ShouldBeTrue();
     }
 
-    private static object Payload(SubscriptionMessage message) =>
-        message.ShouldBeOfType<SubscriptionMessage.Event<ReadEvent<object, string, StreamPosition, LogPosition>>>()
-            .Value.Payload;
+    private static object Payload(SubscriptionMessage message) => message
+        .ShouldBeOfType<SubscriptionMessage.Event<ReadEvent<object, string, StreamPosition, LogPosition>>>()
+        .Value.Payload;
 
     private sealed record Older(string Values, string Extra);
 
@@ -437,6 +443,6 @@ public class EventStoreDecoratorTests
     {
         private int _index;
 
-        public void Contribute(object @event, MetadataWriter metadata) => metadata.Set("index", (_index++).ToString());
+        public void Contribute(object @event, MetadataWriter metadata) => metadata.Set("index", _index++.ToString());
     }
 }

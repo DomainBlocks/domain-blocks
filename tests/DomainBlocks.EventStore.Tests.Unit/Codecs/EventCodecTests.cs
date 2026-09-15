@@ -89,7 +89,8 @@ public class EventCodecTests
     [Test]
     public void Decode_WithContractMapper_MapsContractBackToDomainEvent()
     {
-        var (payload, _) = CreateCodec(new OrderShippedMapper()).Decode("OrderShipped", "OrderShippedContract:o1", null);
+        var (payload, _) = CreateCodec(new OrderShippedMapper())
+            .Decode("OrderShipped", "OrderShippedContract:o1", null);
 
         payload.ShouldBe(new OrderShipped("o1"));
     }

@@ -55,19 +55,22 @@ public static class EventStoreExtensions
         if (contributors.Length == 0)
             return eventStore;
 
-        return eventStore is EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos> decorated
-            ? new EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos>(
+        if (eventStore is EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos> decorated)
+        {
+            return new EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos>(
                 decorated.Inner,
                 [.. decorated.Contributors, .. contributors],
                 decorated.Transforms,
                 decorated.HasDroppedEventPlaceholder,
-                decorated.DroppedEventPlaceholder)
-            : new EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos>(
-                eventStore,
-                contributors,
-                [],
-                hasDroppedEventPlaceholder: false,
-                droppedEventPlaceholder: default!);
+                decorated.DroppedEventPlaceholder);
+        }
+
+        return new EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos>(
+            eventStore,
+            contributors,
+            [],
+            hasDroppedEventPlaceholder: false,
+            droppedEventPlaceholder: default!);
     }
 
     /// <summary>

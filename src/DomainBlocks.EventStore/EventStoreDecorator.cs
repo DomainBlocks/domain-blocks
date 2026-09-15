@@ -23,12 +23,9 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
     // Guards against transform cycles (A -> B -> A) that the same-type check cannot see.
     private const int MaxTransformDepth = 32;
 
-    private readonly IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> _inner;
     private readonly IMetadataContributor<TEvent>[] _contributors;
     private readonly IReadEventTransform<TEvent>[] _transformList;
     private readonly FrozenDictionary<Type, IReadEventTransform<TEvent>> _transforms;
-    private readonly bool _hasDroppedEventPlaceholder;
-    private readonly TEvent _droppedEventPlaceholder;
 
     public EventStoreDecorator(
         IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> inner,
@@ -37,11 +34,11 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         bool hasDroppedEventPlaceholder,
         TEvent droppedEventPlaceholder)
     {
-        _inner = inner;
-        _contributors = contributors.ToArray();
-        _transformList = transforms.ToArray();
-        _hasDroppedEventPlaceholder = hasDroppedEventPlaceholder;
-        _droppedEventPlaceholder = droppedEventPlaceholder;
+        Inner = inner;
+        _contributors = [.. contributors];
+        _transformList = [.. transforms];
+        HasDroppedEventPlaceholder = hasDroppedEventPlaceholder;
+        DroppedEventPlaceholder = droppedEventPlaceholder;
 
         var transformsByType = new Dictionary<Type, IReadEventTransform<TEvent>>();
 
@@ -67,15 +64,15 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         }
     }
 
-    public IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> Inner => _inner;
+    public IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> Inner { get; }
 
     public IReadOnlyList<IMetadataContributor<TEvent>> Contributors => _contributors;
 
     public IReadOnlyList<IReadEventTransform<TEvent>> Transforms => _transformList;
 
-    public bool HasDroppedEventPlaceholder => _hasDroppedEventPlaceholder;
+    public bool HasDroppedEventPlaceholder { get; }
 
-    public TEvent DroppedEventPlaceholder => _droppedEventPlaceholder;
+    public TEvent DroppedEventPlaceholder { get; }
 
     public Task AppendAsync(
         TStreamId streamId,
@@ -88,7 +85,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         ArgumentNullException.ThrowIfNull(events);
 
         return _contributors.Length == 0
-            ? _inner.AppendAsync(streamId, events, expectedState, commitId, options, cancellationToken)
+            ? Inner.AppendAsync(streamId, events, expectedState, commitId, options, cancellationToken)
             : AppendWithMetadataAsync(streamId, events, expectedState, commitId, options, cancellationToken);
     }
 
@@ -104,8 +101,9 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         // pool here. The events handed to the store are valid only for the duration of the append.
         using var buffer = new MetadataBuffer();
 
-        await _inner
-            .AppendAsync(streamId, ContributeMetadata(events, buffer), expectedState, commitId, options, cancellationToken)
+        await Inner
+            .AppendAsync(streamId, ContributeMetadata(events, buffer), expectedState, commitId, options,
+                cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -114,7 +112,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         ReadOrigin<TLogPos>? origin = null,
         ReadAllOptions? options = null)
     {
-        var events = _inner.ReadAll(direction, origin, options);
+        var events = Inner.ReadAll(direction, origin, options);
         return _transforms.Count == 0 ? events : TransformAsync(events);
     }
 
@@ -124,7 +122,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         ReadOrigin<TStreamPos>? origin = null,
         ReadStreamOptions? options = null)
     {
-        var events = _inner.ReadStream(streamId, direction, origin, options);
+        var events = Inner.ReadStream(streamId, direction, origin, options);
         return _transforms.Count == 0 ? events : TransformAsync(events);
     }
 
@@ -132,7 +130,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         SubscriptionOrigin<TLogPos>? origin = null,
         SubscriptionOptions? options = null)
     {
-        var messages = _inner.SubscribeToAll(origin, options);
+        var messages = Inner.SubscribeToAll(origin, options);
         return _transforms.Count == 0 ? messages : TransformSubscriptionAsync(messages);
     }
 
@@ -141,13 +139,13 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         SubscriptionOrigin<TStreamPos>? origin = null,
         SubscriptionOptions? options = null)
     {
-        var messages = _inner.SubscribeToStream(streamId, origin, options);
+        var messages = Inner.SubscribeToStream(streamId, origin, options);
         return _transforms.Count == 0 ? messages : TransformSubscriptionAsync(messages);
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (_inner is IAsyncDisposable disposable)
+        if (Inner is IAsyncDisposable disposable)
             await disposable.DisposeAsync().ConfigureAwait(false);
     }
 
@@ -273,7 +271,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         if (produced)
             return;
 
-        if (!_hasDroppedEventPlaceholder)
+        if (!HasDroppedEventPlaceholder)
         {
             throw new InvalidOperationException(
                 $"Read event transform '{transform.GetType().Name}' produced no events for '{sourceType.Name}'. " +
@@ -281,6 +279,6 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
                 "pass a droppedEventPlaceholder to WithReadTransforms to have it emitted in the event's place.");
         }
 
-        output.Add(ReadEvent.Create(_droppedEventPlaceholder, context));
+        output.Add(ReadEvent.Create(DroppedEventPlaceholder, context));
     }
 }

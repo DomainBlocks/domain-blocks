@@ -12,10 +12,9 @@ public interface IByteMetadataSerializer : IMetadataSerializer<byte[]>, IMetadat
     IReadOnlyDictionary<string, string> IMetadataSerializer<byte[]>.Deserialize(byte[] data) =>
         Deserialize(data.AsSpan());
 
+    ReadOnlyMemory<byte> IMetadataSerializer<ReadOnlyMemory<byte>>.Serialize(
+        ReadOnlySpan<KeyValuePair<string, string>> metadata) => ((IMetadataSerializer<byte[]>)this).Serialize(metadata);
+
     IReadOnlyDictionary<string, string> IMetadataSerializer<ReadOnlyMemory<byte>>.Deserialize(
         ReadOnlyMemory<byte> data) => Deserialize(data.Span);
-
-    ReadOnlyMemory<byte> IMetadataSerializer<ReadOnlyMemory<byte>>.Serialize(
-        ReadOnlySpan<KeyValuePair<string, string>> metadata) =>
-        ((IMetadataSerializer<byte[]>)this).Serialize(metadata);
 }

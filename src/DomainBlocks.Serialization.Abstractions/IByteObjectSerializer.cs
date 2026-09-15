@@ -11,9 +11,9 @@ public interface IByteObjectSerializer : IObjectSerializer<byte[]>, IObjectSeria
 
     object IObjectSerializer<byte[]>.Deserialize(byte[] data, Type type) => Deserialize(data.AsSpan(), type);
 
-    object IObjectSerializer<ReadOnlyMemory<byte>>.Deserialize(ReadOnlyMemory<byte> data, Type type) =>
-        Deserialize(data.Span, type);
-
     ReadOnlyMemory<byte> IObjectSerializer<ReadOnlyMemory<byte>>.Serialize(object value) =>
         ((IObjectSerializer<byte[]>)this).Serialize(value);
+
+    object IObjectSerializer<ReadOnlyMemory<byte>>.Deserialize(ReadOnlyMemory<byte> data, Type type) =>
+        Deserialize(data.Span, type);
 }
