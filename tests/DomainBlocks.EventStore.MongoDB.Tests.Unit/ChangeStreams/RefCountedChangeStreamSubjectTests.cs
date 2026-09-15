@@ -1,4 +1,5 @@
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
+using MongoDB.Bson;
 using NUnit.Framework;
 using Shouldly;
 
@@ -158,6 +159,8 @@ public class RefCountedChangeStreamSubjectTests
         private readonly TaskCompletionSource _completionTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public Task Completion => _completionTcs.Task;
+
+        public BsonTimestamp OperationTime { get; } = new(1, 1);
 
         public int DisposeCount { get; private set; }
 

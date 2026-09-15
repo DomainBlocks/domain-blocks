@@ -52,16 +52,30 @@ public static class MongoEventStore
     }
 }
 
-public sealed class MongoEventStore<TEvent>(
-    IMongoSequencedAppender<BsonDocument, AppendContext> sequencedAppender,
-    IMongoCollection<BsonDocument> eventLog,
-    EventCodec<TEvent, BsonValue, BsonValue> eventCodec,
-    ILogger? logger = null) :
-    IMongoEventStore<TEvent>
-    where TEvent : notnull
+public sealed class MongoEventStore<TEvent> : IMongoEventStore<TEvent> where TEvent : notnull
 {
-    private readonly RefCountedChangeStreamSubject<ChangeStreamDocument<BsonDocument>> _allEventsSubject =
-        CreateAllEventsChangeStreamSubject(eventLog, logger);
+    private readonly IMongoSequencedAppender<BsonDocument, AppendContext> _sequencedAppender;
+    private readonly IMongoCollection<BsonDocument> _eventLog;
+    private readonly EventCodec<TEvent, BsonValue, BsonValue> _eventCodec;
+    private readonly ILogger? _logger;
+    private readonly RefCountedChangeStreamSubject<ChangeStreamDocument<BsonDocument>> _allEventsSubject;
+
+    public MongoEventStore(
+        IMongoSequencedAppender<BsonDocument, AppendContext> sequencedAppender,
+        IMongoCollection<BsonDocument> eventLog,
+        EventCodec<TEvent, BsonValue, BsonValue> eventCodec,
+        ILogger? logger = null)
+    {
+        _sequencedAppender = sequencedAppender;
+        _eventCodec = eventCodec;
+        _logger = logger;
+
+        _eventLog = eventLog
+            .WithReadConcern(ReadConcern.Majority)
+            .WithReadPreference(ReadPreference.Primary);
+
+        _allEventsSubject = CreateAllEventsSubject(_eventLog, logger);
+    }
 
     public async Task AppendAsync(
         string streamId,
@@ -78,7 +92,7 @@ public sealed class MongoEventStore<TEvent>(
         var bsonStreamId = new BsonString(streamId);
         var bsonCommitId = new BsonBinaryData(commitId.Value, GuidRepresentation.Standard);
 
-        var eventDocuments = eventCodec.Encoder
+        var eventDocuments = _eventCodec.Encoder
             .Encode(events)
             .Select((x, i) => new BsonDocument
             {
@@ -93,7 +107,7 @@ public sealed class MongoEventStore<TEvent>(
         var context = new AppendContext(commitId.Value, streamId, expectedState.Value);
         var appendOptions = new DomainBlocks.MongoDB.Sequencing.AppendOptions { Timeout = options.Timeout };
 
-        await sequencedAppender
+        await _sequencedAppender
             .AppendAsync(eventDocuments, context, appendOptions, cancellationToken)
             .ConfigureAwait(false);
     }
@@ -119,7 +133,7 @@ public sealed class MongoEventStore<TEvent>(
 
             var query = GetReadQuery(direction, origin, EventLogEntry.FieldNames.Position);
 
-            using var cursor = await eventLog
+            using var cursor = await _eventLog
                 .Find(query.Filter)
                 .Sort(query.Sort)
                 .Limit(options.MaxCount)
@@ -130,7 +144,7 @@ public sealed class MongoEventStore<TEvent>(
             while (await cursor.MoveNextAsync(cancellationToken).ConfigureAwait(false))
             {
                 foreach (var doc in cursor.Current)
-                    yield return eventCodec.Decoder.Decode(doc);
+                    yield return _eventCodec.Decoder.Decode(doc);
             }
         }
     }
@@ -166,7 +180,7 @@ public sealed class MongoEventStore<TEvent>(
             var query = GetReadQuery(direction, origin, EventLogEntry.FieldNames.StreamPosition);
             var filter = query.Filter & Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, streamId);
 
-            using var cursor = await eventLog
+            using var cursor = await _eventLog
                 .Find(filter)
                 .Sort(query.Sort)
                 .Limit(options.MaxCount)
@@ -181,7 +195,7 @@ public sealed class MongoEventStore<TEvent>(
                 foreach (var doc in cursor.Current)
                 {
                     isEmpty = false;
-                    yield return eventCodec.Decoder.Decode(doc);
+                    yield return _eventCodec.Decoder.Decode(doc);
                 }
             }
 
@@ -200,16 +214,16 @@ public sealed class MongoEventStore<TEvent>(
         SubscriptionOptions? options = null)
     {
         return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
-            eventLog,
+            _eventLog,
             _allEventsSubject,
-            eventCodec.Decoder,
+            _eventCodec.Decoder,
             Builders<BsonDocument>.Filter.Empty,
             static _ => true,
             EventLogEntry.FieldNames.Position,
             static ctx => ctx.LogPosition,
             origin,
             options,
-            logger);
+            _logger);
     }
 
     public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
@@ -218,21 +232,21 @@ public sealed class MongoEventStore<TEvent>(
         SubscriptionOptions? options = null)
     {
         return new SubscriptionAsyncEnumerable<TEvent, StreamPosition>(
-            eventLog,
+            _eventLog,
             _allEventsSubject,
-            eventCodec.Decoder,
+            _eventCodec.Decoder,
             Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, streamId),
             ctx => ctx.StreamId == streamId,
             EventLogEntry.FieldNames.StreamPosition,
             static ctx => ctx.StreamPosition,
             origin,
             options,
-            logger);
+            _logger);
     }
 
-    public ValueTask DisposeAsync() => sequencedAppender.DisposeAsync();
+    public ValueTask DisposeAsync() => _sequencedAppender.DisposeAsync();
 
-    private static RefCountedChangeStreamSubject<ChangeStreamDocument<BsonDocument>> CreateAllEventsChangeStreamSubject(
+    private static RefCountedChangeStreamSubject<ChangeStreamDocument<BsonDocument>> CreateAllEventsSubject(
         IMongoCollection<BsonDocument> eventLog,
         ILogger? logger)
     {
@@ -241,6 +255,7 @@ public sealed class MongoEventStore<TEvent>(
             ChangeStreamOperationType.Insert);
 
         return RefCountedChangeStreamSubject.Create(
+            eventLog.Database.Client,
             eventLog.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(insertsOnly),
             doc => doc.ResumeToken,
@@ -279,7 +294,7 @@ public sealed class MongoEventStore<TEvent>(
     private async Task<bool> StreamExistsAsync(string streamId, CancellationToken cancellationToken)
     {
         var filter = Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, streamId);
-        return await eventLog.Find(filter).AnyAsync(cancellationToken).ConfigureAwait(false);
+        return await _eventLog.Find(filter).AnyAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private sealed class ReadQuery(FilterDefinition<BsonDocument> filter, SortDefinition<BsonDocument> sort)

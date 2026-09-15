@@ -65,9 +65,9 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
             while (true)
             {
                 using var observer = new Observer(_options.QueueCapacity);
-                await using var _ = await AttachObserver(observer).ConfigureAwait(false);
+                await using var attachment = await AttachObserver(observer).ConfigureAwait(false);
 
-                var enumerator = ReadAllAsync(resumeOrigin, observer, cancellationToken)
+                var enumerator = ReadAllAsync(resumeOrigin, observer, attachment.OperationTime, cancellationToken)
                     .GetAsyncEnumerator(cancellationToken);
 
                 await using (enumerator.ConfigureAwait(false))
@@ -125,7 +125,7 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
         }
     }
 
-    private async Task<IAsyncDisposable> AttachObserver(Observer observer)
+    private async Task<IChangeStreamAttachment> AttachObserver(Observer observer)
     {
         try
         {
@@ -141,6 +141,7 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
     private async IAsyncEnumerable<SubscriptionMessage> ReadAllAsync(
         SubscriptionOrigin<TPos> resumeOrigin,
         Observer observer,
+        BsonTimestamp changeStreamOperationTime,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         LogPosition? highWaterMark;
@@ -149,13 +150,18 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
                    cancellationToken,
                    observer.OverflowToken))
         {
-            highWaterMark = await GetHighWaterMarkAsync(catchUpCts.Token).ConfigureAwait(false);
+            // The majority read waits until everything up to the change stream's anchor is committed, so nothing
+            // falls between catch-up and live. See docs/unpublished/event-store-database-contract.md.
+            using var session = await StartCatchUpSessionAsync(changeStreamOperationTime, catchUpCts.Token)
+                .ConfigureAwait(false);
+
+            highWaterMark = await GetHighWaterMarkAsync(session, catchUpCts.Token).ConfigureAwait(false);
 
             _logger?.CatchUpBoundary(_correlationId, highWaterMark?.Value);
 
             if (highWaterMark is not null)
             {
-                await foreach (var doc in ReadCatchUpAsync(resumeOrigin, highWaterMark.Value, catchUpCts.Token)
+                await foreach (var doc in ReadCatchUpAsync(session, resumeOrigin, highWaterMark.Value, catchUpCts.Token)
                                    .ConfigureAwait(false))
                 {
                     yield return SubscriptionMessage.Event.Create(_eventDecoder.Decode(doc));
@@ -179,12 +185,34 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
         }
     }
 
-    private async Task<LogPosition?> GetHighWaterMarkAsync(CancellationToken cancellationToken)
+    private async Task<IClientSessionHandle> StartCatchUpSessionAsync(
+        BsonTimestamp changeStreamOperationTime,
+        CancellationToken cancellationToken)
+    {
+        var session = await _eventLog.Database.Client
+            .StartSessionAsync(new ClientSessionOptions { CausalConsistency = true }, cancellationToken)
+            .ConfigureAwait(false);
+
+        try
+        {
+            session.AdvanceOperationTime(changeStreamOperationTime);
+            return session;
+        }
+        catch
+        {
+            session.Dispose();
+            throw;
+        }
+    }
+
+    private async Task<LogPosition?> GetHighWaterMarkAsync(
+        IClientSessionHandle session,
+        CancellationToken cancellationToken)
     {
         var projection = Builders<BsonDocument>.Projection.Include(EventLogEntry.FieldNames.Position);
 
         var result = await _eventLog
-            .Find(Builders<BsonDocument>.Filter.Empty)
+            .Find(session, Builders<BsonDocument>.Filter.Empty)
             .Sort(Builders<BsonDocument>.Sort.Descending(EventLogEntry.FieldNames.Position))
             .Limit(1)
             .Project(projection)
@@ -195,6 +223,7 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
     }
 
     private async IAsyncEnumerable<BsonDocument> ReadCatchUpAsync(
+        IClientSessionHandle session,
         SubscriptionOrigin<TPos> resumeOrigin,
         LogPosition highWaterMark,
         [EnumeratorCancellation] CancellationToken cancellationToken)
@@ -209,8 +238,9 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
         filter &= Builders<BsonDocument>.Filter.Lte(EventLogEntry.FieldNames.Position, highWaterMark.Value);
 
+        // Same session, so the snapshot includes the high-water mark.
         using var cursor = await _eventLog
-            .Find(filter)
+            .Find(session, filter)
             .Sort(Builders<BsonDocument>.Sort.Ascending(EventLogEntry.FieldNames.Position))
             .ToCursorAsync(cancellationToken)
             .ConfigureAwait(false);
