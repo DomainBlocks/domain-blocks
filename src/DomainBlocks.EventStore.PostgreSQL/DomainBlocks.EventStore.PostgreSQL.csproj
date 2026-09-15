@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj"/>
+    <ProjectReference Include="..\DomainBlocks.Serialization.SystemTextJson\DomainBlocks.Serialization.SystemTextJson.csproj"/>
   </ItemGroup>
 
 </Project>

@@ -49,10 +49,10 @@ public abstract class PostgresIntegrationTest(Action<PostgresEventStoreOptions>?
         string loggerNameSuffix = "",
         PostgresEventStoreOptions? options = null)
     {
-        return Harness.CreateEventStore(
-            TestPostgresEventCodec.Create<object>(DefaultEventTypeMap),
-            options,
-            loggerNameSuffix);
+        return Harness.CreateBuilder(loggerNameSuffix)
+            .UseEventTypeMap(DefaultEventTypeMap)
+            .UseOptions(options ?? Options)
+            .Build();
     }
 
     protected static AppendableEvent<object> Appendable(string value) => Appendable(new TestEvent { Value = value });

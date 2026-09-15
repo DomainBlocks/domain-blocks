@@ -3,6 +3,9 @@ using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.ContractMapping;
 using DomainBlocks.EventStore.PostgreSQL;
 using DomainBlocks.EventStore.TypeMapping;
+using DomainBlocks.Serialization.Abstractions;
+using DomainBlocks.Serialization.Google.Protobuf;
+using DomainBlocks.Serialization.SystemTextJson;
 using Npgsql;
 
 namespace DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
@@ -10,7 +13,7 @@ namespace DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
 /// <summary>
 /// Binds a suite to the PostgreSQL event store: one schema and one data source per fixture on the server started by
 /// <see cref="PostgresTestEnvironment"/>. The schema is named after the fixture unless <paramref name="configure"/>
-/// sets one.
+/// sets one. Stores are built on the borrowed-data-source path of <see cref="PostgresEventStoreBuilder{TEvent}"/>.
 /// </summary>
 public sealed class PostgresEventStoreTestHarness(Action<PostgresEventStoreOptions>? configure = null) :
     IEventStoreTestHarness<StreamPosition, LogPosition>
@@ -53,16 +56,30 @@ public sealed class PostgresEventStoreTestHarness(Action<PostgresEventStoreOptio
         await DataSource.DisposeAsync();
     }
 
+    /// <summary>
+    /// A builder over this harness's data source, options and a logger named for the test, for callers that need to
+    /// configure more than <see cref="CreateEventStore(EventTypeMap, EventFormat?, IEnumerable{IEventContractMapper{object}}?, string)"/>
+    /// offers.
+    /// </summary>
+    public PostgresEventStoreBuilder<object> CreateBuilder(string loggerNameSuffix = "")
+    {
+        return new PostgresEventStoreBuilder<object>()
+            .UseDataSource(DataSource)
+            .UseOptions(Options)
+            .UseLogger(PostgresTestEnvironment.LoggerFactory.CreateLogger($"PostgresEventStore{loggerNameSuffix}"));
+    }
+
     public IEventStore<object, string, StreamPosition, LogPosition> CreateEventStore(
         EventTypeMap eventTypeMap,
         EventFormat? eventFormat = null,
         IEnumerable<IEventContractMapper<object>>? contractMappers = null,
         string loggerNameSuffix = "")
     {
-        return CreateEventStore(
-            TestPostgresEventCodec.Create(eventTypeMap, eventFormat, contractMappers),
-            Options,
-            loggerNameSuffix);
+        return CreateBuilder(loggerNameSuffix)
+            .UseEventTypeMap(eventTypeMap)
+            .UseEventSerializer(EventSerializerFor(eventFormat ?? EventFormat.Json))
+            .AddContractMappers([.. contractMappers ?? []])
+            .Build();
     }
 
     /// <summary>
@@ -74,11 +91,10 @@ public sealed class PostgresEventStoreTestHarness(Action<PostgresEventStoreOptio
         PostgresEventStoreOptions? options = null,
         string loggerNameSuffix = "")
     {
-        return PostgresEventStore.Create(
-            DataSource,
-            eventCodec,
-            options ?? Options,
-            PostgresTestEnvironment.LoggerFactory.CreateLogger($"PostgresEventStore{loggerNameSuffix}"));
+        return CreateBuilder(loggerNameSuffix)
+            .UseCodec(eventCodec)
+            .UseOptions(options ?? Options)
+            .Build();
     }
 
     public StreamPosition CreateStreamPosition(ulong value) => new(value);
@@ -102,6 +118,14 @@ public sealed class PostgresEventStoreTestHarness(Action<PostgresEventStoreOptio
             $"server {version}: wal_writer_delay {walWriterDelay}, synchronous_commit {synchronousCommit}, " +
             $"fsync {fsync}, shared_buffers {sharedBuffers}";
     }
+
+    private static IObjectSerializer<PostgresEventData> EventSerializerFor(EventFormat format) => format switch
+    {
+        EventFormat.Json => new JsonObjectSerializer().AsPostgresEventDataSerializer(),
+        EventFormat.Protobuf => ((IObjectSerializer<byte[]>)new ProtobufBytesObjectSerializer()).AsPostgresEventDataSerializer(),
+        EventFormat.Bson => throw new NotSupportedException("BSON is not supported by the PostgreSQL event store."),
+        _ => throw new ArgumentOutOfRangeException(nameof(format), format, null)
+    };
 
     private static async Task<string> ShowAsync(string setting)
     {
