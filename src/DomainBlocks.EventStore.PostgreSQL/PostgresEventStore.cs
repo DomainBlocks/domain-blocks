@@ -17,7 +17,7 @@ public static class PostgresEventStore
     /// </summary>
     public static PostgresEventStore<TEvent> Create<TEvent>(
         NpgsqlDataSource dataSource,
-        EventCodec<TEvent, PostgresEventData, string> eventCodec,
+        IEventCodec<TEvent, PostgresEventData, string> eventCodec,
         PostgresEventStoreOptions? options = null,
         ILogger? logger = null)
         where TEvent : notnull
@@ -34,9 +34,9 @@ public static class PostgresEventStore
             dataSource,
             new EventLogSql(names),
             options.ReadBatchSize,
-            eventCodec.Decoder);
+            eventCodec);
 
-        var feed = CreateFeed(dataSource, names, options, eventCodec.Decoder, logger);
+        var feed = CreateFeed(dataSource, names, options, eventCodec, logger);
 
         return new PostgresEventStore<TEvent>(appender, reader, feed, eventCodec, logger);
     }
@@ -80,14 +80,14 @@ public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> whe
     private readonly IAppender _appender;
     private readonly EventLogReader<TEvent> _reader;
     private readonly RefCountedEventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>> _feed;
-    private readonly EventCodec<TEvent, PostgresEventData, string> _eventCodec;
+    private readonly IEventCodec<TEvent, PostgresEventData, string> _eventCodec;
     private readonly ILogger? _logger;
 
     internal PostgresEventStore(
         IAppender appender,
         EventLogReader<TEvent> reader,
         RefCountedEventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>> feed,
-        EventCodec<TEvent, PostgresEventData, string> eventCodec,
+        IEventCodec<TEvent, PostgresEventData, string> eventCodec,
         ILogger? logger)
     {
         _appender = appender;
@@ -114,7 +114,7 @@ public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> whe
         commitId ??= Guid.CreateVersion7();
         options ??= AppendOptions.Default;
 
-        var encodedEvents = _eventCodec.Encoder.Encode(events).ToArray();
+        var encodedEvents = _eventCodec.Encode(events).ToArray();
 
         if (encodedEvents.Length == 0)
             return;

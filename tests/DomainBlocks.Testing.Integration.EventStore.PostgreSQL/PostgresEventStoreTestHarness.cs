@@ -70,7 +70,7 @@ public sealed class PostgresEventStoreTestHarness(Action<PostgresEventStoreOptio
     /// batch sizes.
     /// </summary>
     public PostgresEventStore<object> CreateEventStore(
-        EventCodec<object, PostgresEventData, string> eventCodec,
+        IEventCodec<object, PostgresEventData, string> eventCodec,
         PostgresEventStoreOptions? options = null,
         string loggerNameSuffix = "")
     {

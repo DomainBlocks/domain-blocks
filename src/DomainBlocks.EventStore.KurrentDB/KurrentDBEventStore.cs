@@ -11,7 +11,7 @@ namespace DomainBlocks.EventStore.KurrentDB;
 
 public class KurrentDBEventStore<TEvent>(
     KurrentDBClient client,
-    EventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec) :
+    IEventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec) :
     IKurrentDBEventStore<TEvent>
     where TEvent : notnull
 {
@@ -28,7 +28,7 @@ public class KurrentDBEventStore<TEvent>(
 
         var kurrentExpectedState = ToKurrentStreamState(expectedState.Value);
 
-        var eventData = eventCodec.Encoder
+        var eventData = eventCodec
             .Encode(events)
             .Select(x => new EventData(Uuid.NewUuid(), x.EventName, x.EventData, x.Metadata));
 
@@ -160,7 +160,7 @@ public class KurrentDBEventStore<TEvent>(
             var originalRecord = resolvedEvent.OriginalEvent;
             var metadataBytes = options.IncludeMetadata ? record.Metadata : default;
 
-            var (@event, metadata) = eventCodec.Decoder.Decode(record.EventType, record.Data, metadataBytes);
+            var (@event, metadata) = eventCodec.Decode(record.EventType, record.Data, metadataBytes);
 
             var context = ReadEventContext.Create(
                 streamId,

@@ -42,17 +42,17 @@ public class EventStoreWriteBenchmarks
     [GlobalSetup]
     public void GlobalSetup()
     {
-        var encoderOptions = new EventEncoderOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
+        var codecOptions = new EventCodecOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
             TypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>()),
             EventSerializer = Utf8EventSerializer,
             MetadataSerializer = Utf8MetadataSerializer
         };
 
-        var encoder = EventEncoder.Create(encoderOptions);
+        var codec = EventCodec.Create(codecOptions);
         var eventCount = EventCount;
 
-        _eventStore = new FakeKurrentDBEventStore<IDomainEvent>(encoder, new Consumer())
+        _eventStore = new FakeKurrentDBEventStore<IDomainEvent>(codec, new Consumer())
             .WithPipeline(pipeline =>
             {
                 if (WithMetadata)

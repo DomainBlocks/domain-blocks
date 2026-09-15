@@ -1,6 +1,9 @@
-﻿namespace DomainBlocks.EventStore.Abstractions.Codecs;
+namespace DomainBlocks.EventStore.Abstractions.Codecs;
 
-public interface IEventEncoder<TEvent, TEventData, TMetadata> where TEvent : notnull where TEventData : notnull
+/// <summary>
+/// Encodes one event and its already-merged metadata into the record a store persists.
+/// </summary>
+public interface IEventEncoder<in TEvent, TEventData, TMetadata> where TEvent : notnull where TEventData : notnull
 {
-    IEnumerable<EncodedEvent<TEventData, TMetadata>> Encode(IEnumerable<AppendableEvent<TEvent>> events);
+    EncodedEvent<TEventData, TMetadata> Encode(TEvent payload, ReadOnlySpan<KeyValuePair<string, string>> metadata);
 }

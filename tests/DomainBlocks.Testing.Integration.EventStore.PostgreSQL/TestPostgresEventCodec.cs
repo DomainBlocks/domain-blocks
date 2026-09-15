@@ -11,7 +11,7 @@ namespace DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
 
 public static class TestPostgresEventCodec
 {
-    public static EventCodec<TEvent, PostgresEventData, string> Create<TEvent>(
+    public static IEventCodec<TEvent, PostgresEventData, string> Create<TEvent>(
         EventTypeMap eventTypeMap,
         EventFormat? eventFormat = null,
         IEnumerable<IEventContractMapper<TEvent>>? contractMappers = null)

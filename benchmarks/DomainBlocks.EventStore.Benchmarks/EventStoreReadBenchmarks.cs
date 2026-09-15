@@ -46,14 +46,14 @@ public class EventStoreReadBenchmarks
     {
         var kurrentEvents = CreateKurrentEvents(EventCount);
 
-        var decoderOptions = new EventDecoderOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
+        var codecOptions = new EventCodecOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
             TypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>()),
-            EventDeserializer = Utf8EventSerializer,
-            MetadataDeserializer = Utf8MetadataSerializer
+            EventSerializer = Utf8EventSerializer,
+            MetadataSerializer = Utf8MetadataSerializer
         };
 
-        var decoder = EventDecoder.Create(decoderOptions);
+        var codec = EventCodec.Create(codecOptions);
 
         IReadEventTransform<IDomainEvent>[] transforms = Transforms switch
         {
@@ -63,7 +63,7 @@ public class EventStoreReadBenchmarks
             _ => throw new ArgumentOutOfRangeException()
         };
 
-        _eventStore = new FakeKurrentDBEventStore<IDomainEvent>(kurrentEvents, decoder)
+        _eventStore = new FakeKurrentDBEventStore<IDomainEvent>(kurrentEvents, codec)
             .WithPipeline(pipeline => pipeline.Transform(transforms));
 
         _readStreamOptions = new ReadStreamOptions { IncludeMetadata = IncludeMetadata };

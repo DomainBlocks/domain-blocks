@@ -8,7 +8,7 @@ namespace DomainBlocks.Testing.Integration.EventStore.KurrentDB;
 
 public static class TestKurrentDBEventCodec
 {
-    public static EventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> Create<TEvent>(
+    public static IEventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> Create<TEvent>(
         EventTypeMap eventTypeMap,
         EventFormat? eventFormat = null,
         IEnumerable<IEventContractMapper<TEvent>>? contractMappers = null)

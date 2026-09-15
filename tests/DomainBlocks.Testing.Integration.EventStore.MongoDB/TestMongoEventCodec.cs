@@ -11,7 +11,7 @@ namespace DomainBlocks.Testing.Integration.EventStore.MongoDB;
 
 public static class TestMongoEventCodec
 {
-    public static EventCodec<TEvent, BsonValue, BsonValue> Create<TEvent>(
+    public static IEventCodec<TEvent, BsonValue, BsonValue> Create<TEvent>(
         EventTypeMap eventTypeMap,
         EventFormat? eventFormat = null,
         IEnumerable<IEventContractMapper<TEvent>>? contractMappers = null)

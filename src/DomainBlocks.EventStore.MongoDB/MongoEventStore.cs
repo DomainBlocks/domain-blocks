@@ -20,7 +20,7 @@ public static class MongoEventStore
 
     public static MongoEventStore<TEvent> Create<TEvent>(
         IMongoClient mongoClient,
-        EventCodec<TEvent, BsonValue, BsonValue> eventCodec,
+        IEventCodec<TEvent, BsonValue, BsonValue> eventCodec,
         MongoEventStoreOptions? options = null,
         ILogger? logger = null)
         where TEvent : notnull
@@ -56,14 +56,14 @@ public sealed class MongoEventStore<TEvent> : IMongoEventStore<TEvent> where TEv
 {
     private readonly IMongoSequencedAppender<BsonDocument, AppendContext> _sequencedAppender;
     private readonly IMongoCollection<BsonDocument> _eventLog;
-    private readonly EventCodec<TEvent, BsonValue, BsonValue> _eventCodec;
+    private readonly IEventCodec<TEvent, BsonValue, BsonValue> _eventCodec;
     private readonly ILogger? _logger;
     private readonly RefCountedChangeStreamSubject<ChangeStreamDocument<BsonDocument>> _allEventsSubject;
 
     public MongoEventStore(
         IMongoSequencedAppender<BsonDocument, AppendContext> sequencedAppender,
         IMongoCollection<BsonDocument> eventLog,
-        EventCodec<TEvent, BsonValue, BsonValue> eventCodec,
+        IEventCodec<TEvent, BsonValue, BsonValue> eventCodec,
         ILogger? logger = null)
     {
         _sequencedAppender = sequencedAppender;
@@ -92,7 +92,7 @@ public sealed class MongoEventStore<TEvent> : IMongoEventStore<TEvent> where TEv
         var bsonStreamId = new BsonString(streamId);
         var bsonCommitId = new BsonBinaryData(commitId.Value, GuidRepresentation.Standard);
 
-        var eventDocuments = _eventCodec.Encoder
+        var eventDocuments = _eventCodec
             .Encode(events)
             .Select((x, i) => new BsonDocument
             {
@@ -144,7 +144,7 @@ public sealed class MongoEventStore<TEvent> : IMongoEventStore<TEvent> where TEv
             while (await cursor.MoveNextAsync(cancellationToken).ConfigureAwait(false))
             {
                 foreach (var doc in cursor.Current)
-                    yield return _eventCodec.Decoder.Decode(doc);
+                    yield return _eventCodec.Decode(doc);
             }
         }
     }
@@ -195,7 +195,7 @@ public sealed class MongoEventStore<TEvent> : IMongoEventStore<TEvent> where TEv
                 foreach (var doc in cursor.Current)
                 {
                     isEmpty = false;
-                    yield return _eventCodec.Decoder.Decode(doc);
+                    yield return _eventCodec.Decode(doc);
                 }
             }
 
@@ -216,7 +216,7 @@ public sealed class MongoEventStore<TEvent> : IMongoEventStore<TEvent> where TEv
         return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
             _eventLog,
             _allEventsSubject,
-            _eventCodec.Decoder,
+            _eventCodec,
             Builders<BsonDocument>.Filter.Empty,
             static _ => true,
             EventLogEntry.FieldNames.Position,
@@ -234,7 +234,7 @@ public sealed class MongoEventStore<TEvent> : IMongoEventStore<TEvent> where TEv
         return new SubscriptionAsyncEnumerable<TEvent, StreamPosition>(
             _eventLog,
             _allEventsSubject,
-            _eventCodec.Decoder,
+            _eventCodec,
             Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, streamId),
             ctx => ctx.StreamId == streamId,
             EventLogEntry.FieldNames.StreamPosition,
