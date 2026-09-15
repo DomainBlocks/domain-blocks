@@ -2,6 +2,7 @@ using BenchmarkDotNet.Attributes;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Codecs;
 using DomainBlocks.EventStore.Codecs;
+using DomainBlocks.EventStore.Pipeline;
 using DomainBlocks.EventStore.Transforms;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.SystemTextJson;
@@ -22,9 +23,8 @@ public class EventStoreReadBenchmarks
     private static readonly JsonUtf8BytesObjectSerializer Utf8EventSerializer = new();
     private static readonly JsonUtf8BytesMetadataSerializer Utf8MetadataSerializer = new();
 
-    private FakeKurrentDBEventStore<IDomainEvent> _eventStore = null!;
+    private IEventStore<IDomainEvent, string, StreamPosition, Position> _eventStore = null!;
     private ReadStreamOptions _readStreamOptions = null!;
-    private IReadEventTransform<IDomainEvent, string, StreamPosition, Position>[] _transforms = [];
 
     [Params(false, true)]
     public bool IncludeMetadata { get; set; }
@@ -55,28 +55,25 @@ public class EventStoreReadBenchmarks
 
         var decoder = EventDecoder.Create(decoderOptions);
 
-        _eventStore = new FakeKurrentDBEventStore<IDomainEvent>(kurrentEvents, decoder);
-        _readStreamOptions = new ReadStreamOptions { IncludeMetadata = IncludeMetadata };
-
-        _transforms = Transforms switch
+        IReadEventTransform<IDomainEvent>[] transforms = Transforms switch
         {
             TransformMode.None => [],
             TransformMode.Probe => [new UnusedEventTransform()],
             TransformMode.FanOut => [new TestEventFanOutTransform()],
             _ => throw new ArgumentOutOfRangeException()
         };
+
+        _eventStore = new FakeKurrentDBEventStore<IDomainEvent>(kurrentEvents, decoder)
+            .WithPipeline(pipeline => pipeline.Transform(transforms));
+
+        _readStreamOptions = new ReadStreamOptions { IncludeMetadata = IncludeMetadata };
     }
 
     [Benchmark]
     public async Task ReadStream_NoIO()
     {
-        var events = _eventStore.ReadStream(StreamId, options: _readStreamOptions);
-
-        if (Transforms != TransformMode.None)
-            events = events.Transform(_transforms);
-
         // Force enumeration
-        await foreach (var _ in events)
+        await foreach (var _ in _eventStore.ReadStream(StreamId, options: _readStreamOptions))
         {
         }
     }
@@ -147,23 +144,17 @@ public class EventStoreReadBenchmarks
 
     private sealed class UnusedEvent : IDomainEvent;
 
-    private sealed class UnusedEventTransform :
-        ReadEventTransform<IDomainEvent, UnusedEvent, string, StreamPosition, Position>
+    private sealed class UnusedEventTransform : ReadEventTransform<IDomainEvent, UnusedEvent>
     {
-        protected override IEnumerable<IDomainEvent> Apply(
-            UnusedEvent @event,
-            ReadEventContext<string, StreamPosition, Position> context)
+        protected override IEnumerable<IDomainEvent> Apply(UnusedEvent @event, ReadEventInfo info)
         {
             throw new InvalidOperationException("This transform should never be applied.");
         }
     }
 
-    private sealed class TestEventFanOutTransform :
-        ReadEventTransform<IDomainEvent, TestEvent, string, StreamPosition, Position>
+    private sealed class TestEventFanOutTransform : ReadEventTransform<IDomainEvent, TestEvent>
     {
-        protected override IEnumerable<IDomainEvent> Apply(
-            TestEvent @event,
-            ReadEventContext<string, StreamPosition, Position> context)
+        protected override IEnumerable<IDomainEvent> Apply(TestEvent @event, ReadEventInfo info)
         {
             return [new TestEventPart { Value = @event.Value1 }, new TestEventPart { Value = @event.Value2 }];
         }

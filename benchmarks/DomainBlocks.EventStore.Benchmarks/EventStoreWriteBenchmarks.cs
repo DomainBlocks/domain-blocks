@@ -4,6 +4,7 @@ using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Codecs;
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Metadata;
+using DomainBlocks.EventStore.Pipeline;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.SystemTextJson;
 using KurrentDB.Client;
@@ -23,7 +24,7 @@ public class EventStoreWriteBenchmarks
     private static readonly JsonUtf8BytesObjectSerializer Utf8EventSerializer = new();
     private static readonly JsonUtf8BytesMetadataSerializer Utf8MetadataSerializer = new();
 
-    private FakeKurrentDBEventStore<IDomainEvent> _eventStore = null!;
+    private IEventStore<IDomainEvent, string, StreamPosition, Position> _eventStore = null!;
     private AppendableEvent<IDomainEvent>[] _appendEvents = null!;
 
     //[Params(100, 1_000, 10_000)]
@@ -45,13 +46,19 @@ public class EventStoreWriteBenchmarks
         {
             TypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>()),
             EventSerializer = Utf8EventSerializer,
-            MetadataSerializer = Utf8MetadataSerializer,
-            MetadataContributors = WithMetadata ? [new MetadataContributor(EventCount)] : []
+            MetadataSerializer = Utf8MetadataSerializer
         };
 
         var encoder = EventEncoder.Create(encoderOptions);
+        var eventCount = EventCount;
 
-        _eventStore = new FakeKurrentDBEventStore<IDomainEvent>(encoder, new Consumer());
+        _eventStore = new FakeKurrentDBEventStore<IDomainEvent>(encoder, new Consumer())
+            .WithPipeline(pipeline =>
+            {
+                if (WithMetadata)
+                    pipeline.ContributeMetadata(new MetadataContributor(eventCount));
+            });
+
         _appendEvents = CreateAppendEvents(EventCount, WithMetadata);
     }
 
@@ -150,7 +157,7 @@ public class EventStoreWriteBenchmarks
     {
         private int _counter;
 
-        public void Contribute(IDomainEvent @event, object? contract, string eventName, MetadataWriter metadata)
+        public void Contribute(IDomainEvent @event, MetadataWriter metadata)
         {
             metadata.Set("Value2", $"value2-{_counter}");
 

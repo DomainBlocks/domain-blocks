@@ -14,7 +14,6 @@ public static class EventCodec
             TypeMap = options.TypeMap,
             EventSerializer = options.EventSerializer,
             MetadataSerializer = options.MetadataSerializer,
-            MetadataContributors = options.MetadataContributors,
             ContractMappers = options.ContractMappers
         };
 

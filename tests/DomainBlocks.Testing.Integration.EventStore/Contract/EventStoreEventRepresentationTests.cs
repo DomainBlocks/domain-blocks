@@ -1,6 +1,7 @@
 using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.ContractMapping;
+using DomainBlocks.EventStore.Pipeline;
 using DomainBlocks.EventStore.Transforms;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Events;
@@ -167,7 +168,9 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
                 Destination: "Madrid, ES")
         };
 
-        var eventStore = CreateEventStore(eventTypeMap);
+        var eventStore = CreateEventStore(eventTypeMap)
+            .WithPipeline(pipeline => pipeline.Transform(new ShipmentDispatchedTransform()));
+
         object[] readEvents;
 
         try
@@ -176,7 +179,6 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
 
             readEvents = await eventStore
                 .ReadStream(streamId)
-                .Transform([new ShipmentDispatchedTransform()])
                 .Select(x => x.Payload)
                 .ToArrayAsync();
         }
@@ -248,12 +250,9 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
         double WeightKg,
         string Destination);
 
-    private class ShipmentDispatchedTransform :
-        ReadEventTransform<object, ShipmentDispatched, string, TStreamPos, TLogPos>
+    private class ShipmentDispatchedTransform : ReadEventTransform<object, ShipmentDispatched>
     {
-        protected override IEnumerable<object> Apply(
-            ShipmentDispatched @event,
-            ReadEventContext<string, TStreamPos, TLogPos> context)
+        protected override IEnumerable<object> Apply(ShipmentDispatched @event, ReadEventInfo info)
         {
             yield return new ShipmentDispatchedV2(
                 @event.ShipmentId,
