@@ -24,8 +24,8 @@ public sealed class EventDecoder<TEvent, TEventData, TMetadata>(
     where TEventData : notnull
 {
     private readonly EventTypeMap _eventTypeMap = options.TypeMap;
-    private readonly IObjectDeserializer<TEventData> _eventDeserializer = options.EventDeserializer;
-    private readonly IMetadataDeserializer<TMetadata> _metadataDeserializer = options.MetadataDeserializer;
+    private readonly IObjectSerializer<TEventData> _eventDeserializer = options.EventDeserializer;
+    private readonly IMetadataSerializer<TMetadata> _metadataDeserializer = options.MetadataDeserializer;
 
     private readonly FrozenDictionary<Type, IReadEventContractMapper<TEvent>> _contractMappers =
         options.ContractMappers.ToFrozenDictionary(x => x.ContractType);

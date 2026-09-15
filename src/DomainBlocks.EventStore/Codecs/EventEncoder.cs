@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using System.Runtime.InteropServices;
 using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Abstractions.Codecs;
 using DomainBlocks.EventStore.ContractMapping;
@@ -35,7 +36,10 @@ public sealed class EventEncoder<TEvent, TEventData, TMetadata>(
 
     public IEnumerable<EncodedEvent<TEventData, TMetadata>> Encode(IEnumerable<AppendableEvent<TEvent>> events)
     {
+        // Both buffers are reused across the batch: the dictionary de-duplicates keys, the list gives the
+        // serializer a contiguous span without allocating per event.
         var metadataBuffer = new Dictionary<string, string>();
+        var metadataEntries = new List<KeyValuePair<string, string>>();
 
         foreach (var appendEvent in events)
         {
@@ -64,9 +68,14 @@ public sealed class EventEncoder<TEvent, TEventData, TMetadata>(
             foreach (var (key, value) in appendEvent.Metadata)
                 metadataBuffer[key] = value;
 
-            var serializedMetadata = metadataBuffer.Count > 0
-                ? _metadataSerializer.Serialize(metadataBuffer)
-                : default;
+            TMetadata? serializedMetadata = default;
+
+            if (metadataBuffer.Count > 0)
+            {
+                metadataEntries.Clear();
+                metadataEntries.AddRange(metadataBuffer);
+                serializedMetadata = _metadataSerializer.Serialize(CollectionsMarshal.AsSpan(metadataEntries));
+            }
 
             yield return EncodedEvent.Create(eventName, serializedEventData, serializedMetadata);
         }

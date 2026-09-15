@@ -3,7 +3,7 @@ using Google.Protobuf;
 
 namespace DomainBlocks.Serialization.Google.Protobuf;
 
-public sealed class ProtobufJsonObjectSerde(JsonFormatter.Settings? settings = null) : IObjectSerde<string>
+public sealed class ProtobufJsonObjectSerializer(JsonFormatter.Settings? settings = null) : IObjectSerializer<string>
 {
     private readonly JsonFormatter _formatter = new(settings ?? JsonFormatter.Settings.Default);
 
@@ -17,7 +17,7 @@ public sealed class ProtobufJsonObjectSerde(JsonFormatter.Settings? settings = n
         return _formatter.Format(message);
     }
 
-    public object Deserialize(string value, Type type)
+    public object Deserialize(string data, Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
 
@@ -26,6 +26,6 @@ public sealed class ProtobufJsonObjectSerde(JsonFormatter.Settings? settings = n
 
         var parser = MessageParserCache.Get(type);
 
-        return parser.ParseJson(value);
+        return parser.ParseJson(data);
     }
 }

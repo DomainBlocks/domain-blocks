@@ -19,10 +19,10 @@ public static class TestPostgresEventCodec
     {
         eventFormat ??= EventFormat.Json;
 
-        var eventSerde = eventFormat switch
+        var eventSerializer = eventFormat switch
         {
-            EventFormat.Json => new JsonObjectSerde().AsPostgresEventDataSerde(),
-            EventFormat.Protobuf => ((IObjectSerde<byte[]>)new ProtobufBytesObjectSerde()).AsPostgresEventDataSerde(),
+            EventFormat.Json => new JsonObjectSerializer().AsPostgresEventDataSerializer(),
+            EventFormat.Protobuf => ((IObjectSerializer<byte[]>)new ProtobufBytesObjectSerializer()).AsPostgresEventDataSerializer(),
             EventFormat.Bson => throw new NotSupportedException("BSON is not supported by the PostgreSQL event store."),
             _ => throw new ArgumentOutOfRangeException(nameof(eventFormat), eventFormat, null)
         };
@@ -30,8 +30,8 @@ public static class TestPostgresEventCodec
         var codecOptions = new EventCodecOptions<TEvent, PostgresEventData, string>
         {
             TypeMap = eventTypeMap,
-            EventSerde = eventSerde,
-            MetadataSerde = new JsonMetadataSerde(),
+            EventSerializer = eventSerializer,
+            MetadataSerializer = new JsonMetadataSerializer(),
             ContractMappers = contractMappers ?? []
         };
 

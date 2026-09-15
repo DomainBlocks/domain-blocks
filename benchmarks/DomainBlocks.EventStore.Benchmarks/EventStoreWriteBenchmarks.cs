@@ -20,8 +20,8 @@ public class EventStoreWriteBenchmarks
 {
     private const string StreamId = "test-stream";
 
-    private static readonly JsonUtf8BytesObjectSerde EventSerde = new();
-    private static readonly JsonUtf8BytesMetadataSerde MetadataSerde = new();
+    private static readonly JsonUtf8BytesObjectSerializer Utf8EventSerializer = new();
+    private static readonly JsonUtf8BytesMetadataSerializer Utf8MetadataSerializer = new();
 
     private FakeKurrentDBEventStore<IDomainEvent> _eventStore = null!;
     private AppendableEvent<IDomainEvent>[] _appendEvents = null!;
@@ -44,8 +44,8 @@ public class EventStoreWriteBenchmarks
         var encoderOptions = new EventEncoderOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
             TypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>()),
-            EventSerializer = EventSerde,
-            MetadataSerializer = MetadataSerde,
+            EventSerializer = Utf8EventSerializer,
+            MetadataSerializer = Utf8MetadataSerializer,
             MetadataContributors = WithMetadata ? [new MetadataContributor(EventCount)] : []
         };
 

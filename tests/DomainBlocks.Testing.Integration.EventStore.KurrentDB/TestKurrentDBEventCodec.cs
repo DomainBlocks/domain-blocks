@@ -22,8 +22,8 @@ public static class TestKurrentDBEventCodec
         var codecOptions = new EventCodecOptions<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
             TypeMap = eventTypeMap,
-            EventSerde = new JsonUtf8BytesObjectSerde(),
-            MetadataSerde = new JsonUtf8BytesMetadataSerde(),
+            EventSerializer = new JsonUtf8BytesObjectSerializer(),
+            MetadataSerializer = new JsonUtf8BytesMetadataSerializer(),
             ContractMappers = contractMappers ?? []
         };
 

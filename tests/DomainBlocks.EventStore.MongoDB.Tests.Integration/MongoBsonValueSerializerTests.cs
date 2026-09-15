@@ -15,11 +15,11 @@ using Shouldly;
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
 /// <summary>
-/// The BSON value adapters over string serdes, which store the event as a string field. The BSON document, JSON bytes
-/// and Protobuf bytes serdes are covered by the shared event format tests.
+/// The BSON value adapters over string serializers, which store the event as a string field. The BSON document, JSON bytes
+/// and Protobuf bytes serializers are covered by the shared event format tests.
 /// </summary>
 [TestFixture]
-public class MongoBsonValueSerdeTests
+public class MongoBsonValueSerializerTests
 {
     private readonly MongoEventStoreTestHarness _harness = new();
 
@@ -30,22 +30,22 @@ public class MongoBsonValueSerdeTests
     public Task DropDatabaseAsync() => _harness.DropAsync();
 
     [Test]
-    public async Task AppendAsync_JsonStringSerde_RoundTripsEvent()
+    public async Task AppendAsync_JsonStringSerializer_RoundTripsEvent()
     {
         var @event = new TestEvent { Value = "test-123" };
 
-        await ShouldRoundTripAsync(@event, new JsonObjectSerde().AsBsonValueSerde());
+        await ShouldRoundTripAsync(@event, new JsonObjectSerializer().AsBsonValueSerializer());
     }
 
     [Test]
-    public async Task AppendAsync_ProtobufJsonStringSerde_RoundTripsEvent()
+    public async Task AppendAsync_ProtobufJsonStringSerializer_RoundTripsEvent()
     {
         var @event = new ProtoTestEvent { Value = "test-123" };
 
-        await ShouldRoundTripAsync(@event, new ProtobufJsonObjectSerde().AsBsonValueSerde());
+        await ShouldRoundTripAsync(@event, new ProtobufJsonObjectSerializer().AsBsonValueSerializer());
     }
 
-    private async Task ShouldRoundTripAsync<TEvent>(TEvent @event, IObjectSerde<BsonValue> serde)
+    private async Task ShouldRoundTripAsync<TEvent>(TEvent @event, IObjectSerializer<BsonValue> serializer)
         where TEvent : class
     {
         var eventTypeMap = EventTypeMap.Create(
@@ -55,8 +55,8 @@ public class MongoBsonValueSerdeTests
         var eventCodec = EventCodec.Create(new EventCodecOptions<object, BsonValue, BsonValue>
         {
             TypeMap = eventTypeMap,
-            EventSerde = serde,
-            MetadataSerde = new BsonDocumentMetadataSerde()
+            EventSerializer = serializer,
+            MetadataSerializer = new BsonDocumentMetadataSerializer()
         });
 
         await using var eventStore = MongoEventStore.Create(
@@ -64,7 +64,7 @@ public class MongoBsonValueSerdeTests
             eventCodec,
             _harness.Options);
 
-        var streamId = $"test-{serde.GetType().Name}-{Guid.NewGuid():N}";
+        var streamId = $"test-{serializer.GetType().Name}-{Guid.NewGuid():N}";
 
         await eventStore.AppendAsync(streamId, [@event]);
 

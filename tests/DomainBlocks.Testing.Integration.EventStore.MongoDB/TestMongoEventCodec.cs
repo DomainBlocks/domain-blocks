@@ -19,19 +19,19 @@ public static class TestMongoEventCodec
     {
         eventFormat ??= EventFormat.Bson;
 
-        var eventSerde = eventFormat switch
+        var eventSerializer = eventFormat switch
         {
-            EventFormat.Bson => new BsonDocumentObjectSerde(),
-            EventFormat.Protobuf => new ProtobufBytesObjectSerde().AsBsonValueSerde(),
-            EventFormat.Json => new JsonUtf8BytesObjectSerde().AsBsonValueSerde(),
+            EventFormat.Bson => new BsonDocumentObjectSerializer(),
+            EventFormat.Protobuf => new ProtobufBytesObjectSerializer().AsBsonValueSerializer(),
+            EventFormat.Json => new JsonUtf8BytesObjectSerializer().AsBsonValueSerializer(),
             _ => throw new ArgumentOutOfRangeException(nameof(eventFormat), eventFormat, null)
         };
 
         var codecOptions = new EventCodecOptions<TEvent, BsonValue, BsonValue>
         {
             TypeMap = eventTypeMap,
-            EventSerde = eventSerde,
-            MetadataSerde = new BsonDocumentMetadataSerde(),
+            EventSerializer = eventSerializer,
+            MetadataSerializer = new BsonDocumentMetadataSerializer(),
             ContractMappers = contractMappers ?? []
         };
 

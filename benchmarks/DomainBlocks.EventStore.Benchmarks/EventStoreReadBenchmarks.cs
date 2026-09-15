@@ -19,8 +19,8 @@ public class EventStoreReadBenchmarks
 {
     private const string StreamId = "test-stream";
 
-    private static readonly JsonUtf8BytesObjectSerde EventSerde = new();
-    private static readonly JsonUtf8BytesMetadataSerde MetadataSerde = new();
+    private static readonly JsonUtf8BytesObjectSerializer Utf8EventSerializer = new();
+    private static readonly JsonUtf8BytesMetadataSerializer Utf8MetadataSerializer = new();
 
     private FakeKurrentDBEventStore<IDomainEvent> _eventStore = null!;
     private ReadStreamOptions _readStreamOptions = null!;
@@ -49,8 +49,8 @@ public class EventStoreReadBenchmarks
         var decoderOptions = new EventDecoderOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
             TypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>()),
-            EventDeserializer = EventSerde,
-            MetadataDeserializer = MetadataSerde
+            EventDeserializer = Utf8EventSerializer,
+            MetadataDeserializer = Utf8MetadataSerializer
         };
 
         var decoder = EventDecoder.Create(decoderOptions);
@@ -101,14 +101,14 @@ public class EventStoreReadBenchmarks
                 Value2 = $"value2-{i}"
             };
 
-            var metadata = new Dictionary<string, string>
-            {
-                { "Value1", $"value1-{i}" },
-                { "Value2", $"value2-{i}" },
-            };
+            KeyValuePair<string, string>[] metadata =
+            [
+                KeyValuePair.Create("Value1", $"value1-{i}"),
+                KeyValuePair.Create("Value2", $"value2-{i}")
+            ];
 
-            var serializedEvent = EventSerde.Serialize(@event);
-            var serializedMetadata = MetadataSerde.Serialize(metadata);
+            var serializedEvent = Utf8EventSerializer.Serialize(@event);
+            var serializedMetadata = Utf8MetadataSerializer.Serialize(metadata);
 
             var eventRecord = new EventRecord(
                 StreamId,

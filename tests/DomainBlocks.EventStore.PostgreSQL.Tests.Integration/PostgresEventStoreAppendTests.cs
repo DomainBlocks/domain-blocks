@@ -150,8 +150,8 @@ public class PostgresEventStoreAppendTests : PostgresIntegrationTest
         var eventCodec = EventCodec.Create(new EventCodecOptions<object, PostgresEventData, string>
         {
             TypeMap = DefaultEventTypeMap,
-            EventSerde = ((IObjectSerde<byte[]>)new JsonUtf8BytesObjectSerde()).AsPostgresEventDataSerde(),
-            MetadataSerde = new JsonMetadataSerde()
+            EventSerializer = ((IObjectSerializer<byte[]>)new JsonUtf8BytesObjectSerializer()).AsPostgresEventDataSerializer(),
+            MetadataSerializer = new JsonMetadataSerializer()
         });
 
         return Harness.CreateEventStore(eventCodec);

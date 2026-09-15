@@ -1,12 +1,9 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using DomainBlocks.Serialization.Abstractions;
 
 namespace DomainBlocks.Serialization.SystemTextJson;
 
-public sealed class JsonUtf8BytesObjectSerde(JsonSerializerOptions? options = null) :
-    IObjectSerde<byte[]>,
-    IObjectSerde<ReadOnlyMemory<byte>>,
-    IByteObjectDeserializer
+public sealed class JsonUtf8BytesObjectSerializer(JsonSerializerOptions? options = null) : IByteObjectSerializer
 {
     public byte[] Serialize(object value)
     {
@@ -20,13 +17,13 @@ public sealed class JsonUtf8BytesObjectSerde(JsonSerializerOptions? options = nu
         }
     }
 
-    public object Deserialize(ReadOnlySpan<byte> value, Type type)
+    public object Deserialize(ReadOnlySpan<byte> data, Type type)
     {
         object? result;
 
         try
         {
-            result = JsonSerializer.Deserialize(value, type, options);
+            result = JsonSerializer.Deserialize(data, type, options);
         }
         catch (Exception ex)
         {
@@ -35,6 +32,4 @@ public sealed class JsonUtf8BytesObjectSerde(JsonSerializerOptions? options = nu
 
         return result ?? throw ObjectSerializationException.DeserializationReturnedNull(type);
     }
-
-    ReadOnlyMemory<byte> IObjectSerializer<ReadOnlyMemory<byte>>.Serialize(object value) => Serialize(value);
 }

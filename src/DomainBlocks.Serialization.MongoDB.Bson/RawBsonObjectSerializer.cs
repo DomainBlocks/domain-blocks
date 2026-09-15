@@ -4,15 +4,15 @@ using MongoDB.Bson.Serialization;
 
 namespace DomainBlocks.Serialization.MongoDB.Bson;
 
-public sealed class RawBsonObjectSerde : IObjectSerde<byte[]>
+public sealed class RawBsonObjectSerializer : IObjectSerializer<byte[]>
 {
     public byte[] Serialize(object value)
     {
         return value.ToBson(value.GetType());
     }
 
-    public object Deserialize(byte[] value, Type type)
+    public object Deserialize(byte[] data, Type type)
     {
-        return BsonSerializer.Deserialize(value, type);
+        return BsonSerializer.Deserialize(data, type);
     }
 }
