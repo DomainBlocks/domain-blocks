@@ -45,7 +45,7 @@ public abstract class PostgresIntegrationTest(Action<PostgresEventStoreOptions>?
     /// <summary>
     /// Creates a store over the fixture's schema with the default JSON codec and, optionally, different options.
     /// </summary>
-    protected PostgresEventStore<object> CreateEventStore(
+    protected IEventStore<object, string, StreamPosition, LogPosition> CreateEventStore(
         string loggerNameSuffix = "",
         PostgresEventStoreOptions? options = null)
     {

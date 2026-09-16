@@ -20,6 +20,14 @@ internal sealed class FakeEventStore : IEventStore<object, string, StreamPositio
 
     public bool Disposed { get; private set; }
 
+    public int InitializeCalls { get; private set; }
+
+    public Task EnsureInitializedAsync(CancellationToken cancellationToken = default)
+    {
+        InitializeCalls++;
+        return Task.CompletedTask;
+    }
+
     public Task AppendAsync(
         string streamId,
         IEnumerable<AppendableEvent<object>> events,
@@ -28,8 +36,9 @@ internal sealed class FakeEventStore : IEventStore<object, string, StreamPositio
         AppendOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        LastAppendedEnumerable = events;
-        Appends.Add((streamId, events.Select(e => new AppendedEvent(e.Payload, e.Metadata.ToArray())).ToArray()));
+        var eventArray = events as AppendableEvent<object>[] ?? [.. events];
+        LastAppendedEnumerable = eventArray;
+        Appends.Add((streamId, [.. eventArray.Select(e => new AppendedEvent(e.Payload, [.. e.Metadata]))]));
         return Task.CompletedTask;
     }
 

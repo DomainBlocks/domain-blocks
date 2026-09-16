@@ -54,6 +54,20 @@ public class KurrentDBEventStoreBuilderTests
     }
 
     [Test]
+    public async Task EnsureInitializedAsync_CompletesWithoutTouchingTheServer()
+    {
+        await using var store = new KurrentDBEventStoreBuilder<object>()
+            .UseConnectionString(ConnectionString)
+            .MapEvent<OrderPlaced>()
+            .Build();
+
+        var initialized = store.EnsureInitializedAsync();
+
+        initialized.IsCompletedSuccessfully.ShouldBeTrue();
+        await initialized;
+    }
+
+    [Test]
     public async Task Build_OwnedClient_BuildsOnceThenThrows()
     {
         var builder = new KurrentDBEventStoreBuilder<object>()

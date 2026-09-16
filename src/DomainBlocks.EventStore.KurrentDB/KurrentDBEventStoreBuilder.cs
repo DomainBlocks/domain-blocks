@@ -149,9 +149,11 @@ public sealed class KurrentDBEventStoreBuilder<TEvent> where TEvent : notnull
     }
 
     /// <summary>
-    /// Builds the store. Nothing here touches the server.
+    /// Builds the store, with the configured metadata contributors and read transforms applied. Nothing here touches
+    /// the server, and KurrentDB needs nothing created ahead of use, so the result's
+    /// <see cref="IEventStore{TEvent, TStreamId, TStreamPos, TLogPos}.EnsureInitializedAsync"/> completes immediately.
     /// </summary>
-    public KurrentDBEventStore<TEvent> Build()
+    public IEventStore<TEvent, string, global::KurrentDB.Client.StreamPosition, Position> Build()
     {
         if (_client is null && _connectionString is null)
         {
@@ -177,15 +179,13 @@ public sealed class KurrentDBEventStoreBuilder<TEvent> where TEvent : notnull
 
         try
         {
-            var core = new KurrentDBEventStoreCore<TEvent>(client, codec);
+            var store = new KurrentDBEventStore<TEvent>(client, codec, ownedClient);
 
-            var inner = core.WithMetadataContributors([.. _contributors]);
+            var decorated = store.WithMetadataContributors([.. _contributors]);
 
-            inner = _hasDroppedEventPlaceholder
-                ? inner.WithReadTransforms(_transforms, _droppedEventPlaceholder)
-                : inner.WithReadTransforms([.. _transforms]);
-
-            return new KurrentDBEventStore<TEvent>(inner, ownedClient);
+            return _hasDroppedEventPlaceholder
+                ? decorated.WithReadTransforms(_transforms, _droppedEventPlaceholder)
+                : decorated.WithReadTransforms([.. _transforms]);
         }
         catch
         {

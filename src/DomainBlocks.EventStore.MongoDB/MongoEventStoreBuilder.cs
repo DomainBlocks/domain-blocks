@@ -195,10 +195,11 @@ public sealed class MongoEventStoreBuilder<TEvent> where TEvent : notnull
     }
 
     /// <summary>
-    /// Builds the store. Nothing here touches the database; call
-    /// <see cref="MongoEventStore{TEvent}.EnsureInitializedAsync"/> on the result to create the indexes.
+    /// Builds the store, with the configured metadata contributors and read transforms applied. Nothing here touches
+    /// the database; call <see cref="IEventStore{TEvent, TStreamId, TStreamPos, TLogPos}.EnsureInitializedAsync"/>
+    /// on the result to create the indexes.
     /// </summary>
-    public MongoEventStore<TEvent> Build()
+    public IEventStore<TEvent, string, StreamPosition, LogPosition> Build()
     {
         if (_client is null && _connectionString is null)
         {
@@ -226,15 +227,13 @@ public sealed class MongoEventStoreBuilder<TEvent> where TEvent : notnull
 
         try
         {
-            var core = MongoEventStoreCore.Create(client, codec, _options, logger);
+            var store = MongoEventStore.Create(client, codec, _options, logger, ownedClient);
 
-            var inner = core.WithMetadataContributors([.. _contributors]);
+            var decorated = store.WithMetadataContributors([.. _contributors]);
 
-            inner = _hasDroppedEventPlaceholder
-                ? inner.WithReadTransforms(_transforms, _droppedEventPlaceholder)
-                : inner.WithReadTransforms([.. _transforms]);
-
-            return new MongoEventStore<TEvent>(inner, client, ownedClient, _options);
+            return _hasDroppedEventPlaceholder
+                ? decorated.WithReadTransforms(_transforms, _droppedEventPlaceholder)
+                : decorated.WithReadTransforms([.. _transforms]);
         }
         catch
         {

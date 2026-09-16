@@ -37,6 +37,7 @@ public sealed class PostgresEventStoreBuilder<TEvent> where TEvent : notnull
     private string? _connectionString;
     private Action<NpgsqlDataSourceBuilder>? _configureDataSource;
     private PostgresEventStoreOptions _options = new();
+    private PostgresEventStoreAdminOptions _adminOptions = new();
     private ILoggerFactory? _loggerFactory;
     private ILogger? _logger;
     private bool _built;
@@ -93,6 +94,26 @@ public sealed class PostgresEventStoreBuilder<TEvent> where TEvent : notnull
         ArgumentNullException.ThrowIfNull(configure);
 
         configure(_options);
+        return this;
+    }
+
+    /// <summary>
+    /// Replaces the options that the store's <see cref="IEventStore{TEvent, TStreamId, TStreamPos, TLogPos}.EnsureInitializedAsync"/>
+    /// applies. Use <see cref="ConfigureAdminOptions"/> to adjust the current ones.
+    /// </summary>
+    public PostgresEventStoreBuilder<TEvent> UseAdminOptions(PostgresEventStoreAdminOptions adminOptions)
+    {
+        ArgumentNullException.ThrowIfNull(adminOptions);
+
+        _adminOptions = adminOptions;
+        return this;
+    }
+
+    public PostgresEventStoreBuilder<TEvent> ConfigureAdminOptions(Action<PostgresEventStoreAdminOptions> configure)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+
+        configure(_adminOptions);
         return this;
     }
 
@@ -202,10 +223,11 @@ public sealed class PostgresEventStoreBuilder<TEvent> where TEvent : notnull
     }
 
     /// <summary>
-    /// Builds the store. Nothing here touches the database; call
-    /// <see cref="PostgresEventStore{TEvent}.EnsureInitializedAsync"/> on the result to create the schema.
+    /// Builds the store, with the configured metadata contributors and read transforms applied. Nothing here touches
+    /// the database; call <see cref="IEventStore{TEvent, TStreamId, TStreamPos, TLogPos}.EnsureInitializedAsync"/>
+    /// on the result to create the schema.
     /// </summary>
-    public PostgresEventStore<TEvent> Build()
+    public IEventStore<TEvent, string, StreamPosition, LogPosition> Build()
     {
         if (_dataSource is null && _connectionString is null)
         {
@@ -234,20 +256,20 @@ public sealed class PostgresEventStoreBuilder<TEvent> where TEvent : notnull
 
         try
         {
-            var core = PostgresEventStoreCore.Create(
+            var store = PostgresEventStore.Create(
                 dataSource,
                 codec,
                 _options,
+                _adminOptions,
                 logger,
+                ownsDataSource,
                 replicationConnectionStringFallback: ownsDataSource ? _connectionString : null);
 
-            var inner = core.WithMetadataContributors([.. _contributors]);
+            var decorated = store.WithMetadataContributors([.. _contributors]);
 
-            inner = _hasDroppedEventPlaceholder
-                ? inner.WithReadTransforms(_transforms, _droppedEventPlaceholder)
-                : inner.WithReadTransforms([.. _transforms]);
-
-            return new PostgresEventStore<TEvent>(inner, dataSource, ownsDataSource, _options);
+            return _hasDroppedEventPlaceholder
+                ? decorated.WithReadTransforms(_transforms, _droppedEventPlaceholder)
+                : decorated.WithReadTransforms([.. _transforms]);
         }
         catch
         {

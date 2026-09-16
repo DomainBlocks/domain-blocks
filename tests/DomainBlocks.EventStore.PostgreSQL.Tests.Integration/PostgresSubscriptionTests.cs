@@ -12,7 +12,7 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 [TestFixture]
 public class PostgresSubscriptionTests : PostgresIntegrationTest
 {
-    private PostgresEventStore<object> _eventStore = null!;
+    private IEventStore<object, string, StreamPosition, LogPosition> _eventStore = null!;
 
     [SetUp]
     public void SetUp()

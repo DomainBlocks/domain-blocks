@@ -64,25 +64,31 @@ owners. A builder on the borrowed path may build as many stores as it likes.
 
 ## Initialization
 
-`EnsureInitializedAsync` lives on the concrete store, not on the builder and not on `IEventStore`:
+`EnsureInitializedAsync` is a member of `IEventStore`. The store knows *what* it needs in its backing database; the
+host decides *when* to create it. Splitting the two this way is what keeps the rest of the design simple:
 
+* Builders never perform I/O. `Build()` is synchronous and can run in a container factory; `BuildAsync` or an
+  initializing builder would also mean one DDL round per built store, which is wrong for fixtures that initialise
+  once and build many.
 * It is idempotent and safe to call concurrently, so calling it from start-up code, a test fixture or a hosted
-  service is always safe.
-* A builder is configuration; it should not perform I/O, and `BuildAsync` would mean one DDL round per built store,
-  which is wrong for fixtures that initialise once and build many.
-* It is provider-specific: PostgreSQL creates a schema, functions and a publication; MongoDB creates indexes;
-  KurrentDB has nothing to initialise, so its store has no such method.
+  service is always safe, including from several replicas starting at once.
+* It is provider-specific underneath: PostgreSQL creates a schema, functions and a publication; MongoDB creates
+  indexes; KurrentDB has nothing to create, so its store completes immediately. Provider-specific choices, such as
+  whether PostgreSQL creates the publication, are builder configuration (`ConfigureAdminOptions`), not call-site
+  arguments, so the call itself is the same for every store.
+* Being on the interface, it survives decoration: the store `Build()` returns, a fake in a test host, or anything
+  a user wraps around a store can be initialized without knowing what it is. That is what lets one generic
+  start-up component serve every provider, below.
 * It is the only admin operation on the store. `DropAsync` stays on the static admin classes: a destructive method
   does not belong in IntelliSense next to `AppendAsync`.
 
-## The public face and the core
+## One class per backend
 
-`Build()` returns the concrete store, `PostgresEventStore<TEvent>` and so on, with the configured contributors and
-transforms already applied. To make that possible the store class is a thin public face over an internal core: the
-core is the store proper, the builder decorates it with the existing `WithMetadataContributors` and
-`WithReadTransforms` extensions, and the face delegates every `IEventStore` member to the result. One extra virtual
-call per operation, none per event. The face is also where provider-specific surface lives, `EnsureInitializedAsync`
-today.
+`Build()` returns `IEventStore<TEvent, string, StreamPosition, LogPosition>`: the concrete store with the configured
+contributors and transforms applied through the existing `WithMetadataContributors` and `WithReadTransforms`
+extensions. There is one store class per backend, `PostgresEventStore<TEvent>` and so on. It owns its append
+queue, feed and, when the builder created it, its client; it implements `EnsureInitializedAsync` over the static
+admin class; and it sees only `IEventCodec`, which the dependency tests enforce.
 
 The static `Create(client, codec, options, logger)` factories remain as the primitive for callers who build a codec
 themselves, and the decorator extensions remain for composing any `IEventStore` by hand.
@@ -96,23 +102,37 @@ its own, in tests for instance. Two rules in it remove known traps: contract typ
 automatically, because the stored name comes from the contract type; and the store's serializer defaults apply only
 to a serializer that was not set explicitly.
 
-## Dependency injection, later
+## Start-up
 
-Nothing is built yet, and nothing in the builders needs to change for it:
+Nothing is built yet; this records the design. There are three idiomatic places to call `EnsureInitializedAsync`
+in a hosted application, and the interface method serves all of them:
+
+1. **Explicitly in `Program.cs`**, before the host runs, the way EF Core migrations are usually applied. No library
+   support is needed and the DDL step is visible in the one file people read first.
+2. **An opt-in hosted initializer**, registered by a future `AddPostgresEventStore(...)` through something like
+   `InitializeOnStartup()`. It implements `IHostedLifecycleService.StartingAsync`, not plain `StartAsync`: the host
+   runs every `StartingAsync` before any `StartAsync`, so subscription and projection workers see the schema
+   regardless of registration order. Opt-in rather than default, as with EF and Marten, because locked-down
+   deployments create the schema out of band.
+3. **Out of band**: an init container, a migration job or a DBA script. The application never calls initialize.
+
+Registration binds `IEventStore<TEvent, string, StreamPosition, LogPosition>` directly; there is no concrete type to
+forward from:
 
 ```csharp
 services.AddSingleton<IMongoClient>(_ => new MongoClient(connectionString));      // MongoDB's guidance
 services.AddMongoEventStore<IDomainEvent>(b => b.MapEvents(...));                   // resolves the client itself
 services.AddPostgresEventStore<IDomainEvent>((sp, b) => b
     .ConfigureOptions(o => configuration.GetSection("EventStore").Bind(o))
-    .MapEvents(...));
+    .MapEvents(...))
+    .InitializeOnStartup();
 ```
 
-A registration resolves the client and `ILoggerFactory` from the container, calls the borrow path, registers the
-concrete store as a singleton and forwards `IEventStore<TEvent, string, StreamPosition, LogPosition>` to it, and an
-optional hosted service calls `EnsureInitializedAsync` at start-up. The options classes are plain mutable objects,
-so `IConfiguration.Bind` works today. The `Add*` methods belong in each store package, depending only on
-`Microsoft.Extensions.DependencyInjection.Abstractions`.
+A registration resolves the client and `ILoggerFactory` from the container, calls the borrow path and registers
+the built store as a singleton. The options classes are plain mutable objects, so `IConfiguration.Bind` works today.
+The `Add*` methods belong in each store package, depending only on
+`Microsoft.Extensions.DependencyInjection.Abstractions`; the generic initializer needs the hosting abstractions, so
+it belongs in a small shared hosting package, keeping `DomainBlocks.EventStore` free of package dependencies.
 
 ## Packages
 

@@ -72,6 +72,9 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
 
     public TEvent DroppedEventPlaceholder { get; }
 
+    public Task EnsureInitializedAsync(CancellationToken cancellationToken = default) =>
+        Inner.EnsureInitializedAsync(cancellationToken);
+
     public Task AppendAsync(
         TStreamId streamId,
         IEnumerable<AppendableEvent<TEvent>> events,

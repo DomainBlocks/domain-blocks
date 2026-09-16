@@ -14,7 +14,7 @@ public class PostgresEventStorePagingTests() : PostgresIntegrationTest(x => x.Re
 {
     private const int BatchSize = 7;
 
-    private PostgresEventStore<object> _eventStore = null!;
+    private IEventStore<object, string, StreamPosition, LogPosition> _eventStore = null!;
 
     [SetUp]
     public void SetUp()

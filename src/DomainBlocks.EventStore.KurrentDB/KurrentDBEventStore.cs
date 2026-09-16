@@ -1,5 +1,8 @@
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Codecs;
 using KurrentDB.Client;
+using KurrentStreamState = KurrentDB.Client.StreamState;
 
 namespace DomainBlocks.EventStore.KurrentDB;
 
@@ -20,28 +23,38 @@ public static class KurrentDBEventStore
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(eventCodec);
 
-        return new KurrentDBEventStore<TEvent>(new KurrentDBEventStoreCore<TEvent>(client, eventCodec), ownedClient: null);
+        return new KurrentDBEventStore<TEvent>(client, eventCodec, ownedClient: null);
     }
 }
 
 /// <summary>
-/// A KurrentDB event store. The event store operations are those of <see cref="IEventStore{TEvent, TStreamId,
-/// TStreamPos, TLogPos}"/>; the metadata contributors and read transforms configured through the builder are already
-/// applied. Disposing the store releases the client only when the store created it.
+/// A KurrentDB event store over a client. Created by <see cref="KurrentDBEventStore.Create{TEvent}"/> over a client
+/// the caller owns, or by <see cref="KurrentDBEventStoreBuilder{TEvent}"/>, which may also create a client for the
+/// store to own. Disposing the store releases the client only when the store owns it.
 /// </summary>
 public sealed class KurrentDBEventStore<TEvent> : IEventStore<TEvent, string, StreamPosition, Position>
     where TEvent : notnull
 {
-    private readonly IEventStore<TEvent, string, StreamPosition, Position> _inner;
+    private readonly KurrentDBClient _client;
+    private readonly IEventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> _eventCodec;
     private readonly IAsyncDisposable? _ownedClient;
 
-    internal KurrentDBEventStore(IEventStore<TEvent, string, StreamPosition, Position> inner, IAsyncDisposable? ownedClient)
+    internal KurrentDBEventStore(
+        KurrentDBClient client,
+        IEventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec,
+        IAsyncDisposable? ownedClient)
     {
-        _inner = inner;
+        _client = client;
+        _eventCodec = eventCodec;
         _ownedClient = ownedClient;
     }
 
-    public Task AppendAsync(
+    /// <summary>
+    /// KurrentDB needs nothing created ahead of use, so this completes immediately.
+    /// </summary>
+    public Task EnsureInitializedAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public async Task AppendAsync(
         string streamId,
         IEnumerable<AppendableEvent<TEvent>> events,
         ExpectedStreamState<StreamPosition>? expectedState = null,
@@ -49,7 +62,30 @@ public sealed class KurrentDBEventStore<TEvent> : IEventStore<TEvent, string, St
         AppendOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        return _inner.AppendAsync(streamId, events, expectedState, commitId, options, cancellationToken);
+        expectedState ??= ExpectedStreamState.Any<StreamPosition>();
+        options ??= AppendOptions.Default;
+
+        var kurrentExpectedState = ToKurrentStreamState(expectedState.Value);
+
+        var eventData = _eventCodec
+            .Encode(events)
+            .Select(x => new EventData(Uuid.NewUuid(), x.EventName, x.EventData, x.Metadata));
+
+        try
+        {
+            _ = await _client
+                .AppendToStreamAsync(
+                    streamId,
+                    kurrentExpectedState,
+                    eventData,
+                    cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (WrongExpectedVersionException ex)
+        {
+            var observedState = ToObservedStreamState(ex.ActualStreamState);
+            throw new StreamAppendConflictException<StreamPosition>(streamId, expectedState.Value, observedState, ex);
+        }
     }
 
     public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, Position>> ReadAll(
@@ -57,7 +93,7 @@ public sealed class KurrentDBEventStore<TEvent> : IEventStore<TEvent, string, St
         ReadOrigin<Position>? origin = null,
         ReadAllOptions? options = null)
     {
-        return _inner.ReadAll(direction, origin, options);
+        throw new NotImplementedException();
     }
 
     public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, Position>> ReadStream(
@@ -66,29 +102,130 @@ public sealed class KurrentDBEventStore<TEvent> : IEventStore<TEvent, string, St
         ReadOrigin<StreamPosition>? origin = null,
         ReadStreamOptions? options = null)
     {
-        return _inner.ReadStream(streamId, direction, origin, options);
+        return ReadStreamCoreAsync(streamId, direction, origin, options);
     }
 
     public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
         SubscriptionOrigin<Position>? origin = null,
         SubscriptionOptions? options = null)
     {
-        return _inner.SubscribeToAll(origin, options);
+        throw new NotImplementedException();
     }
 
-    public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
-        string streamId,
+    public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(string streamId,
         SubscriptionOrigin<StreamPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
-        return _inner.SubscribeToStream(streamId, origin, options);
+        throw new NotImplementedException();
     }
 
-    public async ValueTask DisposeAsync()
-    {
-        await _inner.DisposeAsync().ConfigureAwait(false);
+    // The store holds no resources of its own beyond a client it may own.
+    public ValueTask DisposeAsync() => _ownedClient?.DisposeAsync() ?? ValueTask.CompletedTask;
 
-        if (_ownedClient is not null)
-            await _ownedClient.DisposeAsync().ConfigureAwait(false);
+    private static KurrentStreamState ToKurrentStreamState(ExpectedStreamState<StreamPosition> expected) =>
+        expected switch
+        {
+            { Kind: ExpectedStreamStateKind.Any } => KurrentStreamState.Any,
+            { Kind: ExpectedStreamStateKind.DoesNotExist } => KurrentStreamState.NoStream,
+            { Kind: ExpectedStreamStateKind.Exists } => KurrentStreamState.StreamExists,
+            { Kind: ExpectedStreamStateKind.AtVersion } => KurrentStreamState.StreamRevision(expected.Version),
+            _ => throw new ArgumentOutOfRangeException(nameof(expected), expected, null)
+        };
+
+    private static ObservedStreamState<StreamPosition>? ToObservedStreamState(KurrentStreamState kurrentStreamState)
+    {
+        if (kurrentStreamState == KurrentStreamState.NoStream)
+            return ObservedStreamState.DoesNotExist<StreamPosition>();
+
+        if (kurrentStreamState.HasPosition)
+        {
+            var value = kurrentStreamState.ToInt64();
+            if (value >= 0)
+                return ObservedStreamState.AtVersion(StreamPosition.FromInt64(value));
+        }
+
+        return null;
+    }
+
+    private async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, Position>> ReadStreamCoreAsync(
+        string streamId,
+        ReadDirection direction,
+        ReadOrigin<StreamPosition>? origin,
+        ReadStreamOptions? options,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        origin ??= direction == ReadDirection.Forward
+            ? ReadOrigin.Start<StreamPosition>()
+            : ReadOrigin.End<StreamPosition>();
+
+        options ??= ReadStreamOptions.Default;
+
+        if (direction.ProducesEmptyReadFrom(origin))
+        {
+            if (options.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw &&
+                !await StreamExistsAsync(streamId, cancellationToken).ConfigureAwait(false))
+            {
+                throw new StreamNotFoundException(streamId);
+            }
+
+            yield break;
+        }
+
+        var revision = origin switch
+        {
+            ReadOrigin<StreamPosition>.Start => StreamPosition.Start,
+            ReadOrigin<StreamPosition>.End => StreamPosition.End,
+            ReadOrigin<StreamPosition>.At at => at.Position,
+            _ => throw new UnreachableException($"Unknown ReadOrigin type '{origin.GetType().Name}'.")
+        };
+
+        var kurrentDirection = direction == ReadDirection.Forward ? Direction.Forwards : Direction.Backwards;
+
+        var result = _client.ReadStreamAsync(
+            kurrentDirection,
+            streamId,
+            revision,
+            maxCount: options.MaxCount ?? long.MaxValue,
+            cancellationToken: cancellationToken);
+
+        if (await result.ReadState.ConfigureAwait(false) == ReadState.StreamNotFound)
+        {
+            if (options.StreamNotFoundBehavior == StreamNotFoundBehavior.Throw)
+                throw new StreamNotFoundException(streamId);
+
+            yield break;
+        }
+
+        await foreach (var resolvedEvent in result.ConfigureAwait(false))
+        {
+            var record = resolvedEvent.Event;
+            var originalRecord = resolvedEvent.OriginalEvent;
+            var metadataBytes = options.IncludeMetadata ? record.Metadata : default;
+
+            var (@event, metadata) = _eventCodec.Decode(record.EventType, record.Data, metadataBytes);
+
+            var context = ReadEventContext.Create(
+                streamId,
+                metadata,
+                record.Created,
+                originalRecord.EventNumber,
+                originalRecord.Position);
+
+            yield return ReadEvent.Create(@event, context);
+        }
+    }
+
+    private async Task<bool> StreamExistsAsync(string streamId, CancellationToken cancellationToken)
+    {
+        var streamExist = _client.ReadStreamAsync(
+            Direction.Backwards,
+            streamId,
+            StreamPosition.End,
+            maxCount: 1,
+            cancellationToken: cancellationToken);
+
+        var readState = await streamExist.ReadState.ConfigureAwait(false);
+
+        return readState == ReadState.Ok;
     }
 }

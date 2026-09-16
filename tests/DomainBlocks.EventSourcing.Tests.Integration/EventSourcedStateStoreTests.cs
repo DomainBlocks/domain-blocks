@@ -14,7 +14,7 @@ namespace DomainBlocks.EventSourcing.Tests.Integration;
 public class EventSourcedStateStoreTests
 {
     private MongoEventStoreOptions _options = null!;
-    private MongoEventStore<IDomainEvent> _eventStore = null!;
+    private IEventStore<IDomainEvent, string, StreamPosition, LogPosition> _eventStore = null!;
     private EventSourcedStateStore<ShoppingCart, IDomainEvent, string, StreamPosition, LogPosition> _store = null!;
 
     [OneTimeSetUp]

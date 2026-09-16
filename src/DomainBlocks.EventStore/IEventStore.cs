@@ -1,8 +1,8 @@
 ﻿namespace DomainBlocks.EventStore;
 
 /// <summary>
-/// Defines operations for appending to and reading from an event store. Disposing a store releases the resources
-/// it owns, such as append queues and feeds; a client the store merely borrows is never disposed.
+/// Defines operations for appending to and reading from an event store, and for creating what the store needs in its
+/// backing database. Disposing a store releases any resources it owns.
 /// </summary>
 /// <typeparam name="TEvent">The type of events stored by the event store.</typeparam>
 /// <typeparam name="TStreamId">The type used to identify event streams.</typeparam>
@@ -14,6 +14,15 @@ public interface IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> : IAsyncDis
     where TStreamPos : notnull
     where TLogPos : notnull
 {
+    /// <summary>
+    /// Creates whatever the store needs in its backing database, such as a schema or indexes, if it does not already
+    /// exist. Idempotent and safe to call concurrently from several processes, so it can run on every start-up. A
+    /// store with nothing to create completes immediately.
+    /// </summary>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <returns>A task that represents the asynchronous initialization.</returns>
+    Task EnsureInitializedAsync(CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Appends events to a stream.
     /// </summary>

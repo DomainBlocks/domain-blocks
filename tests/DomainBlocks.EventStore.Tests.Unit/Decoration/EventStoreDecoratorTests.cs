@@ -25,6 +25,20 @@ public class EventStoreDecoratorTests
     }
 
     [Test]
+    public async Task EnsureInitializedAsync_ForwardsToInnerStore()
+    {
+        var store = _inner
+            .WithMetadataContributors(new FixedContributor("k", "v"))
+            .WithReadTransforms(new SplitTransform());
+
+        store.ShouldNotBeSameAs(_inner);
+
+        await store.EnsureInitializedAsync();
+
+        _inner.InitializeCalls.ShouldBe(1);
+    }
+
+    [Test]
     public async Task WithMetadataContributors_ThenWithReadTransforms_AppliesBothInEitherOrder()
     {
         _inner.ReadEvents.Add(FakeEventStore.ReadEventAt(new Legacy("a;b"), 0));

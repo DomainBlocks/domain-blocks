@@ -86,7 +86,7 @@ public sealed class PostgresEventStoreTestHarness(Action<PostgresEventStoreOptio
     /// Creates a store over this harness's schema with an explicit codec and, optionally, different options such as
     /// batch sizes.
     /// </summary>
-    public PostgresEventStore<object> CreateEventStore(
+    public IEventStore<object, string, StreamPosition, LogPosition> CreateEventStore(
         IEventCodec<object, PostgresEventData, string> eventCodec,
         PostgresEventStoreOptions? options = null,
         string loggerNameSuffix = "")
@@ -122,7 +122,8 @@ public sealed class PostgresEventStoreTestHarness(Action<PostgresEventStoreOptio
     private static IObjectSerializer<PostgresEventData> EventSerializerFor(EventFormat format) => format switch
     {
         EventFormat.Json => new JsonObjectSerializer().AsPostgresEventDataSerializer(),
-        EventFormat.Protobuf => ((IObjectSerializer<byte[]>)new ProtobufBytesObjectSerializer()).AsPostgresEventDataSerializer(),
+        EventFormat.Protobuf => ((IObjectSerializer<byte[]>)new ProtobufBytesObjectSerializer())
+            .AsPostgresEventDataSerializer(),
         EventFormat.Bson => throw new NotSupportedException("BSON is not supported by the PostgreSQL event store."),
         _ => throw new ArgumentOutOfRangeException(nameof(format), format, null)
     };

@@ -17,7 +17,7 @@ public class PostgresFeedRecoveryTests() : PostgresIntegrationTest(x =>
     x.Replication.MaxRetryDelay = TimeSpan.FromMilliseconds(500);
 })
 {
-    private PostgresEventStore<object> _eventStore = null!;
+    private IEventStore<object, string, StreamPosition, LogPosition> _eventStore = null!;
 
     [SetUp]
     public void SetUp()

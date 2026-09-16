@@ -10,6 +10,8 @@ namespace DomainBlocks.Benchmarking.EventStore;
 /// </summary>
 public sealed class NoOpEventStore : IEventStore<object, string, StreamPosition, LogPosition>
 {
+    public Task EnsureInitializedAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
     public Task AppendAsync(
         string streamId,
         IEnumerable<AppendableEvent<object>> events,

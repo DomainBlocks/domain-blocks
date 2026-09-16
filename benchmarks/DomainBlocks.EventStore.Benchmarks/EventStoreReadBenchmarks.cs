@@ -164,6 +164,8 @@ public class EventStoreReadBenchmarks
         IEventStore<TEvent, string, StreamPosition, Position>
         where TEvent : notnull
     {
+        public Task EnsureInitializedAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
         public Task AppendAsync(
             string streamId,
             IEnumerable<AppendableEvent<TEvent>> events,

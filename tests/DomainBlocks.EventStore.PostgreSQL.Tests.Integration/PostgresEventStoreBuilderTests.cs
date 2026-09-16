@@ -32,7 +32,7 @@ public class PostgresEventStoreBuilderTests
 
         await using (store)
         {
-            await store.EnsureInitializedAsync(cancellationToken: ct);
+            await store.EnsureInitializedAsync(ct);
 
             var appended = new TestEvent { Value = "owned" };
             await store.AppendAsync("s1", [AppendableEvent.Create<object>(appended)], cancellationToken: ct);
