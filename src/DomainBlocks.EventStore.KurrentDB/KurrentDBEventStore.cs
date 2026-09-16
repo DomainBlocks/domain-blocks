@@ -9,28 +9,9 @@ namespace DomainBlocks.EventStore.KurrentDB;
 // Inside the namespace so that it shadows DomainBlocks.EventStore.StreamPosition from the parent namespace.
 using StreamPosition = global::KurrentDB.Client.StreamPosition;
 
-public static class KurrentDBEventStore
-{
-    /// <summary>
-    /// Creates an event store over an existing client, which the caller owns; the store only borrows it. For the
-    /// common case, prefer <see cref="KurrentDBEventStoreBuilder{TEvent}"/>.
-    /// </summary>
-    public static KurrentDBEventStore<TEvent> Create<TEvent>(
-        KurrentDBClient client,
-        IEventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec)
-        where TEvent : notnull
-    {
-        ArgumentNullException.ThrowIfNull(client);
-        ArgumentNullException.ThrowIfNull(eventCodec);
-
-        return new KurrentDBEventStore<TEvent>(client, eventCodec, ownedClient: null);
-    }
-}
-
 /// <summary>
-/// A KurrentDB event store over a client. Created by <see cref="KurrentDBEventStore.Create{TEvent}"/> over a client
-/// the caller owns, or by <see cref="KurrentDBEventStoreBuilder{TEvent}"/>, which may also create a client for the
-/// store to own. Disposing the store releases the client only when the store owns it.
+/// A KurrentDB event store over a client. Created by <see cref="KurrentDBEventStoreBuilder{TEvent}"/>, which may also
+/// create a client for the store to own. Disposing the store releases the client only when the store owns it.
 /// </summary>
 public sealed class KurrentDBEventStore<TEvent> : IEventStore<TEvent, string, StreamPosition, Position>
     where TEvent : notnull
