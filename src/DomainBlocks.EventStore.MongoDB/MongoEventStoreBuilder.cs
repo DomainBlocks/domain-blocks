@@ -7,8 +7,6 @@ using DomainBlocks.Serialization.Abstractions;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
-using MongoDB.Bson.Serialization;
-using MongoDB.Bson.Serialization.Serializers;
 using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB;
@@ -215,7 +213,10 @@ public sealed class MongoEventStoreBuilder<TEvent> where TEvent : notnull
                 "owns, so it builds one store; use another builder, or UseClient, for another.");
         }
 
-        var codec = _codec.Build(DefaultEventSerializer, static () => new BsonDocumentMetadataSerializer());
+        var codec = _codec.Build(
+            static () => new BsonDocumentObjectSerializer(),
+            static () => new BsonDocumentMetadataSerializer());
+
         var logger = _logger ?? _loggerFactory?.CreateLogger(typeof(MongoEventStore).FullName!);
 
         MongoClient? ownedClient = null;
@@ -240,16 +241,5 @@ public sealed class MongoEventStoreBuilder<TEvent> where TEvent : notnull
             ownedClient?.Dispose();
             throw;
         }
-    }
-
-    /// <summary>
-    /// BSON documents serialize <see cref="Guid"/> only once a representation is chosen process-wide. The standard
-    /// one is registered here if nothing has been registered yet, so the default round-trips events with Guid
-    /// properties; a representation registered earlier by the application is left alone.
-    /// </summary>
-    private static IObjectSerializer<BsonValue> DefaultEventSerializer()
-    {
-        BsonSerializer.TryRegisterSerializer(new GuidSerializer(GuidRepresentation.Standard));
-        return new BsonDocumentObjectSerializer();
     }
 }

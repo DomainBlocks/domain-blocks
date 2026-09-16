@@ -32,9 +32,10 @@ public static class MongoEventStore
 }
 
 /// <summary>
-/// A MongoDB event store. The event store operations are those of <see cref="IEventStore{TEvent, TStreamId,
-/// TStreamPos, TLogPos}"/>; the metadata contributors and read transforms configured through the builder are already
-/// applied. Disposing the store releases its append queue, and the client only when the store created it.
+/// A MongoDB event store. The event store operations are those of
+/// <see cref="IEventStore{TEvent, TStreamId, TStreamPos, TLogPos}"/>; the metadata contributors and read transforms
+/// configured through the builder are already applied. Disposing the store releases its append queue, and the client
+/// only when the store created it.
 /// </summary>
 public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, StreamPosition, LogPosition>
     where TEvent : notnull

@@ -40,10 +40,10 @@ public static class EventStoreExtensions
     /// Reads are unaffected. With no contributors the store itself is returned. Disposing the result
     /// disposes the store.
     /// </summary>
-    public static IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> WithMetadataContributors<
-        TEvent, TStreamId, TStreamPos, TLogPos>(
-        this IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> eventStore,
-        params IMetadataContributor<TEvent>[] contributors)
+    public static IEventStore<TEvent, TStreamId, TStreamPos, TLogPos>
+        WithMetadataContributors<TEvent, TStreamId, TStreamPos, TLogPos>(
+            this IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> eventStore,
+            params IMetadataContributor<TEvent>[] contributors)
         where TEvent : notnull
         where TStreamId : notnull
         where TStreamPos : notnull
@@ -83,10 +83,10 @@ public static class EventStoreExtensions
     /// consumers that track the last observed position, such as an event-sourced state store. Use the overload with
     /// <c>droppedEventPlaceholder</c> to retire events instead.
     /// </remarks>
-    public static IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> WithReadTransforms<
-        TEvent, TStreamId, TStreamPos, TLogPos>(
-        this IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> eventStore,
-        params IReadEventTransform<TEvent>[] transforms)
+    public static IEventStore<TEvent, TStreamId, TStreamPos, TLogPos>
+        WithReadTransforms<TEvent, TStreamId, TStreamPos, TLogPos>(
+            this IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> eventStore,
+            params IReadEventTransform<TEvent>[] transforms)
         where TEvent : notnull
         where TStreamId : notnull
         where TStreamPos : notnull
@@ -109,11 +109,11 @@ public static class EventStoreExtensions
     /// <param name="droppedEventPlaceholder">
     /// The event emitted in place of a dropped one. Must not itself have a transform registered.
     /// </param>
-    public static IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> WithReadTransforms<
-        TEvent, TStreamId, TStreamPos, TLogPos>(
-        this IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> eventStore,
-        IEnumerable<IReadEventTransform<TEvent>> transforms,
-        TEvent droppedEventPlaceholder)
+    public static IEventStore<TEvent, TStreamId, TStreamPos, TLogPos>
+        WithReadTransforms<TEvent, TStreamId, TStreamPos, TLogPos>(
+            this IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> eventStore,
+            IEnumerable<IReadEventTransform<TEvent>> transforms,
+            TEvent droppedEventPlaceholder)
         where TEvent : notnull
         where TStreamId : notnull
         where TStreamPos : notnull
@@ -125,12 +125,12 @@ public static class EventStoreExtensions
         return WithReadTransforms(eventStore, transforms, hasDroppedEventPlaceholder: true, droppedEventPlaceholder);
     }
 
-    private static IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> WithReadTransforms<
-        TEvent, TStreamId, TStreamPos, TLogPos>(
-        IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> eventStore,
-        IEnumerable<IReadEventTransform<TEvent>> transforms,
-        bool hasDroppedEventPlaceholder,
-        TEvent droppedEventPlaceholder)
+    private static IEventStore<TEvent, TStreamId, TStreamPos, TLogPos>
+        WithReadTransforms<TEvent, TStreamId, TStreamPos, TLogPos>(
+            IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> eventStore,
+            IEnumerable<IReadEventTransform<TEvent>> transforms,
+            bool hasDroppedEventPlaceholder,
+            TEvent droppedEventPlaceholder)
         where TEvent : notnull
         where TStreamId : notnull
         where TStreamPos : notnull

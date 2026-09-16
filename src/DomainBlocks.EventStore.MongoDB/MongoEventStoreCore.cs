@@ -139,7 +139,7 @@ internal sealed class MongoEventStoreCore<TEvent> : IEventStore<TEvent, string, 
                 .Find(query.Filter)
                 .Sort(query.Sort)
                 .Limit(options.MaxCount)
-                .ProjectMetadata(options.IncludeMetadata)
+                .SetExcludeMetadata(!options.IncludeMetadata)
                 .ToCursorAsync(cancellationToken)
                 .ConfigureAwait(false);
 
@@ -186,7 +186,7 @@ internal sealed class MongoEventStoreCore<TEvent> : IEventStore<TEvent, string, 
                 .Find(filter)
                 .Sort(query.Sort)
                 .Limit(options.MaxCount)
-                .ProjectMetadata(options.IncludeMetadata)
+                .SetExcludeMetadata(!options.IncludeMetadata)
                 .ToCursorAsync(cancellationToken)
                 .ConfigureAwait(false);
 
