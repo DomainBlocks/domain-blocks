@@ -1,5 +1,4 @@
 using DomainBlocks.EventStore;
-using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Events;
 using NUnit.Framework;
@@ -24,18 +23,18 @@ public abstract class EventStoreTests<TStreamPos, TLogPos>(IEventStoreTestHarnes
     [TearDown]
     public async Task TearDown()
     {
-        if (EventStore is IAsyncDisposable asyncDisposable)
-            await asyncDisposable.DisposeAsync();
+        if (EventStore is { } eventStore)
+            await eventStore.DisposeAsync();
     }
 
     private static IEnumerable<TestCaseData> DirectionAndOriginCases
     {
         get
         {
-            yield return new TestCaseData(ReadDirection.Forward, ReadOrigin.Start<TStreamPos>());
-            yield return new TestCaseData(ReadDirection.Backward, ReadOrigin.Start<TStreamPos>());
-            yield return new TestCaseData(ReadDirection.Forward, ReadOrigin.End<TStreamPos>());
-            yield return new TestCaseData(ReadDirection.Backward, ReadOrigin.End<TStreamPos>());
+            yield return new TestCaseData(ReadDirection.Forward, ReadOrigin<TStreamPos>.Start.Instance);
+            yield return new TestCaseData(ReadDirection.Backward, ReadOrigin<TStreamPos>.Start.Instance);
+            yield return new TestCaseData(ReadDirection.Forward, ReadOrigin<TStreamPos>.End.Instance);
+            yield return new TestCaseData(ReadDirection.Backward, ReadOrigin<TStreamPos>.End.Instance);
         }
     }
 
@@ -43,8 +42,8 @@ public abstract class EventStoreTests<TStreamPos, TLogPos>(IEventStoreTestHarnes
     {
         get
         {
-            yield return new TestCaseData(ReadDirection.Forward, ReadOrigin.End<TStreamPos>());
-            yield return new TestCaseData(ReadDirection.Backward, ReadOrigin.Start<TStreamPos>());
+            yield return new TestCaseData(ReadDirection.Forward, ReadOrigin<TStreamPos>.End.Instance);
+            yield return new TestCaseData(ReadDirection.Backward, ReadOrigin<TStreamPos>.Start.Instance);
         }
     }
 

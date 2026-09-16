@@ -1,5 +1,4 @@
 using DomainBlocks.EventStore;
-using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Events;
 using NUnit.Framework;
@@ -27,8 +26,8 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(IEventSto
     [TearDown]
     public async Task TearDown()
     {
-        if (EventStore is IAsyncDisposable asyncDisposable)
-            await asyncDisposable.DisposeAsync();
+        if (EventStore is { } eventStore)
+            await eventStore.DisposeAsync();
     }
 
     [Test]
@@ -40,7 +39,7 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(IEventSto
         await EventStore.AppendAsync(streamId, catchUpEvents, cancellationToken: cancellationToken);
 
         await using var enumerator = EventStore
-            .SubscribeToAll(SubscriptionOrigin.Start<TLogPos>())
+            .SubscribeToAll(SubscriptionOrigin.Start)
             .GetAsyncEnumerator(cancellationToken);
 
         (await GetNextEventAsync(enumerator)).Payload.ShouldBe(catchUpEvents[0]);
@@ -77,7 +76,7 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(IEventSto
         CancellationToken cancellationToken)
     {
         await using var enumerator = EventStore
-            .SubscribeToAll(SubscriptionOrigin.Start<TLogPos>())
+            .SubscribeToAll(SubscriptionOrigin.Start)
             .GetAsyncEnumerator(cancellationToken);
 
         await ShouldBeCaughtUpAsync(enumerator);
@@ -147,7 +146,7 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(IEventSto
         await EventStore.AppendAsync(stream1, [events[2]], cancellationToken: cancellationToken);
 
         await using var enumerator = EventStore
-            .SubscribeToAll(SubscriptionOrigin.Start<TLogPos>())
+            .SubscribeToAll(SubscriptionOrigin.Start)
             .GetAsyncEnumerator(cancellationToken);
 
         var observed = new[]
@@ -176,7 +175,7 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(IEventSto
         await EventStore.AppendAsync(targetStream, [targetEvents[1]], cancellationToken: cancellationToken);
 
         await using var enumerator = EventStore
-            .SubscribeToStream(targetStream, SubscriptionOrigin.Start<TStreamPos>())
+            .SubscribeToStream(targetStream, SubscriptionOrigin.Start)
             .GetAsyncEnumerator(cancellationToken);
 
         (await GetNextEventAsync(enumerator)).Payload.ShouldBe(targetEvents[0]);
@@ -263,7 +262,7 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(IEventSto
         var stored = await EventStore.ReadStream(streamId).SingleAsync(cancellationToken);
 
         await using var enumerator = EventStore
-            .SubscribeToAll(SubscriptionOrigin.Start<TLogPos>())
+            .SubscribeToAll(SubscriptionOrigin.Start)
             .GetAsyncEnumerator(cancellationToken);
 
         var observed = await GetNextEventAsync(enumerator);
@@ -283,7 +282,7 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(IEventSto
         var streamId = NewStreamId();
 
         await using var enumerator = EventStore
-            .SubscribeToStream(streamId, SubscriptionOrigin.Start<TStreamPos>())
+            .SubscribeToStream(streamId, SubscriptionOrigin.Start)
             .GetAsyncEnumerator(cancellationToken);
 
         await ShouldBeCaughtUpAsync(enumerator);
@@ -308,7 +307,7 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(IEventSto
         await EventStore.AppendAsync(streamId, catchUpEvents, cancellationToken: cancellationToken);
 
         await using var enumerator = EventStore
-            .SubscribeToAll(SubscriptionOrigin.Start<TLogPos>())
+            .SubscribeToAll(SubscriptionOrigin.Start)
             .GetAsyncEnumerator(cancellationToken);
 
         List<TestEvent> observed =
@@ -335,7 +334,7 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(IEventSto
     {
         await using var enumerator = EventStore
             .SubscribeToAll(
-                SubscriptionOrigin.Start<TLogPos>(),
+                SubscriptionOrigin.Start,
                 new SubscriptionOptions { QueueCapacity = 1 })
             .GetAsyncEnumerator(cancellationToken);
 
@@ -360,7 +359,7 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(IEventSto
         await subscriptionCancellation.CancelAsync();
 
         await using var enumerator = EventStore
-            .SubscribeToAll(SubscriptionOrigin.Start<TLogPos>())
+            .SubscribeToAll(SubscriptionOrigin.Start)
             .GetAsyncEnumerator(subscriptionCancellation.Token);
 
         await enumerator.MoveNextAsync().AsTask().ShouldThrowAsync<OperationCanceledException>();
@@ -374,7 +373,7 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(IEventSto
         using var subscriptionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
         await using var enumerator = EventStore
-            .SubscribeToAll(SubscriptionOrigin.Start<TLogPos>())
+            .SubscribeToAll(SubscriptionOrigin.Start)
             .GetAsyncEnumerator(subscriptionCancellation.Token);
 
         await ShouldBeCaughtUpAsync(enumerator);
@@ -388,11 +387,11 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(IEventSto
     public async Task SubscribeToAll_TwoSubscribers_ObserveTheSameLiveEvents(CancellationToken cancellationToken)
     {
         await using var first = EventStore
-            .SubscribeToAll(SubscriptionOrigin.Start<TLogPos>())
+            .SubscribeToAll(SubscriptionOrigin.Start)
             .GetAsyncEnumerator(cancellationToken);
 
         await using var second = EventStore
-            .SubscribeToAll(SubscriptionOrigin.Start<TLogPos>())
+            .SubscribeToAll(SubscriptionOrigin.Start)
             .GetAsyncEnumerator(cancellationToken);
 
         await ShouldBeCaughtUpAsync(first);
@@ -410,11 +409,11 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(IEventSto
     public async Task SubscribeToAll_TwoSubscribers_UnsubscribeIndependently(CancellationToken cancellationToken)
     {
         var first = EventStore
-            .SubscribeToAll(SubscriptionOrigin.Start<TLogPos>())
+            .SubscribeToAll(SubscriptionOrigin.Start)
             .GetAsyncEnumerator(cancellationToken);
 
         await using var second = EventStore
-            .SubscribeToAll(SubscriptionOrigin.Start<TLogPos>())
+            .SubscribeToAll(SubscriptionOrigin.Start)
             .GetAsyncEnumerator(cancellationToken);
 
         await ShouldBeCaughtUpAsync(first);
@@ -438,22 +437,22 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(IEventSto
         [.. values.Select(value => new TestEvent { Value = value })];
 
     private static async Task<ReadEvent<object, string, TStreamPos, TLogPos>> GetNextEventAsync(
-        IAsyncEnumerator<SubscriptionMessage> enumerator)
+        IAsyncEnumerator<SubscriptionMessage<object, string, TStreamPos, TLogPos>> enumerator)
     {
         (await enumerator.MoveNextAsync()).ShouldBeTrue();
 
-        return enumerator.Current
-            .ShouldBeOfType<SubscriptionMessage.Event<ReadEvent<object, string, TStreamPos, TLogPos>>>()
-            .Value;
+        return enumerator.Current.Event.ShouldNotBeNull();
     }
 
-    private static async Task ShouldBeCaughtUpAsync(IAsyncEnumerator<SubscriptionMessage> enumerator)
+    private static async Task ShouldBeCaughtUpAsync(
+        IAsyncEnumerator<SubscriptionMessage<object, string, TStreamPos, TLogPos>> enumerator)
     {
         (await enumerator.MoveNextAsync()).ShouldBeTrue();
-        enumerator.Current.ShouldBeOfType<SubscriptionMessage.CaughtUp>();
+        enumerator.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
     }
 
-    private static async Task<RecoveredEvents> ReadUntilRecoveredAsync(IAsyncEnumerator<SubscriptionMessage> enumerator)
+    private static async Task<RecoveredEvents> ReadUntilRecoveredAsync(
+        IAsyncEnumerator<SubscriptionMessage<object, string, TStreamPos, TLogPos>> enumerator)
     {
         var events = new List<TestEvent>();
         var fellBehindCount = 0;
@@ -465,13 +464,13 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(IEventSto
 
             switch (enumerator.Current)
             {
-                case SubscriptionMessage.Event<ReadEvent<object, string, TStreamPos, TLogPos>> message:
-                    events.Add(message.Value.Payload.ShouldBeOfType<TestEvent>());
+                case { Event: { } e }:
+                    events.Add(e.Payload.ShouldBeOfType<TestEvent>());
                     break;
-                case SubscriptionMessage.CaughtUp:
+                case { IsCaughtUp: true }:
                     caughtUpCount++;
                     break;
-                case SubscriptionMessage.FellBehind:
+                case { IsFellBehind: true }:
                     fellBehindCount++;
                     break;
             }

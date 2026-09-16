@@ -1,11 +1,10 @@
 using DomainBlocks.EventSourcing.Tests.Integration.Adapters;
 using DomainBlocks.EventSourcing.Tests.Integration.DomainEvents;
 using DomainBlocks.EventSourcing.Tests.Integration.DomainModel;
-using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.MongoDB;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Integration.EventStore.MongoDB;
-using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using Shouldly;
 
@@ -15,7 +14,7 @@ namespace DomainBlocks.EventSourcing.Tests.Integration;
 public class EventSourcedStateStoreTests
 {
     private MongoEventStoreOptions _options = null!;
-    private MongoEventStore<IDomainEvent> _eventStore = null!;
+    private IEventStore<IDomainEvent, string, StreamPosition, LogPosition> _eventStore = null!;
     private EventSourcedStateStore<ShoppingCart, IDomainEvent, string, StreamPosition, LogPosition> _store = null!;
 
     [OneTimeSetUp]
@@ -28,13 +27,12 @@ public class EventSourcedStateStoreTests
             EventTypeMapping.ReadWrite<ItemAddedToShoppingCart>(),
             EventTypeMapping.ReadWrite<ItemRemovedFromShoppingCart>());
 
-        var eventCodec = TestMongoEventCodec.Create<IDomainEvent>(eventTypeMap);
-
-        _eventStore = MongoEventStore.Create(
-            MongoTestEnvironment.MongoClient,
-            eventCodec,
-            _options,
-            MongoTestEnvironment.LoggerFactory.CreateLogger<MongoEventStore<IDomainEvent>>());
+        _eventStore = new MongoEventStoreBuilder<IDomainEvent>()
+            .UseClient(MongoTestEnvironment.MongoClient)
+            .UseOptions(_options)
+            .UseEventTypeMap(eventTypeMap)
+            .UseLoggerFactory(MongoTestEnvironment.LoggerFactory)
+            .Build();
 
         _store = EventSourcedStateStore.Create(_eventStore, new AggregateAdapter<ShoppingCart, ShoppingCartState>());
 

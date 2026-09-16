@@ -1,4 +1,3 @@
-using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.Serialization.Abstractions;
 using DomainBlocks.Serialization.SystemTextJson;
@@ -18,7 +17,7 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 [TestFixture]
 public class PostgresEventStoreAppendTests : PostgresIntegrationTest
 {
-    private PostgresEventStore<object> _eventStore = null!;
+    private IEventStore<object, string, StreamPosition, LogPosition> _eventStore = null!;
 
     [SetUp]
     public void SetUp()
@@ -145,13 +144,13 @@ public class PostgresEventStoreAppendTests : PostgresIntegrationTest
             await Task.Delay(50, ct);
     }
 
-    private PostgresEventStore<object> CreateBytesEventStore()
+    private IEventStore<object, string, StreamPosition, LogPosition> CreateBytesEventStore()
     {
         var eventCodec = EventCodec.Create(new EventCodecOptions<object, PostgresEventData, string>
         {
             TypeMap = DefaultEventTypeMap,
-            EventSerde = ((IObjectSerde<byte[]>)new JsonUtf8BytesObjectSerde()).AsPostgresEventDataSerde(),
-            MetadataSerde = new JsonMetadataSerde()
+            EventSerializer = ((IObjectSerializer<byte[]>)new JsonUtf8BytesObjectSerializer()).AsPostgresEventDataSerializer(),
+            MetadataSerializer = new JsonMetadataSerializer()
         });
 
         return Harness.CreateEventStore(eventCodec);

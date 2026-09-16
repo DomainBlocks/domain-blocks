@@ -1,4 +1,4 @@
-using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.ContractMapping;
 using DomainBlocks.EventStore.KurrentDB;
 using DomainBlocks.EventStore.TypeMapping;
@@ -8,14 +8,11 @@ using StreamPosition = KurrentDB.Client.StreamPosition;
 namespace DomainBlocks.Testing.Integration.EventStore.KurrentDB;
 
 /// <summary>
-/// Binds a suite to the KurrentDB event store on the server started by <see cref="KurrentDBTestEnvironment"/>.
-/// KurrentDB has no per-fixture database, so initialising, resetting and dropping do nothing: the suites isolate
-/// their tests with unique stream ids, and the store implements neither reads across the log nor subscriptions,
-/// which are the operations that would assume an empty log.
+/// Binds a suite to the KurrentDB event store on the server started by <see cref="KurrentDBTestEnvironment"/>. Stores
+/// are built on the borrowed-client path of <see cref="KurrentDBEventStoreBuilder{TEvent}"/>.
 /// </summary>
 public sealed class KurrentDBEventStoreTestHarness : IEventStoreTestHarness<StreamPosition, Position>
 {
-    // The store passes the commit id through to nothing, so repeated appends are not deduplicated.
     public StoreCapabilities Capabilities => StoreCapabilities.None;
 
     public IReadOnlyList<EventFormat> SupportedFormats { get; } = [EventFormat.Json];
@@ -26,14 +23,26 @@ public sealed class KurrentDBEventStoreTestHarness : IEventStoreTestHarness<Stre
 
     public Task DropAsync() => Task.CompletedTask;
 
+    /// <summary>
+    /// A builder over the shared client, for callers that need to configure more than <see cref="CreateEventStore"/>
+    /// offers.
+    /// </summary>
+    public static KurrentDBEventStoreBuilder<object> CreateBuilder() =>
+        new KurrentDBEventStoreBuilder<object>().UseClient(KurrentDBTestEnvironment.Client);
+
     public IEventStore<object, string, StreamPosition, Position> CreateEventStore(
         EventTypeMap eventTypeMap,
         EventFormat? eventFormat = null,
         IEnumerable<IEventContractMapper<object>>? contractMappers = null,
         string loggerNameSuffix = "")
     {
-        var eventCodec = TestKurrentDBEventCodec.Create(eventTypeMap, eventFormat, contractMappers);
-        return new KurrentDBEventStore<object>(KurrentDBTestEnvironment.Client, eventCodec);
+        if (eventFormat is not null and not EventFormat.Json)
+            throw new NotSupportedException($"{eventFormat} is not supported by the KurrentDB test harness.");
+
+        return CreateBuilder()
+            .UseEventTypeMap(eventTypeMap)
+            .AddContractMappers([.. contractMappers ?? []])
+            .Build();
     }
 
     public StreamPosition CreateStreamPosition(ulong value) => StreamPosition.FromStreamRevision(value);

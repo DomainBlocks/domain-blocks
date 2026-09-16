@@ -13,12 +13,18 @@ public static class MongoTestEnvironment
 
     public static IMongoClient MongoClient { get; private set; } = null!;
 
+    /// <summary>
+    /// The replica set's connection string, for tests that create their own client.
+    /// </summary>
+    public static string ConnectionString { get; private set; } = null!;
+
     public static ILoggerFactory LoggerFactory { get; private set; } = null!;
 
     public static async Task StartAsync()
     {
         _replicaSet = await MongoReplicaSet.CreateAsync();
-        MongoClient = new MongoClient(_replicaSet.ConnectionString);
+        ConnectionString = _replicaSet.ConnectionString;
+        MongoClient = new MongoClient(ConnectionString);
         LoggerFactory = TestLoggerFactory.Create();
         TestMongoSerialization.Configure();
     }

@@ -1,7 +1,6 @@
 ﻿using System.Runtime.CompilerServices;
 using System.Threading.Channels;
-using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.Abstractions.Codecs;
+using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
@@ -10,7 +9,7 @@ using MongoDB.Driver;
 namespace DomainBlocks.EventStore.MongoDB;
 
 internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
-    IAsyncEnumerable<SubscriptionMessage>
+    IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>>
     where TEvent : notnull
     where TPos : struct, IPosition<TPos>
 {
@@ -38,7 +37,7 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
         SubscriptionOptions? options,
         ILogger? logger)
     {
-        _origin = origin ?? SubscriptionOrigin.End<TPos>();
+        _origin = origin ?? SubscriptionOrigin.End;
         _options = options ?? SubscriptionOptions.Default;
         _catchUpFilter = catchUpFilter;
         _livePredicate = livePredicate;
@@ -54,7 +53,8 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
             : CorrelationId.ReserveGenerated();
     }
 
-    public async IAsyncEnumerator<SubscriptionMessage> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+    public async IAsyncEnumerator<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> GetAsyncEnumerator(
+        CancellationToken cancellationToken = default)
     {
         try
         {
@@ -78,15 +78,15 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
                         var m = enumerator.Current;
                         yield return m;
 
-                        if (m is SubscriptionMessage.Event<ReadEvent<TEvent, string, StreamPosition, LogPosition>> e)
-                            resumeOrigin = SubscriptionOrigin.After(_positionSelector(e.Value.Context));
+                        if (m.Event is { } e)
+                            resumeOrigin = SubscriptionOrigin.After(_positionSelector(e.Context));
                     }
                 }
 
                 if (observer.OverflowToken.IsCancellationRequested)
                 {
                     _logger?.SubscriptionFellBehind(_correlationId);
-                    yield return new SubscriptionMessage.FellBehind();
+                    yield return SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>.FellBehind;
                     continue;
                 }
 
@@ -101,7 +101,7 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
     }
 
     private async ValueTask<bool> MoveNextAsync(
-        IAsyncEnumerator<SubscriptionMessage> enumerator,
+        IAsyncEnumerator<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> enumerator,
         CancellationToken overflowToken,
         CancellationToken cancellationToken)
     {
@@ -138,7 +138,7 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
         }
     }
 
-    private async IAsyncEnumerable<SubscriptionMessage> ReadAllAsync(
+    private async IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> ReadAllAsync(
         SubscriptionOrigin<TPos> resumeOrigin,
         Observer observer,
         BsonTimestamp changeStreamOperationTime,
@@ -164,14 +164,14 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
                 await foreach (var doc in ReadCatchUpAsync(session, resumeOrigin, highWaterMark.Value, catchUpCts.Token)
                                    .ConfigureAwait(false))
                 {
-                    yield return SubscriptionMessage.Event.Create(_eventDecoder.Decode(doc));
+                    yield return SubscriptionMessage.Event(_eventDecoder.Decode(doc));
                 }
             }
         }
 
         _logger?.SubscriptionCaughtUp(_correlationId);
 
-        yield return new SubscriptionMessage.CaughtUp();
+        yield return SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>.CaughtUp;
 
         await foreach (var doc in observer.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
         {
@@ -181,7 +181,7 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
             if (context.LogPosition.Value <= highWaterMark?.Value || !_livePredicate(context))
                 continue;
 
-            yield return SubscriptionMessage.Event.Create(readEvent);
+            yield return SubscriptionMessage.Event(readEvent);
         }
     }
 

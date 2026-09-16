@@ -1,5 +1,4 @@
 using DomainBlocks.Benchmarking.EventStore;
-using DomainBlocks.EventStore.Abstractions;
 using NUnit.Framework;
 
 namespace DomainBlocks.EventStore.NoOp.Benchmarks;

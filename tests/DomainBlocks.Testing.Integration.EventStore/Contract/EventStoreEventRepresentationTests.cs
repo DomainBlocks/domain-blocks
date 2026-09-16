@@ -1,5 +1,4 @@
 using DomainBlocks.EventStore;
-using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.ContractMapping;
 using DomainBlocks.EventStore.Transforms;
 using DomainBlocks.EventStore.TypeMapping;
@@ -73,8 +72,7 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
         }
         finally
         {
-            if (eventStore is IAsyncDisposable d)
-                await d.DisposeAsync();
+            await eventStore.DisposeAsync();
         }
 
         orderEvents.Length.ShouldBe(3);
@@ -114,8 +112,7 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
         }
         finally
         {
-            if (eventStore is IAsyncDisposable d)
-                await d.DisposeAsync();
+            await eventStore.DisposeAsync();
         }
 
         readEvents
@@ -167,7 +164,8 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
                 Destination: "Madrid, ES")
         };
 
-        var eventStore = CreateEventStore(eventTypeMap);
+        var eventStore = CreateEventStore(eventTypeMap).WithReadTransforms(new ShipmentDispatchedTransform());
+
         object[] readEvents;
 
         try
@@ -176,14 +174,12 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
 
             readEvents = await eventStore
                 .ReadStream(streamId)
-                .Transform([new ShipmentDispatchedTransform()])
                 .Select(x => x.Payload)
                 .ToArrayAsync();
         }
         finally
         {
-            if (eventStore is IAsyncDisposable d)
-                await d.DisposeAsync();
+            await eventStore.DisposeAsync();
         }
 
         readEvents.ShouldBe(expectedEvents);
@@ -248,12 +244,9 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
         double WeightKg,
         string Destination);
 
-    private class ShipmentDispatchedTransform :
-        ReadEventTransform<object, ShipmentDispatched, string, TStreamPos, TLogPos>
+    private class ShipmentDispatchedTransform : ReadEventTransform<object, ShipmentDispatched>
     {
-        protected override IEnumerable<object> Apply(
-            ShipmentDispatched @event,
-            ReadEventContext<string, TStreamPos, TLogPos> context)
+        protected override IEnumerable<object> Apply(ShipmentDispatched @event, ReadEventInfo info)
         {
             yield return new ShipmentDispatchedV2(
                 @event.ShipmentId,

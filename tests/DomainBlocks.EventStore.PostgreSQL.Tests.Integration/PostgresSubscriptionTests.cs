@@ -1,4 +1,3 @@
-using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.Testing.Events;
 using DomainBlocks.Testing.Integration.EventStore;
 using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
@@ -13,7 +12,7 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 [TestFixture]
 public class PostgresSubscriptionTests : PostgresIntegrationTest
 {
-    private PostgresEventStore<object> _eventStore = null!;
+    private IEventStore<object, string, StreamPosition, LogPosition> _eventStore = null!;
 
     [SetUp]
     public void SetUp()
@@ -31,10 +30,10 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task SubscribeToAll_TwoSubscribers_ShareOneSlotUntilTheLastUnsubscribes(CancellationToken ct)
     {
-        var first = _eventStore.SubscribeToAll(SubscriptionOrigin.Start<LogPosition>()).GetAsyncEnumerator(ct);
+        var first = _eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
 
         await using var second = _eventStore
-            .SubscribeToAll(SubscriptionOrigin.Start<LogPosition>())
+            .SubscribeToAll(SubscriptionOrigin.Start)
             .GetAsyncEnumerator(ct);
 
         await ShouldBeCaughtUpAsync(first);
@@ -64,7 +63,7 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
     public async Task SubscribeToStream_WhenQueueOverflows_ResumesByStreamPosition(CancellationToken ct)
     {
         await using var enumerator = _eventStore
-            .SubscribeToStream("target", SubscriptionOrigin.Start<StreamPosition>(), new SubscriptionOptions
+            .SubscribeToStream("target", SubscriptionOrigin.Start, new SubscriptionOptions
             {
                 QueueCapacity = 1
             })
@@ -99,13 +98,13 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
 
             switch (enumerator.Current)
             {
-                case SubscriptionMessage.Event<ReadEvent<object, string, StreamPosition, LogPosition>> message:
-                    observed.Add(message.Value);
+                case { Event: { } e }:
+                    observed.Add(e);
                     break;
-                case SubscriptionMessage.CaughtUp:
+                case { IsCaughtUp: true }:
                     caughtUpCount++;
                     break;
-                case SubscriptionMessage.FellBehind:
+                case { IsFellBehind: true }:
                     fellBehindCount++;
                     break;
             }
@@ -126,18 +125,17 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
     }
 
     private static async Task<ReadEvent<object, string, StreamPosition, LogPosition>> NextEventAsync(
-        IAsyncEnumerator<SubscriptionMessage> enumerator)
+        IAsyncEnumerator<SubscriptionMessage<object, string, StreamPosition, LogPosition>> enumerator)
     {
         (await enumerator.MoveNextAsync()).ShouldBeTrue();
 
-        return enumerator.Current
-            .ShouldBeOfType<SubscriptionMessage.Event<ReadEvent<object, string, StreamPosition, LogPosition>>>()
-            .Value;
+        return enumerator.Current.Event.ShouldNotBeNull();
     }
 
-    private static async Task ShouldBeCaughtUpAsync(IAsyncEnumerator<SubscriptionMessage> enumerator)
+    private static async Task ShouldBeCaughtUpAsync(
+        IAsyncEnumerator<SubscriptionMessage<object, string, StreamPosition, LogPosition>> enumerator)
     {
         (await enumerator.MoveNextAsync()).ShouldBeTrue();
-        enumerator.Current.ShouldBeOfType<SubscriptionMessage.CaughtUp>();
+        enumerator.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
     }
 }

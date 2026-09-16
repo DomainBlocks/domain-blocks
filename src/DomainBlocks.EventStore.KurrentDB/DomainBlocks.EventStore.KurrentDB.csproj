@@ -1,11 +1,17 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <!-- Not published yet: ReadAll and the subscriptions are not implemented. -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="KurrentDB.Client" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DomainBlocks.EventStore.Abstractions\DomainBlocks.EventStore.Abstractions.csproj"/>
+    <ProjectReference Include="..\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj"/>
+    <ProjectReference Include="..\DomainBlocks.Serialization.SystemTextJson\DomainBlocks.Serialization.SystemTextJson.csproj"/>
   </ItemGroup>
 
 </Project>

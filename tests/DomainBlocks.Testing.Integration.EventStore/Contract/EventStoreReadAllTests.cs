@@ -1,4 +1,4 @@
-using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Events;
 using NUnit.Framework;
@@ -29,8 +29,8 @@ public abstract class EventStoreReadAllTests<TStreamPos, TLogPos>(IEventStoreTes
     [TearDown]
     public async Task TearDown()
     {
-        if (EventStore is IAsyncDisposable asyncDisposable)
-            await asyncDisposable.DisposeAsync();
+        if (EventStore is { } eventStore)
+            await eventStore.DisposeAsync();
     }
 
     [Test]
@@ -137,7 +137,7 @@ public abstract class EventStoreReadAllTests<TStreamPos, TLogPos>(IEventStoreTes
     {
         await AppendAcrossStreamsAsync(3, cancellationToken);
 
-        ReadOrigin<TLogPos> origin = fromEnd ? ReadOrigin.End<TLogPos>() : ReadOrigin.Start<TLogPos>();
+        ReadOrigin<TLogPos> origin = fromEnd ? ReadOrigin.End : ReadOrigin.Start;
 
         var read = await EventStore.ReadAll(direction, origin).ToArrayAsync(cancellationToken);
 

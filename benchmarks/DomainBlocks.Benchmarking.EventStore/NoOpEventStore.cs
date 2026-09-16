@@ -1,4 +1,4 @@
-using DomainBlocks.EventStore.Abstractions;
+using DomainBlocks.EventStore;
 
 namespace DomainBlocks.Benchmarking.EventStore;
 
@@ -10,6 +10,8 @@ namespace DomainBlocks.Benchmarking.EventStore;
 /// </summary>
 public sealed class NoOpEventStore : IEventStore<object, string, StreamPosition, LogPosition>
 {
+    public Task EnsureInitializedAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
     public Task AppendAsync(
         string streamId,
         IEnumerable<AppendableEvent<object>> events,
@@ -39,18 +41,20 @@ public sealed class NoOpEventStore : IEventStore<object, string, StreamPosition,
         throw new NotSupportedException();
     }
 
-    public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
+    public IAsyncEnumerable<SubscriptionMessage<object, string, StreamPosition, LogPosition>> SubscribeToAll(
         SubscriptionOrigin<LogPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
         throw new NotSupportedException();
     }
 
-    public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
+    public IAsyncEnumerable<SubscriptionMessage<object, string, StreamPosition, LogPosition>> SubscribeToStream(
         string streamId,
         SubscriptionOrigin<StreamPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
         throw new NotSupportedException();
     }
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }

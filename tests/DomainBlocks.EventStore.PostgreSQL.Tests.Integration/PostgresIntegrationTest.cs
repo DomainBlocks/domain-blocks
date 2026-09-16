@@ -1,4 +1,3 @@
-using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Events;
 using DomainBlocks.Testing.Integration.EventStore;
@@ -46,14 +45,14 @@ public abstract class PostgresIntegrationTest(Action<PostgresEventStoreOptions>?
     /// <summary>
     /// Creates a store over the fixture's schema with the default JSON codec and, optionally, different options.
     /// </summary>
-    protected PostgresEventStore<object> CreateEventStore(
+    protected IEventStore<object, string, StreamPosition, LogPosition> CreateEventStore(
         string loggerNameSuffix = "",
         PostgresEventStoreOptions? options = null)
     {
-        return Harness.CreateEventStore(
-            TestPostgresEventCodec.Create<object>(DefaultEventTypeMap),
-            options,
-            loggerNameSuffix);
+        return Harness.CreateBuilder(loggerNameSuffix)
+            .UseEventTypeMap(DefaultEventTypeMap)
+            .UseOptions(options ?? Options)
+            .Build();
     }
 
     protected static AppendableEvent<object> Appendable(string value) => Appendable(new TestEvent { Value = value });

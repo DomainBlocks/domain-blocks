@@ -1,5 +1,4 @@
 using DomainBlocks.EventStore;
-using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Events;
 using NUnit.Framework;
@@ -33,7 +32,7 @@ public abstract class EventStoreConcurrencyTests<TStreamPos, TLogPos>(IEventStor
     [TearDown]
     public async Task TearDown()
     {
-        foreach (var instance in _instances.OfType<IAsyncDisposable>())
+        foreach (var instance in _instances)
             await instance.DisposeAsync();
     }
 

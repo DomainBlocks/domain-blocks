@@ -1,13 +1,11 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.Abstractions.Codecs;
+using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using DomainBlocks.MongoDB.Sequencing;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
-using AppendOptions = DomainBlocks.EventStore.Abstractions.AppendOptions;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
@@ -18,15 +16,14 @@ public static class MongoEventStore
     private static readonly StringFieldDefinition<BsonDocument, long> SequenceTargetField =
         new(EventLogEntry.FieldNames.Position);
 
-    public static MongoEventStore<TEvent> Create<TEvent>(
+    internal static MongoEventStore<TEvent> Create<TEvent>(
         IMongoClient mongoClient,
-        EventCodec<TEvent, BsonValue, BsonValue> eventCodec,
-        MongoEventStoreOptions? options = null,
-        ILogger? logger = null)
+        IEventCodec<TEvent, BsonValue, BsonValue> eventCodec,
+        MongoEventStoreOptions options,
+        ILogger? logger,
+        IDisposable? ownedClient)
         where TEvent : notnull
     {
-        options ??= new MongoEventStoreOptions();
-
         var db = mongoClient.GetDatabase(options.DatabaseName);
 
         var sequenceBinding = new MongoSequenceBinding<BsonDocument>(
@@ -48,24 +45,47 @@ public static class MongoEventStore
             },
             logger);
 
-        return new MongoEventStore<TEvent>(sequencedAppender, eventLog, eventCodec, logger);
+        return new MongoEventStore<TEvent>(
+            mongoClient,
+            ownedClient,
+            options,
+            sequencedAppender,
+            eventLog,
+            eventCodec,
+            logger);
     }
 }
 
-public sealed class MongoEventStore<TEvent> : IMongoEventStore<TEvent> where TEvent : notnull
+/// <summary>
+/// A MongoDB event store: sequenced appender, event log collection and change-stream subject over a client. Created
+/// by <see cref="MongoEventStore.Create{TEvent}"/> over a client the caller owns, or by
+/// <see cref="MongoEventStoreBuilder{TEvent}"/>, which may also create a client for the store to own. Disposing the
+/// store releases its append queue, and the client only when the store owns it.
+/// </summary>
+public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, StreamPosition, LogPosition>
+    where TEvent : notnull
 {
+    private readonly IMongoClient _client;
+    private readonly IDisposable? _ownedClient;
+    private readonly MongoEventStoreOptions _options;
     private readonly IMongoSequencedAppender<BsonDocument, AppendContext> _sequencedAppender;
     private readonly IMongoCollection<BsonDocument> _eventLog;
-    private readonly EventCodec<TEvent, BsonValue, BsonValue> _eventCodec;
+    private readonly IEventCodec<TEvent, BsonValue, BsonValue> _eventCodec;
     private readonly ILogger? _logger;
     private readonly RefCountedChangeStreamSubject<ChangeStreamDocument<BsonDocument>> _allEventsSubject;
 
-    public MongoEventStore(
+    internal MongoEventStore(
+        IMongoClient client,
+        IDisposable? ownedClient,
+        MongoEventStoreOptions options,
         IMongoSequencedAppender<BsonDocument, AppendContext> sequencedAppender,
         IMongoCollection<BsonDocument> eventLog,
-        EventCodec<TEvent, BsonValue, BsonValue> eventCodec,
+        IEventCodec<TEvent, BsonValue, BsonValue> eventCodec,
         ILogger? logger = null)
     {
+        _client = client;
+        _ownedClient = ownedClient;
+        _options = options;
         _sequencedAppender = sequencedAppender;
         _eventCodec = eventCodec;
         _logger = logger;
@@ -75,6 +95,14 @@ public sealed class MongoEventStore<TEvent> : IMongoEventStore<TEvent> where TEv
             .WithReadPreference(ReadPreference.Primary);
 
         _allEventsSubject = CreateAllEventsSubject(_eventLog, logger);
+    }
+
+    /// <summary>
+    /// Creates the event log's indexes if they do not already exist. Idempotent, so it can run on every start-up.
+    /// </summary>
+    public Task EnsureInitializedAsync(CancellationToken cancellationToken = default)
+    {
+        return MongoEventStoreAdmin.EnsureInitializedAsync(_client, _options, cancellationToken);
     }
 
     public async Task AppendAsync(
@@ -92,7 +120,7 @@ public sealed class MongoEventStore<TEvent> : IMongoEventStore<TEvent> where TEv
         var bsonStreamId = new BsonString(streamId);
         var bsonCommitId = new BsonBinaryData(commitId.Value, GuidRepresentation.Standard);
 
-        var eventDocuments = _eventCodec.Encoder
+        var eventDocuments = _eventCodec
             .Encode(events)
             .Select((x, i) => new BsonDocument
             {
@@ -122,10 +150,7 @@ public sealed class MongoEventStore<TEvent> : IMongoEventStore<TEvent> where TEv
         async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Impl(
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            origin ??= direction == ReadDirection.Forward
-                ? ReadOrigin.Start<LogPosition>()
-                : ReadOrigin.End<LogPosition>();
-
+            origin ??= direction == ReadDirection.Forward ? ReadOrigin.Start : ReadOrigin.End;
             options ??= ReadAllOptions.Default;
 
             if (direction.ProducesEmptyReadFrom(origin))
@@ -137,14 +162,14 @@ public sealed class MongoEventStore<TEvent> : IMongoEventStore<TEvent> where TEv
                 .Find(query.Filter)
                 .Sort(query.Sort)
                 .Limit(options.MaxCount)
-                .ProjectMetadata(options.IncludeMetadata)
+                .SetExcludeMetadata(!options.IncludeMetadata)
                 .ToCursorAsync(cancellationToken)
                 .ConfigureAwait(false);
 
             while (await cursor.MoveNextAsync(cancellationToken).ConfigureAwait(false))
             {
                 foreach (var doc in cursor.Current)
-                    yield return _eventCodec.Decoder.Decode(doc);
+                    yield return _eventCodec.Decode(doc);
             }
         }
     }
@@ -160,10 +185,7 @@ public sealed class MongoEventStore<TEvent> : IMongoEventStore<TEvent> where TEv
         async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Impl(
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            origin ??= direction == ReadDirection.Forward
-                ? ReadOrigin.Start<StreamPosition>()
-                : ReadOrigin.End<StreamPosition>();
-
+            origin ??= direction == ReadDirection.Forward ? ReadOrigin.Start : ReadOrigin.End;
             options ??= ReadStreamOptions.Default;
 
             if (direction.ProducesEmptyReadFrom(origin))
@@ -184,7 +206,7 @@ public sealed class MongoEventStore<TEvent> : IMongoEventStore<TEvent> where TEv
                 .Find(filter)
                 .Sort(query.Sort)
                 .Limit(options.MaxCount)
-                .ProjectMetadata(options.IncludeMetadata)
+                .SetExcludeMetadata(!options.IncludeMetadata)
                 .ToCursorAsync(cancellationToken)
                 .ConfigureAwait(false);
 
@@ -195,7 +217,7 @@ public sealed class MongoEventStore<TEvent> : IMongoEventStore<TEvent> where TEv
                 foreach (var doc in cursor.Current)
                 {
                     isEmpty = false;
-                    yield return _eventCodec.Decoder.Decode(doc);
+                    yield return _eventCodec.Decode(doc);
                 }
             }
 
@@ -209,14 +231,14 @@ public sealed class MongoEventStore<TEvent> : IMongoEventStore<TEvent> where TEv
         }
     }
 
-    public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
+    public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> SubscribeToAll(
         SubscriptionOrigin<LogPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
         return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
             _eventLog,
             _allEventsSubject,
-            _eventCodec.Decoder,
+            _eventCodec,
             Builders<BsonDocument>.Filter.Empty,
             static _ => true,
             EventLogEntry.FieldNames.Position,
@@ -226,7 +248,7 @@ public sealed class MongoEventStore<TEvent> : IMongoEventStore<TEvent> where TEv
             _logger);
     }
 
-    public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
+    public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> SubscribeToStream(
         string streamId,
         SubscriptionOrigin<StreamPosition>? origin = null,
         SubscriptionOptions? options = null)
@@ -234,7 +256,7 @@ public sealed class MongoEventStore<TEvent> : IMongoEventStore<TEvent> where TEv
         return new SubscriptionAsyncEnumerable<TEvent, StreamPosition>(
             _eventLog,
             _allEventsSubject,
-            _eventCodec.Decoder,
+            _eventCodec,
             Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, streamId),
             ctx => ctx.StreamId == streamId,
             EventLogEntry.FieldNames.StreamPosition,
@@ -244,7 +266,11 @@ public sealed class MongoEventStore<TEvent> : IMongoEventStore<TEvent> where TEv
             _logger);
     }
 
-    public ValueTask DisposeAsync() => _sequencedAppender.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+        await _sequencedAppender.DisposeAsync().ConfigureAwait(false);
+        _ownedClient?.Dispose();
+    }
 
     private static RefCountedChangeStreamSubject<ChangeStreamDocument<BsonDocument>> CreateAllEventsSubject(
         IMongoCollection<BsonDocument> eventLog,

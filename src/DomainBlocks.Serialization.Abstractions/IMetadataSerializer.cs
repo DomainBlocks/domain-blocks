@@ -1,6 +1,12 @@
-﻿namespace DomainBlocks.Serialization.Abstractions;
+namespace DomainBlocks.Serialization.Abstractions;
 
-public interface IMetadataSerializer<out TData>
+/// <summary>
+/// Serializes flat string metadata to, and deserializes it from, a data representation of type
+/// <typeparamref name="TData"/>.
+/// </summary>
+public interface IMetadataSerializer<TData>
 {
-    TData Serialize(IReadOnlyDictionary<string, string> metadata);
+    TData Serialize(ReadOnlySpan<KeyValuePair<string, string>> metadata);
+
+    IReadOnlyDictionary<string, string> Deserialize(TData data);
 }

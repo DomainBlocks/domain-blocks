@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using DomainBlocks.EventStore.Abstractions;
 using NpgsqlTypes;
 
 namespace DomainBlocks.EventStore.PostgreSQL;

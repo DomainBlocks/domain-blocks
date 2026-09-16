@@ -10,12 +10,12 @@ internal static class FindFluentExtensions
         /// <summary>
         /// Leaves the metadata field out of the documents returned when the caller does not want it.
         /// </summary>
-        public IFindFluent<BsonDocument, BsonDocument> ProjectMetadata(bool includeMetadata)
+        public IFindFluent<BsonDocument, BsonDocument> SetExcludeMetadata(bool isExcluded)
         {
-            return includeMetadata
-                ? find
-                : find.Project<BsonDocument>(
-                    Builders<BsonDocument>.Projection.Exclude(EventLogEntry.FieldNames.Metadata));
+            return isExcluded
+                ? find.Project<BsonDocument>(
+                    Builders<BsonDocument>.Projection.Exclude(EventLogEntry.FieldNames.Metadata))
+                : find;
         }
     }
 }

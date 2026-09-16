@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
-using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.Abstractions.Codecs;
+using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.PostgreSQL.Feeds;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -9,24 +8,22 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 
 public static class PostgresEventStore
 {
-    /// <summary>
-    /// Creates an event store over an existing data source, which must have been built with
-    /// <see cref="NpgsqlDataSourceBuilderExtensions.UsePostgresEventStore"/> for the same schema. The caller owns the
-    /// data source's lifetime; the store only borrows connections from it. The schema must have been initialized with
-    /// <see cref="PostgresEventStoreAdmin.EnsureInitializedAsync"/>.
-    /// </summary>
-    public static PostgresEventStore<TEvent> Create<TEvent>(
+    /// <remarks>
+    /// <paramref name="replicationConnectionStringFallback"/> is used for the replication connection when
+    /// <see cref="PostgresReplicationOptions.ConnectionString"/> is not set, before falling back to the data source's
+    /// connection string, which carries no password unless security info is persisted. The builder passes the raw
+    /// connection string it created the data source from.
+    /// </remarks>
+    internal static PostgresEventStore<TEvent> Create<TEvent>(
         NpgsqlDataSource dataSource,
-        EventCodec<TEvent, PostgresEventData, string> eventCodec,
-        PostgresEventStoreOptions? options = null,
-        ILogger? logger = null)
+        IEventCodec<TEvent, PostgresEventData, string> eventCodec,
+        PostgresEventStoreOptions options,
+        PostgresEventStoreAdminOptions adminOptions,
+        ILogger? logger,
+        bool ownsDataSource,
+        string? replicationConnectionStringFallback)
         where TEvent : notnull
     {
-        ArgumentNullException.ThrowIfNull(dataSource);
-        ArgumentNullException.ThrowIfNull(eventCodec);
-
-        options ??= new PostgresEventStoreOptions();
-
         var names = new SchemaObjectNames(options.Schema);
         var appender = new BatchingAppender(dataSource, names, options, logger);
 
@@ -34,11 +31,20 @@ public static class PostgresEventStore
             dataSource,
             new EventLogSql(names),
             options.ReadBatchSize,
-            eventCodec.Decoder);
+            eventCodec);
 
-        var feed = CreateFeed(dataSource, names, options, eventCodec.Decoder, logger);
+        var feed = CreateFeed(dataSource, names, options, eventCodec, logger, replicationConnectionStringFallback);
 
-        return new PostgresEventStore<TEvent>(appender, reader, feed, eventCodec, logger);
+        return new PostgresEventStore<TEvent>(
+            dataSource,
+            ownsDataSource,
+            options,
+            adminOptions,
+            appender,
+            reader,
+            feed,
+            eventCodec,
+            logger);
     }
 
     private static RefCountedEventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>> CreateFeed<TEvent>(
@@ -46,11 +52,16 @@ public static class PostgresEventStore
         SchemaObjectNames names,
         PostgresEventStoreOptions options,
         IEventDecoder<TEvent, PostgresEventData, string> decoder,
-        ILogger? logger)
+        ILogger? logger,
+        string? replicationConnectionStringFallback)
         where TEvent : notnull
     {
         var replicationOptions = options.Replication;
-        var connectionString = replicationOptions.ConnectionString ?? dataSource.ConnectionString;
+
+        var connectionString = replicationOptions.ConnectionString
+                               ?? replicationConnectionStringFallback
+                               ?? dataSource.ConnectionString;
+
         var slotNames = new SlotNameGenerator(replicationOptions.SlotNamePrefix);
 
         var feedOptions = new EventLogFeedOptions
@@ -75,26 +86,55 @@ public static class PostgresEventStore
     }
 }
 
-public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> where TEvent : notnull
+/// <summary>
+/// A PostgreSQL event store: appender, reader and replication feed over a data source. Created by
+/// <see cref="PostgresEventStore.Create{TEvent}"/> over a data source the caller owns, or by
+/// <see cref="PostgresEventStoreBuilder{TEvent}"/>, which may also create a data source for the store to own. Disposing
+/// the store releases its append queue and replication feed, and the data source only when the store owns it.
+/// </summary>
+public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, StreamPosition, LogPosition>
+    where TEvent : notnull
 {
+    private readonly NpgsqlDataSource _dataSource;
+    private readonly bool _ownsDataSource;
+    private readonly PostgresEventStoreOptions _options;
+    private readonly PostgresEventStoreAdminOptions _adminOptions;
     private readonly IAppender _appender;
     private readonly EventLogReader<TEvent> _reader;
     private readonly RefCountedEventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>> _feed;
-    private readonly EventCodec<TEvent, PostgresEventData, string> _eventCodec;
+    private readonly IEventCodec<TEvent, PostgresEventData, string> _eventCodec;
     private readonly ILogger? _logger;
 
     internal PostgresEventStore(
+        NpgsqlDataSource dataSource,
+        bool ownsDataSource,
+        PostgresEventStoreOptions options,
+        PostgresEventStoreAdminOptions adminOptions,
         IAppender appender,
         EventLogReader<TEvent> reader,
         RefCountedEventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>> feed,
-        EventCodec<TEvent, PostgresEventData, string> eventCodec,
+        IEventCodec<TEvent, PostgresEventData, string> eventCodec,
         ILogger? logger)
     {
+        _dataSource = dataSource;
+        _ownsDataSource = ownsDataSource;
+        _options = options;
+        _adminOptions = adminOptions;
         _appender = appender;
         _reader = reader;
         _feed = feed;
         _eventCodec = eventCodec;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Creates the schema, types, tables, append functions and, unless disabled through
+    /// <see cref="PostgresEventStoreAdminOptions"/>, the publication this store uses if they do not already exist.
+    /// Idempotent and safe to call concurrently from several processes, so it can run on every start-up.
+    /// </summary>
+    public Task EnsureInitializedAsync(CancellationToken cancellationToken = default)
+    {
+        return PostgresEventStoreAdmin.EnsureInitializedAsync(_dataSource, _options, _adminOptions, cancellationToken);
     }
 
     public async Task AppendAsync(
@@ -114,7 +154,7 @@ public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> whe
         commitId ??= Guid.CreateVersion7();
         options ??= AppendOptions.Default;
 
-        var encodedEvents = _eventCodec.Encoder.Encode(events).ToArray();
+        var encodedEvents = _eventCodec.Encode(events).ToArray();
 
         if (encodedEvents.Length == 0)
             return;
@@ -143,10 +183,7 @@ public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> whe
         async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Impl(
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            origin ??= direction == ReadDirection.Forward
-                ? ReadOrigin.Start<LogPosition>()
-                : ReadOrigin.End<LogPosition>();
-
+            origin ??= direction == ReadDirection.Forward ? ReadOrigin.Start : ReadOrigin.End;
             options ??= ReadAllOptions.Default;
 
             if (direction.ProducesEmptyReadFrom(origin))
@@ -179,10 +216,7 @@ public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> whe
         async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Impl(
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            origin ??= direction == ReadDirection.Forward
-                ? ReadOrigin.Start<StreamPosition>()
-                : ReadOrigin.End<StreamPosition>();
-
+            origin ??= direction == ReadDirection.Forward ? ReadOrigin.Start : ReadOrigin.End;
             options ??= ReadStreamOptions.Default;
 
             if (direction.ProducesEmptyReadFrom(origin))
@@ -215,7 +249,7 @@ public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> whe
         }
     }
 
-    public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
+    public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> SubscribeToAll(
         SubscriptionOrigin<LogPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
@@ -230,7 +264,7 @@ public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> whe
             _logger);
     }
 
-    public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
+    public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> SubscribeToStream(
         string streamId,
         SubscriptionOrigin<StreamPosition>? origin = null,
         SubscriptionOptions? options = null)
@@ -252,6 +286,9 @@ public sealed class PostgresEventStore<TEvent> : IPostgresEventStore<TEvent> whe
     {
         await _appender.DisposeAsync().ConfigureAwait(false);
         await _feed.DisposeAsync().ConfigureAwait(false);
+
+        if (_ownsDataSource)
+            await _dataSource.DisposeAsync().ConfigureAwait(false);
     }
 
     private async Task ThrowIfStreamNotFoundAsync(

@@ -5,7 +5,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DomainBlocks.EventStore.Abstractions\DomainBlocks.EventStore.Abstractions.csproj"/>
+    <ProjectReference Include="..\DomainBlocks.Core\DomainBlocks.Core.csproj"/>
+    <ProjectReference Include="..\DomainBlocks.Serialization.Abstractions\DomainBlocks.Serialization.Abstractions.csproj"/>
   </ItemGroup>
 
 </Project>

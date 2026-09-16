@@ -1,6 +1,5 @@
 using System.Threading.Channels;
-using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.Abstractions.Codecs;
+using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.PostgreSQL.Feeds;
 using DomainBlocks.Testing.Integration.EventStore;
 using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;

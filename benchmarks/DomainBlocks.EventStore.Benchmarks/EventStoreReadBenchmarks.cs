@@ -1,27 +1,40 @@
-﻿using BenchmarkDotNet.Attributes;
-using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.Abstractions.Codecs;
+using BenchmarkDotNet.Attributes;
 using DomainBlocks.EventStore.Codecs;
+using DomainBlocks.EventStore.Transforms;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.SystemTextJson;
 using KurrentDB.Client;
-using StreamPosition = KurrentDB.Client.StreamPosition;
 
 namespace DomainBlocks.EventStore.Benchmarks;
 
+// Inside the namespace so that it shadows DomainBlocks.EventStore.StreamPosition from the parent namespace.
+using StreamPosition = global::KurrentDB.Client.StreamPosition;
+
+/// <summary>
+/// Measures the read path without I/O: type mapping, payload and metadata deserialization, and optionally the read
+/// transform stage, for <see cref="EventCount"/> events per operation.
+/// </summary>
 [MemoryDiagnoser]
 public class EventStoreReadBenchmarks
 {
     private const string StreamId = "test-stream";
 
-    private static readonly JsonUtf8BytesObjectSerde EventSerde = new();
-    private static readonly JsonUtf8BytesMetadataSerde MetadataSerde = new();
+    private static readonly JsonUtf8BytesObjectSerializer Utf8EventSerializer = new();
+    private static readonly JsonUtf8BytesMetadataSerializer Utf8MetadataSerializer = new();
 
-    private FakeKurrentDBEventStore<IDomainEvent> _eventStore = null!;
+    private IEventStore<IDomainEvent, string, StreamPosition, Position> _eventStore = null!;
     private ReadStreamOptions _readStreamOptions = null!;
 
     [Params(false, true)]
     public bool IncludeMetadata { get; set; }
+
+    /// <summary>
+    /// <see cref="TransformMode.None"/> reads decoded events as-is. <see cref="TransformMode.Probe"/> registers a
+    /// transform for a type that never occurs, so only the per-event lookup is paid. <see cref="TransformMode.FanOut"/>
+    /// registers a transform that turns every event into two.
+    /// </summary>
+    [Params(TransformMode.None, TransformMode.Probe, TransformMode.FanOut)]
+    public TransformMode Transforms { get; set; }
 
     //[Params(100, 1_000, 10_000)]
     [Params(10_000)]
@@ -32,16 +45,25 @@ public class EventStoreReadBenchmarks
     {
         var kurrentEvents = CreateKurrentEvents(EventCount);
 
-        var decoderOptions = new EventDecoderOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
+        var codecOptions = new EventCodecOptions<IDomainEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>>
         {
             TypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>()),
-            EventDeserializer = EventSerde,
-            MetadataDeserializer = MetadataSerde
+            EventSerializer = Utf8EventSerializer,
+            MetadataSerializer = Utf8MetadataSerializer
         };
 
-        var decoder = EventDecoder.Create(decoderOptions);
+        var codec = EventCodec.Create(codecOptions);
 
-        _eventStore = new FakeKurrentDBEventStore<IDomainEvent>(kurrentEvents, decoder);
+        IReadEventTransform<IDomainEvent>[] transforms = Transforms switch
+        {
+            TransformMode.None => [],
+            TransformMode.Probe => [new UnusedEventTransform()],
+            TransformMode.FanOut => [new TestEventFanOutTransform()],
+            _ => throw new ArgumentOutOfRangeException()
+        };
+
+        _eventStore = new FakeKurrentDBEventStore<IDomainEvent>(kurrentEvents, codec).WithReadTransforms(transforms);
+
         _readStreamOptions = new ReadStreamOptions { IncludeMetadata = IncludeMetadata };
     }
 
@@ -74,14 +96,14 @@ public class EventStoreReadBenchmarks
                 Value2 = $"value2-{i}"
             };
 
-            var metadata = new Dictionary<string, string>
-            {
-                { "Value1", $"value1-{i}" },
-                { "Value2", $"value2-{i}" },
-            };
+            KeyValuePair<string, string>[] metadata =
+            [
+                KeyValuePair.Create("Value1", $"value1-{i}"),
+                KeyValuePair.Create("Value2", $"value2-{i}")
+            ];
 
-            var serializedEvent = EventSerde.Serialize(@event);
-            var serializedMetadata = MetadataSerde.Serialize(metadata);
+            var serializedEvent = Utf8EventSerializer.Serialize(@event);
+            var serializedMetadata = Utf8MetadataSerializer.Serialize(metadata);
 
             var eventRecord = new EventRecord(
                 StreamId,
@@ -98,6 +120,13 @@ public class EventStoreReadBenchmarks
         return resolvedEvents;
     }
 
+    public enum TransformMode
+    {
+        None,
+        Probe,
+        FanOut
+    }
+
     private interface IDomainEvent;
 
     private sealed class TestEvent : IDomainEvent
@@ -106,12 +135,37 @@ public class EventStoreReadBenchmarks
         public required string Value2 { get; init; }
     }
 
+    private sealed class TestEventPart : IDomainEvent
+    {
+        public required string Value { get; init; }
+    }
+
+    private sealed class UnusedEvent : IDomainEvent;
+
+    private sealed class UnusedEventTransform : ReadEventTransform<IDomainEvent, UnusedEvent>
+    {
+        protected override IEnumerable<IDomainEvent> Apply(UnusedEvent @event, ReadEventInfo info)
+        {
+            throw new InvalidOperationException("This transform should never be applied.");
+        }
+    }
+
+    private sealed class TestEventFanOutTransform : ReadEventTransform<IDomainEvent, TestEvent>
+    {
+        protected override IEnumerable<IDomainEvent> Apply(TestEvent @event, ReadEventInfo info)
+        {
+            return [new TestEventPart { Value = @event.Value1 }, new TestEventPart { Value = @event.Value2 }];
+        }
+    }
+
     private sealed class FakeKurrentDBEventStore<TEvent>(
         ResolvedEvent[] kurrentEvents,
         IEventDecoder<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventDecoder) :
         IEventStore<TEvent, string, StreamPosition, Position>
         where TEvent : notnull
     {
+        public Task EnsureInitializedAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
         public Task AppendAsync(
             string streamId,
             IEnumerable<AppendableEvent<TEvent>> events,
@@ -162,19 +216,21 @@ public class EventStoreReadBenchmarks
             }
         }
 
-        public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
+        public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, Position>> SubscribeToAll(
             SubscriptionOrigin<Position>? origin = null,
             SubscriptionOptions? options = null)
         {
             throw new NotImplementedException();
         }
 
-        public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
+        public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, Position>> SubscribeToStream(
             string streamId,
             SubscriptionOrigin<StreamPosition>? origin = null,
             SubscriptionOptions? options = null)
         {
             throw new NotImplementedException();
         }
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }

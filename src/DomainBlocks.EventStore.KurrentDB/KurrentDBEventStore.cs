@@ -1,20 +1,40 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.Abstractions.Codecs;
+using DomainBlocks.EventStore.Codecs;
 using KurrentDB.Client;
 using KurrentStreamState = KurrentDB.Client.StreamState;
-using StreamNotFoundException = DomainBlocks.EventStore.Abstractions.StreamNotFoundException;
-using StreamPosition = KurrentDB.Client.StreamPosition;
 
 namespace DomainBlocks.EventStore.KurrentDB;
 
-public class KurrentDBEventStore<TEvent>(
-    KurrentDBClient client,
-    EventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec) :
-    IKurrentDBEventStore<TEvent>
+// Inside the namespace so that it shadows DomainBlocks.EventStore.StreamPosition from the parent namespace.
+using StreamPosition = global::KurrentDB.Client.StreamPosition;
+
+/// <summary>
+/// A KurrentDB event store over a client. Created by <see cref="KurrentDBEventStoreBuilder{TEvent}"/>, which may also
+/// create a client for the store to own. Disposing the store releases the client only when the store owns it.
+/// </summary>
+public sealed class KurrentDBEventStore<TEvent> : IEventStore<TEvent, string, StreamPosition, Position>
     where TEvent : notnull
 {
+    private readonly KurrentDBClient _client;
+    private readonly IEventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> _eventCodec;
+    private readonly IAsyncDisposable? _ownedClient;
+
+    internal KurrentDBEventStore(
+        KurrentDBClient client,
+        IEventCodec<TEvent, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> eventCodec,
+        IAsyncDisposable? ownedClient)
+    {
+        _client = client;
+        _eventCodec = eventCodec;
+        _ownedClient = ownedClient;
+    }
+
+    /// <summary>
+    /// KurrentDB needs nothing created ahead of use, so this completes immediately.
+    /// </summary>
+    public Task EnsureInitializedAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
     public async Task AppendAsync(
         string streamId,
         IEnumerable<AppendableEvent<TEvent>> events,
@@ -28,13 +48,13 @@ public class KurrentDBEventStore<TEvent>(
 
         var kurrentExpectedState = ToKurrentStreamState(expectedState.Value);
 
-        var eventData = eventCodec.Encoder
+        var eventData = _eventCodec
             .Encode(events)
             .Select(x => new EventData(Uuid.NewUuid(), x.EventName, x.EventData, x.Metadata));
 
         try
         {
-            _ = await client
+            _ = await _client
                 .AppendToStreamAsync(
                     streamId,
                     kurrentExpectedState,
@@ -66,19 +86,23 @@ public class KurrentDBEventStore<TEvent>(
         return ReadStreamCoreAsync(streamId, direction, origin, options);
     }
 
-    public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
+    public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, Position>> SubscribeToAll(
         SubscriptionOrigin<Position>? origin = null,
         SubscriptionOptions? options = null)
     {
         throw new NotImplementedException();
     }
 
-    public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(string streamId,
+    public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, Position>> SubscribeToStream(
+        string streamId,
         SubscriptionOrigin<StreamPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
         throw new NotImplementedException();
     }
+
+    // The store holds no resources of its own beyond a client it may own.
+    public ValueTask DisposeAsync() => _ownedClient?.DisposeAsync() ?? ValueTask.CompletedTask;
 
     private static KurrentStreamState ToKurrentStreamState(ExpectedStreamState<StreamPosition> expected) =>
         expected switch
@@ -113,8 +137,8 @@ public class KurrentDBEventStore<TEvent>(
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         origin ??= direction == ReadDirection.Forward
-            ? ReadOrigin.Start<StreamPosition>()
-            : ReadOrigin.End<StreamPosition>();
+            ? ReadOrigin.Start
+            : ReadOrigin.End;
 
         options ??= ReadStreamOptions.Default;
 
@@ -139,7 +163,7 @@ public class KurrentDBEventStore<TEvent>(
 
         var kurrentDirection = direction == ReadDirection.Forward ? Direction.Forwards : Direction.Backwards;
 
-        var result = client.ReadStreamAsync(
+        var result = _client.ReadStreamAsync(
             kurrentDirection,
             streamId,
             revision,
@@ -160,7 +184,7 @@ public class KurrentDBEventStore<TEvent>(
             var originalRecord = resolvedEvent.OriginalEvent;
             var metadataBytes = options.IncludeMetadata ? record.Metadata : default;
 
-            var (@event, metadata) = eventCodec.Decoder.Decode(record.EventType, record.Data, metadataBytes);
+            var (@event, metadata) = _eventCodec.Decode(record.EventType, record.Data, metadataBytes);
 
             var context = ReadEventContext.Create(
                 streamId,
@@ -175,7 +199,7 @@ public class KurrentDBEventStore<TEvent>(
 
     private async Task<bool> StreamExistsAsync(string streamId, CancellationToken cancellationToken)
     {
-        var streamExist = client.ReadStreamAsync(
+        var streamExist = _client.ReadStreamAsync(
             Direction.Backwards,
             streamId,
             StreamPosition.End,

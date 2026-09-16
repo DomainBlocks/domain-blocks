@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
-using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.Abstractions.Codecs;
+using DomainBlocks.EventStore.Codecs;
 using Microsoft.Extensions.Logging;
 using Npgsql.Replication;
 using Npgsql.Replication.PgOutput;

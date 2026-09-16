@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <IsPackable>true</IsPackable>
@@ -17,7 +17,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DomainBlocks.EventStore.Abstractions\DomainBlocks.EventStore.Abstractions.csproj"/>
+    <ProjectReference Include="..\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj"/>
+    <ProjectReference Include="..\DomainBlocks.Serialization.MongoDB.Bson\DomainBlocks.Serialization.MongoDB.Bson.csproj"/>
   </ItemGroup>
 
 </Project>

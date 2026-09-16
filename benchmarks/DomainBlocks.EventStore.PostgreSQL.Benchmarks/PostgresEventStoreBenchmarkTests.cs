@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using DomainBlocks.Benchmarking.EventStore;
-using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Events;
 using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
@@ -27,13 +26,12 @@ public class PostgresEventStoreBenchmarkTests() :
     [CancelAfter(BenchmarkTimeouts.DefaultMillis)]
     public async Task SubscribeToAll_MeasureLiveLatency(CancellationToken ct)
     {
-        var eventStore = CreateEventStore(EventTypeMap);
-        await using var disposable = eventStore as IAsyncDisposable;
+        await using var eventStore = CreateEventStore(EventTypeMap);
 
         await using var enumerator = eventStore.SubscribeToAll().GetAsyncEnumerator(ct);
 
         (await enumerator.MoveNextAsync()).ShouldBeTrue();
-        enumerator.Current.ShouldBeOfType<SubscriptionMessage.CaughtUp>();
+        enumerator.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
 
         var runner = new AppendBenchmarkRunner();
 
@@ -44,8 +42,7 @@ public class PostgresEventStoreBenchmarkTests() :
                     cancellationToken: token);
 
                 (await enumerator.MoveNextAsync()).ShouldBeTrue();
-                enumerator.Current.ShouldBeOfType<
-                    SubscriptionMessage.Event<ReadEvent<object, string, StreamPosition, LogPosition>>>();
+                enumerator.Current.Kind.ShouldBe(SubscriptionMessageKind.Event);
             },
             new LatencyOptions
             {
@@ -87,7 +84,7 @@ public class PostgresEventStoreBenchmarkTests() :
         };
 
         await using var eventStore =
-            Postgres.CreateEventStore(TestPostgresEventCodec.Create<object>(EventTypeMap), options);
+            Postgres.CreateBuilder().UseEventTypeMap(EventTypeMap).UseOptions(options).Build();
 
         // Server-side time inside append_events per batch, to separate the function from the rest of the cycle.
         await ExecuteAsync("ALTER SYSTEM SET track_functions = 'pl'; SELECT pg_reload_conf()");

@@ -1,5 +1,3 @@
-using DomainBlocks.EventStore.Abstractions;
-using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Events;
 using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
 using Npgsql;
@@ -61,9 +59,11 @@ public class PostgresEventStoreAdminTests
 
         await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options);
 
-        var eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>());
-        var codec = TestPostgresEventCodec.Create<object>(eventTypeMap);
-        await using var eventStore = PostgresEventStore.Create(dataSource, codec, _options);
+        await using var eventStore = new PostgresEventStoreBuilder<object>()
+            .UseDataSource(dataSource)
+            .UseOptions(_options)
+            .MapEvent<TestEvent>()
+            .Build();
 
         await eventStore.AppendAsync("s1", [AppendableEvent.Create<object>(new TestEvent { Value = "v" })]);
 

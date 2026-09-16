@@ -1,5 +1,4 @@
 using DomainBlocks.Benchmarking.EventStore;
-using DomainBlocks.EventStore.Abstractions;
 using DomainBlocks.Testing.Integration.EventStore.MongoDB;
 using NUnit.Framework;
 
