@@ -127,7 +127,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         return _transforms.Count == 0 ? events : TransformAsync(events);
     }
 
-    public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
+    public IAsyncEnumerable<SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>> SubscribeToAll(
         SubscriptionOrigin<TLogPos>? origin = null,
         SubscriptionOptions? options = null)
     {
@@ -135,7 +135,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         return _transforms.Count == 0 ? messages : TransformSubscriptionAsync(messages);
     }
 
-    public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
+    public IAsyncEnumerable<SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>> SubscribeToStream(
         TStreamId streamId,
         SubscriptionOrigin<TStreamPos>? origin = null,
         SubscriptionOptions? options = null)
@@ -198,17 +198,17 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         }
     }
 
-    private async IAsyncEnumerable<SubscriptionMessage> TransformSubscriptionAsync(
-        IAsyncEnumerable<SubscriptionMessage> messages,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    private async IAsyncEnumerable<SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>>
+        TransformSubscriptionAsync(
+            IAsyncEnumerable<SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>> messages,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         List<ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>>? output = null;
 
         await foreach (var message in messages.WithCancellation(cancellationToken).ConfigureAwait(false))
         {
-            // Anything that is not an event, and any event with no transform, passes through by reference.
-            if (message is not SubscriptionMessage.Event<ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>> e ||
-                !_transforms.TryGetValue(e.Value.Payload.GetType(), out var transform))
+            // Anything that is not an event, and any event with no transform, passes through unchanged.
+            if (message.Event is not { } e || !_transforms.TryGetValue(e.Payload.GetType(), out var transform))
             {
                 yield return message;
                 continue;
@@ -216,10 +216,10 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
 
             output ??= [];
             output.Clear();
-            Expand(e.Value, transform, output, depth: 0);
+            Expand(e, transform, output, depth: 0);
 
             foreach (var derived in output)
-                yield return SubscriptionMessage.Event.Create(derived);
+                yield return SubscriptionMessage.Event(derived);
         }
     }
 

@@ -135,14 +135,14 @@ public class EventStoreWriteBenchmarks
             throw new NotImplementedException();
         }
 
-        public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
+        public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, Position>> SubscribeToAll(
             SubscriptionOrigin<Position>? origin = null,
             SubscriptionOptions? options = null)
         {
             throw new NotImplementedException();
         }
 
-        public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
+        public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, Position>> SubscribeToStream(
             string streamId,
             SubscriptionOrigin<StreamPosition>? origin = null,
             SubscriptionOptions? options = null)

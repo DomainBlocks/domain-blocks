@@ -150,10 +150,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Impl(
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            origin ??= direction == ReadDirection.Forward
-                ? ReadOrigin.Start<LogPosition>()
-                : ReadOrigin.End<LogPosition>();
-
+            origin ??= direction == ReadDirection.Forward ? ReadOrigin.Start : ReadOrigin.End;
             options ??= ReadAllOptions.Default;
 
             if (direction.ProducesEmptyReadFrom(origin))
@@ -188,10 +185,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Impl(
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            origin ??= direction == ReadDirection.Forward
-                ? ReadOrigin.Start<StreamPosition>()
-                : ReadOrigin.End<StreamPosition>();
-
+            origin ??= direction == ReadDirection.Forward ? ReadOrigin.Start : ReadOrigin.End;
             options ??= ReadStreamOptions.Default;
 
             if (direction.ProducesEmptyReadFrom(origin))
@@ -237,7 +231,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         }
     }
 
-    public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
+    public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> SubscribeToAll(
         SubscriptionOrigin<LogPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
@@ -254,7 +248,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
             _logger);
     }
 
-    public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
+    public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> SubscribeToStream(
         string streamId,
         SubscriptionOrigin<StreamPosition>? origin = null,
         SubscriptionOptions? options = null)

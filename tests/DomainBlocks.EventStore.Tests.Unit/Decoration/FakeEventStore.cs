@@ -16,7 +16,7 @@ internal sealed class FakeEventStore : IEventStore<object, string, StreamPositio
 
     public List<ReadEvent<object, string, StreamPosition, LogPosition>> ReadEvents { get; } = [];
 
-    public List<SubscriptionMessage> SubscriptionMessages { get; } = [];
+    public List<SubscriptionMessage<object, string, StreamPosition, LogPosition>> SubscriptionMessages { get; } = [];
 
     public bool Disposed { get; private set; }
 
@@ -59,14 +59,14 @@ internal sealed class FakeEventStore : IEventStore<object, string, StreamPositio
         return Replay(ReadEvents);
     }
 
-    public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
+    public IAsyncEnumerable<SubscriptionMessage<object, string, StreamPosition, LogPosition>> SubscribeToAll(
         SubscriptionOrigin<LogPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
         return Replay(SubscriptionMessages);
     }
 
-    public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
+    public IAsyncEnumerable<SubscriptionMessage<object, string, StreamPosition, LogPosition>> SubscribeToStream(
         string streamId,
         SubscriptionOrigin<StreamPosition>? origin = null,
         SubscriptionOptions? options = null)

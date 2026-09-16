@@ -137,7 +137,7 @@ public abstract class EventStoreReadAllTests<TStreamPos, TLogPos>(IEventStoreTes
     {
         await AppendAcrossStreamsAsync(3, cancellationToken);
 
-        ReadOrigin<TLogPos> origin = fromEnd ? ReadOrigin.End<TLogPos>() : ReadOrigin.Start<TLogPos>();
+        ReadOrigin<TLogPos> origin = fromEnd ? ReadOrigin.End : ReadOrigin.Start;
 
         var read = await EventStore.ReadAll(direction, origin).ToArrayAsync(cancellationToken);
 

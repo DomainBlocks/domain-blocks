@@ -11,17 +11,19 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// <remarks>
 /// <para>
 /// Each cycle attaches an observer to the live feed first, then reads the high-water mark (the highest committed
-/// position), replays everything from the resume position up to it, emits <see cref="SubscriptionMessage.CaughtUp"/>,
+/// position), replays everything from the resume position up to it, emits
+/// <see cref="SubscriptionMessage{TEvent,TStreamId,TStreamPos,TLogPos}.CaughtUp"/>,
 /// and finally drains the live rows, skipping any at or below the high-water mark. Because positions are assigned in
 /// commit order without gaps, the replay and the live rows tile exactly: nothing is skipped and nothing is repeated.
 /// </para>
 /// <para>
 /// A cycle is restarted from the last delivered position, after emitting
-/// <see cref="SubscriptionMessage.FellBehind"/>, when the subscriber's queue overflows or when the feed has been
-/// re-established and may have missed rows.
+/// <see cref="SubscriptionMessage{TEvent,TStreamId,TStreamPos,TLogPos}.FellBehind"/>, when the subscriber's queue
+/// overflows or when the feed has been re-established and may have missed rows.
 /// </para>
 /// </remarks>
-internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> : IAsyncEnumerable<SubscriptionMessage>
+internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
+    IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>>
     where TEvent : notnull
     where TPos : struct, IPosition<TPos>
 {
@@ -45,7 +47,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> : IAsyncEnumerab
         SubscriptionOptions? options,
         ILogger? logger)
     {
-        _origin = origin ?? SubscriptionOrigin.End<TPos>();
+        _origin = origin ?? SubscriptionOrigin.End;
         _options = options ?? SubscriptionOptions.Default;
         _catchUpReader = catchUpReader;
         _livePredicate = livePredicate;
@@ -59,7 +61,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> : IAsyncEnumerab
             : CorrelationId.ReserveGenerated();
     }
 
-    public async IAsyncEnumerator<SubscriptionMessage> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+    public async IAsyncEnumerator<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> GetAsyncEnumerator(
+        CancellationToken cancellationToken = default)
     {
         Observer? observer = null;
         IAsyncDisposable? attachment = null;
@@ -96,10 +99,10 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> : IAsyncEnumerab
                         var message = enumerator.Current;
                         yield return message;
 
-                        if (message is SubscriptionMessage.CaughtUp)
+                        if (message.IsCaughtUp)
                             fellBehindPending = false;
-                        else if (TryGetContext(message, out var context))
-                            resumeOrigin = SubscriptionOrigin.After(_positionSelector(context));
+                        else if (message.Event is { } e)
+                            resumeOrigin = SubscriptionOrigin.After(_positionSelector(e.Context));
                     }
                 }
 
@@ -123,7 +126,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> : IAsyncEnumerab
                 if (!fellBehindPending)
                 {
                     fellBehindPending = true;
-                    yield return new SubscriptionMessage.FellBehind();
+                    yield return SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>.FellBehind;
                 }
             }
         }
@@ -139,22 +142,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> : IAsyncEnumerab
         }
     }
 
-    private static bool TryGetContext(
-        SubscriptionMessage message,
-        out ReadEventContext<string, StreamPosition, LogPosition> context)
-    {
-        if (message is SubscriptionMessage.Event<ReadEvent<TEvent, string, StreamPosition, LogPosition>> e)
-        {
-            context = e.Value.Context;
-            return true;
-        }
-
-        context = default;
-        return false;
-    }
-
     private async ValueTask<bool> MoveNextAsync(
-        IAsyncEnumerator<SubscriptionMessage> enumerator,
+        IAsyncEnumerator<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> enumerator,
         CancellationToken restartToken,
         CancellationToken cancellationToken)
     {
@@ -198,7 +187,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> : IAsyncEnumerab
         }
     }
 
-    private async IAsyncEnumerable<SubscriptionMessage> ReadAllAsync(
+    private async IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> ReadAllAsync(
         SubscriptionOrigin<TPos> resumeOrigin,
         Observer observer,
         [EnumeratorCancellation] CancellationToken cancellationToken)
@@ -222,20 +211,20 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> : IAsyncEnumerab
                 var events = _catchUpReader(_reader, afterExclusive, highWaterMark.Value, catchUpCts.Token);
 
                 await foreach (var e in events.ConfigureAwait(false))
-                    yield return SubscriptionMessage.Event.Create(e);
+                    yield return SubscriptionMessage.Event(e);
             }
         }
 
         _logger?.SubscriptionCaughtUp(_correlationId);
 
-        yield return new SubscriptionMessage.CaughtUp();
+        yield return SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>.CaughtUp;
 
         await foreach (var e in observer.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
         {
             if ((long)e.Context.LogPosition.Value <= highWaterMark || !_livePredicate(e.Context))
                 continue;
 
-            yield return SubscriptionMessage.Event.Create(e);
+            yield return SubscriptionMessage.Event(e);
         }
     }
 

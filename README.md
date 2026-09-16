@@ -11,7 +11,7 @@ Add a store package, `DomainBlocks.EventStore.PostgreSQL` or `DomainBlocks.Event
 ```csharp
 await using var store = new PostgresEventStoreBuilder<IDomainEvent>()
     .UseConnectionString(connectionString)
-    .ConfigureOptions(o => o.Schema = "orders")
+    .ConfigureOptions(o => o.Schema = "events")
     .MapEvents(EventTypeMapping.ReadWrite<OrderPlaced>())
     .Build();
 
@@ -19,8 +19,26 @@ await store.EnsureInitializedAsync();
 await store.AppendAsync("order-1", [new OrderPlaced(...)]);
 ```
 
-Events are stored as JSON by default. Serializers, contract mappers, metadata contributors and read transforms are
-configured on the builder; a data source or client from a container is passed with `UseDataSource` or `UseClient`.
+Subscribe to catch up on existing events and then keep receiving new ones as they are appended:
+
+```csharp
+await foreach (var message in store.SubscribeToAll(SubscriptionOrigin.Start))
+{
+    switch (message)
+    {
+        case { Event: { } e }:
+            Console.WriteLine($"{e.Context.StreamId}: {e.Payload}");
+            break;
+        case { IsCaughtUp: true }:
+            Console.WriteLine("Caught up; now receiving live events");
+            break;
+    }
+}
+```
+
+The default origin is the end of the log, so omitting it receives only new events. `SubscribeToStream` works the same
+way for a single event stream. A subscriber that consumes too slowly receives a message with `IsFellBehind` set to
+`true`, then catches up again.
 
 ## Contributing
 

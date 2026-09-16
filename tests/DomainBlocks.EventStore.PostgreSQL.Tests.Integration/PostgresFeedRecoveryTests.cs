@@ -36,7 +36,7 @@ public class PostgresFeedRecoveryTests() : PostgresIntegrationTest(x =>
     public async Task SubscribeToAll_WhenWalSenderIsTerminated_ObservesEveryEventOnce(CancellationToken ct)
     {
         await using var enumerator = _eventStore
-            .SubscribeToAll(SubscriptionOrigin.Start<LogPosition>())
+            .SubscribeToAll(SubscriptionOrigin.Start)
             .GetAsyncEnumerator(ct);
 
         await ShouldBeCaughtUpAsync(enumerator);
@@ -73,14 +73,14 @@ public class PostgresFeedRecoveryTests() : PostgresIntegrationTest(x =>
         CancellationToken ct)
     {
         await using var enumerator = _eventStore
-            .SubscribeToAll(SubscriptionOrigin.Start<LogPosition>())
+            .SubscribeToAll(SubscriptionOrigin.Start)
             .GetAsyncEnumerator(ct);
 
         await ShouldBeCaughtUpAsync(enumerator);
         await TerminateWalSenderAsync(ct);
 
         (await enumerator.MoveNextAsync()).ShouldBeTrue();
-        enumerator.Current.ShouldBeOfType<SubscriptionMessage.FellBehind>();
+        enumerator.Current.Kind.ShouldBe(SubscriptionMessageKind.FellBehind);
         await ShouldBeCaughtUpAsync(enumerator);
 
         var live = new TestEvent { Value = "live" };
@@ -93,11 +93,11 @@ public class PostgresFeedRecoveryTests() : PostgresIntegrationTest(x =>
     public async Task SubscribeToAll_TwoSubscribers_BothRecoverAfterFeedLoss(CancellationToken ct)
     {
         await using var first = _eventStore
-            .SubscribeToAll(SubscriptionOrigin.Start<LogPosition>())
+            .SubscribeToAll(SubscriptionOrigin.Start)
             .GetAsyncEnumerator(ct);
 
         await using var second = _eventStore
-            .SubscribeToStream("s1", SubscriptionOrigin.Start<StreamPosition>())
+            .SubscribeToStream("s1", SubscriptionOrigin.Start)
             .GetAsyncEnumerator(ct);
 
         await ShouldBeCaughtUpAsync(first);
@@ -158,22 +158,22 @@ public class PostgresFeedRecoveryTests() : PostgresIntegrationTest(x =>
     }
 
     private static async Task<ReadEvent<object, string, StreamPosition, LogPosition>> NextEventAsync(
-        IAsyncEnumerator<SubscriptionMessage> enumerator)
+        IAsyncEnumerator<SubscriptionMessage<object, string, StreamPosition, LogPosition>> enumerator)
     {
         (await enumerator.MoveNextAsync()).ShouldBeTrue();
 
-        return enumerator.Current
-            .ShouldBeOfType<SubscriptionMessage.Event<ReadEvent<object, string, StreamPosition, LogPosition>>>()
-            .Value;
+        return enumerator.Current.Event.ShouldNotBeNull();
     }
 
-    private static async Task ShouldBeCaughtUpAsync(IAsyncEnumerator<SubscriptionMessage> enumerator)
+    private static async Task ShouldBeCaughtUpAsync(
+        IAsyncEnumerator<SubscriptionMessage<object, string, StreamPosition, LogPosition>> enumerator)
     {
         (await enumerator.MoveNextAsync()).ShouldBeTrue();
-        enumerator.Current.ShouldBeOfType<SubscriptionMessage.CaughtUp>();
+        enumerator.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
     }
 
-    private static async Task<RecoveredEvents> ReadUntilRecoveredAsync(IAsyncEnumerator<SubscriptionMessage> enumerator)
+    private static async Task<RecoveredEvents> ReadUntilRecoveredAsync(
+        IAsyncEnumerator<SubscriptionMessage<object, string, StreamPosition, LogPosition>> enumerator)
     {
         var events = new List<TestEvent>();
         var fellBehindCount = 0;
@@ -185,13 +185,13 @@ public class PostgresFeedRecoveryTests() : PostgresIntegrationTest(x =>
 
             switch (enumerator.Current)
             {
-                case SubscriptionMessage.Event<ReadEvent<object, string, StreamPosition, LogPosition>> message:
-                    events.Add(message.Value.Payload.ShouldBeOfType<TestEvent>());
+                case { Event: { } e }:
+                    events.Add(e.Payload.ShouldBeOfType<TestEvent>());
                     break;
-                case SubscriptionMessage.CaughtUp:
+                case { IsCaughtUp: true }:
                     caughtUpCount++;
                     break;
-                case SubscriptionMessage.FellBehind:
+                case { IsFellBehind: true }:
                     fellBehindCount++;
                     break;
             }

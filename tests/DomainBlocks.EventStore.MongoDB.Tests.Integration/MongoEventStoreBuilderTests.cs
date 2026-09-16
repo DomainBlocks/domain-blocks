@@ -41,15 +41,13 @@ public class MongoEventStoreBuilderTests
 
             await using var subscription = store.SubscribeToAll().GetAsyncEnumerator(ct);
             (await subscription.MoveNextAsync()).ShouldBeTrue();
-            subscription.Current.ShouldBeOfType<SubscriptionMessage.CaughtUp>();
+            subscription.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
 
             var live = new TestEvent { Value = "live" };
             await store.AppendAsync("s2", [AppendableEvent.Create<object>(live)], cancellationToken: ct);
 
             (await subscription.MoveNextAsync()).ShouldBeTrue();
-            subscription.Current
-                .ShouldBeOfType<SubscriptionMessage.Event<ReadEvent<object, string, StreamPosition, LogPosition>>>()
-                .Value.Payload.ShouldBe(live);
+            subscription.Current.Event.ShouldNotBeNull().Payload.ShouldBe(live);
         }
 
         var indexes = await MongoTestEnvironment.MongoClient

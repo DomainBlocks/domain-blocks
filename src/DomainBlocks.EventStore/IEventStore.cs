@@ -88,7 +88,7 @@ public interface IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> : IAsyncDis
     /// </param>
     /// <param name="options">Options that configure the subscription.</param>
     /// <returns>An asynchronous sequence of subscription messages.</returns>
-    IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
+    IAsyncEnumerable<SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>> SubscribeToAll(
         SubscriptionOrigin<TLogPos>? origin = null,
         SubscriptionOptions? options = null);
 
@@ -102,7 +102,7 @@ public interface IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> : IAsyncDis
     /// </param>
     /// <param name="options">Options that configure the subscription.</param>
     /// <returns>An asynchronous sequence of subscription messages.</returns>
-    IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
+    IAsyncEnumerable<SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>> SubscribeToStream(
         TStreamId streamId,
         SubscriptionOrigin<TStreamPos>? origin = null,
         SubscriptionOptions? options = null);

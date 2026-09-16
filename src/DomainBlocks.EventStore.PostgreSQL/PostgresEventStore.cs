@@ -61,6 +61,7 @@ public static class PostgresEventStore
         var connectionString = replicationOptions.ConnectionString
                                ?? replicationConnectionStringFallback
                                ?? dataSource.ConnectionString;
+
         var slotNames = new SlotNameGenerator(replicationOptions.SlotNamePrefix);
 
         var feedOptions = new EventLogFeedOptions
@@ -182,10 +183,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Impl(
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            origin ??= direction == ReadDirection.Forward
-                ? ReadOrigin.Start<LogPosition>()
-                : ReadOrigin.End<LogPosition>();
-
+            origin ??= direction == ReadDirection.Forward ? ReadOrigin.Start : ReadOrigin.End;
             options ??= ReadAllOptions.Default;
 
             if (direction.ProducesEmptyReadFrom(origin))
@@ -218,10 +216,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Impl(
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            origin ??= direction == ReadDirection.Forward
-                ? ReadOrigin.Start<StreamPosition>()
-                : ReadOrigin.End<StreamPosition>();
-
+            origin ??= direction == ReadDirection.Forward ? ReadOrigin.Start : ReadOrigin.End;
             options ??= ReadStreamOptions.Default;
 
             if (direction.ProducesEmptyReadFrom(origin))
@@ -254,7 +249,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         }
     }
 
-    public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
+    public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> SubscribeToAll(
         SubscriptionOrigin<LogPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
@@ -269,7 +264,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
             _logger);
     }
 
-    public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(
+    public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> SubscribeToStream(
         string streamId,
         SubscriptionOrigin<StreamPosition>? origin = null,
         SubscriptionOptions? options = null)

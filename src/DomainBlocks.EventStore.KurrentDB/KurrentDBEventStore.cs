@@ -86,14 +86,15 @@ public sealed class KurrentDBEventStore<TEvent> : IEventStore<TEvent, string, St
         return ReadStreamCoreAsync(streamId, direction, origin, options);
     }
 
-    public IAsyncEnumerable<SubscriptionMessage> SubscribeToAll(
+    public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, Position>> SubscribeToAll(
         SubscriptionOrigin<Position>? origin = null,
         SubscriptionOptions? options = null)
     {
         throw new NotImplementedException();
     }
 
-    public IAsyncEnumerable<SubscriptionMessage> SubscribeToStream(string streamId,
+    public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, Position>> SubscribeToStream(
+        string streamId,
         SubscriptionOrigin<StreamPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
@@ -136,8 +137,8 @@ public sealed class KurrentDBEventStore<TEvent> : IEventStore<TEvent, string, St
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         origin ??= direction == ReadDirection.Forward
-            ? ReadOrigin.Start<StreamPosition>()
-            : ReadOrigin.End<StreamPosition>();
+            ? ReadOrigin.Start
+            : ReadOrigin.End;
 
         options ??= ReadStreamOptions.Default;
 
