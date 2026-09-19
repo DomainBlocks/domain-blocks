@@ -7,7 +7,6 @@
     <Project Path="benchmarks/DomainBlocks.EventStore.PostgreSQL.Benchmarks/DomainBlocks.EventStore.PostgreSQL.Benchmarks.csproj" />
   </Folder>
   <Folder Name="/src/">
-    <Project Path="src/DomainBlocks.EventStore.Primitives/DomainBlocks.EventStore.Primitives.csproj" />
     <Project Path="src/DomainBlocks.Core/DomainBlocks.Core.csproj" />
     <Project Path="src/DomainBlocks.EventSourcing/DomainBlocks.EventSourcing.csproj" />
     <Project Path="src/DomainBlocks.EventStore.MongoDB/DomainBlocks.EventStore.MongoDB.csproj" />
@@ -21,7 +20,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/DomainBlocks.EventStore.MongoDB.Tests.Unit/DomainBlocks.EventStore.MongoDB.Tests.Unit.csproj" />
     <Project Path="tests/DomainBlocks.EventStore.PostgreSQL.Tests.Unit/DomainBlocks.EventStore.PostgreSQL.Tests.Unit.csproj" />
-    <Project Path="tests/DomainBlocks.EventStore.Primitives.Tests.Unit/DomainBlocks.EventStore.Primitives.Tests.Unit.csproj" />
     <Project Path="tests/DomainBlocks.EventSourcing.Tests.Integration/DomainBlocks.EventSourcing.Tests.Integration.csproj" />
     <Project Path="tests/DomainBlocks.EventStore.MongoDB.Tests.Integration/DomainBlocks.EventStore.MongoDB.Tests.Integration.csproj" />
     <Project Path="tests/DomainBlocks.EventStore.PostgreSQL.Tests.Integration/DomainBlocks.EventStore.PostgreSQL.Tests.Integration.csproj" />
