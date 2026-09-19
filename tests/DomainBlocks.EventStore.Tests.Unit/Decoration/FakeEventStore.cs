@@ -87,6 +87,7 @@ internal sealed class FakeEventStore : IEventStore<object, string, StreamPositio
     {
         var context = ReadEventContext.Create(
             "stream-1",
+            payload.GetType().Name,
             metadata ?? new Dictionary<string, string>(),
             new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero).AddSeconds(position),
             new StreamPosition(position),

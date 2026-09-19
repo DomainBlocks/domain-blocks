@@ -8,11 +8,6 @@ namespace DomainBlocks.EventStore.Tests.Unit.Codecs;
 
 public class EventCodecBuilderTests
 {
-    private static EventCodecBuilder<object, string, string> Builder() => new();
-
-    private static IEventCodec<object, string, string> BuildWithFakes(EventCodecBuilder<object, string, string> b) =>
-        b.UseEventSerializer(new FakeObjectSerializer()).UseMetadataSerializer(new FakeMetadataSerializer()).Build();
-
     [Test]
     public void Build_WithMappings_RoundTripsAnEvent()
     {
@@ -75,15 +70,13 @@ public class EventCodecBuilderTests
     {
         var ex = Should.Throw<InvalidOperationException>(() => BuildWithFakes(Builder()));
 
-        ex.Message.ShouldContain("MapEvents");
-        ex.Message.ShouldContain("UseCodec");
+        ex.Message.ShouldContain("No event types are mapped");
     }
 
     [Test]
     public void Build_WithoutSerializers_ThrowsNamingTheMethodToCall()
     {
-        var ex = Should.Throw<InvalidOperationException>(() =>
-            Builder().MapEvent<OrderPlaced>().Build());
+        var ex = Should.Throw<InvalidOperationException>(() => Builder().MapEvent<OrderPlaced>().Build());
 
         ex.Message.ShouldContain("UseEventSerializer");
     }
@@ -101,8 +94,16 @@ public class EventCodecBuilderTests
             .MapEvent<OrderPlaced>()
             .UseMetadataSerializer(explicitMetadata)
             .Build(
-                () => { defaultEventUsed = true; return defaultEvent; },
-                () => { defaultMetadataUsed = true; return defaultMetadata; });
+                () =>
+                {
+                    defaultEventUsed = true;
+                    return defaultEvent;
+                },
+                () =>
+                {
+                    defaultMetadataUsed = true;
+                    return defaultMetadata;
+                });
 
         defaultEventUsed.ShouldBeTrue();
         defaultMetadataUsed.ShouldBeFalse();
@@ -131,20 +132,15 @@ public class EventCodecBuilderTests
         codec.Encode(new OrderShipped("o1"), []).EventName.ShouldBe("Shipped");
     }
 
-    [Test]
-    public void UseCodec_ReturnsThatCodec()
+    private static EventCodecBuilder<object, string, string> Builder() => new();
+
+    private static IEventCodec<object, string, string> BuildWithFakes(
+        EventCodecBuilder<object, string, string> builder)
     {
-        var existing = BuildWithFakes(Builder().MapEvent<OrderPlaced>());
-
-        Builder().UseCodec(existing).Build().ShouldBeSameAs(existing);
-    }
-
-    [Test]
-    public void UseCodec_CombinedWithMappings_Throws()
-    {
-        var existing = BuildWithFakes(Builder().MapEvent<OrderPlaced>());
-
-        Should.Throw<InvalidOperationException>(() => Builder().UseCodec(existing).MapEvent<OrderPlaced>().Build());
+        return builder
+            .UseEventSerializer(new FakeObjectSerializer())
+            .UseMetadataSerializer(new FakeMetadataSerializer())
+            .Build();
     }
 
     private sealed record OrderPlaced(string OrderId);

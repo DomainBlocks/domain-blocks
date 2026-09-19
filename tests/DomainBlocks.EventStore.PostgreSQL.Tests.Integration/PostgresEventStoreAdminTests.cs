@@ -62,7 +62,7 @@ public class PostgresEventStoreAdminTests
         await using var eventStore = new PostgresEventStoreBuilder<object>()
             .UseDataSource(dataSource)
             .UseOptions(_options)
-            .MapEvent<TestEvent>()
+            .ConfigureCodec(x => x.MapEvent<TestEvent>())
             .Build();
 
         await eventStore.AppendAsync("s1", [AppendableEvent.Create<object>(new TestEvent { Value = "v" })]);

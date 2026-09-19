@@ -83,8 +83,11 @@ public class PostgresEventStoreBenchmarkTests() :
             AppendQueueCapacity = Math.Max(inFlight, Postgres.Options.AppendQueueCapacity)
         };
 
-        await using var eventStore =
-            Postgres.CreateBuilder().UseEventTypeMap(EventTypeMap).UseOptions(options).Build();
+        await using var eventStore = Postgres
+            .CreateBuilder()
+            .ConfigureCodec(x => x.UseEventTypeMap(EventTypeMap))
+            .UseOptions(options)
+            .Build();
 
         // Server-side time inside append_events per batch, to separate the function from the rest of the cycle.
         await ExecuteAsync("ALTER SYSTEM SET track_functions = 'pl'; SELECT pg_reload_conf()");

@@ -10,20 +10,11 @@ using Npgsql;
 
 namespace DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
 
-/// <summary>
-/// Binds a suite to the PostgreSQL event store: one schema and one data source per fixture on the server started by
-/// <see cref="PostgresTestEnvironment"/>. The schema is named after the fixture unless <paramref name="configure"/>
-/// sets one. Stores are built on the borrowed-data-source path of <see cref="PostgresEventStoreBuilder{TEvent}"/>.
-/// </summary>
 public sealed class PostgresEventStoreTestHarness(Action<PostgresEventStoreOptions>? configure = null) :
     IEventStoreTestHarness<StreamPosition, LogPosition>
 {
     public PostgresEventStoreOptions Options { get; private set; } = null!;
 
-    /// <summary>
-    /// The data source the fixture's stores are created over, with the type mappings of the fixture's schema. It
-    /// lives from <see cref="InitializeAsync"/> to <see cref="DropAsync"/>.
-    /// </summary>
     public NpgsqlDataSource DataSource { get; private set; } = null!;
 
     public StoreCapabilities Capabilities => StoreCapabilities.IdempotentAppends;
@@ -56,11 +47,6 @@ public sealed class PostgresEventStoreTestHarness(Action<PostgresEventStoreOptio
         await DataSource.DisposeAsync();
     }
 
-    /// <summary>
-    /// A builder over this harness's data source, options and a logger named for the test, for callers that need to
-    /// configure more than <see cref="CreateEventStore(EventTypeMap, EventFormat?, IEnumerable{IEventContractMapper{object}}?, string)"/>
-    /// offers.
-    /// </summary>
     public PostgresEventStoreBuilder<object> CreateBuilder(string loggerNameSuffix = "")
     {
         return new PostgresEventStoreBuilder<object>()
@@ -73,19 +59,21 @@ public sealed class PostgresEventStoreTestHarness(Action<PostgresEventStoreOptio
         EventTypeMap eventTypeMap,
         EventFormat? eventFormat = null,
         IEnumerable<IEventContractMapper<object>>? contractMappers = null,
-        string loggerNameSuffix = "")
+        string loggerNameSuffix = "",
+        IEnumerable<string>? ignoredEventNames = null)
     {
-        return CreateBuilder(loggerNameSuffix)
-            .UseEventTypeMap(eventTypeMap)
-            .UseEventSerializer(EventSerializerFor(eventFormat ?? EventFormat.Json))
-            .AddContractMappers([.. contractMappers ?? []])
-            .Build();
+        var builder = CreateBuilder(loggerNameSuffix)
+            .ConfigureCodec(x => x
+                .UseEventTypeMap(eventTypeMap)
+                .UseEventSerializer(EventSerializerFor(eventFormat ?? EventFormat.Json))
+                .AddContractMappers([.. contractMappers ?? []]));
+
+        if (ignoredEventNames is not null)
+            builder.IgnoreEvents([.. ignoredEventNames]).UseIgnoredEventSentinel(IgnoredEvent.Instance);
+
+        return builder.Build();
     }
 
-    /// <summary>
-    /// Creates a store over this harness's schema with an explicit codec and, optionally, different options such as
-    /// batch sizes.
-    /// </summary>
     public IEventStore<object, string, StreamPosition, LogPosition> CreateEventStore(
         IEventCodec<object, PostgresEventData, string> eventCodec,
         PostgresEventStoreOptions? options = null,

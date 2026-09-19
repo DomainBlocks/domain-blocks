@@ -30,7 +30,7 @@ public class EventSourcedStateStoreTests
         _eventStore = new MongoEventStoreBuilder<IDomainEvent>()
             .UseClient(MongoTestEnvironment.MongoClient)
             .UseOptions(_options)
-            .UseEventTypeMap(eventTypeMap)
+            .ConfigureCodec(x => x.UseEventTypeMap(eventTypeMap))
             .UseLoggerFactory(MongoTestEnvironment.LoggerFactory)
             .Build();
 

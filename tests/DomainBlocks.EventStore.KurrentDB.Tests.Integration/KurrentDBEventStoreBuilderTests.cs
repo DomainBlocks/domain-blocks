@@ -16,7 +16,7 @@ public class KurrentDBEventStoreBuilderTests
     {
         var store = new KurrentDBEventStoreBuilder<object>()
             .UseConnectionString(KurrentDBTestEnvironment.ConnectionString)
-            .MapEvent<TestEvent>()
+            .ConfigureCodec(x => x.MapEvent<TestEvent>())
             .Build();
 
         var streamId = $"bld-{Guid.NewGuid():N}";
@@ -35,18 +35,23 @@ public class KurrentDBEventStoreBuilderTests
     [Test]
     public async Task BorrowedPath_DisposingTheStore_LeavesTheClientUsable()
     {
-        await using var client = new KurrentDBClient(KurrentDBClientSettings.Create(KurrentDBTestEnvironment.ConnectionString));
+        await using var client = new KurrentDBClient(
+            KurrentDBClientSettings.Create(KurrentDBTestEnvironment.ConnectionString));
 
         var store = new KurrentDBEventStoreBuilder<object>()
             .UseClient(client)
-            .MapEvent<TestEvent>()
+            .ConfigureCodec(x => x.MapEvent<TestEvent>())
             .Build();
 
         var streamId = $"bld-{Guid.NewGuid():N}";
         await store.AppendAsync(streamId, [AppendableEvent.Create<object>(new TestEvent { Value = "v" })]);
         await store.DisposeAsync();
 
-        var result = client.ReadStreamAsync(Direction.Forwards, streamId, global::KurrentDB.Client.StreamPosition.Start);
+        var result = client.ReadStreamAsync(
+            Direction.Forwards,
+            streamId,
+            global::KurrentDB.Client.StreamPosition.Start);
+
         (await result.ReadState).ShouldBe(ReadState.Ok);
     }
 }

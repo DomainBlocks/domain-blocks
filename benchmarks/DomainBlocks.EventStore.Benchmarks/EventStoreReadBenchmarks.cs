@@ -207,6 +207,7 @@ public class EventStoreReadBenchmarks
 
                 var context = ReadEventContext.Create(
                     streamId,
+                    eventRecord.EventType,
                     metadata,
                     eventRecord.Created,
                     originalEventRecord.EventNumber,

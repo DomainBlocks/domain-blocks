@@ -188,6 +188,7 @@ public sealed class KurrentDBEventStore<TEvent> : IEventStore<TEvent, string, St
 
             var context = ReadEventContext.Create(
                 streamId,
+                record.EventType,
                 metadata,
                 record.Created,
                 originalRecord.EventNumber,

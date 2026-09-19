@@ -1,4 +1,5 @@
-﻿using DomainBlocks.EventStore;
+﻿using DomainBlocks.Core;
+using DomainBlocks.EventStore;
 
 namespace DomainBlocks.EventSourcing;
 

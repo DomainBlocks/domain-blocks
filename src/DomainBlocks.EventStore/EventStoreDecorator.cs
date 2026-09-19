@@ -1,16 +1,11 @@
 using System.Collections.Frozen;
 using System.Runtime.CompilerServices;
+using DomainBlocks.Core;
 using DomainBlocks.EventStore.Metadata;
 using DomainBlocks.EventStore.Transforms;
 
 namespace DomainBlocks.EventStore;
 
-/// <summary>
-/// Decorates an event store with the domain-facing hooks configured through <see cref="EventStoreExtensions"/>:
-/// metadata contributors on append and read transforms on reads and subscriptions. The store underneath sees only
-/// encoded events. One instance carries the whole configuration; adding a hook to a decorated store rebuilds it
-/// rather than stacking another layer.
-/// </summary>
 internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos> :
     IEventStore<TEvent, TStreamId, TStreamPos, TLogPos>
     where TEvent : notnull
@@ -21,56 +16,51 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
     // Guards against transform cycles (A -> B -> A) that the same-type check cannot see.
     private const int MaxTransformDepth = 32;
 
-    private readonly IMetadataContributor<TEvent>[] _contributors;
-    private readonly IReadEventTransform<TEvent>[] _transformList;
-    private readonly FrozenDictionary<Type, IReadEventTransform<TEvent>> _transforms;
+    private readonly IMetadataContributor<TEvent>[] _metadataContributors;
+    private readonly FrozenDictionary<Type, IReadEventTransform<TEvent>> _readTransforms;
 
     public EventStoreDecorator(
         IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> inner,
-        IEnumerable<IMetadataContributor<TEvent>> contributors,
-        IEnumerable<IReadEventTransform<TEvent>> transforms,
-        bool hasDroppedEventPlaceholder,
-        TEvent droppedEventPlaceholder)
+        IEnumerable<IMetadataContributor<TEvent>> metadataContributors,
+        IEnumerable<IReadEventTransform<TEvent>> readTransforms,
+        Optional<TEvent> ignoredEventSentinel)
     {
-        Inner = inner;
-        _contributors = [.. contributors];
-        _transformList = [.. transforms];
-        HasDroppedEventPlaceholder = hasDroppedEventPlaceholder;
-        DroppedEventPlaceholder = droppedEventPlaceholder;
+        _metadataContributors = [.. metadataContributors];
 
         var transformsByType = new Dictionary<Type, IReadEventTransform<TEvent>>();
 
-        foreach (var transform in _transformList)
+        foreach (var transform in readTransforms)
         {
             if (!transformsByType.TryAdd(transform.SourceEventType, transform))
             {
                 throw new ArgumentException(
                     $"More than one read event transform is registered for source type " +
                     $"'{transform.SourceEventType.Name}'.",
-                    nameof(transforms));
+                    nameof(readTransforms));
             }
         }
 
-        _transforms = transformsByType.ToFrozenDictionary();
+        _readTransforms = transformsByType.ToFrozenDictionary();
 
-        if (hasDroppedEventPlaceholder && _transforms.ContainsKey(droppedEventPlaceholder.GetType()))
+        if (ignoredEventSentinel.HasValue && _readTransforms.ContainsKey(ignoredEventSentinel.Value.GetType()))
         {
             throw new ArgumentException(
-                $"The dropped event placeholder type '{droppedEventPlaceholder.GetType().Name}' must not have a " +
+                $"The ignored event sentinel type '{ignoredEventSentinel.Value.GetType().Name}' must not have a " +
                 "read event transform registered.",
-                nameof(droppedEventPlaceholder));
+                nameof(ignoredEventSentinel));
         }
+
+        Inner = inner;
+        IgnoredEventSentinel = ignoredEventSentinel;
     }
 
     public IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> Inner { get; }
 
-    public IReadOnlyList<IMetadataContributor<TEvent>> Contributors => _contributors;
+    public IReadOnlyList<IMetadataContributor<TEvent>> MetadataContributors => _metadataContributors;
 
-    public IReadOnlyList<IReadEventTransform<TEvent>> Transforms => _transformList;
+    public IReadOnlyList<IReadEventTransform<TEvent>> ReadTransforms => _readTransforms.Values;
 
-    public bool HasDroppedEventPlaceholder { get; }
-
-    public TEvent DroppedEventPlaceholder { get; }
+    public Optional<TEvent> IgnoredEventSentinel { get; }
 
     public Task EnsureInitializedAsync(CancellationToken cancellationToken = default) =>
         Inner.EnsureInitializedAsync(cancellationToken);
@@ -85,7 +75,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
     {
         ArgumentNullException.ThrowIfNull(events);
 
-        return _contributors.Length == 0
+        return _metadataContributors.Length == 0
             ? Inner.AppendAsync(streamId, events, expectedState, commitId, options, cancellationToken)
             : AppendWithMetadataAsync(streamId, events, expectedState, commitId, options, cancellationToken);
     }
@@ -98,12 +88,17 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         AppendOptions? options,
         CancellationToken cancellationToken)
     {
-        // The store has consumed every event by the time its append completes, so the buffer can go back to the
-        // pool here. The events handed to the store are valid only for the duration of the append.
+        // The store has consumed every event by the time the append operation completes, so the buffer can go back to
+        // the pool.
         using var buffer = new MetadataBuffer();
 
         await Inner
-            .AppendAsync(streamId, ContributeMetadata(events, buffer), expectedState, commitId, options,
+            .AppendAsync(
+                streamId,
+                ContributeMetadata(events, buffer),
+                expectedState,
+                commitId,
+                options,
                 cancellationToken)
             .ConfigureAwait(false);
     }
@@ -114,7 +109,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         ReadAllOptions? options = null)
     {
         var events = Inner.ReadAll(direction, origin, options);
-        return _transforms.Count == 0 ? events : TransformAsync(events);
+        return _readTransforms.Count == 0 ? events : TransformAsync(events);
     }
 
     public IAsyncEnumerable<ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>> ReadStream(
@@ -124,7 +119,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         ReadStreamOptions? options = null)
     {
         var events = Inner.ReadStream(streamId, direction, origin, options);
-        return _transforms.Count == 0 ? events : TransformAsync(events);
+        return _readTransforms.Count == 0 ? events : TransformAsync(events);
     }
 
     public IAsyncEnumerable<SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>> SubscribeToAll(
@@ -132,7 +127,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         SubscriptionOptions? options = null)
     {
         var messages = Inner.SubscribeToAll(origin, options);
-        return _transforms.Count == 0 ? messages : TransformSubscriptionAsync(messages);
+        return _readTransforms.Count == 0 ? messages : TransformSubscriptionAsync(messages);
     }
 
     public IAsyncEnumerable<SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>> SubscribeToStream(
@@ -141,15 +136,11 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         SubscriptionOptions? options = null)
     {
         var messages = Inner.SubscribeToStream(streamId, origin, options);
-        return _transforms.Count == 0 ? messages : TransformSubscriptionAsync(messages);
+        return _readTransforms.Count == 0 ? messages : TransformSubscriptionAsync(messages);
     }
 
     public ValueTask DisposeAsync() => Inner.DisposeAsync();
 
-    /// <summary>
-    /// Merges contributed and explicit metadata for each event into pooled chunks shared by the batch, so no
-    /// per-event allocation is made. Explicit entries win. Lazy, so a store that streams its input keeps streaming.
-    /// </summary>
     private IEnumerable<AppendableEvent<TEvent>> ContributeMetadata(
         IEnumerable<AppendableEvent<TEvent>> events,
         MetadataBuffer buffer)
@@ -166,7 +157,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
 
         var writer = new MetadataWriter(buffer);
 
-        foreach (var contributor in _contributors)
+        foreach (var contributor in _metadataContributors)
             contributor.Contribute(@event.Payload, writer);
 
         foreach (var (key, value) in @event.Metadata)
@@ -183,7 +174,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
 
         await foreach (var @event in events.WithCancellation(cancellationToken).ConfigureAwait(false))
         {
-            if (!_transforms.TryGetValue(@event.Payload.GetType(), out var transform))
+            if (!_readTransforms.TryGetValue(@event.Payload.GetType(), out var transform))
             {
                 yield return @event;
                 continue;
@@ -207,8 +198,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
 
         await foreach (var message in messages.WithCancellation(cancellationToken).ConfigureAwait(false))
         {
-            // Anything that is not an event, and any event with no transform, passes through unchanged.
-            if (message.Event is not { } e || !_transforms.TryGetValue(e.Payload.GetType(), out var transform))
+            if (message.Event is not { } e || !_readTransforms.TryGetValue(e.Payload.GetType(), out var transform))
             {
                 yield return message;
                 continue;
@@ -224,15 +214,16 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
     }
 
     /// <summary>
-    /// Applies <paramref name="transform"/> to <paramref name="event"/> and, depth first so that order is preserved,
-    /// any transform that applies to what it produced. Derived events share the source event's context. A transform
-    /// that produces nothing yields the dropped event placeholder in the source event's place, so the position is
-    /// still observed, or throws if no placeholder is configured.
+    /// Applies <paramref name="transform"/> to <paramref name="event"/> and then, depth-first, applies any transform
+    /// that matches an event it produces to preserve event order. Derived events inherit the source event's context. If
+    /// a transform produces no events, the configured ignored event sentinel is emitted in its place so that the source
+    /// event's position is still observed. An exception is thrown if no sentinel is configured.
     /// </summary>
     private void Expand(
         ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos> @event,
         IReadEventTransform<TEvent> transform,
         List<ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>> output,
+        // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Local - incremented in recursive call
         int depth)
     {
         if (depth >= MaxTransformDepth)
@@ -253,13 +244,13 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
             if (derivedPayload.GetType() == sourceType)
             {
                 throw new InvalidOperationException(
-                    $"Read event transform '{transform.GetType().Name}' produced an event of its own source type " +
-                    $"'{sourceType.Name}', which would be transformed again indefinitely.");
+                    $"The read event transform for '{sourceType.Name}' produced an event of the same type, which " +
+                    "would be transformed again indefinitely.");
             }
 
             var derived = ReadEvent.Create(derivedPayload, context);
 
-            if (_transforms.TryGetValue(derivedPayload.GetType(), out var next))
+            if (_readTransforms.TryGetValue(derivedPayload.GetType(), out var next))
                 Expand(derived, next, output, depth + 1);
             else
                 output.Add(derived);
@@ -268,14 +259,13 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         if (produced)
             return;
 
-        if (!HasDroppedEventPlaceholder)
+        if (!IgnoredEventSentinel.HasValue)
         {
             throw new InvalidOperationException(
-                $"Read event transform '{transform.GetType().Name}' produced no events for '{sourceType.Name}'. " +
-                "Dropping an event would hide its position from consumers that track the last observed position; " +
-                "pass a droppedEventPlaceholder to WithReadTransforms to have it emitted in the event's place.");
+                $"The read event transform for '{sourceType.Name}' produced no events, " +
+                "but no ignored-event sentinel is configured. Call UseIgnoredEventSentinel to configure one.");
         }
 
-        output.Add(ReadEvent.Create(DroppedEventPlaceholder, context));
+        output.Add(ReadEvent.Create(IgnoredEventSentinel.Value, context));
     }
 }
