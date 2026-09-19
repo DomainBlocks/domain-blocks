@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+option csharp_namespace = "DomainBlocks.EventStore.Benchmarks.Proto";
+
+message ProtoTestEvent {
+  string value1 = 1;
+  string value2 = 2;
+}
