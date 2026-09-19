@@ -6,13 +6,14 @@ DomainBlocks is a .NET library for building applications using Domain-Driven Des
 
 ## Features
 
-DomainBlocks is a set of NuGet packages, so you reference only what you need. Event sourcing is the first feature
-area; others will follow.
+DomainBlocks is a set of NuGet packages, so you reference only what you need. Event storage and event evolution are the
+first feature areas; others will follow.
 
-### Event sourcing
+### Event storage
 
-Add a store package, `DomainBlocks.EventStore.PostgreSQL` or `DomainBlocks.EventStore.MongoDB`, build a store, then
-append and read events:
+`DomainBlocks.EventStore` holds the store contracts and the append and read pipeline; a store package plugs a database
+in. Add `DomainBlocks.EventStore.PostgreSQL` or `DomainBlocks.EventStore.MongoDB`, build a store, then append and read
+events:
 
 ```csharp
 await using var store = new PostgresEventStoreBuilder<IDomainEvent>()
@@ -50,12 +51,13 @@ The default origin is the end of the log, so omitting it receives only new event
 way for a single event stream. A subscriber that consumes too slowly receives a message with `IsFellBehind` set to
 `true`, then catches up again.
 
-#### Evolving events
+### Event evolution
 
-Read transforms reshape old events as they are read, on reads and subscriptions alike, so the rest of the code only
-sees current shapes.
+Stored events are never rewritten. Instead, read transforms reshape old events as they are read, on reads and
+subscriptions alike, so the rest of the code only sees current shapes.
 
-Upcast an event that gained a field:
+Upcast an event that gained a field. A `ReadOnly` mapping keeps the retired version decodable under its stored name,
+and a `ReadWrite` mapping names the current version for writing:
 
 ```csharp
 var builder = new PostgresEventStoreBuilder<IDomainEvent>()
@@ -89,6 +91,8 @@ public sealed record Ignored : IDomainEvent
     public static readonly Ignored Instance = new();
 }
 ```
+
+A store typed over `object` can use the built-in `IgnoredEvent.Instance` as the sentinel instead.
 
 ## Contributing
 
