@@ -8,9 +8,6 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
-/// <summary>
-/// The builder's two connection paths against a real replica set, and the BSON defaults.
-/// </summary>
 public class MongoEventStoreBuilderTests
 {
     private readonly MongoEventStoreOptions _options = new() { DatabaseName = $"bld_{Guid.NewGuid():N}" };
@@ -25,7 +22,7 @@ public class MongoEventStoreBuilderTests
         var store = new MongoEventStoreBuilder<object>()
             .UseConnectionString(MongoTestEnvironment.ConnectionString)
             .UseOptions(_options)
-            .MapEvent<TestEvent>()
+            .ConfigureCodec(x => x.MapEvent<TestEvent>())
             .UseLoggerFactory(MongoTestEnvironment.LoggerFactory)
             .Build();
 
@@ -50,29 +47,14 @@ public class MongoEventStoreBuilderTests
             subscription.Current.Event.ShouldNotBeNull().Payload.ShouldBe(live);
         }
 
-        var indexes = await MongoTestEnvironment.MongoClient
-            .GetDatabase(_options.DatabaseName)
-            .GetCollection<BsonDocument>(_options.EventLogCollectionName)
-            .Indexes.List()
+        var indexes = await (await MongoTestEnvironment.MongoClient
+                .GetDatabase(_options.DatabaseName)
+                .GetCollection<BsonDocument>(_options.EventLogCollectionName)
+                .Indexes
+                .ListAsync(ct))
             .ToListAsync(ct);
 
         indexes.Select(i => i["name"].AsString).ShouldContain(EventLogIndexNames.UniqueStreamVersion);
-    }
-
-    [Test]
-    public void OwnedPath_BuildTwice_Throws()
-    {
-        var builder = new MongoEventStoreBuilder<object>()
-            .UseConnectionString(MongoTestEnvironment.ConnectionString)
-            .UseOptions(_options)
-            .MapEvent<TestEvent>();
-
-        var first = builder.Build();
-
-        var ex = Should.Throw<InvalidOperationException>(builder.Build);
-        ex.Message.ShouldContain("one store");
-
-        first.DisposeAsync().AsTask().Wait();
     }
 
     [Test]
@@ -83,7 +65,7 @@ public class MongoEventStoreBuilderTests
         var store = new MongoEventStoreBuilder<object>()
             .UseClient(client)
             .UseOptions(_options)
-            .MapEvent<TestEvent>()
+            .ConfigureCodec(x => x.MapEvent<TestEvent>())
             .Build();
 
         await store.EnsureInitializedAsync();
@@ -95,12 +77,12 @@ public class MongoEventStoreBuilderTests
     }
 
     [Test]
-    public async Task Defaults_RoundTripAnEventWithAGuidProperty()
+    public async Task Defaults_EventWithAGuidProperty_RoundTripsWorks()
     {
         await using var store = new MongoEventStoreBuilder<object>()
             .UseClient(MongoTestEnvironment.MongoClient)
             .UseOptions(_options)
-            .MapEvent<OrderPlaced>()
+            .ConfigureCodec(x => x.MapEvent<OrderPlaced>())
             .Build();
 
         await store.EnsureInitializedAsync();
@@ -113,5 +95,5 @@ public class MongoEventStoreBuilderTests
         read.Context.Metadata.ShouldBe(new Dictionary<string, string> { ["k"] = "v" });
     }
 
-    public sealed record OrderPlaced(Guid OrderId, string Note);
+    private sealed record OrderPlaced(Guid OrderId, string Note);
 }

@@ -50,7 +50,7 @@ public abstract class PostgresIntegrationTest(Action<PostgresEventStoreOptions>?
         PostgresEventStoreOptions? options = null)
     {
         return Harness.CreateBuilder(loggerNameSuffix)
-            .UseEventTypeMap(DefaultEventTypeMap)
+            .ConfigureCodec(x => x.UseEventTypeMap(DefaultEventTypeMap))
             .UseOptions(options ?? Options)
             .Build();
     }

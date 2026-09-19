@@ -1,4 +1,3 @@
-using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.Abstractions;
 using DomainBlocks.Serialization.Google.Protobuf;
@@ -53,8 +52,9 @@ public class MongoBsonValueSerializerTests
             EventTypeMapping.ReadWrite<ProtoTestEvent>(nameof(ProtoTestEvent)));
 
         await using var eventStore = _harness.CreateBuilder()
-            .UseEventTypeMap(eventTypeMap)
-            .UseEventSerializer(serializer)
+            .ConfigureCodec(x => x
+                .UseEventTypeMap(eventTypeMap)
+                .UseEventSerializer(serializer))
             .Build();
 
         var streamId = $"test-{serializer.GetType().Name}-{Guid.NewGuid():N}";

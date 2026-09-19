@@ -1,10 +1,48 @@
 namespace DomainBlocks.EventStore.Transforms;
 
-/// <summary>
-/// Base class for a transform of one source event type that does not depend on the store's position types.
-/// Implement <see cref="IReadEventTransform{TEvent}"/> directly to receive the full
-/// <see cref="ReadEventContext{TStreamId, TStreamPos, TLogPos}"/>.
-/// </summary>
+public static class ReadEventTransform
+{
+    public static IReadEventTransform<TEventBase> Create<TEventBase, TSourceEvent>(
+        Func<TSourceEvent, IEnumerable<TEventBase>> apply)
+        where TEventBase : notnull
+        where TSourceEvent : TEventBase
+    {
+        ArgumentNullException.ThrowIfNull(apply);
+
+        return new DelegateReadEventTransform<TEventBase, TSourceEvent>((e, _) => apply(e));
+    }
+
+    public static IReadEventTransform<TEventBase> Create<TEventBase, TSourceEvent>(
+        Func<TSourceEvent, ReadEventInfo, IEnumerable<TEventBase>> apply)
+        where TEventBase : notnull
+        where TSourceEvent : TEventBase
+    {
+        ArgumentNullException.ThrowIfNull(apply);
+
+        return new DelegateReadEventTransform<TEventBase, TSourceEvent>(apply);
+    }
+
+    public static IReadEventTransform<TEventBase> Create<TEventBase, TSourceEvent>(
+        Func<TSourceEvent, TEventBase> apply)
+        where TEventBase : notnull
+        where TSourceEvent : TEventBase
+    {
+        ArgumentNullException.ThrowIfNull(apply);
+
+        return new DelegateReadEventTransform<TEventBase, TSourceEvent>((e, _) => [apply(e)]);
+    }
+
+    public static IReadEventTransform<TEventBase> Create<TEventBase, TSourceEvent>(
+        Func<TSourceEvent, ReadEventInfo, TEventBase> apply)
+        where TEventBase : notnull
+        where TSourceEvent : TEventBase
+    {
+        ArgumentNullException.ThrowIfNull(apply);
+
+        return new DelegateReadEventTransform<TEventBase, TSourceEvent>((e, info) => [apply(e, info)]);
+    }
+}
+
 public abstract class ReadEventTransform<TEventBase, TSourceEvent> : IReadEventTransform<TEventBase>
     where TEventBase : notnull
     where TSourceEvent : TEventBase

@@ -1,4 +1,4 @@
-﻿namespace DomainBlocks.EventSourcing;
+﻿namespace DomainBlocks.Core;
 
 /// <summary>
 /// Provides factory methods for optional values.

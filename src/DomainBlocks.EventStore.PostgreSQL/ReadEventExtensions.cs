@@ -19,6 +19,7 @@ internal static class ReadEventExtensions
 
             var context = ReadEventContext.Create(
                 streamId,
+                eventName,
                 metadata,
                 createdAt,
                 StreamPosition.FromInt64(streamPosition),

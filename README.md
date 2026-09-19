@@ -4,19 +4,29 @@ DomainBlocks is a .NET library for building applications using Domain-Driven Des
 
 > 🚧 **Work in progress:** The API and functionality may change as the project matures.
 
-## Getting started
+## Features
 
-Add a store package, `DomainBlocks.EventStore.PostgreSQL` or `DomainBlocks.EventStore.MongoDB`, and build a store:
+DomainBlocks is a set of NuGet packages, so you reference only what you need. Event sourcing is the first feature
+area; others will follow.
+
+### Event sourcing
+
+Add a store package, `DomainBlocks.EventStore.PostgreSQL` or `DomainBlocks.EventStore.MongoDB`, build a store, then
+append and read events:
 
 ```csharp
 await using var store = new PostgresEventStoreBuilder<IDomainEvent>()
     .UseConnectionString(connectionString)
     .ConfigureOptions(o => o.Schema = "events")
-    .MapEvents(EventTypeMapping.ReadWrite<OrderPlaced>())
+    .ConfigureCodec(c => c.MapEvent<OrderPlaced>())
     .Build();
 
 await store.EnsureInitializedAsync();
+
 await store.AppendAsync("order-1", [new OrderPlaced(...)]);
+
+await foreach (var e in store.ReadStream("order-1"))
+    Console.WriteLine($"{e.Context.StreamPosition}: {e.Payload}");
 ```
 
 Subscribe to catch up on existing events and then keep receiving new ones as they are appended:
@@ -39,6 +49,46 @@ await foreach (var message in store.SubscribeToAll(SubscriptionOrigin.Start))
 The default origin is the end of the log, so omitting it receives only new events. `SubscribeToStream` works the same
 way for a single event stream. A subscriber that consumes too slowly receives a message with `IsFellBehind` set to
 `true`, then catches up again.
+
+#### Evolving events
+
+Read transforms reshape old events as they are read, on reads and subscriptions alike, so the rest of the code only
+sees current shapes.
+
+Upcast an event that gained a field:
+
+```csharp
+var builder = new PostgresEventStoreBuilder<IDomainEvent>()
+    .ConfigureCodec(c => c.MapEvents(
+        EventTypeMapping.ReadOnly<OrderPlacedV1>("OrderPlaced"), // previous version already stored
+        EventTypeMapping.ReadWrite<OrderPlaced>("OrderPlacedV2")))
+    .AddReadTransform((OrderPlacedV1 e) => new OrderPlaced(e.OrderId, e.Total, Currency: "GBP"));
+```
+
+Split an event that recorded two things at once:
+
+```csharp
+builder.AddReadTransform((TradeExecutedV1 e) =>
+[
+    new TradeExecuted(e.TradeId, e.Commodity, e.Quantity, e.Price),
+    new BrokerFeeAccrued(e.TradeId, e.BrokerFee)
+]);
+```
+
+Ignore events by stored name, or by producing nothing from a transform. Each is read as the sentinel, so its position
+is still observed:
+
+```csharp
+builder
+    .IgnoreEvents("TradeNoteAdded")
+    .AddReadTransform((TradeBookedV1 e) => e.IsTest ? [] : [new TradeBooked(e.TradeId, e.Quantity)])
+    .UseIgnoredEventSentinel(Ignored.Instance);
+
+public sealed record Ignored : IDomainEvent
+{
+    public static readonly Ignored Instance = new();
+}
+```
 
 ## Contributing
 

@@ -1,4 +1,5 @@
-﻿using DomainBlocks.Core.Exceptions;
+﻿using DomainBlocks.Core;
+using DomainBlocks.Core.Exceptions;
 
 namespace DomainBlocks.EventSourcing;
 
@@ -17,6 +18,7 @@ public sealed class VersionConflictException<TVersion>(
     where TVersion : notnull
 {
     public Optional<TVersion> ExpectedVersion { get; } = expectedVersion;
+
     public Optional<TVersion>? ObservedVersion { get; } = observedVersion;
 
     private static string GetMessage(

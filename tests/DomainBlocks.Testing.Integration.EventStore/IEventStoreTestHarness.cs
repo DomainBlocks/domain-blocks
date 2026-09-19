@@ -35,11 +35,16 @@ public interface IEventStoreTestHarness<TStreamPos, TLogPos>
 
     Task DropAsync();
 
+    /// <summary>
+    /// Creates a store over the fixture's schema or database. Any <paramref name="ignoredEventNames"/> are read as
+    /// <see cref="IgnoredEvent.Instance"/>.
+    /// </summary>
     IEventStore<object, string, TStreamPos, TLogPos> CreateEventStore(
         EventTypeMap eventTypeMap,
         EventFormat? eventFormat = null,
         IEnumerable<IEventContractMapper<object>>? contractMappers = null,
-        string loggerNameSuffix = "");
+        string loggerNameSuffix = "",
+        IEnumerable<string>? ignoredEventNames = null);
 
     TStreamPos CreateStreamPosition(ulong value);
 

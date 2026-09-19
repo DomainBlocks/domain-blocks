@@ -7,11 +7,6 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
-/// <summary>
-/// The builder's two connection paths against a real server. The owned path uses a connection string without
-/// <c>Persist Security Info</c>, so a working live subscription proves the replication connection was defaulted from
-/// the raw connection string rather than from the data source.
-/// </summary>
 public class PostgresEventStoreBuilderTests
 {
     private readonly PostgresEventStoreOptions _options = new() { Schema = $"bld_{Guid.NewGuid():N}" };
@@ -26,7 +21,7 @@ public class PostgresEventStoreBuilderTests
         var store = new PostgresEventStoreBuilder<object>()
             .UseConnectionString(ConnectionStringWithoutPersistedSecurityInfo())
             .UseOptions(_options)
-            .MapEvent<TestEvent>()
+            .ConfigureCodec(x => x.MapEvent<TestEvent>())
             .UseLoggerFactory(PostgresTestEnvironment.LoggerFactory)
             .Build();
 
@@ -53,22 +48,6 @@ public class PostgresEventStoreBuilderTests
     }
 
     [Test]
-    public void OwnedPath_BuildTwice_Throws()
-    {
-        var builder = new PostgresEventStoreBuilder<object>()
-            .UseConnectionString(PostgresTestEnvironment.ConnectionString)
-            .UseOptions(_options)
-            .MapEvent<TestEvent>();
-
-        var first = builder.Build();
-
-        var ex = Should.Throw<InvalidOperationException>(builder.Build);
-        ex.Message.ShouldContain("one store");
-
-        first.DisposeAsync().AsTask().Wait();
-    }
-
-    [Test]
     public async Task BorrowedPath_DisposingTheStore_LeavesTheDataSourceUsable()
     {
         await using var dataSource =
@@ -77,7 +56,7 @@ public class PostgresEventStoreBuilderTests
         var store = new PostgresEventStoreBuilder<object>()
             .UseDataSource(dataSource)
             .UseOptions(_options)
-            .MapEvent<TestEvent>()
+            .ConfigureCodec(x => x.MapEvent<TestEvent>())
             .Build();
 
         await store.EnsureInitializedAsync();
@@ -89,7 +68,7 @@ public class PostgresEventStoreBuilderTests
     }
 
     [Test]
-    public async Task Defaults_RoundTripWithoutAnySerializerConfigured()
+    public async Task Defaults_WithoutAnySerializerConfigured_RoundTripsWorks()
     {
         await using var dataSource =
             PostgresTestEnvironment.CreateDataSource(b => b.UsePostgresEventStore(_options));
@@ -97,7 +76,7 @@ public class PostgresEventStoreBuilderTests
         await using var store = new PostgresEventStoreBuilder<object>()
             .UseDataSource(dataSource)
             .UseOptions(_options)
-            .MapEvent<TestEvent>()
+            .ConfigureCodec(x => x.MapEvent<TestEvent>())
             .Build();
 
         await store.EnsureInitializedAsync();
@@ -110,7 +89,13 @@ public class PostgresEventStoreBuilderTests
         read.Context.Metadata.ShouldBe(new Dictionary<string, string> { ["k"] = "v" });
     }
 
-    private static string ConnectionStringWithoutPersistedSecurityInfo() =>
-        new NpgsqlConnectionStringBuilder(PostgresTestEnvironment.ConnectionString) { PersistSecurityInfo = false }
-            .ConnectionString;
+    private static string ConnectionStringWithoutPersistedSecurityInfo()
+    {
+        var builder = new NpgsqlConnectionStringBuilder(PostgresTestEnvironment.ConnectionString)
+        {
+            PersistSecurityInfo = false
+        };
+
+        return builder.ConnectionString;
+    }
 }

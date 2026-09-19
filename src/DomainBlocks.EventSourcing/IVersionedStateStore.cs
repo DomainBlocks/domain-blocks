@@ -1,4 +1,6 @@
-﻿namespace DomainBlocks.EventSourcing;
+﻿using DomainBlocks.Core;
+
+namespace DomainBlocks.EventSourcing;
 
 /// <summary>
 /// Loads and persists versioned state by identifier using optimistic concurrency.

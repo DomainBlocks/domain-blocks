@@ -93,6 +93,9 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
     [Test]
     public async Task AppendAsync_WithContractMapper_RoundTripsThroughContract()
     {
+        if (!Harness.SupportedFormats.Contains(EventFormat.Protobuf))
+            Assert.Ignore($"The store's test codec does not support {EventFormat.Protobuf}.");
+
         var eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<ProtoTestEvent>());
         var streamId = $"test-contract-mapper-{Guid.NewGuid()}";
 
@@ -122,7 +125,125 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
     }
 
     [Test]
-    public async Task ReadStream_WithTransform_ReturnsTransformedEvents()
+    public Task ReadStream_WithTransform_ReturnsTransformedEvents()
+    {
+        return AssertShipmentDispatchedIsTransformedAsync(new ShipmentDispatchedTransform());
+    }
+
+    [Test]
+    public Task ReadStream_WithDelegateTransform_ReturnsTransformedEvents()
+    {
+        var transform = ReadEventTransform.Create<object, ShipmentDispatched>(e =>
+        [
+            new ShipmentDispatchedV2(e.ShipmentId, e.DispatchedAt),
+            .. e.Packages.Select(x => new PackageShipped(e.ShipmentId, x.TrackingNumber, x.WeightKg, x.Destination))
+        ]);
+
+        return AssertShipmentDispatchedIsTransformedAsync(transform);
+    }
+
+    [Test]
+    public async Task ReadStream_DelegateTransformWithIgnoredEvent_ReturnsIgnoredAtTheEventsPosition()
+    {
+        var eventTypeMap = EventTypeMap.Create(
+            EventTypeMapping.ReadWrite<ShipmentDispatched>(),
+            EventTypeMapping.ReadWrite<ShipmentDispatchedV2>());
+
+        var streamId = $"test-read-transform-ignore-{Guid.NewGuid()}";
+        var kept = new ShipmentDispatchedV2(Guid.NewGuid(), new DateTime(2025, 08, 25, 14, 30, 0, DateTimeKind.Utc));
+        var retired = new ShipmentDispatched(kept.ShipmentId, kept.DispatchedAt, []);
+
+        var eventStore = CreateEventStore(eventTypeMap)
+            .WithReadTransforms(ReadEventTransform.Create<object, ShipmentDispatched>(_ => []))
+            .UseIgnoredEventSentinel(IgnoredEvent.Instance);
+
+        try
+        {
+            await eventStore.AppendAsync(streamId, [kept, retired]);
+
+            var readEvents = await eventStore.ReadStream(streamId).ToArrayAsync();
+
+            readEvents.Select(x => x.Payload).ShouldBe([kept, IgnoredEvent.Instance]);
+
+            // The ignored head event is still observed at its own position, after the kept one.
+            readEvents[1].Context.StreamPosition.ShouldNotBe(readEvents[0].Context.StreamPosition);
+        }
+        finally
+        {
+            await eventStore.DisposeAsync();
+        }
+    }
+
+    [Test]
+    public async Task ReadStream_DelegateTransformWithIgnoredEventAndNoIgnoredEventInstance_Throws()
+    {
+        var eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<ShipmentDispatched>());
+        var streamId = $"test-read-transform-ignore-{Guid.NewGuid()}";
+        var retired = new ShipmentDispatched(Guid.NewGuid(), DateTime.UtcNow, []);
+
+        var eventStore = CreateEventStore(eventTypeMap)
+            .WithReadTransforms(ReadEventTransform.Create<object, ShipmentDispatched>(_ => []));
+
+        try
+        {
+            await eventStore.AppendAsync(streamId, [retired]);
+
+            var ex = await Should.ThrowAsync<InvalidOperationException>(() =>
+                eventStore.ReadStream(streamId).ToArrayAsync().AsTask());
+
+            ex.Message.ShouldContain(nameof(ShipmentDispatched));
+        }
+        finally
+        {
+            await eventStore.DisposeAsync();
+        }
+    }
+
+    [Test]
+    public async Task ReadStream_IgnoredEventPosition_IsUsedForOptimisticConcurrency()
+    {
+        var streamId = $"test-ignore-events-{Guid.NewGuid()}";
+        var kept = new ShipmentDispatchedV2(Guid.NewGuid(), new DateTime(2025, 08, 25, 14, 30, 0, DateTimeKind.Utc));
+        var next = new ShipmentDispatchedV2(Guid.NewGuid(), kept.DispatchedAt.AddHours(1));
+
+        // Written by a store that still knows the event.
+        var writer = CreateEventStore(EventTypeMap.Create(
+            EventTypeMapping.ReadWrite<ShipmentDispatched>(),
+            EventTypeMapping.ReadWrite<ShipmentDispatchedV2>()));
+
+        try
+        {
+            await writer.AppendAsync(streamId, [kept, new ShipmentDispatched(kept.ShipmentId, kept.DispatchedAt, [])]);
+        }
+        finally
+        {
+            await writer.DisposeAsync();
+        }
+
+        // Read by a store that has no type mapping for ShipmentDispatched, only its stored name.
+        var eventStore = CreateEventStore(
+            EventTypeMap.Create(EventTypeMapping.ReadWrite<ShipmentDispatchedV2>()),
+            ignoredEventNames: [nameof(ShipmentDispatched)]);
+
+        try
+        {
+            var readEvents = await eventStore.ReadStream(streamId).ToArrayAsync();
+
+            readEvents.Select(x => x.Payload).ShouldBe([kept, IgnoredEvent.Instance]);
+
+            // The ignored head event's position is the stream's version, so appending at it does not conflict.
+            var version = readEvents[^1].Context.StreamPosition;
+            await eventStore.AppendAsync(streamId, [next], ExpectedStreamState.AtVersion(version));
+
+            (await eventStore.ReadStream(streamId).ToArrayAsync())[^1].Payload.ShouldBe(next);
+        }
+        finally
+        {
+            await eventStore.DisposeAsync();
+        }
+    }
+
+    private async Task AssertShipmentDispatchedIsTransformedAsync(IReadEventTransform<object> transform)
     {
         var eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<ShipmentDispatched>());
         var streamId = $"test-read-transform-{Guid.NewGuid()}";
@@ -164,7 +285,7 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
                 Destination: "Madrid, ES")
         };
 
-        var eventStore = CreateEventStore(eventTypeMap).WithReadTransforms(new ShipmentDispatchedTransform());
+        var eventStore = CreateEventStore(eventTypeMap).WithReadTransforms(transform);
 
         object[] readEvents;
 
