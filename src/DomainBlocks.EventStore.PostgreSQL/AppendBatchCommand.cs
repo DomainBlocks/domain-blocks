@@ -84,9 +84,9 @@ internal sealed class AppendBatchCommand : IDisposable
 
                 case AppendProtocol.Status.Conflict:
                     // A NULL observed version means the stream did not exist when the request was evaluated.
-                    var observedState = reader.IsDBNull(2)
-                        ? ObservedStreamState.DoesNotExist<StreamPosition>()
-                        : ObservedStreamState.AtVersion(StreamPosition.FromInt64(reader.GetInt64(2)));
+                    ObservedStreamState<StreamPosition> observedState = reader.IsDBNull(2)
+                        ? ObservedStreamState.DoesNotExist
+                        : StreamPosition.FromInt64(reader.GetInt64(2));
 
                     request.TryComplete(new StreamAppendConflictException<StreamPosition>(
                         request.StreamId,
@@ -137,16 +137,16 @@ internal sealed class AppendBatchCommand : IDisposable
             var expectedState = request.ExpectedState;
 
             streamIds[i] = request.StreamId;
-            expectedKinds[i] = AppendProtocol.ToExpectedKind(expectedState.Kind);
-            expectedVersions[i] = expectedState.HasVersion ? checked((long)expectedState.Version.Value) : null;
+            expectedKinds[i] = AppendProtocol.ToExpectedKind(expectedState);
+            expectedVersions[i] = expectedState is StreamPosition version ? checked((long)version.Value) : null;
             commitIds[i] = request.CommitId;
             eventCounts[i] = request.Events.Length;
 
             foreach (var (eventName, data, eventMetadata) in request.Events)
             {
                 eventNames[eventIndex] = eventName;
-                eventData[eventIndex] = data.IsJson ? data.Json : null;
-                eventDataBytes[eventIndex] = data.IsBytes ? data.Bytes.GetArrayOrCopy() : null;
+                eventData[eventIndex] = data is string json ? json : null;
+                eventDataBytes[eventIndex] = data is ReadOnlyMemory<byte> bytes ? bytes.GetArrayOrCopy() : null;
                 metadata[eventIndex] = eventMetadata;
                 eventIndex++;
             }

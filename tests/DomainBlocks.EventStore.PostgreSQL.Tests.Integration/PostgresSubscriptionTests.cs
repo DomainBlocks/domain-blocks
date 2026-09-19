@@ -98,13 +98,13 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
 
             switch (enumerator.Current)
             {
-                case { Event: { } e }:
+                case ReadEvent<object, string, StreamPosition, LogPosition> e:
                     observed.Add(e);
                     break;
-                case { IsCaughtUp: true }:
+                case SubscriptionCaughtUp:
                     caughtUpCount++;
                     break;
-                case { IsFellBehind: true }:
+                case SubscriptionFellBehind:
                     fellBehindCount++;
                     break;
             }
@@ -129,13 +129,13 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
     {
         (await enumerator.MoveNextAsync()).ShouldBeTrue();
 
-        return enumerator.Current.Event.ShouldNotBeNull();
+        return enumerator.Current.Value.ShouldBeOfType<ReadEvent<object, string, StreamPosition, LogPosition>>();
     }
 
     private static async Task ShouldBeCaughtUpAsync(
         IAsyncEnumerator<SubscriptionMessage<object, string, StreamPosition, LogPosition>> enumerator)
     {
         (await enumerator.MoveNextAsync()).ShouldBeTrue();
-        enumerator.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
+        enumerator.Current.Value.ShouldBeOfType<SubscriptionCaughtUp>();
     }
 }

@@ -80,7 +80,7 @@ public abstract class EventStoreConcurrencyTests<TStreamPos, TLogPos>(IEventStor
                 await instance.AppendAsync(
                     streamId,
                     [new TestEvent { Value = "create" }],
-                    ExpectedStreamState.DoesNotExist<TStreamPos>(),
+                    ExpectedStreamState.DoesNotExist,
                     cancellationToken: cancellationToken);
 
                 return (Success: true, Exception: null);
@@ -98,12 +98,13 @@ public abstract class EventStoreConcurrencyTests<TStreamPos, TLogPos>(IEventStor
         {
             ex.ShouldNotBeNull();
             ex.StreamId.ShouldBe(streamId);
-            ex.ExpectedState.ShouldBe(ExpectedStreamState.DoesNotExist<TStreamPos>());
+            ex.ExpectedState.ShouldBe(ExpectedStreamState.DoesNotExist);
 
             // The observed state is optional: a store that learns of the conflict from a unique index violation
             // (MongoDB, when another instance wins the race) cannot report the winner's version without another
             // round trip. When it is reported, it must be the winner's.
-            ex.ObservedState?.ShouldBe(ObservedStreamState.AtVersion(CreateStreamPosition(0)));
+            if (ex.ObservedState.HasValue)
+                ex.ObservedState.ShouldBe(CreateStreamPosition(0));
         }
 
         var readEvents = await _instances[0].ReadStream(streamId).ToArrayAsync(cancellationToken);
@@ -131,7 +132,7 @@ public abstract class EventStoreConcurrencyTests<TStreamPos, TLogPos>(IEventStor
                 await instance.AppendAsync(
                     streamId,
                     [new TestEvent { Value = "raced" }],
-                    ExpectedStreamState.AtVersion(CreateStreamPosition(0)),
+                    CreateStreamPosition(0),
                     cancellationToken: cancellationToken);
 
                 return true;

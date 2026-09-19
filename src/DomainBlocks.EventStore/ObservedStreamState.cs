@@ -1,81 +1,95 @@
-﻿namespace DomainBlocks.EventStore;
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
+
+namespace DomainBlocks.EventStore;
 
 /// <summary>
-/// Provides factory methods for creating observed event stream states.
+/// Provides the observed event stream state that carries no version. It converts implicitly to an
+/// <see cref="ObservedStreamState{TVersion}"/> of any version type, as a version itself does, so the type argument need
+/// not be written at the call site.
 /// </summary>
 public static class ObservedStreamState
 {
     /// <summary>
-    /// Creates an observed state indicating that the stream does not exist.
+    /// The stream does not exist.
     /// </summary>
-    /// <typeparam name="TVersion">The type used to represent stream versions.</typeparam>
-    /// <returns>An observed state indicating that the stream does not exist.</returns>
-    public static ObservedStreamState<TVersion> DoesNotExist<TVersion>() where TVersion : notnull =>
-        ObservedStreamState<TVersion>.DoesNotExist;
-
-    /// <summary>
-    /// Creates an observed state indicating that the stream exists at the specified version.
-    /// </summary>
-    /// <typeparam name="TVersion">The type used to represent stream versions.</typeparam>
-    /// <param name="version">The observed stream version.</param>
-    /// <returns>An observed state for the specified stream version.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="version"/> is <see langword="null"/>.</exception>
-    public static ObservedStreamState<TVersion> AtVersion<TVersion>(TVersion version) where TVersion : notnull =>
-        ObservedStreamState<TVersion>.AtVersion(version);
+    public static StreamDoesNotExist DoesNotExist => default;
 }
 
 /// <summary>
-/// Represents the observed state of an event stream at a point in time. The default value represents a stream that
-/// does not exist.
+/// Represents the observed state of an event stream at a point in time: either the stream does not exist, or it exists
+/// at a version.
 /// </summary>
+/// <remarks>
+/// A union of <see cref="StreamDoesNotExist"/> and <typeparamref name="TVersion"/>: either converts implicitly to this
+/// type, and a <see langword="switch"/> over both is exhaustive. The default value means the stream was not observed,
+/// and matches <see langword="null"/>.
+/// </remarks>
 /// <typeparam name="TVersion">The type used to represent the stream version.</typeparam>
-public readonly record struct ObservedStreamState<TVersion> where TVersion : notnull
+[Union]
+public readonly record struct ObservedStreamState<TVersion> : IUnion where TVersion : notnull
 {
-    /// <summary>
-    /// Represents a stream with no events.
-    /// </summary>
-    public static readonly ObservedStreamState<TVersion> DoesNotExist = new(ObservedStreamStateKind.DoesNotExist);
+    private readonly TVersion? _version;
+    private readonly Case _case;
 
-    private ObservedStreamState(ObservedStreamStateKind kind, TVersion? version = default)
+    public ObservedStreamState(StreamDoesNotExist _)
     {
-        Kind = kind;
-        Version = version;
+        _case = Case.DoesNotExist;
+    }
+
+    /// <exception cref="ArgumentNullException"><paramref name="version"/> is <see langword="null"/>.</exception>
+    public ObservedStreamState(TVersion version)
+    {
+        ArgumentNullException.ThrowIfNull(version);
+        _version = version;
+        _case = Case.AtVersion;
+    }
+
+    private enum Case : byte
+    {
+        NotObserved,
+        DoesNotExist,
+        AtVersion
     }
 
     /// <summary>
-    /// Gets the kind of this observed stream state.
+    /// Whether the stream was observed; <see langword="false"/> only for the default value.
     /// </summary>
-    public ObservedStreamStateKind Kind { get; }
+    public bool HasValue => _case != Case.NotObserved;
 
     /// <summary>
-    /// Gets a value indicating whether the stream exists at a specific version.
+    /// The observed case, or <see langword="null"/> if the stream was not observed. Reading a value-type version
+    /// through this property boxes it; prefer matching on the state itself.
     /// </summary>
-    public bool HasVersion => Kind == ObservedStreamStateKind.AtVersion;
-
-    /// <summary>
-    /// Gets the observed stream version.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">
-    /// <see cref="HasVersion"/> is <see langword="false"/>.
-    /// </exception>
-    public TVersion Version => HasVersion
-        ? field!
-        : throw new InvalidOperationException("Stream state has no version.");
-
-    /// <summary>
-    /// Creates an observed state representing an existing stream at the specified version.
-    /// </summary>
-    /// <param name="version">The observed stream version.</param>
-    /// <returns>An observed state for the specified stream version.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="version"/> is <see langword="null"/>.</exception>
-    public static ObservedStreamState<TVersion> AtVersion(TVersion version)
+    public object? Value => _case switch
     {
-        ArgumentNullException.ThrowIfNull(version);
-        return new ObservedStreamState<TVersion>(ObservedStreamStateKind.AtVersion, version);
+        Case.DoesNotExist => default(StreamDoesNotExist),
+        Case.AtVersion => _version,
+        _ => null
+    };
+
+    public bool TryGetValue(out StreamDoesNotExist doesNotExist)
+    {
+        doesNotExist = default;
+        return _case == Case.DoesNotExist;
+    }
+
+    public bool TryGetValue([MaybeNullWhen(false)] out TVersion version)
+    {
+        version = _version;
+        return _case == Case.AtVersion;
     }
 
     /// <summary>
     /// Returns a string representation of this observed stream state.
     /// </summary>
-    public override string ToString() => HasVersion ? $"Version={Version}" : Kind.ToString();
+    public override string ToString()
+    {
+        return _case switch
+        {
+            Case.DoesNotExist => "DoesNotExist",
+            Case.AtVersion => $"Version={_version}",
+            _ => "NotObserved"
+        };
+    }
 }

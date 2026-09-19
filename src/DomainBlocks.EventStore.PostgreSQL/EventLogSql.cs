@@ -97,14 +97,18 @@ internal sealed class EventLogSql
     public static long FirstKeyExclusive<TPos>(ReadDirection direction, ReadOrigin<TPos> origin)
         where TPos : struct, IPosition<TPos>
     {
-        return (direction, origin) switch
-        {
-            (ReadDirection.Forward, ReadOrigin<TPos>.Start) => -1,
-            (ReadDirection.Forward, ReadOrigin<TPos>.At at) => ToKey(at.Position.Value) - 1,
-            (ReadDirection.Backward, ReadOrigin<TPos>.End) => long.MaxValue,
-            (ReadDirection.Backward, ReadOrigin<TPos>.At at) => ToKey(at.Position.Value) + 1,
-            _ => throw new ArgumentOutOfRangeException(nameof(origin), origin, "Unsupported direction and origin.")
-        };
+        var forward = direction == ReadDirection.Forward;
+
+        var resolved = origin.ResolveFor(direction);
+
+        // TPos is a type parameter here, so the position is read with TryGetValue: a pattern cannot bind a variable
+        // to a case that mentions one.
+        if (resolved.TryGetValue(out ReadOrigin<TPos>.At at))
+            return forward ? ToKey(at.Position.Value) - 1 : ToKey(at.Position.Value) + 1;
+
+        // These bounds hold in either direction: reading forward from the end, or backward from the start, is
+        // bounded to nothing.
+        return resolved is SequenceStart ? -1 : long.MaxValue;
 
         // Positions beyond long.MaxValue cannot exist; clamping keeps the arithmetic above in range.
         static long ToKey(ulong value) => value >= long.MaxValue - 1 ? long.MaxValue - 1 : (long)value;

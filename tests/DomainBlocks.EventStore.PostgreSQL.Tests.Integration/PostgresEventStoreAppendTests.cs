@@ -119,6 +119,16 @@ public class PostgresEventStoreAppendTests : PostgresIntegrationTest
     }
 
     [Test]
+    public async Task AppendAsync_EventWithNoData_ThrowsArgumentException()
+    {
+        await using var eventStore = CreateEventStore(new NoDataSerializer());
+
+        await Should.ThrowAsync<ArgumentException>(() => eventStore.AppendAsync("s1", [Appendable("a")]));
+
+        (await Client.ReadRowsAsync()).ShouldBeEmpty();
+    }
+
+    [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task AppendAsync_SequenceRowLockedElsewhere_TimesOutButStillCommits(CancellationToken ct)
     {
@@ -146,13 +156,27 @@ public class PostgresEventStoreAppendTests : PostgresIntegrationTest
 
     private IEventStore<object, string, StreamPosition, LogPosition> CreateBytesEventStore()
     {
+        return CreateEventStore(
+            ((IObjectSerializer<byte[]>)new JsonUtf8BytesObjectSerializer()).AsPostgresEventDataSerializer());
+    }
+
+    private IEventStore<object, string, StreamPosition, LogPosition> CreateEventStore(
+        IObjectSerializer<PostgresEventData> eventSerializer)
+    {
         var eventCodec = EventCodec.Create(new EventCodecOptions<object, PostgresEventData, string>
         {
             TypeMap = DefaultEventTypeMap,
-            EventSerializer = ((IObjectSerializer<byte[]>)new JsonUtf8BytesObjectSerializer()).AsPostgresEventDataSerializer(),
+            EventSerializer = eventSerializer,
             MetadataSerializer = new JsonMetadataSerializer()
         });
 
         return Harness.CreateEventStore(eventCodec);
+    }
+
+    private sealed class NoDataSerializer : IObjectSerializer<PostgresEventData>
+    {
+        public PostgresEventData Serialize(object value) => default;
+
+        public object Deserialize(PostgresEventData data, Type type) => throw new NotSupportedException();
     }
 }

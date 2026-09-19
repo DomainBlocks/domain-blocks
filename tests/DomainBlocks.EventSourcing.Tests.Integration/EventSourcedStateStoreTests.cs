@@ -92,6 +92,41 @@ public class EventSourcedStateStoreTests
     }
 
     [Test]
+    public async Task SaveAsync_WhenVersionExpectedButStreamDoesNotExist_ReportsNoObservedVersion()
+    {
+        var sessionId = Guid.NewGuid();
+        var cart = new ShoppingCart();
+        cart.AddItem(new ShoppingCartItem(sessionId, "Foo"));
+
+        var exception = await Should.ThrowAsync<VersionConflictException<StreamPosition>>(
+            () => _store.SaveAsync(cart, new StreamPosition(3)));
+
+        // Observed, and found to have no version: distinct from null, which means the store could not observe it.
+        exception.ObservedVersion.ShouldNotBeNull().HasValue.ShouldBeFalse();
+    }
+
+    [Test]
+    public async Task SaveAsync_WhenVersionIsStale_ReportsObservedVersion()
+    {
+        var cart = new ShoppingCart();
+        var sessionId = Guid.NewGuid();
+        cart.AddItem(new ShoppingCartItem(sessionId, "Foo"));
+        await _store.SaveNewAsync(cart);
+
+        var (reloaded, version) = await _store.LoadRequiredAsync(sessionId.ToString());
+        reloaded.AddItem(new ShoppingCartItem(sessionId, "Bar"));
+        await _store.SaveAsync(reloaded, version);
+
+        var (stale, _) = await _store.LoadRequiredAsync(sessionId.ToString());
+        stale.AddItem(new ShoppingCartItem(sessionId, "Baz"));
+
+        var exception = await Should.ThrowAsync<VersionConflictException<StreamPosition>>(
+            () => _store.SaveAsync(stale, version));
+
+        exception.ObservedVersion.ShouldNotBeNull().Value.Value.ShouldBeGreaterThan(version.Value);
+    }
+
+    [Test]
     public async Task SaveAsync_WhenStreamExists_Succeeds()
     {
         var cart = new ShoppingCart();

@@ -48,9 +48,9 @@ internal sealed class AppenderPolicy(IMongoCollection<BsonDocument> eventLog) :
             var expectedStreamState = request.Context.ExpectedStreamState;
             var streamVersion = _buffers.HeadStreamVersions.GetValueOrDefault(streamId, -1L);
 
-            var observedStreamState = streamVersion < 0
-                ? ObservedStreamState.DoesNotExist<StreamPosition>()
-                : ObservedStreamState.AtVersion(StreamPosition.FromInt64(streamVersion));
+            ObservedStreamState<StreamPosition> observedStreamState = streamVersion < 0
+                ? ObservedStreamState.DoesNotExist
+                : StreamPosition.FromInt64(streamVersion);
 
             if (!expectedStreamState.Matches(observedStreamState))
             {
@@ -88,7 +88,7 @@ internal sealed class AppenderPolicy(IMongoCollection<BsonDocument> eventLog) :
         }
 
         var expectedStreamState = conflict.Context.ExpectedStreamState;
-        var canRetry = expectedStreamState.Kind is ExpectedStreamStateKind.Any or ExpectedStreamStateKind.Exists;
+        var canRetry = expectedStreamState is null or StreamExists;
 
         return canRetry
             ? ConflictResolution.Retry

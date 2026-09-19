@@ -1,93 +1,142 @@
+using System.Runtime.CompilerServices;
+
 namespace DomainBlocks.EventStore;
 
 /// <summary>
-/// Provides factory methods for creating subscription messages.
+/// Provides the subscription messages that carry no event. Each converts implicitly to a
+/// <see cref="SubscriptionMessage{TEvent,TStreamId,TStreamPos,TLogPos}"/> of any type arguments, as a
+/// <see cref="ReadEvent{TEvent,TStreamId,TStreamPos,TLogPos}"/> does, so they need not be written at the call site.
 /// </summary>
 public static class SubscriptionMessage
 {
     /// <summary>
-    /// Creates a message that carries an event.
+    /// The message that reports the subscription has caught up.
     /// </summary>
-    public static SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>
-        Event<TEvent, TStreamId, TStreamPos, TLogPos>(ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos> @event)
-        where TEvent : notnull
-        where TStreamId : notnull
-        where TStreamPos : notnull
-        where TLogPos : notnull
-    {
-        return new SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>(SubscriptionMessageKind.Event, @event);
-    }
+    public static SubscriptionCaughtUp CaughtUp => default;
+
+    /// <summary>
+    /// The message that reports the subscription has fallen behind.
+    /// </summary>
+    public static SubscriptionFellBehind FellBehind => default;
 }
 
 /// <summary>
 /// A message delivered by a subscription: either an event, or a notification that the subscription has caught up or
-/// fallen behind. Property patterns are the intended way to consume it:
+/// fallen behind.
+/// </summary>
+/// <remarks>
+/// A union of <see cref="ReadEvent{TEvent,TStreamId,TStreamPos,TLogPos}"/>, <see cref="SubscriptionCaughtUp"/> and
+/// <see cref="SubscriptionFellBehind"/>, so a <see langword="switch"/> over all three is exhaustive:
+/// <code>
+/// var text = message switch
+/// {
+///     ReadEvent&lt;MyEvent, string, StreamPosition, LogPosition&gt; e => ...,
+///     SubscriptionCaughtUp => ...,
+///     SubscriptionFellBehind => ...
+/// };
+/// </code>
+/// Where that check is not needed, <see cref="Event"/> reaches the event without naming its type:
 /// <code>
 /// switch (message)
 /// {
 ///     case { Event: { } e }: ...
-///     case { IsCaughtUp: true }: ...
-///     case { IsFellBehind: true }: ...
+///     case SubscriptionCaughtUp: ...
+///     case SubscriptionFellBehind: ...
 /// }
 /// </code>
-/// </summary>
+/// A subscription never delivers the default value, which holds no message and matches <see langword="null"/>.
+/// </remarks>
 /// <typeparam name="TEvent">The type of events stored by the event store.</typeparam>
 /// <typeparam name="TStreamId">The type used to identify event streams.</typeparam>
 /// <typeparam name="TStreamPos">The type used to represent positions within a stream.</typeparam>
 /// <typeparam name="TLogPos">The type used to represent positions in the global event log.</typeparam>
-public readonly struct SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>
+[Union]
+public readonly struct SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos> : IUnion
     where TEvent : notnull
     where TStreamId : notnull
     where TStreamPos : notnull
     where TLogPos : notnull
 {
-    /// <summary>
-    /// The message that reports the subscription has caught up. See <see cref="SubscriptionMessageKind.CaughtUp"/>.
-    /// </summary>
-    public static readonly SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos> CaughtUp =
-        new(SubscriptionMessageKind.CaughtUp, default);
-
-    /// <summary>
-    /// The message that reports the subscription has fallen behind. See
-    /// <see cref="SubscriptionMessageKind.FellBehind"/>.
-    /// </summary>
-    public static readonly SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos> FellBehind =
-        new(SubscriptionMessageKind.FellBehind, default);
-
     private readonly ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos> _event;
+    private readonly Case _case;
 
-    internal SubscriptionMessage(
-        SubscriptionMessageKind kind,
-        ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos> @event)
+    public SubscriptionMessage(ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos> @event)
     {
-        Kind = kind;
         _event = @event;
+        _case = Case.Event;
+    }
+
+    public SubscriptionMessage(SubscriptionCaughtUp _)
+    {
+        _case = Case.CaughtUp;
+    }
+
+    public SubscriptionMessage(SubscriptionFellBehind _)
+    {
+        _case = Case.FellBehind;
+    }
+
+    private enum Case : byte
+    {
+        None,
+        Event,
+        CaughtUp,
+        FellBehind
     }
 
     /// <summary>
-    /// What this message carries.
+    /// The event, if this message carries one; otherwise <see langword="null"/>. A shorthand for matching the
+    /// <see cref="ReadEvent{TEvent,TStreamId,TStreamPos,TLogPos}"/> case, whose type is long to write:
+    /// <c>if (message.Event is { } e)</c>, or <c>case { Event: { } e }:</c> beside the other cases in a
+    /// <see langword="switch"/> statement. A pattern on this property is not a pattern on the case, so it does not
+    /// count towards a <see langword="switch"/> expression being exhaustive.
     /// </summary>
-    public SubscriptionMessageKind Kind { get; }
+    public ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>? Event => _case == Case.Event ? _event : null;
 
     /// <summary>
-    /// The event, when <see cref="Kind"/> is <see cref="SubscriptionMessageKind.Event"/>; otherwise
-    /// <see langword="null"/>.
+    /// Whether this holds a message; <see langword="false"/> only for the default value.
     /// </summary>
-    public ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>? Event =>
-        Kind == SubscriptionMessageKind.Event ? _event : null;
+    public bool HasValue => _case != Case.None;
 
     /// <summary>
-    /// Whether <see cref="Kind"/> is <see cref="SubscriptionMessageKind.CaughtUp"/>.
+    /// The message's case, or <see langword="null"/> for the default value. Reading an event through this property
+    /// boxes it; prefer matching on the message itself.
     /// </summary>
-    public bool IsCaughtUp => Kind == SubscriptionMessageKind.CaughtUp;
+    public object? Value => _case switch
+    {
+        Case.Event => _event,
+        Case.CaughtUp => default(SubscriptionCaughtUp),
+        Case.FellBehind => default(SubscriptionFellBehind),
+        _ => null
+    };
 
-    /// <summary>
-    /// Whether <see cref="Kind"/> is <see cref="SubscriptionMessageKind.FellBehind"/>.
-    /// </summary>
-    public bool IsFellBehind => Kind == SubscriptionMessageKind.FellBehind;
+    public bool TryGetValue(out ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos> @event)
+    {
+        @event = _event;
+        return _case == Case.Event;
+    }
+
+    public bool TryGetValue(out SubscriptionCaughtUp caughtUp)
+    {
+        caughtUp = default;
+        return _case == Case.CaughtUp;
+    }
+
+    public bool TryGetValue(out SubscriptionFellBehind fellBehind)
+    {
+        fellBehind = default;
+        return _case == Case.FellBehind;
+    }
 
     /// <inheritdoc/>
-    public override string ToString() => Kind == SubscriptionMessageKind.Event
-        ? $"Event({_event.Context.StreamId}@{_event.Context.StreamPosition})"
-        : Kind.ToString();
+    public override string ToString()
+    {
+        return _case switch
+        {
+            Case.Event => $"Event({_event.Context.StreamId}@{_event.Context.StreamPosition})",
+            Case.CaughtUp => "CaughtUp",
+            Case.FellBehind => "FellBehind",
+            _ => "None"
+        };
+    }
 }

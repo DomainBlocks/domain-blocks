@@ -108,7 +108,7 @@ internal sealed class NoIOEventStore<TEvent, TEventData, TMetadata>(
     public Task AppendAsync(
         string streamId,
         IEnumerable<AppendableEvent<TEvent>> events,
-        ExpectedStreamState<StreamPosition>? expectedState = null,
+        ExpectedStreamState<StreamPosition> expectedState = default,
         Guid? commitId = null,
         AppendOptions? options = null,
         CancellationToken cancellationToken = default)
@@ -125,7 +125,7 @@ internal sealed class NoIOEventStore<TEvent, TEventData, TMetadata>(
 
     public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAll(
         ReadDirection direction = ReadDirection.Forward,
-        ReadOrigin<LogPosition>? origin = null,
+        ReadOrigin<LogPosition> origin = default,
         ReadAllOptions? options = null)
     {
         throw new NotSupportedException();
@@ -135,7 +135,7 @@ internal sealed class NoIOEventStore<TEvent, TEventData, TMetadata>(
     public async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadStream(
         string streamId,
         ReadDirection direction = ReadDirection.Forward,
-        ReadOrigin<StreamPosition>? origin = null,
+        ReadOrigin<StreamPosition> origin = default,
         ReadStreamOptions? options = null)
     {
         options ??= ReadStreamOptions.Default;
@@ -163,7 +163,7 @@ internal sealed class NoIOEventStore<TEvent, TEventData, TMetadata>(
     }
 
     public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> SubscribeToAll(
-        SubscriptionOrigin<LogPosition>? origin = null,
+        SubscriptionOrigin<LogPosition> origin = default,
         SubscriptionOptions? options = null)
     {
         throw new NotSupportedException();
@@ -171,7 +171,7 @@ internal sealed class NoIOEventStore<TEvent, TEventData, TMetadata>(
 
     public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> SubscribeToStream(
         string streamId,
-        SubscriptionOrigin<StreamPosition>? origin = null,
+        SubscriptionOrigin<StreamPosition> origin = default,
         SubscriptionOptions? options = null)
     {
         throw new NotSupportedException();

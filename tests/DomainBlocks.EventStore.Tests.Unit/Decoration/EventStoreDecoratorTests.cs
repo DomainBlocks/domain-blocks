@@ -299,12 +299,12 @@ public class EventStoreDecoratorTests
     [Test]
     public async Task SubscribeToAll_IgnoredEventWithIgnoredEventInstance_EmitsIgnoredEventMessage()
     {
-        _inner.SubscriptionMessages.Add(SubscriptionMessage.Event(FakeEventStore.ReadEventAt(new Legacy(""), 9)));
+        _inner.SubscriptionMessages.Add(FakeEventStore.ReadEventAt(new Legacy(""), 9));
         var store = _inner.WithReadTransforms(new SplitTransform()).UseIgnoredEventSentinel(IgnoredEvent.Instance);
 
         var messages = await store.SubscribeToAll().ToArrayAsync();
 
-        var e = messages.ShouldHaveSingleItem().Event.ShouldNotBeNull();
+        var e = messages.ShouldHaveSingleItem().Value.ShouldBeOfType<ReadEvent<object, string, StreamPosition, LogPosition>>();
         e.Payload.ShouldBeSameAs(IgnoredEvent.Instance);
         e.Context.LogPosition.ShouldBe(new LogPosition(9));
     }
@@ -331,10 +331,10 @@ public class EventStoreDecoratorTests
         var untouched = new Current("c");
 
         _inner.SubscriptionMessages.Add(
-            SubscriptionMessage.Event(FakeEventStore.ReadEventAt(new Legacy("a;b"), 0)));
+            FakeEventStore.ReadEventAt(new Legacy("a;b"), 0));
 
-        _inner.SubscriptionMessages.Add(Message.CaughtUp);
-        _inner.SubscriptionMessages.Add(SubscriptionMessage.Event(FakeEventStore.ReadEventAt(untouched, 1)));
+        _inner.SubscriptionMessages.Add(SubscriptionMessage.CaughtUp);
+        _inner.SubscriptionMessages.Add(FakeEventStore.ReadEventAt(untouched, 1));
         var store = _inner.WithReadTransforms(new SplitTransform());
 
         var messages = await store.SubscribeToAll().ToArrayAsync();
@@ -342,7 +342,7 @@ public class EventStoreDecoratorTests
         messages.Length.ShouldBe(4);
         Payload(messages[0]).ShouldBe(new Current("a"));
         Payload(messages[1]).ShouldBe(new Current("b"));
-        messages[2].Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
+        messages[2].Value.ShouldBeOfType<SubscriptionCaughtUp>();
         Payload(messages[3]).ShouldBeSameAs(untouched);
     }
 
@@ -351,10 +351,10 @@ public class EventStoreDecoratorTests
     {
         var store = _inner.WithMetadataContributors(new FixedContributor("k", "v"));
 
-        _inner.SubscriptionMessages.Add(Message.CaughtUp);
+        _inner.SubscriptionMessages.Add(SubscriptionMessage.CaughtUp);
 
         var messages = await store.SubscribeToStream("s").ToArrayAsync();
-        messages.ShouldHaveSingleItem().Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
+        messages.ShouldHaveSingleItem().Value.ShouldBeOfType<SubscriptionCaughtUp>();
     }
 
     [Test]
@@ -381,7 +381,7 @@ public class EventStoreDecoratorTests
         _inner.Disposed.ShouldBeTrue();
     }
 
-    private static object Payload(Message message) => message.Event.ShouldNotBeNull().Payload;
+    private static object Payload(Message message) => message.Value.ShouldBeOfType<ReadEvent<object, string, StreamPosition, LogPosition>>().Payload;
 
     private sealed record Older(string Values, string Extra);
 

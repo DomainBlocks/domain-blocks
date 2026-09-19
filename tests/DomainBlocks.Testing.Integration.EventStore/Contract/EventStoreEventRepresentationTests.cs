@@ -233,7 +233,7 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
 
             // The ignored head event's position is the stream's version, so appending at it does not conflict.
             var version = readEvents[^1].Context.StreamPosition;
-            await eventStore.AppendAsync(streamId, [next], ExpectedStreamState.AtVersion(version));
+            await eventStore.AppendAsync(streamId, [next], version);
 
             (await eventStore.ReadStream(streamId).ToArrayAsync())[^1].Payload.ShouldBe(next);
         }

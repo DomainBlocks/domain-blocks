@@ -31,10 +31,10 @@ public abstract class EventStoreTests<TStreamPos, TLogPos>(IEventStoreTestHarnes
     {
         get
         {
-            yield return new TestCaseData(ReadDirection.Forward, ReadOrigin<TStreamPos>.Start.Instance);
-            yield return new TestCaseData(ReadDirection.Backward, ReadOrigin<TStreamPos>.Start.Instance);
-            yield return new TestCaseData(ReadDirection.Forward, ReadOrigin<TStreamPos>.End.Instance);
-            yield return new TestCaseData(ReadDirection.Backward, ReadOrigin<TStreamPos>.End.Instance);
+            yield return new TestCaseData(ReadDirection.Forward, new ReadOrigin<TStreamPos>(ReadOrigin.Start));
+            yield return new TestCaseData(ReadDirection.Backward, new ReadOrigin<TStreamPos>(ReadOrigin.Start));
+            yield return new TestCaseData(ReadDirection.Forward, new ReadOrigin<TStreamPos>(ReadOrigin.End));
+            yield return new TestCaseData(ReadDirection.Backward, new ReadOrigin<TStreamPos>(ReadOrigin.End));
         }
     }
 
@@ -42,8 +42,8 @@ public abstract class EventStoreTests<TStreamPos, TLogPos>(IEventStoreTestHarnes
     {
         get
         {
-            yield return new TestCaseData(ReadDirection.Forward, ReadOrigin<TStreamPos>.End.Instance);
-            yield return new TestCaseData(ReadDirection.Backward, ReadOrigin<TStreamPos>.Start.Instance);
+            yield return new TestCaseData(ReadDirection.Forward, new ReadOrigin<TStreamPos>(ReadOrigin.End));
+            yield return new TestCaseData(ReadDirection.Backward, new ReadOrigin<TStreamPos>(ReadOrigin.Start));
         }
     }
 
@@ -114,7 +114,7 @@ public abstract class EventStoreTests<TStreamPos, TLogPos>(IEventStoreTestHarnes
             ],
             cancellationToken: cancellationToken);
 
-        var expectedState = ExpectedStreamState.AtVersion(CreateStreamPosition(1));
+        ExpectedStreamState<TStreamPos> expectedState = CreateStreamPosition(1);
 
         var exception = await EventStore
             .AppendAsync(
@@ -126,8 +126,7 @@ public abstract class EventStoreTests<TStreamPos, TLogPos>(IEventStoreTestHarnes
 
         exception.StreamId.ShouldBe(streamId);
         exception.ExpectedState.ShouldBe(expectedState);
-        exception.ObservedState.ShouldNotBeNull();
-        exception.ObservedState.ShouldBe(ObservedStreamState.AtVersion(CreateStreamPosition(2)));
+        exception.ObservedState.ShouldBe(CreateStreamPosition(2));
     }
 
     [Test]
@@ -145,14 +144,13 @@ public abstract class EventStoreTests<TStreamPos, TLogPos>(IEventStoreTestHarnes
                     new TestEvent { Value = "TestEvent2" },
                     new TestEvent { Value = "TestEvent3" }
                 ],
-                ExpectedStreamState.Exists<TStreamPos>(),
+                ExpectedStreamState.Exists,
                 cancellationToken: cancellationToken)
             .ShouldThrowAsync<StreamAppendConflictException<TStreamPos>>();
 
         exception.StreamId.ShouldBe(streamId);
-        exception.ExpectedState.ShouldBe(ExpectedStreamState.Exists<TStreamPos>());
-        exception.ObservedState.ShouldNotBeNull();
-        exception.ObservedState.ShouldBe(ObservedStreamState.DoesNotExist<TStreamPos>());
+        exception.ExpectedState.ShouldBe(ExpectedStreamState.Exists);
+        exception.ObservedState.ShouldBe(ObservedStreamState.DoesNotExist);
     }
 
     [Test]
@@ -175,14 +173,13 @@ public abstract class EventStoreTests<TStreamPos, TLogPos>(IEventStoreTestHarnes
             .AppendAsync(
                 streamId,
                 [new TestEvent { Value = "TestEvent4" }],
-                ExpectedStreamState.DoesNotExist<TStreamPos>(),
+                ExpectedStreamState.DoesNotExist,
                 cancellationToken: cancellationToken)
             .ShouldThrowAsync<StreamAppendConflictException<TStreamPos>>();
 
         exception.StreamId.ShouldBe(streamId);
-        exception.ExpectedState.ShouldBe(ExpectedStreamState.DoesNotExist<TStreamPos>());
-        exception.ObservedState.ShouldNotBeNull();
-        exception.ObservedState.ShouldBe(ObservedStreamState.AtVersion(CreateStreamPosition(2)));
+        exception.ExpectedState.ShouldBe(ExpectedStreamState.DoesNotExist);
+        exception.ObservedState.ShouldBe(CreateStreamPosition(2));
     }
 
     [TestCaseSource(nameof(DirectionAndOriginCases))]

@@ -5,87 +5,185 @@ namespace DomainBlocks.EventStore.Tests.Unit;
 
 public class ExpectedStreamStateTests
 {
+    // Typed as the union, so that members called on them are the union's and not the case's.
+    private static readonly ExpectedStreamState<StreamPosition> Any = default;
+    private static readonly ExpectedStreamState<StreamPosition> DoesNotExist = ExpectedStreamState.DoesNotExist;
+    private static readonly ExpectedStreamState<StreamPosition> Exists = ExpectedStreamState.Exists;
+    private static readonly ObservedStreamState<StreamPosition> ObservedDoesNotExist = ObservedStreamState.DoesNotExist;
+
+    private static ExpectedStreamState<StreamPosition> AtVersion(ulong version)
+    {
+        return new StreamPosition(version);
+    }
+
+    private static ObservedStreamState<StreamPosition> ObservedAtVersion(ulong version)
+    {
+        return new StreamPosition(version);
+    }
+
     [Test]
     public void Instance_WhenDefaultConstructed_EqualsAny()
     {
-        default(ExpectedStreamState<StreamPosition>).ShouldBe(ExpectedStreamState.Any<StreamPosition>());
+        default(ExpectedStreamState<StreamPosition>).ShouldBe(Any);
     }
 
     [Test]
-    public void HasVersion_WhenNonSpecificState_IsFalse()
+    public void Any_WhenMatched_IsNull()
     {
-        ExpectedStreamState.Any<StreamPosition>().HasVersion.ShouldBeFalse();
-        ExpectedStreamState.Exists<StreamPosition>().HasVersion.ShouldBeFalse();
-        ExpectedStreamState.DoesNotExist<StreamPosition>().HasVersion.ShouldBeFalse();
+        var expected = Any;
+
+        (expected is null).ShouldBeTrue();
+        expected.HasValue.ShouldBeFalse();
+        expected.Value.ShouldBeNull();
     }
 
     [Test]
-    public void Version_WhenNonSpecificState_Throws()
+    public void DoesNotExist_WhenMatched_IsDoesNotExistCase()
     {
-        Should.Throw<InvalidOperationException>(() => ExpectedStreamState.Any<StreamPosition>().Version);
-        Should.Throw<InvalidOperationException>(() => ExpectedStreamState.Exists<StreamPosition>().Version);
-        Should.Throw<InvalidOperationException>(() => ExpectedStreamState.DoesNotExist<StreamPosition>().Version);
+        var expected = DoesNotExist;
+
+        (expected is StreamDoesNotExist).ShouldBeTrue();
+        expected.HasValue.ShouldBeTrue();
+        expected.Value.ShouldBe(new StreamDoesNotExist());
     }
 
     [Test]
-    public void Version_WhenSpecificVersion_IsSpecificVersion()
+    public void Exists_WhenMatched_IsExistsCase()
     {
-        var version = new StreamPosition(42);
-        var expected = ExpectedStreamState.AtVersion(version);
+        var expected = Exists;
 
-        expected.HasVersion.ShouldBeTrue();
-        expected.Version.ShouldBe(version);
+        (expected is StreamExists).ShouldBeTrue();
+        expected.HasValue.ShouldBeTrue();
+        expected.Value.ShouldBe(new StreamExists());
+    }
+
+    [Test]
+    public void AtVersion_WhenMatched_IsVersionCase()
+    {
+        var expected = AtVersion(42);
+
+        (expected is StreamPosition version && version == new StreamPosition(42)).ShouldBeTrue();
+        expected.HasValue.ShouldBeTrue();
+        expected.Value.ShouldBe(new StreamPosition(42));
+    }
+
+    [Test]
+    public void Constructor_WhenVersionIsNull_Throws()
+    {
+        Should.Throw<ArgumentNullException>(() => new ExpectedStreamState<string>(null!));
+    }
+
+    [Test]
+    public void Conversion_FromCase_CreatesMatchingState()
+    {
+        ExpectedStreamState<StreamPosition> doesNotExist = new StreamDoesNotExist();
+        ExpectedStreamState<StreamPosition> exists = new StreamExists();
+        ExpectedStreamState<StreamPosition> atVersion = new StreamPosition(42);
+
+        doesNotExist.ShouldBe(DoesNotExist);
+        exists.ShouldBe(Exists);
+        atVersion.ShouldBe(AtVersion(42));
+    }
+
+    [Test]
+    public void TryGetValue_WhenAtVersion_ReturnsOnlyVersion()
+    {
+        var expected = AtVersion(42);
+
+        expected.TryGetValue(out StreamPosition version).ShouldBeTrue();
+        version.ShouldBe(new StreamPosition(42));
+        expected.TryGetValue(out StreamDoesNotExist _).ShouldBeFalse();
+        expected.TryGetValue(out StreamExists _).ShouldBeFalse();
+    }
+
+    [Test]
+    public void TryGetValue_WhenAny_ReturnsNothing()
+    {
+        var expected = Any;
+
+        expected.TryGetValue(out StreamPosition _).ShouldBeFalse();
+        expected.TryGetValue(out StreamDoesNotExist _).ShouldBeFalse();
+        expected.TryGetValue(out StreamExists _).ShouldBeFalse();
+    }
+
+    // The compiler silently falls back to the boxing Value property if TryGetValue ever stops matching the
+    // non-boxing access pattern, so only an allocation check can catch that.
+    [Test]
+    public void Switch_WhenAtVersion_DoesNotAllocate()
+    {
+        var expected = AtVersion(42);
+        VersionOf(expected);
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        ulong total = 0;
+
+        for (var i = 0; i < 1_000; i++)
+            total += VersionOf(expected);
+
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        total.ShouldBe(42_000ul);
+        allocated.ShouldBe(0);
     }
 
     [Test]
     public void Matches_WhenAnyExpectedState_ReturnsTrueForAnyObservedState()
     {
-        var expected = ExpectedStreamState.Any<StreamPosition>();
+        var expected = Any;
 
-        expected.Matches(ObservedStreamState.DoesNotExist<StreamPosition>()).ShouldBeTrue();
-        expected.Matches(ObservedStreamState.AtVersion(new StreamPosition(42))).ShouldBeTrue();
+        expected.Matches(ObservedDoesNotExist).ShouldBeTrue();
+        expected.Matches(ObservedAtVersion(42)).ShouldBeTrue();
+        expected.Matches(default).ShouldBeTrue();
+    }
+
+    [Test]
+    public void Matches_WhenStreamWasNotObserved_ReturnsTrueOnlyForAny()
+    {
+        DoesNotExist.Matches(default).ShouldBeFalse();
+        Exists.Matches(default).ShouldBeFalse();
+        AtVersion(42).Matches(default).ShouldBeFalse();
     }
 
     [Test]
     public void Matches_WhenStreamDoesNotExistExpectedState_ReturnsTrueOnlyForNonexistentStream()
     {
-        var expected = ExpectedStreamState.DoesNotExist<StreamPosition>();
+        var expected = DoesNotExist;
 
-        expected.Matches(ObservedStreamState.DoesNotExist<StreamPosition>()).ShouldBeTrue();
-        expected.Matches(ObservedStreamState.AtVersion(new StreamPosition(42))).ShouldBeFalse();
+        expected.Matches(ObservedDoesNotExist).ShouldBeTrue();
+        expected.Matches(ObservedAtVersion(42)).ShouldBeFalse();
     }
 
     [Test]
     public void Matches_WhenStreamExistsExpectedState_ReturnsTrueOnlyForExistingStream()
     {
-        var expected = ExpectedStreamState.Exists<StreamPosition>();
+        var expected = Exists;
 
-        expected.Matches(ObservedStreamState.DoesNotExist<StreamPosition>()).ShouldBeFalse();
-        expected.Matches(ObservedStreamState.AtVersion(new StreamPosition(42))).ShouldBeTrue();
+        expected.Matches(ObservedDoesNotExist).ShouldBeFalse();
+        expected.Matches(ObservedAtVersion(42)).ShouldBeTrue();
     }
 
     [Test]
     public void Matches_WhenSpecificVersionExpectedState_ReturnsTrueOnlyForMatchingVersion()
     {
-        var expected = ExpectedStreamState.AtVersion(new StreamPosition(42));
+        var expected = AtVersion(42);
 
-        expected.Matches(ObservedStreamState.DoesNotExist<StreamPosition>()).ShouldBeFalse();
-        expected.Matches(ObservedStreamState.AtVersion(new StreamPosition(41))).ShouldBeFalse();
-        expected.Matches(ObservedStreamState.AtVersion(new StreamPosition(42))).ShouldBeTrue();
+        expected.Matches(ObservedDoesNotExist).ShouldBeFalse();
+        expected.Matches(ObservedAtVersion(41)).ShouldBeFalse();
+        expected.Matches(ObservedAtVersion(42)).ShouldBeTrue();
     }
 
     [Test]
     public void ToString_WhenNonSpecificVersion_ReturnsName()
     {
-        ExpectedStreamState.Any<StreamPosition>().ToString().ShouldBe("Any");
-        ExpectedStreamState.Exists<StreamPosition>().ToString().ShouldBe("Exists");
-        ExpectedStreamState.DoesNotExist<StreamPosition>().ToString().ShouldBe("DoesNotExist");
+        Any.ToString().ShouldBe("Any");
+        Exists.ToString().ShouldBe("Exists");
+        DoesNotExist.ToString().ShouldBe("DoesNotExist");
     }
 
     [Test]
     public void ToString_ForSpecificVersion_ReturnsNumericValue()
     {
-        var specific = ExpectedStreamState.AtVersion(new StreamPosition(99));
+        var specific = AtVersion(99);
 
         specific.ToString().ShouldBe("Version=99");
     }
@@ -93,8 +191,8 @@ public class ExpectedStreamStateTests
     [Test]
     public void Equals_WhenValuesAreSame_ReturnsTrue()
     {
-        var a = ExpectedStreamState.AtVersion(new StreamPosition(1));
-        var b = ExpectedStreamState.AtVersion(new StreamPosition(1));
+        var a = AtVersion(1);
+        var b = AtVersion(1);
 
         a.Equals(b).ShouldBeTrue();
     }
@@ -102,24 +200,36 @@ public class ExpectedStreamStateTests
     [Test]
     public void Equals_WhenValuesDiffer_ReturnsFalse()
     {
-        var a = ExpectedStreamState.AtVersion(new StreamPosition(1));
-        var b = ExpectedStreamState.AtVersion(new StreamPosition(2));
+        var a = AtVersion(1);
+        var b = AtVersion(2);
 
         a.Equals(b).ShouldBeFalse();
-        a.Equals(ExpectedStreamState.Any<StreamPosition>()).ShouldBeFalse();
-        a.Equals(ExpectedStreamState.Exists<StreamPosition>()).ShouldBeFalse();
-        a.Equals(ExpectedStreamState.DoesNotExist<StreamPosition>()).ShouldBeFalse();
+        a.Equals(Any).ShouldBeFalse();
+        a.Equals(Exists).ShouldBeFalse();
+        a.Equals(DoesNotExist).ShouldBeFalse();
 
-        ExpectedStreamState.Any<StreamPosition>()
-            .Equals(ExpectedStreamState.Exists<StreamPosition>())
+        Any
+            .Equals(Exists)
             .ShouldBeFalse();
 
-        ExpectedStreamState.Any<StreamPosition>()
-            .Equals(ExpectedStreamState.DoesNotExist<StreamPosition>())
+        Any
+            .Equals(DoesNotExist)
             .ShouldBeFalse();
 
-        ExpectedStreamState.Exists<StreamPosition>()
-            .Equals(ExpectedStreamState.DoesNotExist<StreamPosition>())
+        Exists
+            .Equals(DoesNotExist)
             .ShouldBeFalse();
+    }
+
+    // Exhaustive without a discard: the compiler knows every case of the union.
+    private static ulong VersionOf(ExpectedStreamState<StreamPosition> expected)
+    {
+        return expected switch
+        {
+            StreamPosition version => version.Value,
+            StreamDoesNotExist => 0,
+            StreamExists => 0,
+            null => 0
+        };
     }
 }

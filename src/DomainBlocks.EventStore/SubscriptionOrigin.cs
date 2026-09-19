@@ -1,21 +1,22 @@
+using System.Runtime.CompilerServices;
+
 namespace DomainBlocks.EventStore;
 
 /// <summary>
-/// Provides subscription origins. <see cref="Start"/> and <see cref="End"/> convert implicitly to a
-/// <see cref="SubscriptionOrigin{TPos}"/> of any position type, so the type argument need not be written at the call
-/// site.
+/// Provides subscription origins. Each converts implicitly to a <see cref="SubscriptionOrigin{TPos}"/> of any position
+/// type, so the type argument need not be written at the call site. Omitting the origin subscribes from the end.
 /// </summary>
 public static class SubscriptionOrigin
 {
     /// <summary>
     /// The start of an event sequence.
     /// </summary>
-    public static StartMarker Start { get; } = new();
+    public static SequenceStart Start => default;
 
     /// <summary>
     /// The end of an event sequence.
     /// </summary>
-    public static EndMarker End { get; } = new();
+    public static SequenceEnd End => default;
 
     /// <summary>
     /// Creates an origin representing the point immediately after a specific position within an event sequence.
@@ -24,68 +25,114 @@ public static class SubscriptionOrigin
     /// <param name="position">The position after which to begin receiving events.</param>
     /// <returns>An origin representing the point immediately after <paramref name="position"/>.</returns>
     public static SubscriptionOrigin<TPos>.After After<TPos>(TPos position) where TPos : notnull => new(position);
-
-    /// <summary>
-    /// A position-type-agnostic marker for the start of an event sequence. Converts implicitly to
-    /// <see cref="SubscriptionOrigin{TPos}.Start"/>.
-    /// </summary>
-    public sealed class StartMarker
-    {
-        internal StartMarker()
-        {
-        }
-    }
-
-    /// <summary>
-    /// A position-type-agnostic marker for the end of an event sequence. Converts implicitly to
-    /// <see cref="SubscriptionOrigin{TPos}.End"/>.
-    /// </summary>
-    public sealed class EndMarker
-    {
-        internal EndMarker()
-        {
-        }
-    }
 }
 
 /// <summary>
 /// Represents a subscription’s starting point within an event sequence, i.e., an individual event stream or the
 /// global event log.
 /// </summary>
+/// <remarks>
+/// A union of <see cref="SequenceStart"/>, <see cref="SequenceEnd"/> and <see cref="After"/>: each converts implicitly
+/// to this type, and a <see langword="switch"/> over all three is exhaustive. The default value names no origin, and
+/// matches <see langword="null"/>; a subscription given it begins at the end of the sequence, which
+/// <see cref="Resolve"/> makes explicit.
+/// </remarks>
 /// <typeparam name="TPos">The type used to represent positions within the event sequence.</typeparam>
-public abstract record SubscriptionOrigin<TPos> where TPos : notnull
+[Union]
+public readonly record struct SubscriptionOrigin<TPos> : IUnion where TPos : notnull
 {
-    public static implicit operator SubscriptionOrigin<TPos>(SubscriptionOrigin.StartMarker _) => Start.Instance;
+    private readonly TPos? _position;
+    private readonly Case _case;
 
-    public static implicit operator SubscriptionOrigin<TPos>(SubscriptionOrigin.EndMarker _) => End.Instance;
-
-    /// <summary>
-    /// Represents the start of an event sequence.
-    /// </summary>
-    public sealed record Start : SubscriptionOrigin<TPos>
+    public SubscriptionOrigin(SequenceStart _)
     {
-        public static readonly Start Instance = new();
+        _case = Case.Start;
+    }
 
-        private Start()
-        {
-        }
+    public SubscriptionOrigin(SequenceEnd _)
+    {
+        _case = Case.End;
+    }
+
+    /// <exception cref="ArgumentNullException">
+    /// The position of <paramref name="after"/> is <see langword="null"/>.
+    /// </exception>
+    public SubscriptionOrigin(After after)
+    {
+        ArgumentNullException.ThrowIfNull(after.Position);
+        _position = after.Position;
+        _case = Case.After;
+    }
+
+    private enum Case : byte
+    {
+        Unspecified,
+        Start,
+        End,
+        After
     }
 
     /// <summary>
-    /// Represents the end of an event sequence.
-    /// </summary>
-    public sealed record End : SubscriptionOrigin<TPos>
-    {
-        public static readonly End Instance = new();
-
-        private End()
-        {
-        }
-    }
-
-    /// <summary>
-    /// Represents a position after which to begin receiving events.
+    /// Represents a position after which to begin receiving events. The position is exclusive: the subscription begins
+    /// with the event that follows it.
     /// </summary>
     /// <param name="Position">The position after which to begin receiving events.</param>
-    public sealed record After(TPos Position) : SubscriptionOrigin<TPos>;
+    public readonly record struct After(TPos Position);
+
+    /// <summary>
+    /// Whether an origin is named; <see langword="false"/> only for the default value.
+    /// </summary>
+    public bool HasValue => _case != Case.Unspecified;
+
+    /// <summary>
+    /// The origin's case, or <see langword="null"/> for the default value. Reading through this property boxes the
+    /// case; prefer matching on the origin itself.
+    /// </summary>
+    public object? Value => _case switch
+    {
+        Case.Start => default(SequenceStart),
+        Case.End => default(SequenceEnd),
+        Case.After => new After(_position!),
+        _ => null
+    };
+
+    public bool TryGetValue(out SequenceStart start)
+    {
+        start = default;
+        return _case == Case.Start;
+    }
+
+    public bool TryGetValue(out SequenceEnd end)
+    {
+        end = default;
+        return _case == Case.End;
+    }
+
+    public bool TryGetValue(out After after)
+    {
+        after = _case == Case.After ? new After(_position!) : default;
+        return _case == Case.After;
+    }
+
+    /// <summary>
+    /// Returns this origin, or the end of the sequence if no origin is named.
+    /// </summary>
+    public SubscriptionOrigin<TPos> Resolve()
+    {
+        return HasValue ? this : SubscriptionOrigin.End;
+    }
+
+    /// <summary>
+    /// Returns a string representation of this origin.
+    /// </summary>
+    public override string ToString()
+    {
+        return this switch
+        {
+            SequenceStart => "Start",
+            SequenceEnd => "End",
+            After => $"After({_position})",
+            null => "Unspecified"
+        };
+    }
 }

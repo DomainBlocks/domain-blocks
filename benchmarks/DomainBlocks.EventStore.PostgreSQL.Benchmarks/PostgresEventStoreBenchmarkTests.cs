@@ -31,7 +31,7 @@ public class PostgresEventStoreBenchmarkTests() :
         await using var enumerator = eventStore.SubscribeToAll().GetAsyncEnumerator(ct);
 
         (await enumerator.MoveNextAsync()).ShouldBeTrue();
-        enumerator.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
+        enumerator.Current.Value.ShouldBeOfType<SubscriptionCaughtUp>();
 
         var runner = new AppendBenchmarkRunner();
 
@@ -42,7 +42,7 @@ public class PostgresEventStoreBenchmarkTests() :
                     cancellationToken: token);
 
                 (await enumerator.MoveNextAsync()).ShouldBeTrue();
-                enumerator.Current.Kind.ShouldBe(SubscriptionMessageKind.Event);
+                enumerator.Current.Value.ShouldBeOfType<ReadEvent<object, string, StreamPosition, LogPosition>>();
             },
             new LatencyOptions
             {

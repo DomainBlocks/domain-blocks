@@ -16,7 +16,7 @@ public class ObjectSerializerExtensionsTests
         var payload = new Payload("a", 1);
 
         var data = serializer.Serialize(payload);
-        data.IsJson.ShouldBeTrue();
+        (data is string).ShouldBeTrue();
 
         serializer.Deserialize(data, typeof(Payload)).ShouldBe(payload);
     }
@@ -28,7 +28,7 @@ public class ObjectSerializerExtensionsTests
         var payload = new Payload("b", 2);
 
         var data = serializer.Serialize(payload);
-        data.IsBytes.ShouldBeTrue();
+        (data is ReadOnlyMemory<byte>).ShouldBeTrue();
 
         serializer.Deserialize(data, typeof(Payload)).ShouldBe(payload);
     }
@@ -40,7 +40,7 @@ public class ObjectSerializerExtensionsTests
         var payload = new Payload("c", 3);
 
         var data = serializer.Serialize(payload);
-        data.IsBytes.ShouldBeTrue();
+        (data is ReadOnlyMemory<byte>).ShouldBeTrue();
 
         serializer.Deserialize(data, typeof(Payload)).ShouldBe(payload);
     }

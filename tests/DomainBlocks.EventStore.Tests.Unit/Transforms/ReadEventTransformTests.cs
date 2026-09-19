@@ -125,12 +125,12 @@ public class ReadEventTransformTests
     [Test]
     public async Task Create_SubscribeToAll_AppliesTransform()
     {
-        _inner.SubscriptionMessages.Add(SubscriptionMessage.Event(FakeEventStore.ReadEventAt(new Legacy("a"), 9)));
+        _inner.SubscriptionMessages.Add(FakeEventStore.ReadEventAt(new Legacy("a"), 9));
         var store = _inner.WithReadTransforms(ReadEventTransform.Create<object, Legacy>(e => new Current(e.Values)));
 
         var messages = await store.SubscribeToAll().ToArrayAsync();
 
-        var readEvent = messages.ShouldHaveSingleItem().Event.ShouldNotBeNull();
+        var readEvent = messages.ShouldHaveSingleItem().Value.ShouldBeOfType<ReadEvent<object, string, StreamPosition, LogPosition>>();
         readEvent.Payload.ShouldBe(new Current("a"));
         readEvent.Context.LogPosition.ShouldBe(new LogPosition(9));
     }
@@ -196,7 +196,7 @@ public class ReadEventTransformTests
     [Test]
     public async Task Create_SequenceFuncWithIgnoredEvent_SubscriptionEmitsPlaceholderMessage()
     {
-        _inner.SubscriptionMessages.Add(SubscriptionMessage.Event(FakeEventStore.ReadEventAt(new Legacy("a"), 9)));
+        _inner.SubscriptionMessages.Add(FakeEventStore.ReadEventAt(new Legacy("a"), 9));
 
         var store = _inner
             .WithReadTransforms(ReadEventTransform.Create<object, Legacy>(_ => []))
@@ -204,7 +204,7 @@ public class ReadEventTransformTests
 
         var messages = await store.SubscribeToAll().ToArrayAsync();
 
-        var readEvent = messages.ShouldHaveSingleItem().Event.ShouldNotBeNull();
+        var readEvent = messages.ShouldHaveSingleItem().Value.ShouldBeOfType<ReadEvent<object, string, StreamPosition, LogPosition>>();
         readEvent.Payload.ShouldBeSameAs(IgnoredEvent.Instance);
         readEvent.Context.LogPosition.ShouldBe(new LogPosition(9));
     }

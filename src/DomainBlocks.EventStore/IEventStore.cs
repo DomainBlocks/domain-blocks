@@ -1,4 +1,4 @@
-﻿namespace DomainBlocks.EventStore;
+namespace DomainBlocks.EventStore;
 
 /// <summary>
 /// Defines operations for appending to and reading from an event store, and for creating what the store needs in its
@@ -29,7 +29,8 @@ public interface IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> : IAsyncDis
     /// <param name="streamId">The identifier of the stream to append to.</param>
     /// <param name="events">The events to append, in their append order.</param>
     /// <param name="expectedState">
-    /// The expected state of the stream, or <see langword="null"/> to impose no constraint (default).
+    /// The expected state of the stream. The default, <see cref="ExpectedStreamState{TVersion}.Any"/>, imposes no
+    /// constraint.
     /// </param>
     /// <param name="commitId">An optional identifier used to make the append operation idempotent.</param>
     /// <param name="options">Options that configure the append operation.</param>
@@ -38,7 +39,7 @@ public interface IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> : IAsyncDis
     Task AppendAsync(
         TStreamId streamId,
         IEnumerable<AppendableEvent<TEvent>> events,
-        ExpectedStreamState<TStreamPos>? expectedState = null,
+        ExpectedStreamState<TStreamPos> expectedState = default,
         Guid? commitId = null,
         AppendOptions? options = null,
         CancellationToken cancellationToken = default);
@@ -50,14 +51,14 @@ public interface IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> : IAsyncDis
     /// The direction in which to read events. The default is <see cref="ReadDirection.Forward"/>.
     /// </param>
     /// <param name="origin">
-    /// The read origin that determines where to begin reading events. The default is
-    /// <see cref="ReadOrigin{TLogPos}.Start"/>.
+    /// The read origin that determines where to begin reading events. By default a forward read begins at
+    /// <see cref="ReadOrigin.Start"/> and a backward read at <see cref="ReadOrigin.End"/>.
     /// </param>
     /// <param name="options">Options that configure the read operation.</param>
     /// <returns>An asynchronous sequence of events from all streams.</returns>
     IAsyncEnumerable<ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>> ReadAll(
         ReadDirection direction = ReadDirection.Forward,
-        ReadOrigin<TLogPos>? origin = null,
+        ReadOrigin<TLogPos> origin = default,
         ReadAllOptions? options = null);
 
     /// <summary>
@@ -68,15 +69,15 @@ public interface IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> : IAsyncDis
     /// The direction in which to read events. The default is <see cref="ReadDirection.Forward"/>.
     /// </param>
     /// <param name="origin">
-    /// The read origin that determines where to begin reading events. The default is
-    /// <see cref="ReadOrigin{TStreamPos}.Start"/>.
+    /// The read origin that determines where to begin reading events. By default a forward read begins at
+    /// <see cref="ReadOrigin.Start"/> and a backward read at <see cref="ReadOrigin.End"/>.
     /// </param>
     /// <param name="options">Options that configure the read operation.</param>
     /// <returns>An asynchronous sequence of events from the specified stream.</returns>
     IAsyncEnumerable<ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>> ReadStream(
         TStreamId streamId,
         ReadDirection direction = ReadDirection.Forward,
-        ReadOrigin<TStreamPos>? origin = null,
+        ReadOrigin<TStreamPos> origin = default,
         ReadStreamOptions? options = null);
 
     /// <summary>
@@ -84,12 +85,12 @@ public interface IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> : IAsyncDis
     /// </summary>
     /// <param name="origin">
     /// The subscription origin that determines where to begin receiving events. The default is
-    /// <see cref="SubscriptionOrigin{TLogPos}.End"/>.
+    /// <see cref="SubscriptionOrigin.End"/>.
     /// </param>
     /// <param name="options">Options that configure the subscription.</param>
     /// <returns>An asynchronous sequence of subscription messages.</returns>
     IAsyncEnumerable<SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>> SubscribeToAll(
-        SubscriptionOrigin<TLogPos>? origin = null,
+        SubscriptionOrigin<TLogPos> origin = default,
         SubscriptionOptions? options = null);
 
     /// <summary>
@@ -98,12 +99,12 @@ public interface IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> : IAsyncDis
     /// <param name="streamId">The identifier of the stream to subscribe to.</param>
     /// <param name="origin">
     /// The subscription origin that determines where to begin receiving events. The default is
-    /// <see cref="SubscriptionOrigin{TStreamPos}.End"/>.
+    /// <see cref="SubscriptionOrigin.End"/>.
     /// </param>
     /// <param name="options">Options that configure the subscription.</param>
     /// <returns>An asynchronous sequence of subscription messages.</returns>
     IAsyncEnumerable<SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>> SubscribeToStream(
         TStreamId streamId,
-        SubscriptionOrigin<TStreamPos>? origin = null,
+        SubscriptionOrigin<TStreamPos> origin = default,
         SubscriptionOptions? options = null);
 }

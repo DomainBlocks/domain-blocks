@@ -6,8 +6,8 @@ public static class ReadDirectionExtensions
     {
         public bool ProducesEmptyReadFrom<TPos>(ReadOrigin<TPos> origin) where TPos : notnull => direction switch
         {
-            ReadDirection.Forward => origin is ReadOrigin<TPos>.End,
-            ReadDirection.Backward => origin is ReadOrigin<TPos>.Start,
+            ReadDirection.Forward => origin is SequenceEnd,
+            ReadDirection.Backward => origin is SequenceStart,
             _ => throw new ArgumentOutOfRangeException(nameof(direction), direction, "Unknown read direction.")
         };
     }

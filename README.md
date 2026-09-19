@@ -40,16 +40,20 @@ await foreach (var message in store.SubscribeToAll(SubscriptionOrigin.Start))
         case { Event: { } e }:
             Console.WriteLine($"{e.Context.StreamId}: {e.Payload}");
             break;
-        case { IsCaughtUp: true }:
+        case SubscriptionCaughtUp:
             Console.WriteLine("Caught up; now receiving live events");
             break;
     }
 }
 ```
 
+A subscription message is a union of an event, `SubscriptionCaughtUp` and `SubscriptionFellBehind`. `Event` is a
+shorthand for the event case, whose full type is `ReadEvent<IDomainEvent, string, StreamPosition, LogPosition>`;
+matching on that type instead lets a `switch` expression over all three be checked for completeness.
+
 The default origin is the end of the log, so omitting it receives only new events. `SubscribeToStream` works the same
-way for a single event stream. A subscriber that consumes too slowly receives a message with `IsFellBehind` set to
-`true`, then catches up again.
+way for a single event stream. A subscriber that consumes too slowly receives a `SubscriptionFellBehind` message, then
+catches up again.
 
 ### Event evolution
 

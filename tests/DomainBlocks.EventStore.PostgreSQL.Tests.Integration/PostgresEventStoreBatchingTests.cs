@@ -66,7 +66,7 @@ public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
             .Select(_ => eventStore.AppendAsync(
                 "existing",
                 [Appendable("create")],
-                ExpectedStreamState.DoesNotExist<StreamPosition>(),
+                ExpectedStreamState.DoesNotExist,
                 cancellationToken: ct))
             .ToArray();
 
@@ -74,7 +74,7 @@ public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
             .Select(_ => eventStore.AppendAsync(
                 "existing",
                 [Appendable("stale")],
-                ExpectedStreamState.AtVersion(new StreamPosition(99)),
+                new StreamPosition(99),
                 cancellationToken: ct))
             .ToArray();
 

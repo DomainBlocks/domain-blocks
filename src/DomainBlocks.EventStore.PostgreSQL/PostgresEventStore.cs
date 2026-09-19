@@ -140,7 +140,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
     public async Task AppendAsync(
         string streamId,
         IEnumerable<AppendableEvent<TEvent>> events,
-        ExpectedStreamState<StreamPosition>? expectedState = null,
+        ExpectedStreamState<StreamPosition> expectedState = default,
         Guid? commitId = null,
         AppendOptions? options = null,
         CancellationToken cancellationToken = default)
@@ -149,7 +149,6 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         ArgumentNullException.ThrowIfNull(events);
         ThrowIfContainsNul(streamId, nameof(streamId));
 
-        expectedState ??= ExpectedStreamState.Any<StreamPosition>();
         // Time-ordered ids keep inserts into the commit id index append-mostly rather than scattered across it.
         commitId ??= Guid.CreateVersion7();
         options ??= AppendOptions.Default;
@@ -161,21 +160,24 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
 
         foreach (var (_, eventData, metadata) in encodedEvents)
         {
-            if (eventData.IsJson)
-                ThrowIfContainsNul(eventData.Json, nameof(events));
+            if (eventData is null)
+                throw new ArgumentException("An encoded event has no data.", nameof(events));
+
+            if (eventData is string json)
+                ThrowIfContainsNul(json, nameof(events));
 
             if (metadata is not null)
                 ThrowIfContainsNul(metadata, nameof(events));
         }
 
-        var request = new AppendRequest(streamId, expectedState.Value, commitId.Value, encodedEvents);
+        var request = new AppendRequest(streamId, expectedState, commitId.Value, encodedEvents);
 
         await _appender.AppendAsync(request, options.Timeout, cancellationToken).ConfigureAwait(false);
     }
 
     public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAll(
         ReadDirection direction = ReadDirection.Forward,
-        ReadOrigin<LogPosition>? origin = null,
+        ReadOrigin<LogPosition> origin = default,
         ReadAllOptions? options = null)
     {
         return Impl();
@@ -183,7 +185,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Impl(
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            origin ??= direction == ReadDirection.Forward ? ReadOrigin.Start : ReadOrigin.End;
+            origin = origin.ResolveFor(direction);
             options ??= ReadAllOptions.Default;
 
             if (direction.ProducesEmptyReadFrom(origin))
@@ -206,7 +208,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
     public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadStream(
         string streamId,
         ReadDirection direction = ReadDirection.Forward,
-        ReadOrigin<StreamPosition>? origin = null,
+        ReadOrigin<StreamPosition> origin = default,
         ReadStreamOptions? options = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(streamId);
@@ -216,7 +218,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Impl(
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            origin ??= direction == ReadDirection.Forward ? ReadOrigin.Start : ReadOrigin.End;
+            origin = origin.ResolveFor(direction);
             options ??= ReadStreamOptions.Default;
 
             if (direction.ProducesEmptyReadFrom(origin))
@@ -250,7 +252,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
     }
 
     public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> SubscribeToAll(
-        SubscriptionOrigin<LogPosition>? origin = null,
+        SubscriptionOrigin<LogPosition> origin = default,
         SubscriptionOptions? options = null)
     {
         return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
@@ -266,7 +268,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
 
     public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> SubscribeToStream(
         string streamId,
-        SubscriptionOrigin<StreamPosition>? origin = null,
+        SubscriptionOrigin<StreamPosition> origin = default,
         SubscriptionOptions? options = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(streamId);

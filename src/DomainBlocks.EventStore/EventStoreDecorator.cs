@@ -68,7 +68,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
     public Task AppendAsync(
         TStreamId streamId,
         IEnumerable<AppendableEvent<TEvent>> events,
-        ExpectedStreamState<TStreamPos>? expectedState = null,
+        ExpectedStreamState<TStreamPos> expectedState = default,
         Guid? commitId = null,
         AppendOptions? options = null,
         CancellationToken cancellationToken = default)
@@ -83,7 +83,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
     private async Task AppendWithMetadataAsync(
         TStreamId streamId,
         IEnumerable<AppendableEvent<TEvent>> events,
-        ExpectedStreamState<TStreamPos>? expectedState,
+        ExpectedStreamState<TStreamPos> expectedState,
         Guid? commitId,
         AppendOptions? options,
         CancellationToken cancellationToken)
@@ -105,7 +105,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
 
     public IAsyncEnumerable<ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>> ReadAll(
         ReadDirection direction = ReadDirection.Forward,
-        ReadOrigin<TLogPos>? origin = null,
+        ReadOrigin<TLogPos> origin = default,
         ReadAllOptions? options = null)
     {
         var events = Inner.ReadAll(direction, origin, options);
@@ -115,7 +115,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
     public IAsyncEnumerable<ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>> ReadStream(
         TStreamId streamId,
         ReadDirection direction = ReadDirection.Forward,
-        ReadOrigin<TStreamPos>? origin = null,
+        ReadOrigin<TStreamPos> origin = default,
         ReadStreamOptions? options = null)
     {
         var events = Inner.ReadStream(streamId, direction, origin, options);
@@ -123,7 +123,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
     }
 
     public IAsyncEnumerable<SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>> SubscribeToAll(
-        SubscriptionOrigin<TLogPos>? origin = null,
+        SubscriptionOrigin<TLogPos> origin = default,
         SubscriptionOptions? options = null)
     {
         var messages = Inner.SubscribeToAll(origin, options);
@@ -132,7 +132,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
 
     public IAsyncEnumerable<SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>> SubscribeToStream(
         TStreamId streamId,
-        SubscriptionOrigin<TStreamPos>? origin = null,
+        SubscriptionOrigin<TStreamPos> origin = default,
         SubscriptionOptions? options = null)
     {
         var messages = Inner.SubscribeToStream(streamId, origin, options);
@@ -209,7 +209,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
             Expand(e, transform, output, depth: 0);
 
             foreach (var derived in output)
-                yield return SubscriptionMessage.Event(derived);
+                yield return derived;
         }
     }
 

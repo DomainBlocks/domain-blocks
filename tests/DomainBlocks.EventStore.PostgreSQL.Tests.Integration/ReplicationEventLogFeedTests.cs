@@ -103,7 +103,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
         events[0].Context.StreamId.ShouldBe("stream-1");
         events[0].Context.StreamPosition.ShouldBe(StreamPosition.FromInt64(0));
         events[0].Payload.EventName.ShouldBe("json-event");
-        events[0].Payload.EventData.IsJson.ShouldBeTrue();
+        (events[0].Payload.EventData is string).ShouldBeTrue();
         events[0].Payload.EventData.Json.ShouldBe("{\"a\": 1}");
         events[0].Payload.Metadata.ShouldBe("{\"tenant\": \"x\"}");
         events[0].Context.CreatedAt.Offset.ShouldBe(TimeSpan.Zero);
@@ -111,7 +111,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
 
         events[1].Context.StreamPosition.ShouldBe(StreamPosition.FromInt64(1));
         events[1].Payload.EventName.ShouldBe("bytes-event");
-        events[1].Payload.EventData.IsBytes.ShouldBeTrue();
+        (events[1].Payload.EventData is ReadOnlyMemory<byte>).ShouldBeTrue();
         events[1].Payload.EventData.Bytes.ToArray().ShouldBe(bytes);
         events[1].Payload.Metadata.ShouldBeNull();
         events[1].Context.CreatedAt.ShouldBe(events[0].Context.CreatedAt);

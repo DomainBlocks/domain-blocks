@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
@@ -108,12 +107,11 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
     public async Task AppendAsync(
         string streamId,
         IEnumerable<AppendableEvent<TEvent>> events,
-        ExpectedStreamState<StreamPosition>? expectedState = null,
+        ExpectedStreamState<StreamPosition> expectedState = default,
         Guid? commitId = null,
         AppendOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        expectedState ??= ExpectedStreamState.Any<StreamPosition>();
         commitId ??= Guid.NewGuid();
         options ??= new AppendOptions();
 
@@ -132,7 +130,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
                 { EventLogEntry.FieldNames.Metadata, x.Metadata ?? BsonNull.Value }
             });
 
-        var context = new AppendContext(commitId.Value, streamId, expectedState.Value);
+        var context = new AppendContext(commitId.Value, streamId, expectedState);
         var appendOptions = new DomainBlocks.MongoDB.Sequencing.AppendOptions { Timeout = options.Timeout };
 
         await _sequencedAppender
@@ -142,7 +140,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
 
     public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAll(
         ReadDirection direction = ReadDirection.Forward,
-        ReadOrigin<LogPosition>? origin = null,
+        ReadOrigin<LogPosition> origin = default,
         ReadAllOptions? options = null)
     {
         return Impl();
@@ -150,7 +148,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Impl(
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            origin ??= direction == ReadDirection.Forward ? ReadOrigin.Start : ReadOrigin.End;
+            origin = origin.ResolveFor(direction);
             options ??= ReadAllOptions.Default;
 
             if (direction.ProducesEmptyReadFrom(origin))
@@ -177,7 +175,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
     public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadStream(
         string streamId,
         ReadDirection direction = ReadDirection.Forward,
-        ReadOrigin<StreamPosition>? origin = null,
+        ReadOrigin<StreamPosition> origin = default,
         ReadStreamOptions? options = null)
     {
         return Impl();
@@ -185,7 +183,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Impl(
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            origin ??= direction == ReadDirection.Forward ? ReadOrigin.Start : ReadOrigin.End;
+            origin = origin.ResolveFor(direction);
             options ??= ReadStreamOptions.Default;
 
             if (direction.ProducesEmptyReadFrom(origin))
@@ -232,7 +230,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
     }
 
     public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> SubscribeToAll(
-        SubscriptionOrigin<LogPosition>? origin = null,
+        SubscriptionOrigin<LogPosition> origin = default,
         SubscriptionOptions? options = null)
     {
         return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
@@ -250,7 +248,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
 
     public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> SubscribeToStream(
         string streamId,
-        SubscriptionOrigin<StreamPosition>? origin = null,
+        SubscriptionOrigin<StreamPosition> origin = default,
         SubscriptionOptions? options = null)
     {
         return new SubscriptionAsyncEnumerable<TEvent, StreamPosition>(
@@ -295,26 +293,25 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         where TPos : struct,
         IPosition<TPos>
     {
-        return origin switch
+        var forward = direction == ReadDirection.Forward;
+
+        var sort = forward
+            ? Builders<BsonDocument>.Sort.Ascending(positionFieldName)
+            : Builders<BsonDocument>.Sort.Descending(positionFieldName);
+
+        // Read origins are inclusive. A read from either end of the sequence is bounded only by its direction; the
+        // caller has already returned for the two combinations that read nothing. TPos is a type parameter here, so
+        // the position is read with TryGetValue: a pattern cannot bind a variable to a case that mentions one.
+        var filter = Builders<BsonDocument>.Filter.Empty;
+
+        if (origin.TryGetValue(out ReadOrigin<TPos>.At at))
         {
-            ReadOrigin<TPos>.Start when direction == ReadDirection.Forward => new ReadQuery(
-                Builders<BsonDocument>.Filter.Empty,
-                Builders<BsonDocument>.Sort.Ascending(positionFieldName)),
+            filter = forward
+                ? Builders<BsonDocument>.Filter.Gte(positionFieldName, at.Position.Value)
+                : Builders<BsonDocument>.Filter.Lte(positionFieldName, at.Position.Value);
+        }
 
-            ReadOrigin<TPos>.End when direction == ReadDirection.Backward => new ReadQuery(
-                Builders<BsonDocument>.Filter.Empty,
-                Builders<BsonDocument>.Sort.Descending(positionFieldName)),
-
-            ReadOrigin<TPos>.At at when direction == ReadDirection.Forward => new ReadQuery(
-                Builders<BsonDocument>.Filter.Gte(positionFieldName, at.Position.Value),
-                Builders<BsonDocument>.Sort.Ascending(positionFieldName)),
-
-            ReadOrigin<TPos>.At at when direction == ReadDirection.Backward => new ReadQuery(
-                Builders<BsonDocument>.Filter.Lte(positionFieldName, at.Position.Value),
-                Builders<BsonDocument>.Sort.Descending(positionFieldName)),
-
-            _ => throw new UnreachableException($"Unexpected ReadOrigin type '{origin.GetType().Name}'.")
-        };
+        return new ReadQuery(filter, sort);
     }
 
     private async Task<bool> StreamExistsAsync(string streamId, CancellationToken cancellationToken)

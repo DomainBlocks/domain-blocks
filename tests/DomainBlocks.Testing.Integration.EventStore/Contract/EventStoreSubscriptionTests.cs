@@ -441,14 +441,14 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(IEventSto
     {
         (await enumerator.MoveNextAsync()).ShouldBeTrue();
 
-        return enumerator.Current.Event.ShouldNotBeNull();
+        return enumerator.Current.Value.ShouldBeOfType<ReadEvent<object, string, TStreamPos, TLogPos>>();
     }
 
     private static async Task ShouldBeCaughtUpAsync(
         IAsyncEnumerator<SubscriptionMessage<object, string, TStreamPos, TLogPos>> enumerator)
     {
         (await enumerator.MoveNextAsync()).ShouldBeTrue();
-        enumerator.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
+        enumerator.Current.Value.ShouldBeOfType<SubscriptionCaughtUp>();
     }
 
     private static async Task<RecoveredEvents> ReadUntilRecoveredAsync(
@@ -467,10 +467,10 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(IEventSto
                 case { Event: { } e }:
                     events.Add(e.Payload.ShouldBeOfType<TestEvent>());
                     break;
-                case { IsCaughtUp: true }:
+                case SubscriptionCaughtUp:
                     caughtUpCount++;
                     break;
-                case { IsFellBehind: true }:
+                case SubscriptionFellBehind:
                     fellBehindCount++;
                     break;
             }

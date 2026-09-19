@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using NpgsqlTypes;
 
 namespace DomainBlocks.EventStore.PostgreSQL;
@@ -31,12 +30,11 @@ internal static class AppendProtocol
         [PgName("duplicate")] Duplicate
     }
 
-    public static ExpectedKind ToExpectedKind(ExpectedStreamStateKind kind) => kind switch
+    public static ExpectedKind ToExpectedKind(ExpectedStreamState<StreamPosition> state) => state switch
     {
-        ExpectedStreamStateKind.Any => ExpectedKind.Any,
-        ExpectedStreamStateKind.DoesNotExist => ExpectedKind.DoesNotExist,
-        ExpectedStreamStateKind.Exists => ExpectedKind.Exists,
-        ExpectedStreamStateKind.AtVersion => ExpectedKind.AtVersion,
-        _ => throw new UnreachableException($"Unexpected expected stream state kind '{kind}'.")
+        StreamDoesNotExist => ExpectedKind.DoesNotExist,
+        StreamExists => ExpectedKind.Exists,
+        StreamPosition => ExpectedKind.AtVersion,
+        null => ExpectedKind.Any
     };
 }

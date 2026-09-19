@@ -80,7 +80,7 @@ public class PostgresFeedRecoveryTests() : PostgresIntegrationTest(x =>
         await TerminateWalSenderAsync(ct);
 
         (await enumerator.MoveNextAsync()).ShouldBeTrue();
-        enumerator.Current.Kind.ShouldBe(SubscriptionMessageKind.FellBehind);
+        enumerator.Current.Value.ShouldBeOfType<SubscriptionFellBehind>();
         await ShouldBeCaughtUpAsync(enumerator);
 
         var live = new TestEvent { Value = "live" };
@@ -162,14 +162,14 @@ public class PostgresFeedRecoveryTests() : PostgresIntegrationTest(x =>
     {
         (await enumerator.MoveNextAsync()).ShouldBeTrue();
 
-        return enumerator.Current.Event.ShouldNotBeNull();
+        return enumerator.Current.Value.ShouldBeOfType<ReadEvent<object, string, StreamPosition, LogPosition>>();
     }
 
     private static async Task ShouldBeCaughtUpAsync(
         IAsyncEnumerator<SubscriptionMessage<object, string, StreamPosition, LogPosition>> enumerator)
     {
         (await enumerator.MoveNextAsync()).ShouldBeTrue();
-        enumerator.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
+        enumerator.Current.Value.ShouldBeOfType<SubscriptionCaughtUp>();
     }
 
     private static async Task<RecoveredEvents> ReadUntilRecoveredAsync(
@@ -185,13 +185,13 @@ public class PostgresFeedRecoveryTests() : PostgresIntegrationTest(x =>
 
             switch (enumerator.Current)
             {
-                case { Event: { } e }:
+                case ReadEvent<object, string, StreamPosition, LogPosition> e:
                     events.Add(e.Payload.ShouldBeOfType<TestEvent>());
                     break;
-                case { IsCaughtUp: true }:
+                case SubscriptionCaughtUp:
                     caughtUpCount++;
                     break;
-                case { IsFellBehind: true }:
+                case SubscriptionFellBehind:
                     fellBehindCount++;
                     break;
             }

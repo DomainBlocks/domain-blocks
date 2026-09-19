@@ -31,7 +31,7 @@ internal sealed class FakeEventStore : IEventStore<object, string, StreamPositio
     public Task AppendAsync(
         string streamId,
         IEnumerable<AppendableEvent<object>> events,
-        ExpectedStreamState<StreamPosition>? expectedState = null,
+        ExpectedStreamState<StreamPosition> expectedState = default,
         Guid? commitId = null,
         AppendOptions? options = null,
         CancellationToken cancellationToken = default)
@@ -44,7 +44,7 @@ internal sealed class FakeEventStore : IEventStore<object, string, StreamPositio
 
     public IAsyncEnumerable<ReadEvent<object, string, StreamPosition, LogPosition>> ReadAll(
         ReadDirection direction = ReadDirection.Forward,
-        ReadOrigin<LogPosition>? origin = null,
+        ReadOrigin<LogPosition> origin = default,
         ReadAllOptions? options = null)
     {
         return Replay(ReadEvents);
@@ -53,14 +53,14 @@ internal sealed class FakeEventStore : IEventStore<object, string, StreamPositio
     public IAsyncEnumerable<ReadEvent<object, string, StreamPosition, LogPosition>> ReadStream(
         string streamId,
         ReadDirection direction = ReadDirection.Forward,
-        ReadOrigin<StreamPosition>? origin = null,
+        ReadOrigin<StreamPosition> origin = default,
         ReadStreamOptions? options = null)
     {
         return Replay(ReadEvents);
     }
 
     public IAsyncEnumerable<SubscriptionMessage<object, string, StreamPosition, LogPosition>> SubscribeToAll(
-        SubscriptionOrigin<LogPosition>? origin = null,
+        SubscriptionOrigin<LogPosition> origin = default,
         SubscriptionOptions? options = null)
     {
         return Replay(SubscriptionMessages);
@@ -68,7 +68,7 @@ internal sealed class FakeEventStore : IEventStore<object, string, StreamPositio
 
     public IAsyncEnumerable<SubscriptionMessage<object, string, StreamPosition, LogPosition>> SubscribeToStream(
         string streamId,
-        SubscriptionOrigin<StreamPosition>? origin = null,
+        SubscriptionOrigin<StreamPosition> origin = default,
         SubscriptionOptions? options = null)
     {
         return Replay(SubscriptionMessages);

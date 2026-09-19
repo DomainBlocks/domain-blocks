@@ -12,13 +12,13 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// <para>
 /// Each cycle attaches an observer to the live feed first, then reads the high-water mark (the highest committed
 /// position), replays everything from the resume position up to it, emits
-/// <see cref="SubscriptionMessage{TEvent,TStreamId,TStreamPos,TLogPos}.CaughtUp"/>,
+/// <see cref="SubscriptionCaughtUp"/>,
 /// and finally drains the live rows, skipping any at or below the high-water mark. Because positions are assigned in
 /// commit order without gaps, the replay and the live rows tile exactly: nothing is skipped and nothing is repeated.
 /// </para>
 /// <para>
 /// A cycle is restarted from the last delivered position, after emitting
-/// <see cref="SubscriptionMessage{TEvent,TStreamId,TStreamPos,TLogPos}.FellBehind"/>, when the subscriber's queue
+/// <see cref="SubscriptionFellBehind"/>, when the subscriber's queue
 /// overflows or when the feed has been re-established and may have missed rows.
 /// </para>
 /// </remarks>
@@ -43,11 +43,11 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         CatchUpReader catchUpReader,
         Func<ReadEventContext<string, StreamPosition, LogPosition>, bool> livePredicate,
         Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> positionSelector,
-        SubscriptionOrigin<TPos>? origin,
+        SubscriptionOrigin<TPos> origin,
         SubscriptionOptions? options,
         ILogger? logger)
     {
-        _origin = origin ?? SubscriptionOrigin.End;
+        _origin = origin.Resolve();
         _options = options ?? SubscriptionOptions.Default;
         _catchUpReader = catchUpReader;
         _livePredicate = livePredicate;
@@ -99,7 +99,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                         var message = enumerator.Current;
                         yield return message;
 
-                        if (message.IsCaughtUp)
+                        if (message is SubscriptionCaughtUp)
                             fellBehindPending = false;
                         else if (message.Event is { } e)
                             resumeOrigin = SubscriptionOrigin.After(_positionSelector(e.Context));
@@ -126,7 +126,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                 if (!fellBehindPending)
                 {
                     fellBehindPending = true;
-                    yield return SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>.FellBehind;
+                    yield return SubscriptionMessage.FellBehind;
                 }
             }
         }
@@ -202,29 +202,29 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
             _logger?.CatchUpBoundary(_correlationId, highWaterMark);
 
-            if (highWaterMark is not null && resumeOrigin is not SubscriptionOrigin<TPos>.End)
+            if (highWaterMark is not null && resumeOrigin is not SequenceEnd)
             {
-                var afterExclusive = resumeOrigin is SubscriptionOrigin<TPos>.After after
+                var afterExclusive = resumeOrigin.TryGetValue(out SubscriptionOrigin<TPos>.After after)
                     ? checked((long)after.Position.Value)
                     : -1;
 
                 var events = _catchUpReader(_reader, afterExclusive, highWaterMark.Value, catchUpCts.Token);
 
                 await foreach (var e in events.ConfigureAwait(false))
-                    yield return SubscriptionMessage.Event(e);
+                    yield return e;
             }
         }
 
         _logger?.SubscriptionCaughtUp(_correlationId);
 
-        yield return SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>.CaughtUp;
+        yield return SubscriptionMessage.CaughtUp;
 
         await foreach (var e in observer.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
         {
             if ((long)e.Context.LogPosition.Value <= highWaterMark || !_livePredicate(e.Context))
                 continue;
 
-            yield return SubscriptionMessage.Event(e);
+            yield return e;
         }
     }
 

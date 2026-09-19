@@ -16,7 +16,7 @@ public static class EventStoreExtensions
         public Task AppendAsync(
             TStreamId streamId,
             IEnumerable<TEvent> events,
-            ExpectedStreamState<TStreamPos>? expectedState = null,
+            ExpectedStreamState<TStreamPos> expectedState = default,
             Guid? commitId = null,
             AppendOptions? options = null,
             CancellationToken cancellationToken = default)

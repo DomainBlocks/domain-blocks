@@ -1,4 +1,4 @@
-﻿using DomainBlocks.Core;
+using DomainBlocks.Core;
 using DomainBlocks.EventStore;
 
 namespace DomainBlocks.EventSourcing;
@@ -82,9 +82,9 @@ public sealed class EventSourcedStateStore<TState, TEvent, TStreamId, TStreamPos
         if (uncommittedEvents.Length == 0)
             return;
 
-        var expectedStreamState = expectedVersion.HasValue
-            ? ExpectedStreamState.AtVersion(expectedVersion.Value)
-            : ExpectedStreamState.DoesNotExist<TStreamPos>();
+        ExpectedStreamState<TStreamPos> expectedStreamState = expectedVersion.HasValue
+            ? expectedVersion.Value
+            : ExpectedStreamState.DoesNotExist;
 
         try
         {
@@ -94,9 +94,14 @@ public sealed class EventSourcedStateStore<TState, TEvent, TStreamId, TStreamPos
         }
         catch (StreamAppendConflictException<TStreamPos> ex)
         {
-            Optional<TStreamPos>? observedVersion = ex.ObservedState is { HasVersion: true }
-                ? ex.ObservedState.Value.Version
-                : null;
+            // Null when the store did not observe the stream. TStreamPos is a type parameter here, so the version is
+            // read with TryGetValue: a pattern cannot bind a variable to a union case that is a type parameter.
+            Optional<TStreamPos>? observedVersion = null;
+
+            if (ex.ObservedState.TryGetValue(out TStreamPos? version))
+                observedVersion = Optional.From(version);
+            else if (ex.ObservedState is StreamDoesNotExist)
+                observedVersion = Optional.None<TStreamPos>();
 
             throw new VersionConflictException<TStreamPos>(streamId, expectedVersion, observedVersion, ex);
         }

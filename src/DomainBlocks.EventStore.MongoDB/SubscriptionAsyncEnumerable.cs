@@ -1,4 +1,4 @@
-﻿using System.Runtime.CompilerServices;
+using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
@@ -33,11 +33,11 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
         Func<ReadEventContext<string, StreamPosition, LogPosition>, bool> livePredicate,
         string positionFieldName,
         Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> positionSelector,
-        SubscriptionOrigin<TPos>? origin,
+        SubscriptionOrigin<TPos> origin,
         SubscriptionOptions? options,
         ILogger? logger)
     {
-        _origin = origin ?? SubscriptionOrigin.End;
+        _origin = origin.Resolve();
         _options = options ?? SubscriptionOptions.Default;
         _catchUpFilter = catchUpFilter;
         _livePredicate = livePredicate;
@@ -86,7 +86,7 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
                 if (observer.OverflowToken.IsCancellationRequested)
                 {
                     _logger?.SubscriptionFellBehind(_correlationId);
-                    yield return SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>.FellBehind;
+                    yield return SubscriptionMessage.FellBehind;
                     continue;
                 }
 
@@ -164,14 +164,14 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
                 await foreach (var doc in ReadCatchUpAsync(session, resumeOrigin, highWaterMark.Value, catchUpCts.Token)
                                    .ConfigureAwait(false))
                 {
-                    yield return SubscriptionMessage.Event(_eventDecoder.Decode(doc));
+                    yield return _eventDecoder.Decode(doc);
                 }
             }
         }
 
         _logger?.SubscriptionCaughtUp(_correlationId);
 
-        yield return SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>.CaughtUp;
+        yield return SubscriptionMessage.CaughtUp;
 
         await foreach (var doc in observer.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
         {
@@ -181,7 +181,7 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
             if (context.LogPosition.Value <= highWaterMark?.Value || !_livePredicate(context))
                 continue;
 
-            yield return SubscriptionMessage.Event(readEvent);
+            yield return readEvent;
         }
     }
 
@@ -228,12 +228,12 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
         LogPosition highWaterMark,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        if (resumeOrigin is SubscriptionOrigin<TPos>.End)
+        if (resumeOrigin is SequenceEnd)
             yield break;
 
         var filter = _catchUpFilter;
 
-        if (resumeOrigin is SubscriptionOrigin<TPos>.After after)
+        if (resumeOrigin.TryGetValue(out SubscriptionOrigin<TPos>.After after))
             filter &= Builders<BsonDocument>.Filter.Gt(_positionFieldName, after.Position.Value);
 
         filter &= Builders<BsonDocument>.Filter.Lte(EventLogEntry.FieldNames.Position, highWaterMark.Value);
