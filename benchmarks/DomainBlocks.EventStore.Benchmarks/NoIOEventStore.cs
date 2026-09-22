@@ -1,6 +1,7 @@
 using BenchmarkDotNet.Engines;
 using DomainBlocks.EventStore.Benchmarks.Proto;
 using DomainBlocks.EventStore.Codecs;
+using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.Abstractions;
 using DomainBlocks.Serialization.Google.Protobuf;
@@ -71,13 +72,21 @@ internal static class NoIOEventStore
         AppendableEvent<IDomainEvent>[] storedEvents)
         where TEventData : notnull
     {
+        // Both event types are stored under the same name, so that name lookups cost the same for every format.
+        List<EventTypeMapping> mappings =
+        [
+            format.IsProtobuf
+                ? EventTypeMapping.ReadWrite<ProtoTestEvent>(nameof(TestEvent))
+                : EventTypeMapping.ReadWrite<TestEvent>()
+        ];
+
+        // Only mapped when stored, so that the type map of the other benchmarks stays as it was.
+        if (storedEvents.Any(x => x.Payload is OtherTestEvent))
+            mappings.Add(EventTypeMapping.ReadWrite<OtherTestEvent>());
+
         var codecOptions = new EventCodecOptions<IDomainEvent, TEventData, TMetadata>
         {
-            // Both event types are stored under the same name, so that name lookups cost the same for every format.
-            TypeMap = EventTypeMap.Create(
-                format.IsProtobuf
-                    ? EventTypeMapping.ReadWrite<ProtoTestEvent>(nameof(TestEvent))
-                    : EventTypeMapping.ReadWrite<TestEvent>()),
+            TypeMap = EventTypeMap.Create([.. mappings]),
             EventSerializer = eventSerializer,
             MetadataSerializer = metadataSerializer
         };
@@ -139,6 +148,8 @@ internal sealed class NoIOEventStore<TEvent, TEventData, TMetadata>(
         ReadStreamOptions? options = null)
     {
         options ??= ReadStreamOptions.Default;
+
+        EventFilterNotSupportedException.ThrowIfFiltered(options.Filter, nameof(NoIOEventStore));
 
         for (var i = 0; i < storedEvents.Length; i++)
         {

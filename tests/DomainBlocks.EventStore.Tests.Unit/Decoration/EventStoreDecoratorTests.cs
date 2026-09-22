@@ -1,3 +1,4 @@
+using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.Metadata;
 using DomainBlocks.EventStore.Transforms;
 using NUnit.Framework;
@@ -333,17 +334,21 @@ public class EventStoreDecoratorTests
         _inner.SubscriptionMessages.Add(
             SubscriptionMessage.Event(FakeEventStore.ReadEventAt(new Legacy("a;b"), 0)));
 
+        _inner.SubscriptionMessages.Add(
+            SubscriptionMessage.LogCheckpoint<object, string, StreamPosition, LogPosition>(LogPosition.FromInt64(5)));
+
         _inner.SubscriptionMessages.Add(Message.CaughtUp);
         _inner.SubscriptionMessages.Add(SubscriptionMessage.Event(FakeEventStore.ReadEventAt(untouched, 1)));
         var store = _inner.WithReadTransforms(new SplitTransform());
 
         var messages = await store.SubscribeToAll().ToArrayAsync();
 
-        messages.Length.ShouldBe(4);
+        messages.Length.ShouldBe(5);
         Payload(messages[0]).ShouldBe(new Current("a"));
         Payload(messages[1]).ShouldBe(new Current("b"));
-        messages[2].Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
-        Payload(messages[3]).ShouldBeSameAs(untouched);
+        messages[2].LogCheckpoint.Value.ShouldBe(LogPosition.FromInt64(5));
+        messages[3].Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
+        Payload(messages[4]).ShouldBeSameAs(untouched);
     }
 
     [Test]
@@ -396,6 +401,16 @@ public class EventStoreDecoratorTests
             yield return new Legacy(@event.Values);
             yield return new Current(@event.Extra);
         }
+    }
+
+    [Test]
+    public void Reads_WhenFilteredWithoutReadTransforms_AreLeftToTheInnerStore()
+    {
+        var store = _inner.WithMetadataContributors(new FixedContributor("k", "v"));
+        var filter = EventFilter.EventName("Legacy");
+
+        Should.NotThrow(() => store.ReadAll(options: new() { Filter = filter }));
+        Should.NotThrow(() => store.SubscribeToAll(options: new() { Filter = filter }));
     }
 
     private sealed class SplitTransform : ReadEventTransform<object, Legacy>

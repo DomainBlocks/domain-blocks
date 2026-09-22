@@ -14,4 +14,8 @@
     <ProjectReference Include="..\DomainBlocks.Testing\DomainBlocks.Testing.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\Shared\StoredPayload.cs" Link="Shared\StoredPayload.cs" />
+  </ItemGroup>
+
 </Project>

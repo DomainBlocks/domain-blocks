@@ -11,4 +11,8 @@
     <ProjectReference Include="..\..\src\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\Shared\StoredPayload.cs" Link="Shared\StoredPayload.cs" />
+  </ItemGroup>
+
 </Project>

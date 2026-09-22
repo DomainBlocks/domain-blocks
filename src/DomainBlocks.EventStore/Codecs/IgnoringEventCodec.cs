@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using System.Reflection;
 
 namespace DomainBlocks.EventStore.Codecs;
 
@@ -17,4 +18,18 @@ internal sealed class IgnoringEventCodec<TEvent, TEventData, TMetadata>(
         ignoredEventNames.Contains(eventName)
             ? DecodedEvent.Create(sentinel, FrozenDictionary<string, string>.Empty)
             : inner.Decode(eventName, eventData, metadata);
+
+    // An ignored name is decoded as the sentinel, whatever the inner codec would have made of it.
+    public IReadOnlyCollection<string> ResolveEventNames(Type eventType)
+    {
+        ArgumentNullException.ThrowIfNull(eventType);
+
+        var names = inner.ResolveEventNames(eventType).Except(ignoredEventNames);
+
+        return [.. eventType.IsInstanceOfType(sentinel) ? names.Concat(ignoredEventNames) : names];
+    }
+
+    // The sentinel is read from the ignored names too, whose payloads are anything at all.
+    public string? ResolveStoredPath(Type eventType, IReadOnlyList<MemberInfo> members) =>
+        eventType.IsInstanceOfType(sentinel) ? null : inner.ResolveStoredPath(eventType, members);
 }

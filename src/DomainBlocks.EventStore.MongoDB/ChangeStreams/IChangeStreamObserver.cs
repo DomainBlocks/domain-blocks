@@ -1,8 +1,8 @@
 ﻿namespace DomainBlocks.EventStore.MongoDB.ChangeStreams;
 
-internal interface IChangeStreamObserver<in TDocument>
+internal interface IChangeStreamObserver<in TChange>
 {
-    ValueTask OnNextAsync(TDocument change, CancellationToken cancellationToken);
+    ValueTask OnNextAsync(TChange change, CancellationToken cancellationToken);
 
     ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken);
 }

@@ -28,6 +28,11 @@ public sealed class PostgresServer : IAsyncDisposable
 
         var container = new PostgreSqlBuilder(image)
             .WithCommand("-c", "wal_level=logical", "-c", "max_replication_slots=16", "-c", "max_wal_senders=16")
+
+            // The container is set to commit without flushing the log, and a subscription is only sent what has been
+            // flushed, so every live event waited for the log writer, up to 200 ms. Committing as a server does
+            // unless told otherwise costs little here, as the container does not sync the flush to disk.
+            .WithCommand("-c", "synchronous_commit=on")
             .Build();
 
         await container.StartAsync();

@@ -1,3 +1,5 @@
+using DomainBlocks.EventStore.Filtering;
+
 namespace DomainBlocks.EventStore.PostgreSQL;
 
 public sealed class PostgresEventStoreOptions
@@ -38,4 +40,23 @@ public sealed class PostgresEventStoreOptions
     /// Configures the logical replication connection that feeds live subscriptions.
     /// </summary>
     public PostgresReplicationOptions Replication { get; set; } = new();
+
+    /// <summary>
+    /// Selects the events that the store's subscriptions are ever given, for an application that knows them up front.
+    /// It becomes the row filter of the store's publication, so the server leaves the rest out of the live feed, which
+    /// saves their traffic as well. Every subscription is subject to it, along with its own filter. Reads are not. The
+    /// default is every event.
+    /// </summary>
+    /// <remarks>
+    /// It needs PostgreSQL 15 or later, and has to be a filter that the database can evaluate the whole of as it
+    /// stands: by event name rather than by type, as a publication is named after the filter alone, by whoever
+    /// initializes the schema, who has no codec. The publication is named after the filter, so stores with different
+    /// filters can share a schema, as they do while a deployment rolls out. With a filter, keep the schema name to 40
+    /// characters, as PostgreSQL cuts a longer name short.
+    /// </remarks>
+    public EventFilter SubscriptionFilter
+    {
+        get;
+        set => field = value ?? throw new ArgumentNullException(nameof(value));
+    } = EventFilter.All;
 }

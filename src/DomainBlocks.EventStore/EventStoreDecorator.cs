@@ -1,13 +1,16 @@
 using System.Collections.Frozen;
 using System.Runtime.CompilerServices;
 using DomainBlocks.Core;
+using DomainBlocks.EventStore.Filtering;
+using DomainBlocks.EventStore.Filtering.Nodes;
 using DomainBlocks.EventStore.Metadata;
 using DomainBlocks.EventStore.Transforms;
 
 namespace DomainBlocks.EventStore;
 
 internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos> :
-    IEventStore<TEvent, TStreamId, TStreamPos, TLogPos>
+    IEventStore<TEvent, TStreamId, TStreamPos, TLogPos>,
+    IEventFilterExplainer
     where TEvent : notnull
     where TStreamId : notnull
     where TStreamPos : notnull
@@ -18,6 +21,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
 
     private readonly IMetadataContributor<TEvent>[] _metadataContributors;
     private readonly FrozenDictionary<Type, IReadEventTransform<TEvent>> _readTransforms;
+    private readonly EventFilter _transformed;
 
     public EventStoreDecorator(
         IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> inner,
@@ -41,6 +45,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         }
 
         _readTransforms = transformsByType.ToFrozenDictionary();
+        _transformed = EventFilter.AnyOf(_readTransforms.Keys.Select(x => new EventTypeFilter(x, null, null)));
 
         if (ignoredEventSentinel.HasValue && _readTransforms.ContainsKey(ignoredEventSentinel.Value.GetType()))
         {
@@ -108,8 +113,27 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         ReadOrigin<TLogPos>? origin = null,
         ReadAllOptions? options = null)
     {
-        var events = Inner.ReadAll(direction, origin, options);
-        return _readTransforms.Count == 0 ? events : TransformAsync(events);
+        if (_readTransforms.Count == 0)
+            return Inner.ReadAll(direction, origin, options);
+
+        options ??= ReadAllOptions.Default;
+
+        if (!TryWiden(options.Filter, out var storeFilter, out var readsMetadata))
+            return TransformAsync(Inner.ReadAll(direction, origin, options));
+
+        // The store cannot count the events that the filter selects, as it does not see what they turn into.
+        var storeOptions = options with
+        {
+            Filter = storeFilter,
+            MaxCount = null,
+            IncludeMetadata = options.IncludeMetadata || readsMetadata
+        };
+
+        return TransformAsync(
+            Inner.ReadAll(direction, origin, storeOptions),
+            options.Filter,
+            options.MaxCount,
+            options.IncludeMetadata);
     }
 
     public IAsyncEnumerable<ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>> ReadStream(
@@ -118,16 +142,45 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         ReadOrigin<TStreamPos>? origin = null,
         ReadStreamOptions? options = null)
     {
-        var events = Inner.ReadStream(streamId, direction, origin, options);
-        return _readTransforms.Count == 0 ? events : TransformAsync(events);
+        if (_readTransforms.Count == 0)
+            return Inner.ReadStream(streamId, direction, origin, options);
+
+        options ??= ReadStreamOptions.Default;
+
+        if (!TryWiden(options.Filter, out var storeFilter, out var readsMetadata))
+            return TransformAsync(Inner.ReadStream(streamId, direction, origin, options));
+
+        var storeOptions = options with
+        {
+            Filter = storeFilter,
+            MaxCount = null,
+            IncludeMetadata = options.IncludeMetadata || readsMetadata
+        };
+
+        return TransformAsync(
+            Inner.ReadStream(streamId, direction, origin, storeOptions),
+            options.Filter,
+            options.MaxCount,
+            options.IncludeMetadata);
     }
 
     public IAsyncEnumerable<SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>> SubscribeToAll(
         SubscriptionOrigin<TLogPos>? origin = null,
         SubscriptionOptions? options = null)
     {
-        var messages = Inner.SubscribeToAll(origin, options);
-        return _readTransforms.Count == 0 ? messages : TransformSubscriptionAsync(messages);
+        if (_readTransforms.Count == 0)
+            return Inner.SubscribeToAll(origin, options);
+
+        options ??= SubscriptionOptions.Default;
+
+        var outputFilter = TryWiden(options.Filter, out var storeFilter, out _) ? options.Filter : null;
+        var messages = Inner.SubscribeToAll(origin, options with { Filter = storeFilter });
+
+        return TransformSubscriptionAsync(
+            messages,
+            outputFilter,
+            options.CheckpointInterval,
+            x => SubscriptionMessage.LogCheckpoint<TEvent, TStreamId, TStreamPos, TLogPos>(x.LogPosition));
     }
 
     public IAsyncEnumerable<SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>> SubscribeToStream(
@@ -135,11 +188,62 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         SubscriptionOrigin<TStreamPos>? origin = null,
         SubscriptionOptions? options = null)
     {
-        var messages = Inner.SubscribeToStream(streamId, origin, options);
-        return _readTransforms.Count == 0 ? messages : TransformSubscriptionAsync(messages);
+        if (_readTransforms.Count == 0)
+            return Inner.SubscribeToStream(streamId, origin, options);
+
+        options ??= SubscriptionOptions.Default;
+
+        var outputFilter = TryWiden(options.Filter, out var storeFilter, out _) ? options.Filter : null;
+        var messages = Inner.SubscribeToStream(streamId, origin, options with { Filter = storeFilter });
+
+        return TransformSubscriptionAsync(
+            messages,
+            outputFilter,
+            options.CheckpointInterval,
+            x => SubscriptionMessage.StreamCheckpoint<TEvent, TStreamId, TStreamPos, TLogPos>(x.StreamPosition));
+    }
+
+    // What the store is asked, which with read transforms is more than the filter selects.
+    public EventFilterPlan ExplainFilter(EventFilter filter, FilterPushdownMode pushdownMode = FilterPushdownMode.Prefer)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        if (_readTransforms.Count > 0)
+            TryWiden(filter, out filter, out _);
+
+        return Inner.ExplainFilter(filter, pushdownMode);
     }
 
     public ValueTask DisposeAsync() => Inner.DisposeAsync();
+
+    /// <summary>
+    /// A filter is about the events that a caller is given. A transform changes an event's type and nothing else that a
+    /// filter goes by, so a filter that says nothing of types is left to the store as it is. Of one that does, the store
+    /// is asked for more: wherever the filter says something of a type, it also lets through every event that a
+    /// transform applies to. What those turn into is then tested against the filter as it was written.
+    /// </summary>
+    private bool TryWiden(EventFilter filter, out EventFilter storeFilter, out bool readsMetadata)
+    {
+        var leaves = filter.GetLeafNodes().ToArray();
+
+        if (!leaves.Any(x => x is EventTypeFilter))
+        {
+            storeFilter = filter;
+            readsMetadata = false;
+            return false;
+        }
+
+        // Under a negation, letting more through takes matching less.
+        storeFilter = filter.Rewrite((leaf, isNegated) => leaf switch
+        {
+            EventTypeFilter when isNegated => leaf & !_transformed,
+            EventTypeFilter => leaf | _transformed,
+            _ => leaf
+        });
+
+        readsMetadata = leaves.Any(x => x is MetadataExistsFilter or MetadataValueFilter);
+        return true;
+    }
 
     private IEnumerable<AppendableEvent<TEvent>> ContributeMetadata(
         IEnumerable<AppendableEvent<TEvent>> events,
@@ -166,50 +270,150 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         return buffer.EndEvent();
     }
 
+    // With an output filter, every event is tested against it: what a transform makes of an event, and an event that
+    // no transform applies to, which may be here only because the store was asked for all that is read as the type of
+    // a transform, and a transform applies to events of its own type alone. The store was then not asked to count, so
+    // maxCount counts the stored events that anything is returned of. And it may have been asked for metadata that the
+    // caller did not want, which is left out again.
     private async IAsyncEnumerable<ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>> TransformAsync(
         IAsyncEnumerable<ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>> events,
+        EventFilter? outputFilter = null,
+        int? maxCount = null,
+        bool includeMetadata = true,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         List<ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>>? output = null;
+        var subject = outputFilter is null ? null : new FilterableReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>();
+        var remaining = maxCount;
+
+        if (remaining <= 0)
+            yield break;
 
         await foreach (var @event in events.WithCancellation(cancellationToken).ConfigureAwait(false))
         {
+            var isSelected = false;
+
             if (!_readTransforms.TryGetValue(@event.Payload.GetType(), out var transform))
             {
-                yield return @event;
-                continue;
+                subject?.Set(@event);
+
+                if (subject is not null && !outputFilter!.Matches(subject))
+                    continue;
+
+                isSelected = true;
+                yield return includeMetadata ? @event : WithoutMetadata(@event);
+            }
+            else
+            {
+                output ??= [];
+                output.Clear();
+                Expand(@event, transform, output, depth: 0);
+
+                foreach (var derived in output)
+                {
+                    subject?.Set(derived);
+
+                    if (subject is not null && !outputFilter!.Matches(subject))
+                        continue;
+
+                    isSelected = true;
+                    yield return includeMetadata ? derived : WithoutMetadata(derived);
+                }
             }
 
-            output ??= [];
-            output.Clear();
-            Expand(@event, transform, output, depth: 0);
-
-            foreach (var derived in output)
-                yield return derived;
+            if (isSelected && remaining is not null && --remaining == 0)
+                yield break;
         }
     }
 
+    private static ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos> WithoutMetadata(
+        ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos> @event)
+    {
+        var context = @event.Context;
+
+        if (context.Metadata.Count == 0)
+            return @event;
+
+        return ReadEvent.Create(
+            @event.Payload,
+            ReadEventContext.Create(
+                context.StreamId,
+                context.EventName,
+                FrozenDictionary<string, string>.Empty,
+                context.CreatedAt,
+                context.StreamPosition,
+                context.LogPosition));
+    }
+
+    // With an output filter, every event is tested against it, as in a read. The store takes an event that it
+    // delivers for one that the subscriber is given, so of an event that the filter leaves nothing of, it is for this
+    // to say how far the subscription has looked. It says so at once, then at most once in an interval, and
+    // otherwise before the store next says that it has caught up or fallen behind. An event or a checkpoint of the
+    // store says more.
     private async IAsyncEnumerable<SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>>
         TransformSubscriptionAsync(
             IAsyncEnumerable<SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>> messages,
+            EventFilter? outputFilter,
+            TimeSpan checkpointInterval,
+            Func<ReadEventContext<TStreamId, TStreamPos, TLogPos>,
+                SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>> toCheckpoint,
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         List<ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>>? output = null;
+        var subject = outputFilter is null ? null : new FilterableReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>();
+        ReadEventContext<TStreamId, TStreamPos, TLogPos>? passedOver = null;
+        var nextCheckpointAt = Environment.TickCount64;
 
         await foreach (var message in messages.WithCancellation(cancellationToken).ConfigureAwait(false))
         {
-            if (message.Event is not { } e || !_readTransforms.TryGetValue(e.Payload.GetType(), out var transform))
+            if (message.Event is not { } e)
             {
+                if (passedOver is { } context && !message.IsCheckpoint)
+                    yield return toCheckpoint(context);
+
+                passedOver = null;
                 yield return message;
                 continue;
             }
 
-            output ??= [];
-            output.Clear();
-            Expand(e, transform, output, depth: 0);
+            var isSelected = false;
 
-            foreach (var derived in output)
-                yield return SubscriptionMessage.Event(derived);
+            if (!_readTransforms.TryGetValue(e.Payload.GetType(), out var transform))
+            {
+                subject?.Set(e);
+
+                if (subject is null || outputFilter!.Matches(subject))
+                {
+                    isSelected = true;
+                    yield return message;
+                }
+            }
+            else
+            {
+                output ??= [];
+                output.Clear();
+                Expand(e, transform, output, depth: 0);
+
+                foreach (var derived in output)
+                {
+                    subject?.Set(derived);
+
+                    if (subject is not null && !outputFilter!.Matches(subject))
+                        continue;
+
+                    isSelected = true;
+                    yield return SubscriptionMessage.Event(derived);
+                }
+            }
+
+            passedOver = isSelected ? null : e.Context;
+
+            if (isSelected || Environment.TickCount64 < nextCheckpointAt)
+                continue;
+
+            nextCheckpointAt = Environment.TickCount64 + (long)Math.Ceiling(checkpointInterval.TotalMilliseconds);
+            passedOver = null;
+            yield return toCheckpoint(e.Context);
         }
     }
 

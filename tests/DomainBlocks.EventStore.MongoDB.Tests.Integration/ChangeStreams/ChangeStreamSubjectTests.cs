@@ -42,7 +42,8 @@ public class ChangeStreamSubjectTests
             MongoTestEnvironment.MongoClient,
             _collection.WatchAsync,
             pipeline,
-            x => x.ResumeToken,
+            static x => x.ResumeToken,
+            static x => x,
             logger: logger);
 
         var observer1 = new TestChangeStreamObserver(expectedCount: insertCount);

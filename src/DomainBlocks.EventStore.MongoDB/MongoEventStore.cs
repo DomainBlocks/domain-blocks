@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Codecs;
+using DomainBlocks.EventStore.Filtering;
+using DomainBlocks.EventStore.Filtering.Nodes;
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using DomainBlocks.MongoDB.Sequencing;
 using Microsoft.Extensions.Logging;
@@ -62,17 +64,29 @@ public static class MongoEventStore
 /// <see cref="MongoEventStoreBuilder{TEvent}"/>, which may also create a client for the store to own. Disposing the
 /// store releases its append queue, and the client only when the store owns it.
 /// </summary>
-public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, StreamPosition, LogPosition>
+public sealed class MongoEventStore<TEvent> :
+    IEventStore<TEvent, string, StreamPosition, LogPosition>,
+    IEventFilterExplainer
     where TEvent : notnull
 {
     private readonly IMongoClient _client;
     private readonly IDisposable? _ownedClient;
     private readonly MongoEventStoreOptions _options;
+
+    // As it was when the store was built, which is what its change stream is filtered by. The options can be set
+    // again, and a subscription that then caught up by another filter than it is sent live events by would miss
+    // events without a word.
+    private readonly EventFilter _subscriptionFilter;
+
     private readonly IMongoSequencedAppender<BsonDocument, AppendContext> _sequencedAppender;
     private readonly IMongoCollection<BsonDocument> _eventLog;
     private readonly IEventCodec<TEvent, BsonValue, BsonValue> _eventCodec;
     private readonly ILogger? _logger;
-    private readonly RefCountedChangeStreamSubject<ChangeStreamDocument<BsonDocument>> _allEventsSubject;
+    private readonly RefCountedChangeStreamSubject<EventLogDocument<TEvent>> _allEventsSubject;
+
+    // One for the store, set by the observers of its change stream for each change, which they are handed one
+    // after another.
+    private readonly EventLogDocument<TEvent> _liveDocument;
 
     internal MongoEventStore(
         IMongoClient client,
@@ -86,6 +100,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         _client = client;
         _ownedClient = ownedClient;
         _options = options;
+        _subscriptionFilter = options.SubscriptionFilter;
         _sequencedAppender = sequencedAppender;
         _eventCodec = eventCodec;
         _logger = logger;
@@ -94,7 +109,15 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
             .WithReadConcern(ReadConcern.Majority)
             .WithReadPreference(ReadPreference.Primary);
 
-        _allEventsSubject = CreateAllEventsSubject(_eventLog, logger);
+        // Planned with pushdown required, so a filter that the server cannot evaluate the whole of is refused here.
+        var subscriptionFilterPlan = EventFilterPlan.Create(
+            _subscriptionFilter,
+            FilterPushdownMode.Require,
+            RefuseTypes,
+            MongoFilterTranslator.CanPush);
+
+        _allEventsSubject = CreateAllEventsSubject(_eventLog, subscriptionFilterPlan.Pushdown, logger);
+        _liveDocument = new EventLogDocument<TEvent>(eventCodec, includeMetadata: true);
     }
 
     /// <summary>
@@ -145,32 +168,33 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         ReadOrigin<LogPosition>? origin = null,
         ReadAllOptions? options = null)
     {
+        options ??= ReadAllOptions.Default;
+
+        // Planned here rather than as the read is enumerated, so that a filter that is refused is refused at the call.
+        var filterPlan = PlanFilter(options.Filter, options.FilterPushdownMode);
+
         return Impl();
 
         async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Impl(
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             origin ??= direction == ReadDirection.Forward ? ReadOrigin.Start : ReadOrigin.End;
-            options ??= ReadAllOptions.Default;
 
             if (direction.ProducesEmptyReadFrom(origin))
                 yield break;
 
             var query = GetReadQuery(direction, origin, EventLogEntry.FieldNames.Position);
 
-            using var cursor = await _eventLog
-                .Find(query.Filter)
-                .Sort(query.Sort)
-                .Limit(options.MaxCount)
-                .SetExcludeMetadata(!options.IncludeMetadata)
-                .ToCursorAsync(cancellationToken)
-                .ConfigureAwait(false);
+            var events = FindAsync(
+                query.Filter,
+                query.Sort,
+                options.MaxCount,
+                options.IncludeMetadata,
+                filterPlan,
+                cancellationToken);
 
-            while (await cursor.MoveNextAsync(cancellationToken).ConfigureAwait(false))
-            {
-                foreach (var doc in cursor.Current)
-                    yield return _eventCodec.Decode(doc);
-            }
+            await foreach (var e in events.ConfigureAwait(false))
+                yield return e;
         }
     }
 
@@ -180,13 +204,15 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         ReadOrigin<StreamPosition>? origin = null,
         ReadStreamOptions? options = null)
     {
+        options ??= ReadStreamOptions.Default;
+        var filterPlan = PlanFilter(options.Filter, options.FilterPushdownMode);
+
         return Impl();
 
         async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Impl(
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             origin ??= direction == ReadDirection.Forward ? ReadOrigin.Start : ReadOrigin.End;
-            options ??= ReadStreamOptions.Default;
 
             if (direction.ProducesEmptyReadFrom(origin))
             {
@@ -202,23 +228,20 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
             var query = GetReadQuery(direction, origin, EventLogEntry.FieldNames.StreamPosition);
             var filter = query.Filter & Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, streamId);
 
-            using var cursor = await _eventLog
-                .Find(filter)
-                .Sort(query.Sort)
-                .Limit(options.MaxCount)
-                .SetExcludeMetadata(!options.IncludeMetadata)
-                .ToCursorAsync(cancellationToken)
-                .ConfigureAwait(false);
+            var events = FindAsync(
+                filter,
+                query.Sort,
+                options.MaxCount,
+                options.IncludeMetadata,
+                filterPlan,
+                cancellationToken);
 
             var isEmpty = true;
 
-            while (await cursor.MoveNextAsync(cancellationToken).ConfigureAwait(false))
+            await foreach (var e in events.ConfigureAwait(false))
             {
-                foreach (var doc in cursor.Current)
-                {
-                    isEmpty = false;
-                    yield return _eventCodec.Decode(doc);
-                }
+                isEmpty = false;
+                yield return e;
             }
 
             // An empty range of an existing stream is not a missing stream.
@@ -235,12 +258,22 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         SubscriptionOrigin<LogPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
+        options ??= SubscriptionOptions.Default;
+
+        // Catching up is a filtered read. Live changes are not asked of the database, so each is tested against the
+        // whole filter, with its types turned into names so that one can be passed over without being decoded.
+        var filter = _subscriptionFilter & options.Filter;
+        var filterPlan = PlanFilter(filter, options.FilterPushdownMode);
+        var liveFilter = filter.LowerEventTypes(_eventCodec.ResolveEventNames);
+
         return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
             _eventLog,
             _allEventsSubject,
             _eventCodec,
-            Builders<BsonDocument>.Filter.Empty,
-            static _ => true,
+            CatchUpFilter(Builders<BsonDocument>.Filter.Empty, filterPlan),
+            filterPlan.Residual,
+            streamId: null,
+            liveFilter,
             EventLogEntry.FieldNames.Position,
             static ctx => ctx.LogPosition,
             origin,
@@ -253,17 +286,34 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         SubscriptionOrigin<StreamPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
+        options ??= SubscriptionOptions.Default;
+
+        var filter = _subscriptionFilter & options.Filter;
+        var filterPlan = PlanFilter(filter, options.FilterPushdownMode);
+        var liveFilter = filter.LowerEventTypes(_eventCodec.ResolveEventNames);
+        var streamFilter = Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, streamId);
+
         return new SubscriptionAsyncEnumerable<TEvent, StreamPosition>(
             _eventLog,
             _allEventsSubject,
             _eventCodec,
-            Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, streamId),
-            ctx => ctx.StreamId == streamId,
+            CatchUpFilter(streamFilter, filterPlan),
+            filterPlan.Residual,
+            streamId,
+            liveFilter,
             EventLogEntry.FieldNames.StreamPosition,
             static ctx => ctx.StreamPosition,
             origin,
             options,
             _logger);
+    }
+
+    public EventFilterPlan ExplainFilter(EventFilter filter,
+        FilterPushdownMode pushdownMode = FilterPushdownMode.Prefer)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        return PlanFilter(filter, pushdownMode);
     }
 
     public async ValueTask DisposeAsync()
@@ -272,20 +322,111 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         _ownedClient?.Dispose();
     }
 
-    private static RefCountedChangeStreamSubject<ChangeStreamDocument<BsonDocument>> CreateAllEventsSubject(
+    private RefCountedChangeStreamSubject<EventLogDocument<TEvent>> CreateAllEventsSubject(
         IMongoCollection<BsonDocument> eventLog,
+        EventFilter subscriptionFilter,
         ILogger? logger)
     {
-        var insertsOnly = Builders<ChangeStreamDocument<BsonDocument>>.Filter.Eq(
-            x => x.OperationType,
-            ChangeStreamOperationType.Insert);
-
         return RefCountedChangeStreamSubject.Create(
             eventLog.Database.Client,
             eventLog.WatchAsync,
-            new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(insertsOnly),
+            MongoFilterTranslator.ToChangeStreamPipeline(subscriptionFilter),
             doc => doc.ResumeToken,
+            doc =>
+            {
+                _liveDocument.Set(doc.FullDocument);
+                return _liveDocument;
+            },
             logger: logger);
+    }
+
+    private EventFilterPlan PlanFilter(EventFilter filter, FilterPushdownMode pushdownMode)
+    {
+        var plan = EventFilterPlan.Create(
+            filter,
+            pushdownMode,
+            _eventCodec.ResolveEventNames,
+            MongoFilterTranslator.CanPush,
+            _eventCodec.ResolveStoredPath);
+
+        // The filters are given as they are, so that they are only written out if the message is.
+        if (plan != EventFilterPlan.Unfiltered)
+            _logger?.FilterPlanned(filter, plan.Pushdown, plan.Residual);
+
+        return plan;
+    }
+
+    // The subscription filter of a store selects by what is stored beside the payload, as it does for every store: the
+    // names that a type is read as are for a codec to say, and a database may keep a filter longer than a codec does.
+    private static IReadOnlyCollection<string> RefuseTypes(Type eventType)
+    {
+        throw new EventFilterNotSupportedException(
+            $"The subscription filter of a store cannot select by event type, and was given '{eventType}'. " +
+            "Select by the names that the events are stored under instead.");
+    }
+
+    // Nothing, if there is nothing to ask the database for.
+    private static FilterDefinition<BsonDocument>? CatchUpFilter(
+        FilterDefinition<BsonDocument> query,
+        EventFilterPlan filterPlan)
+    {
+        return filterPlan.Pushdown is NoEventsFilter ? null : WithPushedFilter(query, filterPlan);
+    }
+
+    // An unfiltered query is left as it is.
+    private static FilterDefinition<BsonDocument> WithPushedFilter(
+        FilterDefinition<BsonDocument> query,
+        EventFilterPlan filterPlan)
+    {
+        return filterPlan.Pushdown is AllEventsFilter
+            ? query
+            : query & MongoFilterTranslator.Translate(filterPlan.Pushdown);
+    }
+
+    private async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> FindAsync(
+        FilterDefinition<BsonDocument> query,
+        SortDefinition<BsonDocument> sort,
+        int? maxCount,
+        bool includeMetadata,
+        EventFilterPlan filterPlan,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        // Nothing to ask the database for.
+        if (filterPlan.Pushdown is NoEventsFilter)
+            yield break;
+
+        query = WithPushedFilter(query, filterPlan);
+
+        var remainder = filterPlan.Residual is AllEventsFilter ? null : filterPlan.Residual;
+        var remaining = maxCount;
+
+        // The database cannot count the events that the remainder selects, so they are counted as they are returned.
+        using var cursor = await _eventLog
+            .Find(query)
+            .Sort(sort)
+            .Limit(remainder is null ? maxCount : null)
+            .SetExcludeMetadata(!includeMetadata && !filterPlan.IsMetadataRequired)
+            .ToCursorAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        // One for the whole read, set again for each document that comes back.
+        var document = new EventLogDocument<TEvent>(_eventCodec, includeMetadata);
+
+        while (await cursor.MoveNextAsync(cancellationToken).ConfigureAwait(false))
+        {
+            foreach (var doc in cursor.Current)
+            {
+                document.Set(doc);
+
+                if (remainder is not null && !remainder.Matches(document))
+                    continue;
+
+                yield return document.DecodedEvent;
+
+                if (remainder is not null && remaining is not null && --remaining == 0)
+                    yield break;
+            }
+        }
     }
 
     private static ReadQuery GetReadQuery<TPos>(

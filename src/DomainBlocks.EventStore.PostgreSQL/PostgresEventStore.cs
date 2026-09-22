@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Codecs;
+using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.PostgreSQL.Feeds;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -24,7 +25,10 @@ public static class PostgresEventStore
         string? replicationConnectionStringFallback)
         where TEvent : notnull
     {
-        var names = new SchemaObjectNames(options.Schema);
+        var names = new SchemaObjectNames(options.Schema, options.SubscriptionFilter);
+
+        // Refused here if the server could not evaluate it, rather than when the schema is initialized.
+        _ = PostgresFilterTranslator.ToPublicationRowFilter(options.SubscriptionFilter);
         var appender = new BatchingAppender(dataSource, names, options, logger);
 
         var reader = new EventLogReader<TEvent>(
@@ -47,7 +51,7 @@ public static class PostgresEventStore
             logger);
     }
 
-    private static RefCountedEventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>> CreateFeed<TEvent>(
+    private static RefCountedEventLogFeed<EventLogRow<TEvent>> CreateFeed<TEvent>(
         NpgsqlDataSource dataSource,
         SchemaObjectNames names,
         PostgresEventStoreOptions options,
@@ -71,8 +75,8 @@ public static class PostgresEventStore
             MaxRetryAttempts = replicationOptions.MaxRetryAttempts
         };
 
-        return new RefCountedEventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>>(() =>
-            new EventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>>(
+        return new RefCountedEventLogFeed<EventLogRow<TEvent>>(() =>
+            new EventLogFeed<EventLogRow<TEvent>>(
                 ct => ReplicationEventLogSession.OpenAsync(
                     connectionString,
                     slotNames.Next(),
@@ -92,16 +96,24 @@ public static class PostgresEventStore
 /// <see cref="PostgresEventStoreBuilder{TEvent}"/>, which may also create a data source for the store to own. Disposing
 /// the store releases its append queue and replication feed, and the data source only when the store owns it.
 /// </summary>
-public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, StreamPosition, LogPosition>
+public sealed class PostgresEventStore<TEvent> :
+    IEventStore<TEvent, string, StreamPosition, LogPosition>,
+    IEventFilterExplainer
     where TEvent : notnull
 {
     private readonly NpgsqlDataSource _dataSource;
     private readonly bool _ownsDataSource;
     private readonly PostgresEventStoreOptions _options;
     private readonly PostgresEventStoreAdminOptions _adminOptions;
+
+    // As it was when the store was built, which is what the publication of its feed was named after. The options can
+    // be set again, and a subscription that then caught up by another filter than it is sent live events by would
+    // miss events without a word.
+    private readonly EventFilter _subscriptionFilter;
+
     private readonly IAppender _appender;
     private readonly EventLogReader<TEvent> _reader;
-    private readonly RefCountedEventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>> _feed;
+    private readonly RefCountedEventLogFeed<EventLogRow<TEvent>> _feed;
     private readonly IEventCodec<TEvent, PostgresEventData, string> _eventCodec;
     private readonly ILogger? _logger;
 
@@ -112,13 +124,14 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         PostgresEventStoreAdminOptions adminOptions,
         IAppender appender,
         EventLogReader<TEvent> reader,
-        RefCountedEventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>> feed,
+        RefCountedEventLogFeed<EventLogRow<TEvent>> feed,
         IEventCodec<TEvent, PostgresEventData, string> eventCodec,
         ILogger? logger)
     {
         _dataSource = dataSource;
         _ownsDataSource = ownsDataSource;
         _options = options;
+        _subscriptionFilter = options.SubscriptionFilter;
         _adminOptions = adminOptions;
         _appender = appender;
         _reader = reader;
@@ -178,13 +191,17 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         ReadOrigin<LogPosition>? origin = null,
         ReadAllOptions? options = null)
     {
+        options ??= ReadAllOptions.Default;
+
+        // Planned here rather than as the read is enumerated, so that a filter that is refused is refused at the call.
+        var filterPlan = PlanFilter(options.Filter, options.FilterPushdownMode);
+
         return Impl();
 
         async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Impl(
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             origin ??= direction == ReadDirection.Forward ? ReadOrigin.Start : ReadOrigin.End;
-            options ??= ReadAllOptions.Default;
 
             if (direction.ProducesEmptyReadFrom(origin))
                 yield break;
@@ -196,6 +213,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
                 firstKeyExclusive,
                 options.MaxCount,
                 options.IncludeMetadata,
+                filterPlan,
                 cancellationToken);
 
             await foreach (var e in events.ConfigureAwait(false))
@@ -211,13 +229,15 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
     {
         ArgumentException.ThrowIfNullOrEmpty(streamId);
 
+        options ??= ReadStreamOptions.Default;
+        var filterPlan = PlanFilter(options.Filter, options.FilterPushdownMode);
+
         return Impl();
 
         async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Impl(
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             origin ??= direction == ReadDirection.Forward ? ReadOrigin.Start : ReadOrigin.End;
-            options ??= ReadStreamOptions.Default;
 
             if (direction.ProducesEmptyReadFrom(origin))
             {
@@ -234,6 +254,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
                 firstKeyExclusive,
                 options.MaxCount,
                 options.IncludeMetadata,
+                filterPlan,
                 cancellationToken);
 
             await foreach (var e in events.ConfigureAwait(false))
@@ -253,11 +274,21 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         SubscriptionOrigin<LogPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
+        options ??= SubscriptionOptions.Default;
+
+        // Catching up is a filtered read. Live rows are not asked of the database, so each is tested against the whole
+        // filter, with its types turned into names so that a row can be passed over without being decoded.
+        var filter = _subscriptionFilter & options.Filter;
+        var filterPlan = PlanFilter(filter, options.FilterPushdownMode);
+        var liveFilter = filter.LowerEventTypes(_eventCodec.ResolveEventNames);
+
         return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
             _reader,
             _feed,
-            static (reader, pos, hwMark, ct) => reader.ReadCatchUpAllAsync(pos, hwMark, ct),
-            static _ => true,
+            (reader, pos, hwMark, ct) => reader.ReadCatchUpAllAsync(pos, hwMark, filterPlan, ct),
+            static (_, hwMark, _) => Task.FromResult<LogPosition?>(LogPosition.FromInt64(hwMark)),
+            streamId: null,
+            liveFilter,
             static ctx => ctx.LogPosition,
             origin,
             options,
@@ -271,15 +302,33 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
     {
         ArgumentException.ThrowIfNullOrEmpty(streamId);
 
+        options ??= SubscriptionOptions.Default;
+
+        var filter = _subscriptionFilter & options.Filter;
+        var filterPlan = PlanFilter(filter, options.FilterPushdownMode);
+        var liveFilter = filter.LowerEventTypes(_eventCodec.ResolveEventNames);
+
         return new SubscriptionAsyncEnumerable<TEvent, StreamPosition>(
             _reader,
             _feed,
-            (reader, pos, hwMark, ct) => reader.ReadCatchUpStreamAsync(streamId, pos, hwMark, ct),
-            ctx => ctx.StreamId == streamId,
+            (reader, pos, hwMark, ct) => reader.ReadCatchUpStreamAsync(streamId, pos, hwMark, filterPlan, ct),
+            async (reader, hwMark, ct) =>
+                await reader.GetMaxStreamPositionAsync(streamId, hwMark, ct).ConfigureAwait(false) is { } position
+                    ? StreamPosition.FromInt64(position)
+                    : null,
+            streamId,
+            liveFilter,
             static ctx => ctx.StreamPosition,
             origin,
             options,
             _logger);
+    }
+
+    public EventFilterPlan ExplainFilter(EventFilter filter, FilterPushdownMode pushdownMode = FilterPushdownMode.Prefer)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        return PlanFilter(filter, pushdownMode);
     }
 
     public async ValueTask DisposeAsync()
@@ -289,6 +338,22 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
 
         if (_ownsDataSource)
             await _dataSource.DisposeAsync().ConfigureAwait(false);
+    }
+
+    private EventFilterPlan PlanFilter(EventFilter filter, FilterPushdownMode pushdownMode)
+    {
+        var plan = EventFilterPlan.Create(
+            filter,
+            pushdownMode,
+            _eventCodec.ResolveEventNames,
+            PostgresFilterTranslator.CanPush,
+            _eventCodec.ResolveStoredPath);
+
+        // The filters are given as they are, so that they are only written out if the message is.
+        if (plan != EventFilterPlan.Unfiltered)
+            _logger?.FilterPlanned(filter, plan.Pushdown, plan.Residual);
+
+        return plan;
     }
 
     private async Task ThrowIfStreamNotFoundAsync(

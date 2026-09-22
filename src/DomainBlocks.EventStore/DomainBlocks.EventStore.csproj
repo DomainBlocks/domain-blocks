@@ -5,6 +5,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="DomainBlocks.EventStore.MongoDB.Tests.Unit"/>
+    <InternalsVisibleTo Include="DomainBlocks.EventStore.PostgreSQL.Tests.Unit"/>
+    <InternalsVisibleTo Include="DomainBlocks.EventStore.Tests.Unit"/>
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\DomainBlocks.Core\DomainBlocks.Core.csproj"/>
     <ProjectReference Include="..\DomainBlocks.Serialization.Abstractions\DomainBlocks.Serialization.Abstractions.csproj"/>
   </ItemGroup>

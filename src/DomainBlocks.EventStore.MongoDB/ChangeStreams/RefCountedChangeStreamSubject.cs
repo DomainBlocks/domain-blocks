@@ -6,16 +6,23 @@ namespace DomainBlocks.EventStore.MongoDB.ChangeStreams;
 
 internal static class RefCountedChangeStreamSubject
 {
-    public static RefCountedChangeStreamSubject<TResult> Create<TDocument, TResult>(
+    public static RefCountedChangeStreamSubject<TResult> Create<TDocument, TChange, TResult>(
         IMongoClient mongoClient,
-        ChangeStreamCursorFactory<TDocument, TResult> cursorFactory,
-        PipelineDefinition<ChangeStreamDocument<TDocument>, TResult> pipeline,
-        Func<TResult, BsonDocument> resumeTokenSelector,
+        ChangeStreamCursorFactory<TDocument, TChange> cursorFactory,
+        PipelineDefinition<ChangeStreamDocument<TDocument>, TChange> pipeline,
+        Func<TChange, BsonDocument> resumeTokenSelector,
+        Func<TChange, TResult> resultSelector,
         ChangeStreamSubjectOptions? options = null,
         ILogger? logger = null)
     {
-        return new RefCountedChangeStreamSubject<TResult>(() =>
-            ChangeStreamSubject.Create(mongoClient, cursorFactory, pipeline, resumeTokenSelector, options, logger));
+        return new RefCountedChangeStreamSubject<TResult>(() => ChangeStreamSubject.Create(
+            mongoClient,
+            cursorFactory,
+            pipeline,
+            resumeTokenSelector,
+            resultSelector,
+            options,
+            logger));
     }
 }
 
@@ -23,15 +30,15 @@ internal static class RefCountedChangeStreamSubject
 /// Connects the underlying subject when the first observer is attached and disconnects it when the last observer is
 /// detached.
 /// </summary>
-internal sealed class RefCountedChangeStreamSubject<TDocument>(
-    Func<IChangeStreamSubject<TDocument>> subjectFactory) :
-    IRefCountedChangeStreamSubject<TDocument>
+internal sealed class RefCountedChangeStreamSubject<TResult>(
+    Func<IChangeStreamSubject<TResult>> subjectFactory) :
+    IRefCountedChangeStreamSubject<TResult>
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private SubjectConnection? _currentSubjectConnection;
 
     public async Task<IChangeStreamAttachment> AttachAsync(
-        IChangeStreamObserver<TDocument> observer,
+        IChangeStreamObserver<TResult> observer,
         string correlationId = "unknown",
         CancellationToken cancellationToken = default)
     {
@@ -73,7 +80,6 @@ internal sealed class RefCountedChangeStreamSubject<TDocument>(
     private async Task DetachAsync(IDisposable attachment, SubjectConnection subjectConnection)
     {
         attachment.Dispose();
-        IChangeStreamConnection? connectionToDispose = null;
 
         await _gate.WaitAsync().ConfigureAwait(false);
 
@@ -81,28 +87,27 @@ internal sealed class RefCountedChangeStreamSubject<TDocument>(
         {
             subjectConnection.RefCount--;
 
-            if (subjectConnection.RefCount == 0)
-            {
-                if (ReferenceEquals(_currentSubjectConnection, subjectConnection))
-                    _currentSubjectConnection = null;
+            if (subjectConnection.RefCount > 0)
+                return;
 
-                connectionToDispose = subjectConnection.Connection;
-            }
+            if (ReferenceEquals(_currentSubjectConnection, subjectConnection))
+                _currentSubjectConnection = null;
+
+            // Within the gate, so that the next connection is not made until this one has handed out its last
+            // change. Observers may share what they make of a change, which two connections at once would corrupt.
+            await subjectConnection.Connection.DisposeAsync().ConfigureAwait(false);
         }
         finally
         {
             _gate.Release();
         }
-
-        if (connectionToDispose is not null)
-            await connectionToDispose.DisposeAsync();
     }
 
     private sealed class SubjectConnection(
-        IChangeStreamSubject<TDocument> subject,
+        IChangeStreamSubject<TResult> subject,
         IChangeStreamConnection connection)
     {
-        public IChangeStreamSubject<TDocument> Subject { get; } = subject;
+        public IChangeStreamSubject<TResult> Subject { get; } = subject;
         public IChangeStreamConnection Connection { get; } = connection;
         public int RefCount { get; set; }
     }

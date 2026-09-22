@@ -1,5 +1,4 @@
 using System.Collections.Frozen;
-using System.Diagnostics.CodeAnalysis;
 using DomainBlocks.Core.Exceptions;
 
 namespace DomainBlocks.EventStore.TypeMapping;
@@ -18,14 +17,16 @@ public sealed class EventTypeMap
         _reads = reads;
     }
 
+    /// <summary>
+    /// The type that each stored name is read as.
+    /// </summary>
+    public IReadOnlyDictionary<string, Type> EventTypesByName => _reads;
+
     public string GetEventName(Type eventType) =>
         _writes.GetValueOrDefault(eventType) ?? throw new EventTypeNotMappedException(eventType);
 
     public Type GetEventType(string eventName) =>
         _reads.GetValueOrDefault(eventName) ?? throw new EventNameNotMappedException(eventName);
-
-    public bool TryGetEventType(string eventName, [NotNullWhen(true)] out Type? eventType) =>
-        _reads.TryGetValue(eventName, out eventType);
 
     public static EventTypeMap Create(params EventTypeMapping[] mappings)
     {

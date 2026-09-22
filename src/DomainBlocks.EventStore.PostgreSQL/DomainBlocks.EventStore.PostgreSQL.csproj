@@ -5,6 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="DomainBlocks.EventStore.Benchmarks"/>
     <InternalsVisibleTo Include="DomainBlocks.EventStore.PostgreSQL.Tests.Integration"/>
     <InternalsVisibleTo Include="DomainBlocks.EventStore.PostgreSQL.Tests.Unit"/>
   </ItemGroup>

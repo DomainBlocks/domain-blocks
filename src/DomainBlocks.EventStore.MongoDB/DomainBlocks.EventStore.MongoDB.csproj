@@ -5,6 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="DomainBlocks.EventStore.Benchmarks"/>
     <InternalsVisibleTo Include="DomainBlocks.EventStore.MongoDB.Tests.Integration"/>
     <InternalsVisibleTo Include="DomainBlocks.EventStore.MongoDB.Tests.Unit"/>
   </ItemGroup>

@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using System.Reflection;
 using DomainBlocks.EventStore.ContractMapping;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.Abstractions;
@@ -67,6 +68,62 @@ public sealed class EventCodec<TEvent, TEventData, TMetadata> : IEventCodec<TEve
             : (TEvent)deserializedPayload;
 
         return DecodedEvent.Create(payload, DecodeMetadata(metadata));
+    }
+
+    public IReadOnlyCollection<string> ResolveEventNames(Type eventType)
+    {
+        ArgumentNullException.ThrowIfNull(eventType);
+
+        // A name is mapped to the type that is deserialized, which a contract mapper then turns into the event.
+        return
+        [
+            .. from read in _typeMap.EventTypesByName
+            let decodedType = _readContractMappers.TryGetValue(read.Value, out var mapper)
+                ? mapper.EventType
+                : read.Value
+            where eventType.IsAssignableFrom(decodedType)
+            select read.Key
+        ];
+    }
+
+    public string? ResolveStoredPath(Type eventType, IReadOnlyList<MemberInfo> members)
+    {
+        ArgumentNullException.ThrowIfNull(eventType);
+        ArgumentNullException.ThrowIfNull(members);
+
+        // Only of a type that is stored as itself, under every name that is read as it. A contract is stored in its
+        // own shape, and what a member of a base type is stored under is up to each type that derives from it.
+        var storedTypes = _typeMap.EventTypesByName.Values
+            .Where(x => eventType.IsAssignableFrom(_readContractMappers.GetValueOrDefault(x)?.EventType ?? x))
+            .Distinct()
+            .ToArray();
+
+        if (members.Count == 0 || storedTypes is not [var storedType] || storedType != eventType)
+            return null;
+
+        var names = new List<string>(members.Count);
+        var type = eventType;
+
+        foreach (var member in members)
+        {
+            // A dot in a name would make two names of it.
+            if (_eventSerializer.GetStoredName(type, member) is not { Length: > 0 } name || name.Contains('.'))
+                return null;
+
+            names.Add(name);
+
+            type = member switch
+            {
+                PropertyInfo property => property.PropertyType,
+                FieldInfo field => field.FieldType,
+                _ => null
+            };
+
+            if (type is null)
+                return null;
+        }
+
+        return string.Join('.', names);
     }
 
     private IReadOnlyDictionary<string, string> DecodeMetadata(TMetadata? metadata)

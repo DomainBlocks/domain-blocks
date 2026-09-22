@@ -84,7 +84,8 @@ public class ChangeStreamSubjectTests
             _mockClient.Object,
             _mockCollection.Object.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
-            x => x.ResumeToken);
+            static x => x.ResumeToken,
+            static x => x);
 
         var observer = new TestObserver();
         using var _ = subject.Attach(observer);
@@ -109,7 +110,8 @@ public class ChangeStreamSubjectTests
             _mockClient.Object,
             _mockCollection.Object.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
-            x => x.ResumeToken,
+            static x => x.ResumeToken,
+            static x => x,
             new ChangeStreamSubjectOptions { MongoOptions = new ChangeStreamOptions { ResumeAfter = resumeAfter } });
 
         await using var connection = await subject.ConnectAsync(ct);
@@ -132,7 +134,8 @@ public class ChangeStreamSubjectTests
             _mockClient.Object,
             _mockCollection.Object.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
-            x => x.ResumeToken);
+            static x => x.ResumeToken,
+            static x => x);
 
         var observer = new TestObserver();
         using var _ = subject.Attach(observer);
@@ -174,7 +177,8 @@ public class ChangeStreamSubjectTests
             _mockClient.Object,
             _mockCollection.Object.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
-            x => x.ResumeToken,
+            static x => x.ResumeToken,
+            static x => x,
             logger: logger);
 
         var observer = new TestObserver();
@@ -217,7 +221,8 @@ public class ChangeStreamSubjectTests
             _mockClient.Object,
             _mockCollection.Object.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
-            x => x.ResumeToken,
+            static x => x.ResumeToken,
+            static x => x,
             new ChangeStreamSubjectOptions
             {
                 MongoOptions = new ChangeStreamOptions { ResumeAfter = new BsonDocument("_data", "0") }
@@ -242,7 +247,8 @@ public class ChangeStreamSubjectTests
             _mockClient.Object,
             _mockCollection.Object.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
-            x => x.ResumeToken);
+            static x => x.ResumeToken,
+            static x => x);
 
         var observer1 = new TestObserver();
         var observer2 = new TestObserver();
@@ -268,7 +274,8 @@ public class ChangeStreamSubjectTests
             _mockClient.Object,
             _mockCollection.Object.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
-            x => x.ResumeToken);
+            static x => x.ResumeToken,
+            static x => x);
 
         await using var connection = await subject.ConnectAsync(ct);
         var completion = connection.Completion.WaitAsync(ct);
@@ -296,7 +303,8 @@ public class ChangeStreamSubjectTests
             _mockClient.Object,
             _mockCollection.Object.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
-            x => x.ResumeToken);
+            static x => x.ResumeToken,
+            static x => x);
 
         var throwingObserver = new ThrowingObserver();
         var receivingObserver = new TestObserver();
@@ -320,7 +328,8 @@ public class ChangeStreamSubjectTests
             _mockClient.Object,
             _mockCollection.Object.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
-            x => x.ResumeToken);
+            static x => x.ResumeToken,
+            static x => x);
 
         var connection = await subject.ConnectAsync(ct);
         await connection.DisposeAsync();

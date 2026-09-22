@@ -9,30 +9,33 @@ namespace DomainBlocks.EventStore.MongoDB.ChangeStreams;
 
 internal static class ChangeStreamSubject
 {
-    public static ChangeStreamSubject<TDocument, TResult> Create<TDocument, TResult>(
+    public static ChangeStreamSubject<TDocument, TChange, TResult> Create<TDocument, TChange, TResult>(
         IMongoClient mongoClient,
-        ChangeStreamCursorFactory<TDocument, TResult> cursorFactory,
-        PipelineDefinition<ChangeStreamDocument<TDocument>, TResult> pipeline,
-        Func<TResult, BsonDocument> resumeTokenSelector,
+        ChangeStreamCursorFactory<TDocument, TChange> cursorFactory,
+        PipelineDefinition<ChangeStreamDocument<TDocument>, TChange> pipeline,
+        Func<TChange, BsonDocument> resumeTokenSelector,
+        Func<TChange, TResult> resultSelector,
         ChangeStreamSubjectOptions? options = null,
         ILogger? logger = null)
     {
-        return new ChangeStreamSubject<TDocument, TResult>(
+        return new ChangeStreamSubject<TDocument, TChange, TResult>(
             mongoClient,
             cursorFactory,
             pipeline,
             resumeTokenSelector,
+            resultSelector,
             options,
             logger);
     }
 }
 
-internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSubject<TResult>
+internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChangeStreamSubject<TResult>
 {
     private readonly IMongoClient _mongoClient;
-    private readonly ChangeStreamCursorFactory<TDocument, TResult> _cursorFactory;
-    private readonly PipelineDefinition<ChangeStreamDocument<TDocument>, TResult> _pipeline;
-    private readonly Func<TResult, BsonDocument> _resumeTokenSelector;
+    private readonly ChangeStreamCursorFactory<TDocument, TChange> _cursorFactory;
+    private readonly PipelineDefinition<ChangeStreamDocument<TDocument>, TChange> _pipeline;
+    private readonly Func<TChange, BsonDocument> _resumeTokenSelector;
+    private readonly Func<TChange, TResult> _resultSelector;
     private readonly ChangeStreamSubjectOptions _options;
     private readonly ILogger? _logger;
     private readonly ConnectionState _connectionState;
@@ -42,9 +45,10 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
 
     public ChangeStreamSubject(
         IMongoClient mongoClient,
-        ChangeStreamCursorFactory<TDocument, TResult> cursorFactory,
-        PipelineDefinition<ChangeStreamDocument<TDocument>, TResult> pipeline,
-        Func<TResult, BsonDocument> resumeTokenSelector,
+        ChangeStreamCursorFactory<TDocument, TChange> cursorFactory,
+        PipelineDefinition<ChangeStreamDocument<TDocument>, TChange> pipeline,
+        Func<TChange, BsonDocument> resumeTokenSelector,
+        Func<TChange, TResult> resultSelector,
         ChangeStreamSubjectOptions? options = null,
         ILogger? logger = null)
     {
@@ -61,6 +65,7 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
         _cursorFactory = cursorFactory;
         _pipeline = pipeline;
         _resumeTokenSelector = resumeTokenSelector;
+        _resultSelector = resultSelector;
         _options = options;
         _logger = logger;
         _connectionState = new ConnectionState(logger, _subjectId);
@@ -87,8 +92,8 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
         throw new InvalidOperationException("The change stream connection completed before it connected.");
     }
 
-    private static ChangeStreamCursorFactory<TDocument, TResult> AddResilience(
-        ChangeStreamCursorFactory<TDocument, TResult> cursorFactory,
+    private static ChangeStreamCursorFactory<TDocument, TChange> AddResilience(
+        ChangeStreamCursorFactory<TDocument, TChange> cursorFactory,
         int maxRetryAttempts,
         TimeSpan maxRetryDelay,
         ILogger? logger,
@@ -125,8 +130,9 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
 
     private sealed class Connection : IChangeStreamConnection
     {
-        private readonly ChangeStreamSubject<TDocument, TResult> _subject;
-        private readonly Func<TResult, BsonDocument> _resumeTokenSelector;
+        private readonly ChangeStreamSubject<TDocument, TChange, TResult> _subject;
+        private readonly Func<TChange, BsonDocument> _resumeTokenSelector;
+        private readonly Func<TChange, TResult> _resultSelector;
         private readonly ConnectionState _state;
         private readonly ILogger? _logger;
         private readonly string _subjectId;
@@ -136,10 +142,11 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
         private BsonTimestamp? _operationTime;
         private int _disposed;
 
-        public Connection(ChangeStreamSubject<TDocument, TResult> subject)
+        public Connection(ChangeStreamSubject<TDocument, TChange, TResult> subject)
         {
             _subject = subject;
             _resumeTokenSelector = subject._resumeTokenSelector;
+            _resultSelector = subject._resultSelector;
             _state = subject._connectionState;
             _logger = subject._logger;
             _subjectId = subject._subjectId;
@@ -210,10 +217,11 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
                         {
                             var batchCount = 0;
 
-                            foreach (var result in cursor.Current)
+                            foreach (var change in cursor.Current)
                             {
+                                var result = _resultSelector(change);
                                 await _state.NotifyNextAsync(result, _stopCts.Token).ConfigureAwait(false);
-                                resumeToken = _resumeTokenSelector(result);
+                                resumeToken = _resumeTokenSelector(change);
                                 batchCount++;
                             }
 
@@ -284,7 +292,7 @@ internal sealed class ChangeStreamSubject<TDocument, TResult> : IChangeStreamSub
             return lastWrite["opTime"]["ts"].AsBsonTimestamp;
         }
 
-        private async Task<IChangeStreamCursor<TResult>> GetChangeStreamCursorAsync(BsonDocument? resumeToken)
+        private async Task<IChangeStreamCursor<TChange>> GetChangeStreamCursorAsync(BsonDocument? resumeToken)
         {
             var options = _subject._options.MongoOptions;
 

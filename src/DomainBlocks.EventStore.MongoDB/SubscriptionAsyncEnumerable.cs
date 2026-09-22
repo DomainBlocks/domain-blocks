@@ -1,6 +1,9 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using DomainBlocks.EventStore.Codecs;
+using DomainBlocks.EventStore.Filtering;
+using DomainBlocks.EventStore.Filtering.Nodes;
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
@@ -14,10 +17,12 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
     where TPos : struct, IPosition<TPos>
 {
     private readonly IMongoCollection<BsonDocument> _eventLog;
-    private readonly RefCountedChangeStreamSubject<ChangeStreamDocument<BsonDocument>> _changeStreamSubject;
+    private readonly RefCountedChangeStreamSubject<EventLogDocument<TEvent>> _changeStreamSubject;
     private readonly IEventDecoder<TEvent, BsonValue, BsonValue> _eventDecoder;
-    private readonly FilterDefinition<BsonDocument> _catchUpFilter;
-    private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, bool> _livePredicate;
+    private readonly FilterDefinition<BsonDocument>? _catchUpFilter;
+    private readonly EventFilter _catchUpRemainder;
+    private readonly string? _streamId;
+    private readonly EventFilter _liveFilter;
     private readonly string _positionFieldName;
     private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> _positionSelector;
     private readonly SubscriptionOrigin<TPos> _origin;
@@ -27,10 +32,12 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
     public SubscriptionAsyncEnumerable(
         IMongoCollection<BsonDocument> eventLog,
-        RefCountedChangeStreamSubject<ChangeStreamDocument<BsonDocument>> changeStreamSubject,
+        RefCountedChangeStreamSubject<EventLogDocument<TEvent>> changeStreamSubject,
         IEventDecoder<TEvent, BsonValue, BsonValue> eventDecoder,
-        FilterDefinition<BsonDocument> catchUpFilter,
-        Func<ReadEventContext<string, StreamPosition, LogPosition>, bool> livePredicate,
+        FilterDefinition<BsonDocument>? catchUpFilter,
+        EventFilter catchUpRemainder,
+        string? streamId,
+        EventFilter liveFilter,
         string positionFieldName,
         Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> positionSelector,
         SubscriptionOrigin<TPos>? origin,
@@ -40,7 +47,9 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
         _origin = origin ?? SubscriptionOrigin.End;
         _options = options ?? SubscriptionOptions.Default;
         _catchUpFilter = catchUpFilter;
-        _livePredicate = livePredicate;
+        _catchUpRemainder = catchUpRemainder;
+        _streamId = streamId;
+        _liveFilter = liveFilter;
         _positionFieldName = positionFieldName;
         _positionSelector = positionSelector;
         _eventLog = eventLog;
@@ -64,7 +73,12 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
             while (true)
             {
-                using var observer = new Observer(_options.QueueCapacity);
+                using var observer = new Observer(
+                    _options.QueueCapacity,
+                    _streamId,
+                    _liveFilter,
+                    _options.CheckpointInterval);
+
                 await using var attachment = await AttachObserver(observer).ConfigureAwait(false);
 
                 var enumerator = ReadAllAsync(resumeOrigin, observer, attachment.OperationTime, cancellationToken)
@@ -80,6 +94,8 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
                         if (m.Event is { } e)
                             resumeOrigin = SubscriptionOrigin.After(_positionSelector(e.Context));
+                        else if (CheckpointOf(m) is { } checkpoint)
+                            resumeOrigin = SubscriptionOrigin.After(checkpoint);
                     }
                 }
 
@@ -146,6 +162,9 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
     {
         LogPosition? highWaterMark;
 
+        // Where the subscriber has got to: what it asked to resume after, then the last event or checkpoint it is given.
+        TPos? last = resumeOrigin is SubscriptionOrigin<TPos>.After resumedAfter ? resumedAfter.Position : null;
+
         using (var catchUpCts = CancellationTokenSource.CreateLinkedTokenSource(
                    cancellationToken,
                    observer.OverflowToken))
@@ -161,10 +180,35 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
             if (highWaterMark is not null)
             {
+                // Its own, as the store's is set by the change stream while this catches up.
+                var document = new EventLogDocument<TEvent>(_eventDecoder, includeMetadata: true);
+
                 await foreach (var doc in ReadCatchUpAsync(session, resumeOrigin, highWaterMark.Value, catchUpCts.Token)
                                    .ConfigureAwait(false))
                 {
-                    yield return SubscriptionMessage.Event(_eventDecoder.Decode(doc));
+                    document.Set(doc);
+
+                    // What the database could not evaluate of the filter.
+                    if (!_catchUpRemainder.Matches(document))
+                        continue;
+
+                    var e = document.DecodedEvent;
+                    last = _positionSelector(e.Context);
+                    yield return SubscriptionMessage.Event(e);
+                }
+
+                // With a filter, catching up may have looked past the last event it delivered, or past where the
+                // subscriber was if it delivered none. A subscription without one is given every event, and has no need.
+                if (_liveFilter is not AllEventsFilter)
+                {
+                    var checkpoint = await GetCatchUpCheckpointAsync(session, highWaterMark.Value, catchUpCts.Token)
+                        .ConfigureAwait(false);
+
+                    if (checkpoint is { } position && (last is null || position.Value > last.Value.Value))
+                    {
+                        last = position;
+                        yield return ToCheckpoint(position);
+                    }
                 }
             }
         }
@@ -173,16 +217,73 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
         yield return SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>.CaughtUp;
 
-        await foreach (var doc in observer.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+        await foreach (var message in observer.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
         {
-            var readEvent = _eventDecoder.Decode(doc);
-            var context = readEvent.Context;
+            if (message.Event is { } e)
+            {
+                // Catching up has delivered it, if it was to be.
+                if (e.Context.LogPosition.Value <= highWaterMark?.Value)
+                    continue;
 
-            if (context.LogPosition.Value <= highWaterMark?.Value || !_livePredicate(context))
-                continue;
+                last = _positionSelector(e.Context);
+            }
+            else if (CheckpointOf(message) is { } checkpoint)
+            {
+                // A change from before the subscription caught up says nothing new, and must not take a subscriber back.
+                if (last is not null && checkpoint.Value <= last.Value.Value)
+                    continue;
 
-            yield return SubscriptionMessage.Event(readEvent);
+                last = checkpoint;
+            }
+
+            yield return message;
         }
+    }
+
+    // How far catching up has looked, in the position that the subscription resumes by: the high-water mark of the log,
+    // or how far the stream had got by then, which is null if it had no events.
+    private async Task<TPos?> GetCatchUpCheckpointAsync(
+        IClientSessionHandle session,
+        LogPosition highWaterMark,
+        CancellationToken cancellationToken)
+    {
+        if (_streamId is null)
+            return (TPos)(object)highWaterMark;
+
+        var filter = Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, _streamId) &
+                     Builders<BsonDocument>.Filter.Lte(EventLogEntry.FieldNames.Position, highWaterMark.Value);
+
+        var result = await _eventLog
+            .Find(session, filter)
+            .Sort(Builders<BsonDocument>.Sort.Descending(EventLogEntry.FieldNames.StreamPosition))
+            .Limit(1)
+            .Project(Builders<BsonDocument>.Projection.Include(EventLogEntry.FieldNames.StreamPosition))
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return result?[EventLogEntry.FieldNames.StreamPosition].AsInt64 is { } value
+            ? (TPos)(object)StreamPosition.FromInt64(value)
+            : null;
+    }
+
+    private static TPos? CheckpointOf(SubscriptionMessage<TEvent, string, StreamPosition, LogPosition> message)
+    {
+        return message switch
+        {
+            { LogCheckpoint: { HasValue: true, Value: TPos position } } => position,
+            { StreamCheckpoint: { HasValue: true, Value: TPos position } } => position,
+            _ => null
+        };
+    }
+
+    private static SubscriptionMessage<TEvent, string, StreamPosition, LogPosition> ToCheckpoint(TPos position)
+    {
+        return position switch
+        {
+            LogPosition p => SubscriptionMessage.LogCheckpoint<TEvent, string, StreamPosition, LogPosition>(p),
+            StreamPosition p => SubscriptionMessage.StreamCheckpoint<TEvent, string, StreamPosition, LogPosition>(p),
+            _ => throw new UnreachableException($"Unexpected position type '{typeof(TPos).Name}'.")
+        };
     }
 
     private async Task<IClientSessionHandle> StartCatchUpSessionAsync(
@@ -228,10 +329,9 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
         LogPosition highWaterMark,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        if (resumeOrigin is SubscriptionOrigin<TPos>.End)
+        // From the end there is nothing to catch up on, and a filter may leave nothing to ask the database for.
+        if (resumeOrigin is SubscriptionOrigin<TPos>.End || _catchUpFilter is not { } filter)
             yield break;
-
-        var filter = _catchUpFilter;
 
         if (resumeOrigin is SubscriptionOrigin<TPos>.After after)
             filter &= Builders<BsonDocument>.Filter.Gt(_positionFieldName, after.Position.Value);
@@ -252,26 +352,100 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
         }
     }
 
-    private sealed class Observer(int queueCapacity) :
-        IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>,
-        IDisposable
+    /// <summary>
+    /// Buffers live events for one subscription. Never blocks the change stream: an overflow cancels the overflow
+    /// token and completes the channel, so that the subscription starts again from its last position.
+    /// </summary>
+    /// <remarks>
+    /// With a filter, it also says how far it has looked. The change stream notes the position of each change that
+    /// the filter passes over, and a timer queues the last of them as a checkpoint. The change stream queues an event
+    /// before it notes any later position, so a checkpoint is in the queue behind every event that was selected before
+    /// it, and a subscriber is never told of a position before it has been given what the filter selects up to there.
+    /// The timer goes on after the log has gone quiet, so the last change that was passed over is reported too.
+    /// </remarks>
+    private sealed class Observer : IChangeStreamObserver<EventLogDocument<TEvent>>, IDisposable
     {
-        private readonly Channel<BsonDocument> _channel = Channel.CreateBounded<BsonDocument>(
-            new BoundedChannelOptions(queueCapacity)
-            {
-                SingleWriter = true,
-                SingleReader = true
-            });
+        private const long Nowhere = -1;
 
+        private readonly Channel<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> _channel;
+        private readonly string? _streamId;
+        private readonly EventFilter _liveFilter;
+        private readonly Timer? _checkpointTimer;
         private readonly CancellationTokenSource _overflowCts = new();
+        private bool _hasFailed;
+        private long _passedOver = Nowhere;
+        private long _reported = Nowhere;
+        private int _isReporting;
 
-        public ChannelReader<BsonDocument> Reader => _channel.Reader;
+        public Observer(int queueCapacity, string? streamId, EventFilter liveFilter, TimeSpan checkpointInterval)
+        {
+            _streamId = streamId;
+            _liveFilter = liveFilter;
+
+            // The change stream writes events, and the timer checkpoints. A checkpoint is only queued when the queue is
+            // empty, so there is never more than one, and it has a place of its own: the queue always holds as many
+            // events as it was asked to.
+            var hasCheckpoints = liveFilter is not AllEventsFilter;
+
+            _channel = Channel.CreateBounded<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>>(
+                new BoundedChannelOptions(hasCheckpoints ? queueCapacity + 1 : queueCapacity)
+                {
+                    SingleWriter = false,
+                    SingleReader = true
+                });
+
+            // A subscription without a filter passes over nothing.
+            if (hasCheckpoints)
+            {
+                _checkpointTimer = new Timer(
+                    static x => ((Observer)x!).ReportPassedOver(),
+                    this,
+                    checkpointInterval,
+                    checkpointInterval);
+            }
+        }
+
+        public ChannelReader<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> Reader =>
+            _channel.Reader;
 
         public CancellationToken OverflowToken => _overflowCts.Token;
 
-        public ValueTask OnNextAsync(ChangeStreamDocument<BsonDocument> change, CancellationToken cancellationToken)
+        public ValueTask OnNextAsync(EventLogDocument<TEvent> change, CancellationToken cancellationToken)
         {
-            if (_channel.Writer.TryWrite(change.FullDocument) || _overflowCts.IsCancellationRequested)
+            // One that has failed is waiting to say so, and a change that it could not queue would be taken for
+            // falling behind.
+            if (_hasFailed)
+                return ValueTask.CompletedTask;
+
+            SubscriptionMessage<TEvent, string, StreamPosition, LogPosition> message;
+
+            try
+            {
+                // A subscription to a stream has nothing to say of the rest of the log.
+                if (_streamId is not null && change.StreamId != _streamId)
+                    return ValueTask.CompletedTask;
+
+                if (!_liveFilter.Matches(change))
+                {
+                    // In the position that the subscription resumes by.
+                    var position = _streamId is null ? change.Position : change.StreamPosition;
+                    Volatile.Write(ref _passedOver, position);
+                    return ValueTask.CompletedTask;
+                }
+
+                // The document is only good for the length of this call, so the event is taken from it now. It is
+                // decoded once, however many observers take it.
+                message = SubscriptionMessage.Event(change.DecodedEvent);
+            }
+            catch (Exception ex)
+            {
+                // An event that cannot be decoded fails this subscription, as it would a read, and no other.
+                _hasFailed = true;
+                _channel.Writer.TryComplete(ex);
+                return ValueTask.CompletedTask;
+            }
+
+            if (_channel.Writer.TryWrite(message) || _overflowCts.IsCancellationRequested)
                 return ValueTask.CompletedTask;
 
             _overflowCts.Cancel();
@@ -280,12 +454,46 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
             return ValueTask.CompletedTask;
         }
 
+        // On the timer. With events in the queue there is nothing to add: each says where it is, and the next tick
+        // will do. Nor is a checkpoint worth falling behind for, so one that cannot be queued is left for the next.
+        private void ReportPassedOver()
+        {
+            // One tick at a time, should one ever be slow enough to meet the next.
+            if (Interlocked.Exchange(ref _isReporting, 1) != 0)
+                return;
+
+            try
+            {
+                var position = Volatile.Read(ref _passedOver);
+
+                if (position <= _reported || _channel.Reader.Count > 0)
+                    return;
+
+                var checkpoint = _streamId is null
+                    ? SubscriptionMessage.LogCheckpoint<TEvent, string, StreamPosition, LogPosition>(
+                        LogPosition.FromInt64(position))
+                    : SubscriptionMessage.StreamCheckpoint<TEvent, string, StreamPosition, LogPosition>(
+                        StreamPosition.FromInt64(position));
+
+                if (_channel.Writer.TryWrite(checkpoint))
+                    _reported = position;
+            }
+            finally
+            {
+                Volatile.Write(ref _isReporting, 0);
+            }
+        }
+
         public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken)
         {
             _channel.Writer.TryComplete(exception);
             return ValueTask.CompletedTask;
         }
 
-        public void Dispose() => _overflowCts.Dispose();
+        public void Dispose()
+        {
+            _checkpointTimer?.Dispose();
+            _overflowCts.Dispose();
+        }
     }
 }

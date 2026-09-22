@@ -12,5 +12,20 @@ public enum StoreCapabilities
     /// <summary>
     /// Appending with a commit id that was already committed writes nothing and succeeds.
     /// </summary>
-    IdempotentAppends = 1
+    IdempotentAppends = 1,
+
+    /// <summary>
+    /// Reads take an event filter. A store without it refuses one.
+    /// </summary>
+    EventFilters = 2,
+
+    /// <summary>
+    /// Subscriptions take an event filter. A store without it refuses one.
+    /// </summary>
+    EventFilteredSubscriptions = 4,
+
+    /// <summary>
+    /// Subscriptions with a filter report checkpoints.
+    /// </summary>
+    SubscriptionCheckpoints = 8
 }
