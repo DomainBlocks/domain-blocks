@@ -3,6 +3,7 @@ using DomainBlocks.EventStore.Metadata;
 using DomainBlocks.EventStore.Tests.Unit.Codecs;
 using DomainBlocks.EventStore.Tests.Unit.Decoration;
 using DomainBlocks.EventStore.Transforms;
+using DomainBlocks.EventStore.TypeMapping;
 using NUnit.Framework;
 using Shouldly;
 
@@ -108,6 +109,49 @@ public class EventStoreBuilderTests
             .BuildCodecWithFakes();
 
         codec.Decode("Retired", "anything", null).Payload.ShouldBeSameAs(IgnoredEvent.Instance);
+    }
+
+    [Test]
+    public void IgnoreEvents_WhenNamesAreAskedFor_CountsIgnoredNamesAsTheSentinelOnly()
+    {
+        var codec = new FakeEventStoreBuilder()
+            .ConfigureCodec(x => x.MapEvent<Current>().MapEvents(EventTypeMapping.ReadOnly<Current>("Retired")))
+            .IgnoreEvents("Retired", "Gone")
+            .UseIgnoredEventSentinel(IgnoredEvent.Instance)
+            .BuildCodecWithFakes();
+
+        codec.ResolveEventNames(typeof(Current)).ShouldBe(["Current"]);
+        codec.ResolveEventNames(typeof(IgnoredEvent)).ShouldBe(["Retired", "Gone"], ignoreOrder: true);
+        codec.ResolveEventNames(typeof(object)).ShouldBe(["Current", "Retired", "Gone"], ignoreOrder: true);
+    }
+
+    [Test]
+    public void IgnoreEvents_WhenAStoredPathIsAskedFor_SaysNothingOfTheSentinel()
+    {
+        // The sentinel is read from names whose payloads are anything at all.
+        var codec = new FakeEventStoreBuilder()
+            .ConfigureCodec(x => x
+                .MapEvent<Current>()
+                .UseEventSerializer(new FakeObjectSerializer { StoredNames = (_, member) => member.Name }))
+            .IgnoreEvents("Retired")
+            .UseIgnoredEventSentinel(new Current("ignored"))
+            .BuildCodecWithFakes();
+
+        codec.ResolveStoredPath(typeof(Current), [typeof(Current).GetProperty(nameof(Current.Value))!]).ShouldBeNull();
+    }
+
+    [Test]
+    public void IgnoreEvents_WhenAStoredPathIsAskedForOfAnotherType_AsksTheCodec()
+    {
+        var codec = new FakeEventStoreBuilder()
+            .ConfigureCodec(x => x
+                .MapEvent<Current>()
+                .UseEventSerializer(new FakeObjectSerializer { StoredNames = (_, member) => member.Name }))
+            .IgnoreEvents("Retired")
+            .UseIgnoredEventSentinel(IgnoredEvent.Instance)
+            .BuildCodecWithFakes();
+
+        codec.ResolveStoredPath(typeof(Current), [typeof(Current).GetProperty(nameof(Current.Value))!]).ShouldBe("Value");
     }
 
     [Test]

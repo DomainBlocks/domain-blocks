@@ -1,3 +1,4 @@
+using System.Reflection;
 using DomainBlocks.Serialization.Abstractions;
 using Shouldly;
 
@@ -8,6 +9,13 @@ namespace DomainBlocks.EventStore.Tests.Unit.Codecs;
 /// </summary>
 internal sealed class FakeObjectSerializer : IObjectSerializer<string>
 {
+    /// <summary>
+    /// Where a member is stored. Nowhere that can be looked up, unless a test says otherwise.
+    /// </summary>
+    public Func<Type, MemberInfo, string?> StoredNames { get; init; } = (_, _) => null;
+
+    public string? GetStoredName(Type type, MemberInfo member) => StoredNames(type, member);
+
     public string Serialize(object value) =>
         $"{value.GetType().Name}:{value.GetType().GetProperty("OrderId")!.GetValue(value)}";
 

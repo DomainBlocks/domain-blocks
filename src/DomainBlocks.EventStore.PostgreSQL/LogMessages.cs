@@ -1,3 +1,4 @@
+using DomainBlocks.EventStore.Filtering;
 using Microsoft.Extensions.Logging;
 
 namespace DomainBlocks.EventStore.PostgreSQL;
@@ -26,6 +27,15 @@ internal static partial class LogMessages
 
     [LoggerMessage(LogLevel.Critical, "[append] loop failed; further appends will be rejected")]
     internal static partial void AppendLoopFailed(this ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        LogLevel.Debug,
+        "[filter] {Filter}: the database evaluates {Pushed}, and each row is tested against {Remainder}")]
+    internal static partial void FilterPlanned(
+        this ILogger logger,
+        EventFilter filter,
+        EventFilter pushed,
+        EventFilter remainder);
 
     [LoggerMessage(LogLevel.Information, "[sub: {SubscriptionId}] started")]
     internal static partial void SubscriptionStarted(this ILogger logger, string subscriptionId);

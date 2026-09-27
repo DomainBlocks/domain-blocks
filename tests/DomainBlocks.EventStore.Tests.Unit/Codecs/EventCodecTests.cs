@@ -1,3 +1,5 @@
+using System.Linq.Expressions;
+using System.Reflection;
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.ContractMapping;
 using DomainBlocks.EventStore.TypeMapping;
@@ -18,7 +20,13 @@ public class EventCodecTests
         return EventCodec.Create(new EventCodecOptions<object, string, string>
         {
             TypeMap = TypeMap,
-            EventSerializer = new FakeObjectSerializer(),
+
+            // Stores a member under its name in lower case, and not one of a type from elsewhere, such as a string.
+            EventSerializer = new FakeObjectSerializer
+            {
+                StoredNames = (type, member) =>
+                    type.DeclaringType == typeof(EventCodecTests) ? member.Name.ToLowerInvariant() : null
+            },
             MetadataSerializer = new FakeMetadataSerializer(),
             ContractMappers = mappers
         });
@@ -113,7 +121,119 @@ public class EventCodecTests
         Should.Throw<InvalidCastException>(() => codec.Decode("OrderShipped", "OrderShippedContract:o1", null));
     }
 
-    private sealed record OrderPlaced(string OrderId);
+    [Test]
+    public void GetEventNames_WhenATypeIsReadUnderSeveralNames_ReturnsThemAll()
+    {
+        CreateCodec().ResolveEventNames(typeof(OrderPlaced)).ShouldBe(["OrderPlaced", "OrderPlacedV1"], ignoreOrder: true);
+    }
+
+    [Test]
+    public void GetEventNames_WhenGivenABaseType_ReturnsTheNamesOfWhatDerivesFromIt()
+    {
+        CreateCodec().ResolveEventNames(typeof(IOrderEvent)).ShouldBe(["OrderPlaced", "OrderPlacedV1"], ignoreOrder: true);
+
+        CreateCodec().ResolveEventNames(typeof(object))
+            .ShouldBe(["OrderPlaced", "OrderPlacedV1", "OrderShipped"], ignoreOrder: true);
+    }
+
+    [Test]
+    public void GetEventNames_WhenNothingIsReadAsTheType_ReturnsNone()
+    {
+        CreateCodec().ResolveEventNames(typeof(string)).ShouldBeEmpty();
+    }
+
+    [Test]
+    public void GetEventNames_WhenAContractMapperReadsTheName_GoesByTheEventItMapsTo()
+    {
+        var codec = CreateCodec(new OrderShippedMapper());
+
+        codec.ResolveEventNames(typeof(OrderShipped)).ShouldBe(["OrderShipped"]);
+        codec.ResolveEventNames(typeof(OrderShippedContract)).ShouldBeEmpty();
+    }
+
+    [Test]
+    public void GetStoredPath_WhenTheTypeIsStoredAsItself_JoinsTheStoredNames()
+    {
+        var codec = CreateCodec();
+
+        codec.ResolveStoredPath(typeof(OrderPlaced), Members((OrderPlaced e) => e.OrderId)).ShouldBe("orderid");
+        codec.ResolveStoredPath(typeof(OrderPlaced), Members((OrderPlaced e) => e.Customer!.Name)).ShouldBe("customer.name");
+    }
+
+    [Test]
+    public void GetStoredPath_WhenTheSerializerDoesNotSayForAMember_IsNull()
+    {
+        var members = Members((OrderPlaced e) => e.Customer!.Name!.Length);
+
+        CreateCodec().ResolveStoredPath(typeof(OrderPlaced), members).ShouldBeNull();
+    }
+
+    [Test]
+    public void GetStoredPath_WhenAContractIsStoredInPlaceOfTheEvent_IsNull()
+    {
+        var members = Members((OrderShipped e) => e.OrderId);
+
+        CreateCodec(new OrderShippedMapper()).ResolveStoredPath(typeof(OrderShipped), members).ShouldBeNull();
+    }
+
+    [Test]
+    public void GetStoredPath_WhenOtherTypesAreReadAsTheType_IsNull()
+    {
+        // What a member of an interface is stored under is up to each type that has it.
+        var members = Members((IOrderEvent e) => e.OrderId);
+
+        CreateCodec().ResolveStoredPath(typeof(IOrderEvent), members).ShouldBeNull();
+    }
+
+    [Test]
+    public void GetStoredPath_WhenNothingIsReadAsTheType_IsNull()
+    {
+        CreateCodec().ResolveStoredPath(typeof(NotMapped), Members((NotMapped e) => e.OrderId)).ShouldBeNull();
+    }
+
+    [Test]
+    public void GetStoredPath_WhenAStoredNameHasADot_IsNull()
+    {
+        var codec = EventCodec.Create(new EventCodecOptions<object, string, string>
+        {
+            TypeMap = TypeMap,
+            EventSerializer = new FakeObjectSerializer { StoredNames = (_, _) => "order.id" },
+            MetadataSerializer = new FakeMetadataSerializer()
+        });
+
+        codec.ResolveStoredPath(typeof(OrderPlaced), Members((OrderPlaced e) => e.OrderId)).ShouldBeNull();
+    }
+
+    [Test]
+    public void GetStoredPath_WhenThereAreNoMembers_IsNull()
+    {
+        CreateCodec().ResolveStoredPath(typeof(OrderPlaced), []).ShouldBeNull();
+    }
+
+    // The members that an expression goes through, outermost last.
+    private static MemberInfo[] Members<TEvent, TValue>(Expression<Func<TEvent, TValue>> path)
+    {
+        var members = new List<MemberInfo>();
+
+        for (var e = path.Body; e is MemberExpression access; e = access.Expression)
+            members.Insert(0, access.Member);
+
+        return [.. members];
+    }
+
+    private interface IOrderEvent
+    {
+        string OrderId { get; }
+    }
+
+    private sealed record OrderPlaced(string OrderId) : IOrderEvent
+    {
+        public Customer? Customer { get; init; }
+    }
+
+    private sealed record Customer(string? Name);
+
+    private sealed record NotMapped(string OrderId);
 
     private sealed record OrderShipped(string OrderId);
 

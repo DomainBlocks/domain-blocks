@@ -1,9 +1,19 @@
+using DomainBlocks.EventStore.Filtering;
 using Microsoft.Extensions.Logging;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
 internal static partial class LogMessages
 {
+    [LoggerMessage(
+        LogLevel.Debug,
+        "[filter] {Filter}: the database evaluates {Pushed}, and each document is tested against {Remainder}")]
+    internal static partial void FilterPlanned(
+        this ILogger logger,
+        EventFilter filter,
+        EventFilter pushed,
+        EventFilter remainder);
+
     [LoggerMessage(LogLevel.Information, "[sub: {SubscriptionId}] started")]
     internal static partial void SubscriptionStarted(this ILogger logger, string subscriptionId);
 

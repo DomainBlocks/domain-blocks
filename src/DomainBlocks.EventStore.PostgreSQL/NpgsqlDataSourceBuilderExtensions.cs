@@ -21,7 +21,8 @@ public static class NpgsqlDataSourceBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        var names = new SchemaObjectNames((options ?? new PostgresEventStoreOptions()).Schema);
+        options ??= new PostgresEventStoreOptions();
+        var names = new SchemaObjectNames(options.Schema, options.SubscriptionFilter);
 
         builder.MapEnum<AppendProtocol.ExpectedKind>(names.ExpectedStateKindType);
         builder.MapEnum<AppendProtocol.Status>(names.AppendStatusType);

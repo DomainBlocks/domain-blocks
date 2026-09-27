@@ -34,6 +34,8 @@ internal sealed class EventLogSql
         StreamExists = $"SELECT EXISTS (SELECT 1 FROM {eventLog} WHERE stream_id = $1)";
         MaxPosition = $"SELECT max(position) FROM {eventLog}";
 
+        MaxStreamPosition = $"SELECT max(stream_position) FROM {eventLog} WHERE stream_id = $1 AND position <= $2";
+
         ReadCatchUpAll = $"SELECT {Columns} FROM {eventLog} " +
                          "WHERE position > $1 AND position <= $2 ORDER BY position LIMIT $3";
 
@@ -62,6 +64,8 @@ internal sealed class EventLogSql
 
     public string MaxPosition { get; }
 
+    public string MaxStreamPosition { get; }
+
     public string ReadCatchUpAll { get; }
 
     public string ReadCatchUpStream { get; }
@@ -88,6 +92,19 @@ internal sealed class EventLogSql
             (ReadDirection.Backward, false) => ReadAllBackwardWithoutMetadata,
             _ => throw new ArgumentOutOfRangeException(nameof(direction), direction, null)
         };
+    }
+
+    /// <summary>
+    /// Adds a condition to the WHERE clause of one of the queries above, all of which have one and then an ORDER BY.
+    /// </summary>
+    public static string WithCondition(string query, string condition)
+    {
+        const string orderBy = " ORDER BY ";
+        var index = query.LastIndexOf(orderBy, StringComparison.Ordinal);
+
+        return index < 0
+            ? throw new ArgumentException("The query has no ORDER BY to add a condition before.", nameof(query))
+            : $"{query[..index]} AND {condition}{query[index..]}";
     }
 
     /// <summary>
