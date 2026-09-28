@@ -39,7 +39,6 @@ public sealed record EventFilterPlan
     /// </summary>
     /// <param name="filter">The filter to plan.</param>
     /// <param name="pushdownMode">How much of the filter must be pushed down to the native query.</param>
-    /// <param name="eventNamesResolver">Resolves the names stored for an event type.</param>
     /// <param name="canPushdown">Whether the database can push down a leaf filter.</param>
     /// <exception cref="EventFilterNotSupportedException">
     /// <paramref name="pushdownMode"/> is <see cref="FilterPushdownMode.Require"/> and part of the filter is cannot be
@@ -48,7 +47,6 @@ public sealed record EventFilterPlan
     public static EventFilterPlan Create(
         EventFilter filter,
         FilterPushdownMode pushdownMode,
-        Func<Type, IReadOnlyCollection<string>> eventNamesResolver,
         Func<EventFilter, bool> canPushdown)
     {
         ArgumentNullException.ThrowIfNull(filter);
@@ -57,16 +55,14 @@ public sealed record EventFilterPlan
         if (filter is AllEventsFilter)
             return Unfiltered;
 
-        var withNames = filter.WithEventNames(eventNamesResolver);
-
         if (pushdownMode == FilterPushdownMode.None)
-            return new EventFilterPlan(EventFilter.All, withNames);
+            return new EventFilterPlan(EventFilter.All, filter);
 
         var pushdown = EventFilter.All;
         var residual = EventFilter.All;
 
         // Push each conjunct independently. If it cannot be fully pushed down, weaken it and keep it residual.
-        foreach (var conjunct in withNames is AndFilter conjunction ? conjunction.Operands : [withNames])
+        foreach (var conjunct in filter is AndFilter conjunction ? conjunction.Operands : [filter])
         {
             if (conjunct.GetLeafNodes().All(CanPushdown))
             {

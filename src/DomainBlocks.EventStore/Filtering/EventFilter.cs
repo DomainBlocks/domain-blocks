@@ -1,6 +1,5 @@
 using System.Collections.Immutable;
 using System.Globalization;
-using System.Linq.Expressions;
 using System.Text;
 using DomainBlocks.EventStore.Filtering.Nodes;
 
@@ -45,31 +44,6 @@ public abstract record EventFilter
             ArgumentException.ThrowIfNullOrWhiteSpace(name, nameof(eventNames));
 
         return names.Values.IsEmpty ? None : new EventNameFilter(names);
-    }
-
-    /// <summary>
-    /// Matches events whose decoded payload is assignable to <typeparamref name="TEvent"/>. Evaluating this filter
-    /// requires the decoded payload.
-    /// </summary>
-    public static EventFilter OfType<TEvent>() where TEvent : notnull =>
-        new EventTypeFilter(typeof(TEvent), null, null);
-
-    /// <summary>
-    /// Matches events whose decoded payload is assignable to <typeparamref name="TEvent"/> and satisfies
-    /// <paramref name="predicate"/>. Evaluating this filter requires the decoded payload.
-    /// </summary>
-    public static EventFilter OfType<TEvent>(Expression<Func<TEvent, bool>>? predicate) where TEvent : notnull
-    {
-        ArgumentNullException.ThrowIfNull(predicate);
-
-        return new EventTypeFilter(
-            typeof(TEvent),
-            predicate,
-            () =>
-            {
-                var compiled = predicate.Compile();
-                return e => compiled((TEvent)e);
-            });
     }
 
     /// <summary>
@@ -202,22 +176,6 @@ public abstract record EventFilter
             NotFilter negation => negation.Operand,
             _ => new NotFilter(filter)
         };
-    }
-
-    /// <summary>
-    /// Expresses event type filters in terms of their stored event names, so they can be pushed down.
-    /// </summary>
-    /// <param name="eventNamesResolver">Resolves the stored event names for an event type.</param>
-    public EventFilter WithEventNames(Func<Type, IReadOnlyCollection<string>> eventNamesResolver)
-    {
-        ArgumentNullException.ThrowIfNull(eventNamesResolver);
-
-        return Rewrite((leaf, _) => leaf switch
-        {
-            EventTypeFilter { Predicate: null } byType => EventNames(eventNamesResolver(byType.EventType)),
-            EventTypeFilter byType => EventNames(eventNamesResolver(byType.EventType)) & byType,
-            _ => leaf
-        });
     }
 
     /// <summary>
