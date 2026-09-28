@@ -3,6 +3,7 @@ using DomainBlocks.EventStore.Metadata;
 using DomainBlocks.EventStore.Tests.Unit.Codecs;
 using DomainBlocks.EventStore.Tests.Unit.Decoration;
 using DomainBlocks.EventStore.Transforms;
+using DomainBlocks.EventStore.TypeMapping;
 using NUnit.Framework;
 using Shouldly;
 
@@ -108,6 +109,20 @@ public class EventStoreBuilderTests
             .BuildCodecWithFakes();
 
         codec.Decode("Retired", "anything", null).Payload.ShouldBeSameAs(IgnoredEvent.Instance);
+    }
+
+    [Test]
+    public void IgnoreEvents_WhenNamesAreAskedFor_CountsIgnoredNamesAsTheSentinelOnly()
+    {
+        var codec = new FakeEventStoreBuilder()
+            .ConfigureCodec(x => x.MapEvent<Current>().MapEvents(EventTypeMapping.ReadOnly<Current>("Retired")))
+            .IgnoreEvents("Retired", "Gone")
+            .UseIgnoredEventSentinel(IgnoredEvent.Instance)
+            .BuildCodecWithFakes();
+
+        codec.ResolveEventNames(typeof(Current)).ShouldBe(["Current"]);
+        codec.ResolveEventNames(typeof(IgnoredEvent)).ShouldBe(["Retired", "Gone"], ignoreOrder: true);
+        codec.ResolveEventNames(typeof(object)).ShouldBe(["Current", "Retired", "Gone"], ignoreOrder: true);
     }
 
     [Test]

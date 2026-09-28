@@ -69,6 +69,22 @@ public sealed class EventCodec<TEvent, TEventData, TMetadata> : IEventCodec<TEve
         return DecodedEvent.Create(payload, DecodeMetadata(metadata));
     }
 
+    public IReadOnlyCollection<string> ResolveEventNames(Type eventType)
+    {
+        ArgumentNullException.ThrowIfNull(eventType);
+
+        // A name is mapped to the type that is deserialized, which a contract mapper then turns into the event.
+        return
+        [
+            .. from read in _typeMap.EventTypesByName
+            let decodedType = _readContractMappers.TryGetValue(read.Value, out var mapper)
+                ? mapper.EventType
+                : read.Value
+            where eventType.IsAssignableFrom(decodedType)
+            select read.Key
+        ];
+    }
+
     private IReadOnlyDictionary<string, string> DecodeMetadata(TMetadata? metadata)
     {
         return !EqualityComparer<TMetadata>.Default.Equals(metadata, default)

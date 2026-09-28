@@ -18,6 +18,7 @@ public class EventCodecTests
         return EventCodec.Create(new EventCodecOptions<object, string, string>
         {
             TypeMap = TypeMap,
+
             EventSerializer = new FakeObjectSerializer(),
             MetadataSerializer = new FakeMetadataSerializer(),
             ContractMappers = mappers
@@ -113,7 +114,49 @@ public class EventCodecTests
         Should.Throw<InvalidCastException>(() => codec.Decode("OrderShipped", "OrderShippedContract:o1", null));
     }
 
-    private sealed record OrderPlaced(string OrderId);
+    [Test]
+    public void GetEventNames_WhenATypeIsReadUnderSeveralNames_ReturnsThemAll()
+    {
+        CreateCodec().ResolveEventNames(typeof(OrderPlaced)).ShouldBe(["OrderPlaced", "OrderPlacedV1"], ignoreOrder: true);
+    }
+
+    [Test]
+    public void GetEventNames_WhenGivenABaseType_ReturnsTheNamesOfWhatDerivesFromIt()
+    {
+        CreateCodec().ResolveEventNames(typeof(IOrderEvent)).ShouldBe(["OrderPlaced", "OrderPlacedV1"], ignoreOrder: true);
+
+        CreateCodec().ResolveEventNames(typeof(object))
+            .ShouldBe(["OrderPlaced", "OrderPlacedV1", "OrderShipped"], ignoreOrder: true);
+    }
+
+    [Test]
+    public void GetEventNames_WhenNothingIsReadAsTheType_ReturnsNone()
+    {
+        CreateCodec().ResolveEventNames(typeof(string)).ShouldBeEmpty();
+    }
+
+    [Test]
+    public void GetEventNames_WhenAContractMapperReadsTheName_GoesByTheEventItMapsTo()
+    {
+        var codec = CreateCodec(new OrderShippedMapper());
+
+        codec.ResolveEventNames(typeof(OrderShipped)).ShouldBe(["OrderShipped"]);
+        codec.ResolveEventNames(typeof(OrderShippedContract)).ShouldBeEmpty();
+    }
+
+    private interface IOrderEvent
+    {
+        string OrderId { get; }
+    }
+
+    private sealed record OrderPlaced(string OrderId) : IOrderEvent
+    {
+        public Customer? Customer { get; init; }
+    }
+
+    private sealed record Customer(string? Name);
+
+    private sealed record NotMapped(string OrderId);
 
     private sealed record OrderShipped(string OrderId);
 

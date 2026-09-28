@@ -17,4 +17,14 @@ internal sealed class IgnoringEventCodec<TEvent, TEventData, TMetadata>(
         ignoredEventNames.Contains(eventName)
             ? DecodedEvent.Create(sentinel, FrozenDictionary<string, string>.Empty)
             : inner.Decode(eventName, eventData, metadata);
+
+    // An ignored name is decoded as the sentinel, whatever the inner codec would have made of it.
+    public IReadOnlyCollection<string> ResolveEventNames(Type eventType)
+    {
+        ArgumentNullException.ThrowIfNull(eventType);
+
+        var names = inner.ResolveEventNames(eventType).Except(ignoredEventNames);
+
+        return [.. eventType.IsInstanceOfType(sentinel) ? names.Concat(ignoredEventNames) : names];
+    }
 }

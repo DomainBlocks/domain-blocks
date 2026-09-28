@@ -21,5 +21,11 @@ public enum SubscriptionMessageKind
     /// The subscription resumes from the last delivered position and emits <see cref="CaughtUp"/> once it has caught
     /// up again.
     /// </summary>
-    FellBehind
+    FellBehind,
+
+    /// <summary>
+    /// The subscription has delivered every event it selects up to a position, which may be past the last event it
+    /// delivered. Only a subscription with a filter reports these.
+    /// </summary>
+    Checkpoint
 }

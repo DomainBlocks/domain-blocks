@@ -11,4 +11,10 @@ public interface IEventDecoder<TEvent, in TEventData, in TMetadata> where TEvent
     /// The stored metadata, or <see langword="default"/> when the record has none or the read excluded it.
     /// </param>
     DecodedEvent<TEvent> Decode(string eventName, TEventData eventData, TMetadata? metadata);
+
+    /// <summary>
+    /// The names of the stored events that are decoded as <paramref name="eventType"/>, or as a type derived from
+    /// it. A filter by event type is turned into one by these names, which a database can evaluate.
+    /// </summary>
+    IReadOnlyCollection<string> ResolveEventNames(Type eventType);
 }

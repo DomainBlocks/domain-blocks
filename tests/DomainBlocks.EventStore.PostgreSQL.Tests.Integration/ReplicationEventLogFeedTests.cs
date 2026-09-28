@@ -15,6 +15,7 @@ using RawReadEvent = ReadEvent<
     string,
     StreamPosition,
     LogPosition>;
+using RawRow = EventLogRow<ReplicationEventLogFeedTests.RawEvent>;
 
 /// <summary>
 /// Exercises the logical replication session through the feed, against a real server. Events are decoded with a
@@ -144,7 +145,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
     {
         var missingNames = new SchemaObjectNames("dbx_no_such_schema");
 
-        var feed = new EventLogFeed<RawReadEvent>(
+        var feed = new EventLogFeed<RawRow>(
             token => ReplicationEventLogSession.OpenAsync(
                 PostgresTestEnvironment.ConnectionString,
                 NextSlotName(),
@@ -168,9 +169,9 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
         await connection.Completion.WaitAsync(ct).ShouldThrowAsync<PostgresException>();
     }
 
-    private EventLogFeed<RawReadEvent> CreateFeed()
+    private EventLogFeed<RawRow> CreateFeed()
     {
-        return new EventLogFeed<RawReadEvent>(
+        return new EventLogFeed<RawRow>(
             ct => ReplicationEventLogSession.OpenAsync(
                 PostgresTestEnvironment.ConnectionString,
                 NextSlotName(),
@@ -216,9 +217,11 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
                 new RawEvent(eventName, eventData, metadata),
                 new Dictionary<string, string>());
         }
+
+        public IReadOnlyCollection<string> ResolveEventNames(Type eventType) => [];
     }
 
-    private sealed class CollectingObserver : IEventLogObserver<RawReadEvent>
+    private sealed class CollectingObserver : IEventLogObserver<RawRow>
     {
         private readonly Channel<RawReadEvent> _channel = Channel.CreateUnbounded<RawReadEvent>();
 
@@ -227,9 +230,10 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
 
         public Task<Exception> Error => _errorTcs.Task;
 
-        public ValueTask OnNextAsync(RawReadEvent e, CancellationToken cancellationToken)
+        public ValueTask OnNextAsync(RawRow row, CancellationToken cancellationToken)
         {
-            _channel.Writer.TryWrite(e);
+            // The row is set again for the next insert, so the event is taken from it now.
+            _channel.Writer.TryWrite(row.DecodedEvent);
             return ValueTask.CompletedTask;
         }
 
