@@ -95,14 +95,6 @@ public sealed class EventCodecBuilder<TEvent, TEventData, TMetadata> where TEven
         if (_typeMappings.Count == 0)
             throw new InvalidOperationException("No event types are mapped.");
 
-        var mappedTypes = _typeMappings.Select(m => m.EventType).ToHashSet();
-
-        var contractMappings = _contractMappers
-            .Select(m => m.ContractType)
-            .Distinct()
-            .Where(t => !mappedTypes.Contains(t))
-            .Select(t => EventTypeMapping.ReadWrite(t));
-
-        return EventTypeMap.Create([.. _typeMappings, .. contractMappings]);
+        return EventTypeMap.Create([.. _typeMappings]);
     }
 }

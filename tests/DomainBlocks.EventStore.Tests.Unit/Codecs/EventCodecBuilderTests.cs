@@ -107,35 +107,12 @@ public class EventCodecBuilderTests
 
         defaultEventUsed.ShouldBeTrue();
         defaultMetadataUsed.ShouldBeFalse();
-        codec.Encode(new OrderPlaced("o1"), [new("k", "v")]).Metadata.ShouldBe("k=v");
-    }
-
-    [Test]
-    public void AddContractMappers_RegistersTheContractTypeUnderItsTypeName()
-    {
-        var codec = BuildWithFakes(Builder().MapEvent<OrderPlaced>().AddContractMappers(new OrderShippedMapper()));
-
-        var encoded = codec.Encode(new OrderShipped("o1"), []);
-
-        encoded.EventName.ShouldBe(nameof(OrderShippedContract));
-        encoded.EventData.ShouldBe("OrderShippedContract:o1");
-        codec.Decode(encoded.EventName, encoded.EventData, null).Payload.ShouldBe(new OrderShipped("o1"));
-    }
-
-    [Test]
-    public void AddContractMappers_WhenContractTypeMappedExplicitly_KeepsTheExplicitName()
-    {
-        var codec = BuildWithFakes(Builder()
-            .MapEvents(EventTypeMapping.ReadWrite<OrderShippedContract>("Shipped"))
-            .AddContractMappers(new OrderShippedMapper()));
-
-        codec.Encode(new OrderShipped("o1"), []).EventName.ShouldBe("Shipped");
+        codec.Encode(new OrderPlaced("o1"), [KeyValuePair.Create("k", "v")]).Metadata.ShouldBe("k=v");
     }
 
     private static EventCodecBuilder<object, string, string> Builder() => new();
 
-    private static IEventCodec<object, string, string> BuildWithFakes(
-        EventCodecBuilder<object, string, string> builder)
+    private static IEventCodec<object, string, string> BuildWithFakes(EventCodecBuilder<object, string, string> builder)
     {
         return builder
             .UseEventSerializer(new FakeObjectSerializer())

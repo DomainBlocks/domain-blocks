@@ -10,7 +10,7 @@ public class EventCodecTests
 {
     private static readonly EventTypeMap TypeMap = EventTypeMap.Create(
         EventTypeMapping.ReadWrite<OrderPlaced>(),
-        EventTypeMapping.ReadWrite<OrderShippedContract>("OrderShipped"),
+        EventTypeMapping.ReadWrite<OrderShipped>(),
         EventTypeMapping.ReadOnly<OrderPlaced>("OrderPlacedV1"));
 
     private static EventCodec<object, string, string> CreateCodec(params IEventContractMapper<object>[] mappers)
@@ -59,7 +59,7 @@ public class EventCodecTests
     [Test]
     public void Encode_UnmappedType_Throws()
     {
-        Should.Throw<EventTypeNotMappedException>(() => CreateCodec().Encode(new OrderShipped("o1"), []));
+        Should.Throw<EventTypeNotMappedException>(() => CreateCodec().Encode(new OrderShippedContract("o1"), []));
     }
 
     [Test]
@@ -110,7 +110,7 @@ public class EventCodecTests
             MetadataSerializer = new FakeMetadataSerializer()
         });
 
-        Should.Throw<InvalidCastException>(() => codec.Decode("OrderShipped", "OrderShippedContract:o1", null));
+        Should.Throw<InvalidCastException>(() => codec.Decode("OrderShipped", "OrderShipped:o1", null));
     }
 
     private sealed record OrderPlaced(string OrderId);

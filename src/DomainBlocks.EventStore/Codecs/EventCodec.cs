@@ -23,8 +23,7 @@ public sealed class EventCodec<TEvent, TEventData, TMetadata> : IEventCodec<TEve
     private readonly EventTypeMap _typeMap;
     private readonly IObjectSerializer<TEventData> _eventSerializer;
     private readonly IMetadataSerializer<TMetadata> _metadataSerializer;
-    private readonly FrozenDictionary<Type, IEventContractMapper<TEvent>> _writeContractMappers;
-    private readonly FrozenDictionary<Type, IEventContractMapper<TEvent>> _readContractMappers;
+    private readonly FrozenDictionary<Type, IEventContractMapper<TEvent>> _contractMappers;
 
     public EventCodec(EventCodecOptions<TEvent, TEventData, TMetadata> options)
     {
@@ -33,21 +32,19 @@ public sealed class EventCodec<TEvent, TEventData, TMetadata> : IEventCodec<TEve
         _typeMap = options.TypeMap;
         _eventSerializer = options.EventSerializer;
         _metadataSerializer = options.MetadataSerializer;
-
-        var mappers = options.ContractMappers.ToArray();
-        _writeContractMappers = mappers.ToFrozenDictionary(x => x.EventType, x => x);
-        _readContractMappers = mappers.ToFrozenDictionary(x => x.ContractType, x => x);
+        _contractMappers = options.ContractMappers.ToFrozenDictionary(x => x.EventType, x => x);
     }
 
     public EncodedEvent<TEventData, TMetadata> Encode(
         TEvent payload,
         ReadOnlySpan<KeyValuePair<string, string>> metadata)
     {
-        var payloadToSerialize = _writeContractMappers.TryGetValue(payload.GetType(), out var mapper)
+        var eventName = _typeMap.GetEventName(payload.GetType());
+
+        var payloadToSerialize = _contractMappers.TryGetValue(payload.GetType(), out var mapper)
             ? mapper.ToContract(payload)
             : payload;
 
-        var eventName = _typeMap.GetEventName(payloadToSerialize.GetType());
         var eventData = _eventSerializer.Serialize(payloadToSerialize);
 
         var serializedMetadata = metadata.Length > 0
@@ -59,12 +56,14 @@ public sealed class EventCodec<TEvent, TEventData, TMetadata> : IEventCodec<TEve
 
     public DecodedEvent<TEvent> Decode(string eventName, TEventData eventData, TMetadata? metadata)
     {
-        var payloadType = _typeMap.GetEventType(eventName);
-        var deserializedPayload = _eventSerializer.Deserialize(eventData, payloadType);
+        var eventType = _typeMap.GetEventType(eventName);
 
-        var payload = _readContractMappers.TryGetValue(deserializedPayload.GetType(), out var mapper)
-            ? mapper.FromContract(deserializedPayload)
-            : (TEvent)deserializedPayload;
+        var payloadType = _contractMappers.TryGetValue(eventType, out var mapper)
+            ? mapper.ContractType
+            : eventType;
+
+        var deserializedPayload = _eventSerializer.Deserialize(eventData, payloadType);
+        var payload = mapper is null ? (TEvent)deserializedPayload : mapper.FromContract(deserializedPayload);
 
         return DecodedEvent.Create(payload, DecodeMetadata(metadata));
     }
