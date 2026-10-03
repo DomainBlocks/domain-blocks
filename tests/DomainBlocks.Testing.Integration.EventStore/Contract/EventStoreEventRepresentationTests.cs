@@ -96,7 +96,7 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
         if (!Harness.SupportedFormats.Contains(EventFormat.Protobuf))
             Assert.Ignore($"The store's test codec does not support {EventFormat.Protobuf}.");
 
-        var eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<ProtoTestEvent>());
+        var eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>());
         var streamId = $"test-contract-mapper-{Guid.NewGuid()}";
 
         var originalEvent = new TestEvent { Value = "test-123" };
