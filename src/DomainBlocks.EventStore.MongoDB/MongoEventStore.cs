@@ -12,7 +12,7 @@ namespace DomainBlocks.EventStore.MongoDB;
 
 public static class MongoEventStore
 {
-    private const string SequenceIdFieldName = "event_log_seq";
+    internal const string SequenceId = "event_log_seq";
 
     private static readonly StringFieldDefinition<BsonDocument, long> SequenceTargetField =
         new(EventLogEntry.FieldNames.Position);
@@ -29,7 +29,7 @@ public static class MongoEventStore
 
         var sequenceBinding = new MongoSequenceBinding<BsonDocument>(
             new CollectionNamespace(db.DatabaseNamespace, options.SequencesCollectionName),
-            SequenceIdFieldName,
+            SequenceId,
             new CollectionNamespace(db.DatabaseNamespace, options.EventLogCollectionName),
             SequenceTargetField);
 
@@ -99,7 +99,8 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
     }
 
     /// <summary>
-    /// Creates the event log's indexes if they do not already exist. Idempotent, so it can run on every start-up.
+    /// Creates the event log's indexes and its sequence document if they do not already exist. Idempotent, so it can run
+    /// on every start-up. It must have run before the first append.
     /// </summary>
     public Task EnsureInitializedAsync(CancellationToken cancellationToken = default)
     {
