@@ -17,8 +17,8 @@ using RawReadEvent = ReadEvent<
     LogPosition>;
 
 /// <summary>
-/// Exercises the logical replication session through the feed, against a real server. Events are decoded with a
-/// pass-through decoder so that the raw column values can be asserted on.
+/// Exercises the logical replication session through the feed, against a real server. The event of each row is decoded
+/// with a pass-through decoder so that the raw column values can be asserted on.
 /// </summary>
 [TestFixture]
 public class ReplicationEventLogFeedTests : PostgresIntegrationTest
@@ -144,7 +144,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
     {
         var missingNames = new SchemaObjectNames("dbx_no_such_schema");
 
-        var feed = new EventLogFeed<RawReadEvent>(
+        var feed = new EventLogFeed<EventLogRow<RawEvent>>(
             token => ReplicationEventLogSession.OpenAsync(
                 PostgresTestEnvironment.ConnectionString,
                 NextSlotName(),
@@ -168,9 +168,9 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
         await connection.Completion.WaitAsync(ct).ShouldThrowAsync<PostgresException>();
     }
 
-    private EventLogFeed<RawReadEvent> CreateFeed()
+    private EventLogFeed<EventLogRow<RawEvent>> CreateFeed()
     {
-        return new EventLogFeed<RawReadEvent>(
+        return new EventLogFeed<EventLogRow<RawEvent>>(
             ct => ReplicationEventLogSession.OpenAsync(
                 PostgresTestEnvironment.ConnectionString,
                 NextSlotName(),
@@ -218,7 +218,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
         }
     }
 
-    private sealed class CollectingObserver : IEventLogObserver<RawReadEvent>
+    private sealed class CollectingObserver : IEventLogObserver<EventLogRow<RawEvent>>
     {
         private readonly Channel<RawReadEvent> _channel = Channel.CreateUnbounded<RawReadEvent>();
 
@@ -227,9 +227,10 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
 
         public Task<Exception> Error => _errorTcs.Task;
 
-        public ValueTask OnNextAsync(RawReadEvent e, CancellationToken cancellationToken)
+        public ValueTask OnNextAsync(EventLogRow<RawEvent> row, CancellationToken cancellationToken)
         {
-            _channel.Writer.TryWrite(e);
+            // The row is only valid during this call.
+            _channel.Writer.TryWrite(row.DecodedEvent);
             return ValueTask.CompletedTask;
         }
 
