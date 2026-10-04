@@ -20,13 +20,13 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// <para>
 /// A cycle is restarted from the last delivered position, after emitting
 /// <see cref="SubscriptionMessage{TEvent,TStreamId,TStreamPos,TLogPos}.FellBehind"/>, when the subscriber's queue
-/// overflows or when the feed has been re-established and may have missed rows. A restart that is signalled while the
-/// cycle is still replaying takes effect once the replay has reached the high-water mark. The replay is never abandoned
+/// overflows or when the feed has been re-established and may have missed rows. A restart signaled while the cycle is
+/// still replaying takes effect once the replay has reached the high-water mark. The replay is never abandoned
 /// part-way, as the next cycle would have to start it again.
 /// </para>
 /// <para>
 /// The live feed hands every subscription each row of the log undecoded. A subscription takes the event of a row only
-/// if it selects the row, so it neither decodes nor queues the events it does not select, and an event that cannot be
+/// if it selects the row. It neither decodes nor queues the events it does not select, and an event that cannot be
 /// decoded fails only the subscriptions that select it.
 /// </para>
 /// <para>
@@ -247,9 +247,9 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                 yield return SubscriptionMessage.Event(e);
         }
 
-        // A restart that was signalled during the replay takes effect only now that the replay is complete. Cancelling
-        // the replay instead would throw away the part of the log it had already read through without delivering
-        // anything, and a replay that takes longer than the queue takes to overflow would never finish.
+        // A restart signaled during the replay takes effect only now that the replay is complete. Cancelling the replay
+        // instead would throw away the part of the log it had already read through without delivering anything, and a
+        // replay that takes longer than the queue takes to overflow would never finish.
         if (observer.RestartToken.IsCancellationRequested)
             yield break;
 
@@ -288,8 +288,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
     /// <summary>
     /// Buffers the live events that a subscription selects, for one subscription cycle. Never blocks the feed: an
-    /// overflow, like a feed reset, cancels the restart token and completes the channel so that the cycle ends and a new
-    /// one starts from the last position.
+    /// overflow, like a feed reset, cancels the restart token and completes the channel so that the cycle ends and a
+    /// new one starts from the last position.
     /// </summary>
     internal sealed class Observer(int queueCapacity, EventFilter liveFilter) :
         IEventLogObserver<EventLogRow<TEvent>>,
