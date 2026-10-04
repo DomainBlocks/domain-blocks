@@ -364,7 +364,7 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(
             .SubscribeToStream(targetStream, options: new SubscriptionOptions { QueueCapacity = 1 })
             .GetAsyncEnumerator(cancellationToken);
 
-        // Observes every event, so it shows when the live feed has passed them all to the subscription under test.
+        // A second subscription, used to tell when the live feed has delivered all the appended events.
         await using var witness = EventStore
             .SubscribeToAll(SubscriptionOrigin.Start)
             .GetAsyncEnumerator(cancellationToken);
@@ -374,15 +374,18 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(
 
         // The subscription is not being read, so the other stream's events overflow its queue before it has observed
         // an event of its own. The target event is appended before the subscription recovers.
-        await EventStore.AppendAsync(
-            otherStream,
-            CreateEvents("other-1", "other-2"),
-            cancellationToken: cancellationToken);
+        var otherEvents = CreateEvents("other-1", "other-2");
+        await EventStore.AppendAsync(otherStream, otherEvents, cancellationToken: cancellationToken);
 
         var targetEvent = new TestEvent { Value = "target" };
         await EventStore.AppendAsync(targetStream, [targetEvent], cancellationToken: cancellationToken);
 
-        for (var i = 0; i < 3; i++)
+        // Wait until the witness has seen every appended event before reading the subscription under test. The feed
+        // delivers each event to all subscribers, so by then the subscription's queue (capacity 1) must have
+        // overflowed.
+        var appendedCount = otherEvents.Length + 1;
+
+        for (var i = 0; i < appendedCount; i++)
             await GetNextEventAsync(witness);
 
         var observed = await ReadUntilRecoveredAsync(enumerator);
