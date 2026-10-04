@@ -99,8 +99,8 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
     }
 
     /// <summary>
-    /// Creates the event log's indexes and its sequence document if they do not already exist. Idempotent, so it can run
-    /// on every start-up. It must have run before the first append.
+    /// Creates the event log's indexes and its sequence document if they do not already exist. Idempotent, so it can
+    /// run on every start-up. It must have run before the first append.
     /// </summary>
     public Task EnsureInitializedAsync(CancellationToken cancellationToken = default)
     {

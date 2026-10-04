@@ -112,7 +112,7 @@ public class MongoEventStoreAdminTests
 
     private Task<BsonDocument?> ClaimPositionAsync(IClientSessionHandle session, CancellationToken ct)
     {
-        return Sequences.FindOneAndUpdateAsync<BsonDocument?>(
+        return Sequences.FindOneAndUpdateAsync(
             session,
             Builders<BsonDocument>.Filter.Eq("_id", MongoEventStore.SequenceId),
             Builders<BsonDocument>.Update.Inc("next", 1L),
