@@ -13,6 +13,18 @@ internal sealed class EventLogSql
     private const string ColumnsWithoutMetadata =
         "position, stream_id, stream_position, event_name, event_data, event_data_bytes, NULL::jsonb, created_at";
 
+    /// <summary>
+    /// The number of parameters that a page of <see cref="ReadStream"/> binds: the stream ID, the key, and the limit.
+    /// The parameters of a condition are numbered after them.
+    /// </summary>
+    public const int ReadStreamParameterCount = 3;
+
+    /// <summary>
+    /// The number of parameters that a page of <see cref="ReadAll"/> binds: the key and the limit. The parameters of a
+    /// condition are numbered after them.
+    /// </summary>
+    public const int ReadAllParameterCount = 2;
+
     public EventLogSql(SchemaObjectNames names)
     {
         var eventLog = names.EventLog;
@@ -68,18 +80,6 @@ internal sealed class EventLogSql
     public string ReadCatchUpAll { get; }
 
     public string ReadCatchUpStream { get; }
-
-    /// <summary>
-    /// The number of parameters that a page of <see cref="ReadStream"/> binds: the stream ID, the key, and the limit.
-    /// The parameters of a condition are numbered after them.
-    /// </summary>
-    public const int ReadStreamParameterCount = 3;
-
-    /// <summary>
-    /// The number of parameters that a page of <see cref="ReadAll"/> binds: the key and the limit. The parameters of a
-    /// condition are numbered after them.
-    /// </summary>
-    public const int ReadAllParameterCount = 2;
 
     /// <summary>
     /// The query for a page of the read, with a further condition that rows must meet if one is given.
