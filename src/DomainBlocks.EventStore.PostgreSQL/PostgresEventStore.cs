@@ -48,7 +48,7 @@ public static class PostgresEventStore
             logger);
     }
 
-    private static RefCountedEventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>> CreateFeed<TEvent>(
+    private static RefCountedEventLogFeed<EventLogRow<TEvent>> CreateFeed<TEvent>(
         NpgsqlDataSource dataSource,
         SchemaObjectNames names,
         PostgresEventStoreOptions options,
@@ -72,8 +72,8 @@ public static class PostgresEventStore
             MaxRetryAttempts = replicationOptions.MaxRetryAttempts
         };
 
-        return new RefCountedEventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>>(() =>
-            new EventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>>(
+        return new RefCountedEventLogFeed<EventLogRow<TEvent>>(() =>
+            new EventLogFeed<EventLogRow<TEvent>>(
                 ct => ReplicationEventLogSession.OpenAsync(
                     connectionString,
                     slotNames.Next(),
@@ -102,7 +102,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
     private readonly PostgresEventStoreAdminOptions _adminOptions;
     private readonly IAppender _appender;
     private readonly EventLogReader<TEvent> _reader;
-    private readonly RefCountedEventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>> _feed;
+    private readonly RefCountedEventLogFeed<EventLogRow<TEvent>> _feed;
     private readonly IEventCodec<TEvent, PostgresEventData, string> _eventCodec;
     private readonly ILogger? _logger;
 
@@ -113,7 +113,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         PostgresEventStoreAdminOptions adminOptions,
         IAppender appender,
         EventLogReader<TEvent> reader,
-        RefCountedEventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>> feed,
+        RefCountedEventLogFeed<EventLogRow<TEvent>> feed,
         IEventCodec<TEvent, PostgresEventData, string> eventCodec,
         ILogger? logger)
     {
@@ -265,7 +265,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
             static async (reader, ct) => await reader.GetMaxPositionAsync(ct).ConfigureAwait(false) is { } pos
                 ? LogPosition.FromInt64(pos)
                 : null,
-            static _ => true,
+            EventFilter.All,
             static ctx => ctx.LogPosition,
             origin,
             options,
@@ -287,7 +287,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
             async (reader, ct) => await reader.GetMaxStreamPositionAsync(streamId, ct).ConfigureAwait(false) is { } pos
                 ? StreamPosition.FromInt64(pos)
                 : null,
-            ctx => ctx.StreamId == streamId,
+            EventFilter.StreamIds(streamId),
             static ctx => ctx.StreamPosition,
             origin,
             options,

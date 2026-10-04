@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
+using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.PostgreSQL.Feeds;
 using Microsoft.Extensions.Logging;
 
@@ -22,6 +23,11 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// overflows or when the feed has been re-established and may have missed rows.
 /// </para>
 /// <para>
+/// The live feed hands every subscription each row of the log undecoded. A subscription takes the event of a row only
+/// if it selects the row, so it neither decodes nor queues the events it does not select, and an event that cannot be
+/// decoded fails only the subscriptions that select it.
+/// </para>
+/// <para>
 /// A subscription from the end is pinned to the last position at the time it starts. A cycle that restarts before
 /// delivering an event then resumes from that position, rather than from a later end that would skip the events
 /// appended in between.
@@ -33,10 +39,10 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     where TPos : struct, IPosition<TPos>
 {
     private readonly EventLogReader<TEvent> _reader;
-    private readonly IRefCountedEventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>> _feed;
+    private readonly IRefCountedEventLogFeed<EventLogRow<TEvent>> _feed;
     private readonly CatchUpReader _catchUpReader;
     private readonly EndPositionReader _endPositionReader;
-    private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, bool> _livePredicate;
+    private readonly EventFilter _liveFilter;
     private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> _positionSelector;
     private readonly SubscriptionOrigin<TPos> _origin;
     private readonly SubscriptionOptions _options;
@@ -45,10 +51,10 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
     public SubscriptionAsyncEnumerable(
         EventLogReader<TEvent> reader,
-        IRefCountedEventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>> feed,
+        IRefCountedEventLogFeed<EventLogRow<TEvent>> feed,
         CatchUpReader catchUpReader,
         EndPositionReader endPositionReader,
-        Func<ReadEventContext<string, StreamPosition, LogPosition>, bool> livePredicate,
+        EventFilter liveFilter,
         Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> positionSelector,
         SubscriptionOrigin<TPos>? origin,
         SubscriptionOptions? options,
@@ -58,7 +64,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         _options = options ?? SubscriptionOptions.Default;
         _catchUpReader = catchUpReader;
         _endPositionReader = endPositionReader;
-        _livePredicate = livePredicate;
+        _liveFilter = liveFilter;
         _positionSelector = positionSelector;
         _reader = reader;
         _feed = feed;
@@ -89,7 +95,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
             {
                 // Attach the new observer before detaching the old one, so that the ref count never drops to zero
                 // between cycles and the feed's replication session survives a restart.
-                var nextObserver = new Observer(_options.QueueCapacity);
+                var nextObserver = new Observer(_options.QueueCapacity, _liveFilter);
                 var nextAttachment = await AttachObserverAsync(nextObserver, cancellationToken).ConfigureAwait(false);
 
                 if (attachment is not null)
@@ -252,7 +258,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
         await foreach (var e in observer.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
         {
-            if ((long)e.Context.LogPosition.Value <= highWaterMark || !_livePredicate(e.Context))
+            // Catching up has delivered it.
+            if ((long)e.Context.LogPosition.Value <= highWaterMark)
                 continue;
 
             yield return SubscriptionMessage.Event(e);
@@ -279,11 +286,12 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     }
 
     /// <summary>
-    /// Buffers live events for one subscription cycle. Never blocks the feed: an overflow, like a feed reset, cancels
-    /// the restart token and completes the channel so that the cycle ends and a new one starts from the last position.
+    /// Buffers the live events that a subscription selects, for one subscription cycle. Never blocks the feed: an
+    /// overflow, like a feed reset, cancels the restart token and completes the channel so that the cycle ends and a new
+    /// one starts from the last position.
     /// </summary>
-    internal sealed class Observer(int queueCapacity) :
-        IEventLogObserver<ReadEvent<TEvent, string, StreamPosition, LogPosition>>,
+    internal sealed class Observer(int queueCapacity, EventFilter liveFilter) :
+        IEventLogObserver<EventLogRow<TEvent>>,
         IDisposable
     {
         private readonly Channel<ReadEvent<TEvent, string, StreamPosition, LogPosition>> _channel =
@@ -296,6 +304,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
         private readonly CancellationTokenSource _restartCts = new();
         private int _restartReason;
+        private bool _hasFailed;
 
         public ChannelReader<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Reader => _channel.Reader;
 
@@ -303,10 +312,30 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
         public RestartReason RestartReason => (RestartReason)Volatile.Read(ref _restartReason);
 
-        public ValueTask OnNextAsync(
-            ReadEvent<TEvent, string, StreamPosition, LogPosition> e,
-            CancellationToken cancellationToken)
+        public ValueTask OnNextAsync(EventLogRow<TEvent> row, CancellationToken cancellationToken)
         {
+            // A subscription that has failed is waiting to say so. A row that it could not queue would be taken for
+            // falling behind.
+            if (_hasFailed || !liveFilter.Matches(row))
+                return ValueTask.CompletedTask;
+
+            ReadEvent<TEvent, string, StreamPosition, LogPosition> e;
+
+            try
+            {
+                // The row is only valid during this call, so the event is taken from it now.
+                e = row.DecodedEvent;
+            }
+            catch (Exception ex)
+            {
+                // An event that cannot be decoded fails this subscription, as it would a read. Thrown to the feed, it
+                // would detach the observer without telling the subscriber.
+                _hasFailed = true;
+                _channel.Writer.TryComplete(ex);
+
+                return ValueTask.CompletedTask;
+            }
+
             if (!_channel.Writer.TryWrite(e))
                 Restart(RestartReason.QueueOverflow);
 

@@ -354,7 +354,7 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task SubscribeToStream_FromEndWhenQueueOverflowsBeforeFirstEvent_ObservesEventsAppendedSince(
+    public async Task SubscribeToStream_FromEndWhenOtherStreamsFillQueueFirst_ObservesEventsAppendedSince(
         CancellationToken cancellationToken)
     {
         var targetStream = NewStreamId();
@@ -372,8 +372,10 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(
         await ShouldBeCaughtUpAsync(enumerator);
         await ShouldBeCaughtUpAsync(witness);
 
-        // The subscription is not being read, so the other stream's events overflow its queue before it has observed
-        // an event of its own. The target event is appended before the subscription recovers.
+        // The subscription is not being read while more events are appended to another stream than its queue holds,
+        // followed by one to its own. A store that queues every event for a stream subscription overflows the queue
+        // before the subscription has observed an event of its own, and has to recover from where it started rather
+        // than from a later end. A store that only queues the events of the stream delivers the target event live.
         var otherEvents = CreateEvents("other-1", "other-2");
         await EventStore.AppendAsync(otherStream, otherEvents, cancellationToken: cancellationToken);
 
@@ -381,16 +383,19 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(
         await EventStore.AppendAsync(targetStream, [targetEvent], cancellationToken: cancellationToken);
 
         // Wait until the witness has seen every appended event before reading the subscription under test. The feed
-        // delivers each event to all subscribers, so by then the subscription's queue (capacity 1) must have
-        // overflowed.
+        // delivers each event to all subscribers, so by then the subscription has been given them all.
         var appendedCount = otherEvents.Length + 1;
 
         for (var i = 0; i < appendedCount; i++)
             await GetNextEventAsync(witness);
 
-        var observed = await ReadUntilRecoveredAsync(enumerator);
-        observed.Events.ShouldBe([targetEvent]);
-        observed.FellBehindCount.ShouldBeGreaterThan(0);
+        // The target event is the next event, whether or not the subscription fell behind on the way to it.
+        do
+        {
+            (await enumerator.MoveNextAsync()).ShouldBeTrue();
+        } while (enumerator.Current.Event is null);
+
+        enumerator.Current.Event.Value.Payload.ShouldBe(targetEvent);
     }
 
     [Test]

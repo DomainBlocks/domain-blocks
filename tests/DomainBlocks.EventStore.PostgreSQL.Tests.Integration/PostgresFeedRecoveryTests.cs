@@ -118,6 +118,26 @@ public class PostgresFeedRecoveryTests() : PostgresIntegrationTest(x =>
         (await NextEventAsync(second)).Payload.ShouldBe(live);
     }
 
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToStream_FromEndWhenWalSenderIsTerminatedBeforeFirstEvent_ObservesEventsAppendedSince(
+        CancellationToken ct)
+    {
+        await using var enumerator = _eventStore.SubscribeToStream("s1").GetAsyncEnumerator(ct);
+
+        await ShouldBeCaughtUpAsync(enumerator);
+        await TerminateWalSenderAsync(ct);
+
+        // The subscription has observed nothing yet, so it recovers from where it started. Recovering from a later end
+        // would skip these.
+        var during = await AppendEventsAsync("during", 5, ct);
+
+        var recovered = await ReadUntilRecoveredAsync(enumerator);
+
+        recovered.Events.ShouldBe(during);
+        recovered.FellBehindCount.ShouldBeGreaterThan(0);
+    }
+
     private async Task<TestEvent[]> AppendEventsAsync(string prefix, int count, CancellationToken ct)
     {
         var events = Enumerable.Range(0, count).Select(i => new TestEvent { Value = $"{prefix}-{i}" }).ToArray();
