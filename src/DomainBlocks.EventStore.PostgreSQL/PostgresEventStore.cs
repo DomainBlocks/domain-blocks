@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Codecs;
+using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.PostgreSQL.Feeds;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -178,6 +179,8 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         ReadOrigin<LogPosition>? origin = null,
         ReadAllOptions? options = null)
     {
+        ThrowIfFiltered(options?.Filter, nameof(ReadAll));
+
         return Impl();
 
         async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Impl(
@@ -210,6 +213,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         ReadStreamOptions? options = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(streamId);
+        ThrowIfFiltered(options?.Filter, nameof(ReadStream));
 
         return Impl();
 
@@ -253,6 +257,8 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         SubscriptionOrigin<LogPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
+        ThrowIfFiltered(options?.Filter, nameof(SubscribeToAll));
+
         return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
             _reader,
             _feed,
@@ -273,6 +279,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         SubscriptionOptions? options = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(streamId);
+        ThrowIfFiltered(options?.Filter, nameof(SubscribeToStream));
 
         return new SubscriptionAsyncEnumerable<TEvent, StreamPosition>(
             _reader,
@@ -287,6 +294,10 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
             options,
             _logger);
     }
+
+    // Filters are not supported yet. One is refused rather than ignored.
+    private static void ThrowIfFiltered(EventFilter? filter, string operation) =>
+        EventFilterNotSupportedException.ThrowIfFiltered(filter, $"{nameof(PostgresEventStore)}.{operation}");
 
     public async ValueTask DisposeAsync()
     {

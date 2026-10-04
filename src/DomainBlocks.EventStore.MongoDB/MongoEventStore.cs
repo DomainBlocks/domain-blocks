@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Codecs;
+using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using DomainBlocks.MongoDB.Sequencing;
 using Microsoft.Extensions.Logging;
@@ -145,6 +146,8 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         ReadOrigin<LogPosition>? origin = null,
         ReadAllOptions? options = null)
     {
+        ThrowIfFiltered(options?.Filter, nameof(ReadAll));
+
         return Impl();
 
         async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Impl(
@@ -180,6 +183,8 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         ReadOrigin<StreamPosition>? origin = null,
         ReadStreamOptions? options = null)
     {
+        ThrowIfFiltered(options?.Filter, nameof(ReadStream));
+
         return Impl();
 
         async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Impl(
@@ -235,6 +240,8 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         SubscriptionOrigin<LogPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
+        ThrowIfFiltered(options?.Filter, nameof(SubscribeToAll));
+
         return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
             _eventLog,
             _allEventsSubject,
@@ -254,6 +261,8 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         SubscriptionOrigin<StreamPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
+        ThrowIfFiltered(options?.Filter, nameof(SubscribeToStream));
+
         return new SubscriptionAsyncEnumerable<TEvent, StreamPosition>(
             _eventLog,
             _allEventsSubject,
@@ -267,6 +276,10 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
             options,
             _logger);
     }
+
+    // Filters are not supported yet. One is refused rather than ignored.
+    private static void ThrowIfFiltered(EventFilter? filter, string operation) =>
+        EventFilterNotSupportedException.ThrowIfFiltered(filter, $"{nameof(MongoEventStore)}.{operation}");
 
     public async ValueTask DisposeAsync()
     {

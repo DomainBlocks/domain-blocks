@@ -18,6 +18,12 @@ internal sealed class FakeEventStore : IEventStore<object, string, StreamPositio
 
     public List<SubscriptionMessage<object, string, StreamPosition, LogPosition>> SubscriptionMessages { get; } = [];
 
+    public ReadAllOptions? LastReadAllOptions { get; private set; }
+
+    public ReadStreamOptions? LastReadStreamOptions { get; private set; }
+
+    public SubscriptionOptions? LastSubscriptionOptions { get; private set; }
+
     public bool Disposed { get; private set; }
 
     public int InitializeCalls { get; private set; }
@@ -47,6 +53,7 @@ internal sealed class FakeEventStore : IEventStore<object, string, StreamPositio
         ReadOrigin<LogPosition>? origin = null,
         ReadAllOptions? options = null)
     {
+        LastReadAllOptions = options;
         return Replay(ReadEvents);
     }
 
@@ -56,6 +63,7 @@ internal sealed class FakeEventStore : IEventStore<object, string, StreamPositio
         ReadOrigin<StreamPosition>? origin = null,
         ReadStreamOptions? options = null)
     {
+        LastReadStreamOptions = options;
         return Replay(ReadEvents);
     }
 
@@ -63,6 +71,7 @@ internal sealed class FakeEventStore : IEventStore<object, string, StreamPositio
         SubscriptionOrigin<LogPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
+        LastSubscriptionOptions = options;
         return Replay(SubscriptionMessages);
     }
 
@@ -71,6 +80,7 @@ internal sealed class FakeEventStore : IEventStore<object, string, StreamPositio
         SubscriptionOrigin<StreamPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
+        LastSubscriptionOptions = options;
         return Replay(SubscriptionMessages);
     }
 

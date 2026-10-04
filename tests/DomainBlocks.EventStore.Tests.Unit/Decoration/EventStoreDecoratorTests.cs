@@ -1,3 +1,4 @@
+using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.Metadata;
 using DomainBlocks.EventStore.Transforms;
 using NUnit.Framework;
@@ -195,6 +196,29 @@ public class EventStoreDecoratorTests
 
         _inner.Appends[0].Events.Single().Metadata.ShouldBe([new("index", "0")]);
         _inner.Appends[1].Events.Single().Metadata.ShouldBe([new("index", "1")]);
+    }
+
+    [Test]
+    public void ReadsAndSubscriptions_WithTransforms_PassOptionsToInnerStoreUnchanged()
+    {
+        var store = _inner.WithReadTransforms(new SplitTransform());
+        var filter = EventFilter.EventNames(nameof(Legacy));
+        var readAllOptions = new ReadAllOptions { Filter = filter };
+        var readStreamOptions = new ReadStreamOptions { Filter = filter };
+        var subscriptionOptions = new SubscriptionOptions { Filter = filter };
+
+        store.ReadAll(options: readAllOptions);
+        _inner.LastReadAllOptions.ShouldBeSameAs(readAllOptions);
+
+        store.ReadStream("s", options: readStreamOptions);
+        _inner.LastReadStreamOptions.ShouldBeSameAs(readStreamOptions);
+
+        store.SubscribeToAll(options: subscriptionOptions);
+        _inner.LastSubscriptionOptions.ShouldBeSameAs(subscriptionOptions);
+
+        var otherSubscriptionOptions = new SubscriptionOptions { Filter = filter };
+        store.SubscribeToStream("s", options: otherSubscriptionOptions);
+        _inner.LastSubscriptionOptions.ShouldBeSameAs(otherSubscriptionOptions);
     }
 
     [Test]
