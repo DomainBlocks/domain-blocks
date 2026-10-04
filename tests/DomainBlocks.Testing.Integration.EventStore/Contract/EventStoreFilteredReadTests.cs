@@ -7,9 +7,9 @@ namespace DomainBlocks.Testing.Integration.EventStore.Contract;
 
 /// <summary>
 /// Reading with an event filter. Each case of <see cref="EventFilterTestLog"/> is read from one log, and what a store
-/// reads is compared with what the case expects, which is written by hand. The same expectation is checked against
-/// the filter evaluated in memory, so the store and the in-memory evaluation are each held to the same meaning.
-/// A store that does not filter reads refuses a filter rather than ignoring it.
+/// reads is compared with what the case expects, which is written by hand. The same expectation is checked against the
+/// filter evaluated in memory, so the store and the in-memory evaluation are each held to the same meaning. A store
+/// that does not filter reads refuses a filter rather than ignoring it.
 /// </summary>
 public abstract class EventStoreFilteredReadTests<TStreamPos, TLogPos>(
     IEventStoreTestHarness<TStreamPos, TLogPos> harness) :
@@ -22,19 +22,19 @@ public abstract class EventStoreFilteredReadTests<TStreamPos, TLogPos>(
 
     private IEventStore<object, string, TStreamPos, TLogPos> _eventStore = null!;
     private ReadEvent<object, string, TStreamPos, TLogPos>[] _log = [];
-    private LoggedEvent[] _loggedEvents = [];
+    private EventFilterTestLog.LoggedEvent[] _loggedEvents = [];
     private DateTimeOffset _midpoint;
 
-    public static IEnumerable<EventFilterCase> Cases => EventFilterTestLog.Cases;
+    public static IEnumerable<EventFilterTestLog.Case> Cases => EventFilterTestLog.Cases;
 
     [OneTimeSetUp]
-    public async Task AppendLogAsync()
+    public async Task OneTimeSetUp()
     {
         _eventStore = CreateEventStore(EventFilterTestLog.TypeMap);
 
         var index = 0;
 
-        foreach (var (streamId, e) in EventFilterTestLog.Events())
+        foreach (var (streamId, e) in EventFilterTestLog.GenerateEvents())
         {
             if (EventFilterTestLog.PauseBeforeIndexes.Contains(index++))
                 await Task.Delay(50);
@@ -47,7 +47,7 @@ public abstract class EventStoreFilteredReadTests<TStreamPos, TLogPos>(
 
         _loggedEvents =
         [
-            .. _log.Select((x, i) => new LoggedEvent(
+            .. _log.Select((x, i) => new EventFilterTestLog.LoggedEvent(
                 i,
                 x.Context.EventName,
                 x.Context.StreamId,
@@ -59,7 +59,7 @@ public abstract class EventStoreFilteredReadTests<TStreamPos, TLogPos>(
     }
 
     [OneTimeTearDown]
-    public async Task DisposeStoreAsync()
+    public async Task OneTimeTearDown()
     {
         if (_eventStore is { } eventStore)
             await eventStore.DisposeAsync();
@@ -75,17 +75,17 @@ public abstract class EventStoreFilteredReadTests<TStreamPos, TLogPos>(
     }
 
     [TestCaseSource(nameof(Cases))]
-    public void Expected_AnyCase_SelectsAsMuchOfLogAsCaseDeclares(EventFilterCase filterCase)
+    public void Expected_AnyCase_SelectsAsMuchOfLogAsCaseDeclares(EventFilterTestLog.Case filterCase)
     {
         var count = Expected(filterCase).Length;
 
         switch (filterCase.Selects)
         {
-            case CaseSelection.Nothing:
+            case EventFilterTestLog.CaseSelection.Nothing:
                 count.ShouldBe(0);
                 break;
 
-            case CaseSelection.Everything:
+            case EventFilterTestLog.CaseSelection.Everything:
                 count.ShouldBe(_loggedEvents.Length);
                 break;
 
@@ -96,7 +96,7 @@ public abstract class EventStoreFilteredReadTests<TStreamPos, TLogPos>(
     }
 
     [TestCaseSource(nameof(Cases))]
-    public void Matches_AnyCase_SelectsEventsThatCaseExpects(EventFilterCase filterCase)
+    public void Matches_AnyCase_SelectsEventsThatCaseExpects(EventFilterTestLog.Case filterCase)
     {
         var filter = filterCase.Filter(_midpoint);
 
@@ -109,7 +109,7 @@ public abstract class EventStoreFilteredReadTests<TStreamPos, TLogPos>(
     {
         RequireNoCapability(StoreCapabilities.FilteredReads);
 
-        var options = new ReadAllOptions { Filter = EventFilter.EventNames(nameof(OrderPlaced)) };
+        var options = new ReadAllOptions { Filter = EventFilter.EventNames(nameof(EventFilterTestLog.OrderPlaced)) };
 
         Should.Throw<EventFilterNotSupportedException>(() => _eventStore.ReadAll(options: options));
     }
@@ -119,7 +119,7 @@ public abstract class EventStoreFilteredReadTests<TStreamPos, TLogPos>(
     {
         RequireNoCapability(StoreCapabilities.FilteredReads);
 
-        var options = new ReadStreamOptions { Filter = EventFilter.EventNames(nameof(OrderPlaced)) };
+        var options = new ReadStreamOptions { Filter = EventFilter.EventNames(nameof(EventFilterTestLog.OrderPlaced)) };
 
         Should.Throw<EventFilterNotSupportedException>(() => _eventStore.ReadStream(StreamId, options: options));
     }
@@ -127,7 +127,7 @@ public abstract class EventStoreFilteredReadTests<TStreamPos, TLogPos>(
     [TestCaseSource(nameof(Cases))]
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task ReadAll_WithFilter_ReadsSelectedEventsInOrder(
-        EventFilterCase filterCase,
+        EventFilterTestLog.Case filterCase,
         CancellationToken cancellationToken)
     {
         RequireCapability(StoreCapabilities.FilteredReads);
@@ -148,13 +148,13 @@ public abstract class EventStoreFilteredReadTests<TStreamPos, TLogPos>(
     [TestCaseSource(nameof(Cases))]
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task ReadStream_WithFilter_ReadsSelectedEventsOfStreamInOrder(
-        EventFilterCase filterCase,
+        EventFilterTestLog.Case filterCase,
         CancellationToken cancellationToken)
     {
         RequireCapability(StoreCapabilities.FilteredReads);
 
         var options = new ReadStreamOptions { Filter = filterCase.Filter(_midpoint) };
-        LoggedEvent[] expected = [.. Expected(filterCase).Where(e => e.StreamId == StreamId)];
+        EventFilterTestLog.LoggedEvent[] expected = [.. Expected(filterCase).Where(e => e.StreamId == StreamId)];
 
         var forward = await _eventStore.ReadStream(StreamId, options: options).ToArrayAsync(cancellationToken);
         ShouldBe(forward, expected);
@@ -173,7 +173,7 @@ public abstract class EventStoreFilteredReadTests<TStreamPos, TLogPos>(
         RequireCapability(StoreCapabilities.FilteredReads);
 
         var options = new ReadAllOptions { Filter = EventFilter.MetadataExists("tenant"), MaxCount = 3 };
-        LoggedEvent[] expected = [.. _loggedEvents.Where(e => e.Metadata.ContainsKey("tenant"))];
+        EventFilterTestLog.LoggedEvent[] expected = [.. _loggedEvents.Where(e => e.Metadata.ContainsKey("tenant"))];
         expected.Length.ShouldBeGreaterThan(3);
 
         var forward = await _eventStore.ReadAll(options: options).ToArrayAsync(cancellationToken);
@@ -194,10 +194,8 @@ public abstract class EventStoreFilteredReadTests<TStreamPos, TLogPos>(
 
         var options = new ReadStreamOptions { Filter = !EventFilter.MetadataExists("note"), MaxCount = 3 };
 
-        LoggedEvent[] expected =
-        [
-            .. _loggedEvents.Where(e => e.StreamId == StreamId && !e.Metadata.ContainsKey("note"))
-        ];
+        EventFilterTestLog.LoggedEvent[] expected =
+            [.. _loggedEvents.Where(e => e.StreamId == StreamId && !e.Metadata.ContainsKey("note"))];
 
         expected.Length.ShouldBeGreaterThan(3);
 
@@ -219,8 +217,10 @@ public abstract class EventStoreFilteredReadTests<TStreamPos, TLogPos>(
 
         const int originIndex = 17;
         var origin = ReadOrigin.At(_log[originIndex].Context.LogPosition);
-        var options = new ReadAllOptions { Filter = EventFilter.EventNames(nameof(OrderShipped)) };
-        LoggedEvent[] expected = [.. _loggedEvents.Where(e => e.EventName == nameof(OrderShipped))];
+        var options = new ReadAllOptions { Filter = EventFilter.EventNames(nameof(EventFilterTestLog.OrderShipped)) };
+
+        EventFilterTestLog.LoggedEvent[] expected =
+            [.. _loggedEvents.Where(e => e.EventName == nameof(EventFilterTestLog.OrderShipped))];
 
         var forward = await _eventStore
             .ReadAll(ReadDirection.Forward, origin, options)
@@ -242,11 +242,17 @@ public abstract class EventStoreFilteredReadTests<TStreamPos, TLogPos>(
     {
         RequireCapability(StoreCapabilities.FilteredReads);
 
-        LoggedEvent[] streamEvents = [.. _loggedEvents.Where(e => e.StreamId == StreamId)];
+        EventFilterTestLog.LoggedEvent[] streamEvents = [.. _loggedEvents.Where(e => e.StreamId == StreamId)];
         var originIndex = streamEvents[3].Index;
         var origin = ReadOrigin.At(_log[originIndex].Context.StreamPosition);
-        var options = new ReadStreamOptions { Filter = EventFilter.EventNames(nameof(OrderShipped)) };
-        LoggedEvent[] expected = [.. streamEvents.Where(e => e.EventName == nameof(OrderShipped))];
+
+        var options = new ReadStreamOptions
+        {
+            Filter = EventFilter.EventNames(nameof(EventFilterTestLog.OrderShipped))
+        };
+
+        EventFilterTestLog.LoggedEvent[] expected =
+            [.. streamEvents.Where(e => e.EventName == nameof(EventFilterTestLog.OrderShipped))];
 
         var forward = await _eventStore
             .ReadStream(StreamId, ReadDirection.Forward, origin, options)
@@ -285,7 +291,7 @@ public abstract class EventStoreFilteredReadTests<TStreamPos, TLogPos>(
 
         var options = new ReadStreamOptions
         {
-            Filter = EventFilter.EventNames(nameof(InvoiceRaised)),
+            Filter = EventFilter.EventNames(nameof(EventFilterTestLog.InvoiceRaised)),
             StreamNotFoundBehavior = StreamNotFoundBehavior.Throw
         };
 
@@ -302,7 +308,7 @@ public abstract class EventStoreFilteredReadTests<TStreamPos, TLogPos>(
 
         var options = new ReadStreamOptions
         {
-            Filter = EventFilter.EventNames(nameof(OrderPlaced)),
+            Filter = EventFilter.EventNames(nameof(EventFilterTestLog.OrderPlaced)),
             StreamNotFoundBehavior = StreamNotFoundBehavior.Throw
         };
 
@@ -310,13 +316,13 @@ public abstract class EventStoreFilteredReadTests<TStreamPos, TLogPos>(
             await _eventStore.ReadStream("no-such-stream", options: options).ToArrayAsync(cancellationToken));
     }
 
-    private LoggedEvent[] Expected(EventFilterCase filterCase) =>
+    private EventFilterTestLog.LoggedEvent[] Expected(EventFilterTestLog.Case filterCase) =>
         [.. _loggedEvents.Where(e => filterCase.Expected(_midpoint, e))];
 
     // Events are told apart by their position in the log. The payload is compared as well, as it is what was decoded.
     private void ShouldBe(
         IReadOnlyList<ReadEvent<object, string, TStreamPos, TLogPos>> read,
-        IEnumerable<LoggedEvent> expected)
+        IEnumerable<EventFilterTestLog.LoggedEvent> expected)
     {
         ReadEvent<object, string, TStreamPos, TLogPos>[] expectedEvents = [.. expected.Select(e => _log[e.Index])];
 

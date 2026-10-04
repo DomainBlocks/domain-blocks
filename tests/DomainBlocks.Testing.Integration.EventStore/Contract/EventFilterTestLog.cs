@@ -5,72 +5,6 @@ using DomainBlocks.EventStore.TypeMapping;
 
 namespace DomainBlocks.Testing.Integration.EventStore.Contract;
 
-public sealed record OrderPlaced
-{
-    public required int Number { get; init; }
-}
-
-public sealed record OrderShipped
-{
-    public required int Number { get; init; }
-}
-
-public sealed record InvoiceRaised
-{
-    public required int Number { get; init; }
-}
-
-/// <summary>
-/// An event of the test log as it was read without a filter. The expectation of each case is written against it by
-/// hand, and it is the stored form that a filter is evaluated against in memory. Its index is its place in the log,
-/// counting from zero.
-/// </summary>
-public sealed record LoggedEvent(
-    int Index,
-    string EventName,
-    string StreamId,
-    IReadOnlyDictionary<string, string> Metadata,
-    DateTimeOffset CreatedAt) : IFilterableEvent
-{
-    public string? Tenant => Metadata.GetValueOrDefault("tenant");
-
-    public bool TryGetMetadata(string key, [MaybeNullWhen(false)] out string value) =>
-        Metadata.TryGetValue(key, out value);
-}
-
-/// <summary>
-/// How much of the test log a case is meant to select. Declared so that a case cannot pass by accident, by selecting
-/// nothing or everything whatever a store does with its filter.
-/// </summary>
-public enum CaseSelection
-{
-    Some,
-    Nothing,
-    Everything
-}
-
-/// <summary>
-/// A filter and the events of the test log that it should select, written by hand rather than derived from the filter.
-/// Both are given the midpoint of the log, for the cases that depend on when its events were created.
-/// </summary>
-public sealed record EventFilterCase(
-    string Name,
-    Func<DateTimeOffset, EventFilter> Filter,
-    Func<DateTimeOffset, LoggedEvent, bool> Expected,
-    CaseSelection Selects = CaseSelection.Some)
-{
-    public EventFilterCase(
-        string name,
-        EventFilter filter,
-        Func<LoggedEvent, bool> expected,
-        CaseSelection selects = CaseSelection.Some)
-        : this(name, _ => filter, (_, e) => expected(e), selects)
-    {
-    }
-
-    public override string ToString() => Name;
-}
-
 /// <summary>
 /// The log that filtered reads and subscriptions are tested against, and the filters they are tested with.
 /// </summary>
@@ -106,7 +40,7 @@ public static class EventFilterTestLog
     /// rate, so that every stream has events of every shape of metadata: none, a tenant, a tenant and an empty note, a
     /// region, and a tenant and a region.
     /// </summary>
-    public static IEnumerable<(string StreamId, AppendableEvent<object> Event)> Events()
+    public static IEnumerable<(string StreamId, AppendableEvent<object> Event)> GenerateEvents()
     {
         for (var i = 0; i < Count; i++)
         {
@@ -126,17 +60,17 @@ public static class EventFilterTestLog
             KeyValuePair<string, string>[] metadata = (i % 5) switch
             {
                 0 => [],
-                1 => [new("tenant", tenant)],
-                2 => [new("tenant", tenant), new("note", "")],
-                3 => [new("region", "eu")],
-                _ => [new("tenant", tenant), new("region", "eu")]
+                1 => [KeyValuePair.Create("tenant", tenant)],
+                2 => [KeyValuePair.Create("tenant", tenant), KeyValuePair.Create("note", string.Empty)],
+                3 => [KeyValuePair.Create("region", "eu")],
+                _ => [KeyValuePair.Create("tenant", tenant), KeyValuePair.Create("region", "eu")]
             };
 
             yield return (streamId, AppendableEvent.Create(payload, metadata));
         }
     }
 
-    public static IReadOnlyList<EventFilterCase> Cases { get; } =
+    public static IReadOnlyList<Case> Cases { get; } =
     [
         new("All", EventFilter.All, _ => true, CaseSelection.Everything),
         new("None", EventFilter.None, _ => false, CaseSelection.Nothing),
@@ -186,7 +120,10 @@ public static class EventFilterTestLog
             "Metadata_ValueWithQuotesAndBackslash",
             EventFilter.Metadata("tenant", AwkwardTenant),
             e => e.Tenant == AwkwardTenant),
-        new("Metadata_EmptyValue", EventFilter.Metadata("note", ""), e => e.Metadata.GetValueOrDefault("note") == ""),
+        new(
+            "Metadata_EmptyValue",
+            EventFilter.Metadata("note", string.Empty),
+            e => e.Metadata.GetValueOrDefault("note") == string.Empty),
         new("Metadata_NoSuchValue", EventFilter.Metadata("tenant", "globex"), _ => false, CaseSelection.Nothing),
         new("Metadata_ValueOfAnotherKey", EventFilter.Metadata("region", "acme"), _ => false, CaseSelection.Nothing),
 
@@ -278,4 +215,70 @@ public static class EventFilterTestLog
             EventFilter.StreamIds("order%3") | (EventFilter.MetadataExists("note") & !EventFilter.EventNames(Shipped)),
             e => e.StreamId == "order%3" || e.Metadata.ContainsKey("note") && e.EventName != Shipped)
     ];
+
+    public sealed record OrderPlaced
+    {
+        public required int Number { get; init; }
+    }
+
+    public sealed record OrderShipped
+    {
+        public required int Number { get; init; }
+    }
+
+    public sealed record InvoiceRaised
+    {
+        public required int Number { get; init; }
+    }
+
+    /// <summary>
+    /// An event of the test log as it was read without a filter. The expectation of each case is written against it by
+    /// hand, and it is the stored form that a filter is evaluated against in memory. Its index is its place in the log,
+    /// counting from zero.
+    /// </summary>
+    public sealed record LoggedEvent(
+        int Index,
+        string EventName,
+        string StreamId,
+        IReadOnlyDictionary<string, string> Metadata,
+        DateTimeOffset CreatedAt) : IFilterableEvent
+    {
+        public string? Tenant => Metadata.GetValueOrDefault("tenant");
+
+        public bool TryGetMetadata(string key, [MaybeNullWhen(false)] out string value) =>
+            Metadata.TryGetValue(key, out value);
+    }
+
+    /// <summary>
+    /// How much of the test log a case is meant to select. Declared so that a case cannot pass by accident, by selecting
+    /// nothing or everything whatever a store does with its filter.
+    /// </summary>
+    public enum CaseSelection
+    {
+        Some,
+        Nothing,
+        Everything
+    }
+
+    /// <summary>
+    /// A filter and the events of the test log that it should select, written by hand rather than derived from the
+    /// filter. Both are given the midpoint of the log, for the cases that depend on when its events were created.
+    /// </summary>
+    public sealed record Case(
+        string Name,
+        Func<DateTimeOffset, EventFilter> Filter,
+        Func<DateTimeOffset, LoggedEvent, bool> Expected,
+        CaseSelection Selects = CaseSelection.Some)
+    {
+        public Case(
+            string name,
+            EventFilter filter,
+            Func<LoggedEvent, bool> expected,
+            CaseSelection selects = CaseSelection.Some) :
+            this(name, _ => filter, (_, e) => expected(e), selects)
+        {
+        }
+
+        public override string ToString() => Name;
+    }
 }
