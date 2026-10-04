@@ -69,9 +69,24 @@ internal sealed class EventLogSql
 
     public string ReadCatchUpStream { get; }
 
-    public string ReadStream(ReadDirection direction, bool includeMetadata)
+    /// <summary>
+    /// The number of parameters that a page of <see cref="ReadStream"/> binds: the stream ID, the key, and the limit.
+    /// The parameters of a condition are numbered after them.
+    /// </summary>
+    public const int ReadStreamParameterCount = 3;
+
+    /// <summary>
+    /// The number of parameters that a page of <see cref="ReadAll"/> binds: the key and the limit. The parameters of a
+    /// condition are numbered after them.
+    /// </summary>
+    public const int ReadAllParameterCount = 2;
+
+    /// <summary>
+    /// The query for a page of the read, with a further condition that rows must meet if one is given.
+    /// </summary>
+    public string ReadStream(ReadDirection direction, bool includeMetadata, string? condition = null)
     {
-        return (direction, includeMetadata) switch
+        var query = (direction, includeMetadata) switch
         {
             (ReadDirection.Forward, true) => ReadStreamForward,
             (ReadDirection.Forward, false) => ReadStreamForwardWithoutMetadata,
@@ -79,11 +94,16 @@ internal sealed class EventLogSql
             (ReadDirection.Backward, false) => ReadStreamBackwardWithoutMetadata,
             _ => throw new ArgumentOutOfRangeException(nameof(direction), direction, null)
         };
+
+        return condition is null ? query : WithCondition(query, condition);
     }
 
-    public string ReadAll(ReadDirection direction, bool includeMetadata)
+    /// <summary>
+    /// The query for a page of the read, with a further condition that rows must meet if one is given.
+    /// </summary>
+    public string ReadAll(ReadDirection direction, bool includeMetadata, string? condition = null)
     {
-        return (direction, includeMetadata) switch
+        var query = (direction, includeMetadata) switch
         {
             (ReadDirection.Forward, true) => ReadAllForward,
             (ReadDirection.Forward, false) => ReadAllForwardWithoutMetadata,
@@ -91,6 +111,8 @@ internal sealed class EventLogSql
             (ReadDirection.Backward, false) => ReadAllBackwardWithoutMetadata,
             _ => throw new ArgumentOutOfRangeException(nameof(direction), direction, null)
         };
+
+        return condition is null ? query : WithCondition(query, condition);
     }
 
     /// <summary>
@@ -111,5 +133,16 @@ internal sealed class EventLogSql
 
         // Positions beyond long.MaxValue cannot exist; clamping keeps the arithmetic above in range.
         static long ToKey(ulong value) => value >= long.MaxValue - 1 ? long.MaxValue - 1 : (long)value;
+    }
+
+    // Every read query has a WHERE clause followed by one ORDER BY, so a further condition goes between the two. The
+    // database then counts the limit in rows that meet the condition, and keyset paging carries on from the last of
+    // them.
+    private static string WithCondition(string query, string condition)
+    {
+        const string orderBy = " ORDER BY ";
+        var index = query.LastIndexOf(orderBy, StringComparison.Ordinal);
+
+        return $"{query[..index]} AND {condition}{query[index..]}";
     }
 }

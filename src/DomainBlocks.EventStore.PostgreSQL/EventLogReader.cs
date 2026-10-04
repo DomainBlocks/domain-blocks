@@ -1,5 +1,7 @@
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Codecs;
+using DomainBlocks.EventStore.Filtering;
+using DomainBlocks.EventStore.Filtering.Nodes;
 using Npgsql;
 
 namespace DomainBlocks.EventStore.PostgreSQL;
@@ -21,16 +23,20 @@ internal sealed class EventLogReader<TEvent>(
         long firstKeyExclusive,
         long? maxCount,
         bool includeMetadata,
+        EventFilter filter,
         CancellationToken cancellationToken)
     {
+        var condition = Translate(filter, EventLogSql.ReadStreamParameterCount + 1);
+
         return ReadPagesAsync(
-            sql.ReadStream(direction, includeMetadata),
+            sql.ReadStream(direction, includeMetadata, condition?.Sql),
             (parameters, key, limit) =>
             {
                 parameters.Add(new NpgsqlParameter<string> { TypedValue = streamId });
                 parameters.Add(new NpgsqlParameter<long> { TypedValue = key });
                 parameters.Add(new NpgsqlParameter<int> { TypedValue = limit });
             },
+            condition,
             firstKeyExclusive,
             static e => (long)e.Context.StreamPosition.Value,
             maxCount,
@@ -42,15 +48,19 @@ internal sealed class EventLogReader<TEvent>(
         long firstKeyExclusive,
         long? maxCount,
         bool includeMetadata,
+        EventFilter filter,
         CancellationToken cancellationToken)
     {
+        var condition = Translate(filter, EventLogSql.ReadAllParameterCount + 1);
+
         return ReadPagesAsync(
-            sql.ReadAll(direction, includeMetadata),
+            sql.ReadAll(direction, includeMetadata, condition?.Sql),
             (parameters, key, limit) =>
             {
                 parameters.Add(new NpgsqlParameter<long> { TypedValue = key });
                 parameters.Add(new NpgsqlParameter<int> { TypedValue = limit });
             },
+            condition,
             firstKeyExclusive,
             static e => (long)e.Context.LogPosition.Value,
             maxCount,
@@ -74,6 +84,7 @@ internal sealed class EventLogReader<TEvent>(
                 parameters.Add(new NpgsqlParameter<long> { TypedValue = highWaterMark });
                 parameters.Add(new NpgsqlParameter<int> { TypedValue = limit });
             },
+            null,
             afterExclusive,
             static e => (long)e.Context.LogPosition.Value,
             null,
@@ -98,6 +109,7 @@ internal sealed class EventLogReader<TEvent>(
                 parameters.Add(new NpgsqlParameter<long> { TypedValue = highWaterMark });
                 parameters.Add(new NpgsqlParameter<int> { TypedValue = limit });
             },
+            null,
             afterExclusive,
             static e => (long)e.Context.StreamPosition.Value,
             null,
@@ -134,6 +146,7 @@ internal sealed class EventLogReader<TEvent>(
     private async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadPagesAsync(
         string pageSql,
         Action<NpgsqlParameterCollection, long, int> bindPage,
+        PostgresFilterCondition? condition,
         long firstKeyExclusive,
         Func<ReadEvent<TEvent, string, StreamPosition, LogPosition>, long> keyOf,
         long? maxCount,
@@ -150,6 +163,7 @@ internal sealed class EventLogReader<TEvent>(
             await using (var command = dataSource.CreateCommand(pageSql))
             {
                 bindPage(command.Parameters, key, limit);
+                condition?.AddParametersTo(command.Parameters);
 
                 await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
 
@@ -168,6 +182,10 @@ internal sealed class EventLogReader<TEvent>(
                 yield break;
         }
     }
+
+    // A read without a filter has no condition, so it runs exactly the query it would if there were no filters.
+    private static PostgresFilterCondition? Translate(EventFilter filter, int firstParameterIndex) =>
+        filter is AllEventsFilter ? null : PostgresFilterTranslator.Translate(filter, firstParameterIndex);
 
     // Columns are read in ascending ordinal order so that CommandBehavior.SequentialAccess could be enabled later.
     private ReadEvent<TEvent, string, StreamPosition, LogPosition> ReadEvent(NpgsqlDataReader reader)
