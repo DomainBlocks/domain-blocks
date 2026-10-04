@@ -28,6 +28,11 @@ public sealed class PostgresServer : IAsyncDisposable
 
         var container = new PostgreSqlBuilder(image)
             .WithCommand("-c", "wal_level=logical", "-c", "max_replication_slots=16", "-c", "max_wal_senders=16")
+
+            // Testcontainers turns synchronous_commit off. A commit is then visible, and acknowledged, before it is
+            // flushed, and the live feed is only sent it once the WAL writer flushes, up to 200 ms later. Run as a
+            // server does by default instead. It costs little here, as the container does not sync the flush to disk.
+            .WithCommand("-c", "synchronous_commit=on")
             .Build();
 
         await container.StartAsync();
