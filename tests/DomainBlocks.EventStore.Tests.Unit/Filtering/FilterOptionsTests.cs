@@ -42,8 +42,8 @@ public class FilterOptionsTests
     [Test]
     public void ThrowIfFiltered_AnyOtherFilter_ThrowsNamingOperationAndFilter()
     {
-        var exception = Should.Throw<EventFilterNotSupportedException>(
-            () => EventFilterNotSupportedException.ThrowIfFiltered(Filter, "Store.ReadAll"));
+        var exception = Should.Throw<EventFilterNotSupportedException>(() =>
+            EventFilterNotSupportedException.ThrowIfFiltered(Filter, "Store.ReadAll"));
 
         exception.Message.ShouldBe(
             "Store.ReadAll does not support event filters, but was given the filter EventNames(\"OrderPlaced\").");
@@ -52,7 +52,7 @@ public class FilterOptionsTests
     [Test]
     public void ThrowIfFiltered_None_Throws()
     {
-        Should.Throw<EventFilterNotSupportedException>(
-            () => EventFilterNotSupportedException.ThrowIfFiltered(EventFilter.None, "Store.ReadAll"));
+        Should.Throw<EventFilterNotSupportedException>(() =>
+            EventFilterNotSupportedException.ThrowIfFiltered(EventFilter.None, "Store.ReadAll"));
     }
 }

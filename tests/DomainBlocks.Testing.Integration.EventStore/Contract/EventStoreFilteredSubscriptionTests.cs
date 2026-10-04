@@ -17,21 +17,19 @@ public abstract class EventStoreFilteredSubscriptionTests<TStreamPos, TLogPos>(
     where TStreamPos : notnull
     where TLogPos : notnull
 {
-    private static readonly EventFilter Filter = EventFilter.EventNames(nameof(TestEvent));
-
-    private IEventStore<object, string, TStreamPos, TLogPos> EventStore { get; set; } = null!;
+    private IEventStore<object, string, TStreamPos, TLogPos> _eventStore = null!;
 
     [SetUp]
     public void SetUp()
     {
         var eventTypeMap = new EventTypeMapBuilder().Add<TestEvent>().Build();
-        EventStore = CreateEventStore(eventTypeMap);
+        _eventStore = CreateEventStore(eventTypeMap);
     }
 
     [TearDown]
     public async Task TearDown()
     {
-        if (EventStore is { } eventStore)
+        if (_eventStore is { } eventStore)
             await eventStore.DisposeAsync();
     }
 
@@ -40,9 +38,9 @@ public abstract class EventStoreFilteredSubscriptionTests<TStreamPos, TLogPos>(
     {
         RequireNoCapability(StoreCapabilities.FilteredSubscriptions);
 
-        var options = new SubscriptionOptions { Filter = Filter };
+        var options = new SubscriptionOptions { Filter = EventFilter.EventNames(nameof(TestEvent)) };
 
-        Should.Throw<EventFilterNotSupportedException>(() => EventStore.SubscribeToAll(options: options));
+        Should.Throw<EventFilterNotSupportedException>(() => _eventStore.SubscribeToAll(options: options));
     }
 
     [Test]
@@ -50,9 +48,9 @@ public abstract class EventStoreFilteredSubscriptionTests<TStreamPos, TLogPos>(
     {
         RequireNoCapability(StoreCapabilities.FilteredSubscriptions);
 
-        var options = new SubscriptionOptions { Filter = Filter };
+        var options = new SubscriptionOptions { Filter = EventFilter.EventNames(nameof(TestEvent)) };
 
-        Should.Throw<EventFilterNotSupportedException>(
-            () => EventStore.SubscribeToStream("stream-1", options: options));
+        Should.Throw<EventFilterNotSupportedException>(() =>
+            _eventStore.SubscribeToStream("stream-1", options: options));
     }
 }
