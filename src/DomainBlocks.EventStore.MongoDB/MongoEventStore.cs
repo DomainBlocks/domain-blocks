@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Filtering;
+using DomainBlocks.EventStore.Filtering.Nodes;
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using DomainBlocks.MongoDB.Sequencing;
 using Microsoft.Extensions.Logging;
@@ -147,7 +148,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         ReadOrigin<LogPosition>? origin = null,
         ReadAllOptions? options = null)
     {
-        ThrowIfFiltered(options?.Filter, nameof(ReadAll));
+        var eventFilter = TranslateFilter(options?.Filter);
 
         return Impl();
 
@@ -161,9 +162,10 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
                 yield break;
 
             var query = GetReadQuery(direction, origin, EventLogEntry.FieldNames.Position);
+            var filter = eventFilter is null ? query.Filter : query.Filter & eventFilter;
 
             using var cursor = await _eventLog
-                .Find(query.Filter)
+                .Find(filter)
                 .Sort(query.Sort)
                 .Limit(options.MaxCount)
                 .SetExcludeMetadata(!options.IncludeMetadata)
@@ -184,7 +186,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         ReadOrigin<StreamPosition>? origin = null,
         ReadStreamOptions? options = null)
     {
-        ThrowIfFiltered(options?.Filter, nameof(ReadStream));
+        var eventFilter = TranslateFilter(options?.Filter);
 
         return Impl();
 
@@ -207,6 +209,9 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
 
             var query = GetReadQuery(direction, origin, EventLogEntry.FieldNames.StreamPosition);
             var filter = query.Filter & Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, streamId);
+
+            if (eventFilter is not null)
+                filter &= eventFilter;
 
             using var cursor = await _eventLog
                 .Find(filter)
@@ -278,7 +283,13 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
             _logger);
     }
 
-    // Filters are not supported yet. One is refused rather than ignored.
+    // A filter is translated at the call, so that one that cannot be translated is refused there rather than on
+    // enumeration. A read without a filter has no further condition, so it runs exactly the query it would if there
+    // were no filters.
+    private static FilterDefinition<BsonDocument>? TranslateFilter(EventFilter? filter) =>
+        filter is null or AllEventsFilter ? null : MongoFilterTranslator.Translate(filter);
+
+    // Subscriptions do not filter yet. A filter is refused rather than ignored.
     private static void ThrowIfFiltered(EventFilter? filter, string operation) =>
         EventFilterNotSupportedException.ThrowIfFiltered(filter, $"{nameof(MongoEventStore)}.{operation}");
 
