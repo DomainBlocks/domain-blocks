@@ -3,7 +3,7 @@ using DomainBlocks.EventStore.Filtering.Nodes;
 namespace DomainBlocks.EventStore.Filtering;
 
 /// <summary>
-/// Selects events by what is stored about them: the event name, the stream ID, the metadata and the creation time.
+/// Selects events by what is stored about them: the event name, the stream ID, the metadata, and the creation time.
 /// </summary>
 public abstract class EventFilter
 {
@@ -80,8 +80,8 @@ public abstract class EventFilter
     }
 
     /// <summary>
-    /// Matches events whose metadata entry with the key <paramref name="key"/> has one of
-    /// <paramref name="values"/>, using an ordinal comparison.
+    /// Matches events whose metadata entry with the key <paramref name="key"/> has one of <paramref name="values"/>,
+    /// using an ordinal comparison.
     /// </summary>
     public static EventFilter Metadata(string key, params IEnumerable<string> values)
     {
@@ -115,7 +115,7 @@ public abstract class EventFilter
     /// </summary>
     public abstract bool Matches(IFilterableEvent filterable);
 
-    // No store can hold a NUL character in a string, or search for one.
+    // No store can hold a NUL character in a string or search for one.
     private static void ThrowIfContainsNul(string value, string paramName)
     {
         if (value.Contains('\0'))

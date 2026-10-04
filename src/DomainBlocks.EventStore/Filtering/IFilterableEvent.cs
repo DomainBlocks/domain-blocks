@@ -3,7 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 namespace DomainBlocks.EventStore.Filtering;
 
 /// <summary>
-/// Represents an event in its stored form, so that an <see cref="EventFilter"/> can be evaluated against it before the
+/// Represents an event in its stored form so that an <see cref="EventFilter"/> can be evaluated against it before the
 /// event is decoded.
 /// </summary>
 public interface IFilterableEvent
