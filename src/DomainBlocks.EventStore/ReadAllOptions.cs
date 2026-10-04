@@ -1,4 +1,6 @@
-﻿namespace DomainBlocks.EventStore;
+﻿using DomainBlocks.EventStore.Filtering;
+
+namespace DomainBlocks.EventStore;
 
 /// <summary>
 /// Options for configuring a read across all event streams.
@@ -19,4 +21,13 @@ public sealed class ReadAllOptions
     /// Specifies whether event metadata is included in the returned events. The default is <see langword="true"/>.
     /// </summary>
     public bool IncludeMetadata { get; init; } = true;
+
+    /// <summary>
+    /// Selects the events to read. The default is <see cref="EventFilter.All"/>.
+    /// </summary>
+    public EventFilter Filter
+    {
+        get;
+        init => field = value ?? throw new ArgumentNullException(nameof(value));
+    } = EventFilter.All;
 }

@@ -1,9 +1,11 @@
-﻿namespace DomainBlocks.EventStore;
+﻿using DomainBlocks.EventStore.Filtering;
+
+namespace DomainBlocks.EventStore;
 
 /// <summary>
 /// Configures an event subscription.
 /// </summary>
-public sealed record SubscriptionOptions
+public sealed class SubscriptionOptions
 {
     /// <summary>
     /// The default subscription options.
@@ -22,4 +24,13 @@ public sealed record SubscriptionOptions
     /// 1,000.
     /// </summary>
     public int QueueCapacity { get; init; } = 1_000;
+
+    /// <summary>
+    /// Selects the events to deliver. The default is <see cref="EventFilter.All"/>.
+    /// </summary>
+    public EventFilter Filter
+    {
+        get;
+        init => field = value ?? throw new ArgumentNullException(nameof(value));
+    } = EventFilter.All;
 }

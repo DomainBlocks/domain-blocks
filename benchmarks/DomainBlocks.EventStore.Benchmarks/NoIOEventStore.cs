@@ -1,6 +1,7 @@
 using BenchmarkDotNet.Engines;
 using DomainBlocks.EventStore.Benchmarks.Proto;
 using DomainBlocks.EventStore.Codecs;
+using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.Abstractions;
 using DomainBlocks.Serialization.Google.Protobuf;
@@ -143,6 +144,7 @@ internal sealed class NoIOEventStore<TEvent, TEventData, TMetadata>(
         ReadStreamOptions? options = null)
     {
         options ??= ReadStreamOptions.Default;
+        EventFilterNotSupportedException.ThrowIfFiltered(options.Filter, nameof(NoIOEventStore));
 
         for (var i = 0; i < storedEvents.Length; i++)
         {
