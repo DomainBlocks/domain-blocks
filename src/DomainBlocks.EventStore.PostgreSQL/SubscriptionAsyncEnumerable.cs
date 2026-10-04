@@ -21,6 +21,11 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// <see cref="SubscriptionMessage{TEvent,TStreamId,TStreamPos,TLogPos}.FellBehind"/>, when the subscriber's queue
 /// overflows or when the feed has been re-established and may have missed rows.
 /// </para>
+/// <para>
+/// A subscription from the end is pinned to the last position at the time it starts. A cycle that restarts before
+/// delivering an event then resumes from that position, rather than from a later end that would skip the events
+/// appended in between.
+/// </para>
 /// </remarks>
 internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>>
@@ -30,6 +35,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     private readonly EventLogReader<TEvent> _reader;
     private readonly IRefCountedEventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>> _feed;
     private readonly CatchUpReader _catchUpReader;
+    private readonly EndPositionReader _endPositionReader;
     private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, bool> _livePredicate;
     private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> _positionSelector;
     private readonly SubscriptionOrigin<TPos> _origin;
@@ -41,6 +47,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         EventLogReader<TEvent> reader,
         IRefCountedEventLogFeed<ReadEvent<TEvent, string, StreamPosition, LogPosition>> feed,
         CatchUpReader catchUpReader,
+        EndPositionReader endPositionReader,
         Func<ReadEventContext<string, StreamPosition, LogPosition>, bool> livePredicate,
         Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> positionSelector,
         SubscriptionOrigin<TPos>? origin,
@@ -50,6 +57,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         _origin = origin ?? SubscriptionOrigin.End;
         _options = options ?? SubscriptionOptions.Default;
         _catchUpReader = catchUpReader;
+        _endPositionReader = endPositionReader;
         _livePredicate = livePredicate;
         _positionSelector = positionSelector;
         _reader = reader;
@@ -71,7 +79,10 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         {
             _logger?.SubscriptionStarted(_correlationId);
 
-            var resumeOrigin = _origin;
+            var resumeOrigin = _origin is SubscriptionOrigin<TPos>.End
+                ? await PinEndAsync(cancellationToken).ConfigureAwait(false)
+                : _origin;
+
             var fellBehindPending = false;
 
             while (true)
@@ -167,6 +178,26 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         }
     }
 
+    private async Task<SubscriptionOrigin<TPos>> PinEndAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var endPosition = await _endPositionReader(_reader, cancellationToken).ConfigureAwait(false);
+
+            return endPosition is { } position ? SubscriptionOrigin.After(position) : SubscriptionOrigin.Start;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _logger?.SubscriptionCanceled(_correlationId);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger?.SubscriptionFailed(ex, _correlationId);
+            throw;
+        }
+    }
+
     private async Task<IAsyncDisposable> AttachObserverAsync(Observer observer, CancellationToken cancellationToken)
     {
         try
@@ -202,7 +233,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
             _logger?.CatchUpBoundary(_correlationId, highWaterMark);
 
-            if (highWaterMark is not null && resumeOrigin is not SubscriptionOrigin<TPos>.End)
+            if (highWaterMark is not null)
             {
                 var afterExclusive = resumeOrigin is SubscriptionOrigin<TPos>.After after
                     ? checked((long)after.Position.Value)
@@ -233,6 +264,12 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         long afterExclusive,
         long highWaterMark,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads the last position of the sequence that the subscription follows, or <see langword="null"/> if the
+    /// sequence is empty.
+    /// </summary>
+    public delegate Task<TPos?> EndPositionReader(EventLogReader<TEvent> reader, CancellationToken cancellationToken);
 
     private enum RestartReason
     {
