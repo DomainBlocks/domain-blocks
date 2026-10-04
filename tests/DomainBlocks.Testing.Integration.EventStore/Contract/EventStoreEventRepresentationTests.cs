@@ -156,8 +156,7 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
         var retired = new ShipmentDispatched(kept.ShipmentId, kept.DispatchedAt, []);
 
         var eventStore = CreateEventStore(eventTypeMap)
-            .WithReadTransforms(ReadEventTransform.Create<object, ShipmentDispatched>(_ => []))
-            .UseIgnoredEventSentinel(IgnoredEvent.Instance);
+            .WithReadTransforms(ReadEventTransform.Create<object, ShipmentDispatched>(_ => IgnoredEvent.Instance));
 
         try
         {
@@ -223,10 +222,13 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
             await writer.DisposeAsync();
         }
 
-        // Read by a store that has no type mapping for ShipmentDispatched, only its stored name.
+        // Read by a store that "ignores" ShipmentDispatched by mapping every read name 'ShipmentDispatched' to
+        // IgnoredEvent.Instance.
         var eventStore = CreateEventStore(
-            new EventTypeMapBuilder().Add<ShipmentDispatchedV2>().Build(),
-            ignoredEventNames: [nameof(ShipmentDispatched)]);
+            new EventTypeMapBuilder()
+                .Add<ShipmentDispatchedV2>()
+                .AddRead(IgnoredEvent.Instance, nameof(ShipmentDispatched))
+                .Build());
 
         try
         {

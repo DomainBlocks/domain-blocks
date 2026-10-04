@@ -3,6 +3,7 @@ using DomainBlocks.EventStore.Metadata;
 using DomainBlocks.EventStore.Tests.Unit.Codecs;
 using DomainBlocks.EventStore.Tests.Unit.Decoration;
 using DomainBlocks.EventStore.Transforms;
+using DomainBlocks.Testing.Events;
 using NUnit.Framework;
 using Shouldly;
 
@@ -19,7 +20,6 @@ public class EventStoreBuilderTests
             .ConfigureCodec(x => x.MapEvent<Current>())
             .AddMetadataContributors(new UserContributor())
             .AddReadTransform((Legacy e) => new Current(e.Value))
-            .UseIgnoredEventSentinel(IgnoredEvent.Instance)
             .UseStore(new FakeEventStore());
 
         chained.ShouldBeSameAs(builder);
@@ -46,8 +46,7 @@ public class EventStoreBuilderTests
             .UseStore(inner)
             .AddMetadataContributors(new UserContributor())
             .AddReadTransform<Legacy>(e => new Current(e.Value))
-            .AddReadTransforms(ReadEventTransform.Create<object, Retired>(_ => []))
-            .UseIgnoredEventSentinel(IgnoredEvent.Instance)
+            .AddReadTransforms(ReadEventTransform.Create<object, Retired>(_ => IgnoredEvent.Instance))
             .Build();
 
         await store.AppendAsync("s", [new Current("x")]);
@@ -96,31 +95,6 @@ public class EventStoreBuilderTests
             .AddReadTransform((Legacy e) => new Current(e.Value));
 
         Should.Throw<ArgumentException>(builder.Build).Message.ShouldContain(nameof(Legacy));
-    }
-
-    [Test]
-    public void IgnoreEvents_WithUseIgnoredEventSentinel_DecodeUsesSentinel()
-    {
-        var codec = new FakeEventStoreBuilder()
-            .ConfigureCodec(x => x.MapEvent<Current>())
-            .IgnoreEvents("Retired")
-            .UseIgnoredEventSentinel(IgnoredEvent.Instance)
-            .BuildCodecWithFakes();
-
-        codec.Decode("Retired", "anything", null).Payload.ShouldBeSameAs(IgnoredEvent.Instance);
-    }
-
-    [Test]
-    public void IgnoreEvents_WithoutSentinel_BuildCodecThrows()
-    {
-        var builder = new FakeEventStoreBuilder()
-            .ConfigureCodec(x => x.MapEvent<Current>())
-            .IgnoreEvents("Retired");
-
-        Should
-            .Throw<InvalidOperationException>(builder.BuildCodecWithFakes)
-            .Message
-            .ShouldContain("UseIgnoredEventSentinel");
     }
 
     [Test]

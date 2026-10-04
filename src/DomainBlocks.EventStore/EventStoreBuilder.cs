@@ -1,5 +1,3 @@
-using System.Collections.Frozen;
-using DomainBlocks.Core;
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Metadata;
 using DomainBlocks.EventStore.Transforms;
@@ -16,8 +14,6 @@ public abstract class EventStoreBuilder<TEvent, TEventData, TMetadata, TBuilder>
     private IEventCodec<TEvent, TEventData, TMetadata>? _codec;
     private readonly List<IMetadataContributor<TEvent>> _metadataContributors = [];
     private readonly List<IReadEventTransform<TEvent>> _readTransforms = [];
-    private readonly List<string> _ignoredEventNames = [];
-    private Optional<TEvent> _ignoredEventSentinel;
 
     private TBuilder Self => (TBuilder)this;
 
@@ -77,42 +73,15 @@ public abstract class EventStoreBuilder<TEvent, TEventData, TMetadata, TBuilder>
         return AddReadTransforms(ReadEventTransform.Create(apply));
     }
 
-    public TBuilder IgnoreEvents(params string[] storedNames)
-    {
-        ArgumentNullException.ThrowIfNull(storedNames);
-
-        if (storedNames.Any(string.IsNullOrWhiteSpace))
-            throw new ArgumentException("Names cannot be null or whitespace.", nameof(storedNames));
-
-        _ignoredEventNames.AddRange(storedNames);
-        return Self;
-    }
-
-    public TBuilder UseIgnoredEventSentinel(TEvent sentinel)
-    {
-        ArgumentNullException.ThrowIfNull(sentinel);
-
-        _ignoredEventSentinel = sentinel;
-        return Self;
-    }
-
     protected IEventCodec<TEvent, TEventData, TMetadata> BuildCodec(
         Func<IObjectSerializer<TEventData>> defaultEventSerializer,
         Func<IMetadataSerializer<TMetadata>> defaultMetadataSerializer)
     {
-        var codec = _codec ?? (_codecBuilder ?? new EventCodecBuilder<TEvent, TEventData, TMetadata>())
+        if (_codec != null)
+            return _codec;
+
+        return (_codecBuilder ?? new EventCodecBuilder<TEvent, TEventData, TMetadata>())
             .Build(defaultEventSerializer, defaultMetadataSerializer);
-
-        if (_ignoredEventNames.Count == 0)
-            return codec;
-
-        if (!_ignoredEventSentinel.HasValue)
-            throw new InvalidOperationException("IgnoreEvents requires UseIgnoredEventSentinel(...).");
-
-        return new IgnoringEventCodec<TEvent, TEventData, TMetadata>(
-            codec,
-            _ignoredEventNames.ToFrozenSet(),
-            _ignoredEventSentinel.Value);
     }
 
     protected IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> Decorate<TStreamId, TStreamPos, TLogPos>(
@@ -121,12 +90,8 @@ public abstract class EventStoreBuilder<TEvent, TEventData, TMetadata, TBuilder>
         where TStreamPos : notnull
         where TLogPos : notnull
     {
-        var decorated = store
+        return store
             .WithMetadataContributors([.. _metadataContributors])
             .WithReadTransforms([.. _readTransforms]);
-
-        return _ignoredEventSentinel.HasValue
-            ? decorated.UseIgnoredEventSentinel(_ignoredEventSentinel.Value)
-            : decorated;
     }
 }

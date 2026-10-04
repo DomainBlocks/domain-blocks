@@ -11,8 +11,8 @@ first feature areas; others will follow.
 
 ### Event storage
 
-`DomainBlocks.EventStore` holds the store contracts and the append and read pipeline; a store package plugs a database
-in. Add `DomainBlocks.EventStore.PostgreSQL` or `DomainBlocks.EventStore.MongoDB`, build a store, then append and read
+`DomainBlocks.EventStore` holds the store contracts and the append/read pipeline; a store package plugs a database in.
+Add `DomainBlocks.EventStore.PostgreSQL` or `DomainBlocks.EventStore.MongoDB`, build a store, then append and read
 events:
 
 ```csharp
@@ -53,17 +53,20 @@ way for a single event stream. A subscriber that consumes too slowly receives a 
 
 ### Event evolution
 
-Stored events are never rewritten. Instead, read transforms reshape old events as they are read, on reads and
-subscriptions alike, so the rest of the code only sees current shapes.
+Stored events are never rewritten. Instead, the event type map and read transforms reshape old events as they are read,
+on ordinary reads and subscriptions alike, so the rest of the code only sees current shapes.
 
-Upcast an event that gained a field. A `ReadOnly` mapping keeps the retired version decodable under its stored name,
-and a `ReadWrite` mapping names the current version for writing:
+Upcast an event that gained a field. `AddRead` keeps the previous version readable under its stored name, and `Add` maps
+the current version for both reading and writing:
 
 ```csharp
+var typeMap = new EventTypeMapBuilder()
+    .AddRead<OrderPlacedV1>("OrderPlaced") // previous version already stored
+    .Add<OrderPlaced>("OrderPlacedV2")
+    .Build();
+
 var builder = new PostgresEventStoreBuilder<IDomainEvent>()
-    .ConfigureCodec(c => c.MapEvents(
-        EventTypeMapping.ReadOnly<OrderPlacedV1>("OrderPlaced"), // previous version already stored
-        EventTypeMapping.ReadWrite<OrderPlaced>("OrderPlacedV2")))
+    .ConfigureCodec(c => c.UseEventTypeMap(typeMap))
     .AddReadTransform((OrderPlacedV1 e) => new OrderPlaced(e.OrderId, e.Total, Currency: "GBP"));
 ```
 
@@ -77,22 +80,31 @@ builder.AddReadTransform((TradeExecutedV1 e) =>
 ]);
 ```
 
-Ignore events by stored name, or by producing nothing from a transform. Each is read as the sentinel, so its position
-is still observed:
+Rename an event by also reading its old stored name:
 
 ```csharp
-builder
-    .IgnoreEvents("TradeNoteAdded")
-    .AddReadTransform((TradeBookedV1 e) => e.IsTest ? [] : [new TradeBooked(e.TradeId, e.Quantity)])
-    .UseIgnoredEventSentinel(Ignored.Instance);
+new EventTypeMapBuilder()
+    .Add<TradeBooked>()
+    .AddRead<TradeBooked>("TradeCreated");
+```
+
+Ignore events by mapping their stored names to a placeholder instance, or by returning it from a transform. Returning a
+placeholder event allows the event's stream position to still be observed - important for optimistic concurrency.
+
+```csharp
+var typeMap = new EventTypeMapBuilder()
+    .Add<TradeBooked>()
+    .AddRead<TradeBookedV1>()
+    .AddRead(Ignored.Instance, "TradeNoteAdded", "TradeNoteRemoved")
+    .Build();
+
+builder.AddReadTransform((TradeBookedV1 e) => e.IsTest ? Ignored.Instance : new TradeBooked(e.TradeId, e.Quantity));
 
 public sealed record Ignored : IDomainEvent
 {
     public static readonly Ignored Instance = new();
 }
 ```
-
-A store typed over `object` can use the built-in `IgnoredEvent.Instance` as the sentinel instead.
 
 ## Contributing
 

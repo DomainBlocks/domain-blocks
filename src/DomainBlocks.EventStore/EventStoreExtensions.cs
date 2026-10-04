@@ -1,4 +1,3 @@
-using DomainBlocks.Core;
 using DomainBlocks.EventStore.Metadata;
 using DomainBlocks.EventStore.Transforms;
 
@@ -54,15 +53,10 @@ public static class EventStoreExtensions
             return new EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos>(
                 decorated.Inner,
                 [.. decorated.MetadataContributors, .. contributors],
-                decorated.ReadTransforms,
-                decorated.IgnoredEventSentinel);
+                decorated.ReadTransforms);
         }
 
-        return new EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos>(
-            eventStore,
-            contributors,
-            [],
-            Optional.None<TEvent>());
+        return new EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos>(eventStore, contributors, []);
     }
 
     public static IEventStore<TEvent, TStreamId, TStreamPos, TLogPos>
@@ -86,39 +80,9 @@ public static class EventStoreExtensions
             return new EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos>(
                 decorated.Inner,
                 decorated.MetadataContributors,
-                [.. decorated.ReadTransforms, .. added],
-                decorated.IgnoredEventSentinel);
+                [.. decorated.ReadTransforms, .. added]);
         }
 
-        return new EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos>(
-            eventStore,
-            [],
-            added,
-            Optional.None<TEvent>());
-    }
-
-    public static IEventStore<TEvent, TStreamId, TStreamPos, TLogPos>
-        UseIgnoredEventSentinel<TEvent, TStreamId, TStreamPos, TLogPos>(
-            this IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> eventStore,
-            TEvent sentinel)
-        where TEvent : notnull
-        where TStreamId : notnull
-        where TStreamPos : notnull
-        where TLogPos : notnull
-    {
-        if (eventStore is EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos> decorated)
-        {
-            return new EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos>(
-                decorated.Inner,
-                decorated.MetadataContributors,
-                decorated.ReadTransforms,
-                sentinel);
-        }
-
-        return new EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos>(
-            eventStore,
-            [],
-            [],
-            sentinel);
+        return new EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos>(eventStore, [], added);
     }
 }

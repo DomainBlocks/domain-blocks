@@ -1,4 +1,4 @@
-namespace DomainBlocks.EventStore;
+namespace DomainBlocks.Testing.Events;
 
 public sealed class IgnoredEvent
 {
