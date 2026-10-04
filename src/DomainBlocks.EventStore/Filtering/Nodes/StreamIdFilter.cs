@@ -20,4 +20,6 @@ public sealed class StreamIdFilter : EventFilter
     public ImmutableArray<string> Ids => _ids.Values;
 
     public override bool Matches(IFilterableEvent filterable) => _ids.Contains(filterable.StreamId);
+
+    public override string ToString() => Format(nameof(StreamIds), Ids);
 }

@@ -24,4 +24,6 @@ public sealed class MetadataValueFilter : EventFilter
 
     public override bool Matches(IFilterableEvent filterable) =>
         filterable.TryGetMetadata(Key, out var value) && _values.Contains(value);
+
+    public override string ToString() => Format(nameof(Metadata), [Key, .. Values]);
 }

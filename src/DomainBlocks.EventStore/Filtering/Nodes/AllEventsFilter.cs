@@ -10,4 +10,6 @@ public sealed class AllEventsFilter : EventFilter
     }
 
     public override bool Matches(IFilterableEvent filterable) => true;
+
+    public override string ToString() => nameof(All);
 }

@@ -20,4 +20,6 @@ public sealed class EventNameFilter : EventFilter
     public ImmutableArray<string> Names => _names.Values;
 
     public override bool Matches(IFilterableEvent filterable) => _names.Contains(filterable.EventName);
+
+    public override string ToString() => Format(nameof(EventNames), Names);
 }

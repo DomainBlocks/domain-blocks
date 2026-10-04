@@ -14,4 +14,6 @@ public sealed class StreamIdPrefixFilter : EventFilter
 
     public override bool Matches(IFilterableEvent filterable) =>
         filterable.StreamId.StartsWith(Prefix, StringComparison.Ordinal);
+
+    public override string ToString() => Format(nameof(StreamIdStartsWith), [Prefix]);
 }
