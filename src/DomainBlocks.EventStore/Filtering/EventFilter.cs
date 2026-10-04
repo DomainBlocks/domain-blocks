@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+using System.Globalization;
 using DomainBlocks.EventStore.Filtering.Nodes;
 
 namespace DomainBlocks.EventStore.Filtering;
@@ -111,9 +113,111 @@ public abstract class EventFilter
     public static EventFilter CreatedBefore(DateTimeOffset before) => new CreatedAtFilter(null, before);
 
     /// <summary>
+    /// Matches events that match every one of <paramref name="filters"/>. With no filters, it matches every event.
+    /// </summary>
+    public static EventFilter AllOf(params IEnumerable<EventFilter> filters)
+    {
+        ArgumentNullException.ThrowIfNull(filters);
+
+        var result = All;
+
+        foreach (var filter in filters)
+            result &= filter;
+
+        return result;
+    }
+
+    /// <summary>
+    /// Matches events that match at least one of <paramref name="filters"/>. With no filters, it matches no event.
+    /// </summary>
+    public static EventFilter AnyOf(params IEnumerable<EventFilter> filters)
+    {
+        ArgumentNullException.ThrowIfNull(filters);
+
+        var result = None;
+
+        foreach (var filter in filters)
+            result |= filter;
+
+        return result;
+    }
+
+    /// <summary>
+    /// Matches events that match both filters. The left filter is evaluated first.
+    /// </summary>
+    public static EventFilter operator &(EventFilter left, EventFilter right)
+    {
+        ArgumentNullException.ThrowIfNull(left);
+        ArgumentNullException.ThrowIfNull(right);
+
+        return (left, right) switch
+        {
+            (NoEventsFilter, _) or (_, NoEventsFilter) => None,
+            (AllEventsFilter, _) => right,
+            (_, AllEventsFilter) => left,
+            _ => new AndFilter([.. ConjunctsOf(left), .. ConjunctsOf(right)])
+        };
+    }
+
+    /// <summary>
+    /// Matches events that match either filter. The left filter is evaluated first.
+    /// </summary>
+    public static EventFilter operator |(EventFilter left, EventFilter right)
+    {
+        ArgumentNullException.ThrowIfNull(left);
+        ArgumentNullException.ThrowIfNull(right);
+
+        return (left, right) switch
+        {
+            (AllEventsFilter, _) or (_, AllEventsFilter) => All,
+            (NoEventsFilter, _) => right,
+            (_, NoEventsFilter) => left,
+            _ => new OrFilter([.. DisjunctsOf(left), .. DisjunctsOf(right)])
+        };
+    }
+
+    /// <summary>
+    /// Matches events that do not match <paramref name="filter"/>.
+    /// </summary>
+    public static EventFilter operator !(EventFilter filter)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        return filter switch
+        {
+            AllEventsFilter => None,
+            NoEventsFilter => All,
+            NotFilter negation => negation.Operand,
+            _ => new NotFilter(filter)
+        };
+    }
+
+    /// <summary>
     /// Determines whether this filter matches the specified event.
     /// </summary>
     public abstract bool Matches(IFilterableEvent filterable);
+
+    /// <summary>
+    /// Returns a description of the filter for logs and messages, written as the expression that builds it.
+    /// </summary>
+    public abstract override string ToString();
+
+    private protected static string Format(string name, IEnumerable<string> values) =>
+        $"{name}({string.Join(", ", values.Select(Quote))})";
+
+    // In UTC, so that an instant reads the same whatever offset it was given with.
+    private protected static string Format(DateTimeOffset instant) =>
+        instant.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
+
+    // Nested conjunctions and disjunctions are flattened, so combining filters one at a time builds a single node.
+    private static ImmutableArray<EventFilter> ConjunctsOf(EventFilter filter) =>
+        filter is AndFilter conjunction ? conjunction.Operands : [filter];
+
+    private static ImmutableArray<EventFilter> DisjunctsOf(EventFilter filter) =>
+        filter is OrFilter disjunction ? disjunction.Operands : [filter];
+
+    // Escaped, so a value cannot be mistaken for the end of the string or for another value.
+    private static string Quote(string value) => $"\"{value.Replace(@"\", @"\\").Replace("\"", "\\\"")}\"";
 
     // No store can hold a NUL character in a string or search for one.
     private static void ThrowIfContainsNul(string value, string paramName)

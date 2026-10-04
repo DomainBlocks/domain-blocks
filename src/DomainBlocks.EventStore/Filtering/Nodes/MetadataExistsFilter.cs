@@ -13,4 +13,6 @@ public sealed class MetadataExistsFilter : EventFilter
     public string Key { get; }
 
     public override bool Matches(IFilterableEvent filterable) => filterable.TryGetMetadata(Key, out _);
+
+    public override string ToString() => Format(nameof(MetadataExists), [Key]);
 }

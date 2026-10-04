@@ -22,4 +22,16 @@ public sealed class CreatedAtFilter : EventFilter
 
         return (From is null || createdAt >= From) && (Before is null || createdAt < Before);
     }
+
+    public override string ToString()
+    {
+        return (From, Before) switch
+        {
+            ({ } from, null) => $"{nameof(CreatedAtOrAfter)}({Format(from)})",
+            (null, { } before) => $"{nameof(CreatedBefore)}({Format(before)})",
+            ({ } from, { } before) =>
+                $"({nameof(CreatedAtOrAfter)}({Format(from)}) & {nameof(CreatedBefore)}({Format(before)}))",
+            _ => nameof(All)
+        };
+    }
 }
