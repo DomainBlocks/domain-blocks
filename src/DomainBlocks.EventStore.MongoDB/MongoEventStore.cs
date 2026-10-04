@@ -243,6 +243,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
             static _ => true,
             EventLogEntry.FieldNames.Position,
             static ctx => ctx.LogPosition,
+            LogPosition.FromInt64,
             origin,
             options,
             _logger);
@@ -261,6 +262,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
             ctx => ctx.StreamId == streamId,
             EventLogEntry.FieldNames.StreamPosition,
             static ctx => ctx.StreamPosition,
+            StreamPosition.FromInt64,
             origin,
             options,
             _logger);

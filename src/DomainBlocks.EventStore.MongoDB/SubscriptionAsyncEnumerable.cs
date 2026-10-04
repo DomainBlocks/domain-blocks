@@ -20,6 +20,7 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
     private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, bool> _livePredicate;
     private readonly string _positionFieldName;
     private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> _positionSelector;
+    private readonly Func<long, TPos> _positionFactory;
     private readonly SubscriptionOrigin<TPos> _origin;
     private readonly SubscriptionOptions _options;
     private readonly ILogger? _logger;
@@ -33,6 +34,7 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
         Func<ReadEventContext<string, StreamPosition, LogPosition>, bool> livePredicate,
         string positionFieldName,
         Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> positionSelector,
+        Func<long, TPos> positionFactory,
         SubscriptionOrigin<TPos>? origin,
         SubscriptionOptions? options,
         ILogger? logger)
@@ -43,6 +45,7 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
         _livePredicate = livePredicate;
         _positionFieldName = positionFieldName;
         _positionSelector = positionSelector;
+        _positionFactory = positionFactory;
         _eventLog = eventLog;
         _changeStreamSubject = changeStreamSubject;
         _eventDecoder = eventDecoder;
@@ -60,7 +63,12 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
         {
             _logger?.SubscriptionStarted(_correlationId);
 
-            var resumeOrigin = _origin;
+            // A subscription from the end is pinned to the last position at the time it starts. A cycle that restarts
+            // before delivering an event then resumes from that position, rather than from a later end that would skip
+            // the events appended in between.
+            var resumeOrigin = _origin is SubscriptionOrigin<TPos>.End
+                ? await PinEndAsync(cancellationToken).ConfigureAwait(false)
+                : _origin;
 
             while (true)
             {
@@ -112,6 +120,36 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
         catch (OperationCanceledException) when (overflowToken.IsCancellationRequested)
         {
             return false;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _logger?.SubscriptionCanceled(_correlationId);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger?.SubscriptionFailed(ex, _correlationId);
+            throw;
+        }
+    }
+
+    private async Task<SubscriptionOrigin<TPos>> PinEndAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var projection = Builders<BsonDocument>.Projection.Include(_positionFieldName);
+
+            var last = await _eventLog
+                .Find(_catchUpFilter)
+                .Sort(Builders<BsonDocument>.Sort.Descending(_positionFieldName))
+                .Limit(1)
+                .Project(projection)
+                .FirstOrDefaultAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            return last?[_positionFieldName].AsInt64 is { } position
+                ? SubscriptionOrigin.After(_positionFactory(position))
+                : SubscriptionOrigin.Start;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -228,9 +266,6 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
         LogPosition highWaterMark,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        if (resumeOrigin is SubscriptionOrigin<TPos>.End)
-            yield break;
-
         var filter = _catchUpFilter;
 
         if (resumeOrigin is SubscriptionOrigin<TPos>.After after)

@@ -113,6 +113,16 @@ internal sealed class EventLogReader<TEvent>(
         return result is DBNull or null ? null : (long)result;
     }
 
+    public async Task<long?> GetMaxStreamPositionAsync(string streamId, CancellationToken cancellationToken)
+    {
+        await using var command = dataSource.CreateCommand(sql.MaxStreamPosition);
+        command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = streamId });
+
+        var result = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+
+        return result is DBNull or null ? null : (long)result;
+    }
+
     public async Task<bool> StreamExistsAsync(string streamId, CancellationToken cancellationToken)
     {
         await using var command = dataSource.CreateCommand(sql.StreamExists);
