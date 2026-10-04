@@ -271,7 +271,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     /// </summary>
     public delegate Task<TPos?> EndPositionReader(EventLogReader<TEvent> reader, CancellationToken cancellationToken);
 
-    private enum RestartReason
+    internal enum RestartReason
     {
         QueueOverflow,
         FeedReset,
@@ -282,7 +282,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     /// Buffers live events for one subscription cycle. Never blocks the feed: an overflow, like a feed reset, cancels
     /// the restart token and completes the channel so that the cycle ends and a new one starts from the last position.
     /// </summary>
-    private sealed class Observer(int queueCapacity) :
+    internal sealed class Observer(int queueCapacity) :
         IEventLogObserver<ReadEvent<TEvent, string, StreamPosition, LogPosition>>,
         IDisposable
     {
