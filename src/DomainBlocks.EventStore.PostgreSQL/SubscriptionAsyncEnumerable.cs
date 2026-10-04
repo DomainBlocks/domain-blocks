@@ -20,7 +20,9 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// <para>
 /// A cycle is restarted from the last delivered position, after emitting
 /// <see cref="SubscriptionMessage{TEvent,TStreamId,TStreamPos,TLogPos}.FellBehind"/>, when the subscriber's queue
-/// overflows or when the feed has been re-established and may have missed rows.
+/// overflows or when the feed has been re-established and may have missed rows. A restart that is signalled while the
+/// cycle is still replaying takes effect once the replay has reached the high-water mark. The replay is never abandoned
+/// part-way, as the next cycle would have to start it again.
 /// </para>
 /// <para>
 /// The live feed hands every subscription each row of the log undecoded. A subscription takes the event of a row only
@@ -229,28 +231,27 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         Observer observer,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        long? highWaterMark;
+        var highWaterMark = await _reader.GetMaxPositionAsync(cancellationToken).ConfigureAwait(false);
 
-        using (var catchUpCts = CancellationTokenSource.CreateLinkedTokenSource(
-                   cancellationToken,
-                   observer.RestartToken))
+        _logger?.CatchUpBoundary(_correlationId, highWaterMark);
+
+        if (highWaterMark is not null)
         {
-            highWaterMark = await _reader.GetMaxPositionAsync(catchUpCts.Token).ConfigureAwait(false);
+            var afterExclusive = resumeOrigin is SubscriptionOrigin<TPos>.After after
+                ? checked((long)after.Position.Value)
+                : -1;
 
-            _logger?.CatchUpBoundary(_correlationId, highWaterMark);
+            var events = _catchUpReader(_reader, afterExclusive, highWaterMark.Value, cancellationToken);
 
-            if (highWaterMark is not null)
-            {
-                var afterExclusive = resumeOrigin is SubscriptionOrigin<TPos>.After after
-                    ? checked((long)after.Position.Value)
-                    : -1;
-
-                var events = _catchUpReader(_reader, afterExclusive, highWaterMark.Value, catchUpCts.Token);
-
-                await foreach (var e in events.ConfigureAwait(false))
-                    yield return SubscriptionMessage.Event(e);
-            }
+            await foreach (var e in events.ConfigureAwait(false))
+                yield return SubscriptionMessage.Event(e);
         }
+
+        // A restart that was signalled during the replay takes effect only now that the replay is complete. Cancelling
+        // the replay instead would throw away the part of the log it had already read through without delivering
+        // anything, and a replay that takes longer than the queue takes to overflow would never finish.
+        if (observer.RestartToken.IsCancellationRequested)
+            yield break;
 
         _logger?.SubscriptionCaughtUp(_correlationId);
 
