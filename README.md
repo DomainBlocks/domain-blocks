@@ -98,7 +98,9 @@ var typeMap = new EventTypeMapBuilder()
     .AddRead(Ignored.Instance, "TradeNoteAdded", "TradeNoteRemoved")
     .Build();
 
-builder.AddReadTransform((TradeBookedV1 e) => e.IsTest ? Ignored.Instance : new TradeBooked(e.TradeId, e.Quantity));
+builder.AddReadTransform((TradeBookedV1 e) => e.IsTest
+    ? Ignored.Instance
+    : new TradeBooked(e.TradeId, e.Quantity));
 
 public sealed record Ignored : IDomainEvent
 {
