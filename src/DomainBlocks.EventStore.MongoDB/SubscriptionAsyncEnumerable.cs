@@ -287,7 +287,7 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
         }
     }
 
-    private sealed class Observer(int queueCapacity) :
+    internal sealed class Observer(int queueCapacity) :
         IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>,
         IDisposable
     {
