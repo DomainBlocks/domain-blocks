@@ -15,9 +15,9 @@ namespace DomainBlocks.Benchmarking.EventStore;
 /// errors is invalid.
 /// </summary>
 [Category("Benchmark")]
-public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(IEventStoreTestHarness<TStreamPos, TLogPos> harness)
-    :
-        EventStoreTestBase<TStreamPos, TLogPos>(harness)
+public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
+    IEventStoreTestHarness<TStreamPos, TLogPos> harness) :
+    EventStoreTestBase<TStreamPos, TLogPos>(harness)
     where TStreamPos : notnull
     where TLogPos : notnull
 {
@@ -145,9 +145,9 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(IEventStoreT
             for (var pass = 0; pass < warmUpPasses; pass++)
                 eventsRead = await CountAsync(eventStore.ReadAll(options: options), ct);
         }
-        catch (NotSupportedException e)
+        catch (NotSupportedException ex)
         {
-            Assert.Ignore($"The store does not support this read: {e.Message}");
+            Assert.Ignore($"The store does not support this read: {ex.Message}");
         }
 
         GC.Collect();

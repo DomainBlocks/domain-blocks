@@ -80,6 +80,7 @@ public static class BenchmarkReport
         var passes = string.Join(", ", result.Passes.Select(x => $"{x.TotalMilliseconds:F0}"));
 
         await output.WriteLineAsync($"--- {title} ---");
+
         await output.WriteLineAsync(
             $"log:           {result.EventsInLog:N0} events, {result.EventsRead:N0} read per pass");
 
