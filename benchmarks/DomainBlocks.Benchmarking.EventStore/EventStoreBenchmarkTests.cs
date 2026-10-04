@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using DomainBlocks.EventStore;
+using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Events;
 using DomainBlocks.Testing.Integration.EventStore;
@@ -109,6 +110,26 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
     }
 
     /// <summary>
+    /// The same read with a filter. A stream is a hundredth of the log and its ID is indexed. A tenant is a tenth of
+    /// the log and metadata is not indexed. Either way the store reads through the whole log.
+    /// </summary>
+    [TestCase("1% by stream", 1_000)]
+    [TestCase("10% by tenant", 10_000)]
+    [Explicit("Benchmark")]
+    [CancelAfter(BenchmarkTimeouts.DefaultMillis)]
+    public async Task ReadAll_WithFilter_MeasureThroughput(string selection, int expectedCount, CancellationToken ct)
+    {
+        var filter = selection == "1% by stream"
+            ? EventFilter.StreamIds("stream-042")
+            : EventFilter.Metadata("tenant", "tenant-4");
+
+        var options = new ReadAllOptions { Filter = filter };
+        var result = await MeasureReadAllAsync($"read all, forward, with metadata, {selection}", options, ct);
+
+        result.EventsRead.ShouldBe(expectedCount);
+    }
+
+    /// <summary>
     /// Appends a log in which each stream is a hundredth of the events and each tenant a tenth, then reads it with
     /// the given options.
     /// </summary>
@@ -145,7 +166,7 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
             for (var pass = 0; pass < warmUpPasses; pass++)
                 eventsRead = await CountAsync(eventStore.ReadAll(options: options), ct);
         }
-        catch (NotSupportedException ex)
+        catch (Exception ex) when (ex is NotSupportedException or EventFilterNotSupportedException)
         {
             Assert.Ignore($"The store does not support this read: {ex.Message}");
         }

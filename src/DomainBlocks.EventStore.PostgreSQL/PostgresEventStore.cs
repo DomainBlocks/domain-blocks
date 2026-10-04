@@ -179,8 +179,6 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         ReadOrigin<LogPosition>? origin = null,
         ReadAllOptions? options = null)
     {
-        ThrowIfFiltered(options?.Filter, nameof(ReadAll));
-
         return Impl();
 
         async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Impl(
@@ -199,6 +197,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
                 firstKeyExclusive,
                 options.MaxCount,
                 options.IncludeMetadata,
+                options.Filter,
                 cancellationToken);
 
             await foreach (var e in events.ConfigureAwait(false))
@@ -213,7 +212,6 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         ReadStreamOptions? options = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(streamId);
-        ThrowIfFiltered(options?.Filter, nameof(ReadStream));
 
         return Impl();
 
@@ -238,6 +236,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
                 firstKeyExclusive,
                 options.MaxCount,
                 options.IncludeMetadata,
+                options.Filter,
                 cancellationToken);
 
             await foreach (var e in events.ConfigureAwait(false))
@@ -295,7 +294,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
             _logger);
     }
 
-    // Filters are not supported yet. One is refused rather than ignored.
+    // Subscriptions do not filter yet. A filter is refused rather than ignored.
     private static void ThrowIfFiltered(EventFilter? filter, string operation) =>
         EventFilterNotSupportedException.ThrowIfFiltered(filter, $"{nameof(PostgresEventStore)}.{operation}");
 
