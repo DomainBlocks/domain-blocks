@@ -69,7 +69,11 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
             })
             .GetAsyncEnumerator(ct);
 
+        // A second subscription, used to tell when the live feed has delivered all the appended events.
+        await using var witness = _eventStore.SubscribeToAll().GetAsyncEnumerator(ct);
+
         await ShouldBeCaughtUpAsync(enumerator);
+        await ShouldBeCaughtUpAsync(witness);
 
         // Interleave the target stream with another one so that the resume position (a stream position) differs
         // from the global position.
@@ -87,6 +91,15 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
 
             await _eventStore.AppendAsync("target", [Appendable(targetEvent)], cancellationToken: ct);
         }
+
+        // Wait until the witness has seen every appended event before reading the subscription under test. The feed
+        // delivers each event to all subscribers, so by then the subscription's queue (capacity 1) must have
+        // overflowed. Without this wait, the test could start reading before the events arrive, keep up with them,
+        // and never fall behind.
+        var appendedCount = expected.Count * 2; // One "other" event per target event.
+
+        for (var i = 0; i < appendedCount; i++)
+            await NextEventAsync(witness);
 
         var observed = new List<ReadEvent<object, string, StreamPosition, LogPosition>>();
         var fellBehindCount = 0;
