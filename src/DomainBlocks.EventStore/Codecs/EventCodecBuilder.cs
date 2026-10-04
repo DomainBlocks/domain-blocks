@@ -6,34 +6,30 @@ namespace DomainBlocks.EventStore.Codecs;
 
 public sealed class EventCodecBuilder<TEvent, TEventData, TMetadata> where TEvent : notnull where TEventData : notnull
 {
-    private readonly List<EventTypeMapping> _typeMappings = [];
+    private EventTypeMapBuilder? _typeMapBuilder;
     private EventTypeMap? _typeMap;
     private IObjectSerializer<TEventData>? _eventSerializer;
     private IMetadataSerializer<TMetadata>? _metadataSerializer;
     private readonly List<IEventContractMapper<TEvent>> _contractMappers = [];
 
-    public EventCodecBuilder<TEvent, TEventData, TMetadata> MapEvents(params EventTypeMapping[] mappings)
+    public EventCodecBuilder<TEvent, TEventData, TMetadata> MapEvent<T>(string? eventName = null) where T : TEvent
     {
-        ArgumentNullException.ThrowIfNull(mappings);
-
         if (_typeMap is not null)
-            throw new InvalidOperationException("MapEvents cannot be combined with UseEventTypeMap.");
+            throw new InvalidOperationException("MapEvent cannot be combined with UseEventTypeMap.");
 
-        _typeMappings.AddRange(mappings);
+        _typeMapBuilder ??= new EventTypeMapBuilder();
+        _typeMapBuilder.Add<T>(eventName);
         return this;
-    }
-
-    public EventCodecBuilder<TEvent, TEventData, TMetadata> MapEvent<T>(string? name = null) where T : TEvent
-    {
-        return MapEvents(EventTypeMapping.ReadWrite<T>(name));
     }
 
     public EventCodecBuilder<TEvent, TEventData, TMetadata> UseEventTypeMap(EventTypeMap typeMap)
     {
         ArgumentNullException.ThrowIfNull(typeMap);
 
-        if (_typeMappings.Count > 0)
-            throw new InvalidOperationException("UseEventTypeMap cannot be combined with MapEvents.");
+        if (_typeMapBuilder is not null)
+            throw new InvalidOperationException("UseEventTypeMap cannot be combined with MapEvent.");
+
+        typeMap.ValidateAssignableTo(typeof(TEvent));
 
         _typeMap = typeMap;
         return this;
@@ -81,20 +77,16 @@ public sealed class EventCodecBuilder<TEvent, TEventData, TMetadata> where TEven
         ArgumentNullException.ThrowIfNull(defaultEventSerializer);
         ArgumentNullException.ThrowIfNull(defaultMetadataSerializer);
 
+        var typeMap = _typeMap ??
+                      _typeMapBuilder?.Build() ??
+                      throw new InvalidOperationException("No event types are mapped.");
+
         return EventCodec.Create(new EventCodecOptions<TEvent, TEventData, TMetadata>
         {
-            TypeMap = _typeMap ?? BuildTypeMap(),
+            TypeMap = typeMap,
             EventSerializer = _eventSerializer ?? defaultEventSerializer(),
             MetadataSerializer = _metadataSerializer ?? defaultMetadataSerializer(),
             ContractMappers = _contractMappers,
         });
-    }
-
-    private EventTypeMap BuildTypeMap()
-    {
-        if (_typeMappings.Count == 0)
-            throw new InvalidOperationException("No event types are mapped.");
-
-        return EventTypeMap.Create([.. _typeMappings]);
     }
 }

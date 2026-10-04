@@ -1,59 +1,53 @@
-﻿namespace DomainBlocks.EventStore.TypeMapping;
+using System.Diagnostics;
+using DomainBlocks.Core.Exceptions;
 
-public sealed class EventTypeMapping
+namespace DomainBlocks.EventStore.TypeMapping;
+
+public abstract record EventTypeMapping
 {
-    private EventTypeMapping(Type eventType, string? writeName, IReadOnlyList<string> readNames)
+    private EventTypeMapping()
     {
-        EventType = eventType;
-        WriteName = writeName;
-        ReadNames = readNames;
     }
 
-    public Type EventType { get; }
-
-    public string? WriteName { get; }
-
-    public IReadOnlyList<string> ReadNames { get; }
-
-    public static EventTypeMapping ReadWrite<TEvent>(string? name = null) => ReadWrite(typeof(TEvent), name);
-
-    public static EventTypeMapping ReadWrite(Type eventType, string? name = null)
+    internal void ValidateAssignableTo(Type targetType)
     {
-        var resolvedName = ResolveName(eventType, name);
-        return new EventTypeMapping(eventType, resolvedName, [resolvedName]);
+        var eventType = this switch
+        {
+            Write w => w.EventType,
+            ReadToType r => r.EventType,
+            ReadToInstance r => r.Instance.GetType(),
+            _ => throw new UnreachableException($"Unhandled mapping type '{GetType()}'.")
+        };
+
+        if (!eventType.IsAssignableTo(targetType))
+        {
+            throw new DomainBlocksException(
+                $"Invalid mapping [{this}]: typeof({eventType.Name}) is not assignable to typeof({targetType.Name}).");
+        }
     }
 
-    public static EventTypeMapping WriteOnly<TEvent>(string? name = null) => WriteOnly(typeof(TEvent), name);
-
-    public static EventTypeMapping WriteOnly(Type eventType, string? name = null) =>
-        new(eventType, ResolveName(eventType, name), []);
-
-    public static EventTypeMapping ReadOnly<TEvent>(params string[] names) => ReadOnly(typeof(TEvent), names);
-
-    public static EventTypeMapping ReadOnly(Type eventType, params string[] names)
+    public sealed record Write(Type EventType, string EventName) : EventTypeMapping
     {
-        if (names.Any(string.IsNullOrWhiteSpace))
-            throw new ArgumentException("Names cannot be null or whitespace.", nameof(names));
-
-        return new EventTypeMapping(eventType, null, names.Length == 0 ? [eventType.Name] : [.. names]);
+        public override string ToString() => $"Write typeof({EventType.Name}) -> '{EventName}'";
     }
 
-    public override string ToString()
+    public abstract record Read : EventTypeMapping
     {
-        var writeName = WriteName is null ? "<none>" : $"'{WriteName}'";
+        private protected Read(string eventName)
+        {
+            EventName = eventName;
+        }
 
-        var readNames = ReadNames.Count == 0
-            ? "<none>"
-            : $"['{string.Join("', '", ReadNames)}']";
-
-        return $"{EventType.Name}: WriteName={writeName}, ReadNames={readNames}";
+        public string EventName { get; }
     }
 
-    private static string ResolveName(Type eventType, string? name)
+    public sealed record ReadToType(string EventName, Type EventType) : Read(EventName)
     {
-        if (name is not null && string.IsNullOrWhiteSpace(name))
-            throw new ArgumentException("Name cannot be empty or whitespace.", nameof(name));
+        public override string ToString() => $"Read '{EventName}' -> typeof({EventType.Name})";
+    }
 
-        return name ?? eventType.Name;
+    public sealed record ReadToInstance(string EventName, object Instance) : Read(EventName)
+    {
+        public override string ToString() => $"Read '{EventName}' -> instance of {Instance.GetType().Name}";
     }
 }

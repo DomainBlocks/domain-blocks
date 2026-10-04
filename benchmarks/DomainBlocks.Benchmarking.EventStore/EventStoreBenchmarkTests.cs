@@ -19,7 +19,7 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(IEventStoreT
     where TStreamPos : notnull
     where TLogPos : notnull
 {
-    private readonly EventTypeMap _eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>());
+    private readonly EventTypeMap _eventTypeMap = new EventTypeMapBuilder().Add<TestEvent>().Build();
 
     // A benchmark's result must not depend on which tests ran before it.
     protected override bool ResetLogBeforeEachTest => true;

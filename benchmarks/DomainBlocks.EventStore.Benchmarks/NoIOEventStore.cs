@@ -71,13 +71,17 @@ internal static class NoIOEventStore
         AppendableEvent<IDomainEvent>[] storedEvents)
         where TEventData : notnull
     {
+        var typeMapBuilder = new EventTypeMapBuilder();
+
+        if (format.IsProtobuf)
+            typeMapBuilder.Add<ProtoTestEvent>(nameof(TestEvent));
+        else
+            typeMapBuilder.Add<TestEvent>();
+
         var codecOptions = new EventCodecOptions<IDomainEvent, TEventData, TMetadata>
         {
             // Both event types are stored under the same name, so that name lookups cost the same for every format.
-            TypeMap = EventTypeMap.Create(
-                format.IsProtobuf
-                    ? EventTypeMapping.ReadWrite<ProtoTestEvent>(nameof(TestEvent))
-                    : EventTypeMapping.ReadWrite<TestEvent>()),
+            TypeMap = typeMapBuilder.Build(),
             EventSerializer = eventSerializer,
             MetadataSerializer = metadataSerializer
         };

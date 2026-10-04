@@ -14,8 +14,7 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 /// </summary>
 public abstract class PostgresIntegrationTest(Action<PostgresEventStoreOptions>? configure = null)
 {
-    protected static readonly EventTypeMap DefaultEventTypeMap =
-        EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>());
+    protected static readonly EventTypeMap DefaultEventTypeMap = new EventTypeMapBuilder().Add<TestEvent>().Build();
 
     protected PostgresEventStoreTestHarness Harness { get; } = new(configure);
 

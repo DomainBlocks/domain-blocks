@@ -22,10 +22,11 @@ public class EventSourcedStateStoreTests
     {
         _options = new MongoEventStoreOptions { DatabaseName = "dbx_es_event_sourced_state_tests" };
 
-        var eventTypeMap = EventTypeMap.Create(
-            EventTypeMapping.ReadWrite<ShoppingSessionStarted>(),
-            EventTypeMapping.ReadWrite<ItemAddedToShoppingCart>(),
-            EventTypeMapping.ReadWrite<ItemRemovedFromShoppingCart>());
+        var eventTypeMap = new EventTypeMapBuilder()
+            .Add<ShoppingSessionStarted>()
+            .Add<ItemAddedToShoppingCart>()
+            .Add<ItemRemovedFromShoppingCart>()
+            .Build();
 
         _eventStore = new MongoEventStoreBuilder<IDomainEvent>()
             .UseClient(MongoTestEnvironment.MongoClient)

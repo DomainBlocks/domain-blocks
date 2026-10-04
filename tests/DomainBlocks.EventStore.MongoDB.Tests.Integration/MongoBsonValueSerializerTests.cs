@@ -47,9 +47,10 @@ public class MongoBsonValueSerializerTests
     private async Task ShouldRoundTripAsync<TEvent>(TEvent @event, IObjectSerializer<BsonValue> serializer)
         where TEvent : class
     {
-        var eventTypeMap = EventTypeMap.Create(
-            EventTypeMapping.ReadWrite<TestEvent>(),
-            EventTypeMapping.ReadWrite<ProtoTestEvent>(nameof(ProtoTestEvent)));
+        var eventTypeMap = new EventTypeMapBuilder()
+            .Add<TestEvent>()
+            .Add<ProtoTestEvent>()
+            .Build();
 
         await using var eventStore = _harness.CreateBuilder()
             .ConfigureCodec(x => x

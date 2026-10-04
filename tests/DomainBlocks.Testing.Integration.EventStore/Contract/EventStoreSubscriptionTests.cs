@@ -6,7 +6,8 @@ using Shouldly;
 
 namespace DomainBlocks.Testing.Integration.EventStore.Contract;
 
-public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(IEventStoreTestHarness<TStreamPos, TLogPos> harness) :
+public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(
+    IEventStoreTestHarness<TStreamPos, TLogPos> harness) :
     EventStoreTestBase<TStreamPos, TLogPos>(harness)
     where TStreamPos : notnull
     where TLogPos : notnull
@@ -19,7 +20,7 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(IEventSto
     [SetUp]
     public void SetUp()
     {
-        var eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>());
+        var eventTypeMap = new EventTypeMapBuilder().Add<TestEvent>().Build();
         EventStore = CreateEventStore(eventTypeMap);
     }
 

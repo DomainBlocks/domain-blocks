@@ -9,7 +9,8 @@ namespace DomainBlocks.Testing.Integration.EventStore.Contract;
 /// <summary>
 /// Several store instances appending concurrently to one store, as separate processes would.
 /// </summary>
-public abstract class EventStoreConcurrencyTests<TStreamPos, TLogPos>(IEventStoreTestHarness<TStreamPos, TLogPos> harness) :
+public abstract class EventStoreConcurrencyTests<TStreamPos, TLogPos>(
+    IEventStoreTestHarness<TStreamPos, TLogPos> harness) :
     EventStoreTestBase<TStreamPos, TLogPos>(harness)
     where TStreamPos : notnull
     where TLogPos : notnull
@@ -21,7 +22,7 @@ public abstract class EventStoreConcurrencyTests<TStreamPos, TLogPos>(IEventStor
     [SetUp]
     public void SetUp()
     {
-        var eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>());
+        var eventTypeMap = new EventTypeMapBuilder().Add<TestEvent>().Build();
 
         _instances = Enumerable
             .Range(0, InstanceCount)
@@ -149,7 +150,8 @@ public abstract class EventStoreConcurrencyTests<TStreamPos, TLogPos>(IEventStor
 
         readEvents
             .Select(x => x.Context.StreamPosition)
-            .ShouldBe([CreateStreamPosition(0), CreateStreamPosition(1)], "The stream must hold the seed and the winner");
+            .ShouldBe([CreateStreamPosition(0), CreateStreamPosition(1)],
+                "The stream must hold the seed and the winner");
     }
 
     [Test]
