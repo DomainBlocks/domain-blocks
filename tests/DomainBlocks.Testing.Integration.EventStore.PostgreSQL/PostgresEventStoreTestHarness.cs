@@ -59,17 +59,13 @@ public sealed class PostgresEventStoreTestHarness(Action<PostgresEventStoreOptio
         EventTypeMap eventTypeMap,
         EventFormat? eventFormat = null,
         IEnumerable<IEventContractMapper<object>>? contractMappers = null,
-        string loggerNameSuffix = "",
-        IEnumerable<string>? ignoredEventNames = null)
+        string loggerNameSuffix = "")
     {
         var builder = CreateBuilder(loggerNameSuffix)
             .ConfigureCodec(x => x
                 .UseEventTypeMap(eventTypeMap)
                 .UseEventSerializer(EventSerializerFor(eventFormat ?? EventFormat.Json))
                 .AddContractMappers([.. contractMappers ?? []]));
-
-        if (ignoredEventNames is not null)
-            builder.IgnoreEvents([.. ignoredEventNames]).UseIgnoredEventSentinel(IgnoredEvent.Instance);
 
         return builder.Build();
     }

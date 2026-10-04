@@ -1,6 +1,5 @@
 using System.Collections.Frozen;
 using System.Runtime.CompilerServices;
-using DomainBlocks.Core;
 using DomainBlocks.EventStore.Metadata;
 using DomainBlocks.EventStore.Transforms;
 
@@ -22,8 +21,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
     public EventStoreDecorator(
         IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> inner,
         IEnumerable<IMetadataContributor<TEvent>> metadataContributors,
-        IEnumerable<IReadEventTransform<TEvent>> readTransforms,
-        Optional<TEvent> ignoredEventSentinel)
+        IEnumerable<IReadEventTransform<TEvent>> readTransforms)
     {
         _metadataContributors = [.. metadataContributors];
 
@@ -42,16 +40,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
 
         _readTransforms = transformsByType.ToFrozenDictionary();
 
-        if (ignoredEventSentinel.HasValue && _readTransforms.ContainsKey(ignoredEventSentinel.Value.GetType()))
-        {
-            throw new ArgumentException(
-                $"The ignored event sentinel type '{ignoredEventSentinel.Value.GetType().Name}' must not have a " +
-                "read event transform registered.",
-                nameof(ignoredEventSentinel));
-        }
-
         Inner = inner;
-        IgnoredEventSentinel = ignoredEventSentinel;
     }
 
     public IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> Inner { get; }
@@ -59,8 +48,6 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
     public IReadOnlyList<IMetadataContributor<TEvent>> MetadataContributors => _metadataContributors;
 
     public IReadOnlyList<IReadEventTransform<TEvent>> ReadTransforms => _readTransforms.Values;
-
-    public Optional<TEvent> IgnoredEventSentinel { get; }
 
     public Task EnsureInitializedAsync(CancellationToken cancellationToken = default) =>
         Inner.EnsureInitializedAsync(cancellationToken);
@@ -259,13 +246,6 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         if (produced)
             return;
 
-        if (!IgnoredEventSentinel.HasValue)
-        {
-            throw new InvalidOperationException(
-                $"The read event transform for '{sourceType.Name}' produced no events, " +
-                "but no ignored-event sentinel is configured. Call UseIgnoredEventSentinel to configure one.");
-        }
-
-        output.Add(ReadEvent.Create(IgnoredEventSentinel.Value, context));
+        throw new InvalidOperationException($"The read event transform for '{sourceType.Name}' produced no events");
     }
 }

@@ -13,7 +13,7 @@ namespace DomainBlocks.EventStore.PostgreSQL.Benchmarks;
 public class PostgresEventStoreBenchmarkTests() :
     EventStoreBenchmarkTests<StreamPosition, LogPosition>(new PostgresEventStoreTestHarness())
 {
-    private static readonly EventTypeMap EventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>());
+    private static readonly EventTypeMap EventTypeMap = new EventTypeMapBuilder().Add<TestEvent>().Build();
 
     private PostgresEventStoreTestHarness Postgres => (PostgresEventStoreTestHarness)Harness;
 

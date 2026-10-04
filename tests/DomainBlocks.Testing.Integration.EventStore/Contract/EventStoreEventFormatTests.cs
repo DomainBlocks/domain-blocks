@@ -33,9 +33,10 @@ public abstract class EventStoreEventFormatTests<TStreamPos, TLogPos>(
             ? new ProtoTestEvent { Value = "test-123" }
             : new TestEvent { Value = "test-123" };
 
-        var eventTypeMap = EventTypeMap.Create(
-            EventTypeMapping.ReadWrite<TestEvent>(),
-            EventTypeMapping.ReadWrite<ProtoTestEvent>(nameof(ProtoTestEvent)));
+        var eventTypeMap = new EventTypeMapBuilder()
+            .Add<TestEvent>()
+            .Add<ProtoTestEvent>()
+            .Build();
 
         await using var eventStore = CreateEventStore(eventTypeMap, format);
 

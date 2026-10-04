@@ -22,7 +22,7 @@ public abstract class EventStoreReadAllTests<TStreamPos, TLogPos>(IEventStoreTes
     [SetUp]
     public void SetUp()
     {
-        var eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>());
+        var eventTypeMap = new EventTypeMapBuilder().Add<TestEvent>().Build();
         EventStore = CreateEventStore(eventTypeMap);
     }
 

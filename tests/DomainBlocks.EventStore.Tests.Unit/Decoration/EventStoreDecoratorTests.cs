@@ -256,7 +256,7 @@ public class EventStoreDecoratorTests
     }
 
     [Test]
-    public async Task ReadStream_TransformIgnoresEventWithoutIgnoredEventInstance_Throws()
+    public async Task ReadStream_TransformReturningNoEvents_Throws()
     {
         _inner.ReadEvents.Add(FakeEventStore.ReadEventAt(new Legacy(""), 0));
         var store = _inner.WithReadTransforms(new SplitTransform());
@@ -264,56 +264,7 @@ public class EventStoreDecoratorTests
         var ex = await Should.ThrowAsync<InvalidOperationException>(() =>
             store.ReadStream("s").ToArrayAsync().AsTask());
 
-        ex.Message.ShouldContain("no ignored-event sentinel is configured");
-    }
-
-    [Test]
-    public async Task ReadStream_TransformIgnoresEventWithIgnoredEventInstance_EmitsIgnoredEventWithSourceContext()
-    {
-        var metadata = new Dictionary<string, string> { ["user"] = "bob" };
-        _inner.ReadEvents.Add(FakeEventStore.ReadEventAt(new Legacy(""), 4, metadata));
-        _inner.ReadEvents.Add(FakeEventStore.ReadEventAt(new Current("kept"), 5));
-        var store = _inner.WithReadTransforms(new SplitTransform()).UseIgnoredEventSentinel(IgnoredEvent.Instance);
-
-        var events = await store.ReadStream("s").ToArrayAsync();
-
-        events.Length.ShouldBe(2);
-        events[0].Payload.ShouldBeSameAs(IgnoredEvent.Instance);
-        events[0].Context.StreamPosition.ShouldBe(new StreamPosition(4));
-        events[0].Context.Metadata.ShouldBeSameAs(metadata);
-        events[1].Payload.ShouldBe(new Current("kept"));
-    }
-
-    [Test]
-    public async Task ReadStream_IgnoredTailEventWithIgnoredEventInstance_StillObservesLastPosition()
-    {
-        _inner.ReadEvents.Add(FakeEventStore.ReadEventAt(new Current("a"), 0));
-        _inner.ReadEvents.Add(FakeEventStore.ReadEventAt(new Legacy(""), 1));
-        var store = _inner.WithReadTransforms(new SplitTransform()).UseIgnoredEventSentinel(IgnoredEvent.Instance);
-
-        var events = await store.ReadStream("s").ToArrayAsync();
-
-        events[^1].Context.StreamPosition.ShouldBe(new StreamPosition(1));
-    }
-
-    [Test]
-    public async Task SubscribeToAll_IgnoredEventWithIgnoredEventInstance_EmitsIgnoredEventMessage()
-    {
-        _inner.SubscriptionMessages.Add(SubscriptionMessage.Event(FakeEventStore.ReadEventAt(new Legacy(""), 9)));
-        var store = _inner.WithReadTransforms(new SplitTransform()).UseIgnoredEventSentinel(IgnoredEvent.Instance);
-
-        var messages = await store.SubscribeToAll().ToArrayAsync();
-
-        var e = messages.ShouldHaveSingleItem().Event.ShouldNotBeNull();
-        e.Payload.ShouldBeSameAs(IgnoredEvent.Instance);
-        e.Context.LogPosition.ShouldBe(new LogPosition(9));
-    }
-
-    [Test]
-    public void WithReadTransforms_IgnoredEventTypeHasTransform_Throws()
-    {
-        Should.Throw<ArgumentException>(() =>
-            _inner.WithReadTransforms(new SplitTransform()).UseIgnoredEventSentinel(new Legacy("ignored")));
+        ex.Message.ShouldContain("produced no events");
     }
 
     [Test]

@@ -48,14 +48,15 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
             FilledAt = amended.AmendedAt.AddHours(1)
         };
 
-        var eventTypeMap = EventTypeMap.Create(
-            EventTypeMapping.WriteOnly<LimitOrderSubmitted>(),
-            EventTypeMapping.WriteOnly<LimitOrderAmended>(),
-            EventTypeMapping.WriteOnly<LimitOrderFilled>(),
-            EventTypeMapping.ReadOnly<LimitOrderEvent>(
+        var eventTypeMap = new EventTypeMapBuilder()
+            .AddWrite<LimitOrderSubmitted>()
+            .AddWrite<LimitOrderAmended>()
+            .AddWrite<LimitOrderFilled>()
+            .AddRead<LimitOrderEvent>(
                 nameof(LimitOrderSubmitted),
                 nameof(LimitOrderAmended),
-                nameof(LimitOrderFilled)));
+                nameof(LimitOrderFilled))
+            .Build();
 
         var eventStore = CreateEventStore(eventTypeMap);
         LimitOrderEvent[] orderEvents;
@@ -96,7 +97,7 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
         if (!Harness.SupportedFormats.Contains(EventFormat.Protobuf))
             Assert.Ignore($"The store's test codec does not support {EventFormat.Protobuf}.");
 
-        var eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<TestEvent>());
+        var eventTypeMap = new EventTypeMapBuilder().Add<TestEvent>().Build();
         var streamId = $"test-contract-mapper-{Guid.NewGuid()}";
 
         var originalEvent = new TestEvent { Value = "test-123" };
@@ -145,17 +146,17 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
     [Test]
     public async Task ReadStream_DelegateTransformWithIgnoredEvent_ReturnsIgnoredAtTheEventsPosition()
     {
-        var eventTypeMap = EventTypeMap.Create(
-            EventTypeMapping.ReadWrite<ShipmentDispatched>(),
-            EventTypeMapping.ReadWrite<ShipmentDispatchedV2>());
+        var eventTypeMap = new EventTypeMapBuilder()
+            .Add<ShipmentDispatched>()
+            .Add<ShipmentDispatchedV2>()
+            .Build();
 
         var streamId = $"test-read-transform-ignore-{Guid.NewGuid()}";
         var kept = new ShipmentDispatchedV2(Guid.NewGuid(), new DateTime(2025, 08, 25, 14, 30, 0, DateTimeKind.Utc));
         var retired = new ShipmentDispatched(kept.ShipmentId, kept.DispatchedAt, []);
 
         var eventStore = CreateEventStore(eventTypeMap)
-            .WithReadTransforms(ReadEventTransform.Create<object, ShipmentDispatched>(_ => []))
-            .UseIgnoredEventSentinel(IgnoredEvent.Instance);
+            .WithReadTransforms(ReadEventTransform.Create<object, ShipmentDispatched>(_ => IgnoredEvent.Instance));
 
         try
         {
@@ -177,7 +178,7 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
     [Test]
     public async Task ReadStream_DelegateTransformWithIgnoredEventAndNoIgnoredEventInstance_Throws()
     {
-        var eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<ShipmentDispatched>());
+        var eventTypeMap = new EventTypeMapBuilder().Add<ShipmentDispatched>().Build();
         var streamId = $"test-read-transform-ignore-{Guid.NewGuid()}";
         var retired = new ShipmentDispatched(Guid.NewGuid(), DateTime.UtcNow, []);
 
@@ -207,9 +208,10 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
         var next = new ShipmentDispatchedV2(Guid.NewGuid(), kept.DispatchedAt.AddHours(1));
 
         // Written by a store that still knows the event.
-        var writer = CreateEventStore(EventTypeMap.Create(
-            EventTypeMapping.ReadWrite<ShipmentDispatched>(),
-            EventTypeMapping.ReadWrite<ShipmentDispatchedV2>()));
+        var writer = CreateEventStore(new EventTypeMapBuilder()
+            .Add<ShipmentDispatched>()
+            .Add<ShipmentDispatchedV2>()
+            .Build());
 
         try
         {
@@ -220,10 +222,13 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
             await writer.DisposeAsync();
         }
 
-        // Read by a store that has no type mapping for ShipmentDispatched, only its stored name.
+        // Read by a store that "ignores" ShipmentDispatched by mapping every read name 'ShipmentDispatched' to
+        // IgnoredEvent.Instance.
         var eventStore = CreateEventStore(
-            EventTypeMap.Create(EventTypeMapping.ReadWrite<ShipmentDispatchedV2>()),
-            ignoredEventNames: [nameof(ShipmentDispatched)]);
+            new EventTypeMapBuilder()
+                .Add<ShipmentDispatchedV2>()
+                .AddRead(IgnoredEvent.Instance, nameof(ShipmentDispatched))
+                .Build());
 
         try
         {
@@ -245,7 +250,8 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
 
     private async Task AssertShipmentDispatchedIsTransformedAsync(IReadEventTransform<object> transform)
     {
-        var eventTypeMap = EventTypeMap.Create(EventTypeMapping.ReadWrite<ShipmentDispatched>());
+        var eventTypeMap = new EventTypeMapBuilder().Add<ShipmentDispatched>().Build();
+
         var streamId = $"test-read-transform-{Guid.NewGuid()}";
         var shipmentId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
         var dispatchedAt = new DateTime(2025, 08, 25, 14, 30, 0, DateTimeKind.Utc);

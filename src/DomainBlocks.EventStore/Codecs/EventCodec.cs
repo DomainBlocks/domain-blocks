@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using System.Diagnostics;
 using DomainBlocks.EventStore.ContractMapping;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.Abstractions;
@@ -28,6 +29,7 @@ public sealed class EventCodec<TEvent, TEventData, TMetadata> : IEventCodec<TEve
     public EventCodec(EventCodecOptions<TEvent, TEventData, TMetadata> options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        options.TypeMap.ValidateAssignableTo(typeof(TEvent));
 
         _typeMap = options.TypeMap;
         _eventSerializer = options.EventSerializer;
@@ -56,19 +58,25 @@ public sealed class EventCodec<TEvent, TEventData, TMetadata> : IEventCodec<TEve
 
     public DecodedEvent<TEvent> Decode(string eventName, TEventData eventData, TMetadata? metadata)
     {
-        var eventType = _typeMap.GetEventType(eventName);
+        var payload = _typeMap.GetReadMapping(eventName) switch
+        {
+            EventTypeMapping.ReadToType m => DeserializePayload(m.EventType, eventData),
+            EventTypeMapping.ReadToInstance m => (TEvent)m.Instance,
+            var m => throw new UnreachableException($"Unknown read mapping type '{m.GetType()}'.")
+        };
 
-        var payloadType = _contractMappers.TryGetValue(eventType, out var mapper)
-            ? mapper.ContractType
-            : eventType;
-
-        var deserializedPayload = _eventSerializer.Deserialize(eventData, payloadType);
-        var payload = mapper is null ? (TEvent)deserializedPayload : mapper.FromContract(deserializedPayload);
-
-        return DecodedEvent.Create(payload, DecodeMetadata(metadata));
+        return DecodedEvent.Create(payload, DeserializeMetadata(metadata));
     }
 
-    private IReadOnlyDictionary<string, string> DecodeMetadata(TMetadata? metadata)
+    private TEvent DeserializePayload(Type eventType, TEventData eventData)
+    {
+        if (_contractMappers.TryGetValue(eventType, out var mapper))
+            return mapper.FromContract(_eventSerializer.Deserialize(eventData, mapper.ContractType));
+
+        return (TEvent)_eventSerializer.Deserialize(eventData, eventType);
+    }
+
+    private IReadOnlyDictionary<string, string> DeserializeMetadata(TMetadata? metadata)
     {
         return !EqualityComparer<TMetadata>.Default.Equals(metadata, default)
             ? _metadataSerializer.Deserialize(metadata!)

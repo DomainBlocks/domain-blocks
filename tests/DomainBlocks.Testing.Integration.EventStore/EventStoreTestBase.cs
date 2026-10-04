@@ -38,15 +38,13 @@ public abstract class EventStoreTestBase<TStreamPos, TLogPos>(IEventStoreTestHar
         EventTypeMap eventTypeMap,
         EventFormat? eventFormat = null,
         IEnumerable<IEventContractMapper<object>>? contractMappers = null,
-        string loggerNameSuffix = "",
-        IEnumerable<string>? ignoredEventNames = null)
+        string loggerNameSuffix = "")
     {
         return Harness.CreateEventStore(
             eventTypeMap,
             eventFormat,
             contractMappers,
-            loggerNameSuffix,
-            ignoredEventNames);
+            loggerNameSuffix);
     }
 
     /// <summary>

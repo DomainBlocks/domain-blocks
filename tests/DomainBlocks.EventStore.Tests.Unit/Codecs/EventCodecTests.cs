@@ -1,3 +1,4 @@
+using DomainBlocks.Core.Exceptions;
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.ContractMapping;
 using DomainBlocks.EventStore.TypeMapping;
@@ -8,10 +9,11 @@ namespace DomainBlocks.EventStore.Tests.Unit.Codecs;
 
 public class EventCodecTests
 {
-    private static readonly EventTypeMap TypeMap = EventTypeMap.Create(
-        EventTypeMapping.ReadWrite<OrderPlaced>(),
-        EventTypeMapping.ReadWrite<OrderShipped>(),
-        EventTypeMapping.ReadOnly<OrderPlaced>("OrderPlacedV1"));
+    private static readonly EventTypeMap TypeMap = new EventTypeMapBuilder()
+        .Add<OrderPlaced>()
+        .Add<OrderShipped>()
+        .AddRead<OrderPlaced>("OrderPlacedV1")
+        .Build();
 
     private static EventCodec<object, string, string> CreateCodec(params IEventContractMapper<object>[] mappers)
     {
@@ -101,16 +103,17 @@ public class EventCodecTests
     }
 
     [Test]
-    public void Decode_DeserializedTypeNotAssignableToEventType_Throws()
+    public void Create_EventTypeMappingsNotAssignableToCodecEventType_Throws()
     {
-        var codec = EventCodec.Create(new EventCodecOptions<OrderPlaced, string, string>
-        {
-            TypeMap = TypeMap,
-            EventSerializer = new FakeObjectSerializer(),
-            MetadataSerializer = new FakeMetadataSerializer()
-        });
+        var exception = Should.Throw<DomainBlocksException>(() => EventCodec.Create(
+            new EventCodecOptions<OrderPlaced, string, string>
+            {
+                TypeMap = TypeMap,
+                EventSerializer = new FakeObjectSerializer(),
+                MetadataSerializer = new FakeMetadataSerializer()
+            }));
 
-        Should.Throw<InvalidCastException>(() => codec.Decode("OrderShipped", "OrderShipped:o1", null));
+        exception.Message.ShouldContain("is not assignable to");
     }
 
     private sealed record OrderPlaced(string OrderId);

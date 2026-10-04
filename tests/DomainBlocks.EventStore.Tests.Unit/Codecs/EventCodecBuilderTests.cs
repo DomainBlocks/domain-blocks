@@ -1,5 +1,4 @@
 using DomainBlocks.EventStore.Codecs;
-using DomainBlocks.EventStore.ContractMapping;
 using DomainBlocks.EventStore.TypeMapping;
 using NUnit.Framework;
 using Shouldly;
@@ -8,17 +7,6 @@ namespace DomainBlocks.EventStore.Tests.Unit.Codecs;
 
 public class EventCodecBuilderTests
 {
-    [Test]
-    public void Build_WithMappings_RoundTripsAnEvent()
-    {
-        var codec = BuildWithFakes(Builder().MapEvents(EventTypeMapping.ReadWrite<OrderPlaced>()));
-
-        var encoded = codec.Encode(new OrderPlaced("o1"), []);
-        encoded.EventName.ShouldBe(nameof(OrderPlaced));
-
-        codec.Decode(encoded.EventName, encoded.EventData, null).Payload.ShouldBe(new OrderPlaced("o1"));
-    }
-
     [Test]
     public void MapEvent_DefaultsNameToTypeName_AndAcceptsOverride()
     {
@@ -29,19 +17,9 @@ public class EventCodecBuilderTests
     }
 
     [Test]
-    public void MapEvents_CalledRepeatedly_Accumulates()
-    {
-        var codec = BuildWithFakes(Builder()
-            .MapEvents(EventTypeMapping.ReadWrite<OrderPlaced>())
-            .MapEvents(EventTypeMapping.ReadWrite<OrderShipped>()));
-
-        codec.Encode(new OrderShipped("o1"), []).EventName.ShouldBe(nameof(OrderShipped));
-    }
-
-    [Test]
     public void UseEventTypeMap_UsesThePrebuiltMap()
     {
-        var map = EventTypeMap.Create(EventTypeMapping.ReadWrite<OrderPlaced>("Placed"));
+        var map = new EventTypeMapBuilder().Add<OrderPlaced>("Placed").Build();
 
         var codec = BuildWithFakes(Builder().UseEventTypeMap(map));
 
@@ -49,20 +27,20 @@ public class EventCodecBuilderTests
     }
 
     [Test]
-    public void MapEvents_AfterUseEventTypeMap_Throws()
+    public void MapEvent_AfterUseEventTypeMap_Throws()
     {
-        var builder = Builder().UseEventTypeMap(EventTypeMap.Create(EventTypeMapping.ReadWrite<OrderPlaced>()));
+        var builder = Builder().UseEventTypeMap(new EventTypeMapBuilder().Add<OrderPlaced>().Build());
 
-        Should.Throw<InvalidOperationException>(() => builder.MapEvents(EventTypeMapping.ReadWrite<OrderShipped>()));
+        Should.Throw<InvalidOperationException>(() => builder.MapEvent<OrderShipped>());
     }
 
     [Test]
-    public void UseEventTypeMap_AfterMapEvents_Throws()
+    public void UseEventTypeMap_AfterMapEvent_Throws()
     {
-        var builder = Builder().MapEvents(EventTypeMapping.ReadWrite<OrderPlaced>());
+        var builder = Builder().MapEvent<OrderPlaced>();
 
         Should.Throw<InvalidOperationException>(() =>
-            builder.UseEventTypeMap(EventTypeMap.Create(EventTypeMapping.ReadWrite<OrderShipped>())));
+            builder.UseEventTypeMap(new EventTypeMapBuilder().Add<OrderShipped>().Build()));
     }
 
     [Test]
@@ -123,13 +101,4 @@ public class EventCodecBuilderTests
     private sealed record OrderPlaced(string OrderId);
 
     private sealed record OrderShipped(string OrderId);
-
-    private sealed record OrderShippedContract(string OrderId);
-
-    private sealed class OrderShippedMapper : EventContractMapper<object, OrderShipped, OrderShippedContract>
-    {
-        protected override OrderShippedContract ToContract(OrderShipped @event) => new(@event.OrderId);
-
-        protected override OrderShipped FromContract(OrderShippedContract contract) => new(contract.OrderId);
-    }
 }

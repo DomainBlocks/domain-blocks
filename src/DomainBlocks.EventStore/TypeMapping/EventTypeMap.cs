@@ -1,57 +1,51 @@
 using System.Collections.Frozen;
-using System.Diagnostics.CodeAnalysis;
 using DomainBlocks.Core.Exceptions;
 
 namespace DomainBlocks.EventStore.TypeMapping;
 
-/// <summary>
-/// Defines the mapping between event CLR types and their string names used in storage.
-/// </summary>
 public sealed class EventTypeMap
 {
-    private readonly FrozenDictionary<Type, string> _writes;
-    private readonly FrozenDictionary<string, Type> _reads;
+    private readonly FrozenDictionary<Type, EventTypeMapping.Write> _writes;
+    private readonly FrozenDictionary<string, EventTypeMapping.Read> _reads;
 
-    private EventTypeMap(FrozenDictionary<Type, string> writes, FrozenDictionary<string, Type> reads)
+    private EventTypeMap(
+        FrozenDictionary<Type, EventTypeMapping.Write> writes,
+        FrozenDictionary<string, EventTypeMapping.Read> reads)
     {
         _writes = writes;
         _reads = reads;
     }
 
     public string GetEventName(Type eventType) =>
-        _writes.GetValueOrDefault(eventType) ?? throw new EventTypeNotMappedException(eventType);
+        _writes.GetValueOrDefault(eventType)?.EventName ?? throw new EventTypeNotMappedException(eventType);
 
-    public Type GetEventType(string eventName) =>
+    public EventTypeMapping.Read GetReadMapping(string eventName) =>
         _reads.GetValueOrDefault(eventName) ?? throw new EventNameNotMappedException(eventName);
 
-    public bool TryGetEventType(string eventName, [NotNullWhen(true)] out Type? eventType) =>
-        _reads.TryGetValue(eventName, out eventType);
-
-    public static EventTypeMap Create(params EventTypeMapping[] mappings)
+    internal static EventTypeMap Create(IEnumerable<EventTypeMapping> mappings)
     {
-        var writes = new Dictionary<Type, string>();
-        var reads = new Dictionary<string, Type>();
+        var writes = new Dictionary<Type, EventTypeMapping.Write>();
+        var reads = new Dictionary<string, EventTypeMapping.Read>();
 
         foreach (var mapping in mappings)
         {
-            if (mapping.WriteName is { } writeName && !writes.TryAdd(mapping.EventType, writeName))
+            switch (mapping)
             {
-                throw new DomainBlocksException(
-                    $"Cannot add event type mapping ({mapping}): " +
-                    $"type '{mapping.EventType.Name}' is already mapped to name '{writes[mapping.EventType]}'.");
-            }
-
-            foreach (var name in mapping.ReadNames)
-            {
-                if (!reads.TryAdd(name, mapping.EventType))
-                {
+                case EventTypeMapping.Write write when !writes.TryAdd(write.EventType, write):
                     throw new DomainBlocksException(
-                        $"Cannot add event type mapping ({mapping}): " +
-                        $"name '{name}' is already mapped to type '{reads[name].Name}'.");
-                }
+                        $"Cannot add [{write}]: conflicts with [{writes[write.EventType]}].");
+
+                case EventTypeMapping.Read read when !reads.TryAdd(read.EventName, read):
+                    throw new DomainBlocksException($"Cannot add [{read}]: conflicts with [{reads[read.EventName]}].");
             }
         }
 
-        return new EventTypeMap(writes.ToFrozenDictionary(), reads.ToFrozenDictionary());
+        return new EventTypeMap(writes.ToFrozenDictionary(), reads.ToFrozenDictionary(StringComparer.Ordinal));
+    }
+
+    internal void ValidateAssignableTo(Type targetType)
+    {
+        foreach (var mapping in _writes.Values.Concat<EventTypeMapping>(_reads.Values))
+            mapping.ValidateAssignableTo(targetType);
     }
 }

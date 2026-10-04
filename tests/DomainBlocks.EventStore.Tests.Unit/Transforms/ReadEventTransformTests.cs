@@ -150,7 +150,7 @@ public class ReadEventTransformTests
     }
 
     [Test]
-    public async Task Create_SequenceFuncWithIgnoredEventWithoutIgnoredEventInstance_Throws()
+    public async Task Create_SequenceFuncReturningNoEvents_Throws()
     {
         _inner.ReadEvents.Add(FakeEventStore.ReadEventAt(new Legacy("a"), 0));
         var store = _inner.WithReadTransforms(ReadEventTransform.Create<object, Legacy>(_ => []));
@@ -159,30 +159,11 @@ public class ReadEventTransformTests
             store.ReadStream("s").ToArrayAsync().AsTask());
 
         ex.Message.ShouldContain(nameof(Legacy));
-        ex.Message.ShouldContain("no ignored-event sentinel is configured");
+        ex.Message.ShouldContain("produced no events");
     }
 
     [Test]
-    public async Task Create_SequenceFuncWithIgnoredEvent_ReadEmitsIgnoredEvent()
-    {
-        // Ignores on a condition taken from the info, so only one of the two source events is left out.
-        var retired = new Dictionary<string, string> { ["retired"] = "true" };
-        _inner.ReadEvents.Add(FakeEventStore.ReadEventAt(new Legacy("a"), 0, retired));
-        _inner.ReadEvents.Add(FakeEventStore.ReadEventAt(new Legacy("b"), 1));
-
-        var store = _inner
-            .WithReadTransforms(ReadEventTransform.Create<object, Legacy>((e, info) =>
-                info.Metadata.ContainsKey("retired") ? [] : [new Current(e.Values)]))
-            .UseIgnoredEventSentinel(IgnoredEvent.Instance);
-
-        var events = await store.ReadStream("s").ToArrayAsync();
-
-        events.Select(x => x.Payload).ShouldBe([IgnoredEvent.Instance, new Current("b")]);
-        events.Select(x => x.Context.StreamPosition).ShouldBe([new StreamPosition(0), new StreamPosition(1)]);
-    }
-
-    [Test]
-    public async Task Create_SequenceFuncWithInfoIgnoresEvent_Throws()
+    public async Task Create_SequenceFuncWithInfoReturningNoEvents_Throws()
     {
         _inner.ReadEvents.Add(FakeEventStore.ReadEventAt(new Legacy("a"), 0));
         var store = _inner.WithReadTransforms(ReadEventTransform.Create<object, Legacy>((_, _) => []));
@@ -190,40 +171,7 @@ public class ReadEventTransformTests
         var ex = await Should.ThrowAsync<InvalidOperationException>(() =>
             store.ReadStream("s").ToArrayAsync().AsTask());
 
-        ex.Message.ShouldContain("no ignored-event sentinel is configured");
-    }
-
-    [Test]
-    public async Task Create_SequenceFuncWithIgnoredEvent_SubscriptionEmitsPlaceholderMessage()
-    {
-        _inner.SubscriptionMessages.Add(SubscriptionMessage.Event(FakeEventStore.ReadEventAt(new Legacy("a"), 9)));
-
-        var store = _inner
-            .WithReadTransforms(ReadEventTransform.Create<object, Legacy>(_ => []))
-            .UseIgnoredEventSentinel(IgnoredEvent.Instance);
-
-        var messages = await store.SubscribeToAll().ToArrayAsync();
-
-        var readEvent = messages.ShouldHaveSingleItem().Event.ShouldNotBeNull();
-        readEvent.Payload.ShouldBeSameAs(IgnoredEvent.Instance);
-        readEvent.Context.LogPosition.ShouldBe(new LogPosition(9));
-    }
-
-    [Test]
-    public async Task Create_DerivedEventIsIgnoredByChainedFunc_EmitsPlaceholderInItsPlace()
-    {
-        // Older -> Legacy, Current; the Legacy is then ignored, and its placeholder keeps its place before Current.
-        _inner.ReadEvents.Add(FakeEventStore.ReadEventAt(new Older("x"), 0));
-
-        var store = _inner
-            .WithReadTransforms(
-                ReadEventTransform.Create<object, Older>(e => [new Legacy(e.Values), new Current(e.Values)]),
-                ReadEventTransform.Create<object, Legacy>(_ => []))
-            .UseIgnoredEventSentinel(IgnoredEvent.Instance);
-
-        var events = await store.ReadStream("s").ToArrayAsync();
-
-        events.Select(x => x.Payload).ShouldBe([IgnoredEvent.Instance, new Current("x")]);
+        ex.Message.ShouldContain("produced no events");
     }
 
     [Test]

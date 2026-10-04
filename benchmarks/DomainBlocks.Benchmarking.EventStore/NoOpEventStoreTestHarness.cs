@@ -24,8 +24,7 @@ public sealed class NoOpEventStoreTestHarness : IEventStoreTestHarness<StreamPos
         EventTypeMap eventTypeMap,
         EventFormat? eventFormat = null,
         IEnumerable<IEventContractMapper<object>>? contractMappers = null,
-        string loggerNameSuffix = "",
-        IEnumerable<string>? ignoredEventNames = null)
+        string loggerNameSuffix = "")
     {
         return new NoOpEventStore();
     }
