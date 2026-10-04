@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Events;
@@ -8,14 +9,15 @@ using Shouldly;
 namespace DomainBlocks.Benchmarking.EventStore;
 
 /// <summary>
-/// Append benchmarks shared by every store. Each test writes one small event per append to a new stream, which is the
-/// cheapest possible append and therefore measures the store's ceiling rather than a workload. Results are printed
-/// to the test output; the tests only fail if an operation errors, since a throughput figure with errors is invalid.
+/// Append and read benchmarks shared by every store. Each append test writes one small event per append to a new
+/// stream, which is the cheapest possible append and therefore measures the store's ceiling rather than a workload.
+/// Results are printed to the test output; the tests only fail if an operation errors, since a throughput figure with
+/// errors is invalid.
 /// </summary>
 [Category("Benchmark")]
-public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(IEventStoreTestHarness<TStreamPos, TLogPos> harness)
-    :
-        EventStoreTestBase<TStreamPos, TLogPos>(harness)
+public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
+    IEventStoreTestHarness<TStreamPos, TLogPos> harness) :
+    EventStoreTestBase<TStreamPos, TLogPos>(harness)
     where TStreamPos : notnull
     where TLogPos : notnull
 {
@@ -90,6 +92,99 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(IEventStoreT
             foreach (var instance in instances)
                 await instance.DisposeAsync();
         }
+    }
+
+    /// <summary>
+    /// Read throughput: one reader reads a log of a hundred streams from start to end, several times over. The median
+    /// pass is reported, along with what the passes allocated.
+    /// </summary>
+    [Test]
+    [Explicit("Benchmark")]
+    [CancelAfter(BenchmarkTimeouts.DefaultMillis)]
+    public async Task ReadAll_MeasureThroughput(CancellationToken ct)
+    {
+        var result = await MeasureReadAllAsync("read all, forward, with metadata", ReadAllOptions.Default, ct);
+
+        result.EventsRead.ShouldBe(result.EventsInLog);
+    }
+
+    /// <summary>
+    /// Appends a log in which each stream is a hundredth of the events and each tenant a tenth, then reads it with
+    /// the given options.
+    /// </summary>
+    private async Task<ReadThroughputResult> MeasureReadAllAsync(
+        string title,
+        ReadAllOptions options,
+        CancellationToken ct)
+    {
+        const int streamCount = 100;
+        const int eventsPerStream = 1_000;
+        const int eventsInLog = streamCount * eventsPerStream;
+
+        // The first passes are much slower than the rest, while the store and the database warm up.
+        const int warmUpPasses = 5;
+        const int measuredPasses = 9;
+
+        await using var eventStore = CreateEventStore(_eventTypeMap);
+
+        for (var stream = 0; stream < streamCount; stream++)
+        {
+            var events = Enumerable
+                .Range(0, eventsPerStream)
+                .Select(i => AppendableEvent.Create<object>(
+                    new TestEvent { Value = $"value-{i}" },
+                    [KeyValuePair.Create("tenant", $"tenant-{i % 10}")]));
+
+            await eventStore.AppendAsync($"stream-{stream:D3}", events, cancellationToken: ct);
+        }
+
+        var eventsRead = 0;
+
+        try
+        {
+            for (var pass = 0; pass < warmUpPasses; pass++)
+                eventsRead = await CountAsync(eventStore.ReadAll(options: options), ct);
+        }
+        catch (NotSupportedException ex)
+        {
+            Assert.Ignore($"The store does not support this read: {ex.Message}");
+        }
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        var passes = new TimeSpan[measuredPasses];
+        var gcBefore = GcSnapshot.Capture();
+        var allocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
+
+        for (var pass = 0; pass < measuredPasses; pass++)
+        {
+            var start = Stopwatch.GetTimestamp();
+            eventsRead = await CountAsync(eventStore.ReadAll(options: options), ct);
+            passes[pass] = Stopwatch.GetElapsedTime(start);
+        }
+
+        var allocated = GC.GetTotalAllocatedBytes(precise: true) - allocatedBefore;
+        var gc = GcSnapshot.Capture().Since(gcBefore);
+        var result = new ReadThroughputResult(eventsInLog, eventsRead, passes, allocated, gc);
+
+        await BenchmarkReport.WriteEnvironmentAsync(eventStore.GetType(), await Harness.DescribeAsync());
+        await BenchmarkReport.WriteReadThroughputAsync(title, result);
+
+        return result;
+    }
+
+    private static async Task<int> CountAsync(
+        IAsyncEnumerable<ReadEvent<object, string, TStreamPos, TLogPos>> events,
+        CancellationToken ct)
+    {
+        var count = 0;
+
+        await foreach (var _ in events.WithCancellation(ct).ConfigureAwait(false))
+            count++;
+
+        return count;
     }
 
     private static Task AppendAsync(
