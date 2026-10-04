@@ -305,7 +305,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
         private readonly CancellationTokenSource _restartCts = new();
         private int _restartReason;
-        private bool _hasFailed;
+        private bool _isStopped;
 
         public ChannelReader<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Reader => _channel.Reader;
 
@@ -315,9 +315,9 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
         public ValueTask OnNextAsync(EventLogRow<TEvent> row, CancellationToken cancellationToken)
         {
-            // A subscription that has failed is waiting to say so. A row that it could not queue would be taken for
-            // falling behind.
-            if (_hasFailed || !liveFilter.Matches(row))
+            // An observer that has failed or signaled a restart takes nothing more. It stays attached until the
+            // subscription replaces it, and a row that it selected would be decoded only to be dropped.
+            if (_isStopped || !liveFilter.Matches(row))
                 return ValueTask.CompletedTask;
 
             ReadEvent<TEvent, string, StreamPosition, LogPosition> e;
@@ -331,7 +331,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
             {
                 // An event that cannot be decoded fails this subscription, as it would a read. Thrown to the feed, it
                 // would detach the observer without telling the subscriber.
-                _hasFailed = true;
+                _isStopped = true;
                 _channel.Writer.TryComplete(ex);
 
                 return ValueTask.CompletedTask;
@@ -365,6 +365,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
         private void Restart(RestartReason reason)
         {
+            _isStopped = true;
+
             if (Interlocked.CompareExchange(ref _restartReason, (int)reason, 0) != 0)
                 return;
 
