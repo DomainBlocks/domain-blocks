@@ -16,9 +16,9 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// one array parameter, so filters of the same shape share a statement.
 /// </para>
 /// <para>
-/// Every condition is either true or false, as a filter either matches an event or does not. A condition over
-/// metadata, which an event can lack, is closed with <c>IS TRUE</c>. Left as null, it would stay null under
-/// <c>NOT</c>, and the negation of the filter would miss the events without metadata.
+/// Every condition is either true or false, as a filter either matches an event or does not. A condition over metadata,
+/// which an event can lack, is closed with <c>IS TRUE</c>. Left as null, it would stay null under <c>NOT</c>, and the
+/// negation of the filter would miss the events without metadata.
 /// </para>
 /// </remarks>
 internal static class PostgresFilterTranslator
@@ -143,9 +143,9 @@ internal static class PostgresFilterTranslator
     }
 
     // The column holds whole microseconds, so no event is created between a bound and the next whole microsecond, and
-    // both >= and < select the same events with the bound rounded up as with the bound itself. The bound cannot be
-    // sent as it is, because it would be truncated to the microsecond below. The result is in UTC, which is the only
-    // offset that a timestamptz parameter accepts.
+    // both >= and < select the same events with the bound rounded up as with the bound itself. The bound cannot be sent
+    // as it is, because it would be truncated to the microsecond below. The result is in UTC, which is the only offset
+    // that a timestamptz parameter accepts.
     private static DateTimeOffset CeilingToMicrosecond(DateTimeOffset instant)
     {
         var utc = instant.ToUniversalTime();
