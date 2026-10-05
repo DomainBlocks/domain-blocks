@@ -143,7 +143,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
                 // FellBehind tells a subscriber that it is no longer caught up, so it is only reported to one that has
                 // been told it caught up. A restart before then, or a second restart before it has caught up again,
-                // e.g. when the live feed is still pumping a large transaction into a small queue, only makes the
+                // e.g., when the live feed is still pumping a large transaction into a small queue, only makes the
                 // catch-up longer. Every FellBehind is therefore answered by exactly one CaughtUp.
                 if (isCaughtUp)
                 {

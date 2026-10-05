@@ -46,15 +46,14 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
         _reader = new EventLogReader<object>(DataSource, new EventLogSql(names), Options.ReadBatchSize, codec);
 
         _feed = new RefCountedEventLogFeed<EventLogRow<object>>(() =>
-            new EventLogFeed<EventLogRow<object>>(ct =>
-                ReplicationEventLogSession.OpenAsync(
-                    PostgresTestEnvironment.ConnectionString,
-                    $"dbx_test_{Guid.NewGuid():N}",
-                    names,
-                    Options.Replication,
-                    codec,
-                    LoggerFactory.CreateLogger("ReplicationEventLogSession"),
-                    ct)));
+            new EventLogFeed<EventLogRow<object>>(ct => ReplicationEventLogSession.OpenAsync(
+                PostgresTestEnvironment.ConnectionString,
+                $"dbx_test_{Guid.NewGuid():N}",
+                names,
+                Options.Replication,
+                codec,
+                LoggerFactory.CreateLogger("ReplicationEventLogSession"),
+                ct)));
     }
 
     [TearDown]
@@ -181,8 +180,11 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
         return new SubscriptionAsyncEnumerable<object, LogPosition>(
             _reader,
             _feed,
-            (reader, after, highWaterMark, ct) =>
-                RecordAsync(reader.ReadCatchUpAllAsync(after, highWaterMark, ct), after, highWaterMark),
+            (reader, after, highWaterMark, ct) => RecordAsync(
+                reader.ReadCatchUpAllAsync(after, highWaterMark, ct),
+                after,
+                highWaterMark,
+                ct),
             static async (reader, ct) => await reader.GetMaxPositionAsync(ct) is { } pos
                 ? LogPosition.FromInt64(pos)
                 : null,
