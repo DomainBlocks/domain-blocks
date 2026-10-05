@@ -110,10 +110,15 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
             while (true)
             {
-                if (resumePosition.After is { } after)
-                    _logger?.SubscriptionCatchingUp(_correlationId, after.Value);
-                else
-                    _logger?.SubscriptionCatchingUpFromStart(_correlationId);
+                // Every cycle but the first is a restart. It can come long after the observer logged that one was
+                // pending, so it is logged when it takes place.
+                if (observer is not null)
+                {
+                    if (resumePosition.After is { } after)
+                        _logger?.SubscriptionRestarting(_correlationId, after.Value);
+                    else
+                        _logger?.SubscriptionRestartingFromStart(_correlationId);
+                }
 
                 // Attach the new observer before detaching the old one, so that the ref count never drops to zero
                 // between cycles and the feed's replication session survives a restart.
@@ -142,24 +147,16 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                     }
                 }
 
-                // The observer logged why it stopped when it did, which can be long before the cycle ends. What is
-                // logged here is what the subscription now does about it. A subscription that had not caught up has not
-                // fallen behind: its replay has already run to the high-water mark, and the next cycle carries on from
-                // there.
+                // The observer logged why it stopped when it did, which can be long before the cycle ends, and the next
+                // cycle logs the restart. A subscription that had not caught up has not fallen behind: its replay has
+                // already run to the high-water mark, and the next cycle carries on from there.
                 switch (observer.StopReason)
                 {
                     case StopReason.QueueOverflow when isCaughtUp:
                         _logger?.SubscriptionFellBehind(_correlationId);
                         break;
 
-                    case StopReason.QueueOverflow:
-                        break;
-
-                    case StopReason.FeedReset when isCaughtUp:
-                        _logger?.SubscriptionFeedReset(_correlationId);
-                        break;
-
-                    case StopReason.FeedReset:
+                    case StopReason.QueueOverflow or StopReason.FeedReset:
                         break;
 
                     default:
@@ -406,7 +403,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         public ValueTask OnResetAsync(CancellationToken cancellationToken)
         {
             if (Stop(StopReason.FeedReset))
-                logger?.SubscriptionFeedResetPending(subscriptionId);
+                logger?.SubscriptionFeedReset(subscriptionId);
 
             return ValueTask.CompletedTask;
         }

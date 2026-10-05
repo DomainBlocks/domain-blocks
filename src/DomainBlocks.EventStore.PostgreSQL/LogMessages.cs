@@ -30,23 +30,14 @@ internal static partial class LogMessages
     [LoggerMessage(LogLevel.Information, "[sub: {SubscriptionId}] started")]
     internal static partial void SubscriptionStarted(this ILogger logger, string subscriptionId);
 
-    [LoggerMessage(LogLevel.Information, "[sub: {SubscriptionId}] catching up from start")]
-    internal static partial void SubscriptionCatchingUpFromStart(this ILogger logger, string subscriptionId);
-
-    [LoggerMessage(LogLevel.Information, "[sub: {SubscriptionId}] catching up after position {Position}")]
-    internal static partial void SubscriptionCatchingUp(this ILogger logger, string subscriptionId, ulong position);
-
     [LoggerMessage(LogLevel.Debug, "[sub: {SubscriptionId}] catch-up boundary is {HighWaterMark}")]
     internal static partial void CatchUpBoundary(this ILogger logger, string subscriptionId, ulong? highWaterMark);
 
     [LoggerMessage(LogLevel.Information, "[sub: {SubscriptionId}] caught up")]
     internal static partial void SubscriptionCaughtUp(this ILogger logger, string subscriptionId);
 
-    [LoggerMessage(LogLevel.Warning, "[sub: {SubscriptionId}] fell behind; restarting from last position")]
+    [LoggerMessage(LogLevel.Warning, "[sub: {SubscriptionId}] fell behind")]
     internal static partial void SubscriptionFellBehind(this ILogger logger, string subscriptionId);
-
-    [LoggerMessage(LogLevel.Warning, "[sub: {SubscriptionId}] feed was reset; restarting from last position")]
-    internal static partial void SubscriptionFeedReset(this ILogger logger, string subscriptionId);
 
     [LoggerMessage(
         LogLevel.Warning,
@@ -57,7 +48,13 @@ internal static partial class LogMessages
         int queueCapacity);
 
     [LoggerMessage(LogLevel.Warning, "[sub: {SubscriptionId}] feed was reset; restart pending")]
-    internal static partial void SubscriptionFeedResetPending(this ILogger logger, string subscriptionId);
+    internal static partial void SubscriptionFeedReset(this ILogger logger, string subscriptionId);
+
+    [LoggerMessage(LogLevel.Information, "[sub: {SubscriptionId}] restarting from start")]
+    internal static partial void SubscriptionRestartingFromStart(this ILogger logger, string subscriptionId);
+
+    [LoggerMessage(LogLevel.Information, "[sub: {SubscriptionId}] restarting after position {Position}")]
+    internal static partial void SubscriptionRestarting(this ILogger logger, string subscriptionId, ulong position);
 
     [LoggerMessage(LogLevel.Debug, "[sub: {SubscriptionId}] canceled")]
     internal static partial void SubscriptionCanceled(this ILogger logger, string subscriptionId);
