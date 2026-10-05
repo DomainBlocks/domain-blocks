@@ -37,9 +37,9 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// decoded fails only the subscriptions that select it.
 /// </para>
 /// <para>
-/// The resume position only moves forward. Delivering an event moves it to that event, and a replay that reaches its
-/// high-water mark moves it there whether or not it delivered anything, as a filter can leave long stretches of the
-/// sequence with nothing to deliver and the next cycle should not read them again.
+/// The resume position only moves forward. A replay that reaches its high-water mark moves it there, whether or not it
+/// delivered anything, as a filter can leave long stretches of the sequence with nothing to deliver and the next cycle
+/// should not read them again. Delivering a live event moves it to that event.
 /// </para>
 /// <para>
 /// A subscription from the end is pinned to the last position at the time it starts. A cycle that restarts before
@@ -258,15 +258,11 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
             var afterExclusive = resumePosition.After is { } after ? checked((long)after.Value) : -1;
             var events = _catchUpReader(_reader, afterExclusive, checked((long)mark.Value), cancellationToken);
 
-            // The resume position moves to an event once the subscriber has taken it and come back for more, and not
-            // before, so that an event is never counted as delivered before it has been.
             await foreach (var e in events.ConfigureAwait(false))
-            {
                 yield return SubscriptionMessage.Event(e);
-                resumePosition.AdvanceTo(_positionSelector(e.Context));
-            }
 
-            // The replay has covered the sequence up to the mark, whether or not it delivered anything on the way.
+            // A replay is never abandoned part-way, so the resume position moves once for the whole of it. It has
+            // covered the sequence up to the mark, whether or not it delivered anything on the way.
             resumePosition.AdvanceTo(mark);
         }
 
@@ -290,6 +286,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                 continue;
 
             yield return SubscriptionMessage.Event(e);
+
+            // The subscriber has taken the event and come back for more.
             resumePosition.AdvanceTo(position);
         }
     }
