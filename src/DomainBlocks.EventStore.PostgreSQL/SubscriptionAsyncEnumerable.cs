@@ -127,8 +127,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
                 await using (enumerator.ConfigureAwait(false))
                 {
-                    while (await MoveNextAsync(enumerator, observer.RestartToken, cancellationToken)
-                               .ConfigureAwait(false))
+                    while (await MoveNextAsync(enumerator, cancellationToken).ConfigureAwait(false))
                     {
                         var message = enumerator.Current;
                         yield return message;
@@ -187,16 +186,11 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
     private async ValueTask<bool> MoveNextAsync(
         IAsyncEnumerator<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> enumerator,
-        CancellationToken restartToken,
         CancellationToken cancellationToken)
     {
         try
         {
             return await enumerator.MoveNextAsync().ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (restartToken.IsCancellationRequested)
-        {
-            return false;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -279,13 +273,14 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         // A restart signaled during the replay takes effect only now that the replay is complete. Cancelling the replay
         // instead would throw away the part of the log it had already read through without delivering anything, and a
         // replay that takes longer than the queue takes to overflow would never finish.
-        if (observer.RestartToken.IsCancellationRequested)
+        if (observer.RestartReason != RestartReason.None)
             yield break;
 
         _logger?.SubscriptionCaughtUp(_correlationId);
 
         yield return SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>.CaughtUp;
 
+        // The observer's queue ends, once what it holds has been read, when the observer signals a restart.
         await foreach (var e in observer.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
         {
             var position = _positionSelector(e.Context);
@@ -335,17 +330,21 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         }
     }
 
+    /// <summary>
+    /// Why an observer has stopped taking rows, if it has.
+    /// </summary>
     internal enum RestartReason
     {
+        None,
         QueueOverflow,
         FeedReset,
         Disposed
     }
 
     /// <summary>
-    /// Buffers the live events that a subscription selects, for one subscription cycle. Never blocks the feed: an
-    /// overflow, like a feed reset, cancels the restart token and completes the channel so that the cycle ends and a
-    /// new one starts from the last position.
+    /// Buffers the live events that a subscription selects, for one subscription cycle. Never blocks the feed: on an
+    /// overflow, as on a feed reset, it records the reason and completes its queue. The cycle ends once it has read
+    /// what the queue holds, and a new one starts from the resume position. Nothing is interrupted to bring that about.
     /// </summary>
     internal sealed class Observer(int queueCapacity, EventFilter liveFilter) :
         IEventLogObserver<EventLogRow<TEvent>>,
@@ -359,13 +358,10 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                     SingleReader = true
                 });
 
-        private readonly CancellationTokenSource _restartCts = new();
         private int _restartReason;
         private bool _isStopped;
 
         public ChannelReader<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Reader => _channel.Reader;
-
-        public CancellationToken RestartToken => _restartCts.Token;
 
         public RestartReason RestartReason => (RestartReason)Volatile.Read(ref _restartReason);
 
@@ -394,14 +390,14 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
             }
 
             if (!_channel.Writer.TryWrite(e))
-                Restart(RestartReason.QueueOverflow);
+                Stop(RestartReason.QueueOverflow);
 
             return ValueTask.CompletedTask;
         }
 
         public ValueTask OnResetAsync(CancellationToken cancellationToken)
         {
-            Restart(RestartReason.FeedReset);
+            Stop(RestartReason.FeedReset);
             return ValueTask.CompletedTask;
         }
 
@@ -411,23 +407,18 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
             return ValueTask.CompletedTask;
         }
 
-        public void Dispose()
-        {
-            if (Interlocked.CompareExchange(ref _restartReason, (int)RestartReason.Disposed, 0) == 0)
-                _channel.Writer.TryComplete();
+        public void Dispose() => Stop(RestartReason.Disposed);
 
-            _restartCts.Dispose();
-        }
-
-        private void Restart(RestartReason reason)
+        // The first reason given is the one that stands. It is recorded before the queue is completed, so that it is
+        // there to read by the time the queue ends.
+        private void Stop(RestartReason reason)
         {
             _isStopped = true;
 
-            if (Interlocked.CompareExchange(ref _restartReason, (int)reason, 0) != 0)
-                return;
+            var previous = Interlocked.CompareExchange(ref _restartReason, (int)reason, (int)RestartReason.None);
 
-            _restartCts.Cancel();
-            _channel.Writer.TryComplete(new OperationCanceledException(_restartCts.Token));
+            if (previous == (int)RestartReason.None)
+                _channel.Writer.TryComplete();
         }
     }
 }
