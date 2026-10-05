@@ -25,6 +25,18 @@ internal sealed class EventLogSql
     /// </summary>
     public const int ReadAllParameterCount = 2;
 
+    /// <summary>
+    /// The number of parameters that a page of <see cref="CatchUpAll"/> binds: the key, the high-water mark, and the
+    /// limit. The parameters of a condition are numbered after them.
+    /// </summary>
+    public const int CatchUpAllParameterCount = 3;
+
+    /// <summary>
+    /// The number of parameters that a page of <see cref="CatchUpStream"/> binds: the stream ID, the key, the
+    /// high-water mark, and the limit. The parameters of a condition are numbered after them.
+    /// </summary>
+    public const int CatchUpStreamParameterCount = 4;
+
     public EventLogSql(SchemaObjectNames names)
     {
         var eventLog = names.EventLog;
@@ -80,6 +92,18 @@ internal sealed class EventLogSql
     public string ReadCatchUpAll { get; }
 
     public string ReadCatchUpStream { get; }
+
+    /// <summary>
+    /// The query for a page of the read, with a further condition that rows must meet if one is given.
+    /// </summary>
+    public string CatchUpAll(string? condition = null) =>
+        condition is null ? ReadCatchUpAll : WithCondition(ReadCatchUpAll, condition);
+
+    /// <summary>
+    /// The query for a page of the read, with a further condition that rows must meet if one is given.
+    /// </summary>
+    public string CatchUpStream(string? condition = null) =>
+        condition is null ? ReadCatchUpStream : WithCondition(ReadCatchUpStream, condition);
 
     /// <summary>
     /// The query for a page of the read, with a further condition that rows must meet if one is given.

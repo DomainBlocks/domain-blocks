@@ -1,5 +1,6 @@
 using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.Filtering;
+using DomainBlocks.EventStore.TypeMapping;
 using NUnit.Framework;
 using Shouldly;
 
@@ -314,6 +315,37 @@ public abstract class EventStoreFilteredReadTests<TStreamPos, TLogPos>(
 
         await Should.ThrowAsync<StreamNotFoundException>(async () =>
             await _eventStore.ReadStream("no-such-stream", options: options).ToArrayAsync(cancellationToken));
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task ReadAll_WithFilterExcludingEventsThatCannotBeDecoded_ReadsSelectedEvents(
+        CancellationToken cancellationToken)
+    {
+        RequireCapability(StoreCapabilities.FilteredReads);
+
+        // A store that maps only two of the three kinds of event in the log.
+        var eventTypeMap = new EventTypeMapBuilder()
+            .Add<EventFilterTestLog.OrderPlaced>()
+            .Add<EventFilterTestLog.OrderShipped>()
+            .Build();
+
+        await using var eventStore = CreateEventStore(eventTypeMap, loggerNameSuffix: "_narrow");
+
+        var options = new ReadAllOptions
+        {
+            Filter = EventFilter.EventNames(
+                nameof(EventFilterTestLog.OrderPlaced),
+                nameof(EventFilterTestLog.OrderShipped))
+        };
+
+        var read = await eventStore.ReadAll(options: options).ToArrayAsync(cancellationToken);
+
+        ShouldBe(read, _loggedEvents.Where(e => e.EventName != nameof(EventFilterTestLog.InvoiceRaised)));
+
+        // Without the filter, the store fails on the first event that it cannot decode.
+        await Should.ThrowAsync<EventNameNotMappedException>(async () =>
+            await eventStore.ReadAll().ToArrayAsync(cancellationToken));
     }
 
     private EventFilterTestLog.LoggedEvent[] Expected(EventFilterTestLog.Case filterCase) =>

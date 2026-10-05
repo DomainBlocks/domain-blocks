@@ -74,17 +74,20 @@ internal sealed class EventLogReader<TEvent>(
     public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCatchUpAllAsync(
         long afterExclusive,
         long highWaterMark,
+        EventFilter filter,
         CancellationToken cancellationToken)
     {
+        var condition = Translate(filter, EventLogSql.CatchUpAllParameterCount + 1);
+
         return ReadPagesAsync(
-            sql.ReadCatchUpAll,
+            sql.CatchUpAll(condition?.Sql),
             (parameters, key, limit) =>
             {
                 parameters.Add(new NpgsqlParameter<long> { TypedValue = key });
                 parameters.Add(new NpgsqlParameter<long> { TypedValue = highWaterMark });
                 parameters.Add(new NpgsqlParameter<int> { TypedValue = limit });
             },
-            null,
+            condition,
             afterExclusive,
             static e => (long)e.Context.LogPosition.Value,
             null,
@@ -98,10 +101,13 @@ internal sealed class EventLogReader<TEvent>(
         string streamId,
         long afterExclusive,
         long highWaterMark,
+        EventFilter filter,
         CancellationToken cancellationToken)
     {
+        var condition = Translate(filter, EventLogSql.CatchUpStreamParameterCount + 1);
+
         return ReadPagesAsync(
-            sql.ReadCatchUpStream,
+            sql.CatchUpStream(condition?.Sql),
             (parameters, key, limit) =>
             {
                 parameters.Add(new NpgsqlParameter<string> { TypedValue = streamId });
@@ -109,7 +115,7 @@ internal sealed class EventLogReader<TEvent>(
                 parameters.Add(new NpgsqlParameter<long> { TypedValue = highWaterMark });
                 parameters.Add(new NpgsqlParameter<int> { TypedValue = limit });
             },
-            null,
+            condition,
             afterExclusive,
             static e => (long)e.Context.StreamPosition.Value,
             null,

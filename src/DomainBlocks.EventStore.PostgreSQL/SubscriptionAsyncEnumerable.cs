@@ -27,9 +27,15 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// <see cref="SubscriptionMessage{TEvent,TStreamId,TStreamPos,TLogPos}.CaughtUp"/>.
 /// </para>
 /// <para>
+/// A subscription's filter selects the events of the replay in the query that reads them, and the live rows in memory.
 /// The live feed hands every subscription each row of the log undecoded. A subscription takes the event of a row only
 /// if it selects the row. It neither decodes nor queues the events it does not select, and an event that cannot be
 /// decoded fails only the subscriptions that select it.
+/// </para>
+/// <para>
+/// A filter can leave long stretches of the log with nothing to deliver. A subscription to the whole log whose replay
+/// has reached its high-water mark therefore restarts from that mark if it is beyond the last delivered position, and
+/// does not read that part of the log again.
 /// </para>
 /// <para>
 /// A subscription from the end is pinned to the last position at the time it starts. A cycle that restarts before
@@ -48,6 +54,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     private readonly EndPositionReader _endPositionReader;
     private readonly EventFilter _liveFilter;
     private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> _positionSelector;
+    private readonly Func<long, TPos?> _highWaterMarkPosition;
     private readonly SubscriptionOrigin<TPos> _origin;
     private readonly SubscriptionOptions _options;
     private readonly ILogger? _logger;
@@ -60,6 +67,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         EndPositionReader endPositionReader,
         EventFilter liveFilter,
         Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> positionSelector,
+        Func<long, TPos?> highWaterMarkPosition,
         SubscriptionOrigin<TPos>? origin,
         SubscriptionOptions? options,
         ILogger? logger)
@@ -70,6 +78,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         _endPositionReader = endPositionReader;
         _liveFilter = liveFilter;
         _positionSelector = positionSelector;
+        _highWaterMarkPosition = highWaterMarkPosition;
         _reader = reader;
         _feed = feed;
         _logger = logger;
@@ -125,6 +134,16 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                         else if (message.Event is { } e)
                             resumeOrigin = SubscriptionOrigin.After(_positionSelector(e.Context));
                     }
+                }
+
+                // A replay that ran to its high-water mark has covered the log up to there, whether or not it delivered
+                // anything, so the next cycle does not read that part again. A filter can leave long stretches of the
+                // log with nothing to deliver.
+                if (observer.ReplayedTo is { } replayedTo &&
+                    _highWaterMarkPosition(replayedTo) is { } position &&
+                    (resumeOrigin is not SubscriptionOrigin<TPos>.After after || after.Position.Value < position.Value))
+                {
+                    resumeOrigin = SubscriptionOrigin.After(position);
                 }
 
                 // A subscription that had not caught up has not fallen behind. Its replay has already run to the
@@ -260,6 +279,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                 yield return SubscriptionMessage.Event(e);
         }
 
+        observer.ReplayedTo = highWaterMark;
+
         // A restart signaled during the replay takes effect only now that the replay is complete. Cancelling the replay
         // instead would throw away the part of the log it had already read through without delivering anything, and a
         // replay that takes longer than the queue takes to overflow would never finish.
@@ -323,6 +344,11 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         public ChannelReader<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Reader => _channel.Reader;
 
         public CancellationToken RestartToken => _restartCts.Token;
+
+        /// <summary>
+        /// The high-water mark that the cycle's replay ran to, once it has.
+        /// </summary>
+        public long? ReplayedTo { get; set; }
 
         public RestartReason RestartReason => (RestartReason)Volatile.Read(ref _restartReason);
 

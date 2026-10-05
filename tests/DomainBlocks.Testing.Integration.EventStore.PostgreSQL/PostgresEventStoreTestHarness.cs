@@ -17,7 +17,10 @@ public sealed class PostgresEventStoreTestHarness(Action<PostgresEventStoreOptio
 
     public NpgsqlDataSource DataSource { get; private set; } = null!;
 
-    public StoreCapabilities Capabilities => StoreCapabilities.IdempotentAppends | StoreCapabilities.FilteredReads;
+    public StoreCapabilities Capabilities =>
+        StoreCapabilities.IdempotentAppends |
+        StoreCapabilities.FilteredReads |
+        StoreCapabilities.FilteredSubscriptions;
 
     public IReadOnlyList<EventFormat> SupportedFormats { get; } = [EventFormat.Json, EventFormat.Protobuf];
 
