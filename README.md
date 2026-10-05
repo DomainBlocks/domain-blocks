@@ -70,8 +70,8 @@ EventFilter.StreamIds("order-1", "order-2")
 EventFilter.StreamIdStartsWith("order-")
 EventFilter.MetadataExists("tenant")
 EventFilter.Metadata("tenant", "acme", "initech")
-EventFilter.CreatedAtOrAfter(from)
-EventFilter.CreatedBefore(before)
+EventFilter.CreatedAtOrAfter(dateTime)
+EventFilter.CreatedBefore(dateTime)
 ```
 
 Combine them with `&`, `|`, and `!`:
