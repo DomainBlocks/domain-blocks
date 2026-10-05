@@ -20,11 +20,15 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// <para>
 /// A cycle is restarted from the last delivered position, after emitting
 /// <see cref="SubscriptionMessage{TEvent,TStreamId,TStreamPos,TLogPos}.FellBehind"/>, when the subscriber's queue
-/// overflows or when the feed has been re-established and may have missed rows.
+/// overflows or when the feed has been re-established and may have missed rows. A restart signaled while the cycle is
+/// still replaying takes effect once the replay has reached the high-water mark. The replay is never abandoned
+/// part-way, as the next cycle would have to start it again. Falling behind is only reported to a subscriber that has
+/// been told it caught up, so the two messages alternate, starting with
+/// <see cref="SubscriptionMessage{TEvent,TStreamId,TStreamPos,TLogPos}.CaughtUp"/>.
 /// </para>
 /// <para>
 /// The live feed hands every subscription each row of the log undecoded. A subscription takes the event of a row only
-/// if it selects the row, so it neither decodes nor queues the events it does not select, and an event that cannot be
+/// if it selects the row. It neither decodes nor queues the events it does not select, and an event that cannot be
 /// decoded fails only the subscriptions that select it.
 /// </para>
 /// <para>
@@ -89,7 +93,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                 ? await PinEndAsync(cancellationToken).ConfigureAwait(false)
                 : _origin;
 
-            var fellBehindPending = false;
+            var isCaughtUp = false;
 
             while (true)
             {
@@ -117,32 +121,43 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                         yield return message;
 
                         if (message.IsCaughtUp)
-                            fellBehindPending = false;
+                            isCaughtUp = true;
                         else if (message.Event is { } e)
                             resumeOrigin = SubscriptionOrigin.After(_positionSelector(e.Context));
                     }
                 }
 
+                // A subscription that had not caught up has not fallen behind. Its replay has already run to the
+                // high-water mark, and the next cycle carries on from there.
                 switch (observer.RestartReason)
                 {
-                    case RestartReason.QueueOverflow:
+                    case RestartReason.QueueOverflow when isCaughtUp:
                         _logger?.SubscriptionFellBehind(_correlationId);
                         break;
 
-                    case RestartReason.FeedReset:
+                    case RestartReason.QueueOverflow:
+                        _logger?.SubscriptionQueueOverflowedBeforeCaughtUp(_correlationId);
+                        break;
+
+                    case RestartReason.FeedReset when isCaughtUp:
                         _logger?.SubscriptionFeedReset(_correlationId);
+                        break;
+
+                    case RestartReason.FeedReset:
+                        _logger?.SubscriptionFeedResetBeforeCaughtUp(_correlationId);
                         break;
 
                     default:
                         yield break;
                 }
 
-                // A cycle can restart again before it has caught up, e.g. when the live feed is still pumping a large
-                // transaction into a small queue. Every FellBehind is answered by exactly one CaughtUp, so a restart
-                // that has not yet been caught up on is not reported twice.
-                if (!fellBehindPending)
+                // FellBehind tells a subscriber that it is no longer caught up, so it is only reported to one that has
+                // been told it caught up. A restart before then, or a second restart before it has caught up again,
+                // e.g., when the live feed is still pumping a large transaction into a small queue, only makes the
+                // catch-up longer. Every FellBehind is therefore answered by exactly one CaughtUp.
+                if (isCaughtUp)
                 {
-                    fellBehindPending = true;
+                    isCaughtUp = false;
                     yield return SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>.FellBehind;
                 }
             }
@@ -229,28 +244,27 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         Observer observer,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        long? highWaterMark;
+        var highWaterMark = await _reader.GetMaxPositionAsync(cancellationToken).ConfigureAwait(false);
 
-        using (var catchUpCts = CancellationTokenSource.CreateLinkedTokenSource(
-                   cancellationToken,
-                   observer.RestartToken))
+        _logger?.CatchUpBoundary(_correlationId, highWaterMark);
+
+        if (highWaterMark is not null)
         {
-            highWaterMark = await _reader.GetMaxPositionAsync(catchUpCts.Token).ConfigureAwait(false);
+            var afterExclusive = resumeOrigin is SubscriptionOrigin<TPos>.After after
+                ? checked((long)after.Position.Value)
+                : -1;
 
-            _logger?.CatchUpBoundary(_correlationId, highWaterMark);
+            var events = _catchUpReader(_reader, afterExclusive, highWaterMark.Value, cancellationToken);
 
-            if (highWaterMark is not null)
-            {
-                var afterExclusive = resumeOrigin is SubscriptionOrigin<TPos>.After after
-                    ? checked((long)after.Position.Value)
-                    : -1;
-
-                var events = _catchUpReader(_reader, afterExclusive, highWaterMark.Value, catchUpCts.Token);
-
-                await foreach (var e in events.ConfigureAwait(false))
-                    yield return SubscriptionMessage.Event(e);
-            }
+            await foreach (var e in events.ConfigureAwait(false))
+                yield return SubscriptionMessage.Event(e);
         }
+
+        // A restart signaled during the replay takes effect only now that the replay is complete. Cancelling the replay
+        // instead would throw away the part of the log it had already read through without delivering anything, and a
+        // replay that takes longer than the queue takes to overflow would never finish.
+        if (observer.RestartToken.IsCancellationRequested)
+            yield break;
 
         _logger?.SubscriptionCaughtUp(_correlationId);
 
@@ -287,8 +301,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
     /// <summary>
     /// Buffers the live events that a subscription selects, for one subscription cycle. Never blocks the feed: an
-    /// overflow, like a feed reset, cancels the restart token and completes the channel so that the cycle ends and a new
-    /// one starts from the last position.
+    /// overflow, like a feed reset, cancels the restart token and completes the channel so that the cycle ends and a
+    /// new one starts from the last position.
     /// </summary>
     internal sealed class Observer(int queueCapacity, EventFilter liveFilter) :
         IEventLogObserver<EventLogRow<TEvent>>,
@@ -304,7 +318,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
         private readonly CancellationTokenSource _restartCts = new();
         private int _restartReason;
-        private bool _hasFailed;
+        private bool _isStopped;
 
         public ChannelReader<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Reader => _channel.Reader;
 
@@ -314,9 +328,9 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
         public ValueTask OnNextAsync(EventLogRow<TEvent> row, CancellationToken cancellationToken)
         {
-            // A subscription that has failed is waiting to say so. A row that it could not queue would be taken for
-            // falling behind.
-            if (_hasFailed || !liveFilter.Matches(row))
+            // An observer that has failed or signaled a restart takes nothing more. It stays attached until the
+            // subscription replaces it, and a row that it selected would be decoded only to be dropped.
+            if (_isStopped || !liveFilter.Matches(row))
                 return ValueTask.CompletedTask;
 
             ReadEvent<TEvent, string, StreamPosition, LogPosition> e;
@@ -330,7 +344,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
             {
                 // An event that cannot be decoded fails this subscription, as it would a read. Thrown to the feed, it
                 // would detach the observer without telling the subscriber.
-                _hasFailed = true;
+                _isStopped = true;
                 _channel.Writer.TryComplete(ex);
 
                 return ValueTask.CompletedTask;
@@ -364,6 +378,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
         private void Restart(RestartReason reason)
         {
+            _isStopped = true;
+
             if (Interlocked.CompareExchange(ref _restartReason, (int)reason, 0) != 0)
                 return;
 

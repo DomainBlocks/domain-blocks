@@ -1,4 +1,3 @@
-using DomainBlocks.EventStore.Codecs;
 using NUnit.Framework;
 using Shouldly;
 
@@ -166,30 +165,5 @@ public class EventLogRowTests
         row.Set(7, "order-1", 3, "OrderPlaced", PostgresEventData.FromJson("{}"), metadata, CreatedAt);
 
         return row;
-    }
-
-    /// <summary>
-    /// Decodes an event to its name and data, and its metadata to one entry holding the stored text, counting the calls.
-    /// </summary>
-    private sealed class CountingDecoder : IEventDecoder<string, PostgresEventData, string>
-    {
-        public int DecodeCount { get; private set; }
-
-        public Exception? Failure { get; set; }
-
-        public DecodedEvent<string> Decode(string eventName, PostgresEventData eventData, string? metadata)
-        {
-            DecodeCount++;
-
-            if (Failure is not null)
-                throw Failure;
-
-            var decodedMetadata = new Dictionary<string, string>();
-
-            if (metadata is not null)
-                decodedMetadata["raw"] = metadata;
-
-            return DecodedEvent.Create($"{eventName}:{eventData.Json}", decodedMetadata);
-        }
     }
 }
