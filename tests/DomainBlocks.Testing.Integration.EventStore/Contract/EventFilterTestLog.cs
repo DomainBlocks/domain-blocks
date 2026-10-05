@@ -33,6 +33,7 @@ public static class EventFilterTestLog
         .Add<OrderPlaced>()
         .Add<OrderShipped>()
         .Add<InvoiceRaised>()
+        .Add<BatchEnded>()
         .Build();
 
     /// <summary>
@@ -230,6 +231,12 @@ public static class EventFilterTestLog
     {
         public required int Number { get; init; }
     }
+
+    /// <summary>
+    /// Not an event of the test log. A test that appends a batch of events to a subscription appends this after them,
+    /// so that a subscription that also selects it by name can tell where the batch ends.
+    /// </summary>
+    public sealed record BatchEnded;
 
     /// <summary>
     /// An event of the test log as it was read without a filter. The expectation of each case is written against it by

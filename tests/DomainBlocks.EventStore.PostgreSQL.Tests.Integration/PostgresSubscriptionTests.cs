@@ -8,8 +8,8 @@ using Shouldly;
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
 /// <summary>
-/// PostgreSQL-specific subscription behaviour beyond the shared suite: slot sharing, stream-position resume, and live
-/// events that cannot be decoded.
+/// PostgreSQL-specific subscription behaviour beyond the shared suite: slot sharing, stream-position resume, live
+/// events that cannot be decoded, and an origin beyond the end.
 /// </summary>
 [TestFixture]
 public class PostgresSubscriptionTests : PostgresIntegrationTest
@@ -172,6 +172,43 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
 
         (await NextEventAsync(stream)).Payload.ShouldBe(firstEvent);
         (await NextEventAsync(stream)).Payload.ShouldBe(lastEvent);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_AfterPositionBeyondEnd_ObservesOnlyEventsAfterIt(CancellationToken ct)
+    {
+        TestEvent[] events = [.. Enumerable.Range(0, 4).Select(i => new TestEvent { Value = $"event-{i}" })];
+        var origin = SubscriptionOrigin.After(LogPosition.FromInt64(2));
+
+        await using var enumerator = _eventStore.SubscribeToAll(origin).GetAsyncEnumerator(ct);
+        await ShouldBeCaughtUpAsync(enumerator);
+
+        // The log is empty, so the events take positions 0 to 3. All of them arrive live.
+        foreach (var e in events)
+            await _eventStore.AppendAsync("target", [Appendable(e)], cancellationToken: ct);
+
+        (await NextEventAsync(enumerator)).Payload.ShouldBe(events[3]);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToStream_AfterPositionBeyondEnd_ObservesOnlyEventsAfterIt(CancellationToken ct)
+    {
+        TestEvent[] events = [.. Enumerable.Range(0, 4).Select(i => new TestEvent { Value = $"event-{i}" })];
+        var origin = SubscriptionOrigin.After(StreamPosition.FromInt64(2));
+
+        // An event of another stream comes first, so that positions in the stream differ from those in the log.
+        await _eventStore.AppendAsync("other", [Appendable("other")], cancellationToken: ct);
+
+        await using var enumerator = _eventStore.SubscribeToStream("target", origin).GetAsyncEnumerator(ct);
+        await ShouldBeCaughtUpAsync(enumerator);
+
+        // The stream is empty, so the events take positions 0 to 3 in it. All of them arrive live.
+        foreach (var e in events)
+            await _eventStore.AppendAsync("target", [Appendable(e)], cancellationToken: ct);
+
+        (await NextEventAsync(enumerator)).Payload.ShouldBe(events[3]);
     }
 
     // Appended by a store that maps the event, which the store under test does not.

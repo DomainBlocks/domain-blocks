@@ -13,21 +13,32 @@ using SubscriptionObserver = SubscriptionAsyncEnumerable<IDomainEvent, LogPositi
 
 /// <summary>
 /// Measures the PostgreSQL live path without I/O: a session hands <see cref="EventCount"/> rows to the feed, which fans
-/// them out to the observers of <see cref="SubscriberCount"/> subscriptions, each of which selects every row and takes
-/// its event. The feed and the observers are the real ones. The session stands in for the replication session, and does
-/// with each row what that does.
+/// them out to the observers of <see cref="SubscriberCount"/> subscriptions, each of which selects
+/// <see cref="SelectedPercent"/> percent of the rows and takes their events. The feed and the observers are the real
+/// ones. The session stands in for the replication session, and does with each row what that does.
 /// </summary>
 [MemoryDiagnoser]
 public class PostgresLiveFanOutBenchmarks
 {
+    // The rows are spread evenly over this many streams, so that one stream holds one percent of them.
+    private const int StreamCount = 100;
+
     private IEventDecoder<IDomainEvent, PostgresEventData, string> _decoder = null!;
     private EncodedEvent<PostgresEventData, string>[] _rows = null!;
+    private string[] _streamIds = null!;
+    private EventFilter _filter = null!;
 
     [Params(1, 4, 16)]
     public int SubscriberCount { get; set; }
 
     [Params(10_000)]
     public int EventCount { get; set; }
+
+    /// <summary>
+    /// How much of the log each subscription selects: all of it, without a filter, or the one percent in one stream.
+    /// </summary>
+    [Params(100, 1)]
+    public int SelectedPercent { get; set; }
 
     [GlobalSetup]
     public void GlobalSetup()
@@ -43,20 +54,28 @@ public class PostgresLiveFanOutBenchmarks
 
         _decoder = codec;
         _rows = [.. codec.Encode(events)];
+        _streamIds = [.. Enumerable.Range(0, StreamCount).Select(i => $"test-stream-{i}")];
+
+        _filter = SelectedPercent switch
+        {
+            100 => EventFilter.All,
+            1 => EventFilter.StreamIds(_streamIds[0]),
+            _ => throw new NotSupportedException($"No filter selects {SelectedPercent} percent of the rows.")
+        };
     }
 
     [Benchmark]
     public async Task<int> FanOut_NoIO()
     {
         var feed = new EventLogFeed<EventLogRow<IDomainEvent>>(_ =>
-            Task.FromResult<IEventLogSession<EventLogRow<IDomainEvent>>>(new Session(_decoder, _rows)));
+            Task.FromResult<IEventLogSession<EventLogRow<IDomainEvent>>>(new Session(_decoder, _rows, _streamIds)));
 
         var subscribers = new Subscriber[SubscriberCount];
         var attachments = new IDisposable[SubscriberCount];
 
         for (var i = 0; i < subscribers.Length; i++)
         {
-            subscribers[i] = new Subscriber(EventCount);
+            subscribers[i] = new Subscriber(EventCount, _filter);
             attachments[i] = feed.Attach(subscribers[i]);
         }
 
@@ -83,7 +102,8 @@ public class PostgresLiveFanOutBenchmarks
     /// </summary>
     private sealed class Session(
         IEventDecoder<IDomainEvent, PostgresEventData, string> decoder,
-        EncodedEvent<PostgresEventData, string>[] rows) : IEventLogSession<EventLogRow<IDomainEvent>>
+        EncodedEvent<PostgresEventData, string>[] rows,
+        string[] streamIds) : IEventLogSession<EventLogRow<IDomainEvent>>
     {
         private readonly EventLogRow<IDomainEvent> _row = new(decoder);
 
@@ -96,7 +116,9 @@ public class PostgresLiveFanOutBenchmarks
             {
                 var (eventName, eventData, metadata) = rows[i];
 
-                _row.Set(i, "test-stream", i, eventName, eventData, metadata, NoIOEventStore.CreatedAt);
+                var streamId = streamIds[i % streamIds.Length];
+
+                _row.Set(i, streamId, i, eventName, eventData, metadata, NoIOEventStore.CreatedAt);
 
                 yield return _row;
             }
@@ -112,11 +134,11 @@ public class PostgresLiveFanOutBenchmarks
     /// takes whatever the observer queued straight off the queue again, in place of a subscriber reading on another
     /// thread, so that a run does the same work every time.
     /// </summary>
-    private sealed class Subscriber(int expectedCount) : IEventLogObserver<EventLogRow<IDomainEvent>>, IDisposable
+    private sealed class Subscriber(int expectedCount, EventFilter filter) :
+        IEventLogObserver<EventLogRow<IDomainEvent>>,
+        IDisposable
     {
-        private readonly SubscriptionObserver _observer = new(
-            SubscriptionOptions.Default.QueueCapacity,
-            EventFilter.All);
+        private readonly SubscriptionObserver _observer = new(SubscriptionOptions.Default.QueueCapacity, filter);
 
         private readonly TaskCompletionSource _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _offeredCount;

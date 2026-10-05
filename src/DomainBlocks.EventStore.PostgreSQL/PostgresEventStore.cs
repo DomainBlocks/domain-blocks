@@ -256,16 +256,16 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         SubscriptionOrigin<LogPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
-        ThrowIfFiltered(options?.Filter, nameof(SubscribeToAll));
+        var filter = options?.Filter ?? EventFilter.All;
 
         return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
             _reader,
             _feed,
-            static (reader, pos, hwMark, ct) => reader.ReadCatchUpAllAsync(pos, hwMark, ct),
+            (reader, pos, hwMark, ct) => reader.ReadCatchUpAllAsync(pos, hwMark, filter, ct),
             static async (reader, ct) => await reader.GetMaxPositionAsync(ct).ConfigureAwait(false) is { } pos
                 ? LogPosition.FromInt64(pos)
                 : null,
-            EventFilter.All,
+            filter,
             static ctx => ctx.LogPosition,
             origin,
             options,
@@ -278,25 +278,22 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         SubscriptionOptions? options = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(streamId);
-        ThrowIfFiltered(options?.Filter, nameof(SubscribeToStream));
+
+        var filter = options?.Filter ?? EventFilter.All;
 
         return new SubscriptionAsyncEnumerable<TEvent, StreamPosition>(
             _reader,
             _feed,
-            (reader, pos, hwMark, ct) => reader.ReadCatchUpStreamAsync(streamId, pos, hwMark, ct),
+            (reader, pos, hwMark, ct) => reader.ReadCatchUpStreamAsync(streamId, pos, hwMark, filter, ct),
             async (reader, ct) => await reader.GetMaxStreamPositionAsync(streamId, ct).ConfigureAwait(false) is { } pos
                 ? StreamPosition.FromInt64(pos)
                 : null,
-            EventFilter.StreamIds(streamId),
+            EventFilter.StreamIds(streamId) & filter,
             static ctx => ctx.StreamPosition,
             origin,
             options,
             _logger);
     }
-
-    // Subscriptions do not filter yet. A filter is refused rather than ignored.
-    private static void ThrowIfFiltered(EventFilter? filter, string operation) =>
-        EventFilterNotSupportedException.ThrowIfFiltered(filter, $"{nameof(PostgresEventStore)}.{operation}");
 
     public async ValueTask DisposeAsync()
     {

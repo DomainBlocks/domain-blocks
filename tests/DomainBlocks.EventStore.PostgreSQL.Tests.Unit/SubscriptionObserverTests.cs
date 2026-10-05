@@ -1,10 +1,12 @@
 using DomainBlocks.EventStore.Filtering;
+using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using Shouldly;
 
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Unit;
 
 using Observer = SubscriptionAsyncEnumerable<string, LogPosition>.Observer;
+using StopReason = SubscriptionAsyncEnumerable<string, LogPosition>.StopReason;
 
 public class SubscriptionObserverTests
 {
@@ -43,12 +45,65 @@ public class SubscriptionObserverTests
         using var observer = new Observer(queueCapacity: 1, EventFilter.All);
 
         await OfferAsync(observer, 0, "order-1");
-        observer.RestartToken.IsCancellationRequested.ShouldBeFalse();
+        observer.StopReason.ShouldBe(StopReason.None);
 
         await OfferAsync(observer, 1, "order-1");
 
-        observer.RestartToken.IsCancellationRequested.ShouldBeTrue();
-        observer.RestartReason.ShouldBe(SubscriptionAsyncEnumerable<string, LogPosition>.RestartReason.QueueOverflow);
+        observer.StopReason.ShouldBe(StopReason.QueueOverflow);
+    }
+
+    [Test]
+    public async Task OnNextAsync_WhenQueueIsFull_EndsReaderOnceQueuedEventIsRead()
+    {
+        using var observer = new Observer(queueCapacity: 1, EventFilter.All);
+        await OfferAsync(observer, 0, "order-1");
+
+        await OfferAsync(observer, 1, "order-1");
+
+        (await observer.Reader.WaitToReadAsync()).ShouldBeTrue();
+        observer.Reader.TryRead(out var queued).ShouldBeTrue();
+        queued.Context.LogPosition.ShouldBe(LogPosition.FromInt64(0));
+        (await observer.Reader.WaitToReadAsync()).ShouldBeFalse();
+    }
+
+    [Test]
+    public async Task OnNextAsync_WhenQueueIsFull_LogsOverflowAsWarningOnceWhenItHappens()
+    {
+        var logger = new RecordingLogger();
+        using var observer = new Observer(queueCapacity: 1, EventFilter.All, logger, "sub-1");
+
+        await OfferAsync(observer, 0, "order-1");
+        logger.Messages.ShouldBeEmpty();
+
+        await OfferAsync(observer, 1, "order-1");
+        await OfferAsync(observer, 2, "order-1");
+
+        logger.Messages.ShouldBe(
+            [(LogLevel.Warning, "[sub: sub-1] queue overflowed (capacity 1); restart pending")]);
+    }
+
+    [Test]
+    public async Task OnResetAsync_WhenNotYetStopped_LogsFeedResetAsWarningOnce()
+    {
+        var logger = new RecordingLogger();
+        using var observer = new Observer(queueCapacity: 1, EventFilter.All, logger, "sub-1");
+
+        await observer.OnResetAsync(CancellationToken.None);
+        await observer.OnResetAsync(CancellationToken.None);
+
+        logger.Messages.ShouldBe([(LogLevel.Warning, "[sub: sub-1] feed was reset; restart pending")]);
+    }
+
+    [Test]
+    public async Task OnResetAsync_WhenAlreadyStoppedByQueueOverflow_KeepsFirstReason()
+    {
+        using var observer = new Observer(queueCapacity: 1, EventFilter.All);
+        await OfferAsync(observer, 0, "order-1");
+        await OfferAsync(observer, 1, "order-1");
+
+        await observer.OnResetAsync(CancellationToken.None);
+
+        observer.StopReason.ShouldBe(StopReason.QueueOverflow);
     }
 
     [Test]
@@ -75,7 +130,7 @@ public class SubscriptionObserverTests
         await OfferAsync(observer, 1, "order-1");
 
         _decoder.DecodeCount.ShouldBe(1);
-        observer.RestartReason.ShouldBe(SubscriptionAsyncEnumerable<string, LogPosition>.RestartReason.FeedReset);
+        observer.StopReason.ShouldBe(StopReason.FeedReset);
     }
 
     [Test]
@@ -89,7 +144,7 @@ public class SubscriptionObserverTests
         await OfferAsync(observer, 1, "order-1");
 
         _decoder.DecodeCount.ShouldBe(1);
-        observer.RestartToken.IsCancellationRequested.ShouldBeFalse();
+        observer.StopReason.ShouldBe(StopReason.None);
 
         var exception = await Should.ThrowAsync<InvalidOperationException>(async () =>
             await observer.Reader.WaitToReadAsync());
@@ -102,5 +157,24 @@ public class SubscriptionObserverTests
         _row.Set(position, streamId, position, "OrderPlaced", PostgresEventData.FromJson("{}"), null, CreatedAt);
 
         return observer.OnNextAsync(_row, CancellationToken.None);
+    }
+
+    private sealed class RecordingLogger : ILogger
+    {
+        public List<(LogLevel Level, string Message)> Messages { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Messages.Add((logLevel, formatter(state, exception)));
+        }
     }
 }

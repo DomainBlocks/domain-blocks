@@ -25,6 +25,18 @@ internal sealed class EventLogSql
     /// </summary>
     public const int ReadAllParameterCount = 2;
 
+    /// <summary>
+    /// The number of parameters that a page of <see cref="CatchUpAll"/> binds: the key, the high-water mark, and the
+    /// limit. The parameters of a condition are numbered after them.
+    /// </summary>
+    public const int CatchUpAllParameterCount = 3;
+
+    /// <summary>
+    /// The number of parameters that a page of <see cref="CatchUpStream"/> binds: the stream ID, the key, the
+    /// high-water mark, and the limit. The parameters of a condition are numbered after them.
+    /// </summary>
+    public const int CatchUpStreamParameterCount = 4;
+
     public EventLogSql(SchemaObjectNames names)
     {
         var eventLog = names.EventLog;
@@ -51,7 +63,7 @@ internal sealed class EventLogSql
                          "WHERE position > $1 AND position <= $2 ORDER BY position LIMIT $3";
 
         ReadCatchUpStream = $"SELECT {Columns} FROM {eventLog} " +
-                            "WHERE stream_id = $1 AND stream_position > $2 AND position <= $3 " +
+                            "WHERE stream_id = $1 AND stream_position > $2 AND stream_position <= $3 " +
                             "ORDER BY stream_position LIMIT $4";
     }
 
@@ -80,6 +92,18 @@ internal sealed class EventLogSql
     public string ReadCatchUpAll { get; }
 
     public string ReadCatchUpStream { get; }
+
+    /// <summary>
+    /// The query for a page of the read, with a further condition that rows must meet if one is given.
+    /// </summary>
+    public string CatchUpAll(string? condition = null) =>
+        condition is null ? ReadCatchUpAll : WithCondition(ReadCatchUpAll, condition);
+
+    /// <summary>
+    /// The query for a page of the read, with a further condition that rows must meet if one is given.
+    /// </summary>
+    public string CatchUpStream(string? condition = null) =>
+        condition is null ? ReadCatchUpStream : WithCondition(ReadCatchUpStream, condition);
 
     /// <summary>
     /// The query for a page of the read, with a further condition that rows must meet if one is given.

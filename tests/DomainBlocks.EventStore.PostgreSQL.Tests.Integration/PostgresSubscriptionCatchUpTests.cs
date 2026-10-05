@@ -73,13 +73,9 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
         await using var enumerator = SubscribeToAll(new SubscriptionOptions { QueueCapacity = 1 })
             .GetAsyncEnumerator(ct);
 
-        // A second subscription, used to tell when the live feed has delivered all the appended events.
-        await using var witness = _eventStore.SubscribeToAll().GetAsyncEnumerator(ct);
-        (await witness.MoveNextAsync()).ShouldBeTrue();
-        witness.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
-
         // The replay delivers its first event and is then held, with the rest still to come.
         (await NextMessageAsync(enumerator)).Event!.Value.Payload.ShouldBe(existing[0]);
+        await using var witness = await CreateWitnessAsync(ct);
         var pending = enumerator.MoveNextAsync();
 
         // More events arrive live than the queue holds, so the subscription has to restart.
@@ -127,17 +123,17 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
         await using var enumerator = SubscribeToAll(new SubscriptionOptions { QueueCapacity = 1 })
             .GetAsyncEnumerator(ct);
 
-        // A second subscription, used to tell when the live feed has delivered all the appended events.
-        await using var witness = _eventStore.SubscribeToAll().GetAsyncEnumerator(ct);
-        (await witness.MoveNextAsync()).ShouldBeTrue();
-        witness.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
-
         (await NextMessageAsync(enumerator)).Event!.Value.Payload.ShouldBe(existing[0]);
         (await NextMessageAsync(enumerator)).IsCaughtUp.ShouldBeTrue();
 
         // The queue overflows while the subscriber is caught up, so it is told that it fell behind.
-        var first = await AppendEventsAsync("first", 3, ct);
-        await ReadEventsAsync(witness, first.Length);
+        TestEvent[] first;
+
+        await using (var witness = await CreateWitnessAsync(ct))
+        {
+            first = await AppendEventsAsync("first", 3, ct);
+            await ReadEventsAsync(witness, first.Length);
+        }
 
         (await NextMessageAsync(enumerator)).Event!.Value.Payload.ShouldBe(first[0]);
         (await NextMessageAsync(enumerator)).IsFellBehind.ShouldBeTrue();
@@ -146,9 +142,11 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
         (await NextMessageAsync(enumerator)).Event!.Value.Payload.ShouldBe(first[1]);
         var pending = enumerator.MoveNextAsync();
 
-        // The queue overflows again before the subscriber has caught up again.
+        // The queue overflows again before the subscriber has caught up again. The subscription attached to the feed
+        // again when it restarted, so it takes another witness to follow it.
+        await using var secondWitness = await CreateWitnessAsync(ct);
         var second = await AppendEventsAsync("second", 2, ct);
-        await ReadEventsAsync(witness, second.Length);
+        await ReadEventsAsync(secondWitness, second.Length);
 
         release.SetResult();
         (await pending).ShouldBeTrue();
@@ -175,22 +173,97 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
             .ShouldBe([first[2], second[0], second[1]]);
     }
 
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_WhenRestartingAfterReplayThatEndedOnEventsFilterExcludes_ResumesFromHighWaterMark(
+        CancellationToken ct)
+    {
+        // The filter selects the first of the existing events and not the two that follow it.
+        var selected = await AppendEventsAsync("existing", 1, ct, "selected");
+        await AppendEventsAsync("existing", 2, ct, "excluded");
+        var release = HoldReplayAfterItsFirstEvent(replayIndex: 0);
+
+        var options = new SubscriptionOptions { Filter = EventFilter.StreamIds("selected"), QueueCapacity = 1 };
+        await using var enumerator = SubscribeToAll(options).GetAsyncEnumerator(ct);
+
+        // The replay delivers the event that the filter selects and is then held.
+        (await NextMessageAsync(enumerator)).Event!.Value.Payload.ShouldBe(selected[0]);
+        await using var witness = await CreateWitnessAsync(ct);
+        var pending = enumerator.MoveNextAsync();
+
+        // More events that the filter selects arrive live than the queue holds, so the subscription has to restart.
+        var live = await AppendEventsAsync("live", 2, ct, "selected");
+        await ReadEventsAsync(witness, live.Length);
+
+        release.SetResult();
+        (await pending).ShouldBeTrue();
+
+        var messages = new List<Message> { enumerator.Current };
+
+        while (!messages[^1].IsCaughtUp)
+            messages.Add(await NextMessageAsync(enumerator));
+
+        // The first replay delivered nothing after its first event, but it covered the log up to its high-water mark,
+        // so the second went on from there rather than from the last event that was delivered.
+        _replays.Count.ShouldBe(2);
+        _replays[0].ShouldBe(new Replay(AfterExclusive: -1, HighWaterMark: 2, Completed: true));
+        _replays[1].ShouldBe(new Replay(AfterExclusive: 2, HighWaterMark: 4, Completed: true));
+
+        messages
+            .Where(x => x.Event is not null)
+            .Select(x => x.Event!.Value.Payload)
+            .ShouldBe([live[0], live[1]]);
+    }
+
+    // The subscription under test, from the start of the log, with each of its replays recorded.
     private SubscriptionAsyncEnumerable<object, LogPosition> SubscribeToAll(SubscriptionOptions options)
+    {
+        return SubscribeToAll(
+            (reader, after, highWaterMark, ct) => RecordAsync(
+                reader.ReadCatchUpAllAsync(after, highWaterMark, options.Filter, ct),
+                after,
+                highWaterMark,
+                ct),
+            SubscriptionOrigin.Start,
+            options);
+    }
+
+    // A second subscription to the same feed, from the end of the log, used to tell when the feed has given all the
+    // appended events to the subscription under test. The feed gives each event to its subscriptions in the order in
+    // which they attached to it, so a witness is created once the subscription under test has attached.
+    private async Task<IAsyncEnumerator<Message>> CreateWitnessAsync(CancellationToken ct)
+    {
+        var options = new SubscriptionOptions();
+
+        var witness = SubscribeToAll(
+            static (reader, after, highWaterMark, ct) => reader.ReadCatchUpAllAsync(
+                after,
+                highWaterMark,
+                EventFilter.All,
+                ct),
+            SubscriptionOrigin.End,
+            options).GetAsyncEnumerator(ct);
+
+        (await NextMessageAsync(witness)).IsCaughtUp.ShouldBeTrue();
+
+        return witness;
+    }
+
+    private SubscriptionAsyncEnumerable<object, LogPosition> SubscribeToAll(
+        SubscriptionAsyncEnumerable<object, LogPosition>.CatchUpReader catchUpReader,
+        SubscriptionOrigin<LogPosition> origin,
+        SubscriptionOptions options)
     {
         return new SubscriptionAsyncEnumerable<object, LogPosition>(
             _reader,
             _feed,
-            (reader, after, highWaterMark, ct) => RecordAsync(
-                reader.ReadCatchUpAllAsync(after, highWaterMark, ct),
-                after,
-                highWaterMark,
-                ct),
+            catchUpReader,
             static async (reader, ct) => await reader.GetMaxPositionAsync(ct) is { } pos
                 ? LogPosition.FromInt64(pos)
                 : null,
-            EventFilter.All,
+            options.Filter,
             static ctx => ctx.LogPosition,
-            SubscriptionOrigin.Start,
+            origin,
             options,
             LoggerFactory.CreateLogger("Subscription"));
     }
@@ -229,12 +302,16 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
         return _releaseHeldReplay;
     }
 
-    private async Task<TestEvent[]> AppendEventsAsync(string prefix, int count, CancellationToken ct)
+    private async Task<TestEvent[]> AppendEventsAsync(
+        string prefix,
+        int count,
+        CancellationToken ct,
+        string streamId = "s1")
     {
         var events = Enumerable.Range(0, count).Select(i => new TestEvent { Value = $"{prefix}-{i}" }).ToArray();
 
         foreach (var e in events)
-            await _eventStore.AppendAsync("s1", [Appendable(e)], cancellationToken: ct);
+            await _eventStore.AppendAsync(streamId, [Appendable(e)], cancellationToken: ct);
 
         return events;
     }

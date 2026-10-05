@@ -57,6 +57,39 @@ public class EventLogSqlTests
     }
 
     [Test]
+    public void CatchUpAll_WithoutCondition_ReturnsQueryUnchanged()
+    {
+        Sql.CatchUpAll().ShouldBeSameAs(Sql.ReadCatchUpAll);
+    }
+
+    [Test]
+    public void CatchUpStream_WithoutCondition_ReturnsQueryUnchanged()
+    {
+        Sql.CatchUpStream().ShouldBeSameAs(Sql.ReadCatchUpStream);
+    }
+
+    [Test]
+    public void CatchUpAll_WithCondition_AddsConditionBeforeOrderBy()
+    {
+        var query = Sql.CatchUpAll("event_name = ANY($4)");
+
+        query.ShouldBe(
+            $"SELECT {Columns} FROM {EventLog} " +
+            "WHERE position > $1 AND position <= $2 AND event_name = ANY($4) ORDER BY position LIMIT $3");
+    }
+
+    [Test]
+    public void CatchUpStream_WithCondition_AddsConditionBeforeOrderBy()
+    {
+        var query = Sql.CatchUpStream("created_at < $5");
+
+        query.ShouldBe(
+            $"SELECT {Columns} FROM {EventLog} " +
+            "WHERE stream_id = $1 AND stream_position > $2 AND stream_position <= $3 AND created_at < $5 " +
+            "ORDER BY stream_position LIMIT $4");
+    }
+
+    [Test]
     public void ReadAll_WithConditionButWithoutMetadata_StillLeavesMetadataOutOfSelectedColumns()
     {
         var query = Sql.ReadAll(ReadDirection.Forward, includeMetadata: false, "(metadata ? $3) IS TRUE");
@@ -74,5 +107,9 @@ public class EventLogSqlTests
         Sql.ReadAllForward.ShouldNotContain($"${EventLogSql.ReadAllParameterCount + 1}");
         Sql.ReadStreamForward.ShouldContain($"${EventLogSql.ReadStreamParameterCount}");
         Sql.ReadStreamForward.ShouldNotContain($"${EventLogSql.ReadStreamParameterCount + 1}");
+        Sql.ReadCatchUpAll.ShouldContain($"${EventLogSql.CatchUpAllParameterCount}");
+        Sql.ReadCatchUpAll.ShouldNotContain($"${EventLogSql.CatchUpAllParameterCount + 1}");
+        Sql.ReadCatchUpStream.ShouldContain($"${EventLogSql.CatchUpStreamParameterCount}");
+        Sql.ReadCatchUpStream.ShouldNotContain($"${EventLogSql.CatchUpStreamParameterCount + 1}");
     }
 }
