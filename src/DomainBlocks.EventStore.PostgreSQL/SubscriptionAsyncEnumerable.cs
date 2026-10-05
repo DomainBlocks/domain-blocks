@@ -127,14 +127,24 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                     }
                 }
 
+                // A subscription that had not caught up has not fallen behind. Its replay has already run to the
+                // high-water mark, and the next cycle carries on from there.
                 switch (observer.RestartReason)
                 {
-                    case RestartReason.QueueOverflow:
+                    case RestartReason.QueueOverflow when isCaughtUp:
                         _logger?.SubscriptionFellBehind(_correlationId);
                         break;
 
-                    case RestartReason.FeedReset:
+                    case RestartReason.QueueOverflow:
+                        _logger?.SubscriptionQueueOverflowedBeforeCaughtUp(_correlationId);
+                        break;
+
+                    case RestartReason.FeedReset when isCaughtUp:
                         _logger?.SubscriptionFeedReset(_correlationId);
+                        break;
+
+                    case RestartReason.FeedReset:
+                        _logger?.SubscriptionFeedResetBeforeCaughtUp(_correlationId);
                         break;
 
                     default:

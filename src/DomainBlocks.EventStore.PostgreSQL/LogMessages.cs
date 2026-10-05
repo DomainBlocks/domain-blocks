@@ -42,6 +42,16 @@ internal static partial class LogMessages
     [LoggerMessage(LogLevel.Warning, "[sub: {SubscriptionId}] feed was reset; restarting from last position")]
     internal static partial void SubscriptionFeedReset(this ILogger logger, string subscriptionId);
 
+    [LoggerMessage(
+        LogLevel.Information,
+        "[sub: {SubscriptionId}] queue overflowed before catching up; continuing to catch up")]
+    internal static partial void SubscriptionQueueOverflowedBeforeCaughtUp(this ILogger logger, string subscriptionId);
+
+    [LoggerMessage(
+        LogLevel.Warning,
+        "[sub: {SubscriptionId}] feed was reset before catching up; continuing to catch up")]
+    internal static partial void SubscriptionFeedResetBeforeCaughtUp(this ILogger logger, string subscriptionId);
+
     [LoggerMessage(LogLevel.Debug, "[sub: {SubscriptionId}] canceled")]
     internal static partial void SubscriptionCanceled(this ILogger logger, string subscriptionId);
 
