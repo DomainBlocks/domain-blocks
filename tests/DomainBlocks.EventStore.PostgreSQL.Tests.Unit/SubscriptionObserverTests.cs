@@ -1,4 +1,5 @@
 using DomainBlocks.EventStore.Filtering;
+using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using Shouldly;
 
@@ -66,6 +67,21 @@ public class SubscriptionObserverTests
     }
 
     [Test]
+    public async Task OnNextAsync_WhenQueueIsFull_LogsOverflowOnceWhenItHappens()
+    {
+        var logger = new RecordingLogger();
+        using var observer = new Observer(queueCapacity: 1, EventFilter.All, logger, "sub-1");
+
+        await OfferAsync(observer, 0, "order-1");
+        logger.Messages.ShouldBeEmpty();
+
+        await OfferAsync(observer, 1, "order-1");
+        await OfferAsync(observer, 2, "order-1");
+
+        logger.Messages.ShouldBe(["[sub: sub-1] queue overflowed (capacity 1); restart pending"]);
+    }
+
+    [Test]
     public async Task OnResetAsync_WhenAlreadyStoppedByQueueOverflow_KeepsFirstReason()
     {
         using var observer = new Observer(queueCapacity: 1, EventFilter.All);
@@ -128,5 +144,24 @@ public class SubscriptionObserverTests
         _row.Set(position, streamId, position, "OrderPlaced", PostgresEventData.FromJson("{}"), null, CreatedAt);
 
         return observer.OnNextAsync(_row, CancellationToken.None);
+    }
+
+    private sealed class RecordingLogger : ILogger
+    {
+        public List<string> Messages { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Messages.Add(formatter(state, exception));
+        }
     }
 }

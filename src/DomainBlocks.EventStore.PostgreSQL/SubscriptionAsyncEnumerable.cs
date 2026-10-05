@@ -112,7 +112,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
             {
                 // Attach the new observer before detaching the old one, so that the ref count never drops to zero
                 // between cycles and the feed's replication session survives a restart.
-                var nextObserver = new Observer(_options.QueueCapacity, _liveFilter);
+                var nextObserver = new Observer(_options.QueueCapacity, _liveFilter, _logger, _correlationId);
                 var nextAttachment = await AttachObserverAsync(nextObserver, cancellationToken).ConfigureAwait(false);
 
                 if (attachment is not null)
@@ -137,8 +137,10 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                     }
                 }
 
-                // A subscription that had not caught up has not fallen behind. Its replay has already run to the
-                // high-water mark, and the next cycle carries on from there.
+                // The observer logged an overflow when it happened, which can be long before the cycle ends. What is
+                // logged here is what the subscription now does about it. A subscription that had not caught up has not
+                // fallen behind: its replay has already run to the high-water mark, and the next cycle carries on from
+                // there.
                 switch (observer.StopReason)
                 {
                     case StopReason.QueueOverflow when isCaughtUp:
@@ -146,7 +148,6 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                         break;
 
                     case StopReason.QueueOverflow:
-                        _logger?.SubscriptionQueueOverflowedBeforeCaughtUp(_correlationId);
                         break;
 
                     case StopReason.FeedReset when isCaughtUp:
@@ -342,9 +343,14 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     /// <summary>
     /// Buffers the live events that a subscription selects, for one subscription cycle. Never blocks the feed: on an
     /// overflow, as on a feed reset, it records the reason and completes its queue. The cycle ends once it has read
-    /// what the queue holds, and a new one starts from the resume position. Nothing is interrupted to bring that about.
+    /// what the queue holds, and a new one starts from the resume position. Nothing is interrupted to bring that about,
+    /// so the restart can come much later than the overflow, which is logged when it happens.
     /// </summary>
-    internal sealed class Observer(int queueCapacity, EventFilter liveFilter) :
+    internal sealed class Observer(
+        int queueCapacity,
+        EventFilter liveFilter,
+        ILogger? logger = null,
+        string subscriptionId = "") :
         IEventLogObserver<EventLogRow<TEvent>>,
         IDisposable
     {
@@ -387,8 +393,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                 return ValueTask.CompletedTask;
             }
 
-            if (!_channel.Writer.TryWrite(e))
-                Stop(StopReason.QueueOverflow);
+            if (!_channel.Writer.TryWrite(e) && Stop(StopReason.QueueOverflow))
+                logger?.SubscriptionQueueOverflowed(subscriptionId, queueCapacity);
 
             return ValueTask.CompletedTask;
         }
@@ -407,16 +413,20 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
         public void Dispose() => Stop(StopReason.Disposed);
 
-        // The first reason given is the one that stands. It is recorded before the queue is completed, so that it is
-        // there to read by the time the queue ends.
-        private void Stop(StopReason reason)
+        // The first reason given is the one that stands, and the result says whether this one is it. The reason is
+        // recorded before the queue is completed, so that it is there to read by the time the queue ends.
+        private bool Stop(StopReason reason)
         {
             _isStopped = true;
 
             var previous = Interlocked.CompareExchange(ref _stopReason, (int)reason, (int)StopReason.None);
 
-            if (previous == (int)StopReason.None)
-                _channel.Writer.TryComplete();
+            if (previous != (int)StopReason.None)
+                return false;
+
+            _channel.Writer.TryComplete();
+
+            return true;
         }
     }
 }

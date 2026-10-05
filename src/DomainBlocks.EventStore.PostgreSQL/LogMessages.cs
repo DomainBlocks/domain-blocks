@@ -44,8 +44,11 @@ internal static partial class LogMessages
 
     [LoggerMessage(
         LogLevel.Information,
-        "[sub: {SubscriptionId}] queue overflowed before catching up; continuing to catch up")]
-    internal static partial void SubscriptionQueueOverflowedBeforeCaughtUp(this ILogger logger, string subscriptionId);
+        "[sub: {SubscriptionId}] queue overflowed (capacity {QueueCapacity}); restart pending")]
+    internal static partial void SubscriptionQueueOverflowed(
+        this ILogger logger,
+        string subscriptionId,
+        int queueCapacity);
 
     [LoggerMessage(
         LogLevel.Warning,
