@@ -30,6 +30,12 @@ internal static partial class LogMessages
     [LoggerMessage(LogLevel.Information, "[sub: {SubscriptionId}] started")]
     internal static partial void SubscriptionStarted(this ILogger logger, string subscriptionId);
 
+    [LoggerMessage(LogLevel.Information, "[sub: {SubscriptionId}] catching up from start")]
+    internal static partial void SubscriptionCatchingUpFromStart(this ILogger logger, string subscriptionId);
+
+    [LoggerMessage(LogLevel.Information, "[sub: {SubscriptionId}] catching up after position {Position}")]
+    internal static partial void SubscriptionCatchingUp(this ILogger logger, string subscriptionId, ulong position);
+
     [LoggerMessage(LogLevel.Debug, "[sub: {SubscriptionId}] catch-up boundary is {HighWaterMark}")]
     internal static partial void CatchUpBoundary(this ILogger logger, string subscriptionId, ulong? highWaterMark);
 
@@ -43,17 +49,15 @@ internal static partial class LogMessages
     internal static partial void SubscriptionFeedReset(this ILogger logger, string subscriptionId);
 
     [LoggerMessage(
-        LogLevel.Information,
+        LogLevel.Warning,
         "[sub: {SubscriptionId}] queue overflowed (capacity {QueueCapacity}); restart pending")]
     internal static partial void SubscriptionQueueOverflowed(
         this ILogger logger,
         string subscriptionId,
         int queueCapacity);
 
-    [LoggerMessage(
-        LogLevel.Warning,
-        "[sub: {SubscriptionId}] feed was reset before catching up; continuing to catch up")]
-    internal static partial void SubscriptionFeedResetBeforeCaughtUp(this ILogger logger, string subscriptionId);
+    [LoggerMessage(LogLevel.Warning, "[sub: {SubscriptionId}] feed was reset; restart pending")]
+    internal static partial void SubscriptionFeedResetPending(this ILogger logger, string subscriptionId);
 
     [LoggerMessage(LogLevel.Debug, "[sub: {SubscriptionId}] canceled")]
     internal static partial void SubscriptionCanceled(this ILogger logger, string subscriptionId);
