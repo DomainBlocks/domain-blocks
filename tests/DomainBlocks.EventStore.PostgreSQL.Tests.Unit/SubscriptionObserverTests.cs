@@ -5,7 +5,7 @@ using Shouldly;
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Unit;
 
 using Observer = SubscriptionAsyncEnumerable<string, LogPosition>.Observer;
-using RestartReason = SubscriptionAsyncEnumerable<string, LogPosition>.RestartReason;
+using StopReason = SubscriptionAsyncEnumerable<string, LogPosition>.StopReason;
 
 public class SubscriptionObserverTests
 {
@@ -44,11 +44,11 @@ public class SubscriptionObserverTests
         using var observer = new Observer(queueCapacity: 1, EventFilter.All);
 
         await OfferAsync(observer, 0, "order-1");
-        observer.RestartReason.ShouldBe(RestartReason.None);
+        observer.StopReason.ShouldBe(StopReason.None);
 
         await OfferAsync(observer, 1, "order-1");
 
-        observer.RestartReason.ShouldBe(RestartReason.QueueOverflow);
+        observer.StopReason.ShouldBe(StopReason.QueueOverflow);
     }
 
     [Test]
@@ -74,7 +74,7 @@ public class SubscriptionObserverTests
 
         await observer.OnResetAsync(CancellationToken.None);
 
-        observer.RestartReason.ShouldBe(RestartReason.QueueOverflow);
+        observer.StopReason.ShouldBe(StopReason.QueueOverflow);
     }
 
     [Test]
@@ -101,7 +101,7 @@ public class SubscriptionObserverTests
         await OfferAsync(observer, 1, "order-1");
 
         _decoder.DecodeCount.ShouldBe(1);
-        observer.RestartReason.ShouldBe(RestartReason.FeedReset);
+        observer.StopReason.ShouldBe(StopReason.FeedReset);
     }
 
     [Test]
@@ -115,7 +115,7 @@ public class SubscriptionObserverTests
         await OfferAsync(observer, 1, "order-1");
 
         _decoder.DecodeCount.ShouldBe(1);
-        observer.RestartReason.ShouldBe(RestartReason.None);
+        observer.StopReason.ShouldBe(StopReason.None);
 
         var exception = await Should.ThrowAsync<InvalidOperationException>(async () =>
             await observer.Reader.WaitToReadAsync());

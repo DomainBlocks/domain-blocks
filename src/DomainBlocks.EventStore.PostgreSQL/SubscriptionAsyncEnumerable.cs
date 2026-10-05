@@ -139,21 +139,21 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
                 // A subscription that had not caught up has not fallen behind. Its replay has already run to the
                 // high-water mark, and the next cycle carries on from there.
-                switch (observer.RestartReason)
+                switch (observer.StopReason)
                 {
-                    case RestartReason.QueueOverflow when isCaughtUp:
+                    case StopReason.QueueOverflow when isCaughtUp:
                         _logger?.SubscriptionFellBehind(_correlationId);
                         break;
 
-                    case RestartReason.QueueOverflow:
+                    case StopReason.QueueOverflow:
                         _logger?.SubscriptionQueueOverflowedBeforeCaughtUp(_correlationId);
                         break;
 
-                    case RestartReason.FeedReset when isCaughtUp:
+                    case StopReason.FeedReset when isCaughtUp:
                         _logger?.SubscriptionFeedReset(_correlationId);
                         break;
 
-                    case RestartReason.FeedReset:
+                    case StopReason.FeedReset:
                         _logger?.SubscriptionFeedResetBeforeCaughtUp(_correlationId);
                         break;
 
@@ -269,14 +269,14 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         // A restart signaled during the replay takes effect only now that the replay is complete. Cancelling the replay
         // instead would throw away the part of the log it had already read through without delivering anything, and a
         // replay that takes longer than the queue takes to overflow would never finish.
-        if (observer.RestartReason != RestartReason.None)
+        if (observer.StopReason != StopReason.None)
             yield break;
 
         _logger?.SubscriptionCaughtUp(_correlationId);
 
         yield return SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>.CaughtUp;
 
-        // The observer's queue ends, once what it holds has been read, when the observer signals a restart.
+        // The observer's queue ends, once what it holds has been read, when the observer has stopped.
         await foreach (var e in observer.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
         {
             var position = _positionSelector(e.Context);
@@ -331,7 +331,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     /// <summary>
     /// Why an observer has stopped taking rows, if it has.
     /// </summary>
-    internal enum RestartReason
+    internal enum StopReason
     {
         None,
         QueueOverflow,
@@ -356,12 +356,12 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                     SingleReader = true
                 });
 
-        private int _restartReason;
+        private int _stopReason;
         private bool _isStopped;
 
         public ChannelReader<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Reader => _channel.Reader;
 
-        public RestartReason RestartReason => (RestartReason)Volatile.Read(ref _restartReason);
+        public StopReason StopReason => (StopReason)Volatile.Read(ref _stopReason);
 
         public ValueTask OnNextAsync(EventLogRow<TEvent> row, CancellationToken cancellationToken)
         {
@@ -388,14 +388,14 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
             }
 
             if (!_channel.Writer.TryWrite(e))
-                Stop(RestartReason.QueueOverflow);
+                Stop(StopReason.QueueOverflow);
 
             return ValueTask.CompletedTask;
         }
 
         public ValueTask OnResetAsync(CancellationToken cancellationToken)
         {
-            Stop(RestartReason.FeedReset);
+            Stop(StopReason.FeedReset);
             return ValueTask.CompletedTask;
         }
 
@@ -405,17 +405,17 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
             return ValueTask.CompletedTask;
         }
 
-        public void Dispose() => Stop(RestartReason.Disposed);
+        public void Dispose() => Stop(StopReason.Disposed);
 
         // The first reason given is the one that stands. It is recorded before the queue is completed, so that it is
         // there to read by the time the queue ends.
-        private void Stop(RestartReason reason)
+        private void Stop(StopReason reason)
         {
             _isStopped = true;
 
-            var previous = Interlocked.CompareExchange(ref _restartReason, (int)reason, (int)RestartReason.None);
+            var previous = Interlocked.CompareExchange(ref _stopReason, (int)reason, (int)StopReason.None);
 
-            if (previous == (int)RestartReason.None)
+            if (previous == (int)StopReason.None)
                 _channel.Writer.TryComplete();
         }
     }
