@@ -11,14 +11,18 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Each cycle attaches an observer to the live feed first, then reads the high-water mark (the highest committed
-/// position), replays everything from the resume position up to it, emits
+/// A subscription follows one sequence of positions: those of the log, or those of a stream. Its resume position, its
+/// high-water mark, and the position of each of its events are all positions in that sequence.
+/// </para>
+/// <para>
+/// Each cycle attaches an observer to the live feed first, then reads the high-water mark (the last position of the
+/// sequence), replays everything from the resume position up to it, emits
 /// <see cref="SubscriptionMessage{TEvent,TStreamId,TStreamPos,TLogPos}.CaughtUp"/>,
-/// and finally drains the live rows, skipping any at or below the high-water mark. Because positions are assigned in
+/// and finally drains the live rows, skipping any that the replay has covered. Because positions are assigned in
 /// commit order without gaps, the replay and the live rows tile exactly: nothing is skipped and nothing is repeated.
 /// </para>
 /// <para>
-/// A cycle is restarted from the last delivered position, after emitting
+/// A cycle is restarted from the resume position, after emitting
 /// <see cref="SubscriptionMessage{TEvent,TStreamId,TStreamPos,TLogPos}.FellBehind"/>, when the subscriber's queue
 /// overflows or when the feed has been re-established and may have missed rows. A restart signaled while the cycle is
 /// still replaying takes effect once the replay has reached the high-water mark. The replay is never abandoned
@@ -33,9 +37,9 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// decoded fails only the subscriptions that select it.
 /// </para>
 /// <para>
-/// A filter can leave long stretches of the log with nothing to deliver. A subscription to the whole log whose replay
-/// has reached its high-water mark therefore restarts from that mark if it is beyond the last delivered position, and
-/// does not read that part of the log again.
+/// The resume position only moves forward. Delivering an event moves it to that event, and a replay that reaches its
+/// high-water mark moves it there whether or not it delivered anything, as a filter can leave long stretches of the
+/// sequence with nothing to deliver and the next cycle should not read them again.
 /// </para>
 /// <para>
 /// A subscription from the end is pinned to the last position at the time it starts. A cycle that restarts before
@@ -54,7 +58,6 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     private readonly EndPositionReader _endPositionReader;
     private readonly EventFilter _liveFilter;
     private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> _positionSelector;
-    private readonly Func<long, TPos?> _highWaterMarkPosition;
     private readonly SubscriptionOrigin<TPos> _origin;
     private readonly SubscriptionOptions _options;
     private readonly ILogger? _logger;
@@ -67,7 +70,6 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         EndPositionReader endPositionReader,
         EventFilter liveFilter,
         Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> positionSelector,
-        Func<long, TPos?> highWaterMarkPosition,
         SubscriptionOrigin<TPos>? origin,
         SubscriptionOptions? options,
         ILogger? logger)
@@ -78,7 +80,6 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         _endPositionReader = endPositionReader;
         _liveFilter = liveFilter;
         _positionSelector = positionSelector;
-        _highWaterMarkPosition = highWaterMarkPosition;
         _reader = reader;
         _feed = feed;
         _logger = logger;
@@ -98,9 +99,12 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         {
             _logger?.SubscriptionStarted(_correlationId);
 
-            var resumeOrigin = _origin is SubscriptionOrigin<TPos>.End
-                ? await PinEndAsync(cancellationToken).ConfigureAwait(false)
-                : _origin;
+            var resumePosition = new ResumePosition(_origin switch
+            {
+                SubscriptionOrigin<TPos>.After after => after.Position,
+                SubscriptionOrigin<TPos>.End => await PinEndAsync(cancellationToken).ConfigureAwait(false),
+                _ => null
+            });
 
             var isCaughtUp = false;
 
@@ -118,7 +122,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                 observer = nextObserver;
                 attachment = nextAttachment;
 
-                var enumerator = ReadAllAsync(resumeOrigin, observer, cancellationToken)
+                var enumerator = ReadAllAsync(resumePosition, observer, cancellationToken)
                     .GetAsyncEnumerator(cancellationToken);
 
                 await using (enumerator.ConfigureAwait(false))
@@ -131,19 +135,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
                         if (message.IsCaughtUp)
                             isCaughtUp = true;
-                        else if (message.Event is { } e)
-                            resumeOrigin = SubscriptionOrigin.After(_positionSelector(e.Context));
                     }
-                }
-
-                // A replay that ran to its high-water mark has covered the log up to there, whether or not it delivered
-                // anything, so the next cycle does not read that part again. A filter can leave long stretches of the
-                // log with nothing to deliver.
-                if (observer.ReplayedTo is { } replayedTo &&
-                    _highWaterMarkPosition(replayedTo) is { } position &&
-                    (resumeOrigin is not SubscriptionOrigin<TPos>.After after || after.Position.Value < position.Value))
-                {
-                    resumeOrigin = SubscriptionOrigin.After(position);
                 }
 
                 // A subscription that had not caught up has not fallen behind. Its replay has already run to the
@@ -218,13 +210,13 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         }
     }
 
-    private async Task<SubscriptionOrigin<TPos>> PinEndAsync(CancellationToken cancellationToken)
+    // The position that a subscription from the end resumes after: the last of the sequence at the time it starts, or
+    // none if the sequence is empty, in which case it resumes from the start.
+    private async Task<TPos?> PinEndAsync(CancellationToken cancellationToken)
     {
         try
         {
-            var endPosition = await _endPositionReader(_reader, cancellationToken).ConfigureAwait(false);
-
-            return endPosition is { } position ? SubscriptionOrigin.After(position) : SubscriptionOrigin.Start;
+            return await _endPositionReader(_reader, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -259,27 +251,28 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     }
 
     private async IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> ReadAllAsync(
-        SubscriptionOrigin<TPos> resumeOrigin,
+        ResumePosition resumePosition,
         Observer observer,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var highWaterMark = await _reader.GetMaxPositionAsync(cancellationToken).ConfigureAwait(false);
+        var highWaterMark = await _endPositionReader(_reader, cancellationToken).ConfigureAwait(false);
 
-        _logger?.CatchUpBoundary(_correlationId, highWaterMark);
+        _logger?.CatchUpBoundary(_correlationId, highWaterMark?.Value);
 
-        if (highWaterMark is not null)
+        if (highWaterMark is { } mark)
         {
-            var afterExclusive = resumeOrigin is SubscriptionOrigin<TPos>.After after
-                ? checked((long)after.Position.Value)
-                : -1;
-
-            var events = _catchUpReader(_reader, afterExclusive, highWaterMark.Value, cancellationToken);
+            var afterExclusive = resumePosition.After is { } after ? checked((long)after.Value) : -1;
+            var events = _catchUpReader(_reader, afterExclusive, checked((long)mark.Value), cancellationToken);
 
             await foreach (var e in events.ConfigureAwait(false))
+            {
+                resumePosition.AdvanceTo(_positionSelector(e.Context));
                 yield return SubscriptionMessage.Event(e);
-        }
+            }
 
-        observer.ReplayedTo = highWaterMark;
+            // The replay has covered the sequence up to the mark, whether or not it delivered anything on the way.
+            resumePosition.AdvanceTo(mark);
+        }
 
         // A restart signaled during the replay takes effect only now that the replay is complete. Cancelling the replay
         // instead would throw away the part of the log it had already read through without delivering anything, and a
@@ -293,14 +286,21 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
         await foreach (var e in observer.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
         {
-            // Catching up has delivered it.
-            if ((long)e.Context.LogPosition.Value <= highWaterMark)
+            var position = _positionSelector(e.Context);
+
+            // The replay has covered it.
+            if (resumePosition.Covers(position))
                 continue;
 
+            resumePosition.AdvanceTo(position);
             yield return SubscriptionMessage.Event(e);
         }
     }
 
+    /// <summary>
+    /// Reads the events of the sequence that the subscription follows, after one of its positions and up to another,
+    /// inclusive.
+    /// </summary>
     public delegate IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> CatchUpReader(
         EventLogReader<TEvent> reader,
         long afterExclusive,
@@ -312,6 +312,26 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     /// sequence is empty.
     /// </summary>
     public delegate Task<TPos?> EndPositionReader(EventLogReader<TEvent> reader, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The position that a subscription resumes after: the furthest that it has delivered or that a replay has covered.
+    /// It only moves forward.
+    /// </summary>
+    private sealed class ResumePosition(TPos? after)
+    {
+        /// <summary>
+        /// The position to resume after, or <see langword="null"/> to resume from the start.
+        /// </summary>
+        public TPos? After { get; private set; } = after;
+
+        public bool Covers(TPos position) => After is { } after && position.Value <= after.Value;
+
+        public void AdvanceTo(TPos position)
+        {
+            if (!Covers(position))
+                After = position;
+        }
+    }
 
     internal enum RestartReason
     {
@@ -344,11 +364,6 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         public ChannelReader<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Reader => _channel.Reader;
 
         public CancellationToken RestartToken => _restartCts.Token;
-
-        /// <summary>
-        /// The high-water mark that the cycle's replay ran to, once it has.
-        /// </summary>
-        public long? ReplayedTo { get; set; }
 
         public RestartReason RestartReason => (RestartReason)Volatile.Read(ref _restartReason);
 

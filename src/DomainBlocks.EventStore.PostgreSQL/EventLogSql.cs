@@ -63,7 +63,7 @@ internal sealed class EventLogSql
                          "WHERE position > $1 AND position <= $2 ORDER BY position LIMIT $3";
 
         ReadCatchUpStream = $"SELECT {Columns} FROM {eventLog} " +
-                            "WHERE stream_id = $1 AND stream_position > $2 AND position <= $3 " +
+                            "WHERE stream_id = $1 AND stream_position > $2 AND stream_position <= $3 " +
                             "ORDER BY stream_position LIMIT $4";
     }
 

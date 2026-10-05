@@ -85,7 +85,7 @@ public class EventLogSqlTests
 
         query.ShouldBe(
             $"SELECT {Columns} FROM {EventLog} " +
-            "WHERE stream_id = $1 AND stream_position > $2 AND position <= $3 AND created_at < $5 " +
+            "WHERE stream_id = $1 AND stream_position > $2 AND stream_position <= $3 AND created_at < $5 " +
             "ORDER BY stream_position LIMIT $4");
     }
 

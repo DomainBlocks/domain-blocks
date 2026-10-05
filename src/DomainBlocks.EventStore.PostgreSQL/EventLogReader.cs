@@ -95,7 +95,8 @@ internal sealed class EventLogReader<TEvent>(
     }
 
     /// <summary>
-    /// Reads events of one stream after a stream position, bounded by a global high-water mark.
+    /// Reads events of one stream after one stream position and up to another, inclusive. Used for subscription
+    /// catch-up, where the upper bound is the high-water mark read after attaching to the live feed.
     /// </summary>
     public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCatchUpStreamAsync(
         string streamId,

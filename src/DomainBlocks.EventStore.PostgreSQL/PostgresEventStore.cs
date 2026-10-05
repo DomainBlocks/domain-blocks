@@ -267,7 +267,6 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
                 : null,
             filter,
             static ctx => ctx.LogPosition,
-            static highWaterMark => LogPosition.FromInt64(highWaterMark),
             origin,
             options,
             _logger);
@@ -291,7 +290,6 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
                 : null,
             EventFilter.StreamIds(streamId) & filter,
             static ctx => ctx.StreamPosition,
-            static _ => null,
             origin,
             options,
             _logger);

@@ -263,7 +263,6 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
                 : null,
             options.Filter,
             static ctx => ctx.LogPosition,
-            static highWaterMark => LogPosition.FromInt64(highWaterMark),
             origin,
             options,
             LoggerFactory.CreateLogger("Subscription"));

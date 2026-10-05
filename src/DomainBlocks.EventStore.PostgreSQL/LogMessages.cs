@@ -31,7 +31,7 @@ internal static partial class LogMessages
     internal static partial void SubscriptionStarted(this ILogger logger, string subscriptionId);
 
     [LoggerMessage(LogLevel.Debug, "[sub: {SubscriptionId}] catch-up boundary is {HighWaterMark}")]
-    internal static partial void CatchUpBoundary(this ILogger logger, string subscriptionId, long? highWaterMark);
+    internal static partial void CatchUpBoundary(this ILogger logger, string subscriptionId, ulong? highWaterMark);
 
     [LoggerMessage(LogLevel.Information, "[sub: {SubscriptionId}] caught up")]
     internal static partial void SubscriptionCaughtUp(this ILogger logger, string subscriptionId);
