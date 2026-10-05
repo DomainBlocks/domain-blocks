@@ -6,8 +6,8 @@ DomainBlocks is a .NET library for building applications using Domain-Driven Des
 
 ## Features
 
-DomainBlocks is a set of NuGet packages, so you reference only what you need. Event storage and event evolution are the
-first feature areas; others will follow.
+DomainBlocks is a set of NuGet packages, so you reference only what you need. Event storage, event filtering, and event
+evolution are the first feature areas; others will follow.
 
 ### Event storage
 
@@ -50,6 +50,53 @@ await foreach (var message in store.SubscribeToAll(SubscriptionOrigin.Start))
 The default origin is the end of the log, so omitting it receives only new events. `SubscribeToStream` works the same
 way for a single event stream. A subscriber that consumes too slowly receives a message with `IsFellBehind` set to
 `true`, then catches up again.
+
+### Event filtering
+
+Pass an `EventFilter` to a read to select events by name, stream, metadata, or creation time:
+
+```csharp
+var options = new ReadAllOptions { Filter = EventFilter.EventNames("OrderPlaced", "OrderShipped") };
+
+await foreach (var e in store.ReadAll(options: options))
+    Console.WriteLine($"{e.Context.StreamId}: {e.Payload}");
+```
+
+These are the filters to build from:
+
+```csharp
+EventFilter.EventNames("OrderPlaced", "OrderShipped")
+EventFilter.StreamIds("order-1", "order-2")
+EventFilter.StreamIdStartsWith("order-")
+EventFilter.MetadataExists("tenant")
+EventFilter.Metadata("tenant", "acme", "initech")
+EventFilter.CreatedAtOrAfter(from)
+EventFilter.CreatedBefore(before)
+```
+
+Combine them with `&`, `|`, and `!`:
+
+```csharp
+var filter =
+    EventFilter.StreamIdStartsWith("order-") &
+    EventFilter.Metadata("tenant", "acme") &
+    !EventFilter.EventNames("OrderNoteAdded");
+```
+
+A subscription takes a filter in the same way, and applies it both while catching up and to new events:
+
+```csharp
+var options = new SubscriptionOptions { Filter = filter };
+
+await foreach (var message in store.SubscribeToAll(SubscriptionOrigin.Start, options))
+{
+    if (message.Event is { } e)
+        Console.WriteLine($"{e.Context.StreamId}: {e.Payload}");
+}
+```
+
+Names and values match exactly, and event names are the names that events are stored under. Events that a filter
+excludes are never decoded. MongoDB does not filter subscriptions yet.
 
 ### Event evolution
 
