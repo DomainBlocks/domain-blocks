@@ -22,7 +22,9 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// <see cref="SubscriptionMessage{TEvent,TStreamId,TStreamPos,TLogPos}.FellBehind"/>, when the subscriber's queue
 /// overflows or when the feed has been re-established and may have missed rows. A restart signaled while the cycle is
 /// still replaying takes effect once the replay has reached the high-water mark. The replay is never abandoned
-/// part-way, as the next cycle would have to start it again.
+/// part-way, as the next cycle would have to start it again. Falling behind is only reported to a subscriber that has
+/// been told it caught up, so the two messages alternate, starting with
+/// <see cref="SubscriptionMessage{TEvent,TStreamId,TStreamPos,TLogPos}.CaughtUp"/>.
 /// </para>
 /// <para>
 /// The live feed hands every subscription each row of the log undecoded. A subscription takes the event of a row only
@@ -91,7 +93,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                 ? await PinEndAsync(cancellationToken).ConfigureAwait(false)
                 : _origin;
 
-            var fellBehindPending = false;
+            var isCaughtUp = false;
 
             while (true)
             {
@@ -119,7 +121,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                         yield return message;
 
                         if (message.IsCaughtUp)
-                            fellBehindPending = false;
+                            isCaughtUp = true;
                         else if (message.Event is { } e)
                             resumeOrigin = SubscriptionOrigin.After(_positionSelector(e.Context));
                     }
@@ -139,12 +141,13 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                         yield break;
                 }
 
-                // A cycle can restart again before it has caught up, e.g. when the live feed is still pumping a large
-                // transaction into a small queue. Every FellBehind is answered by exactly one CaughtUp, so a restart
-                // that has not yet been caught up on is not reported twice.
-                if (!fellBehindPending)
+                // FellBehind tells a subscriber that it is no longer caught up, so it is only reported to one that has
+                // been told it caught up. A restart before then, or a second restart before it has caught up again,
+                // e.g. when the live feed is still pumping a large transaction into a small queue, only makes the
+                // catch-up longer. Every FellBehind is therefore answered by exactly one CaughtUp.
+                if (isCaughtUp)
                 {
-                    fellBehindPending = true;
+                    isCaughtUp = false;
                     yield return SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>.FellBehind;
                 }
             }
