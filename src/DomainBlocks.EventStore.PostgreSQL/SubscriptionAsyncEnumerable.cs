@@ -264,10 +264,12 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
             var afterExclusive = resumePosition.After is { } after ? checked((long)after.Value) : -1;
             var events = _catchUpReader(_reader, afterExclusive, checked((long)mark.Value), cancellationToken);
 
+            // The resume position moves to an event once the subscriber has taken it and come back for more, and not
+            // before, so that an event is never counted as delivered before it has been.
             await foreach (var e in events.ConfigureAwait(false))
             {
-                resumePosition.AdvanceTo(_positionSelector(e.Context));
                 yield return SubscriptionMessage.Event(e);
+                resumePosition.AdvanceTo(_positionSelector(e.Context));
             }
 
             // The replay has covered the sequence up to the mark, whether or not it delivered anything on the way.
@@ -292,8 +294,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
             if (resumePosition.Covers(position))
                 continue;
 
-            resumePosition.AdvanceTo(position);
             yield return SubscriptionMessage.Event(e);
+            resumePosition.AdvanceTo(position);
         }
     }
 
