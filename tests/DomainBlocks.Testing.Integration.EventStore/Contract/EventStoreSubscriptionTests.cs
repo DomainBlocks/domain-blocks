@@ -478,6 +478,49 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(
         (await GetNextEventAsync(second)).Payload.ShouldBe(secondLive);
     }
 
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToStream_WhenAnotherStreamHasLiveEventThatCannotBeDecoded_IsNotAffected(
+        CancellationToken cancellationToken)
+    {
+        await using var enumerator = EventStore.SubscribeToStream("target").GetAsyncEnumerator(cancellationToken);
+        await ShouldBeCaughtUpAsync(enumerator);
+
+        await AppendEventThatCannotBeDecodedAsync("other", cancellationToken);
+        var targetEvent = new TestEvent { Value = "target" };
+        await EventStore.AppendAsync("target", [targetEvent], cancellationToken: cancellationToken);
+
+        (await GetNextEventAsync(enumerator)).Payload.ShouldBe(targetEvent);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_WhenLiveEventCannotBeDecoded_FailsOnlySubscriptionsThatSelectIt(
+        CancellationToken cancellationToken)
+    {
+        await using var all = EventStore.SubscribeToAll().GetAsyncEnumerator(cancellationToken);
+        await using var otherAll = EventStore.SubscribeToAll().GetAsyncEnumerator(cancellationToken);
+        await using var stream = EventStore.SubscribeToStream("target").GetAsyncEnumerator(cancellationToken);
+        await ShouldBeCaughtUpAsync(all);
+        await ShouldBeCaughtUpAsync(otherAll);
+        await ShouldBeCaughtUpAsync(stream);
+
+        var firstEvent = new TestEvent { Value = "first" };
+        await EventStore.AppendAsync("target", [firstEvent], cancellationToken: cancellationToken);
+        await AppendEventThatCannotBeDecodedAsync("other", cancellationToken);
+        var lastEvent = new TestEvent { Value = "last" };
+        await EventStore.AppendAsync("target", [lastEvent], cancellationToken: cancellationToken);
+
+        // Each subscription to the whole log is given what came before the event, and then fails.
+        (await GetNextEventAsync(all)).Payload.ShouldBe(firstEvent);
+        await Should.ThrowAsync<EventNameNotMappedException>(async () => await all.MoveNextAsync());
+        (await GetNextEventAsync(otherAll)).Payload.ShouldBe(firstEvent);
+        await Should.ThrowAsync<EventNameNotMappedException>(async () => await otherAll.MoveNextAsync());
+
+        (await GetNextEventAsync(stream)).Payload.ShouldBe(firstEvent);
+        (await GetNextEventAsync(stream)).Payload.ShouldBe(lastEvent);
+    }
+
     private static string NewStreamId() => $"test-{Guid.NewGuid():N}";
 
     private static TestEvent[] CreateEvents(params string[] values) =>
@@ -525,6 +568,20 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(
 
         return new RecoveredEvents([.. events], fellBehindCount);
     }
+
+    // Appended by a store that maps the event, which the store under test does not.
+    private async Task AppendEventThatCannotBeDecodedAsync(string streamId, CancellationToken cancellationToken)
+    {
+        var eventTypeMap = new EventTypeMapBuilder().Add<TestEvent>().Add<UnmappedEvent>().Build();
+        await using var eventStore = CreateEventStore(eventTypeMap, loggerNameSuffix: "_unmapped");
+
+        await eventStore.AppendAsync(
+            streamId,
+            [AppendableEvent.Create<object>(new UnmappedEvent())],
+            cancellationToken: cancellationToken);
+    }
+
+    private sealed record UnmappedEvent;
 
     private sealed class RecoveredEvents(TestEvent[] events, int fellBehindCount)
     {

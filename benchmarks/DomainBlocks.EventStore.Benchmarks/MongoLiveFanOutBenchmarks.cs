@@ -1,5 +1,6 @@
 using BenchmarkDotNet.Attributes;
 using DomainBlocks.EventStore.Codecs;
+using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.MongoDB;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.MongoDB.Bson;
@@ -12,15 +13,16 @@ namespace DomainBlocks.EventStore.Benchmarks;
 using SubscriptionObserver = SubscriptionAsyncEnumerable<IDomainEvent, LogPosition>.Observer;
 
 /// <summary>
-/// Measures the MongoDB live path without I/O: <see cref="EventCount"/> changes are handed to the observers of
-/// <see cref="SubscriberCount"/> subscriptions, and each subscription takes the documents off its queue and decodes
-/// them. The observers are the real ones. The change stream subject is left out, as it needs a server, so the loop over
-/// the observers stands in for it, and the dequeue and decode stand in for the subscription's own loop.
+/// Measures the MongoDB live path without I/O: <see cref="EventCount"/> changes are set on the store's one live
+/// document, which is handed to the observers of <see cref="SubscriberCount"/> subscriptions, each of which selects
+/// every document and takes its event. The document and the observers are the real ones. The change stream subject is
+/// left out, as it needs a server, so the loop over the observers stands in for it, and does with each change what the
+/// store's result selector does.
 /// </summary>
 [MemoryDiagnoser]
 public class MongoLiveFanOutBenchmarks
 {
-    private IEventDecoder<IDomainEvent, BsonValue, BsonValue> _decoder = null!;
+    private EventLogDocument<IDomainEvent> _liveDocument = null!;
     private ChangeStreamDocument<BsonDocument>[] _changes = null!;
 
     [Params(1, 4, 16)]
@@ -41,7 +43,7 @@ public class MongoLiveFanOutBenchmarks
 
         var events = TestEvents.Create(SerializationFormat.Bson, EventCount, metadataEntryCount: 2);
 
-        _decoder = codec;
+        _liveDocument = new EventLogDocument<IDomainEvent>(codec);
 
         _changes =
         [
@@ -69,21 +71,23 @@ public class MongoLiveFanOutBenchmarks
         var observers = new SubscriptionObserver[SubscriberCount];
 
         for (var i = 0; i < observers.Length; i++)
-            observers[i] = new SubscriptionObserver(SubscriptionOptions.Default.QueueCapacity);
+            observers[i] = new SubscriptionObserver(SubscriptionOptions.Default.QueueCapacity, EventFilter.All);
 
         var checksum = 0L;
 
         foreach (var change in _changes)
         {
+            _liveDocument.Set(change.FullDocument);
+
             foreach (var observer in observers)
             {
                 // The observer never waits.
-                observer.OnNextAsync(change, CancellationToken.None).GetAwaiter().GetResult();
+                observer.OnNextAsync(_liveDocument, CancellationToken.None).GetAwaiter().GetResult();
 
                 // Whatever the observer queued is taken straight off the queue again, in place of a subscriber reading
                 // on another thread, so that a run does the same work every time.
-                if (observer.Reader.TryRead(out var document))
-                    checksum += (long)_decoder.Decode(document).Context.LogPosition.Value;
+                if (observer.Reader.TryRead(out var e))
+                    checksum += (long)e.Context.LogPosition.Value;
             }
         }
 

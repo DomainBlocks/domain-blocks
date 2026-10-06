@@ -122,6 +122,39 @@ public class RefCountedChangeStreamSubjectTests
         await attachment.DisposeAsync();
     }
 
+    [Test]
+    [CancelAfter(5000)]
+    public async Task AttachAsync_WhileLastConnectionIsStillStopping_WaitsForItBeforeConnectingAgain()
+    {
+        // A connection that is stopping may still be handing a change to its observers. Observers may share what they
+        // make of a change, so two connections must never hand out changes at once.
+        var subjects = new List<TestSubject>();
+
+        var refCountedSubject = new RefCountedChangeStreamSubject<int>(() =>
+        {
+            var subject = new TestSubject();
+            subjects.Add(subject);
+            return subject;
+        });
+
+        var first = await refCountedSubject.AttachAsync(new TestObserver());
+        var connection = subjects[0].Connection!;
+        connection.HoldDispose();
+
+        var detaching = first.DisposeAsync().AsTask();
+        await connection.Disposing;
+
+        var attaching = refCountedSubject.AttachAsync(new TestObserver());
+        subjects.Count.ShouldBe(1);
+
+        connection.ReleaseDispose();
+        await detaching;
+        var second = await attaching;
+
+        subjects.Count.ShouldBe(2);
+        await second.DisposeAsync();
+    }
+
     private sealed class TestSubject : IChangeStreamSubject<int>
     {
         private Exception? _attachException;
@@ -157,8 +190,12 @@ public class RefCountedChangeStreamSubjectTests
     private sealed class TestConnection : IChangeStreamConnection
     {
         private readonly TaskCompletionSource _completionTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _disposingTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private TaskCompletionSource? _disposeGate;
 
         public Task Completion => _completionTcs.Task;
+
+        public Task Disposing => _disposingTcs.Task;
 
         public BsonTimestamp OperationTime { get; } = new(1, 1);
 
@@ -166,11 +203,21 @@ public class RefCountedChangeStreamSubjectTests
 
         public void Fault(Exception exception) => _completionTcs.TrySetException(exception);
 
-        public ValueTask DisposeAsync()
+        // Holds disposal until it is released, as a connection that is still handing out a change would.
+        public void HoldDispose() =>
+            _disposeGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public void ReleaseDispose() => _disposeGate!.SetResult();
+
+        public async ValueTask DisposeAsync()
         {
             DisposeCount++;
+            _disposingTcs.TrySetResult();
+
+            if (_disposeGate is { } gate)
+                await gate.Task;
+
             _completionTcs.TrySetResult();
-            return ValueTask.CompletedTask;
         }
     }
 
