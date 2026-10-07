@@ -9,14 +9,28 @@ DomainBlocks is a .NET library for building applications using Domain-Driven Des
 DomainBlocks is a set of NuGet packages, so you reference only what you need. Event storage, event filtering, and event
 evolution are the first feature areas; others will follow.
 
-### Event storage
+### Event store
+
+The event store is built to be trusted as the system of record:
+
+- **Atomic appends.** The events in a given append operation either all commit or none do, and they are contiguous in
+  the stream.
+- **Optimistic concurrency.** Pass the stream state you expect, and the append is rejected with
+  `StreamAppendConflictException` if another writer got there first. The exception carries the state that was
+  observed, so the caller can reload and retry.
+- **Idempotent appends.** Give an append a commit id and a retry of the same request succeeds without writing again,
+  even if the first attempt committed but its reply was lost (e.g. due to a timeout).
+- **One global log in commit order.** Positions are assigned at commit time, without gaps, so a replay from the start
+  and a live subscription see the same events in the same order.
+- **Subscriptions never skip or repeat.** A subscriber that cannot keep up is told it fell behind and resumes from its
+  last delivered position; no event is dropped silently.
 
 `DomainBlocks.EventStore` holds the store contracts and the append/read pipeline; a store package plugs a database in.
 Add `DomainBlocks.EventStore.PostgreSQL` or `DomainBlocks.EventStore.MongoDB`, build a store, then append and read
 events:
 
 ```csharp
-await using var store = new PostgresEventStoreBuilder<IDomainEvent>()
+await using var store = new PostgresEventStoreBuilder<IDomainEvent>() // Or MongoEventStoreBuilder
     .UseConnectionString(connectionString)
     .ConfigureOptions(o => o.Schema = "events")
     .ConfigureCodec(c => c.MapEvent<OrderPlaced>())
@@ -96,7 +110,7 @@ await foreach (var message in store.SubscribeToAll(SubscriptionOrigin.Start, opt
 ```
 
 Names and values match exactly, and event names are the names that events are stored under. Events that a filter
-excludes are never decoded. MongoDB does not filter subscriptions yet.
+excludes are never decoded. MongoDB subscription filtering is coming soon.
 
 ### Event evolution
 
