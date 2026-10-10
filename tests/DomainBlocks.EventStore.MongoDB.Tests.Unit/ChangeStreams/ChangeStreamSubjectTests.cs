@@ -265,6 +265,35 @@ public class ChangeStreamSubjectTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
+    public async Task Connect_WhenCursorFailsWithUnresumableError_CompletesBeforeNotifyingObservers(
+        CancellationToken ct)
+    {
+        SetupChangeStream(
+        [
+            new ChangeStreamBatch { Items = [CreateChange(new BsonDocument("_data", "1"))] },
+            new ChangeStreamBatch { Exception = new InvalidOperationException() }
+        ]);
+
+        var subject = ChangeStreamSubject.Create(
+            _mockClient.Object,
+            _mockCollection.Object.WatchAsync,
+            new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
+            static x => x.ResumeToken,
+            static x => x);
+
+        var observer = new CompletionRecordingObserver();
+        using var attachment = subject.Attach(observer);
+        await using var connection = await subject.ConnectAsync(ct);
+
+        // The observer holds the first change until it knows the connection.
+        observer.Connection = connection;
+        observer.Release();
+
+        (await observer.WasCompletedWhenNotified.WaitAsync(ct)).ShouldBeTrue();
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
     public async Task Attach_AfterUnresumableError_Throws(CancellationToken ct)
     {
         var exception = new InvalidOperationException();
@@ -495,6 +524,29 @@ public class ChangeStreamSubjectTests
 
         public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken) =>
             ValueTask.CompletedTask;
+    }
+
+    private sealed class CompletionRecordingObserver : IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>
+    {
+        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private readonly TaskCompletionSource<bool> _wasCompletedWhenNotified =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public IChangeStreamConnection? Connection { get; set; }
+
+        public Task<bool> WasCompletedWhenNotified => _wasCompletedWhenNotified.Task;
+
+        public void Release() => _released.TrySetResult();
+
+        public ValueTask OnNextAsync(ChangeStreamDocument<BsonDocument> change, CancellationToken cancellationToken) =>
+            new(_released.Task);
+
+        public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken)
+        {
+            _wasCompletedWhenNotified.TrySetResult(Connection!.Completion.IsCompleted);
+            return ValueTask.CompletedTask;
+        }
     }
 
     private class TestMongoConnectionException(bool isNetworkException) :

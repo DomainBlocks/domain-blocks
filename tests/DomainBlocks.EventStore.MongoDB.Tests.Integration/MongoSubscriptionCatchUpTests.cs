@@ -1,3 +1,4 @@
+using System.Net;
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Filtering;
@@ -9,6 +10,9 @@ using DomainBlocks.Testing.Integration.EventStore;
 using DomainBlocks.Testing.Integration.EventStore.MongoDB;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using MongoDB.Driver.Core.Clusters;
+using MongoDB.Driver.Core.Connections;
+using MongoDB.Driver.Core.Servers;
 using NUnit.Framework;
 using Shouldly;
 
@@ -24,13 +28,19 @@ using Message = SubscriptionMessage<object, string, StreamPosition, LogPosition>
 [TestFixture]
 public class MongoSubscriptionCatchUpTests
 {
+    private const int ChangeStreamHistoryLostCode = 286;
+    private const int UnauthorizedCode = 13;
+
     private readonly List<Replay> _replays = [];
     private MongoEventStoreOptions _options = null!;
     private IEventStore<object, string, StreamPosition, LogPosition> _eventStore = null!;
+    private IMongoCollection<BsonDocument> _eventLog = null!;
     private EventLogReader<object> _reader = null!;
     private RefCountedChangeStreamSubject<EventLogDocument<object>> _subject = null!;
     private int _heldReplayIndex;
     private TaskCompletionSource? _releaseHeldReplay;
+    private ChangeStreamFault? _fault;
+    private int _freshChangeStreamCount;
 
     [SetUp]
     public async Task SetUp()
@@ -53,7 +63,7 @@ public class MongoSubscriptionCatchUpTests
             .ConfigureCodec(x => x.UseEventTypeMap(typeMap).UseEventSerializer(new BsonDocumentObjectSerializer()))
             .Build();
 
-        var eventLog = MongoTestEnvironment.MongoClient
+        _eventLog = MongoTestEnvironment.MongoClient
             .GetDatabase(_options.DatabaseName)
             .GetCollection<BsonDocument>(_options.EventLogCollectionName)
             .WithReadConcern(ReadConcern.Majority)
@@ -67,11 +77,13 @@ public class MongoSubscriptionCatchUpTests
 
         _replays.Clear();
         _releaseHeldReplay = null;
-        _reader = new EventLogReader<object>(eventLog, codec);
+        _fault = null;
+        _freshChangeStreamCount = 0;
+        _reader = new EventLogReader<object>(_eventLog, codec);
 
         _subject = RefCountedChangeStreamSubject.Create(
-            eventLog.Database.Client,
-            eventLog.WatchAsync,
+            _eventLog.Database.Client,
+            WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(insertsOnly),
             static change => change.ResumeToken,
             change =>
@@ -244,6 +256,68 @@ public class MongoSubscriptionCatchUpTests
             .ShouldBe([live[0], live[1]]);
     }
 
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_WhenChangeHistoryIsLost_RestartsAndDeliversEventsAppendedMeanwhile(
+        CancellationToken ct)
+    {
+        var existing = await AppendEventsAsync("existing", 1, ct);
+
+        await using var enumerator = SubscribeToAll(new SubscriptionOptions()).GetAsyncEnumerator(ct);
+
+        (await NextMessageAsync(enumerator)).Event!.Value.Payload.ShouldBe(existing[0]);
+        (await NextMessageAsync(enumerator)).IsCaughtUp.ShouldBeTrue();
+
+        // The change stream loses its connection, and events are appended before it tries to resume.
+        var fault = DisconnectChangeStream(CreateCommandException(ChangeStreamHistoryLostCode));
+        await fault.Resuming.Task.WaitAsync(ct);
+        var meanwhile = await AppendEventsAsync("meanwhile", 2, ct);
+
+        // The oplog no longer holds the resume point, so the subscription restarts with a new change stream.
+        fault.Release();
+
+        var messages = new List<Message> { await NextMessageAsync(enumerator) };
+
+        while (!messages[^1].IsCaughtUp)
+            messages.Add(await NextMessageAsync(enumerator));
+
+        messages.Select(x => x.Kind).ShouldBe(
+        [
+            SubscriptionMessageKind.FellBehind,
+            SubscriptionMessageKind.Event,
+            SubscriptionMessageKind.Event,
+            SubscriptionMessageKind.CaughtUp
+        ]);
+
+        messages
+            .Where(x => x.Event is not null)
+            .Select(x => x.Event!.Value.Payload)
+            .ShouldBe([meanwhile[0], meanwhile[1]]);
+
+        _freshChangeStreamCount.ShouldBe(2);
+
+        // The new change stream delivers live events.
+        var live = await AppendEventsAsync("live", 1, ct);
+        (await NextMessageAsync(enumerator)).Event!.Value.Payload.ShouldBe(live[0]);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_WhenChangeStreamFailsOtherwise_Throws(CancellationToken ct)
+    {
+        await using var enumerator = SubscribeToAll(new SubscriptionOptions()).GetAsyncEnumerator(ct);
+
+        (await NextMessageAsync(enumerator)).IsCaughtUp.ShouldBeTrue();
+
+        var error = CreateCommandException(UnauthorizedCode);
+        DisconnectChangeStream(error).Release();
+
+        var exception = await Should.ThrowAsync<MongoCommandException>(async () => await enumerator.MoveNextAsync());
+
+        exception.ShouldBeSameAs(error);
+        _freshChangeStreamCount.ShouldBe(1);
+    }
+
     // The subscription under test, from the start of the log, with each of its replays recorded. The store turns a
     // subscription filter into a query for the replay and an event filter for live events. This test builds the
     // subscription from its parts, so it passes both.
@@ -373,5 +447,86 @@ public class MongoSubscriptionCatchUpTests
         return enumerator.Current;
     }
 
+    // Makes the change stream lose its connection at its next batch, and then fail with the given error when it tries
+    // to resume. The resume waits until the fault is released.
+    private ChangeStreamFault DisconnectChangeStream(Exception resumeError)
+    {
+        var fault = new ChangeStreamFault(resumeError);
+        _fault = fault;
+
+        return fault;
+    }
+
+    private async Task<IChangeStreamCursor<ChangeStreamDocument<BsonDocument>>> WatchAsync(
+        PipelineDefinition<ChangeStreamDocument<BsonDocument>, ChangeStreamDocument<BsonDocument>> pipeline,
+        ChangeStreamOptions? options,
+        CancellationToken ct)
+    {
+        if (options?.ResumeAfter is null)
+        {
+            Interlocked.Increment(ref _freshChangeStreamCount);
+        }
+        else if (Interlocked.Exchange(ref _fault, null) is { } fault)
+        {
+            fault.Resuming.TrySetResult();
+            await fault.Released.WaitAsync(ct);
+
+            throw fault.ResumeError;
+        }
+
+        var cursor = await _eventLog.WatchAsync(pipeline, options, ct);
+
+        return new FaultableCursor(cursor, () => Volatile.Read(ref _fault)?.Disconnect());
+    }
+
+    private static MongoCommandException CreateCommandException(int code)
+    {
+        var serverId = new ServerId(new ClusterId(), new IPEndPoint(IPAddress.Loopback, 27017));
+
+        return new MongoCommandException(
+            new ConnectionId(serverId),
+            "The command failed.",
+            new BsonDocument("aggregate", 1),
+            new BsonDocument { { "ok", 0 }, { "code", code } });
+    }
+
     private sealed record Replay(long AfterExclusive, long HighWaterMark, bool Completed);
+
+    private sealed class ChangeStreamFault(Exception resumeError)
+    {
+        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _isDisconnected;
+
+        public Exception ResumeError { get; } = resumeError;
+
+        public TaskCompletionSource Resuming { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task Released => _released.Task;
+
+        public void Release() => _released.TrySetResult();
+
+        // A timeout is an error that the change stream resumes from. Only the first batch after the request fails.
+        public Exception? Disconnect() =>
+            Interlocked.Exchange(ref _isDisconnected, 1) == 0 ? new TimeoutException("Disconnected.") : null;
+    }
+
+    private sealed class FaultableCursor(
+        IChangeStreamCursor<ChangeStreamDocument<BsonDocument>> inner,
+        Func<Exception?> disconnect) :
+        IChangeStreamCursor<ChangeStreamDocument<BsonDocument>>
+    {
+        public IEnumerable<ChangeStreamDocument<BsonDocument>> Current => inner.Current;
+
+        public bool MoveNext(CancellationToken cancellationToken = default) =>
+            MoveNextAsync(cancellationToken).GetAwaiter().GetResult();
+
+        public Task<bool> MoveNextAsync(CancellationToken cancellationToken = default) =>
+            disconnect() is { } exception
+                ? Task.FromException<bool>(exception)
+                : inner.MoveNextAsync(cancellationToken);
+
+        public BsonDocument GetResumeToken() => inner.GetResumeToken();
+
+        public void Dispose() => inner.Dispose();
+    }
 }
