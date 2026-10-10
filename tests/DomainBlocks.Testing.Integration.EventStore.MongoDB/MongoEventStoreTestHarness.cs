@@ -15,7 +15,10 @@ public sealed class MongoEventStoreTestHarness(Action<MongoEventStoreOptions>? c
 {
     public MongoEventStoreOptions Options { get; private set; } = null!;
 
-    public StoreCapabilities Capabilities => StoreCapabilities.IdempotentAppends | StoreCapabilities.FilteredReads;
+    public StoreCapabilities Capabilities =>
+        StoreCapabilities.IdempotentAppends |
+        StoreCapabilities.FilteredReads |
+        StoreCapabilities.FilteredSubscriptions;
 
     public IReadOnlyList<EventFormat> SupportedFormats { get; } =
         [EventFormat.Bson, EventFormat.Json, EventFormat.Protobuf];
