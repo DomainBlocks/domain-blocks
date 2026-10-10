@@ -91,7 +91,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                 isFirstCycle = false;
 
                 using var observer = new Observer(_options.QueueCapacity, _liveFilter, _logger, _correlationId);
-                await using var attachment = await AttachObserverAsync(observer).ConfigureAwait(false);
+                await using var attachment = await AttachObserverAsync(observer, cancellationToken)
+                    .ConfigureAwait(false);
 
                 var enumerator = ReadAllAsync(resumePosition, observer, attachment.OperationTime, cancellationToken)
                     .GetAsyncEnumerator(cancellationToken);
@@ -176,11 +177,20 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         }
     }
 
-    private async Task<IChangeStreamAttachment> AttachObserverAsync(Observer observer)
+    private async Task<IChangeStreamAttachment> AttachObserverAsync(
+        Observer observer,
+        CancellationToken cancellationToken)
     {
         try
         {
-            return await _changeStreamSubject.AttachAsync(observer, _correlationId).ConfigureAwait(false);
+            return await _changeStreamSubject
+                .AttachAsync(observer, _correlationId, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _logger?.SubscriptionCanceled(_correlationId);
+            throw;
         }
         catch (Exception ex)
         {

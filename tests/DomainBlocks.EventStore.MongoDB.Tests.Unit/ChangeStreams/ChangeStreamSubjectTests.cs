@@ -338,6 +338,34 @@ public class ChangeStreamSubjectTests
         exception.Message.ShouldBe("Cannot attach to a completed change stream connection.");
     }
 
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task Connect_WhenCancelledDuringRetryBackoff_StopsTheConnection(CancellationToken ct)
+    {
+        _mockCollection
+            .Setup(x => x.WatchAsync(
+                It.IsAny<PipelineDefinition<ChangeStreamDocument<BsonDocument>, ChangeStreamDocument<BsonDocument>>>(),
+                It.IsAny<ChangeStreamOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TimeoutException());
+
+        var subject = ChangeStreamSubject.Create(
+            _mockClient.Object,
+            _mockCollection.Object.WatchAsync,
+            new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
+            static x => x.ResumeToken,
+            static x => x,
+            new ChangeStreamSubjectOptions { MaxRetryDelay = TimeSpan.FromMinutes(1) });
+
+        using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        connectCts.CancelAfter(100);
+
+        await subject.ConnectAsync(connectCts.Token).ShouldThrowAsync<OperationCanceledException>();
+
+        var exception = Should.Throw<InvalidOperationException>(() => subject.Attach(new TestObserver()));
+        exception.Message.ShouldBe("Cannot attach to a completed change stream connection.");
+    }
+
     private static BsonTimestamp CreateOperationTime(int helloCount) => new(helloCount, 0);
 
     private static MongoException CreateResumableMongoException()
