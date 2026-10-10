@@ -15,21 +15,31 @@ using SubscriptionObserver = SubscriptionAsyncEnumerable<IDomainEvent, LogPositi
 /// <summary>
 /// Measures the MongoDB live path without I/O: <see cref="EventCount"/> changes are set on the store's one live
 /// document, which is handed to the observers of <see cref="SubscriberCount"/> subscriptions, each of which selects
-/// every document and takes its event. The document and the observers are the real ones. The change stream subject is
-/// left out, as it needs a server, so the loop over the observers stands in for it, and does with each change what the
-/// store's result selector does.
+/// <see cref="SelectedPercent"/> percent of the documents and takes their events. The document and the observers are
+/// the real ones. The change stream subject is left out, as it needs a server, so the loop over the observers stands in
+/// for it, and does with each change what the store's result selector does.
 /// </summary>
 [MemoryDiagnoser]
 public class MongoLiveFanOutBenchmarks
 {
+    // The documents are spread evenly over this many streams, so that one stream holds one percent of them.
+    private const int StreamCount = 100;
+
     private EventLogDocument<IDomainEvent> _liveDocument = null!;
     private ChangeStreamDocument<BsonDocument>[] _changes = null!;
+    private EventFilter _filter = null!;
 
     [Params(1, 4, 16)]
     public int SubscriberCount { get; set; }
 
     [Params(10_000)]
     public int EventCount { get; set; }
+
+    /// <summary>
+    /// How much of the log each subscription selects: all of it, without a filter, or the one percent in one stream.
+    /// </summary>
+    [Params(100, 1)]
+    public int SelectedPercent { get; set; }
 
     [GlobalSetup]
     public void GlobalSetup()
@@ -45,6 +55,13 @@ public class MongoLiveFanOutBenchmarks
 
         _liveDocument = new EventLogDocument<IDomainEvent>(codec);
 
+        _filter = SelectedPercent switch
+        {
+            100 => EventFilter.All,
+            1 => EventFilter.StreamIds("test-stream-0"),
+            _ => throw new NotSupportedException($"No filter selects {SelectedPercent} percent of the documents.")
+        };
+
         _changes =
         [
             .. codec
@@ -52,7 +69,7 @@ public class MongoLiveFanOutBenchmarks
                 .Select((x, i) => new BsonDocument
                 {
                     { EventLogEntry.FieldNames.Position, (long)i },
-                    { EventLogEntry.FieldNames.StreamId, "test-stream" },
+                    { EventLogEntry.FieldNames.StreamId, $"test-stream-{i % StreamCount}" },
                     { EventLogEntry.FieldNames.StreamPosition, (long)i },
                     { EventLogEntry.FieldNames.EventName, x.EventName },
                     { EventLogEntry.FieldNames.EventData, x.EventData },
@@ -71,7 +88,7 @@ public class MongoLiveFanOutBenchmarks
         var observers = new SubscriptionObserver[SubscriberCount];
 
         for (var i = 0; i < observers.Length; i++)
-            observers[i] = new SubscriptionObserver(SubscriptionOptions.Default.QueueCapacity, EventFilter.All);
+            observers[i] = new SubscriptionObserver(SubscriptionOptions.Default.QueueCapacity, _filter);
 
         var checksum = 0L;
 

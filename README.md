@@ -110,7 +110,7 @@ await foreach (var message in store.SubscribeToAll(SubscriptionOrigin.Start, opt
 ```
 
 Names and values match exactly, and event names are the names that events are stored under. Events that a filter
-excludes are never decoded. MongoDB subscription filtering is coming soon.
+excludes are never decoded.
 
 ### Event evolution
 

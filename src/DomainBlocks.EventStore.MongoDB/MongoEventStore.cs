@@ -250,14 +250,15 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         SubscriptionOrigin<LogPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
-        ThrowIfFiltered(options?.Filter, nameof(SubscribeToAll));
+        var filter = options?.Filter ?? EventFilter.All;
+        var catchUpFilter = TranslateFilter(filter) ?? Builders<BsonDocument>.Filter.Empty;
 
         return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
             _reader,
             _allEventsSubject,
-            static (reader, session, after, highWaterMark, ct) => reader.ReadCatchUpAsync(
+            (reader, session, after, highWaterMark, ct) => reader.ReadCatchUpAsync(
                 session,
-                Builders<BsonDocument>.Filter.Empty,
+                catchUpFilter,
                 EventLogEntry.FieldNames.Position,
                 after,
                 highWaterMark,
@@ -269,7 +270,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
                 ct).ConfigureAwait(false) is { } pos
                 ? LogPosition.FromInt64(pos)
                 : null,
-            EventFilter.All,
+            filter,
             static ctx => ctx.LogPosition,
             origin,
             options,
@@ -281,16 +282,16 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         SubscriptionOrigin<StreamPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
-        ThrowIfFiltered(options?.Filter, nameof(SubscribeToStream));
-
+        var filter = options?.Filter ?? EventFilter.All;
         var streamFilter = Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, streamId);
+        var catchUpFilter = TranslateFilter(filter) is { } translated ? streamFilter & translated : streamFilter;
 
         return new SubscriptionAsyncEnumerable<TEvent, StreamPosition>(
             _reader,
             _allEventsSubject,
             (reader, session, after, highWaterMark, ct) => reader.ReadCatchUpAsync(
                 session,
-                streamFilter,
+                catchUpFilter,
                 EventLogEntry.FieldNames.StreamPosition,
                 after,
                 highWaterMark,
@@ -300,7 +301,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
                 .ConfigureAwait(false) is { } pos
                 ? StreamPosition.FromInt64(pos)
                 : null,
-            EventFilter.StreamIds(streamId),
+            EventFilter.StreamIds(streamId) & filter,
             static ctx => ctx.StreamPosition,
             origin,
             options,
@@ -308,14 +309,10 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
     }
 
     // A filter is translated at the call, so that one that cannot be translated is refused there rather than on
-    // enumeration. A read without a filter has no further condition, so it runs exactly the query it would if there
-    // were no filters.
+    // enumeration. A read or catch-up without a filter has no further condition, so it runs exactly the query it would
+    // if there were no filters.
     private static FilterDefinition<BsonDocument>? TranslateFilter(EventFilter? filter) =>
         filter is null or AllEventsFilter ? null : MongoFilterTranslator.Translate(filter);
-
-    // Subscriptions do not filter yet. A filter is refused rather than ignored.
-    private static void ThrowIfFiltered(EventFilter? filter, string operation) =>
-        EventFilterNotSupportedException.ThrowIfFiltered(filter, $"{nameof(MongoEventStore)}.{operation}");
 
     public async ValueTask DisposeAsync()
     {
