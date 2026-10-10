@@ -207,7 +207,7 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
         var kept = new ShipmentDispatchedV2(Guid.NewGuid(), new DateTime(2025, 08, 25, 14, 30, 0, DateTimeKind.Utc));
         var next = new ShipmentDispatchedV2(Guid.NewGuid(), kept.DispatchedAt.AddHours(1));
 
-        // Written by a store that still knows the event.
+        // A store that still maps the retired event writes the stream.
         var writer = CreateEventStore(new EventTypeMapBuilder()
             .Add<ShipmentDispatched>()
             .Add<ShipmentDispatchedV2>()
@@ -222,8 +222,8 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
             await writer.DisposeAsync();
         }
 
-        // Read by a store that "ignores" ShipmentDispatched by mapping every read name 'ShipmentDispatched' to
-        // IgnoredEvent.Instance.
+        // A second store reads the stream. It maps the read name ShipmentDispatched to IgnoredEvent.Instance, so it
+        // ignores that event.
         var eventStore = CreateEventStore(
             new EventTypeMapBuilder()
                 .Add<ShipmentDispatchedV2>()
@@ -339,7 +339,7 @@ public abstract class EventStoreEventRepresentationTests<TStreamPos, TLogPos>(
         public required DateTimeOffset FilledAt { get; init; }
     }
 
-    // Protected as Mongo test needs to ignore extra elements.
+    // The type is protected because the MongoDB tests register a class map for it that ignores extra elements.
     protected record LimitOrderEvent
     {
         public required Guid OrderId { get; init; }

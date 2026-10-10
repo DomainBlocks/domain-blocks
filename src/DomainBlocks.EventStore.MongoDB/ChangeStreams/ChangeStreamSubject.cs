@@ -189,20 +189,20 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
                 {
                     _stopCts.Token.ThrowIfCancellationRequested();
 
-                    // Anchor for catch-up subscriptions: the stream delivers every change after this optime, and a
-                    // majority read that waits for it sees at least every change up to it. It must be an oplog optime,
-                    // not a cluster time: after a transaction commit the logical clock runs one tick ahead of the
-                    // oplog, and a non-sharded replica set leaves a read waiting for such a time stalled until the
-                    // periodic no-op writer runs. Without an explicit start the server would start the stream at the
-                    // same point, but the anchor would be unknown:
+                    // This optime anchors catch-up subscriptions. The stream delivers every change after it, and a
+                    // majority read that waits for it sees at least every change up to it. It must be an oplog optime
+                    // rather than a cluster time. After a transaction commits, the logical clock runs one tick ahead of
+                    // the oplog, and on a replica set that is not sharded, a read that waits for such a time stalls
+                    // until the periodic no-op writer runs. Without an explicit start, the server would start the
+                    // stream at the same point, but the anchor would be unknown:
                     // https://github.com/mongodb/mongo/blob/r7.0.16/src/mongo/db/pipeline/document_source_change_stream.cpp#L238-L253
                     _operationTime ??= await GetLastAppliedOpTimeAsync().ConfigureAwait(false);
 
                     using var cursor = await GetChangeStreamCursorAsync(resumeToken).ConfigureAwait(false);
 
-                    // Seed the resume token from the open, so a cursor that fails before its first batch resumes
-                    // instead of restarting later. The driver exposes it when the first batch is empty; a non-empty
-                    // first batch cannot fail before it is read.
+                    // The resume token is seeded when the cursor opens, so a cursor that fails before its first batch
+                    // resumes rather than restarting later. The driver exposes the token when the first batch is empty,
+                    // and a non-empty first batch cannot fail before it is read.
                     // See:
                     // - https://github.com/mongodb/specifications/blob/bed11334/source/change-streams/change-streams.md#updating-the-cached-resume-token
                     // - https://jira.mongodb.org/browse/SERVER-35740
@@ -232,13 +232,12 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
                                 resumeToken = batchResumeToken;
                         }
 
-                        // A live change stream is expected to remain open. Log a warning and reconnect.
+                        // A live change stream should never end, so reconnect.
                         _logger?.ChangeStreamCursorEnded(_subjectId);
                     }
                     catch (Exception ex) when (ChangeStreamResumePolicy.CanResume(ex))
                     {
                         _logger?.ChangeStreamConnectionLost(ex, _subjectId);
-                        // Continue outer loop (reconnect)
                     }
                 }
             }
@@ -271,11 +270,11 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
 
         private async Task<BsonTimestamp> GetLastAppliedOpTimeAsync()
         {
-            // hello.lastWrite.opTime is the optime of the last write applied on the node that answers. The primary
-            // read preference is for freshness, not correctness.
+            // hello.lastWrite.opTime is the optime of the last write applied on the node that answers. The primary read
+            // preference is there for freshness, not for correctness.
             // https://www.mongodb.com/docs/manual/reference/command/hello/
             //
-            // Floor: MongoDB 4.4.2. The driver requires 4.4, and the hello command arrived in 4.4.2.
+            // This requires MongoDB 4.4.2 or later. The driver requires 4.4, and the hello command arrived in 4.4.2.
             // https://github.com/mongodb/mongo-csharp-driver/blob/v3.11.1/src/MongoDB.Driver/Core/Misc/WireVersion.cs#L187
             // https://github.com/mongodb/mongo/blob/r4.4.2/src/mongo/db/repl/replication_info.cpp#L304
             var hello = await _subject._mongoClient
@@ -305,8 +304,8 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
             }
             else if (options.ResumeAfter is null && options.StartAfter is null && options.StartAtOperationTime is null)
             {
-                // A caller's own start point is earlier, so it stands. startAtOperationTime is inclusive and the write
-                // at the anchor belongs to the catch-up read, so start one tick later.
+                // A start point that the caller set is kept. Otherwise the stream starts one tick after the anchor,
+                // because startAtOperationTime is inclusive and the write at the anchor belongs to the catch-up read.
                 options = options.Copy();
                 options.StartAtOperationTime = new BsonTimestamp(_operationTime!.Value + 1);
             }

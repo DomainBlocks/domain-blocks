@@ -6,9 +6,8 @@ namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 internal static class EventLogFeedResumePolicy
 {
     /// <summary>
-    /// Whether a feed failure is worth reconnecting for. Connection loss, server shutdown or restart, and resource
-    /// exhaustion are transient; misconfiguration (missing publication, wrong wal_level, insufficient privileges) is
-    /// not and should surface immediately.
+    /// Treats connection loss, server restarts, and resource exhaustion as transient. Misconfiguration, such as a
+    /// missing publication, the wrong wal_level, or missing privileges, is not transient, so it surfaces immediately.
     /// </summary>
     public static bool IsTransient(Exception exception)
     {

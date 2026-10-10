@@ -9,43 +9,13 @@ using MongoDB.Driver;
 namespace DomainBlocks.EventStore.MongoDB;
 
 /// <summary>
-/// A catch-up-then-live subscription over a change stream.
+/// A catch-up-then-live subscription to the log or one stream, over a change stream.
 /// </summary>
 /// <remarks>
-/// <para>
-/// A subscription follows one sequence of positions: those of the log, or those of a stream. Its resume position, its
-/// high-water mark, and the position of each of its events are all positions in that sequence.
-/// </para>
-/// <para>
-/// Each cycle attaches an observer to the change stream first, then reads the high-water mark (the last position of
-/// the sequence) in a session that has seen everything up to the change stream's anchor, replays everything from the
-/// resume position up to it, emits <see cref="SubscriptionMessage{TEvent,TStreamId,TStreamPos,TLogPos}.CaughtUp"/>,
-/// and finally drains the live events, skipping any that the replay has covered. Because positions are assigned in
-/// commit order without gaps, the replay and the live events tile exactly: nothing is skipped and nothing is repeated.
-/// </para>
-/// <para>
-/// A cycle is restarted from the resume position, after emitting
-/// <see cref="SubscriptionMessage{TEvent,TStreamId,TStreamPos,TLogPos}.FellBehind"/>, when the subscriber's queue
-/// overflows. A restart signaled while the cycle is still replaying takes effect once the replay has reached the
-/// high-water mark. The replay is never abandoned part-way, as the next cycle would have to start it again. Falling
-/// behind is only reported to a subscriber that has been told it caught up, so the two messages alternate, starting
-/// with <see cref="SubscriptionMessage{TEvent,TStreamId,TStreamPos,TLogPos}.CaughtUp"/>.
-/// </para>
-/// <para>
-/// The change stream hands every subscription each inserted document undecoded. A subscription takes the event of a
-/// document only if it selects the document. It neither decodes nor queues the events it does not select, and an event
-/// that cannot be decoded fails only the subscriptions that select it.
-/// </para>
-/// <para>
-/// The resume position only moves forward. A replay that reaches its high-water mark moves it there, whether or not it
-/// delivered anything, as a filter can leave long stretches of the sequence with nothing to deliver and the next cycle
-/// should not read them again. Delivering a live event moves it to that event.
-/// </para>
-/// <para>
-/// A subscription from the end is pinned to the last position at the time it starts. A cycle that restarts before
-/// delivering an event then resumes from that position, rather than from a later end that would skip the events
-/// appended in between.
-/// </para>
+/// Each cycle attaches to the change stream before it reads the high-water mark, in a session that has seen every
+/// change up to the change stream's anchor. It then replays the events up to the mark and delivers the live events that
+/// come after it. The change stream delivers every change after the anchor, and the session sees every event up to it,
+/// so no event is missed. Live events that the replay has already covered are skipped, so no event is delivered twice.
 /// </remarks>
 internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>>
@@ -108,8 +78,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
             while (true)
             {
-                // Every cycle but the first is a restart. It can come long after the observer logged that one was
-                // pending, so it is logged when it takes place.
+                // Every cycle after the first is a restart. It is logged here because it can happen long after the
+                // observer recorded the reason for it.
                 if (!isFirstCycle)
                 {
                     if (resumePosition.After is { } after)
@@ -138,9 +108,6 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                     }
                 }
 
-                // The observer logged why it stopped when it did, which can be long before the cycle ends, and the next
-                // cycle logs the restart. A subscription that had not caught up has not fallen behind: its replay has
-                // already run to the high-water mark, and the next cycle carries on from there.
                 switch (observer.StopReason)
                 {
                     case StopReason.QueueOverflow when isCaughtUp:
@@ -154,10 +121,6 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                         yield break;
                 }
 
-                // FellBehind tells a subscriber that it is no longer caught up, so it is only reported to one that has
-                // been told it caught up. A restart before then, or a second restart before it has caught up again,
-                // e.g., when the change stream is still pumping a large batch into a small queue, only makes the
-                // catch-up longer. Every FellBehind is therefore answered by exactly one CaughtUp.
                 if (isCaughtUp)
                 {
                     isCaughtUp = false;
@@ -192,8 +155,9 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         }
     }
 
-    // The position that a subscription from the end resumes after: the last of the sequence at the time it starts, or
-    // none if the sequence is empty, in which case it resumes from the start.
+    // The end is pinned when the subscription starts. Otherwise, a restart before the first event is delivered would
+    // resume from a later end and skip the events appended in between. If the sequence is empty, the subscription
+    // resumes from the start.
     private async Task<TPos?> PinEndAsync(CancellationToken cancellationToken)
     {
         try
@@ -254,15 +218,14 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                 await foreach (var e in events.ConfigureAwait(false))
                     yield return SubscriptionMessage.Event(e);
 
-                // A replay is never abandoned part-way, so the resume position moves once for the whole of it. It has
-                // covered the sequence up to the mark, whether or not it delivered anything on the way.
+                // The replay has covered the sequence up to the mark, even if the filter selected none of its events.
+                // Moving the resume position here means the next cycle does not read that part of the sequence again.
                 resumePosition.AdvanceTo(mark);
             }
         }
 
-        // A restart signaled during the replay takes effect only now that the replay is complete. Cancelling the replay
-        // instead would throw away the part of the log it had already read through without delivering anything, and a
-        // replay that takes longer than the queue takes to overflow would never finish.
+        // A restart signaled during the replay takes effect only now. Cancelling the replay would discard what it read,
+        // and a replay slower than the queue's overflow would never finish.
         if (observer.StopReason != StopReason.None)
             yield break;
 
@@ -270,7 +233,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
         yield return SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>.CaughtUp;
 
-        // The observer's queue ends, once what it holds has been read, when the observer has stopped.
+        // The queue ends once the observer has stopped and everything in the queue has been read.
         await foreach (var e in observer.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
         {
             var position = _positionSelector(e.Context);
@@ -287,8 +250,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     }
 
     /// <summary>
-    /// Reads the events of the sequence that the subscription follows, after one of its positions and up to another,
-    /// inclusive, in the session that read the high-water mark.
+    /// Reads the followed sequence after one position up to another, inclusive, in the session that read the high-water
+    /// mark.
     /// </summary>
     public delegate IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> CatchUpReader(
         EventLogReader<TEvent> reader,
@@ -298,9 +261,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Reads the last position of the sequence that the subscription follows, or <see langword="null"/> if the
-    /// sequence is empty. Read in the catch-up session for a high-water mark, and in none to pin a subscription from
-    /// the end.
+    /// Reads the last position of the followed sequence, or <see langword="null"/> if it is empty. The high-water mark
+    /// is read in the catch-up session, and the end of a subscription from the end is pinned without a session.
     /// </summary>
     public delegate Task<TPos?> EndPositionReader(
         EventLogReader<TEvent> reader,
@@ -308,8 +270,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// The position that a subscription resumes after: the furthest that it has delivered or that a replay has covered.
-    /// It only moves forward.
+    /// The furthest position delivered or covered by a replay. It only moves forward.
     /// </summary>
     private sealed class ResumePosition(TPos? after)
     {
@@ -328,8 +289,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     }
 
     /// <summary>
-    /// Why an observer has stopped taking documents, if it has. A change stream that is lost resumes from its token
-    /// and misses nothing, so there is no reason for a reset.
+    /// A lost change stream resumes from its resume token rather than restarting, so there is no reset reason.
     /// </summary>
     internal enum StopReason
     {
@@ -339,10 +299,9 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     }
 
     /// <summary>
-    /// Buffers the live events that a subscription selects, for one subscription cycle. Never blocks the change
-    /// stream: on an overflow it records the reason and completes its queue. The cycle ends once it has read what the
-    /// queue holds, and a new one starts from the resume position. Nothing is interrupted to bring that about, so the
-    /// restart can come much later than the overflow, which is logged when it happens.
+    /// Buffers the live events that a subscription selects, for one cycle. It never blocks the change stream. On a
+    /// queue overflow, it records the reason and completes its queue, and the cycle restarts once the queue is drained,
+    /// which can be much later.
     /// </summary>
     internal sealed class Observer(
         int queueCapacity,
@@ -369,8 +328,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
         public ValueTask OnNextAsync(EventLogDocument<TEvent> document, CancellationToken cancellationToken)
         {
-            // An observer that has failed or signaled a restart takes nothing more. It stays attached until the
-            // subscription replaces it, and a document that it selected would be decoded only to be dropped.
+            // A stopped observer stays attached until the subscription replaces it, so it skips documents instead of
+            // decoding events that would be dropped.
             if (_isStopped || !liveFilter.Matches(document))
                 return ValueTask.CompletedTask;
 
@@ -378,13 +337,13 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
             try
             {
-                // The document is only valid during this call, so the event is taken from it now.
+                // The document is only valid during this call.
                 e = document.DecodedEvent;
             }
             catch (Exception ex)
             {
-                // An event that cannot be decoded fails this subscription, as it would a read. Thrown to the change
-                // stream, it would detach the observer without telling the subscriber.
+                // An event that cannot be decoded fails this subscription, as it would fail a read. If the exception
+                // reached the change stream, the subject would detach the observer without telling the subscriber.
                 _isStopped = true;
                 _channel.Writer.TryComplete(ex);
 
@@ -405,8 +364,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
         public void Dispose() => Stop(StopReason.Disposed);
 
-        // The first reason given is the one that stands, and the result says whether this one is it. The reason is
-        // recorded before the queue is completed, so that it is there to read by the time the queue ends.
+        // Only the first reason is kept, and the result says whether this call set it. The reason is recorded before
+        // the queue completes, so it can be read once the queue ends.
         private bool Stop(StopReason reason)
         {
             _isStopped = true;

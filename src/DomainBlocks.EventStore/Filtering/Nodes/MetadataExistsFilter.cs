@@ -1,7 +1,7 @@
 namespace DomainBlocks.EventStore.Filtering.Nodes;
 
 /// <summary>
-/// Matches events that have a metadata entry with the key <see cref="Key"/>.
+/// Represents a filter that matches events with a metadata entry for <see cref="Key"/>.
 /// </summary>
 public sealed class MetadataExistsFilter : EventFilter
 {

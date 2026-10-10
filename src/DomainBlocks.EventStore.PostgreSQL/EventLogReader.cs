@@ -7,13 +7,12 @@ using Npgsql;
 namespace DomainBlocks.EventStore.PostgreSQL;
 
 /// <summary>
-/// Reads events in pages so that a consumer-paced enumeration never pins a pooled connection for its whole duration.
-/// Rows are decoded straight from the data reader, without an intermediate row object.
+/// Reads events in pages, so a slow consumer never holds a pooled connection for the whole read.
 /// </summary>
 internal sealed class EventLogReader<TEvent>(
     NpgsqlDataSource dataSource,
     EventLogSql sql,
-    int batchSize,
+    int pageSize,
     IEventDecoder<TEvent, PostgresEventData, string> decoder)
     where TEvent : notnull
 {
@@ -68,8 +67,7 @@ internal sealed class EventLogReader<TEvent>(
     }
 
     /// <summary>
-    /// Reads events of the whole log after one position and up to another, inclusive. Used for subscription
-    /// catch-up, where the upper bound is the high-water mark read after attaching to the live feed.
+    /// Reads log events after <paramref name="afterExclusive"/> up to <paramref name="highWaterMark"/>, inclusive.
     /// </summary>
     public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCatchUpAllAsync(
         long afterExclusive,
@@ -95,8 +93,7 @@ internal sealed class EventLogReader<TEvent>(
     }
 
     /// <summary>
-    /// Reads events of one stream after one stream position and up to another, inclusive. Used for subscription
-    /// catch-up, where the upper bound is the high-water mark read after attaching to the live feed.
+    /// Reads stream events after <paramref name="afterExclusive"/> up to <paramref name="highWaterMark"/>, inclusive.
     /// </summary>
     public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCatchUpStreamAsync(
         string streamId,
@@ -164,7 +161,7 @@ internal sealed class EventLogReader<TEvent>(
 
         while (remaining > 0)
         {
-            var limit = (int)Math.Min(batchSize, remaining);
+            var limit = (int)Math.Min(pageSize, remaining);
             var count = 0;
 
             await using (var command = dataSource.CreateCommand(pageSql))
@@ -190,11 +187,11 @@ internal sealed class EventLogReader<TEvent>(
         }
     }
 
-    // A read without a filter has no condition, so it runs exactly the query it would if there were no filters.
+    // The All filter has no condition, so an unfiltered read runs the plain query.
     private static PostgresFilterCondition? Translate(EventFilter filter, int firstParameterIndex) =>
         filter is AllEventsFilter ? null : PostgresFilterTranslator.Translate(filter, firstParameterIndex);
 
-    // Columns are read in ascending ordinal order so that CommandBehavior.SequentialAccess could be enabled later.
+    // Columns are read in ascending ordinal order, so CommandBehavior.SequentialAccess could be enabled later.
     private ReadEvent<TEvent, string, StreamPosition, LogPosition> ReadEvent(NpgsqlDataReader reader)
     {
         var position = reader.GetInt64(0);

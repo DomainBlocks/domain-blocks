@@ -3,33 +3,33 @@
 namespace DomainBlocks.EventStore;
 
 /// <summary>
-/// Configures a stream read operation.
+/// Provides options for a stream read.
 /// </summary>
 public sealed class ReadStreamOptions
 {
     /// <summary>
-    /// The default stream read options.
+    /// The default options.
     /// </summary>
     public static readonly ReadStreamOptions Default = new();
 
     /// <summary>
-    /// The maximum number of events to read, or <see langword="null"/> for no limit (default).
+    /// Gets the maximum number of events to read, or <see langword="null"/> (the default) for no limit.
     /// </summary>
     public int? MaxCount { get; init; }
 
     /// <summary>
-    /// The behavior to apply when the requested stream does not exist. The default is
+    /// Gets what the read does if the stream does not exist. The default is
     /// <see cref="StreamNotFoundBehavior.Ignore"/>.
     /// </summary>
     public StreamNotFoundBehavior StreamNotFoundBehavior { get; init; }
 
     /// <summary>
-    /// Specifies whether event metadata is included in the returned events. The default is <see langword="true"/>.
+    /// Gets a value that indicates whether to read event metadata. The default is <see langword="true"/>.
     /// </summary>
     public bool IncludeMetadata { get; init; } = true;
 
     /// <summary>
-    /// Selects the events to read. The default is <see cref="EventFilter.All"/>.
+    /// Gets the filter that selects the events to read. The default is <see cref="EventFilter.All"/>.
     /// </summary>
     public EventFilter Filter
     {

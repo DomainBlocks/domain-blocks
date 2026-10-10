@@ -1,8 +1,8 @@
 namespace DomainBlocks.Testing.Integration.EventStore;
 
 /// <summary>
-/// Names a fixture's schema or database after the fixture, so that fixtures in one assembly never share a store and
-/// nobody has to invent names.
+/// Names a fixture's schema or database after the fixture's class, so fixtures with different class names never share a
+/// store and nobody has to invent names.
 /// </summary>
 public static class TestStoreName
 {

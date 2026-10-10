@@ -26,8 +26,8 @@ public static class AppendableEvent
 }
 
 /// <summary>
-/// An event to append, with optional flat string metadata. The metadata is held as a slice, so many events can share
-/// one backing array without copying.
+/// Represents an event to append, with optional string metadata. The metadata is a slice, so events can share one
+/// backing array without copying.
 /// </summary>
 public readonly struct AppendableEvent<TPayload> where TPayload : notnull
 {

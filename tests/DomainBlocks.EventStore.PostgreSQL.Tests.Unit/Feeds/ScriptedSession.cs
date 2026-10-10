@@ -4,8 +4,7 @@ using DomainBlocks.EventStore.PostgreSQL.Feeds;
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Unit.Feeds;
 
 /// <summary>
-/// A fake session that plays a script of row positions, failures and endings, then blocks like a live session
-/// would.
+/// A fake session that plays a script of row positions, failures, and endings, then blocks like a live session would.
 /// </summary>
 internal sealed class ScriptedSession(string description, params ScriptedSession.Step[] steps) : IEventLogSession<long>
 {
@@ -35,7 +34,6 @@ internal sealed class ScriptedSession(string description, params ScriptedSession
     {
         while (true)
         {
-            // Once the script is exhausted, block indefinitely to simulate a live session waiting for rows.
             if (_steps.Count == 0)
                 await Task.Delay(Timeout.Infinite, cancellationToken);
 

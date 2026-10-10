@@ -14,7 +14,6 @@ public class FunctionalAggregateWrapper<TAggregate> where TAggregate : IIdentifi
     {
         var events = command(Value);
 
-        // Apply to state
         foreach (var @event in events)
         {
             Apply(@event);

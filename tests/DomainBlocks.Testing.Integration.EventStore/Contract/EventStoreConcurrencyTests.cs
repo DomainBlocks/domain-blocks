@@ -101,9 +101,9 @@ public abstract class EventStoreConcurrencyTests<TStreamPos, TLogPos>(
             ex.StreamId.ShouldBe(streamId);
             ex.ExpectedState.ShouldBe(ExpectedStreamState.DoesNotExist<TStreamPos>());
 
-            // The observed state is optional: a store that learns of the conflict from a unique index violation
-            // (MongoDB, when another instance wins the race) cannot report the winner's version without another
-            // round trip. When it is reported, it must be the winner's.
+            // The observed state is optional. A store that learns of the conflict from a unique index violation, as
+            // MongoDB does when another instance wins the race, cannot report the winner's version without another
+            // round trip. When the state is reported, it must be the winner's.
             ex.ObservedState?.ShouldBe(ObservedStreamState.AtVersion(CreateStreamPosition(0)));
         }
 

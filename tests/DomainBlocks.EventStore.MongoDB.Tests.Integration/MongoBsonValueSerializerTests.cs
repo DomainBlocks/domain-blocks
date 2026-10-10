@@ -14,8 +14,8 @@ using Shouldly;
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
 /// <summary>
-/// The BSON value adapters over string serializers, which store the event as a string field. The BSON document, JSON bytes
-/// and Protobuf bytes serializers are covered by the shared event format tests.
+/// The BSON value adapters over string serializers, which store the event as a string field. The BSON document, JSON
+/// bytes, and Protobuf bytes serializers are covered by the shared event format tests.
 /// </summary>
 [TestFixture]
 public class MongoBsonValueSerializerTests

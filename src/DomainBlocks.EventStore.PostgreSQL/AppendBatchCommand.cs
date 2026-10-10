@@ -4,12 +4,11 @@ using NpgsqlTypes;
 namespace DomainBlocks.EventStore.PostgreSQL;
 
 /// <summary>
-/// Commits a batch of append requests with one call to the <c>append_events</c> function and completes each request
-/// from the per-request result rows.
+/// Commits a batch of append requests with one <c>append_events</c> call and completes each from its result row.
 /// </summary>
 /// <remarks>
-/// The command is executed in autocommit mode, so the function call is its own transaction. It must never be enlisted
-/// in a caller-managed transaction: the sequence row lock must be released at the moment the batch commits.
+/// The command runs in autocommit mode and must never join a caller's transaction, because the sequence row lock must
+/// be released as soon as the batch commits.
 /// </remarks>
 internal sealed class AppendBatchCommand : IDisposable
 {
@@ -32,7 +31,7 @@ internal sealed class AppendBatchCommand : IDisposable
 
         _streamIds = new NpgsqlParameter<string[]> { NpgsqlDbType = NpgsqlDbType.Text.AsArray() };
 
-        // Naming the type selects this schema's mapping of it, for a data source that maps more than one schema.
+        // Naming the type selects this schema's mapping when a data source maps several schemas.
         _expectedKinds = new NpgsqlParameter<AppendProtocol.ExpectedKind[]>
         {
             DataTypeName = names.ExpectedStateKindArrayType
@@ -61,8 +60,8 @@ internal sealed class AppendBatchCommand : IDisposable
     }
 
     /// <summary>
-    /// Executes the batch and completes every request. Throws only if the whole batch failed, in which case no
-    /// request has been completed and the caller is expected to fault them all.
+    /// Executes the batch and completes each request from its result row. A request without a result row is completed
+    /// with an error.
     /// </summary>
     public async Task ExecuteAsync(IReadOnlyList<AppendRequest> batch, CancellationToken cancellationToken)
     {
@@ -101,7 +100,7 @@ internal sealed class AppendBatchCommand : IDisposable
             }
         }
 
-        // The function returns exactly one row per request; anything left over is a protocol error.
+        // The function returns exactly one row per request, so a request without a row means the protocol was broken.
         foreach (var request in batch)
         {
             if (!request.IsCompleted)

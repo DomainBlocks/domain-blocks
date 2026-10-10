@@ -6,7 +6,7 @@ using NUnit.Framework;
 namespace DomainBlocks.Testing.Integration.EventStore;
 
 /// <summary>
-/// Base of every shared suite. Owns the store's lifecycle through a backend harness, so that a concrete fixture only
+/// The base of every shared suite. It owns the store's lifecycle through a backend harness, so a concrete fixture only
 /// has to say which harness it uses.
 /// </summary>
 public abstract class EventStoreTestBase<TStreamPos, TLogPos>(IEventStoreTestHarness<TStreamPos, TLogPos> harness)
@@ -16,8 +16,8 @@ public abstract class EventStoreTestBase<TStreamPos, TLogPos>(IEventStoreTestHar
     protected IEventStoreTestHarness<TStreamPos, TLogPos> Harness { get; } = harness;
 
     /// <summary>
-    /// Whether the event log is emptied before each test. Suites whose tests assume an empty log override this; the
-    /// rest isolate their tests with unique stream ids instead.
+    /// Gets a value that indicates whether the event log is emptied before each test. Suites whose tests assume an
+    /// empty log override this, and the rest isolate their tests with unique stream IDs.
     /// </summary>
     protected virtual bool ResetLogBeforeEachTest => false;
 
@@ -57,8 +57,8 @@ public abstract class EventStoreTestBase<TStreamPos, TLogPos>(IEventStoreTestHar
     }
 
     /// <summary>
-    /// Ignores the current test, with the reason in the results, when the store has a capability that the test
-    /// expects it to lack.
+    /// Ignores the current test, with the reason in the results, when the store has a capability that the test expects
+    /// it to lack.
     /// </summary>
     protected void RequireNoCapability(StoreCapabilities capability)
     {

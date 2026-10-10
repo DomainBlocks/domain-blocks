@@ -18,14 +18,15 @@ public static class EventFilterTestLog
     private const string Shipped = nameof(OrderShipped);
     private const string Invoiced = nameof(InvoiceRaised);
 
-    // Stream IDs and a tenant with characters that a query language could take for its own.
+    // These stream IDs and the awkward tenant contain characters that a query language could take for its own.
     private static readonly string[] OrderStreams = ["order-1", "order-10", "order_2", "order%3"];
     private static readonly string[] InvoiceStreams = ["invoice.1", "invoice-1"];
     private static readonly string[] Tenants = ["acme", "initech", AwkwardTenant];
 
     /// <summary>
-    /// The events before which the appender pauses, so that the log spans several instants whatever the precision of
-    /// the store's clock. The first of them is the midpoint that the cases are given.
+    /// The indexes of the events before which the appender pauses, so the log spans several instants whatever the
+    /// precision of the store's clock. The creation time of the first of these events is the midpoint that the cases
+    /// are given.
     /// </summary>
     public static IReadOnlyList<int> PauseBeforeIndexes { get; } = [14, 27];
 
@@ -131,7 +132,7 @@ public static class EventFilterTestLog
         new("CreatedAtOrAfter_AnEvent", EventFilter.CreatedAtOrAfter, (midpoint, e) => e.CreatedAt >= midpoint),
         new("CreatedBefore_AnEvent", EventFilter.CreatedBefore, (midpoint, e) => e.CreatedAt < midpoint),
 
-        // A bound that falls between the instants that a store can tell apart.
+        // These bounds fall between the instants that a store can tell apart.
         new(
             "CreatedAtOrAfter_JustAfterAnEvent",
             midpoint => EventFilter.CreatedAtOrAfter(midpoint.AddTicks(1)),
@@ -257,8 +258,8 @@ public static class EventFilterTestLog
     }
 
     /// <summary>
-    /// How much of the test log a case is meant to select. Declared so that a case cannot pass by accident, by selecting
-    /// nothing or everything whatever a store does with its filter.
+    /// How much of the test log a case is meant to select. Declared so that a case cannot pass by accident, by
+    /// selecting nothing or everything whatever a store does with its filter.
     /// </summary>
     public enum CaseSelection
     {

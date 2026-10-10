@@ -9,9 +9,9 @@ namespace DomainBlocks.Testing.Integration.EventStore.Contract;
 /// <summary>
 /// Subscribing with an event filter. Each case of <see cref="EventFilterTestLog"/> is subscribed to from the start of
 /// the log, which a store catches up on by reading, and from its end, where the events of the test log are appended
-/// again and observed live. Either way, what a subscription observes is compared with what the case expects of the
-/// same events as they are read without a filter. The log grows as the tests run, so each test reads it when it needs
-/// it. A store that does not filter subscriptions refuses a filter rather than ignoring it.
+/// again and observed live. Either way, what a subscription observes is compared with what the case expects of the same
+/// events as they are read without a filter. The log grows as the tests run, so each test reads it when it needs it. A
+/// store that does not filter subscriptions refuses a filter rather than ignoring it.
 /// </summary>
 public abstract class EventStoreFilteredSubscriptionTests<TStreamPos, TLogPos>(
     IEventStoreTestHarness<TStreamPos, TLogPos> harness) :
@@ -19,7 +19,7 @@ public abstract class EventStoreFilteredSubscriptionTests<TStreamPos, TLogPos>(
     where TStreamPos : notnull
     where TLogPos : notnull
 {
-    // A stream of the test log with events of every shape of metadata.
+    // This stream of the test log has events of every shape of metadata.
     private const string StreamId = "order-1";
 
     private const string Placed = nameof(EventFilterTestLog.OrderPlaced);
@@ -289,7 +289,7 @@ public abstract class EventStoreFilteredSubscriptionTests<TStreamPos, TLogPos>(
             .SubscribeToAll(options: options)
             .GetAsyncEnumerator(cancellationToken);
 
-        // A second subscription, used to tell when the live feed has delivered all the appended events.
+        // A second subscription shows when the live feed has delivered all the appended events.
         await using var witness = _eventStore.SubscribeToAll().GetAsyncEnumerator(cancellationToken);
 
         await ShouldBeCaughtUpAsync(enumerator);
@@ -316,7 +316,7 @@ public abstract class EventStoreFilteredSubscriptionTests<TStreamPos, TLogPos>(
             .SubscribeToAll(options: options)
             .GetAsyncEnumerator(cancellationToken);
 
-        // A second subscription, used to tell when the live feed has delivered all the appended events.
+        // A second subscription shows when the live feed has delivered all the appended events.
         await using var witness = _eventStore.SubscribeToAll().GetAsyncEnumerator(cancellationToken);
 
         await ShouldBeCaughtUpAsync(enumerator);
@@ -351,7 +351,7 @@ public abstract class EventStoreFilteredSubscriptionTests<TStreamPos, TLogPos>(
     {
         RequireCapability(StoreCapabilities.FilteredSubscriptions);
 
-        // A store that maps only two of the kinds of event in the log.
+        // This store maps only two of the kinds of event in the log.
         var eventTypeMap = new EventTypeMapBuilder()
             .Add<EventFilterTestLog.OrderPlaced>()
             .Add<EventFilterTestLog.OrderShipped>()
@@ -486,7 +486,7 @@ public abstract class EventStoreFilteredSubscriptionTests<TStreamPos, TLogPos>(
         observed.Select(x => x.Payload).ShouldBe(expectedEntries.Select(x => x.Read.Payload));
     }
 
-    // An event as it is read without a filter, and the form of it that the cases' expectations are written against.
+    // An event as it is read without a filter, together with the form that the cases' expectations are written against.
     private sealed record LogEntry(
         ReadEvent<object, string, TStreamPos, TLogPos> Read,
         EventFilterTestLog.LoggedEvent Logged);

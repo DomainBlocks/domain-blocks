@@ -15,7 +15,7 @@ using SubscriptionObserver = SubscriptionAsyncEnumerable<IDomainEvent, LogPositi
 /// Measures the PostgreSQL live path without I/O: a session hands <see cref="EventCount"/> rows to the feed, which fans
 /// them out to the observers of <see cref="SubscriberCount"/> subscriptions, each of which selects
 /// <see cref="SelectedPercent"/> percent of the rows and takes their events. The feed and the observers are the real
-/// ones. The session stands in for the replication session, and does with each row what that does.
+/// ones. The session stands in for the replication session and handles each row as the replication session does.
 /// </summary>
 [MemoryDiagnoser]
 public class PostgresLiveFanOutBenchmarks

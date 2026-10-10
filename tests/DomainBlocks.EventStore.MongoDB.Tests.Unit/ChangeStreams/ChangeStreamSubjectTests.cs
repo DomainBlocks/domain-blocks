@@ -153,8 +153,8 @@ public class ChangeStreamSubjectTests
         Exception exception,
         CancellationToken ct)
     {
-        // A write landing while the cursor opens fills the first batch, and the driver then reports no token until
-        // the batch has been read. The resume must come from the documents rather than fault.
+        // A write landing while the cursor opens fills the first batch, and the driver then reports no token until the
+        // batch has been read. The resume must come from the documents rather than fault.
         _initialResumeToken = null;
 
         ChangeStreamBatch[] batches =
@@ -427,8 +427,8 @@ public class ChangeStreamSubjectTests
         }
     }
 
-    // Collects items pushed by the subject's producer via OnNextAsync, and exposes them
-    // as an async enumerable for assertions.
+    // Collects items pushed by the subject's producer via OnNextAsync, and exposes them as an async enumerable for
+    // assertions.
     private class TestObserver : IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>
     {
         private readonly Channel<ChangeStreamDocument<BsonDocument>> _channel =

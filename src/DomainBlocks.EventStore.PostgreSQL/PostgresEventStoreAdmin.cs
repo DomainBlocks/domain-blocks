@@ -5,9 +5,8 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 public static class PostgresEventStoreAdmin
 {
     /// <summary>
-    /// Creates the schema, types, tables, sequence row, append functions and publication used by the event store if
-    /// they do not already exist. Safe to call on every start-up and from multiple processes concurrently. The data
-    /// source's type cache is reloaded afterwards, so a store created over the same data source can use the types.
+    /// Creates the schema, types, tables, functions, and publication the event store uses, if they do not exist.
+    /// Idempotent and safe to call concurrently from several processes.
     /// </summary>
     public static async Task EnsureInitializedAsync(
         NpgsqlDataSource dataSource,
@@ -35,14 +34,12 @@ public static class PostgresEventStoreAdmin
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        // Npgsql loads the database's types when a data source opens its first physical connection, which is before
-        // the enums above exist when the same data source initializes the schema. Connections opened from now on see
-        // them; the initializing connection has been returned to the pool.
+        // Npgsql loads types on the data source's first connection, which may predate the enums created above.
         await dataSource.ReloadTypesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
-    /// Drops the publication and the schema, including all events. Intended for tests and tear-down tooling.
+    /// Drops the publication and the schema, including all events. Intended for tests and tooling.
     /// </summary>
     public static async Task DropAsync(
         NpgsqlDataSource dataSource,

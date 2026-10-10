@@ -1,8 +1,5 @@
 namespace DomainBlocks.EventStore.PostgreSQL;
 
-/// <summary>
-/// Loads the embedded SQL scripts, substituting the schema token with a validated schema name.
-/// </summary>
 internal static class SqlScripts
 {
     public const string SchemaToken = "__schema__";
@@ -24,7 +21,7 @@ internal static class SqlScripts
         using var reader = new StreamReader(stream);
         var sql = reader.ReadToEnd();
 
-        // The schema name is validated to be a plain lower-case identifier, so it is safe to use unquoted.
+        // The schema name is validated as a plain lowercase identifier, so it is safe unquoted.
         return sql.Replace(SchemaToken, names.Schema);
     }
 }

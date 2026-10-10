@@ -64,7 +64,7 @@ public class ProtobufBytesObjectSerializerTests
         Should.Throw<ArgumentNullException>(() => _serializer.Deserialize(bytes, null!));
     }
 
-    // Dummy type without a Parser property to simulate error
+    // A message type without a Parser property, so deserializing it throws.
     private sealed class FakeWithoutParser : IMessage<FakeWithoutParser>
     {
         public MessageDescriptor Descriptor => throw new NotImplementedException();

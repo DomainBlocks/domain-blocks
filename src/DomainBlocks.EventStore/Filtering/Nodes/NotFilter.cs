@@ -1,7 +1,7 @@
 namespace DomainBlocks.EventStore.Filtering.Nodes;
 
 /// <summary>
-/// Matches events that do not match <see cref="Operand"/>.
+/// Represents a filter that matches events that <see cref="Operand"/> does not match.
 /// </summary>
 public sealed class NotFilter : EventFilter
 {

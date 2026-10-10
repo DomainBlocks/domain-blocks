@@ -31,18 +31,19 @@ internal static class ReplicationEventLogSession
 }
 
 /// <summary>
-/// A logical replication session over a temporary pgoutput slot. Committed event log inserts are yielded in commit
-/// order, which is also position order because appends serialize on the sequence row. Each is yielded as the one
-/// <see cref="EventLogRow{TEvent}"/> that the session owns, undecoded, so it is only valid until the next is read.
+/// A logical replication session over a temporary pgoutput slot. It yields committed inserts in commit order, which is
+/// also position order because appends serialize on the sequence row. Each yield is the one
+/// <see cref="EventLogRow{TEvent}"/> that the session reuses, still undecoded, and it is valid only until the next row
+/// is read.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Creating the slot establishes a consistent point; every transaction committing after it is streamed. Nothing
-/// before it is, which is why the feed tells observers to reset when a session is re-established.
+/// Creating the slot sets a consistent point, and only transactions that commit after it are streamed. That is why the
+/// feed resets its observers when it reconnects.
 /// </para>
 /// <para>
-/// The slot is temporary: the server drops it when this connection closes, whether by disposal or by a crash of the
-/// process, so no WAL is retained on behalf of a consumer that never returns.
+/// The server drops the temporary slot when the connection closes, even if the process crashes, so no WAL is retained
+/// for a consumer that never returns.
 /// </para>
 /// </remarks>
 internal sealed class ReplicationEventLogSession<TEvent> : IEventLogSession<EventLogRow<TEvent>>
@@ -89,7 +90,7 @@ internal sealed class ReplicationEventLogSession<TEvent> : IEventLogSession<Even
         {
             await connection.Open(cancellationToken).ConfigureAwait(false);
 
-            // Blocks until a consistent point exists, i.e. until every transaction in progress right now has ended.
+            // This blocks until a consistent point exists, that is, until every transaction now in progress has ended.
             var slot = await connection
                 .CreatePgOutputReplicationSlot(
                     slotName,
@@ -123,8 +124,8 @@ internal sealed class ReplicationEventLogSession<TEvent> : IEventLogSession<Even
         ColumnMap? columnMap = null;
         uint relationId = 0;
 
-        // Npgsql recycles message instances and row tuples are forward-only, so every message is fully consumed
-        // before the next one is read.
+        // Npgsql reuses message instances and row tuples are forward-only, so each message is fully consumed before the
+        // next one is read.
         await foreach (var message in messages.ConfigureAwait(false))
         {
             switch (message)
@@ -256,8 +257,7 @@ internal sealed class ReplicationEventLogSession<TEvent> : IEventLogSession<Even
     }
 
     /// <summary>
-    /// Maps the ordinal of each replicated column to a known event log column by name, so that the mapping survives
-    /// column reordering or additions.
+    /// Maps replicated columns by name, so the mapping survives reordered or added columns.
     /// </summary>
     private sealed class ColumnMap(Column[] columns)
     {

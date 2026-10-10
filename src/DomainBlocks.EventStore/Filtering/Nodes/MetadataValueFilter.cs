@@ -3,7 +3,7 @@ using System.Collections.Immutable;
 namespace DomainBlocks.EventStore.Filtering.Nodes;
 
 /// <summary>
-/// Matches events whose metadata entry with the key <see cref="Key"/> has one of <see cref="Values"/>.
+/// Represents a filter that matches events whose metadata value for <see cref="Key"/> is one of <see cref="Values"/>.
 /// </summary>
 public sealed class MetadataValueFilter : EventFilter
 {
@@ -18,7 +18,7 @@ public sealed class MetadataValueFilter : EventFilter
     public string Key { get; }
 
     /// <summary>
-    /// The values, distinct and in ordinal order.
+    /// Gets the values, distinct and in ordinal order.
     /// </summary>
     public ImmutableArray<string> Values => _values.Values;
 

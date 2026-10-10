@@ -5,7 +5,7 @@ namespace DomainBlocks.EventStore.Benchmarks;
 
 /// <summary>
 /// Measures the append path without I/O for each serialization format: contract/type mapping, payload serialization,
-/// metadata contribution and metadata serialization for <see cref="EventCount"/> events per operation.
+/// metadata contribution, and metadata serialization, for <see cref="EventCount"/> events per operation.
 /// </summary>
 [MemoryDiagnoser]
 public class EventStoreWriteBenchmarks
@@ -19,9 +19,9 @@ public class EventStoreWriteBenchmarks
     public SerializationFormat Format { get; set; }
 
     /// <summary>
-    /// When <see langword="true"/>, every event carries one explicit metadata entry and one metadata contributor adds
-    /// a second, so the metadata merge and serialization paths are exercised. When <see langword="false"/>, events
-    /// carry no metadata and no contributors are configured.
+    /// When <see langword="true"/>, every event carries one explicit metadata entry and one metadata contributor adds a
+    /// second, so the metadata merge and serialization paths are exercised. When <see langword="false"/>, events carry
+    /// no metadata and no contributors are configured.
     /// </summary>
     [Params(false, true)]
     public bool WithMetadata { get; set; }

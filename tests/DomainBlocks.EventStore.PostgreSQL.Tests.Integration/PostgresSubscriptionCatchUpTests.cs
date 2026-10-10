@@ -43,7 +43,7 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
         _replays.Clear();
         _releaseHeldReplay = null;
         _eventStore = CreateEventStore();
-        _reader = new EventLogReader<object>(DataSource, new EventLogSql(names), Options.ReadBatchSize, codec);
+        _reader = new EventLogReader<object>(DataSource, new EventLogSql(names), Options.ReadPageSize, codec);
 
         _feed = new RefCountedEventLogFeed<EventLogRow<object>>(() =>
             new EventLogFeed<EventLogRow<object>>(ct => ReplicationEventLogSession.OpenAsync(
@@ -230,7 +230,7 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
 
     // A second subscription to the same feed, from the end of the log, used to tell when the feed has given all the
     // appended events to the subscription under test. The feed gives each event to its subscriptions in the order in
-    // which they attached to it, so a witness is created once the subscription under test has attached.
+    // which they attached to it, so a witness is created after the subscription under test has attached.
     private async Task<IAsyncEnumerator<Message>> CreateWitnessAsync(CancellationToken ct)
     {
         var options = new SubscriptionOptions();

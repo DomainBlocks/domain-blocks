@@ -5,16 +5,16 @@ using DomainBlocks.EventStore.TypeMapping;
 namespace DomainBlocks.Testing.Integration.EventStore;
 
 /// <summary>
-/// Everything a shared suite needs from one backend: the lifetime of a store's schema or database and how to build a
-/// store over it. A concrete fixture binds a suite to a backend by passing its harness, so the suites stay
-/// backend-agnostic and the fixtures stay one line.
+/// Provides everything a shared suite needs from one backend, which is the lifetime of a store's schema or database and
+/// how to build a store over it. A concrete fixture binds a suite to a backend by passing its harness, so the suites
+/// stay backend-agnostic.
 /// </summary>
 public interface IEventStoreTestHarness<TStreamPos, TLogPos>
     where TStreamPos : notnull
     where TLogPos : notnull
 {
     /// <summary>
-    /// The optional behaviour the store offers; see <see cref="StoreCapabilities"/>.
+    /// The optional behavior that the store offers. See <see cref="StoreCapabilities"/>.
     /// </summary>
     StoreCapabilities Capabilities { get; }
 
@@ -49,8 +49,8 @@ public interface IEventStoreTestHarness<TStreamPos, TLogPos>
     TLogPos CreateLogPosition(ulong value);
 
     /// <summary>
-    /// Describes the store and the settings that affect a benchmark's result, for the report header. Null when there
-    /// is nothing to say.
+    /// Describes the store and the settings that affect a benchmark's result, for the report header. Null when there is
+    /// nothing to say.
     /// </summary>
     Task<string?> DescribeAsync();
 }

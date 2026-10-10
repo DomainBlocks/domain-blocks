@@ -1,53 +1,53 @@
 ﻿namespace DomainBlocks.EventStore;
 
 /// <summary>
-/// Provides factory methods for creating expected event stream states.
+/// Provides methods for creating <see cref="ExpectedStreamState{TVersion}"/> values.
 /// </summary>
 public static class ExpectedStreamState
 {
     /// <summary>
-    /// Creates an expectation that imposes no constraint on the stream state.
+    /// Returns an expectation that any stream state satisfies.
     /// </summary>
-    /// <typeparam name="TVersion">The type used to represent stream versions.</typeparam>
-    /// <returns>An expectation that matches any stream state.</returns>
+    /// <typeparam name="TVersion">The type of the stream version.</typeparam>
+    /// <returns><see cref="ExpectedStreamState{TVersion}.Any"/>.</returns>
     public static ExpectedStreamState<TVersion> Any<TVersion>() where TVersion : notnull =>
         ExpectedStreamState<TVersion>.Any;
 
     /// <summary>
-    /// Creates an expectation that the stream does not exist.
+    /// Returns an expectation that the stream does not exist.
     /// </summary>
-    /// <typeparam name="TVersion">The type used to represent stream versions.</typeparam>
-    /// <returns>An expectation that matches only a nonexistent stream.</returns>
+    /// <typeparam name="TVersion">The type of the stream version.</typeparam>
+    /// <returns><see cref="ExpectedStreamState{TVersion}.DoesNotExist"/>.</returns>
     public static ExpectedStreamState<TVersion> DoesNotExist<TVersion>() where TVersion : notnull =>
         ExpectedStreamState<TVersion>.DoesNotExist;
 
     /// <summary>
-    /// Creates an expectation that the stream exists, regardless of its version.
+    /// Returns an expectation that the stream exists at any version.
     /// </summary>
-    /// <typeparam name="TVersion">The type used to represent stream versions.</typeparam>
-    /// <returns>An expectation that matches any existing stream.</returns>
+    /// <typeparam name="TVersion">The type of the stream version.</typeparam>
+    /// <returns><see cref="ExpectedStreamState{TVersion}.Exists"/>.</returns>
     public static ExpectedStreamState<TVersion> Exists<TVersion>() where TVersion : notnull =>
         ExpectedStreamState<TVersion>.Exists;
 
     /// <summary>
-    /// Creates an expectation that the stream exists at the specified version.
+    /// Creates an expectation that the stream is at the specified version.
     /// </summary>
-    /// <typeparam name="TVersion">The type used to represent stream versions.</typeparam>
-    /// <param name="version">The required stream version.</param>
-    /// <returns>An expectation for the specified stream version.</returns>
+    /// <typeparam name="TVersion">The type of the stream version.</typeparam>
+    /// <param name="version">The expected version.</param>
+    /// <returns>An expectation that the stream is at <paramref name="version"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="version"/> is <see langword="null"/>.</exception>
     public static ExpectedStreamState<TVersion> AtVersion<TVersion>(TVersion version) where TVersion : notnull =>
         ExpectedStreamState<TVersion>.AtVersion(version);
 }
 
 /// <summary>
-/// Represents an expected state for an event stream operation.
+/// Represents the state a stream must be in for an append to succeed, for optimistic concurrency control.
 /// </summary>
-/// <typeparam name="TVersion">The type used to represent stream versions.</typeparam>
+/// <typeparam name="TVersion">The type of the stream version.</typeparam>
 public readonly record struct ExpectedStreamState<TVersion> where TVersion : notnull
 {
     /// <summary>
-    /// An unconstrained expectation; the stream may exist at any version or may not exist.
+    /// An expectation that any stream state satisfies.
     /// </summary>
     public static readonly ExpectedStreamState<TVersion> Any = new(ExpectedStreamStateKind.Any);
 
@@ -68,17 +68,17 @@ public readonly record struct ExpectedStreamState<TVersion> where TVersion : not
     }
 
     /// <summary>
-    /// Gets the kind of this expected stream state.
+    /// Gets the kind of expectation.
     /// </summary>
     public ExpectedStreamStateKind Kind { get; }
 
     /// <summary>
-    /// Gets a value indicating whether a specific stream version is expected.
+    /// Gets a value that indicates whether a specific version is expected.
     /// </summary>
     public bool HasVersion => Kind == ExpectedStreamStateKind.AtVersion;
 
     /// <summary>
-    /// Gets the expected stream version.
+    /// Gets the expected version.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// <see cref="HasVersion"/> is <see langword="false"/>.
@@ -88,10 +88,10 @@ public readonly record struct ExpectedStreamState<TVersion> where TVersion : not
         : throw new InvalidOperationException("Expected stream state has no version.");
 
     /// <summary>
-    /// Creates an expected stream state for a specific stream version.
+    /// Creates an expectation that the stream is at the specified version.
     /// </summary>
-    /// <param name="version">The required stream version.</param>
-    /// <returns>An expectation for the specified stream version.</returns>
+    /// <param name="version">The expected version.</param>
+    /// <returns>An expectation that the stream is at <paramref name="version"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="version"/> is <see langword="null"/>.</exception>
     public static ExpectedStreamState<TVersion> AtVersion(TVersion version)
     {
@@ -100,11 +100,12 @@ public readonly record struct ExpectedStreamState<TVersion> where TVersion : not
     }
 
     /// <summary>
-    /// Determines whether this expected state matches an observed stream state.
+    /// Determines whether an observed stream state satisfies this expectation.
     /// </summary>
-    /// <param name="observedState">The observed stream state to compare with this expectation.</param>
+    /// <param name="observedState">The observed stream state.</param>
     /// <returns>
-    /// <see langword="true"/> if the observed state satisfies this expectation; otherwise, <see langword="false"/>.
+    /// <see langword="true"/> if <paramref name="observedState"/> satisfies this expectation; otherwise,
+    /// <see langword="false"/>.
     /// </returns>
     public bool Matches(ObservedStreamState<TVersion> observedState)
     {
@@ -115,12 +116,12 @@ public readonly record struct ExpectedStreamState<TVersion> where TVersion : not
             ExpectedStreamStateKind.Exists => observedState.HasVersion,
             ExpectedStreamStateKind.AtVersion =>
                 observedState.HasVersion && EqualityComparer<TVersion>.Default.Equals(Version, observedState.Version),
-            _ => false // Defensive fallback: kind not recognized
+            _ => false
         };
     }
 
     /// <summary>
-    /// Returns a string representation of this expected stream state.
+    /// Returns a string that represents this expectation.
     /// </summary>
     public override string ToString() => HasVersion ? $"Version={Version}" : Kind.ToString();
 }

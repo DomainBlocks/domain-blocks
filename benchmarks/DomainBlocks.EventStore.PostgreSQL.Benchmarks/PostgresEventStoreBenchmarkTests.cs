@@ -19,7 +19,8 @@ public class PostgresEventStoreBenchmarkTests() :
 
     /// <summary>
     /// Append-to-observe latency for a live subscription: each sample appends one event and waits for it to arrive.
-    /// On the default server configuration this tracks <c>wal_writer_delay</c>, so the report includes it.
+    /// With <c>synchronous_commit</c> off, the server sends a commit only once the WAL writer flushes it, so this
+    /// latency then tracks <c>wal_writer_delay</c>. The report includes both settings.
     /// </summary>
     [Test]
     [Explicit("Benchmark")]
@@ -46,7 +47,8 @@ public class PostgresEventStoreBenchmarkTests() :
             },
             new LatencyOptions
             {
-                // Each sample costs a WAL writer cycle (200 ms by default), so bound by time rather than sample count.
+                // The run is bounded by time as well as by sample count, because each sample waits for a WAL writer
+                // cycle (200 ms by default) when synchronous_commit is off.
                 WarmUp = TimeSpan.FromSeconds(1),
                 MinWarmUpOperations = 10,
                 SampleCount = 1_000,
@@ -62,10 +64,10 @@ public class PostgresEventStoreBenchmarkTests() :
     }
 
     /// <summary>
-    /// Throughput ceiling as a function of the append batch size. Every batch serialises on the sequence row, so the
-    /// ceiling is the batch size over the per-batch critical section: larger batches amortise the fixed part of that
-    /// section at the cost of latency under load. The queue capacity and in-flight count are at least the batch size
-    /// so that batches can actually fill.
+    /// Throughput ceiling as a function of the maximum append batch size. Every batch serializes on the sequence row,
+    /// so the ceiling is the batch size over the per-batch critical section. Larger batches amortize the fixed part of
+    /// that section at the cost of latency under load. The queue capacity and in-flight count are at least the batch
+    /// size so that batches can actually fill.
     /// </summary>
     [TestCase(500, 1_000)]
     [TestCase(1_000, 1_000)]
@@ -79,7 +81,7 @@ public class PostgresEventStoreBenchmarkTests() :
         var options = new PostgresEventStoreOptions
         {
             Schema = Postgres.Options.Schema,
-            AppendBatchSize = batchSize,
+            AppendMaxBatchSize = batchSize,
             AppendQueueCapacity = Math.Max(inFlight, Postgres.Options.AppendQueueCapacity)
         };
 

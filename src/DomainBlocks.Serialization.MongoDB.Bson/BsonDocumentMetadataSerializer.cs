@@ -26,7 +26,7 @@ public sealed class BsonDocumentMetadataSerializer : IMetadataSerializer<BsonDoc
 
     IReadOnlyDictionary<string, string> IMetadataSerializer<BsonValue>.Deserialize(BsonValue data)
     {
-        // Reads that exclude metadata project the field out of the document, which surfaces as BsonNull.
+        // A read that excludes metadata leaves the field out of the document, so the store passes BsonNull here.
         return !data.IsBsonNull
             ? Deserialize(data.AsBsonDocument)
             : FrozenDictionary<string, string>.Empty;

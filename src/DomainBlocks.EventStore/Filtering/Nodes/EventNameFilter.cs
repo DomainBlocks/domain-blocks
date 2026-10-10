@@ -3,7 +3,7 @@ using System.Collections.Immutable;
 namespace DomainBlocks.EventStore.Filtering.Nodes;
 
 /// <summary>
-/// Matches events whose name is one of <see cref="Names"/>.
+/// Represents a filter that matches events whose name is one of <see cref="Names"/>.
 /// </summary>
 public sealed class EventNameFilter : EventFilter
 {
@@ -15,7 +15,7 @@ public sealed class EventNameFilter : EventFilter
     }
 
     /// <summary>
-    /// The names, distinct and in ordinal order.
+    /// Gets the names, distinct and in ordinal order.
     /// </summary>
     public ImmutableArray<string> Names => _names.Values;
 

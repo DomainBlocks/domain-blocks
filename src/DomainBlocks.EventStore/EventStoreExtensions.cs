@@ -30,9 +30,9 @@ public static class EventStoreExtensions
         }
     }
 
-    // The hooks below are classic extension methods rather than members of the extension block above: with a
-    // contravariant element type such as IMetadataContributor<in TEvent>, the compiler's nullable analysis reports a
-    // false CS8620 for every expanded params argument inside an extension block.
+    // These are classic extension methods rather than members of the extension block above. Inside an extension block,
+    // nullable analysis reports a false CS8620 for each expanded params argument of a contravariant type, such as
+    // IMetadataContributor<in TEvent>.
 
     public static IEventStore<TEvent, TStreamId, TStreamPos, TLogPos>
         WithMetadataContributors<TEvent, TStreamId, TStreamPos, TLogPos>(

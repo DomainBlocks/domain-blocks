@@ -102,7 +102,7 @@ public class PostgresEventStoreAdminTests
         var commitId = Guid.NewGuid();
         await InsertRowAsync(position: 0, streamId: "s1", streamPosition: 0, commitId, commitIndex: 0);
 
-        // A second event of the same commit is fine: only the first row of a commit is indexed.
+        // A second event of the same commit is fine, because only the first row of a commit is indexed.
         await InsertRowAsync(position: 1, streamId: "s1", streamPosition: 1, commitId, commitIndex: 1);
 
         var ex = await Should.ThrowAsync<PostgresException>(() =>

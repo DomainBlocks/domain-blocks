@@ -6,13 +6,9 @@ using Npgsql;
 namespace DomainBlocks.EventStore.PostgreSQL;
 
 /// <summary>
-/// Queues append requests and commits them in batches, each batch being one round trip to the database. Because all
-/// appenders serialize on the sequence row, batching is what recovers throughput under concurrent load.
+/// Queues append requests and commits each batch in one round trip. Every append serializes on the sequence row, so a
+/// batch lets one lock acquisition and one round trip serve many requests.
 /// </summary>
-/// <remarks>
-/// Ported from the append loop of DomainBlocks.MongoDB.Sequencing's MongoSequencedAppender: a bounded channel drained
-/// by a single loop, optional Nagle-style coalescing, per-request completion, and a loop that survives batch failures.
-/// </remarks>
 internal sealed class BatchingAppender : IAppender
 {
     private readonly AppendBatchCommand _command;
@@ -32,12 +28,12 @@ internal sealed class BatchingAppender : IAppender
         ILogger? logger)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(options.AppendQueueCapacity);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(options.AppendBatchSize);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(options.AppendMaxBatchSize);
         ArgumentOutOfRangeException.ThrowIfLessThan(options.AppendBatchingDelay, TimeSpan.Zero);
         ArgumentOutOfRangeException.ThrowIfNegative(options.AppendBatchingDelayMinCount);
 
         _command = new AppendBatchCommand(dataSource, names);
-        _maxBatchSize = options.AppendBatchSize;
+        _maxBatchSize = options.AppendMaxBatchSize;
         _batchingDelay = options.AppendBatchingDelay;
         _batchingDelayMinCount = options.AppendBatchingDelayMinCount;
         _logger = logger;
@@ -97,13 +93,10 @@ internal sealed class BatchingAppender : IAppender
         {
             while (await _channel.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
             {
-                // Drain what's already queued.
                 while (batch.Count < _maxBatchSize && _channel.Reader.TryRead(out var request))
                     batch.Add(request);
 
-                // If multiple requests arrived together, more are likely in flight: wait up to the batching delay for
-                // further requests to accumulate before committing (Nagle-style coalescing). Short-circuits as soon as
-                // the batch is full.
+                // Waiting briefly for more requests trades latency for larger batches.
                 if (_batchingDelay > TimeSpan.Zero &&
                     batch.Count >= _batchingDelayMinCount &&
                     batch.Count < _maxBatchSize)
@@ -122,7 +115,7 @@ internal sealed class BatchingAppender : IAppender
                     }
                     catch (OperationCanceledException) when (!ct.IsCancellationRequested)
                     {
-                        // The delay elapsed; continue with what we have.
+                        // The delay elapsed; commit what we have.
                     }
                 }
 
@@ -178,8 +171,7 @@ internal sealed class BatchingAppender : IAppender
         }
         catch (NpgsqlException ex) when (ex.IsTransient && !ct.IsCancellationRequested)
         {
-            // Re-running the identical batch is safe: commit ids make already-committed requests report as duplicates,
-            // so nothing is written twice.
+            // Retrying is safe because commit IDs make already-committed requests report as duplicates.
             _logger?.AppendBatchRetrying(ex, batch.Count);
             await _command.ExecuteAsync(batch, ct).ConfigureAwait(false);
         }

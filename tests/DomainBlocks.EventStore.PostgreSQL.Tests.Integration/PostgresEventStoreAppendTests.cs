@@ -10,8 +10,8 @@ using Shouldly;
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
 /// <summary>
-/// PostgreSQL-specific append behaviour, verified against the event log table: how rows are stored, the input the
-/// server rejects and the append's interaction with the sequence row. Behaviour every store shares is in the contract
+/// PostgreSQL-specific append behavior, verified against the event log table: how rows are stored, the input the server
+/// rejects, and the append's interaction with the sequence row. Behavior that every store shares is in the contract
 /// suites.
 /// </summary>
 [TestFixture]
@@ -137,7 +137,7 @@ public class PostgresEventStoreAppendTests : PostgresIntegrationTest
 
         (await Client.ReadRowsAsync(cancellationToken: ct)).ShouldBeEmpty();
 
-        // The caller has given up, but the request is already queued: once the lock is released the batch commits.
+        // The caller has given up, but the request is already queued, so the batch commits once the lock is released.
         await transaction.RollbackAsync(ct);
 
         while ((await Client.ReadRowsAsync(cancellationToken: ct)).Count == 0)

@@ -3,7 +3,7 @@ namespace DomainBlocks.Benchmarking.EventStore;
 /// <summary>
 /// The result of reading the log from start to end several times.
 /// </summary>
-/// <param name="EventsInLog">The number of events that each pass reads through.</param>
+/// <param name="EventsInLog">The number of events in the log.</param>
 /// <param name="EventsRead">The number of events that each pass returns.</param>
 /// <param name="Passes">The duration of each measured pass.</param>
 /// <param name="AllocatedBytes">The bytes allocated during the measured passes, on every thread.</param>

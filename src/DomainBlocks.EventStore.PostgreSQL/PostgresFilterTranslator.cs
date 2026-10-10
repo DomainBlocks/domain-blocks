@@ -12,20 +12,19 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The text of a condition depends only on the shape of the filter. Its values are parameters, and a set of values is
-/// one array parameter, so filters of the same shape share a statement.
+/// The text of a condition depends only on the shape of the filter. Values are passed as parameters, and a set of
+/// values is passed as one array parameter, so filters of the same shape share a statement.
 /// </para>
 /// <para>
-/// Every condition is either true or false, as a filter either matches an event or does not. A condition over metadata,
-/// which an event can lack, is closed with <c>IS TRUE</c>. Left as null, it would stay null under <c>NOT</c>, and the
-/// negation of the filter would miss the events without metadata.
+/// A metadata condition ends with <c>IS TRUE</c> because an event can lack the key. A null result would stay null under
+/// <c>NOT</c>, and a negated filter would then miss the events without that metadata.
 /// </para>
 /// </remarks>
 internal static class PostgresFilterTranslator
 {
     /// <param name="filter">The filter to translate.</param>
     /// <param name="firstParameterIndex">
-    /// The number of the condition's first parameter, which follows those that the query already has.
+    /// The number of the condition's first parameter, after the query's own.
     /// </param>
     public static PostgresFilterCondition Translate(EventFilter filter, int firstParameterIndex)
     {
@@ -59,7 +58,7 @@ internal static class PostgresFilterTranslator
                     sql.Append("stream_id = ANY(").Append(Parameter(streamId.Ids.ToArray())).Append(')');
                     break;
 
-                // Unlike LIKE, this takes the prefix as it is, with nothing in it to escape.
+                // Unlike LIKE, starts_with takes the prefix as it is, so nothing in it needs escaping.
                 case StreamIdPrefixFilter streamIdPrefix:
                     sql.Append("starts_with(stream_id, ").Append(Parameter(streamIdPrefix.Prefix)).Append(')');
                     break;
@@ -142,10 +141,10 @@ internal static class PostgresFilterTranslator
         }
     }
 
-    // The column holds whole microseconds, so no event is created between a bound and the next whole microsecond, and
-    // both >= and < select the same events with the bound rounded up as with the bound itself. The bound cannot be sent
-    // as it is, because it would be truncated to the microsecond below. The result is in UTC, which is the only offset
-    // that a timestamptz parameter accepts.
+    // The column holds whole microseconds, so a bound rounded up to the next microsecond selects the same events with
+    // >= and < as the exact bound. Sent unrounded, the bound would lose its extra ticks in Npgsql, which rounds it down
+    // for instants after 2000 and up for earlier ones. The result is UTC, the only offset Npgsql accepts for a
+    // timestamptz parameter.
     private static DateTimeOffset CeilingToMicrosecond(DateTimeOffset instant)
     {
         var utc = instant.ToUniversalTime();
@@ -156,7 +155,7 @@ internal static class PostgresFilterTranslator
 
         var ticksToNext = TimeSpan.TicksPerMicrosecond - excessTicks;
 
-        // The latest instant has no later whole microsecond, so it is rounded down instead. That differs only for an
+        // The latest instant has no later whole microsecond, so it is rounded down instead. That only differs for an
         // event created in the last microsecond of the year 9999.
         return utc.Ticks > DateTimeOffset.MaxValue.Ticks - ticksToNext
             ? utc.AddTicks(-excessTicks)

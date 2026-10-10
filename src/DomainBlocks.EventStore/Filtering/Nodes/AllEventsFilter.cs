@@ -1,7 +1,7 @@
 namespace DomainBlocks.EventStore.Filtering.Nodes;
 
 /// <summary>
-/// Matches every event.
+/// Represents a filter that matches every event.
 /// </summary>
 public sealed class AllEventsFilter : EventFilter
 {

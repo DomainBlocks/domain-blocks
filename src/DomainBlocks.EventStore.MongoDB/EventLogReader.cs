@@ -15,9 +15,8 @@ internal sealed class EventLogReader<TEvent>(
     where TEvent : notnull
 {
     /// <summary>
-    /// Starts a causally consistent session that has seen everything up to the change stream's anchor, so that a
-    /// majority read in it sees at least every event up to the anchor, and nothing falls between catch-up and live.
-    /// See docs/unpublished/event-store-database-contract.md.
+    /// Starts a causally consistent session that has seen everything up to the change stream's anchor. A majority read
+    /// in the session then sees at least every event up to the anchor, so no event falls between catch-up and live.
     /// </summary>
     public async Task<IClientSessionHandle> StartCatchUpSessionAsync(
         BsonTimestamp changeStreamOperationTime,
@@ -66,8 +65,8 @@ internal sealed class EventLogReader<TEvent>(
 
     /// <summary>
     /// Reads the events of the sequence selected by the filter and ordered by the position field, after one position
-    /// and up to another, inclusive. Used for subscription catch-up, in the session that read the high-water mark, so
-    /// that the snapshot includes it.
+    /// and up to another, inclusive. Subscription catch-up reads in the session that read the high-water mark, so the
+    /// read sees every event up to the mark.
     /// </summary>
     public async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCatchUpAsync(
         IClientSessionHandle session,

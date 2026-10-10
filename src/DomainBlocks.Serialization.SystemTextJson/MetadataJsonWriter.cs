@@ -4,8 +4,8 @@ using System.Text.Json;
 namespace DomainBlocks.Serialization.SystemTextJson;
 
 /// <summary>
-/// Writes metadata as a flat JSON object straight from a span, without materializing a dictionary. The writer and
-/// its buffer are cached per thread, so steady-state serialization allocates only the caller's copy of the output.
+/// Writes metadata as a flat JSON object. Each thread reuses one writer and one buffer rather than allocating them for
+/// each call.
 /// </summary>
 internal static class MetadataJsonWriter
 {
@@ -28,8 +28,7 @@ internal static class MetadataJsonWriter
     }
 
     /// <summary>
-    /// Writes the metadata and returns the UTF-8 output. The returned span aliases a thread-cached buffer and is only
-    /// valid until the next call on the same thread, so callers must copy it before returning.
+    /// Writes metadata as UTF-8 JSON. The result is valid only until the next call on the same thread.
     /// </summary>
     public static ReadOnlySpan<byte> Write(
         ReadOnlySpan<KeyValuePair<string, string>> metadata,

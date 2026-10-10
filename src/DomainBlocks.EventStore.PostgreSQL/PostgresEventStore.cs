@@ -10,10 +10,9 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 public static class PostgresEventStore
 {
     /// <remarks>
-    /// <paramref name="replicationConnectionStringFallback"/> is used for the replication connection when
-    /// <see cref="PostgresReplicationOptions.ConnectionString"/> is not set, before falling back to the data source's
-    /// connection string, which carries no password unless security info is persisted. The builder passes the raw
-    /// connection string it created the data source from.
+    /// <paramref name="replicationConnectionStringFallback"/> applies when
+    /// <see cref="PostgresReplicationOptions.ConnectionString"/> is not set. It takes precedence over the data source's
+    /// connection string, which has no password unless security info is persisted.
     /// </remarks>
     internal static PostgresEventStore<TEvent> Create<TEvent>(
         NpgsqlDataSource dataSource,
@@ -31,7 +30,7 @@ public static class PostgresEventStore
         var reader = new EventLogReader<TEvent>(
             dataSource,
             new EventLogSql(names),
-            options.ReadBatchSize,
+            options.ReadPageSize,
             eventCodec);
 
         var feed = CreateFeed(dataSource, names, options, eventCodec, logger, replicationConnectionStringFallback);
@@ -88,11 +87,11 @@ public static class PostgresEventStore
 }
 
 /// <summary>
-/// A PostgreSQL event store: appender, reader and replication feed over a data source. Created by
-/// <see cref="PostgresEventStore.Create{TEvent}"/> over a data source the caller owns, or by
-/// <see cref="PostgresEventStoreBuilder{TEvent}"/>, which may also create a data source for the store to own. Disposing
-/// the store releases its append queue and replication feed, and the data source only when the store owns it.
+/// Represents an event store backed by PostgreSQL. Create one with <see cref="PostgresEventStoreBuilder{TEvent}"/>.
 /// </summary>
+/// <remarks>
+/// Disposing the store disposes its data source only if the builder created it.
+/// </remarks>
 public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, StreamPosition, LogPosition>
     where TEvent : notnull
 {
@@ -129,9 +128,8 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
     }
 
     /// <summary>
-    /// Creates the schema, types, tables, append functions and, unless disabled through
-    /// <see cref="PostgresEventStoreAdminOptions"/>, the publication this store uses if they do not already exist.
-    /// Idempotent and safe to call concurrently from several processes, so it can run on every start-up.
+    /// Creates the schema, types, tables, functions, and publication the store uses, if they do not exist. Idempotent
+    /// and safe to call concurrently from several processes.
     /// </summary>
     public Task EnsureInitializedAsync(CancellationToken cancellationToken = default)
     {
@@ -151,7 +149,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         ThrowIfContainsNul(streamId, nameof(streamId));
 
         expectedState ??= ExpectedStreamState.Any<StreamPosition>();
-        // Time-ordered ids keep inserts into the commit id index append-mostly rather than scattered across it.
+        // Time-ordered, so new commit IDs sort to the end of the commit ID index instead of landing on random pages.
         commitId ??= Guid.CreateVersion7();
         options ??= AppendOptions.Default;
 
@@ -245,8 +243,8 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
                 yield return e;
             }
 
-            // Unlike an empty edge-case read, an empty result here may simply mean the origin is beyond the end of an
-            // existing stream, so the stream's existence is checked rather than assumed.
+            // An empty result may only mean that the origin is past the end of the stream, so check whether the stream
+            // exists.
             if (isEmpty)
                 await ThrowIfStreamNotFoundAsync(streamId, options, cancellationToken).ConfigureAwait(false);
         }
@@ -316,10 +314,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         }
     }
 
-    /// <summary>
-    /// PostgreSQL text and jsonb values cannot contain NUL. Rejecting it here, per caller, keeps one bad payload from
-    /// faulting a whole batch of unrelated appends.
-    /// </summary>
+    // A NUL is rejected for each caller here, so one bad payload cannot fault a whole batch of unrelated appends.
     private static void ThrowIfContainsNul(string value, string paramName)
     {
         if (value.Contains('\0') || value.Contains("\\u0000", StringComparison.Ordinal))

@@ -4,14 +4,13 @@ using NpgsqlTypes;
 namespace DomainBlocks.EventStore.PostgreSQL;
 
 /// <summary>
-/// The enums exchanged with the <c>append_events</c> function, mapped to the PostgreSQL enums of the same names by
-/// <see cref="NpgsqlDataSourceBuilderExtensions.UsePostgresEventStore"/>. The labels are a wire protocol, so they
-/// are spelled out rather than derived from the C# member names: a rename cannot change them.
+/// The enums exchanged with <c>append_events</c>. Their labels are part of a wire protocol, so they are spelled out and
+/// a C# rename cannot change them.
 /// </summary>
 internal static class AppendProtocol
 {
     /// <summary>
-    /// The <c>expected_state_kind</c> enum: what a request expects of its stream.
+    /// The <c>expected_state_kind</c> enum.
     /// </summary>
     public enum ExpectedKind
     {
@@ -22,7 +21,7 @@ internal static class AppendProtocol
     }
 
     /// <summary>
-    /// The <c>append_status</c> enum: the outcome of a request.
+    /// The <c>append_status</c> enum.
     /// </summary>
     public enum Status
     {

@@ -34,11 +34,10 @@ public static class MongoEventStoreAdmin
         await SeedSequenceAsync(db, options, cancellationToken).ConfigureAwait(false);
     }
 
-    // The appender claims log positions by incrementing a sequence document inside a transaction, and concurrent claims
-    // are kept apart by conflicting on that document. It creates the document if there is none, but that is not safe on
-    // a new database, where the collection does not exist either: each concurrent transaction creates the collection
-    // for itself, sees no document, and claims the first position. So the document is created here, at zero, unless it
-    // already exists. Every claim is then an update of the one document.
+    // The appender claims log positions by incrementing a sequence document inside a transaction, and creates the
+    // document if there is none. A CI run once failed with a duplicate key on the first claim on a new database, which
+    // fits concurrent first appends each creating the document. Creating it here, at zero, means every claim is an
+    // update of an existing document.
     private static async Task SeedSequenceAsync(
         IMongoDatabase db,
         MongoEventStoreOptions options,
@@ -60,7 +59,7 @@ public static class MongoEventStoreAdmin
         }
         catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
         {
-            // Created by a concurrent call.
+            // A concurrent call has already created the document.
         }
     }
 }

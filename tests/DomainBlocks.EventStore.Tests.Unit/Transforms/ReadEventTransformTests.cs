@@ -110,7 +110,7 @@ public class ReadEventTransformTests
     [Test]
     public async Task Create_SequenceReturningFuncWithObjectBase_BindsToOneToMany()
     {
-        // With object as the event base a sequence is itself a valid single event, so this pins that overload
+        // With object as the event base, a sequence is itself a valid single event, so this test pins that overload
         // resolution prefers the one-to-many form.
         _inner.ReadEvents.Add(FakeEventStore.ReadEventAt(new Legacy("a;b"), 0));
 

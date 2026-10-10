@@ -18,7 +18,7 @@ public abstract class EventStoreFilteredReadTests<TStreamPos, TLogPos>(
     where TStreamPos : notnull
     where TLogPos : notnull
 {
-    // A stream of the test log with events of every shape of metadata.
+    // This stream of the test log has events of every shape of metadata.
     private const string StreamId = "order-1";
 
     private IEventStore<object, string, TStreamPos, TLogPos> _eventStore = null!;
@@ -324,7 +324,7 @@ public abstract class EventStoreFilteredReadTests<TStreamPos, TLogPos>(
     {
         RequireCapability(StoreCapabilities.FilteredReads);
 
-        // A store that maps only two of the three kinds of event in the log.
+        // This store maps only two of the three kinds of event in the log.
         var eventTypeMap = new EventTypeMapBuilder()
             .Add<EventFilterTestLog.OrderPlaced>()
             .Add<EventFilterTestLog.OrderShipped>()

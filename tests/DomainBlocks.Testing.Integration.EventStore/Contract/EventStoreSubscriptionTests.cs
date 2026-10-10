@@ -364,7 +364,7 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(
             .SubscribeToStream(targetStream, options: new SubscriptionOptions { QueueCapacity = 1 })
             .GetAsyncEnumerator(cancellationToken);
 
-        // A second subscription, used to tell when the live feed has delivered all the appended events.
+        // A second subscription shows when the live feed has delivered all the appended events.
         await using var witness = EventStore
             .SubscribeToAll(SubscriptionOrigin.Start)
             .GetAsyncEnumerator(cancellationToken);
@@ -611,7 +611,7 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(
         return new RecoveredEvents([.. events], fellBehindCount);
     }
 
-    // Appended by a store that maps the event, which the store under test does not.
+    // A separate store that maps the event appends it, because the store under test does not map it.
     private async Task AppendEventThatCannotBeDecodedAsync(string streamId, CancellationToken cancellationToken)
     {
         var eventTypeMap = new EventTypeMapBuilder().Add<TestEvent>().Add<UnmappedEvent>().Build();

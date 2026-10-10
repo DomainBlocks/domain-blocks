@@ -270,7 +270,7 @@ public class EventStoreDecoratorTests
     [Test]
     public async Task ReadAll_ChainedTransforms_ProduceDepthFirstOrder()
     {
-        // Older -> Legacy("x;y") -> Current("x"), Current("y"); a sibling Current("z") must come after both.
+        // Older -> Legacy("x;y") -> Current("x"), Current("y"). The sibling Current("z") must come after both.
         _inner.ReadEvents.Add(FakeEventStore.ReadEventAt(new Older("x;y", "z"), 0));
         var store = _inner.WithReadTransforms(new OlderTransform(), new SplitTransform());
 

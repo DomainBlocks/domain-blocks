@@ -9,14 +9,12 @@ using DomainBlocks.EventStore.Filtering;
 namespace DomainBlocks.EventStore.PostgreSQL;
 
 /// <summary>
-/// A row of the event log as the live feed reads it, before its event is decoded. A subscription evaluates its filter
-/// against the row and takes the event only if it selects the row, so an event that no subscription selects is never
-/// decoded.
+/// A row from the live feed whose event is decoded only when an observer asks for it, so an event that no subscription
+/// selects is never decoded.
 /// </summary>
 /// <remarks>
-/// A session has one row, which it sets again for each insert, so a row is only valid until the session reads the next.
-/// An observer takes what it wants from the row before it returns. The event is decoded when it is first asked for, and
-/// once, however many observers ask.
+/// A session reuses one row for every insert, so a row is valid only until the next is read. The event is decoded once,
+/// on first request.
 /// </remarks>
 internal sealed class EventLogRow<TEvent>(IEventDecoder<TEvent, PostgresEventData, string> decoder) : IFilterableEvent
     where TEvent : notnull
@@ -38,13 +36,12 @@ internal sealed class EventLogRow<TEvent>(IEventDecoder<TEvent, PostgresEventDat
     public DateTimeOffset CreatedAt { get; private set; }
 
     /// <summary>
-    /// The event of the row. If it cannot be decoded, everyone who asks is thrown the same exception.
+    /// The decoded event. A decode failure is rethrown to every caller.
     /// </summary>
     public ReadEvent<TEvent, string, StreamPosition, LogPosition> DecodedEvent => _isDecoded ? _event : Decode();
 
     /// <summary>
-    /// Sets the row to the next insert. The metadata is as it is stored, a JSON object of strings, or
-    /// <see langword="null"/> if the event has none.
+    /// Sets the row to the next insert. <paramref name="metadata"/> is the stored JSON, or <see langword="null"/>.
     /// </summary>
     public void Set(
         long position,
@@ -68,9 +65,7 @@ internal sealed class EventLogRow<TEvent>(IEventDecoder<TEvent, PostgresEventDat
     }
 
     /// <summary>
-    /// Looks the key up in the metadata as it is stored, which is what the database goes by when it evaluates the same
-    /// filter. Nothing is kept of the metadata, as a filter asks for a key or two of an event, and most events are
-    /// asked nothing.
+    /// Reads the key from the stored JSON, as the database does when it evaluates the same filter.
     /// </summary>
     public bool TryGetMetadata(string key, [MaybeNullWhen(false)] out string value)
     {
@@ -100,7 +95,7 @@ internal sealed class EventLogRow<TEvent>(IEventDecoder<TEvent, PostgresEventDat
                     continue;
                 }
 
-                // Values are strings. Anything else is given as it is written, which is what ->> gives the database.
+                // A value that is not a string is returned as written, which matches what ->> returns in the database.
                 if (reader.TokenType == JsonTokenType.String)
                 {
                     value = reader.GetString()!;
@@ -123,8 +118,7 @@ internal sealed class EventLogRow<TEvent>(IEventDecoder<TEvent, PostgresEventDat
         }
     }
 
-    // Kept apart from DecodedEvent, which every observer that selects the row calls, so that it stays small enough to
-    // inline.
+    // Out of DecodedEvent so the getter, read by every observer that selects the row, stays small enough to inline.
     private ReadEvent<TEvent, string, StreamPosition, LogPosition> Decode()
     {
         _decodeError?.Throw();

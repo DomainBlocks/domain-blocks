@@ -74,7 +74,7 @@ public sealed class MongoEventStoreTestHarness(Action<MongoEventStoreOptions>? c
             .RunCommandAsync<BsonDocument>(new BsonDocument("buildInfo", 1));
 
         return
-            $"MongoEventStore: database {Options.DatabaseName}, append batch size {Options.AppendBatchSize}, " +
+            $"MongoEventStore: database {Options.DatabaseName}, append batch size {Options.AppendMaxBatchSize}, " +
             $"append queue capacity {Options.AppendQueueCapacity}; server {buildInfo["version"]}";
     }
 

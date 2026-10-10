@@ -1,7 +1,7 @@
 namespace DomainBlocks.EventStore.Filtering.Nodes;
 
 /// <summary>
-/// Matches events whose stream ID starts with <see cref="Prefix"/>, using an ordinal comparison.
+/// Represents a filter that matches events whose stream ID starts with <see cref="Prefix"/>, compared ordinally.
 /// </summary>
 public sealed class StreamIdPrefixFilter : EventFilter
 {

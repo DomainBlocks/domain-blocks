@@ -1,7 +1,7 @@
 namespace DomainBlocks.EventStore.PostgreSQL;
 
 /// <summary>
-/// Short, process-unique identifiers used to correlate log messages of subscriptions and feeds.
+/// Short, process-unique IDs that correlate the log messages of subscriptions and feeds.
 /// </summary>
 internal static class CorrelationId
 {

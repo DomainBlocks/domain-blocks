@@ -3,8 +3,7 @@ using System.Text.RegularExpressions;
 namespace DomainBlocks.EventStore.PostgreSQL;
 
 /// <summary>
-/// The fully qualified, quoted names of the database objects used by the event store, derived from a validated schema
-/// name so that they are safe to interpolate into SQL.
+/// The quoted, schema-qualified names of the store's database objects, safe to interpolate into SQL.
 /// </summary>
 internal sealed partial class SchemaObjectNames
 {
@@ -43,8 +42,7 @@ internal sealed partial class SchemaObjectNames
     public string AppendEventsFunction { get; }
 
     /// <summary>
-    /// The names of the append protocol enums, unquoted and schema-qualified, which is the form Npgsql's type
-    /// mapping takes.
+    /// The enum type names, unquoted and schema-qualified as Npgsql's type mapping expects.
     /// </summary>
     public string ExpectedStateKindType { get; }
 
@@ -53,7 +51,7 @@ internal sealed partial class SchemaObjectNames
     public string AppendStatusType { get; }
 
     /// <summary>
-    /// The name of the logical replication publication. Publication names are database-wide, so the schema is embedded.
+    /// The publication name, which embeds the schema because publication names are database-wide.
     /// </summary>
     public string Publication { get; }
 

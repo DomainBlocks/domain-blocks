@@ -7,14 +7,12 @@ using MongoDB.Bson;
 namespace DomainBlocks.EventStore.MongoDB;
 
 /// <summary>
-/// A document of the event log as the change stream delivers it, before its event is decoded. A subscription evaluates
-/// its filter against the document and takes the event only if it selects the document, so an event that no
+/// A document from the change stream whose event is decoded only when an observer asks for it, so an event that no
 /// subscription selects is never decoded.
 /// </summary>
 /// <remarks>
-/// The store has one document, which it sets again for each change, so a document is only valid until the next change
-/// is delivered. An observer takes what it wants from the document before it returns. The event is decoded when it is
-/// first asked for, and once, however many observers ask.
+/// The store reuses one document for every change, so a document is valid only until the next change is delivered. The
+/// event is decoded once, on first request.
 /// </remarks>
 internal sealed class EventLogDocument<TEvent>(IEventDecoder<TEvent, BsonValue, BsonValue> decoder) : IFilterableEvent
     where TEvent : notnull
@@ -32,7 +30,7 @@ internal sealed class EventLogDocument<TEvent>(IEventDecoder<TEvent, BsonValue, 
         _document[EventLogEntry.FieldNames.CreatedAtUtc].AsBsonDateTime.ToUniversalTime();
 
     /// <summary>
-    /// The event of the document. If it cannot be decoded, everyone who asks is thrown the same exception.
+    /// The decoded event. A decode failure is rethrown to every caller.
     /// </summary>
     public ReadEvent<TEvent, string, StreamPosition, LogPosition> DecodedEvent => _isDecoded ? _event : Decode();
 
@@ -48,8 +46,8 @@ internal sealed class EventLogDocument<TEvent>(IEventDecoder<TEvent, BsonValue, 
     }
 
     /// <summary>
-    /// Looks the key up in the metadata as it is stored, which is what the database goes by when it evaluates the same
-    /// filter. Metadata that is not stored as a document has no keys for a filter to find.
+    /// Reads the key from the stored metadata document. Metadata that is not stored as a document has no keys for a
+    /// filter to find.
     /// </summary>
     public bool TryGetMetadata(string key, [MaybeNullWhen(false)] out string value)
     {
@@ -62,14 +60,14 @@ internal sealed class EventLogDocument<TEvent>(IEventDecoder<TEvent, BsonValue, 
             return false;
         }
 
-        // Values are strings. Anything else is given as it is written.
+        // The store writes metadata values as strings. Any other value is returned as written.
         value = entry.IsString ? entry.AsString : entry.ToString()!;
 
         return true;
     }
 
-    // Kept apart from DecodedEvent, which every observer that selects the document calls, so that it stays small
-    // enough to inline.
+    // Out of DecodedEvent so the getter, read by every observer that selects the document, stays small enough to
+    // inline.
     private ReadEvent<TEvent, string, StreamPosition, LogPosition> Decode()
     {
         _decodeError?.Throw();
