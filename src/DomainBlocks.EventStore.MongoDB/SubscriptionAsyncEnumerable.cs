@@ -1,6 +1,7 @@
 ﻿using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using DomainBlocks.EventStore.Codecs;
+using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
@@ -14,10 +15,10 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
     where TPos : struct, IPosition<TPos>
 {
     private readonly IMongoCollection<BsonDocument> _eventLog;
-    private readonly RefCountedChangeStreamSubject<ChangeStreamDocument<BsonDocument>> _changeStreamSubject;
+    private readonly RefCountedChangeStreamSubject<EventLogDocument<TEvent>> _changeStreamSubject;
     private readonly IEventDecoder<TEvent, BsonValue, BsonValue> _eventDecoder;
     private readonly FilterDefinition<BsonDocument> _catchUpFilter;
-    private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, bool> _livePredicate;
+    private readonly EventFilter _liveFilter;
     private readonly string _positionFieldName;
     private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> _positionSelector;
     private readonly Func<long, TPos> _positionFactory;
@@ -28,10 +29,10 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
     public SubscriptionAsyncEnumerable(
         IMongoCollection<BsonDocument> eventLog,
-        RefCountedChangeStreamSubject<ChangeStreamDocument<BsonDocument>> changeStreamSubject,
+        RefCountedChangeStreamSubject<EventLogDocument<TEvent>> changeStreamSubject,
         IEventDecoder<TEvent, BsonValue, BsonValue> eventDecoder,
         FilterDefinition<BsonDocument> catchUpFilter,
-        Func<ReadEventContext<string, StreamPosition, LogPosition>, bool> livePredicate,
+        EventFilter liveFilter,
         string positionFieldName,
         Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> positionSelector,
         Func<long, TPos> positionFactory,
@@ -42,7 +43,7 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
         _origin = origin ?? SubscriptionOrigin.End;
         _options = options ?? SubscriptionOptions.Default;
         _catchUpFilter = catchUpFilter;
-        _livePredicate = livePredicate;
+        _liveFilter = liveFilter;
         _positionFieldName = positionFieldName;
         _positionSelector = positionSelector;
         _positionFactory = positionFactory;
@@ -72,7 +73,7 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
             while (true)
             {
-                using var observer = new Observer(_options.QueueCapacity);
+                using var observer = new Observer(_options.QueueCapacity, _liveFilter);
                 await using var attachment = await AttachObserver(observer).ConfigureAwait(false);
 
                 var enumerator = ReadAllAsync(resumeOrigin, observer, attachment.OperationTime, cancellationToken)
@@ -211,15 +212,13 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
         yield return SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>.CaughtUp;
 
-        await foreach (var doc in observer.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+        await foreach (var e in observer.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
         {
-            var readEvent = _eventDecoder.Decode(doc);
-            var context = readEvent.Context;
-
-            if (context.LogPosition.Value <= highWaterMark?.Value || !_livePredicate(context))
+            // Catching up has delivered it.
+            if (e.Context.LogPosition.Value <= highWaterMark?.Value)
                 continue;
 
-            yield return SubscriptionMessage.Event(readEvent);
+            yield return SubscriptionMessage.Event(e);
         }
     }
 
@@ -287,28 +286,58 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
         }
     }
 
-    internal sealed class Observer(int queueCapacity) :
-        IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>,
+    /// <summary>
+    /// Buffers the live events that a subscription selects, for one subscription cycle. Never blocks the change
+    /// stream: an overflow cancels the overflow token and completes the channel so that the cycle ends and a new one
+    /// starts from the last position.
+    /// </summary>
+    internal sealed class Observer(int queueCapacity, EventFilter liveFilter) :
+        IChangeStreamObserver<EventLogDocument<TEvent>>,
         IDisposable
     {
-        private readonly Channel<BsonDocument> _channel = Channel.CreateBounded<BsonDocument>(
-            new BoundedChannelOptions(queueCapacity)
-            {
-                SingleWriter = true,
-                SingleReader = true
-            });
+        private readonly Channel<ReadEvent<TEvent, string, StreamPosition, LogPosition>> _channel =
+            Channel.CreateBounded<ReadEvent<TEvent, string, StreamPosition, LogPosition>>(
+                new BoundedChannelOptions(queueCapacity)
+                {
+                    SingleWriter = true,
+                    SingleReader = true
+                });
 
         private readonly CancellationTokenSource _overflowCts = new();
+        private bool _isStopped;
 
-        public ChannelReader<BsonDocument> Reader => _channel.Reader;
+        public ChannelReader<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Reader => _channel.Reader;
 
         public CancellationToken OverflowToken => _overflowCts.Token;
 
-        public ValueTask OnNextAsync(ChangeStreamDocument<BsonDocument> change, CancellationToken cancellationToken)
+        public ValueTask OnNextAsync(EventLogDocument<TEvent> document, CancellationToken cancellationToken)
         {
-            if (_channel.Writer.TryWrite(change.FullDocument) || _overflowCts.IsCancellationRequested)
+            // An observer that has failed or signaled an overflow takes nothing more. It stays attached until the
+            // subscription replaces it, and a document that it selected would be decoded only to be dropped.
+            if (_isStopped || !liveFilter.Matches(document))
                 return ValueTask.CompletedTask;
 
+            ReadEvent<TEvent, string, StreamPosition, LogPosition> e;
+
+            try
+            {
+                // The document is only valid during this call, so the event is taken from it now.
+                e = document.DecodedEvent;
+            }
+            catch (Exception ex)
+            {
+                // An event that cannot be decoded fails this subscription, as it would a read. Thrown to the change
+                // stream, it would detach the observer without telling the subscriber.
+                _isStopped = true;
+                _channel.Writer.TryComplete(ex);
+
+                return ValueTask.CompletedTask;
+            }
+
+            if (_channel.Writer.TryWrite(e))
+                return ValueTask.CompletedTask;
+
+            _isStopped = true;
             _overflowCts.Cancel();
             _channel.Writer.TryComplete(new OperationCanceledException(_overflowCts.Token));
 

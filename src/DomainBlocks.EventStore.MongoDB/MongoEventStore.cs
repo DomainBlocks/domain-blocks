@@ -74,7 +74,8 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
     private readonly IMongoCollection<BsonDocument> _eventLog;
     private readonly IEventCodec<TEvent, BsonValue, BsonValue> _eventCodec;
     private readonly ILogger? _logger;
-    private readonly RefCountedChangeStreamSubject<ChangeStreamDocument<BsonDocument>> _allEventsSubject;
+    private readonly RefCountedChangeStreamSubject<EventLogDocument<TEvent>> _allEventsSubject;
+    private readonly EventLogDocument<TEvent> _liveDocument;
 
     internal MongoEventStore(
         IMongoClient client,
@@ -96,6 +97,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
             .WithReadConcern(ReadConcern.Majority)
             .WithReadPreference(ReadPreference.Primary);
 
+        _liveDocument = new EventLogDocument<TEvent>(eventCodec);
         _allEventsSubject = CreateAllEventsSubject(_eventLog, logger);
     }
 
@@ -253,7 +255,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
             _allEventsSubject,
             _eventCodec,
             Builders<BsonDocument>.Filter.Empty,
-            static _ => true,
+            EventFilter.All,
             EventLogEntry.FieldNames.Position,
             static ctx => ctx.LogPosition,
             LogPosition.FromInt64,
@@ -274,7 +276,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
             _allEventsSubject,
             _eventCodec,
             Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, streamId),
-            ctx => ctx.StreamId == streamId,
+            EventFilter.StreamIds(streamId),
             EventLogEntry.FieldNames.StreamPosition,
             static ctx => ctx.StreamPosition,
             StreamPosition.FromInt64,
@@ -299,7 +301,10 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         _ownedClient?.Dispose();
     }
 
-    private static RefCountedChangeStreamSubject<ChangeStreamDocument<BsonDocument>> CreateAllEventsSubject(
+    // The subject hands every subscription each insert as the store's one live document, set to the inserted document
+    // before the fan-out. The document is shared, so a connection of the subject is only replaced once it has handed
+    // out its last change.
+    private RefCountedChangeStreamSubject<EventLogDocument<TEvent>> CreateAllEventsSubject(
         IMongoCollection<BsonDocument> eventLog,
         ILogger? logger)
     {
@@ -311,7 +316,12 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
             eventLog.Database.Client,
             eventLog.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(insertsOnly),
-            doc => doc.ResumeToken,
+            static change => change.ResumeToken,
+            change =>
+            {
+                _liveDocument.Set(change.FullDocument);
+                return _liveDocument;
+            },
             logger: logger);
     }
 

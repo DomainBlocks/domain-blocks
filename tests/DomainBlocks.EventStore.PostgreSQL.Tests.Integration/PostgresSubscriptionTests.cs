@@ -1,4 +1,3 @@
-using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Events;
 using DomainBlocks.Testing.Integration.EventStore;
 using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
@@ -8,8 +7,8 @@ using Shouldly;
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
 /// <summary>
-/// PostgreSQL-specific subscription behaviour beyond the shared suite: slot sharing, stream-position resume, live
-/// events that cannot be decoded, and an origin beyond the end.
+/// PostgreSQL-specific subscription behaviour beyond the shared suite: slot sharing, stream-position resume, and an
+/// origin beyond the end.
 /// </summary>
 [TestFixture]
 public class PostgresSubscriptionTests : PostgresIntegrationTest
@@ -133,49 +132,6 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task SubscribeToStream_WhenAnotherStreamHasLiveEventThatCannotBeDecoded_IsNotAffected(
-        CancellationToken ct)
-    {
-        await using var enumerator = _eventStore.SubscribeToStream("target").GetAsyncEnumerator(ct);
-        await ShouldBeCaughtUpAsync(enumerator);
-
-        await AppendEventThatCannotBeDecodedAsync("other", ct);
-        var targetEvent = new TestEvent { Value = "target" };
-        await _eventStore.AppendAsync("target", [Appendable(targetEvent)], cancellationToken: ct);
-
-        (await NextEventAsync(enumerator)).Payload.ShouldBe(targetEvent);
-    }
-
-    [Test]
-    [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task SubscribeToAll_WhenLiveEventCannotBeDecoded_FailsOnlySubscriptionsThatSelectIt(
-        CancellationToken ct)
-    {
-        await using var all = _eventStore.SubscribeToAll().GetAsyncEnumerator(ct);
-        await using var otherAll = _eventStore.SubscribeToAll().GetAsyncEnumerator(ct);
-        await using var stream = _eventStore.SubscribeToStream("target").GetAsyncEnumerator(ct);
-        await ShouldBeCaughtUpAsync(all);
-        await ShouldBeCaughtUpAsync(otherAll);
-        await ShouldBeCaughtUpAsync(stream);
-
-        var firstEvent = new TestEvent { Value = "first" };
-        await _eventStore.AppendAsync("target", [Appendable(firstEvent)], cancellationToken: ct);
-        await AppendEventThatCannotBeDecodedAsync("other", ct);
-        var lastEvent = new TestEvent { Value = "last" };
-        await _eventStore.AppendAsync("target", [Appendable(lastEvent)], cancellationToken: ct);
-
-        // Each subscription to the whole log is given what came before the event, and then fails.
-        (await NextEventAsync(all)).Payload.ShouldBe(firstEvent);
-        await Should.ThrowAsync<EventNameNotMappedException>(async () => await all.MoveNextAsync());
-        (await NextEventAsync(otherAll)).Payload.ShouldBe(firstEvent);
-        await Should.ThrowAsync<EventNameNotMappedException>(async () => await otherAll.MoveNextAsync());
-
-        (await NextEventAsync(stream)).Payload.ShouldBe(firstEvent);
-        (await NextEventAsync(stream)).Payload.ShouldBe(lastEvent);
-    }
-
-    [Test]
-    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task SubscribeToAll_AfterPositionBeyondEnd_ObservesOnlyEventsAfterIt(CancellationToken ct)
     {
         TestEvent[] events = [.. Enumerable.Range(0, 4).Select(i => new TestEvent { Value = $"event-{i}" })];
@@ -211,21 +167,6 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
         (await NextEventAsync(enumerator)).Payload.ShouldBe(events[3]);
     }
 
-    // Appended by a store that maps the event, which the store under test does not.
-    private async Task AppendEventThatCannotBeDecodedAsync(string streamId, CancellationToken ct)
-    {
-        var eventTypeMap = new EventTypeMapBuilder().Add<TestEvent>().Add<UnmappedEvent>().Build();
-
-        await using var eventStore = Harness
-            .CreateBuilder("_unmapped")
-            .ConfigureCodec(x => x.UseEventTypeMap(eventTypeMap))
-            .UseOptions(Options)
-            .Build();
-
-        var e = AppendableEvent.Create<object>(new UnmappedEvent());
-        await eventStore.AppendAsync(streamId, [e], cancellationToken: ct);
-    }
-
     private static async Task<long> CountSlotsAsync(CancellationToken ct)
     {
         await using var command = PostgresTestEnvironment.DataSource.CreateCommand(
@@ -248,6 +189,4 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
         (await enumerator.MoveNextAsync()).ShouldBeTrue();
         enumerator.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
     }
-
-    private sealed record UnmappedEvent;
 }

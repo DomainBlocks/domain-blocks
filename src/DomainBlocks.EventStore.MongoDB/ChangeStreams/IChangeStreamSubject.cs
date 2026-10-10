@@ -1,8 +1,8 @@
 ﻿namespace DomainBlocks.EventStore.MongoDB.ChangeStreams;
 
-internal interface IChangeStreamSubject<out TDocument>
+internal interface IChangeStreamSubject<out TChange>
 {
-    IDisposable Attach(IChangeStreamObserver<TDocument> observer, string correlationId = "unknown");
+    IDisposable Attach(IChangeStreamObserver<TChange> observer, string correlationId = "unknown");
 
     Task<IChangeStreamConnection> ConnectAsync(CancellationToken cancellationToken = default);
 }
