@@ -1,4 +1,5 @@
 using DomainBlocks.EventStore.Filtering;
+using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using NUnit.Framework;
 using Shouldly;
@@ -6,6 +7,7 @@ using Shouldly;
 namespace DomainBlocks.EventStore.MongoDB.Tests.Unit;
 
 using Observer = SubscriptionAsyncEnumerable<string, LogPosition>.Observer;
+using StopReason = SubscriptionAsyncEnumerable<string, LogPosition>.StopReason;
 
 public class SubscriptionObserverTests
 {
@@ -39,16 +41,71 @@ public class SubscriptionObserverTests
     }
 
     [Test]
-    public async Task OnNextAsync_WhenQueueIsFull_SignalsOverflow()
+    public async Task OnNextAsync_WhenQueueIsFull_SignalsRestart()
     {
         using var observer = new Observer(queueCapacity: 1, EventFilter.All);
 
         await OfferAsync(observer, 0, "order-1");
-        observer.OverflowToken.IsCancellationRequested.ShouldBeFalse();
+        observer.StopReason.ShouldBe(StopReason.None);
 
         await OfferAsync(observer, 1, "order-1");
 
-        observer.OverflowToken.IsCancellationRequested.ShouldBeTrue();
+        observer.StopReason.ShouldBe(StopReason.QueueOverflow);
+    }
+
+    [Test]
+    public async Task OnNextAsync_WhenQueueIsFull_EndsReaderOnceQueuedEventIsRead()
+    {
+        using var observer = new Observer(queueCapacity: 1, EventFilter.All);
+        await OfferAsync(observer, 0, "order-1");
+
+        await OfferAsync(observer, 1, "order-1");
+
+        (await observer.Reader.WaitToReadAsync()).ShouldBeTrue();
+        observer.Reader.TryRead(out var queued).ShouldBeTrue();
+        queued.Context.LogPosition.ShouldBe(LogPosition.FromInt64(0));
+        (await observer.Reader.WaitToReadAsync()).ShouldBeFalse();
+    }
+
+    [Test]
+    public async Task OnNextAsync_WhenQueueIsFull_LogsOverflowAsWarningOnceWhenItHappens()
+    {
+        var logger = new RecordingLogger();
+        using var observer = new Observer(queueCapacity: 1, EventFilter.All, logger, "sub-1");
+
+        await OfferAsync(observer, 0, "order-1");
+        logger.Messages.ShouldBeEmpty();
+
+        await OfferAsync(observer, 1, "order-1");
+        await OfferAsync(observer, 2, "order-1");
+
+        logger.Messages.ShouldBe(
+            [(LogLevel.Warning, "[sub: sub-1] queue overflowed (capacity 1); restart pending")]);
+    }
+
+    [Test]
+    public async Task Dispose_WhenAlreadyStoppedByQueueOverflow_KeepsFirstReason()
+    {
+        var observer = new Observer(queueCapacity: 1, EventFilter.All);
+        await OfferAsync(observer, 0, "order-1");
+        await OfferAsync(observer, 1, "order-1");
+
+        observer.Dispose();
+
+        observer.StopReason.ShouldBe(StopReason.QueueOverflow);
+    }
+
+    [Test]
+    public async Task Dispose_WhenNotYetStopped_EndsReaderOnceQueuedEventIsRead()
+    {
+        var observer = new Observer(queueCapacity: 10, EventFilter.All);
+        await OfferAsync(observer, 0, "order-1");
+
+        observer.Dispose();
+
+        observer.StopReason.ShouldBe(StopReason.Disposed);
+        observer.Reader.TryRead(out _).ShouldBeTrue();
+        (await observer.Reader.WaitToReadAsync()).ShouldBeFalse();
     }
 
     [Test]
@@ -76,7 +133,7 @@ public class SubscriptionObserverTests
         await OfferAsync(observer, 1, "order-1");
 
         _decoder.DecodeCount.ShouldBe(1);
-        observer.OverflowToken.IsCancellationRequested.ShouldBeFalse();
+        observer.StopReason.ShouldBe(StopReason.None);
 
         var exception = await Should.ThrowAsync<InvalidOperationException>(async () =>
             await observer.Reader.WaitToReadAsync());
@@ -98,5 +155,24 @@ public class SubscriptionObserverTests
         });
 
         return observer.OnNextAsync(_document, CancellationToken.None);
+    }
+
+    private sealed class RecordingLogger : ILogger
+    {
+        public List<(LogLevel Level, string Message)> Messages { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Messages.Add((logLevel, formatter(state, exception)));
+        }
     }
 }
