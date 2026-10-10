@@ -368,7 +368,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         {
             // The events are still in the log, so a new cycle recovers them with a new change stream. Restarting on any
             // other error could repeat forever without the subscriber ever seeing it.
-            if (!ChangeStreamResumePolicy.IsHistoryLost(exception))
+            if (exception is not MongoCommandException { Code: MongoErrorCodes.ChangeStreamHistoryLost })
                 _channel.Writer.TryComplete(exception);
             else if (Stop(StopReason.ChangeStreamHistoryLost))
                 logger?.SubscriptionChangeHistoryLost(subscriptionId);

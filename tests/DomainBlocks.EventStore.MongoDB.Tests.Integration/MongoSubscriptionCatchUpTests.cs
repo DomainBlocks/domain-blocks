@@ -28,7 +28,6 @@ using Message = SubscriptionMessage<object, string, StreamPosition, LogPosition>
 [TestFixture]
 public class MongoSubscriptionCatchUpTests
 {
-    private const int ChangeStreamHistoryLostCode = 286;
     private const int UnauthorizedCode = 13;
 
     private readonly List<Replay> _replays = [];
@@ -269,7 +268,7 @@ public class MongoSubscriptionCatchUpTests
         (await NextMessageAsync(enumerator)).IsCaughtUp.ShouldBeTrue();
 
         // The change stream loses its connection, and events are appended before it tries to resume.
-        var fault = DisconnectChangeStream(CreateCommandException(ChangeStreamHistoryLostCode));
+        var fault = DisconnectChangeStream(CreateCommandException(MongoErrorCodes.ChangeStreamHistoryLost));
         await fault.Resuming.Task.WaitAsync(ct);
         var meanwhile = await AppendEventsAsync("meanwhile", 2, ct);
 
