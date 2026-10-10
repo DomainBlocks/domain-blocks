@@ -1,18 +1,17 @@
 namespace DomainBlocks.EventStore;
 
 /// <summary>
-/// Configures an event append operation.
+/// Provides options for an append.
 /// </summary>
 public sealed class AppendOptions
 {
     /// <summary>
-    /// The default append options.
+    /// The default options.
     /// </summary>
     public static readonly AppendOptions Default = new();
 
     /// <summary>
-    /// The maximum time to wait for the append operation to be acknowledged before timing out. The default is 30
-    /// seconds.
+    /// Gets how long to wait for the store to acknowledge the append before timing out. The default is 30 seconds.
     /// </summary>
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(30);
 }

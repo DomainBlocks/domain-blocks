@@ -4,8 +4,7 @@ namespace DomainBlocks.EventStore.Benchmarks;
 
 /// <summary>
 /// Measures the read path without I/O for each serialization format: type mapping, payload and metadata
-/// deserialization, and creation of each read event and its context, for <see cref="EventCount"/> events per
-/// operation.
+/// deserialization, and creation of each read event and its context, for <see cref="EventCount"/> events per operation.
 /// </summary>
 [MemoryDiagnoser]
 public class EventStoreReadBenchmarks

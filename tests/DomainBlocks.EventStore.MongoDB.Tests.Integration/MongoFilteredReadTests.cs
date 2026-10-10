@@ -7,7 +7,7 @@ using Shouldly;
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
 /// <summary>
-/// MongoDB-specific filtered read behaviour beyond the shared suite: the metadata keys that a query cannot address.
+/// MongoDB-specific filtered read behavior beyond the shared suite: the metadata keys that a query cannot address.
 /// </summary>
 public class MongoFilteredReadTests
 {

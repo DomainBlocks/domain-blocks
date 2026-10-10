@@ -2,9 +2,6 @@ using DomainBlocks.EventStore.Codecs;
 
 namespace DomainBlocks.EventStore.PostgreSQL;
 
-/// <summary>
-/// A single append operation awaiting commit. Completed by the appender once the database has reported its outcome.
-/// </summary>
 internal sealed class AppendRequest
 {
     private readonly TaskCompletionSource _tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -34,7 +31,7 @@ internal sealed class AppendRequest
     public Guid CommitId { get; }
 
     /// <summary>
-    /// The encoded events to append. Always contains at least one event.
+    /// The events to append. The array is never empty.
     /// </summary>
     public EncodedEvent<PostgresEventData, string>[] Events { get; }
 
@@ -42,10 +39,6 @@ internal sealed class AppendRequest
 
     public bool IsCompleted => _tcs.Task.IsCompleted;
 
-    /// <summary>
-    /// Attempts to complete this request successfully, or with a failure if an exception is provided.
-    /// </summary>
-    /// <returns>True if the request was completed by this call; false if it had already been completed.</returns>
     public bool TryComplete(Exception? error = null)
     {
         return error is null ? _tcs.TrySetResult() : _tcs.TrySetException(error);

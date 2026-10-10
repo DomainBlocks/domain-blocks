@@ -159,7 +159,8 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
         var observer = new CollectingObserver();
         using var attachment = feed.Attach(observer);
 
-        // The slot is created fine: pgoutput only resolves publications when it decodes the first change.
+        // The slot is created without error, because pgoutput only resolves publications when it decodes the first
+        // change.
         await using var connection = await feed.ConnectAsync(ct);
         await Client.AppendAsync([Any("s1", JsonEvent("trigger"))], ct);
 

@@ -4,16 +4,16 @@ using DomainBlocks.EventStore.Filtering.Nodes;
 namespace DomainBlocks.EventStore.Filtering;
 
 /// <summary>
-/// Thrown when a store is given an event filter that it cannot apply.
+/// The exception that is thrown when a store is given an event filter it cannot apply.
 /// </summary>
 public sealed class EventFilterNotSupportedException(string message) : DomainBlocksException(message)
 {
     /// <summary>
-    /// Throws if <paramref name="filter"/> is anything other than <see cref="EventFilter.All"/>. An operation that does
-    /// not filter calls this so that a filter is refused rather than ignored.
+    /// Throws if <paramref name="filter"/> is anything but <see cref="EventFilter.All"/>, so an operation that cannot
+    /// filter refuses a filter rather than ignoring it.
     /// </summary>
-    /// <param name="filter">The filter that was given, or <see langword="null"/> if none was.</param>
-    /// <param name="operation">The name of the operation that does not filter, for the message.</param>
+    /// <param name="filter">The filter, or <see langword="null"/> if none was given.</param>
+    /// <param name="operation">The name of the operation, for the exception message.</param>
     public static void ThrowIfFiltered(EventFilter? filter, string operation)
     {
         if (filter is null or AllEventsFilter)

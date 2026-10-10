@@ -12,7 +12,7 @@ namespace DomainBlocks.EventStore.MongoDB;
 internal static class MongoFilterTranslator
 {
     /// <exception cref="EventFilterNotSupportedException">
-    /// The filter has a metadata key that a query cannot address: one that contains a dot or starts with a dollar sign.
+    /// The filter has a metadata key that contains a dot or starts with a dollar sign, which a query cannot address.
     /// </exception>
     public static BsonDocument Translate(EventFilter filter)
     {
@@ -22,14 +22,14 @@ internal static class MongoFilterTranslator
         {
             AllEventsFilter => [],
 
-            // No document has an ID that is one of none.
+            // An empty $in matches no document.
             NoEventsFilter => new BsonDocument(EventLogEntry.FieldNames.Position, In([])),
 
             EventNameFilter eventName => new BsonDocument(EventLogEntry.FieldNames.EventName, In(eventName.Names)),
             StreamIdFilter streamId => new BsonDocument(EventLogEntry.FieldNames.StreamId, In(streamId.Ids)),
 
-            // Anchored, so that it can use the index on the stream ID, and escaped, so that the prefix is taken as it
-            // is. A regular expression is case-sensitive unless it says otherwise.
+            // The pattern is anchored so it can use the index on the stream ID, and escaped so the prefix is matched as
+            // it is. A regular expression is case-sensitive unless it says otherwise.
             StreamIdPrefixFilter streamIdPrefix => new BsonDocument(
                 EventLogEntry.FieldNames.StreamId,
                 new BsonDocument("$regex", new BsonRegularExpression($"^{Regex.Escape(streamIdPrefix.Prefix)}"))),
@@ -47,8 +47,8 @@ internal static class MongoFilterTranslator
             AndFilter and => new BsonDocument("$and", new BsonArray(and.Operands.Select(Translate))),
             OrFilter or => new BsonDocument("$or", new BsonArray(or.Operands.Select(Translate))),
 
-            // Unlike $not, which negates one operator of one field, this negates a whole query. It also matches a
-            // document that lacks the field, which the negation of a metadata filter has to.
+            // Unlike $not, which negates one operator on one field, $nor negates a whole query. It also matches a
+            // document that lacks the field, which the negation of a metadata filter needs.
             NotFilter not => new BsonDocument("$nor", new BsonArray { Translate(not.Operand) }),
 
             _ => throw new UnreachableException($"Unexpected filter of type '{filter.GetType()}'.")
@@ -70,9 +70,9 @@ internal static class MongoFilterTranslator
         return bounds.ElementCount == 0 ? [] : new BsonDocument(EventLogEntry.FieldNames.CreatedAtUtc, bounds);
     }
 
-    // The field holds whole milliseconds, so no event is created between a bound and the next whole millisecond, and
-    // both $gte and $lt select the same events with the bound rounded up as with the bound itself. The bound cannot be
-    // given as a DateTime, which the driver would truncate to the millisecond below.
+    // The field holds whole milliseconds, so a bound rounded up to the next millisecond selects the same events with
+    // $gte and $lt as the exact bound. Given as a DateTime, the bound would lose its extra ticks in the driver, which
+    // rounds it down for instants after 1970 and up for earlier ones.
     private static BsonDateTime CeilingToMillisecond(DateTimeOffset instant)
     {
         var milliseconds = instant.ToUnixTimeMilliseconds();
@@ -83,8 +83,8 @@ internal static class MongoFilterTranslator
         return new BsonDateTime(milliseconds);
     }
 
-    // A dot in a field name makes a path of it, and a leading dollar sign an operator, so a key with either cannot be
-    // addressed as the field it is stored in.
+    // A dot in a field name makes it a path, and a leading dollar sign makes it an operator, so a key with either
+    // cannot be addressed as the field it is stored in.
     private static string MetadataField(string key)
     {
         if (key.Contains('.') || key.StartsWith('$'))

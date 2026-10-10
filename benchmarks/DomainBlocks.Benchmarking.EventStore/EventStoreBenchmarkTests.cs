@@ -11,9 +11,8 @@ namespace DomainBlocks.Benchmarking.EventStore;
 
 /// <summary>
 /// Append and read benchmarks shared by every store. Each append test writes one small event per append to a new
-/// stream, which is the cheapest possible append and therefore measures the store's ceiling rather than a workload.
-/// Results are printed to the test output; the tests only fail if an operation errors, since a throughput figure with
-/// errors is invalid.
+/// stream, so it measures the store's ceiling rather than a realistic workload. Results are printed to the test output.
+/// An append test fails only if an append fails, and a read test fails only if it reads the wrong number of events.
 /// </summary>
 [Category("Benchmark")]
 public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
@@ -110,8 +109,8 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
     }
 
     /// <summary>
-    /// The same read with a filter. A stream is a hundredth of the log and its ID is indexed. A tenant is a tenth of
-    /// the log and metadata is not indexed. Either way the store reads through the whole log.
+    /// The same read with a filter. A stream is a hundredth of the log, and stream IDs are indexed. A tenant is a tenth
+    /// of the log, and metadata is not indexed.
     /// </summary>
     [TestCase("1% by stream", 1_000)]
     [TestCase("10% by tenant", 10_000)]
@@ -130,8 +129,8 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
     }
 
     /// <summary>
-    /// Appends a log in which each stream is a hundredth of the events and each tenant a tenth, then reads it with
-    /// the given options.
+    /// Appends a log in which each stream is a hundredth of the events and each tenant a tenth, then reads it with the
+    /// given options.
     /// </summary>
     private async Task<ReadThroughputResult> MeasureReadAllAsync(
         string title,
@@ -142,7 +141,7 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
         const int eventsPerStream = 1_000;
         const int eventsInLog = streamCount * eventsPerStream;
 
-        // The first passes are much slower than the rest, while the store and the database warm up.
+        // The first passes warm up the store and the database, so they are not measured.
         const int warmUpPasses = 5;
         const int measuredPasses = 9;
 

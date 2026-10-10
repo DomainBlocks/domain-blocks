@@ -3,8 +3,7 @@ using System.Collections.Immutable;
 namespace DomainBlocks.EventStore.Filtering;
 
 /// <summary>
-/// A set of strings compared ordinally. The values are kept distinct and in ordinal order, regardless of the order in
-/// which they were given.
+/// A distinct set of strings in ordinal order.
 /// </summary>
 internal readonly struct StringSet(IEnumerable<string> values)
 {
@@ -15,7 +14,7 @@ internal readonly struct StringSet(IEnumerable<string> values)
     {
         var values = Values;
 
-        // Most sets contain one value.
+        // A stream subscription filters on a single stream ID, so a set with one value is compared directly.
         return values.Length == 1
             ? string.Equals(values[0], value, StringComparison.Ordinal)
             : values.BinarySearch(value, StringComparer.Ordinal) >= 0;

@@ -3,27 +3,27 @@
 namespace DomainBlocks.EventStore;
 
 /// <summary>
-/// Options for configuring a read across all event streams.
+/// Provides options for a read across all streams.
 /// </summary>
 public sealed class ReadAllOptions
 {
     /// <summary>
-    /// The default options for reading across all streams.
+    /// The default options.
     /// </summary>
     public static readonly ReadAllOptions Default = new();
 
     /// <summary>
-    /// The maximum number of events to read, or <see langword="null"/> for no limit (default).
+    /// Gets the maximum number of events to read, or <see langword="null"/> (the default) for no limit.
     /// </summary>
     public int? MaxCount { get; init; }
 
     /// <summary>
-    /// Specifies whether event metadata is included in the returned events. The default is <see langword="true"/>.
+    /// Gets a value that indicates whether to read event metadata. The default is <see langword="true"/>.
     /// </summary>
     public bool IncludeMetadata { get; init; } = true;
 
     /// <summary>
-    /// Selects the events to read. The default is <see cref="EventFilter.All"/>.
+    /// Gets the filter that selects the events to read. The default is <see cref="EventFilter.All"/>.
     /// </summary>
     public EventFilter Filter
     {

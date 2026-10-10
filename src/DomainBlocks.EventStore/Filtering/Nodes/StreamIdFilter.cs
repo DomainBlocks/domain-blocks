@@ -3,7 +3,7 @@ using System.Collections.Immutable;
 namespace DomainBlocks.EventStore.Filtering.Nodes;
 
 /// <summary>
-/// Matches events whose stream ID is one of <see cref="Ids"/>.
+/// Represents a filter that matches events whose stream ID is one of <see cref="Ids"/>.
 /// </summary>
 public sealed class StreamIdFilter : EventFilter
 {
@@ -15,7 +15,7 @@ public sealed class StreamIdFilter : EventFilter
     }
 
     /// <summary>
-    /// The stream IDs, distinct and in ordinal order.
+    /// Gets the stream IDs, distinct and in ordinal order.
     /// </summary>
     public ImmutableArray<string> Ids => _ids.Values;
 

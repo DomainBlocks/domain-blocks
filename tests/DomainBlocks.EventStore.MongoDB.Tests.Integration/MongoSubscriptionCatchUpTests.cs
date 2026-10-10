@@ -244,8 +244,9 @@ public class MongoSubscriptionCatchUpTests
             .ShouldBe([live[0], live[1]]);
     }
 
-    // The subscription under test, from the start of the log, with each of its replays recorded. The filters stand in
-    // for a subscription filter, which the store does not take yet.
+    // The subscription under test, from the start of the log, with each of its replays recorded. The store turns a
+    // subscription filter into a query for the replay and an event filter for live events. This test builds the
+    // subscription from its parts, so it passes both.
     private SubscriptionAsyncEnumerable<object, LogPosition> SubscribeToAll(
         SubscriptionOptions options,
         FilterDefinition<BsonDocument>? catchUpFilter = null,
@@ -264,9 +265,9 @@ public class MongoSubscriptionCatchUpTests
             options);
     }
 
-    // A second subscription to the same change stream, from the end of the log, used to tell when the change stream
-    // has given all the appended events to the subscription under test. The change stream gives each event to its
-    // subscriptions in the order in which they attached to it, so a witness is created once the subscription under
+    // A second subscription to the same change stream, from the end of the log, used to tell when the change stream has
+    // given all the appended events to the subscription under test. The change stream gives each event to its
+    // subscriptions in the order in which they attached to it, so a witness is created after the subscription under
     // test has attached.
     private async Task<IAsyncEnumerator<Message>> CreateWitnessAsync(CancellationToken ct)
     {

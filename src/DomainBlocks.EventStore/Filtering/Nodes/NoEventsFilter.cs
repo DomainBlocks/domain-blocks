@@ -1,7 +1,7 @@
 namespace DomainBlocks.EventStore.Filtering.Nodes;
 
 /// <summary>
-/// Matches no event.
+/// Represents a filter that matches no events.
 /// </summary>
 public sealed class NoEventsFilter : EventFilter
 {

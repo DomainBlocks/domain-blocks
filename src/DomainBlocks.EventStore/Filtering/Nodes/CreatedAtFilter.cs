@@ -1,8 +1,8 @@
 namespace DomainBlocks.EventStore.Filtering.Nodes;
 
 /// <summary>
-/// Matches events created in the half-open interval from <see cref="From"/> (inclusive) to <see cref="Before"/>
-/// (exclusive). A <see langword="null"/> bound leaves that side of the interval open.
+/// Represents a filter that matches events created at or after <see cref="From"/> and before <see cref="Before"/>. A
+/// <see langword="null"/> bound leaves that side open.
 /// </summary>
 public sealed class CreatedAtFilter : EventFilter
 {

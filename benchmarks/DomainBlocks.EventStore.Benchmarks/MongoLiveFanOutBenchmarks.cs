@@ -17,7 +17,7 @@ using SubscriptionObserver = SubscriptionAsyncEnumerable<IDomainEvent, LogPositi
 /// document, which is handed to the observers of <see cref="SubscriberCount"/> subscriptions, each of which selects
 /// <see cref="SelectedPercent"/> percent of the documents and takes their events. The document and the observers are
 /// the real ones. The change stream subject is left out, as it needs a server, so the loop over the observers stands in
-/// for it, and does with each change what the store's result selector does.
+/// for it and handles each change as the store's result selector does.
 /// </summary>
 [MemoryDiagnoser]
 public class MongoLiveFanOutBenchmarks

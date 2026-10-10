@@ -7,8 +7,8 @@ using Shouldly;
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
 /// <summary>
-/// MongoDB-specific filtered subscription behaviour beyond the shared suite: the metadata keys that a query cannot
-/// address are refused at the call, before anything is read.
+/// MongoDB-specific filtered subscription behavior beyond the shared suite: the metadata keys that a query cannot
+/// address are refused when the method is called, before anything is read.
 /// </summary>
 public class MongoFilteredSubscriptionTests
 {

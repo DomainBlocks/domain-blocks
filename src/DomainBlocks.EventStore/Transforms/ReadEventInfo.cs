@@ -1,7 +1,7 @@
 namespace DomainBlocks.EventStore.Transforms;
 
 /// <summary>
-/// The store-independent part of a read event's context, for transforms that do not need stream or log positions.
+/// Represents the store-independent part of a read event's context, for transforms that need no positions.
 /// </summary>
 public readonly struct ReadEventInfo(IReadOnlyDictionary<string, string> metadata, DateTimeOffset createdAt)
 {

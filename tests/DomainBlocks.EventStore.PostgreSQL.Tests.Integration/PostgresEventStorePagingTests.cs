@@ -6,13 +6,13 @@ using Shouldly;
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
 /// <summary>
-/// Keyset paging edge cases. The contract suites already run with a small read batch size, so this only covers what
-/// depends on the exact batch boundary.
+/// Keyset paging edge cases. The contract suites already run with a small read page size, so this only covers what
+/// depends on the exact page boundary.
 /// </summary>
 [TestFixture]
-public class PostgresEventStorePagingTests() : PostgresIntegrationTest(x => x.ReadBatchSize = BatchSize)
+public class PostgresEventStorePagingTests() : PostgresIntegrationTest(x => x.ReadPageSize = PageSize)
 {
-    private const int BatchSize = 7;
+    private const int PageSize = 7;
 
     private IEventStore<object, string, StreamPosition, LogPosition> _eventStore = null!;
 
@@ -33,7 +33,7 @@ public class PostgresEventStorePagingTests() : PostgresIntegrationTest(x => x.Re
     public async Task ReadStream_ExactMultipleOfBatchSize_DoesNotIssueAnEmptyTrailingPage(CancellationToken ct)
     {
         var streamId = $"test-{Guid.NewGuid():N}";
-        var events = Enumerable.Range(0, BatchSize * 2).Select(i => new TestEvent { Value = $"e{i}" }).ToArray();
+        var events = Enumerable.Range(0, PageSize * 2).Select(i => new TestEvent { Value = $"e{i}" }).ToArray();
 
         await _eventStore.AppendAsync(
             streamId,

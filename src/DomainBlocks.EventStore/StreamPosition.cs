@@ -1,17 +1,19 @@
 namespace DomainBlocks.EventStore;
 
 /// <summary>
-/// Represents the zero-based, contiguous position of an event within a stream. Positions increase by one for each
-/// event without gaps. Unlike <see cref="LogPosition"/>, this position is scoped to a single stream.
+/// Represents the zero-based position of an event within its stream.
 /// </summary>
-/// <param name="Value">The non-negative stream position.</param>
+/// <param name="Value">The position.</param>
+/// <remarks>
+/// Positions increase by one per event, without gaps.
+/// </remarks>
 public readonly record struct StreamPosition(ulong Value) : IPosition<StreamPosition>
 {
     /// <summary>
-    /// Creates a stream position from a non-negative 64-bit integer.
+    /// Creates a stream position from a 64-bit signed integer.
     /// </summary>
-    /// <param name="value">The position value.</param>
-    /// <returns>A stream position containing <paramref name="value"/>.</returns>
+    /// <param name="value">The position.</param>
+    /// <returns>The stream position <paramref name="value"/>.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is negative.</exception>
     public static StreamPosition FromInt64(long value)
     {
@@ -20,7 +22,7 @@ public readonly record struct StreamPosition(ulong Value) : IPosition<StreamPosi
     }
 
     /// <summary>
-    /// Returns the numeric position value as a string.
+    /// Returns the position as a string.
     /// </summary>
     public override string ToString() => Value.ToString();
 }

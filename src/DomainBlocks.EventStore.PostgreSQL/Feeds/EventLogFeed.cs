@@ -6,14 +6,13 @@ using Polly.Retry;
 namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 
 /// <summary>
-/// Pumps items from an <see cref="IEventLogSession{T}"/> to attached observers, re-establishing the session with
-/// backoff when it is lost. Observers are told about every re-established session via
-/// <see cref="IEventLogObserver{T}.OnResetAsync"/>, before any row of the new session is delivered, because a new
-/// session only sees rows committed after its own establishment point.
+/// Pumps items from an <see cref="IEventLogSession{T}"/> to observers, reconnecting with backoff when the session is
+/// lost.
 /// </summary>
 /// <remarks>
-/// Ported from the MongoDB change stream subject. Unlike a change stream there is no resume token: recovering the rows
-/// missed during an outage is the observer's job, which it does by re-reading from its last position.
+/// A new session sees only rows committed after it is established, so observers get
+/// <see cref="IEventLogObserver{T}.OnResetAsync"/> first and recover missed rows by re-reading from their last
+/// position.
 /// </remarks>
 internal sealed class EventLogFeed<T> : IEventLogFeed<T>
 {
@@ -62,7 +61,7 @@ internal sealed class EventLogFeed<T> : IEventLogFeed<T>
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            // Nobody will ever own this connection, so stop the producer rather than leak it.
+            // Nobody will own this connection, so stop the producer rather than leak it.
             await connection.DisposeAsync().ConfigureAwait(false);
             throw;
         }
@@ -170,9 +169,8 @@ internal sealed class EventLogFeed<T> : IEventLogFeed<T>
                     {
                         _logger?.FeedConnected(_feedId, session.Description);
 
-                        // Anything committed between the old session's loss and this session's establishment was
-                        // missed. Tell observers before pumping any row of the new session, so that no such row can
-                        // advance an observer's position past the gap.
+                        // Rows committed while disconnected were missed. Reset observers before pumping the new
+                        // session, so no row advances a position past the gap.
                         if (hasConnectedBefore)
                             await _state.NotifyResetAsync(_stopCts.Token).ConfigureAwait(false);
 
@@ -184,13 +182,12 @@ internal sealed class EventLogFeed<T> : IEventLogFeed<T>
                             await foreach (var item in session.ReadAsync(_stopCts.Token).ConfigureAwait(false))
                                 await _state.NotifyNextAsync(item, _stopCts.Token).ConfigureAwait(false);
 
-                            // A live session is expected to remain open. Log a warning and reconnect.
+                            // A live session should never end, so reconnect.
                             _logger?.FeedEnded(_feedId);
                         }
                         catch (Exception ex) when (!_stopCts.IsCancellationRequested && _feed._options.IsTransient(ex))
                         {
                             _logger?.FeedConnectionLost(ex, _feedId);
-                            // Continue outer loop (reconnect)
                         }
                     }
                 }

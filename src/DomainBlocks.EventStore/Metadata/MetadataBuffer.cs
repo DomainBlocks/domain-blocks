@@ -3,17 +3,13 @@ using System.Buffers;
 namespace DomainBlocks.EventStore.Metadata;
 
 /// <summary>
-/// Accumulates the merged metadata of a batch of events in pooled, fixed-size chunks, handing each event a slice of
-/// one chunk. Keys are de-duplicated within the current event's slice by a linear scan, which beats hashing for the
-/// handful of entries metadata carries and needs no per-event allocation. Chunks are small enough to stay off the
-/// large object heap and are returned to the pool on dispose, so a warmed-up batch allocates nothing for metadata.
+/// Holds the merged metadata of an event batch in pooled chunks, with one slice per event, so it does not allocate for
+/// each event. Keys are deduplicated within each event's slice. A slice is valid until the buffer is disposed.
 /// </summary>
-/// <remarks>
-/// Slices are valid only until the buffer is disposed. The owner disposes it once the store has consumed the batch.
-/// </remarks>
 internal sealed class MetadataBuffer : IDisposable
 {
-    // 256 entries of two references is 4 KB on 64-bit, well under the LOH threshold.
+    // A chunk of 256 entries, each holding two references, takes 4 KB on 64-bit, which is well under the large object
+    // heap threshold.
     private const int ChunkSize = 256;
 
     private static readonly ArrayPool<KeyValuePair<string, string>> Pool =
@@ -24,14 +20,8 @@ internal sealed class MetadataBuffer : IDisposable
     private int _count;
     private int _eventStart;
 
-    /// <summary>
-    /// Starts a new event's slice.
-    /// </summary>
     public void BeginEvent() => _eventStart = _count;
 
-    /// <summary>
-    /// Ends the current event's slice and returns it.
-    /// </summary>
     public ReadOnlyMemory<KeyValuePair<string, string>> EndEvent() =>
         _chunk.AsMemory(_eventStart, _count - _eventStart);
 
@@ -86,10 +76,7 @@ internal sealed class MetadataBuffer : IDisposable
         _chunk[_count++] = new KeyValuePair<string, string>(key, value);
     }
 
-    /// <summary>
-    /// Rents a new chunk and carries the current event's entries over to it, so an event's slice never spans two
-    /// chunks. An event with more entries than a chunk holds gets a chunk of its own size.
-    /// </summary>
+    // The current event's entries move to the new chunk, so a slice never spans two chunks.
     private void MoveEventToNewChunk()
     {
         var eventLength = _count - _eventStart;

@@ -77,9 +77,9 @@ public class MongoEventStoreAdminTests
     }
 
     /// <summary>
-    /// Why the sequence document is created up front. Two transactions claim a position as the appender does. With the
-    /// document in place, each claim is an update of it, and the second conflicts with the first and is retried. On a
-    /// new database, each would create the collection for itself and both would claim the first position.
+    /// Shows the conflict that the up-front sequence document relies on. Two transactions claim a position as the
+    /// appender does. With the document in place, each claim is an update of it, so the second conflicts with the first
+    /// with an error that can be retried.
     /// </summary>
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]

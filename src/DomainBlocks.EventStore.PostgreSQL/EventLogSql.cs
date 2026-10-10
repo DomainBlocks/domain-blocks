@@ -1,9 +1,9 @@
 namespace DomainBlocks.EventStore.PostgreSQL;
 
 /// <summary>
-/// The read queries over the event log. Reads use keyset pagination: every page selects rows strictly beyond a key
-/// (a position) and the last row's key seeds the next page. Because positions are immutable and gap-free, pages are
-/// exact and no row can be skipped or repeated.
+/// The read queries over the event log, paged by keyset. Each page selects the rows after the last position of the
+/// previous page. Positions never change and are assigned in commit order, so no row is skipped or repeated between
+/// pages.
 /// </summary>
 internal sealed class EventLogSql
 {
@@ -14,26 +14,24 @@ internal sealed class EventLogSql
         "position, stream_id, stream_position, event_name, event_data, event_data_bytes, NULL::jsonb, created_at";
 
     /// <summary>
-    /// The number of parameters that a page of <see cref="ReadStream"/> binds: the stream ID, the key, and the limit.
-    /// The parameters of a condition are numbered after them.
+    /// Parameters bound by a <see cref="ReadStream"/> page: stream ID, key, and limit. Condition parameters follow.
     /// </summary>
     public const int ReadStreamParameterCount = 3;
 
     /// <summary>
-    /// The number of parameters that a page of <see cref="ReadAll"/> binds: the key and the limit. The parameters of a
-    /// condition are numbered after them.
+    /// Parameters bound by a <see cref="ReadAll"/> page: key and limit. Condition parameters follow.
     /// </summary>
     public const int ReadAllParameterCount = 2;
 
     /// <summary>
-    /// The number of parameters that a page of <see cref="CatchUpAll"/> binds: the key, the high-water mark, and the
-    /// limit. The parameters of a condition are numbered after them.
+    /// Parameters bound by a <see cref="CatchUpAll"/> page: key, high-water mark, and limit. Condition parameters
+    /// follow.
     /// </summary>
     public const int CatchUpAllParameterCount = 3;
 
     /// <summary>
-    /// The number of parameters that a page of <see cref="CatchUpStream"/> binds: the stream ID, the key, the
-    /// high-water mark, and the limit. The parameters of a condition are numbered after them.
+    /// Parameters bound by a <see cref="CatchUpStream"/> page: stream ID, key, high-water mark, and limit. Condition
+    /// parameters follow.
     /// </summary>
     public const int CatchUpStreamParameterCount = 4;
 
@@ -93,21 +91,12 @@ internal sealed class EventLogSql
 
     public string ReadCatchUpStream { get; }
 
-    /// <summary>
-    /// The query for a page of the read, with a further condition that rows must meet if one is given.
-    /// </summary>
     public string CatchUpAll(string? condition = null) =>
         condition is null ? ReadCatchUpAll : WithCondition(ReadCatchUpAll, condition);
 
-    /// <summary>
-    /// The query for a page of the read, with a further condition that rows must meet if one is given.
-    /// </summary>
     public string CatchUpStream(string? condition = null) =>
         condition is null ? ReadCatchUpStream : WithCondition(ReadCatchUpStream, condition);
 
-    /// <summary>
-    /// The query for a page of the read, with a further condition that rows must meet if one is given.
-    /// </summary>
     public string ReadStream(ReadDirection direction, bool includeMetadata, string? condition = null)
     {
         var query = (direction, includeMetadata) switch
@@ -122,9 +111,6 @@ internal sealed class EventLogSql
         return condition is null ? query : WithCondition(query, condition);
     }
 
-    /// <summary>
-    /// The query for a page of the read, with a further condition that rows must meet if one is given.
-    /// </summary>
     public string ReadAll(ReadDirection direction, bool includeMetadata, string? condition = null)
     {
         var query = (direction, includeMetadata) switch
@@ -140,8 +126,7 @@ internal sealed class EventLogSql
     }
 
     /// <summary>
-    /// Converts a read origin into the exclusive key bound of the first page. Read origins are inclusive, so the bound
-    /// is one step before the origin in the direction of the read.
+    /// Read origins are inclusive, so the first page's exclusive bound is one step before the origin.
     /// </summary>
     public static long FirstKeyExclusive<TPos>(ReadDirection direction, ReadOrigin<TPos> origin)
         where TPos : struct, IPosition<TPos>
@@ -155,13 +140,12 @@ internal sealed class EventLogSql
             _ => throw new ArgumentOutOfRangeException(nameof(origin), origin, "Unsupported direction and origin.")
         };
 
-        // Positions beyond long.MaxValue cannot exist; clamping keeps the arithmetic above in range.
+        // Positions beyond long.MaxValue cannot exist, and clamping keeps the arithmetic above in range.
         static long ToKey(ulong value) => value >= long.MaxValue - 1 ? long.MaxValue - 1 : (long)value;
     }
 
-    // Every read query has a WHERE clause followed by one ORDER BY, so a further condition goes between the two. The
-    // database then counts the limit in rows that meet the condition, and keyset paging carries on from the last of
-    // them.
+    // Every read query has a WHERE clause followed by one ORDER BY, so the condition goes between them. The limit then
+    // counts only the rows that match the condition.
     private static string WithCondition(string query, string condition)
     {
         const string orderBy = " ORDER BY ";

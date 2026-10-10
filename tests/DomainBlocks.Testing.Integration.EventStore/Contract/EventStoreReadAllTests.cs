@@ -7,7 +7,7 @@ using Shouldly;
 namespace DomainBlocks.Testing.Integration.EventStore.Contract;
 
 /// <summary>
-/// Reading the whole log: order, positions, origins and options.
+/// Reading the whole log: order, positions, origins, and options.
 /// </summary>
 public abstract class EventStoreReadAllTests<TStreamPos, TLogPos>(IEventStoreTestHarness<TStreamPos, TLogPos> harness) :
     EventStoreTestBase<TStreamPos, TLogPos>(harness)

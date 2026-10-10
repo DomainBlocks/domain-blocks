@@ -1,38 +1,37 @@
 ﻿namespace DomainBlocks.EventStore;
 
 /// <summary>
-/// Provides factory methods for creating observed event stream states.
+/// Provides methods for creating <see cref="ObservedStreamState{TVersion}"/> values.
 /// </summary>
 public static class ObservedStreamState
 {
     /// <summary>
-    /// Creates an observed state indicating that the stream does not exist.
+    /// Returns the state of a stream that does not exist.
     /// </summary>
-    /// <typeparam name="TVersion">The type used to represent stream versions.</typeparam>
-    /// <returns>An observed state indicating that the stream does not exist.</returns>
+    /// <typeparam name="TVersion">The type of the stream version.</typeparam>
+    /// <returns><see cref="ObservedStreamState{TVersion}.DoesNotExist"/>.</returns>
     public static ObservedStreamState<TVersion> DoesNotExist<TVersion>() where TVersion : notnull =>
         ObservedStreamState<TVersion>.DoesNotExist;
 
     /// <summary>
-    /// Creates an observed state indicating that the stream exists at the specified version.
+    /// Creates the state of a stream that exists at the specified version.
     /// </summary>
-    /// <typeparam name="TVersion">The type used to represent stream versions.</typeparam>
-    /// <param name="version">The observed stream version.</param>
-    /// <returns>An observed state for the specified stream version.</returns>
+    /// <typeparam name="TVersion">The type of the stream version.</typeparam>
+    /// <param name="version">The observed version.</param>
+    /// <returns>The state of a stream at <paramref name="version"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="version"/> is <see langword="null"/>.</exception>
     public static ObservedStreamState<TVersion> AtVersion<TVersion>(TVersion version) where TVersion : notnull =>
         ObservedStreamState<TVersion>.AtVersion(version);
 }
 
 /// <summary>
-/// Represents the observed state of an event stream at a point in time. The default value represents a stream that
-/// does not exist.
+/// Represents the state of a stream as observed by an operation. The default value is <see cref="DoesNotExist"/>.
 /// </summary>
-/// <typeparam name="TVersion">The type used to represent the stream version.</typeparam>
+/// <typeparam name="TVersion">The type of the stream version.</typeparam>
 public readonly record struct ObservedStreamState<TVersion> where TVersion : notnull
 {
     /// <summary>
-    /// Represents a stream with no events.
+    /// The state of a stream that does not exist.
     /// </summary>
     public static readonly ObservedStreamState<TVersion> DoesNotExist = new(ObservedStreamStateKind.DoesNotExist);
 
@@ -43,17 +42,17 @@ public readonly record struct ObservedStreamState<TVersion> where TVersion : not
     }
 
     /// <summary>
-    /// Gets the kind of this observed stream state.
+    /// Gets the kind of state.
     /// </summary>
     public ObservedStreamStateKind Kind { get; }
 
     /// <summary>
-    /// Gets a value indicating whether the stream exists at a specific version.
+    /// Gets a value that indicates whether the stream exists.
     /// </summary>
     public bool HasVersion => Kind == ObservedStreamStateKind.AtVersion;
 
     /// <summary>
-    /// Gets the observed stream version.
+    /// Gets the observed version.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// <see cref="HasVersion"/> is <see langword="false"/>.
@@ -63,10 +62,10 @@ public readonly record struct ObservedStreamState<TVersion> where TVersion : not
         : throw new InvalidOperationException("Stream state has no version.");
 
     /// <summary>
-    /// Creates an observed state representing an existing stream at the specified version.
+    /// Creates the state of a stream that exists at the specified version.
     /// </summary>
-    /// <param name="version">The observed stream version.</param>
-    /// <returns>An observed state for the specified stream version.</returns>
+    /// <param name="version">The observed version.</param>
+    /// <returns>The state of a stream at <paramref name="version"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="version"/> is <see langword="null"/>.</exception>
     public static ObservedStreamState<TVersion> AtVersion(TVersion version)
     {
@@ -75,7 +74,7 @@ public readonly record struct ObservedStreamState<TVersion> where TVersion : not
     }
 
     /// <summary>
-    /// Returns a string representation of this observed stream state.
+    /// Returns a string that represents this state.
     /// </summary>
     public override string ToString() => HasVersion ? $"Version={Version}" : Kind.ToString();
 }

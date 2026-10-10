@@ -1,33 +1,33 @@
 ﻿namespace DomainBlocks.EventSourcing;
 
 /// <summary>
-/// Adapts event-sourced state of a given type to its events and stream identifier.
+/// Defines how event-sourced state maps to its stream and events.
 /// </summary>
-/// <typeparam name="TState">The state type being adapted.</typeparam>
-/// <typeparam name="TEvent">The event type applied by the adapter.</typeparam>
-/// <typeparam name="TStreamId">The type of stream identifier used by the adapter.</typeparam>
+/// <typeparam name="TState">The type of the state.</typeparam>
+/// <typeparam name="TEvent">The type of the events.</typeparam>
+/// <typeparam name="TStreamId">The type of a stream ID.</typeparam>
 public interface IEventSourcedStateAdapter<TState, TEvent, out TStreamId>
     where TState : notnull
     where TEvent : notnull
     where TStreamId : notnull
 {
     /// <summary>
-    /// Creates the initial state to which events can be applied.
+    /// Creates the state before any events are applied.
     /// </summary>
     TState CreateInitialState();
 
     /// <summary>
-    /// Loads state by applying the supplied events to the initial state.
+    /// Loads state by applying events to the initial state.
     /// </summary>
     Task<TState> LoadAsync(TState initialState, IAsyncEnumerable<TEvent> events, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Gets the identifier for the event stream representing the state.
+    /// Gets the ID of the state's stream.
     /// </summary>
     TStreamId GetStreamId(TState state);
 
     /// <summary>
-    /// Gets any uncommitted events that have been applied to the state.
+    /// Gets the events applied to the state that are not yet saved.
     /// </summary>
     IEnumerable<TEvent> GetUncommittedEvents(TState state);
 }

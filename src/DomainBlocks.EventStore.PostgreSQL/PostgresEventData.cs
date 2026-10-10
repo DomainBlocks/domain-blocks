@@ -1,8 +1,7 @@
 namespace DomainBlocks.EventStore.PostgreSQL;
 
 /// <summary>
-/// The stored representation of an event's data: either a JSON document, held in a <c>jsonb</c> column, or raw bytes,
-/// held in a <c>bytea</c> column.
+/// Represents stored event data: JSON in a <c>jsonb</c> column, or bytes in a <c>bytea</c> column.
 /// </summary>
 public readonly struct PostgresEventData
 {

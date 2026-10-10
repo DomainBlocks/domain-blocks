@@ -1,7 +1,7 @@
 namespace DomainBlocks.Serialization.Abstractions;
 
 /// <summary>
-/// Serializes objects to, and deserializes them from, a data representation of type <typeparamref name="TData"/>.
+/// Defines methods that serialize objects to and from <typeparamref name="TData"/>.
 /// </summary>
 public interface IObjectSerializer<TData>
 {

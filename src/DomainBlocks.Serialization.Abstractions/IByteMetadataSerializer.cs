@@ -1,9 +1,8 @@
 namespace DomainBlocks.Serialization.Abstractions;
 
 /// <summary>
-/// A metadata serializer over UTF-8 or binary bytes. Implementations serialize to a byte array and deserialize from
-/// a span, which lets one implementation serve both <see cref="T:byte[]"/> and <see cref="ReadOnlyMemory{T}"/> data
-/// without copying.
+/// Defines a metadata serializer for UTF-8 or binary data that serves both <see cref="T:byte[]"/> and
+/// <see cref="ReadOnlyMemory{T}"/> without copying.
 /// </summary>
 public interface IByteMetadataSerializer : IMetadataSerializer<byte[]>, IMetadataSerializer<ReadOnlyMemory<byte>>
 {

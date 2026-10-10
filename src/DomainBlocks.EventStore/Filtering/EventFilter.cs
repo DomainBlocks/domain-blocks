@@ -5,7 +5,7 @@ using DomainBlocks.EventStore.Filtering.Nodes;
 namespace DomainBlocks.EventStore.Filtering;
 
 /// <summary>
-/// Selects events by what is stored about them: the event name, the stream ID, the metadata, and the creation time.
+/// Represents a condition that selects events by name, stream ID, metadata, or creation time.
 /// </summary>
 public abstract class EventFilter
 {
@@ -14,17 +14,17 @@ public abstract class EventFilter
     }
 
     /// <summary>
-    /// Matches every event.
+    /// Gets a filter that matches every event.
     /// </summary>
     public static EventFilter All { get; } = new AllEventsFilter();
 
     /// <summary>
-    /// Matches no event.
+    /// Gets a filter that matches no events.
     /// </summary>
     public static EventFilter None { get; } = new NoEventsFilter();
 
     /// <summary>
-    /// Matches events whose name is one of <paramref name="eventNames"/>, using an ordinal comparison.
+    /// Creates a filter that matches events whose name is one of <paramref name="eventNames"/>, compared ordinally.
     /// </summary>
     public static EventFilter EventNames(params IEnumerable<string> eventNames)
     {
@@ -42,7 +42,7 @@ public abstract class EventFilter
     }
 
     /// <summary>
-    /// Matches events whose stream ID is one of <paramref name="streamIds"/>, using an ordinal comparison.
+    /// Creates a filter that matches events whose stream ID is one of <paramref name="streamIds"/>, compared ordinally.
     /// </summary>
     public static EventFilter StreamIds(params IEnumerable<string> streamIds)
     {
@@ -60,7 +60,7 @@ public abstract class EventFilter
     }
 
     /// <summary>
-    /// Matches events whose stream ID starts with <paramref name="prefix"/>, using an ordinal comparison.
+    /// Creates a filter that matches events whose stream ID starts with <paramref name="prefix"/>, compared ordinally.
     /// </summary>
     public static EventFilter StreamIdStartsWith(string prefix)
     {
@@ -71,7 +71,7 @@ public abstract class EventFilter
     }
 
     /// <summary>
-    /// Matches events that have a metadata entry with the key <paramref name="key"/>.
+    /// Creates a filter that matches events with a metadata entry for <paramref name="key"/>.
     /// </summary>
     public static EventFilter MetadataExists(string key)
     {
@@ -82,8 +82,8 @@ public abstract class EventFilter
     }
 
     /// <summary>
-    /// Matches events whose metadata entry with the key <paramref name="key"/> has one of <paramref name="values"/>,
-    /// using an ordinal comparison.
+    /// Creates a filter that matches events whose metadata value for <paramref name="key"/> is one of
+    /// <paramref name="values"/>, compared ordinally.
     /// </summary>
     public static EventFilter Metadata(string key, params IEnumerable<string> values)
     {
@@ -103,17 +103,18 @@ public abstract class EventFilter
     }
 
     /// <summary>
-    /// Matches events created at or after <paramref name="from"/>.
+    /// Creates a filter that matches events created at or after <paramref name="from"/>.
     /// </summary>
     public static EventFilter CreatedAtOrAfter(DateTimeOffset from) => new CreatedAtFilter(from, null);
 
     /// <summary>
-    /// Matches events created before <paramref name="before"/>.
+    /// Creates a filter that matches events created before <paramref name="before"/>.
     /// </summary>
     public static EventFilter CreatedBefore(DateTimeOffset before) => new CreatedAtFilter(null, before);
 
     /// <summary>
-    /// Matches events that match every one of <paramref name="filters"/>. With no filters, it matches every event.
+    /// Creates a filter that matches events that match all of <paramref name="filters"/>, or every event if there are
+    /// none.
     /// </summary>
     public static EventFilter AllOf(params IEnumerable<EventFilter> filters)
     {
@@ -128,7 +129,8 @@ public abstract class EventFilter
     }
 
     /// <summary>
-    /// Matches events that match at least one of <paramref name="filters"/>. With no filters, it matches no event.
+    /// Creates a filter that matches events that match any of <paramref name="filters"/>, or no events if there are
+    /// none.
     /// </summary>
     public static EventFilter AnyOf(params IEnumerable<EventFilter> filters)
     {
@@ -143,7 +145,7 @@ public abstract class EventFilter
     }
 
     /// <summary>
-    /// Matches events that match both filters. The left filter is evaluated first.
+    /// Creates a filter that matches events that match both filters.
     /// </summary>
     public static EventFilter operator &(EventFilter left, EventFilter right)
     {
@@ -160,7 +162,7 @@ public abstract class EventFilter
     }
 
     /// <summary>
-    /// Matches events that match either filter. The left filter is evaluated first.
+    /// Creates a filter that matches events that match either filter.
     /// </summary>
     public static EventFilter operator |(EventFilter left, EventFilter right)
     {
@@ -177,7 +179,7 @@ public abstract class EventFilter
     }
 
     /// <summary>
-    /// Matches events that do not match <paramref name="filter"/>.
+    /// Creates a filter that matches events that <paramref name="filter"/> does not match.
     /// </summary>
     public static EventFilter operator !(EventFilter filter)
     {
@@ -193,19 +195,19 @@ public abstract class EventFilter
     }
 
     /// <summary>
-    /// Determines whether this filter matches the specified event.
+    /// Determines whether this filter matches an event.
     /// </summary>
     public abstract bool Matches(IFilterableEvent filterable);
 
     /// <summary>
-    /// Returns a description of the filter for logs and messages, written as the expression that builds it.
+    /// Returns the expression that builds this filter, for logs and messages.
     /// </summary>
     public abstract override string ToString();
 
     private protected static string Format(string name, IEnumerable<string> values) =>
         $"{name}({string.Join(", ", values.Select(Quote))})";
 
-    // In UTC, so that an instant reads the same whatever offset it was given with.
+    // The instant is formatted in UTC, so equal instants format the same whatever offset they were given with.
     private protected static string Format(DateTimeOffset instant) =>
         instant.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
 
@@ -216,10 +218,10 @@ public abstract class EventFilter
     private static ImmutableArray<EventFilter> DisjunctsOf(EventFilter filter) =>
         filter is OrFilter disjunction ? disjunction.Operands : [filter];
 
-    // Escaped, so a value cannot be mistaken for the end of the string or for another value.
+    // Backslashes and quotes are escaped, so a value cannot be mistaken for the closing quote or for another value.
     private static string Quote(string value) => $"\"{value.Replace(@"\", @"\\").Replace("\"", "\\\"")}\"";
 
-    // No store can hold a NUL character in a string or search for one.
+    // PostgreSQL text cannot contain a NUL character, so no store accepts one in a filter value.
     private static void ThrowIfContainsNul(string value, string paramName)
     {
         if (value.Contains('\0'))

@@ -5,7 +5,7 @@ namespace DomainBlocks.Benchmarking.EventStore;
 /// <summary>
 /// An event store whose appends do nothing beyond a thread-pool hop, as a real store's do when its append loop
 /// completes the caller from another thread. Benchmarking it measures the ceiling of the benchmark harness itself,
-/// which is the yardstick for every real store's result: a store figure close to the no-op figure is a harness limit,
+/// which is the yardstick for every real store's result. A store figure close to the no-op figure is a harness limit,
 /// not a store limit.
 /// </summary>
 public sealed class NoOpEventStore : IEventStore<object, string, StreamPosition, LogPosition>

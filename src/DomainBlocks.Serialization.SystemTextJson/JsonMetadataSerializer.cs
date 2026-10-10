@@ -6,7 +6,7 @@ using DomainBlocks.Serialization.Abstractions;
 namespace DomainBlocks.Serialization.SystemTextJson;
 
 /// <summary>
-/// Serializes metadata as a JSON string, for stores whose metadata column holds text (e.g. PostgreSQL <c>jsonb</c>).
+/// Serializes metadata as a JSON string.
 /// </summary>
 public sealed class JsonMetadataSerializer(JsonSerializerOptions? options = null) : IMetadataSerializer<string>
 {

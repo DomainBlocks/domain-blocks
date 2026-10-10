@@ -5,7 +5,7 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 public static class ObjectSerializerExtensions
 {
     /// <summary>
-    /// Adapts a JSON string serializer so that event data is stored in the <c>jsonb</c> column.
+    /// Adapts a JSON string serializer to store event data in the <c>jsonb</c> column.
     /// </summary>
     public static IObjectSerializer<PostgresEventData> AsPostgresEventDataSerializer(
         this IObjectSerializer<string> serializer)
@@ -14,7 +14,7 @@ public static class ObjectSerializerExtensions
     }
 
     /// <summary>
-    /// Adapts a byte array serializer so that event data is stored in the <c>bytea</c> column.
+    /// Adapts a byte array serializer to store event data in the <c>bytea</c> column.
     /// </summary>
     public static IObjectSerializer<PostgresEventData> AsPostgresEventDataSerializer(
         this IObjectSerializer<byte[]> serializer)
@@ -23,7 +23,7 @@ public static class ObjectSerializerExtensions
     }
 
     /// <summary>
-    /// Adapts a byte memory serializer so that event data is stored in the <c>bytea</c> column.
+    /// Adapts a byte memory serializer to store event data in the <c>bytea</c> column.
     /// </summary>
     public static IObjectSerializer<PostgresEventData> AsPostgresEventDataSerializer(
         this IObjectSerializer<ReadOnlyMemory<byte>> serializer)

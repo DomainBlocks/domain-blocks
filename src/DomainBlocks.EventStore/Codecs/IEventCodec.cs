@@ -1,11 +1,9 @@
 namespace DomainBlocks.EventStore.Codecs;
 
 /// <summary>
-/// Translates between events and the records a store persists, in both directions. This is the only thing a store
-/// needs to know about events: how to name and serialize them on the way in, and how to resolve and deserialize them
-/// on the way out.
+/// Defines how a store encodes events into stored records and decodes them back.
 /// </summary>
-/// <typeparam name="TEvent">The event base type.</typeparam>
+/// <typeparam name="TEvent">The base type of the events.</typeparam>
 /// <typeparam name="TEventData">The store's representation of event data.</typeparam>
 /// <typeparam name="TMetadata">The store's representation of metadata.</typeparam>
 public interface IEventCodec<TEvent, TEventData, TMetadata> :

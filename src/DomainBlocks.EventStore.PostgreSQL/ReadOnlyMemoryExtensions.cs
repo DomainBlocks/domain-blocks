@@ -7,8 +7,8 @@ internal static class ReadOnlyMemoryExtensions
     extension(ReadOnlyMemory<byte> bytes)
     {
         /// <summary>
-        /// Returns the underlying array when the memory covers a whole array, otherwise a copy. The result may alias
-        /// the caller's buffer, so it must only be read from.
+        /// Returns the underlying array if the memory spans all of it, and otherwise a copy. The result may be the
+        /// caller's own buffer, so it must only be read.
         /// </summary>
         public byte[] GetArrayOrCopy()
         {

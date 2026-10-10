@@ -16,7 +16,7 @@ internal static class ChangeStreamResumePolicy
             return true;
         }
 
-        // Requires wire version 9 or higher.
+        // The resumable error label requires wire version 9 or higher.
         return exception is MongoException ex && ex.HasErrorLabel(MongoErrorLabels.ResumableChangeStreamError);
     }
 }

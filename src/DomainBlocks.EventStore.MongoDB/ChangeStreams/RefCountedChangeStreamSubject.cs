@@ -27,8 +27,7 @@ internal static class RefCountedChangeStreamSubject
 }
 
 /// <summary>
-/// Connects the underlying subject when the first observer is attached and disconnects it when the last observer is
-/// detached.
+/// Connects the subject on the first attach and disconnects it on the last detach.
 /// </summary>
 internal sealed class RefCountedChangeStreamSubject<TResult>(
     Func<IChangeStreamSubject<TResult>> subjectFactory) :
@@ -93,8 +92,9 @@ internal sealed class RefCountedChangeStreamSubject<TResult>(
             if (ReferenceEquals(_currentSubjectConnection, subjectConnection))
                 _currentSubjectConnection = null;
 
-            // Within the gate, so that the next connection is not made until this one has handed out its last change.
-            // Observers may share what they make of a change, which two connections at once would corrupt.
+            // This runs within the gate, so the next connection is not made until this one has handed out its last
+            // change. Observers may share what the selector makes of a change, and two connections at once would
+            // corrupt it.
             await subjectConnection.Connection.DisposeAsync().ConfigureAwait(false);
         }
         finally

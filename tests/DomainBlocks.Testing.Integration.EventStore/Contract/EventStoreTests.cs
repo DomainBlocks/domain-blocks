@@ -199,7 +199,7 @@ public abstract class EventStoreTests<TStreamPos, TLogPos>(IEventStoreTestHarnes
             StreamNotFoundBehavior = StreamNotFoundBehavior.Throw
         };
 
-        // The stream must be materialized for the store to notice that it does not exist.
+        // The read is lazy, so it must be enumerated before the store can notice that the stream does not exist.
         await EventStore
             .ReadStream(streamId, direction, origin, options)
             .ToArrayAsync(cancellationToken)

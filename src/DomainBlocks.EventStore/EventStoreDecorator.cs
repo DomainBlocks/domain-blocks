@@ -75,8 +75,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         AppendOptions? options,
         CancellationToken cancellationToken)
     {
-        // The store has consumed every event by the time the append operation completes, so the buffer can go back to
-        // the pool.
+        // The store has consumed every event when the append completes, so the buffer can return to the pool.
         using var buffer = new MetadataBuffer();
 
         await Inner
@@ -200,12 +199,8 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         }
     }
 
-    /// <summary>
-    /// Applies <paramref name="transform"/> to <paramref name="event"/> and then, depth-first, applies any transform
-    /// that matches an event it produces to preserve event order. Derived events inherit the source event's context. If
-    /// a transform produces no events, the configured ignored event sentinel is emitted in its place so that the source
-    /// event's position is still observed. An exception is thrown if no sentinel is configured.
-    /// </summary>
+    // Transforms are applied depth-first, so derived events stay in the order of their source events. Each derived
+    // event inherits the context of its source event.
     private void Expand(
         ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos> @event,
         IReadEventTransform<TEvent> transform,

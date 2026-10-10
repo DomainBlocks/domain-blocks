@@ -1,8 +1,7 @@
 namespace DomainBlocks.Serialization.Abstractions;
 
 /// <summary>
-/// Serializes flat string metadata to, and deserializes it from, a data representation of type
-/// <typeparamref name="TData"/>.
+/// Defines methods that serialize flat string metadata to and from <typeparamref name="TData"/>.
 /// </summary>
 public interface IMetadataSerializer<TData>
 {

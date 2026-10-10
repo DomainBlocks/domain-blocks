@@ -1,8 +1,8 @@
 namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 
 /// <summary>
-/// Connects the underlying feed when the first observer is attached and disconnects it when the last observer is
-/// detached. A feed whose connection has completed or faulted is replaced on the next attach.
+/// Connects the feed on the first attach and disconnects it on the last detach. A completed or faulted feed is replaced
+/// on the next attach.
 /// </summary>
 internal sealed class RefCountedEventLogFeed<T>(Func<IEventLogFeed<T>> feedFactory) :
     IRefCountedEventLogFeed<T>,
@@ -53,8 +53,7 @@ internal sealed class RefCountedEventLogFeed<T>(Func<IEventLogFeed<T>> feedFacto
     }
 
     /// <summary>
-    /// Disconnects the current feed, if any, and rejects further attachments. Observers still attached are notified
-    /// through their attachment being invalidated by the feed completing.
+    /// Disconnects the feed and rejects further attachments. Observers still attached are not notified.
     /// </summary>
     public async ValueTask DisposeAsync()
     {

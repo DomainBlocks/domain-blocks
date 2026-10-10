@@ -5,7 +5,7 @@ namespace DomainBlocks.Testing.Integration.EventStore.MongoDB;
 
 /// <summary>
 /// The MongoDB replica set shared by every fixture in a test assembly. An assembly's <c>[SetUpFixture]</c> starts and
-/// stops it; fixtures reach it through the static members.
+/// stops it, and fixtures reach it through the static members.
 /// </summary>
 public static class MongoTestEnvironment
 {

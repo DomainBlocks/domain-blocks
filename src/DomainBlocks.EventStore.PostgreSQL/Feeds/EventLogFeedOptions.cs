@@ -10,7 +10,7 @@ internal sealed class EventLogFeedOptions
     public int MaxRetryAttempts { get; set; } = int.MaxValue;
 
     /// <summary>
-    /// The base delay between attempts to establish a session. Grows exponentially, with jitter, up to
+    /// The initial delay between attempts to establish a session, growing exponentially, with jitter, up to
     /// <see cref="MaxRetryDelay"/>.
     /// </summary>
     public TimeSpan RetryDelay { get; set; } = TimeSpan.FromSeconds(1);

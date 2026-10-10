@@ -178,7 +178,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     [Test]
     public async Task ExistingCommitId_ProbeUsesPartialIndex()
     {
-        // The probe must repeat the index predicate; without it the planner falls back to a sequential scan.
+        // The probe must repeat the index predicate. Without it, the planner falls back to a sequential scan.
         await Client.AppendAsync(
         [
             Any("s1", JsonEvent(), JsonEvent()),
@@ -204,8 +204,8 @@ public class AppendFunctionTests : PostgresIntegrationTest
     public async Task GetAppendStatus_CalledPerRow_IsInlined()
     {
         // The helper must be inlined so that the decision is planned as part of the calling statement rather than
-        // evaluated as a function call per request. An inlined call leaves no trace of the function in the plan.
-        // Column arguments keep the planner from constant-folding the call, which would hide a missing inline.
+        // evaluated as a function call per request. An inlined call leaves no trace of the function in the plan. Column
+        // arguments keep the planner from constant-folding the call, which would hide a missing inline.
         await using var command = DataSource.CreateCommand(
             $"EXPLAIN (VERBOSE, COSTS OFF) SELECT {Schema}.get_append_status(" +
             $"false, (enum_range(NULL::{Schema}.expected_state_kind))[k], NULL, -1) " +
@@ -220,9 +220,9 @@ public class AppendFunctionTests : PostgresIntegrationTest
     [Test]
     public async Task ZipRequests_CalledInFrom_IsInlined()
     {
-        // A set-returning helper must be inlined as a subquery; a Function Scan on it would mean the planner runs it
-        // as a black box. The probe passes constants only, since a volatile argument such as gen_random_uuid() blocks
-        // inlining by itself and would fail the test for the wrong reason.
+        // A set-returning helper must be inlined as a subquery. A Function Scan on it would mean that the planner runs
+        // it as a black box. The probe passes only constants, because a volatile argument such as gen_random_uuid()
+        // blocks inlining by itself and would fail the test for the wrong reason.
         await using var command = DataSource.CreateCommand(
             $"EXPLAIN (COSTS OFF) SELECT * FROM {Schema}.zip_requests(" +
             $"ARRAY['s1'], ARRAY['any']::{Schema}.expected_state_kind[], ARRAY[NULL::bigint], " +
@@ -287,7 +287,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     [Test]
     public async Task RepeatedCommitIdInBatch_OnDistinctStreams_WritesFirstOnly()
     {
-        // In-batch duplicates on distinct streams: the first occurrence wins, later ones report Duplicate.
+        // Duplicates within the batch, on distinct streams. The first occurrence wins, and later ones report Duplicate.
         var request = Any("s1", JsonEvent());
 
         var results = await Client.AppendAsync(
@@ -510,8 +510,8 @@ public class AppendFunctionTests : PostgresIntegrationTest
     [Test]
     public async Task UnknownExpectedKind_RaisesInvalidTextRepresentation()
     {
-        // The enum rejects a label it does not have while the batch is read, before the function runs. The typed
-        // client cannot express it, so this goes through raw SQL.
+        // The enum rejects a label it does not have while the batch is read, before the function runs. The typed client
+        // cannot express it, so this goes through raw SQL.
         var ex = await Should.ThrowAsync<PostgresException>(() =>
             AppendRawAsync(
                 $"ARRAY['s1', 's2'], {Kinds("'any', 'maybe'")}, ARRAY[NULL::bigint, NULL::bigint], " +
@@ -595,8 +595,8 @@ public class AppendFunctionTests : PostgresIntegrationTest
     [TestCase(false)]
     public async Task LargeBatch_CompletesInLinearTime(bool distinctStreams)
     {
-        // 500 requests x 10 events, with distinct and with repeated streams. A quadratic cost inside the function
-        // would make this take seconds.
+        // 500 requests of 10 events, with distinct and with repeated streams. The time limit is there to catch a cost
+        // inside the function that grows quadratically with the batch size.
         var requests = Enumerable
             .Range(0, 500)
             .Select(i => Any(
@@ -617,7 +617,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     /// <summary>
-    /// The SQL of an expected kinds array: labels are text until cast to the enum.
+    /// The SQL of an expected kinds array. The labels are text until they are cast to the enum.
     /// </summary>
     private string Kinds(string labels) => $"ARRAY[{labels}]::{Schema}.expected_state_kind[]";
 

@@ -43,7 +43,7 @@ public static class MongoEventStore
             new MongoSequencedAppenderOptions
             {
                 QueueCapacity = options.AppendQueueCapacity,
-                MaxBatchSize = options.AppendBatchSize
+                MaxBatchSize = options.AppendMaxBatchSize
             },
             logger);
 
@@ -59,11 +59,11 @@ public static class MongoEventStore
 }
 
 /// <summary>
-/// A MongoDB event store: sequenced appender, event log collection and change-stream subject over a client. Created
-/// by <see cref="MongoEventStore.Create{TEvent}"/> over a client the caller owns, or by
-/// <see cref="MongoEventStoreBuilder{TEvent}"/>, which may also create a client for the store to own. Disposing the
-/// store releases its append queue, and the client only when the store owns it.
+/// Represents an event store backed by MongoDB. Create one with <see cref="MongoEventStoreBuilder{TEvent}"/>.
 /// </summary>
+/// <remarks>
+/// Disposing the store disposes its client only if the builder created it.
+/// </remarks>
 public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, StreamPosition, LogPosition>
     where TEvent : notnull
 {
@@ -104,8 +104,8 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
     }
 
     /// <summary>
-    /// Creates the event log's indexes and its sequence document if they do not already exist. Idempotent, so it can
-    /// run on every start-up. It must have run before the first append.
+    /// Creates the event log's indexes and the sequence document that appends claim log positions from, if they do not
+    /// exist. Idempotent, so it can run at every startup. Run it before the first append.
     /// </summary>
     public Task EnsureInitializedAsync(CancellationToken cancellationToken = default)
     {
@@ -308,9 +308,9 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
             _logger);
     }
 
-    // A filter is translated at the call, so that one that cannot be translated is refused there rather than on
-    // enumeration. A read or catch-up without a filter has no further condition, so it runs exactly the query it would
-    // if there were no filters.
+    // A filter is translated when the method is called, so a filter that cannot be translated is refused there rather
+    // than on enumeration. A read or catch-up without a filter has no further condition, so it runs exactly the query
+    // it would run if there were no filters.
     private static FilterDefinition<BsonDocument>? TranslateFilter(EventFilter? filter) =>
         filter is null or AllEventsFilter ? null : MongoFilterTranslator.Translate(filter);
 
@@ -320,9 +320,9 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         _ownedClient?.Dispose();
     }
 
-    // The subject hands every subscription each insert as the store's one live document, set to the inserted document
-    // before the fan-out. The document is shared, so a connection of the subject is only replaced once it has handed
-    // out its last change.
+    // The subject sets the store's one live document to each inserted document and then hands it to every subscription.
+    // Because the document is shared, the subject replaces a connection only after that connection has handed out its
+    // last change.
     private RefCountedChangeStreamSubject<EventLogDocument<TEvent>> CreateAllEventsSubject(
         IMongoCollection<BsonDocument> eventLog,
         ILogger? logger)

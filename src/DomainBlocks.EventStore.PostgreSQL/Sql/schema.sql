@@ -1,34 +1,32 @@
--- Event store schema. The __schema__ token is replaced with the validated schema name before execution. The script is
--- executed inside a single transaction; the advisory lock serializes concurrent initializers so that racing
--- CREATE ... IF NOT EXISTS statements cannot fail on catalog uniqueness.
+-- Event store schema. __schema__ is replaced with the validated schema name. The script runs in one transaction, and
+-- the advisory lock serializes initializers so that racing CREATE ... IF NOT EXISTS statements cannot fail on catalog
+-- uniqueness.
 
 SELECT pg_advisory_xact_lock(hashtext('__schema__:init'));
 
 CREATE SCHEMA IF NOT EXISTS __schema__;
 
--- The codes append_events exchanges with its caller. CREATE TYPE has no IF NOT EXISTS, so each enum is guarded by a
--- catalog check, which the advisory lock above makes race-free. Without a migration mechanism the labels are
--- effectively frozen: a label added with ALTER TYPE cannot be used in the transaction that adds it.
+-- The codes that append_events exchanges with its caller. CREATE TYPE has no IF NOT EXISTS, so each enum is guarded by
+-- a catalog check, which the advisory lock makes race-free. Without a migration mechanism the labels are effectively
+-- frozen, because a label added with ALTER TYPE cannot be used in the transaction that adds it.
 DO
 $init$
     BEGIN
-        -- What a request expects of its stream: anything, that it does not exist, that it exists, or that its head is
-        -- at a given version.
+        -- What a request expects of its stream.
         IF to_regtype('__schema__.expected_state_kind') IS NULL THEN
             CREATE TYPE __schema__.expected_state_kind AS ENUM ('any', 'does_not_exist', 'exists', 'at_version');
         END IF;
 
-        -- The outcome of a request: appended, rejected because the stream was not in the expected state, or skipped
-        -- because its commit id had already been appended.
+        -- The outcome of a request: appended, a conflict with the expected state, or a duplicate commit ID.
         IF to_regtype('__schema__.append_status') IS NULL THEN
             CREATE TYPE __schema__.append_status AS ENUM ('appended', 'conflict', 'duplicate');
         END IF;
     END
 $init$;
 
--- stream_id is only ever compared for equality, so it uses the byte-wise "C" collation: under a locale collation every
--- comparison in the (stream_id, stream_position) index runs the collator over the ids' common prefix, which doubled the
--- cost of a batch for ids shaped like "<category>-<guid>".
+-- stream_id is only compared for equality, so it uses the byte-wise "C" collation. A locale collation runs the collator
+-- over the common prefix of the IDs in every index comparison, which doubled the cost of a batch for IDs like
+-- "<category>-<guid>".
 CREATE TABLE IF NOT EXISTS __schema__.event_log
 (
     position         bigint           NOT NULL,
@@ -49,12 +47,13 @@ CREATE TABLE IF NOT EXISTS __schema__.event_log
     CONSTRAINT event_log_commit_index_check CHECK (commit_index >= 0)
 );
 
--- Idempotency probe. Every request writes a row with commit_index 0, so indexing only those rows is enough to detect a
--- repeated commit id and keeps the index to one entry per request rather than one per event. It is unique so that the
--- invariant append_events relies on holds even if another writer inserts into the table.
+-- Idempotency probe. Every request writes one row with commit_index 0, so indexing only those rows detects a repeated
+-- commit ID with one index entry per request. The index is unique, so the invariant that append_events relies on holds
+-- even if another writer inserts into the table.
 CREATE UNIQUE INDEX IF NOT EXISTS event_log_commit_id_idx ON __schema__.event_log (commit_id) WHERE commit_index = 0;
 
--- A single hot row per sequence. The low fill factor leaves room for HOT updates so the row never leaves its page.
+-- Each sequence has a single, frequently updated row. The low fill factor leaves room for HOT updates, which keep the
+-- row on its page.
 CREATE TABLE IF NOT EXISTS __schema__.sequences
 (
     name text   NOT NULL,

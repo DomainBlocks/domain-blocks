@@ -49,8 +49,8 @@ public class PostgresFeedRecoveryTests() : PostgresIntegrationTest(x =>
 
         var oldSlot = await TerminateWalSenderAsync(ct);
 
-        // Committed while the feed is down or reconnecting: never streamed by the new slot, so it must be recovered
-        // by catch-up.
+        // This event commits while the feed is down or reconnecting. The new slot never streams it, so catch-up must
+        // recover it.
         var during = await AppendEventsAsync("during", 20, ct);
 
         var recovered = await ReadUntilRecoveredAsync(enumerator);

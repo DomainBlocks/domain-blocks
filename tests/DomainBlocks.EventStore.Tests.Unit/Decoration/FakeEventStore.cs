@@ -3,8 +3,8 @@ using System.Runtime.CompilerServices;
 namespace DomainBlocks.EventStore.Tests.Unit.Decoration;
 
 /// <summary>
-/// An in-memory stand-in for a store: snapshots what is appended during the append, as a real store encodes it,
-/// and replays configured read events and subscription messages.
+/// An in-memory stand-in for a store. It snapshots what is appended during the append, as a real store encodes it, and
+/// replays the configured read events and subscription messages.
 /// </summary>
 internal sealed class FakeEventStore : IEventStore<object, string, StreamPosition, LogPosition>
 {

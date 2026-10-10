@@ -3,39 +3,40 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 public sealed class PostgresEventStoreOptions
 {
     /// <summary>
-    /// The schema that holds the event log, sequence and append function. Must match ^[a-z_][a-z0-9_]{0,62}$.
+    /// Gets or sets the schema of the store's tables and functions, which must match <c>^[a-z_][a-z0-9_]{0,62}$</c>.
+    /// The default is <c>dbx</c>.
     /// </summary>
     public string Schema { get; set; } = "dbx";
 
     /// <summary>
-    /// The maximum number of append requests that may be queued before callers are made to wait.
+    /// Gets or sets the maximum number of queued append requests before callers wait. The default is 1,000.
     /// </summary>
     public int AppendQueueCapacity { get; set; } = 1_000;
 
     /// <summary>
-    /// The maximum number of append requests committed together in one round trip to the database.
+    /// Gets or sets the maximum number of append requests committed in one round trip. The default is 500.
     /// </summary>
-    public int AppendBatchSize { get; set; } = 500;
+    public int AppendMaxBatchSize { get; set; } = 500;
 
     /// <summary>
-    /// How long to wait for further append requests to accumulate before committing a partial batch. Zero disables
-    /// coalescing.
+    /// Gets or sets the maximum time to wait for more append requests when a batch is not full. The default is
+    /// <see cref="TimeSpan.Zero"/>, which commits without waiting.
     /// </summary>
     public TimeSpan AppendBatchingDelay { get; set; } = TimeSpan.Zero;
 
     /// <summary>
-    /// The number of queued append requests that must be observed together before the batching delay applies.
+    /// Gets or sets how many append requests a batch must already hold before <see cref="AppendBatchingDelay"/>
+    /// applies. The default is 0.
     /// </summary>
     public int AppendBatchingDelayMinCount { get; set; }
 
     /// <summary>
-    /// The number of events fetched per round trip when reading. Reads page through the log with keyset queries so
-    /// that a slow consumer does not hold a pooled connection open for the whole enumeration.
+    /// Gets or sets the number of events fetched per round trip when reading. The default is 1,000.
     /// </summary>
-    public int ReadBatchSize { get; set; } = 1_000;
+    public int ReadPageSize { get; set; } = 1_000;
 
     /// <summary>
-    /// Configures the logical replication connection that feeds live subscriptions.
+    /// Gets or sets the options for the replication connection that feeds live subscriptions.
     /// </summary>
     public PostgresReplicationOptions Replication { get; set; } = new();
 }

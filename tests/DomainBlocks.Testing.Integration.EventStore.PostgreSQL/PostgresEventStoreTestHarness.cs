@@ -99,7 +99,7 @@ public sealed class PostgresEventStoreTestHarness(Action<PostgresEventStoreOptio
         var sharedBuffers = await ShowAsync("shared_buffers");
 
         return
-            $"PostgresEventStore: schema {options.Schema}, append batch size {options.AppendBatchSize}, " +
+            $"PostgresEventStore: schema {options.Schema}, append batch size {options.AppendMaxBatchSize}, " +
             $"append queue capacity {options.AppendQueueCapacity}, batching delay {options.AppendBatchingDelay} " +
             $"(min count {options.AppendBatchingDelayMinCount}); " +
             $"server {version}: wal_writer_delay {walWriterDelay}, synchronous_commit {synchronousCommit}, " +

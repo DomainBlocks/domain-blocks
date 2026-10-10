@@ -1,11 +1,10 @@
--- Helpers of append_events. The __schema__ token is replaced with the validated schema name. Each helper is either
--- inlined by the planner into the statement that calls it, or called once per batch, so the split costs nothing at
--- run time. The enums the helpers take and return are created in schema.sql.
+-- Helpers of append_events. __schema__ is replaced with the validated schema name. Each helper is either inlined by the
+-- planner or called once per batch, so splitting them out adds no function call per row. Their enums are created in
+-- schema.sql.
 
--- Rejects a batch that violates the protocol: request or event arrays of different lengths, an event count that is
--- not positive, or a request whose fields are missing or inconsistent. One pass over the request arrays computes the
--- event total and, for each rule, the first request that breaks it, so the error names the request by the 0-based
--- index the caller used.
+-- Rejects a batch that violates the protocol, such as arrays of different lengths, an event count that is not positive,
+-- or request fields that are missing or inconsistent. One pass finds the first request that breaks each rule, so the
+-- error can name that request by the 0-based index the caller used.
 CREATE OR REPLACE FUNCTION __schema__.validate_append_batch(
     p_stream_ids text[],
     p_expected_kinds __schema__.expected_state_kind[],
@@ -102,9 +101,9 @@ BEGIN
 END
 $fn$;
 
--- Decides one request against the head of its stream, where a head of -1 means the stream does not exist. A scalar
--- SQL function whose body is a single expression is inlined by the planner, so this costs nothing at run time; it
--- exists to keep the decision in one place.
+-- Decides one request against the head of its stream, where a head of -1 means the stream does not exist. The planner
+-- inlines a scalar SQL function whose body is a single expression, so this function only keeps the decision in one
+-- place.
 CREATE OR REPLACE FUNCTION __schema__.get_append_status(
     p_duplicate boolean,
     p_expected_kind __schema__.expected_state_kind,
@@ -115,7 +114,7 @@ CREATE OR REPLACE FUNCTION __schema__.get_append_status(
     IMMUTABLE
 AS
 $fn$
--- The cast on the first branch types the CASE; the other labels resolve to the same enum.
+-- The cast on the first branch sets the type of the CASE, and the other labels resolve to the same enum.
 SELECT CASE
            WHEN p_duplicate THEN 'duplicate'::__schema__.append_status
            WHEN p_expected_kind = 'any' THEN 'appended'
@@ -126,9 +125,9 @@ SELECT CASE
            END
 $fn$;
 
--- The requests of a batch, one row each with the derived columns the append needs. A set-returning SQL function that
--- is a single SELECT, not volatile and not strict, is inlined by the planner as a subquery of the calling statement,
--- so this shapes the query without adding a function call or a plan boundary.
+-- The requests of a batch, one row each, with the derived columns the append needs. The planner inlines a set-returning
+-- SQL function that is a single SELECT, not volatile, and not strict as a subquery, so this function adds no call or
+-- plan boundary.
 CREATE OR REPLACE FUNCTION __schema__.zip_requests(
     p_stream_ids text[],
     p_expected_kinds __schema__.expected_state_kind[],
@@ -153,7 +152,7 @@ CREATE OR REPLACE FUNCTION __schema__.zip_requests(
 AS
 $fn$
 SELECT r.ord,
-       -- Unnest yields the database collation; "C" keeps the partition sort below byte-wise, like the column.
+       -- unnest yields the database collation, and "C" keeps the partition sort below byte-wise, like the column.
        r.stream_id COLLATE "C",
        r.expected_kind,
        r.expected_version,
@@ -161,7 +160,7 @@ SELECT r.ord,
        r.event_count,
        -- Position of the request among the requests to its stream, in batch order.
        row_number() OVER (PARTITION BY r.stream_id COLLATE "C" ORDER BY r.ord),
-       -- The first occurrence of a commit id in the batch wins; later ones and already committed ones are duplicates.
+       -- The first occurrence of a commit ID in the batch wins. Later ones and already committed ones are duplicates.
        row_number() OVER (PARTITION BY r.commit_id ORDER BY r.ord) > 1 OR r.commit_id = ANY (p_existing_commits),
        -- 1-based offset of the request's first event in the flattened event arrays.
        1 + coalesce(sum(r.event_count) OVER (ORDER BY r.ord ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0)
@@ -169,9 +168,9 @@ FROM unnest(p_stream_ids, p_expected_kinds, p_expected_versions, p_commit_ids, p
          WITH ORDINALITY AS r(stream_id, expected_kind, expected_version, commit_id, event_count, ord)
 $fn$;
 
--- The head of every distinct stream in the batch, -1 if the stream has no events. The lateral max() lets the planner
--- use the (stream_id, stream_position) index backwards with a limit, so each probe is O(1) however long the stream
--- is. Inlined like zip_requests.
+-- The head of every distinct stream in the batch, or -1 if the stream has no events. The lateral max() lets the planner
+-- read the (stream_id, stream_position) index backward with a limit, so each probe is a single index lookup however
+-- long the stream is. The planner inlines this function like zip_requests.
 CREATE OR REPLACE FUNCTION __schema__.get_stream_heads(p_stream_ids text[])
     RETURNS TABLE
             (

@@ -4,7 +4,7 @@ using DomainBlocks.EventStore.PostgreSQL.Feeds;
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Unit.Feeds;
 
 /// <summary>
-/// Records what the feed delivers, in order, as readable strings: "row:{position}", "reset" or "error".
+/// Records what the feed delivers, in order, as readable strings: "row:{position}", "reset", or "error".
 /// </summary>
 internal sealed class RecordingObserver : IEventLogObserver<long>
 {

@@ -7,7 +7,7 @@ using Shouldly;
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
 /// <summary>
-/// PostgreSQL-specific subscription behaviour beyond the shared suite: slot sharing and stream-position resume.
+/// PostgreSQL-specific subscription behavior beyond the shared suite: slot sharing and stream-position resume.
 /// </summary>
 [TestFixture]
 public class PostgresSubscriptionTests : PostgresIntegrationTest
@@ -69,14 +69,14 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
             })
             .GetAsyncEnumerator(ct);
 
-        // A second subscription, used to tell when the live feed has delivered all the appended events.
+        // A second subscription shows when the live feed has delivered all the appended events.
         await using var witness = _eventStore.SubscribeToAll().GetAsyncEnumerator(ct);
 
         await ShouldBeCaughtUpAsync(enumerator);
         await ShouldBeCaughtUpAsync(witness);
 
-        // Interleave the target stream with another one so that the resume position (a stream position) differs
-        // from the global position.
+        // Interleave the target stream with another one so that the resume position (a stream position) differs from
+        // the global position.
         var expected = new List<TestEvent>();
 
         for (var i = 0; i < 40; i++)
@@ -94,8 +94,8 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
 
         // Wait until the witness has seen every appended event before reading the subscription under test. The feed
         // delivers each event to all subscribers, so by then the subscription's queue (capacity 1) must have
-        // overflowed. Without this wait, the test could start reading before the events arrive, keep up with them,
-        // and never fall behind.
+        // overflowed. Without this wait, the test could start reading before the events arrive, keep up with them, and
+        // never fall behind.
         var appendedCount = expected.Count * 2; // One "other" event per target event.
 
         for (var i = 0; i < appendedCount; i++)

@@ -6,7 +6,7 @@ using DomainBlocks.Testing.Integration.EventStore;
 namespace DomainBlocks.Benchmarking.EventStore;
 
 /// <summary>
-/// Binds the shared benchmarks to <see cref="NoOpEventStore"/>. There is no store to initialise or reset.
+/// Binds the shared benchmarks to <see cref="NoOpEventStore"/>. There is no store to initialize or reset.
 /// </summary>
 public sealed class NoOpEventStoreTestHarness : IEventStoreTestHarness<StreamPosition, LogPosition>
 {

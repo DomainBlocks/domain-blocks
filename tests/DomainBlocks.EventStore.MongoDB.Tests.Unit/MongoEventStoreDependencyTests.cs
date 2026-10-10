@@ -6,9 +6,9 @@ using Shouldly;
 namespace DomainBlocks.EventStore.MongoDB.Tests.Unit;
 
 /// <summary>
-/// The store sees only the codec contracts. Type mapping, contract mapping, metadata contribution and read transforms
-/// are composed around the store, never passed into it. The package boundary that used to enforce this is gone, so
-/// this test does.
+/// The store sees only the codec contracts. Type mapping, contract mapping, metadata contribution, and read transforms
+/// are composed around the store, never passed into it. The package boundary that used to enforce this is gone, so this
+/// test does.
 /// </summary>
 public class MongoEventStoreDependencyTests
 {

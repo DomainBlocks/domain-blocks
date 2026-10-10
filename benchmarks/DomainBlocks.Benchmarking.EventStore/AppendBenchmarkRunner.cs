@@ -4,9 +4,9 @@ using HdrHistogram;
 namespace DomainBlocks.Benchmarking.EventStore;
 
 /// <summary>
-/// Store-agnostic closed-loop benchmark harness. Every run uses a fresh stream id per operation, generated outside the
-/// timed region, so the store sees the same "new stream" path during warm-up and measurement. Latencies are recorded
-/// in <see cref="Stopwatch"/> ticks to an HdrHistogram with microsecond resolution and three significant digits.
+/// Store-agnostic closed-loop benchmark harness. Every run uses a fresh stream ID per operation, generated outside the
+/// timed region, so the store sees the same "new stream" path during warm-up and measurement. Latencies are recorded in
+/// <see cref="Stopwatch"/> ticks to an HdrHistogram with microsecond resolution and three significant digits.
 /// </summary>
 public sealed class AppendBenchmarkRunner
 {
@@ -72,9 +72,9 @@ public sealed class AppendBenchmarkRunner
     }
 
     /// <summary>
-    /// Measures throughput with <see cref="ThroughputOptions.InFlight"/> closed-loop workers. Throughput is derived from
-    /// snapshots of a completion counter at the start and end of the measurement window, so operations in flight at the
-    /// window edges neither inflate nor deflate the result, and no in-flight operation is ever cancelled.
+    /// Measures throughput with <see cref="ThroughputOptions.InFlight"/> closed-loop workers. Throughput is derived
+    /// from snapshots of a completion counter at the start and end of the measurement window, so operations in flight
+    /// at the window edges neither inflate nor deflate the result, and no in-flight operation is ever cancelled.
     /// </summary>
     public async Task<ThroughputResult> MeasureThroughputAsync(
         BenchmarkOperation operation,
@@ -108,8 +108,8 @@ public sealed class AppendBenchmarkRunner
                             var task = operation(workerIndex, streamId, cancellationToken);
 
                             // An operation that completes synchronously would turn this loop into a busy spin that
-                            // never yields its thread-pool thread; with many workers that starves the timer
-                            // continuations that end the run. Yield so every worker stays fair.
+                            // never yields its thread-pool thread. With many workers, that starves the timer
+                            // continuations that end the run, so the worker yields to keep every worker fair.
                             if (task.IsCompleted)
                                 await Task.Yield();
 

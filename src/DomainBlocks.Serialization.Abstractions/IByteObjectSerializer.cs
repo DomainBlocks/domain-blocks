@@ -1,9 +1,8 @@
 namespace DomainBlocks.Serialization.Abstractions;
 
 /// <summary>
-/// An object serializer over UTF-8 or binary bytes. Implementations serialize to a byte array and deserialize from a
-/// span, which lets one implementation serve both <see cref="T:byte[]"/> and <see cref="ReadOnlyMemory{T}"/> data
-/// without copying.
+/// Defines an object serializer for UTF-8 or binary data that serves both <see cref="T:byte[]"/> and
+/// <see cref="ReadOnlyMemory{T}"/> without copying.
 /// </summary>
 public interface IByteObjectSerializer : IObjectSerializer<byte[]>, IObjectSerializer<ReadOnlyMemory<byte>>
 {

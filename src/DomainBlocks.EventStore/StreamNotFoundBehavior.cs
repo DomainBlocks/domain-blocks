@@ -1,17 +1,17 @@
 namespace DomainBlocks.EventStore;
 
 /// <summary>
-/// Defines how to handle attempts to read a stream that does not exist.
+/// Specifies what a stream read does if the stream does not exist.
 /// </summary>
 public enum StreamNotFoundBehavior
 {
     /// <summary>
-    /// Treat a non-existent stream as an empty async sequence.
+    /// Return no events.
     /// </summary>
     Ignore,
 
     /// <summary>
-    /// Throw an exception when the stream does not exist.
+    /// Throw a <see cref="StreamNotFoundException"/>.
     /// </summary>
     Throw
 }

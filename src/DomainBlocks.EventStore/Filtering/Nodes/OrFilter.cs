@@ -3,7 +3,7 @@ using System.Collections.Immutable;
 namespace DomainBlocks.EventStore.Filtering.Nodes;
 
 /// <summary>
-/// Matches events that match at least one filter in <see cref="Operands"/>.
+/// Represents a filter that matches events that match any of <see cref="Operands"/>.
 /// </summary>
 public sealed class OrFilter : EventFilter
 {
@@ -13,7 +13,8 @@ public sealed class OrFilter : EventFilter
     }
 
     /// <summary>
-    /// The filters, in the order they were combined. They are evaluated in this order until one matches.
+    /// Gets the filters, in the order they were combined. <see cref="Matches"/> evaluates them in this order and stops
+    /// at the first one that matches.
     /// </summary>
     public ImmutableArray<EventFilter> Operands { get; }
 

@@ -28,7 +28,7 @@ public abstract class EventStoreEventFormatTests<TStreamPos, TLogPos>(
         if (!Harness.SupportedFormats.Contains(format))
             Assert.Ignore($"The store's test codec does not support {format}.");
 
-        // Protobuf can only serialise generated message types; the other formats take a plain record.
+        // Protobuf can only serialize generated message types, and the other formats take a plain record.
         object @event = format == EventFormat.Protobuf
             ? new ProtoTestEvent { Value = "test-123" }
             : new TestEvent { Value = "test-123" };

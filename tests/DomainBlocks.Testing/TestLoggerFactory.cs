@@ -3,8 +3,8 @@ using Microsoft.Extensions.Logging;
 namespace DomainBlocks.Testing;
 
 /// <summary>
-/// Creates the logger factory used by every test environment: NUnit progress output at Debug, or at the level named
-/// by the DBX_TEST_LOG_LEVEL environment variable (e.g. Trace to see per-batch append logging).
+/// Creates the logger factory that the test environments use. It writes to the NUnit progress output at Debug, or at
+/// the level named by the DBX_TEST_LOG_LEVEL environment variable, e.g., Trace to see per-batch append logging.
 /// </summary>
 public static class TestLoggerFactory
 {

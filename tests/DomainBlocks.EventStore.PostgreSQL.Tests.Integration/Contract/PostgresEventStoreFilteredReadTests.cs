@@ -5,9 +5,9 @@ using NUnit.Framework;
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration.Contract;
 
 /// <summary>
-/// Runs with small read batches so that the shared tests exercise keyset paging.
+/// Runs with a small read page size so that the shared tests exercise keyset paging.
 /// </summary>
 [TestFixture]
 public class PostgresEventStoreFilteredReadTests() :
     EventStoreFilteredReadTests<StreamPosition, LogPosition>(
-        new PostgresEventStoreTestHarness(x => x.ReadBatchSize = 7));
+        new PostgresEventStoreTestHarness(x => x.ReadPageSize = 7));

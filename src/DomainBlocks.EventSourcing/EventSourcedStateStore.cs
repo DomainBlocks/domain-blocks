@@ -71,8 +71,7 @@ public sealed class EventSourcedStateStore<TState, TEvent, TStreamId, TStreamPos
     {
         var streamId = adapter.GetStreamId(state);
 
-        // PoC for adding metadata.
-        // Should this be stream-level metadata?
+        // PoC for adding metadata. Should this be stream-level metadata?
         KeyValuePair<string, string>[] metadata = [KeyValuePair.Create("ClrType", state.GetType().Name)];
 
         var uncommittedEvents = adapter.GetUncommittedEvents(state)

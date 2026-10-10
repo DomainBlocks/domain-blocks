@@ -1,7 +1,7 @@
 namespace DomainBlocks.EventStore.Codecs;
 
 /// <summary>
-/// Encodes one event and its already-merged metadata into the record a store persists.
+/// Defines how a store encodes an event and its metadata into a stored record.
 /// </summary>
 public interface IEventEncoder<in TEvent, TEventData, TMetadata> where TEvent : notnull where TEventData : notnull
 {

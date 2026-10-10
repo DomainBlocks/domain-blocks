@@ -7,7 +7,7 @@ public static class EventEncoderExtensions
         where TEventData : notnull
     {
         /// <summary>
-        /// Encodes a sequence of events lazily, in order.
+        /// Encodes a sequence of events.
         /// </summary>
         public IEnumerable<EncodedEvent<TEventData, TMetadata>> Encode(IEnumerable<AppendableEvent<TEvent>> events)
         {

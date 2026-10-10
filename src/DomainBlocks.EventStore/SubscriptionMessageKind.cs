@@ -1,26 +1,25 @@
 namespace DomainBlocks.EventStore;
 
 /// <summary>
-/// Identifies what a <see cref="SubscriptionMessage{TEvent,TStreamId,TStreamPos,TLogPos}"/> carries.
+/// Specifies the kind of a <see cref="SubscriptionMessage{TEvent,TStreamId,TStreamPos,TLogPos}"/>.
 /// </summary>
 public enum SubscriptionMessageKind
 {
     /// <summary>
-    /// An event read from the store.
+    /// The message carries an event.
     /// </summary>
     Event,
 
     /// <summary>
-    /// The subscription has delivered every event that existed when it started, or when it last fell behind, and is
-    /// now delivering live events.
+    /// The subscription has delivered every event that existed when it started or last fell behind, and now delivers
+    /// live events.
     /// </summary>
     CaughtUp,
 
     /// <summary>
-    /// The subscriber consumed events too slowly, or the store lost its live feed, and events may have been skipped.
-    /// The subscription resumes from the last delivered position and emits <see cref="CaughtUp"/> once it has caught
-    /// up again. It is only sent to a subscriber that has been sent <see cref="CaughtUp"/>, so the two alternate,
-    /// starting with <see cref="CaughtUp"/>.
+    /// The subscription fell behind, either because the subscriber was too slow or because the store lost its live
+    /// feed. The subscription catches up again from where it left off and then sends <see cref="CaughtUp"/>. The two
+    /// kinds therefore alternate, starting with <see cref="CaughtUp"/>.
     /// </summary>
     FellBehind
 }

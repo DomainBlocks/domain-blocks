@@ -1,31 +1,31 @@
 ﻿namespace DomainBlocks.EventStore;
 
 /// <summary>
-/// Provides read origins. <see cref="Start"/> and <see cref="End"/> convert implicitly to a
-/// <see cref="ReadOrigin{TPos}"/> of any position type, so the type argument need not be written at the call site.
+/// Provides read origins. <see cref="Start"/> and <see cref="End"/> convert implicitly to
+/// <see cref="ReadOrigin{TPos}"/> for any position type.
 /// </summary>
 public static class ReadOrigin
 {
     /// <summary>
-    /// The start of an event sequence.
+    /// Gets the start of the stream or event log.
     /// </summary>
     public static StartMarker Start { get; } = new();
 
     /// <summary>
-    /// The end of an event sequence.
+    /// Gets the end of the stream or event log.
     /// </summary>
     public static EndMarker End { get; } = new();
 
     /// <summary>
-    /// Creates an origin representing a specific position within an event sequence.
+    /// Creates an origin at the specified position.
     /// </summary>
-    /// <typeparam name="TPos">The type used to represent positions.</typeparam>
-    /// <param name="position">The position at which to begin reading.</param>
-    /// <returns>An origin representing <paramref name="position"/>.</returns>
+    /// <typeparam name="TPos">The type of the position.</typeparam>
+    /// <param name="position">The position to start reading at.</param>
+    /// <returns>An origin at <paramref name="position"/>.</returns>
     public static ReadOrigin<TPos>.At At<TPos>(TPos position) where TPos : notnull => new(position);
 
     /// <summary>
-    /// A position-type-agnostic marker for the start of an event sequence. Converts implicitly to
+    /// Represents <see cref="Start"/> for any position type. Converts implicitly to
     /// <see cref="ReadOrigin{TPos}.Start"/>.
     /// </summary>
     public sealed class StartMarker
@@ -36,8 +36,7 @@ public static class ReadOrigin
     }
 
     /// <summary>
-    /// A position-type-agnostic marker for the end of an event sequence. Converts implicitly to
-    /// <see cref="ReadOrigin{TPos}.End"/>.
+    /// Represents <see cref="End"/> for any position type. Converts implicitly to <see cref="ReadOrigin{TPos}.End"/>.
     /// </summary>
     public sealed class EndMarker
     {
@@ -48,14 +47,13 @@ public static class ReadOrigin
 }
 
 /// <summary>
-/// Represents a read operation's starting point within an event sequence, i.e., an individual event stream or the
-/// global event log.
+/// Represents where a read starts in a stream or the event log.
 /// </summary>
-/// <typeparam name="TPos"> The type used to represent positions within the event sequence. </typeparam>
+/// <typeparam name="TPos">The type of the position.</typeparam>
 public abstract record ReadOrigin<TPos> where TPos : notnull
 {
     /// <summary>
-    /// Represents the start of an event sequence.
+    /// Represents the start of the stream or event log.
     /// </summary>
     public sealed record Start : ReadOrigin<TPos>
     {
@@ -67,7 +65,7 @@ public abstract record ReadOrigin<TPos> where TPos : notnull
     }
 
     /// <summary>
-    /// Represents the end of an event sequence.
+    /// Represents the end of the stream or event log.
     /// </summary>
     public sealed record End : ReadOrigin<TPos>
     {
@@ -79,9 +77,9 @@ public abstract record ReadOrigin<TPos> where TPos : notnull
     }
 
     /// <summary>
-    /// Represents a position within an event sequence.
+    /// Represents a position to start reading at.
     /// </summary>
-    /// <param name="Position">The position at which to begin reading.</param>
+    /// <param name="Position">The position to start reading at.</param>
     public sealed record At(TPos Position) : ReadOrigin<TPos>;
 
     public static implicit operator ReadOrigin<TPos>(ReadOrigin.StartMarker _) => Start.Instance;

@@ -74,8 +74,8 @@ internal sealed class AppenderPolicy(IMongoCollection<BsonDocument> eventLog) :
 
     public ConflictResolution OnConflict(AppendConflict<AppendContext> conflict)
     {
-        // MongoDB does not populate WriteError.Details for duplicate key errors (code 11000). The only available signal
-        // is the error message, which includes the index name. This is potentially fragile, but is the only option the
+        // MongoDB does not populate WriteError.Details for duplicate key errors (code 11000). The only signal is the
+        // error message, which includes the index name. Matching on it is fragile, but it is the only option that the
         // driver exposes.
         if (conflict.ErrorMessage?.Contains(EventLogIndexNames.UniqueStreamVersion) is not true)
         {
