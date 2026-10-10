@@ -51,7 +51,7 @@ internal sealed class RefCountedChangeStreamSubject<TResult>(
             if (_currentSubjectConnection is null || _currentSubjectConnection.Connection.Completion.IsCompleted)
             {
                 var subject = subjectFactory();
-                var connection = await subject.ConnectAsync(cancellationToken);
+                var connection = await subject.ConnectAsync(cancellationToken).ConfigureAwait(false);
 
                 subjectConnection = new SubjectConnection(subject, connection);
                 attachment = subject.Attach(observer, correlationId);

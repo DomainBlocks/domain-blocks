@@ -155,7 +155,34 @@ public class RefCountedChangeStreamSubjectTests
         await second.DisposeAsync();
     }
 
-    private sealed class TestSubject : IChangeStreamSubject<int>
+    [Test]
+    [CancelAfter(5000)]
+    public async Task AttachAsync_WhenCancelledWhileConnecting_ConnectsAgainOnNextAttach(CancellationToken ct)
+    {
+        var subjects = new List<TestSubject>();
+
+        var refCountedSubject = new RefCountedChangeStreamSubject<int>(() =>
+        {
+            var subject = new TestSubject(neverConnects: subjects.Count == 0);
+            subjects.Add(subject);
+            return subject;
+        });
+
+        using var attachCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var attaching = refCountedSubject.AttachAsync(new TestObserver(), cancellationToken: attachCts.Token);
+        await attachCts.CancelAsync();
+
+        await attaching.ShouldThrowAsync<OperationCanceledException>();
+
+        await using var attachment = await refCountedSubject.AttachAsync(new TestObserver(), cancellationToken: ct);
+
+        subjects.Count.ShouldBe(2);
+        subjects[0].AttachCount.ShouldBe(0);
+        subjects[1].ConnectCount.ShouldBe(1);
+        subjects[1].AttachCount.ShouldBe(1);
+    }
+
+    private sealed class TestSubject(bool neverConnects = false) : IChangeStreamSubject<int>
     {
         private Exception? _attachException;
 
@@ -177,11 +204,15 @@ public class RefCountedChangeStreamSubjectTests
             return new TestAttachment(() => DetachCount++);
         }
 
-        public Task<IChangeStreamConnection> ConnectAsync(CancellationToken cancellationToken = default)
+        public async Task<IChangeStreamConnection> ConnectAsync(CancellationToken cancellationToken = default)
         {
             ConnectCount++;
+
+            if (neverConnects)
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+
             Connection = new TestConnection();
-            return Task.FromResult<IChangeStreamConnection>(Connection);
+            return Connection;
         }
 
         public void FaultOnNextAttach(Exception exception) => _attachException = exception;

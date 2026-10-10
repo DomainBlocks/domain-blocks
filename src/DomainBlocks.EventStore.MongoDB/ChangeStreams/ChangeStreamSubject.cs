@@ -80,14 +80,26 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
             ? new Connection(this)
             : throw new InvalidOperationException("Connect may only be called once.");
 
-        var task = await Task
-            .WhenAny(_connectedTcs.Task, connection.Completion)
-            .WaitAsync(cancellationToken)
-            .ConfigureAwait(false);
+        Task task;
+
+        try
+        {
+            task = await Task
+                .WhenAny(_connectedTcs.Task, connection.Completion)
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Nobody will own this connection, so stop the producer rather than leak it.
+            await connection.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
 
         if (task == _connectedTcs.Task)
             return connection;
 
+        await connection.DisposeAsync().ConfigureAwait(false);
         await connection.Completion.ConfigureAwait(false);
         throw new InvalidOperationException("The change stream connection completed before it connected.");
     }

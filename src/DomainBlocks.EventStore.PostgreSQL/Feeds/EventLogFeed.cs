@@ -69,6 +69,7 @@ internal sealed class EventLogFeed<T> : IEventLogFeed<T>
         if (task == _connectedTcs.Task)
             return connection;
 
+        await connection.DisposeAsync().ConfigureAwait(false);
         await connection.Completion.ConfigureAwait(false);
         throw new InvalidOperationException("The event log feed completed before it connected.");
     }
