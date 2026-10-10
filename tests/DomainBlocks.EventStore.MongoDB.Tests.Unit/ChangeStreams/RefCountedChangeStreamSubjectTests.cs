@@ -7,6 +7,8 @@ namespace DomainBlocks.EventStore.MongoDB.Tests.Unit.ChangeStreams;
 
 public class RefCountedChangeStreamSubjectTests
 {
+    private const int TestTimeoutMillis = 5 * 1000;
+
     [Test]
     public async Task Attach_FirstObserver_ConnectsSubject()
     {
@@ -123,7 +125,7 @@ public class RefCountedChangeStreamSubjectTests
     }
 
     [Test]
-    [CancelAfter(5000)]
+    [CancelAfter(TestTimeoutMillis)]
     public async Task AttachAsync_WhileLastConnectionIsStillStopping_WaitsForItBeforeConnectingAgain()
     {
         // A connection that is stopping may still be handing a change to its observers. Observers may share what they
@@ -156,7 +158,7 @@ public class RefCountedChangeStreamSubjectTests
     }
 
     [Test]
-    [CancelAfter(5000)]
+    [CancelAfter(TestTimeoutMillis)]
     public async Task AttachAsync_WhenCancelledWhileConnecting_ConnectsAgainOnNextAttach(CancellationToken ct)
     {
         var subjects = new List<TestSubject>();
