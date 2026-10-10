@@ -1,6 +1,5 @@
-﻿using System.Runtime.CompilerServices;
+using System.Runtime.CompilerServices;
 using System.Threading.Channels;
-using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using Microsoft.Extensions.Logging;
@@ -9,47 +8,80 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
-internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
+/// <summary>
+/// A catch-up-then-live subscription over a change stream.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A subscription follows one sequence of positions: those of the log, or those of a stream. Its resume position, its
+/// high-water mark, and the position of each of its events are all positions in that sequence.
+/// </para>
+/// <para>
+/// Each cycle attaches an observer to the change stream first, then reads the high-water mark (the last position of
+/// the sequence) in a session that has seen everything up to the change stream's anchor, replays everything from the
+/// resume position up to it, emits <see cref="SubscriptionMessage{TEvent,TStreamId,TStreamPos,TLogPos}.CaughtUp"/>,
+/// and finally drains the live events, skipping any that the replay has covered. Because positions are assigned in
+/// commit order without gaps, the replay and the live events tile exactly: nothing is skipped and nothing is repeated.
+/// </para>
+/// <para>
+/// A cycle is restarted from the resume position, after emitting
+/// <see cref="SubscriptionMessage{TEvent,TStreamId,TStreamPos,TLogPos}.FellBehind"/>, when the subscriber's queue
+/// overflows. A restart signaled while the cycle is still replaying takes effect once the replay has reached the
+/// high-water mark. The replay is never abandoned part-way, as the next cycle would have to start it again. Falling
+/// behind is only reported to a subscriber that has been told it caught up, so the two messages alternate, starting
+/// with <see cref="SubscriptionMessage{TEvent,TStreamId,TStreamPos,TLogPos}.CaughtUp"/>.
+/// </para>
+/// <para>
+/// The change stream hands every subscription each inserted document undecoded. A subscription takes the event of a
+/// document only if it selects the document. It neither decodes nor queues the events it does not select, and an event
+/// that cannot be decoded fails only the subscriptions that select it.
+/// </para>
+/// <para>
+/// The resume position only moves forward. A replay that reaches its high-water mark moves it there, whether or not it
+/// delivered anything, as a filter can leave long stretches of the sequence with nothing to deliver and the next cycle
+/// should not read them again. Delivering a live event moves it to that event.
+/// </para>
+/// <para>
+/// A subscription from the end is pinned to the last position at the time it starts. A cycle that restarts before
+/// delivering an event then resumes from that position, rather than from a later end that would skip the events
+/// appended in between.
+/// </para>
+/// </remarks>
+internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>>
     where TEvent : notnull
     where TPos : struct, IPosition<TPos>
 {
-    private readonly IMongoCollection<BsonDocument> _eventLog;
-    private readonly RefCountedChangeStreamSubject<EventLogDocument<TEvent>> _changeStreamSubject;
-    private readonly IEventDecoder<TEvent, BsonValue, BsonValue> _eventDecoder;
-    private readonly FilterDefinition<BsonDocument> _catchUpFilter;
+    private readonly EventLogReader<TEvent> _reader;
+    private readonly IRefCountedChangeStreamSubject<EventLogDocument<TEvent>> _changeStreamSubject;
+    private readonly CatchUpReader _catchUpReader;
+    private readonly EndPositionReader _endPositionReader;
     private readonly EventFilter _liveFilter;
-    private readonly string _positionFieldName;
     private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> _positionSelector;
-    private readonly Func<long, TPos> _positionFactory;
     private readonly SubscriptionOrigin<TPos> _origin;
     private readonly SubscriptionOptions _options;
     private readonly ILogger? _logger;
     private readonly string _correlationId;
 
     public SubscriptionAsyncEnumerable(
-        IMongoCollection<BsonDocument> eventLog,
-        RefCountedChangeStreamSubject<EventLogDocument<TEvent>> changeStreamSubject,
-        IEventDecoder<TEvent, BsonValue, BsonValue> eventDecoder,
-        FilterDefinition<BsonDocument> catchUpFilter,
+        EventLogReader<TEvent> reader,
+        IRefCountedChangeStreamSubject<EventLogDocument<TEvent>> changeStreamSubject,
+        CatchUpReader catchUpReader,
+        EndPositionReader endPositionReader,
         EventFilter liveFilter,
-        string positionFieldName,
         Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> positionSelector,
-        Func<long, TPos> positionFactory,
         SubscriptionOrigin<TPos>? origin,
         SubscriptionOptions? options,
         ILogger? logger)
     {
         _origin = origin ?? SubscriptionOrigin.End;
         _options = options ?? SubscriptionOptions.Default;
-        _catchUpFilter = catchUpFilter;
+        _catchUpReader = catchUpReader;
+        _endPositionReader = endPositionReader;
         _liveFilter = liveFilter;
-        _positionFieldName = positionFieldName;
         _positionSelector = positionSelector;
-        _positionFactory = positionFactory;
-        _eventLog = eventLog;
+        _reader = reader;
         _changeStreamSubject = changeStreamSubject;
-        _eventDecoder = eventDecoder;
         _logger = logger;
 
         _correlationId = _options.CorrelationId is { } id
@@ -64,42 +96,73 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
         {
             _logger?.SubscriptionStarted(_correlationId);
 
-            // A subscription from the end is pinned to the last position at the time it starts. A cycle that restarts
-            // before delivering an event then resumes from that position, rather than from a later end that would skip
-            // the events appended in between.
-            var resumeOrigin = _origin is SubscriptionOrigin<TPos>.End
-                ? await PinEndAsync(cancellationToken).ConfigureAwait(false)
-                : _origin;
+            var resumePosition = new ResumePosition(_origin switch
+            {
+                SubscriptionOrigin<TPos>.After after => after.Position,
+                SubscriptionOrigin<TPos>.End => await PinEndAsync(cancellationToken).ConfigureAwait(false),
+                _ => null
+            });
+
+            var isCaughtUp = false;
+            var isFirstCycle = true;
 
             while (true)
             {
-                using var observer = new Observer(_options.QueueCapacity, _liveFilter);
-                await using var attachment = await AttachObserver(observer).ConfigureAwait(false);
+                // Every cycle but the first is a restart. It can come long after the observer logged that one was
+                // pending, so it is logged when it takes place.
+                if (!isFirstCycle)
+                {
+                    if (resumePosition.After is { } after)
+                        _logger?.SubscriptionRestarting(_correlationId, after.Value);
+                    else
+                        _logger?.SubscriptionRestartingFromStart(_correlationId);
+                }
 
-                var enumerator = ReadAllAsync(resumeOrigin, observer, attachment.OperationTime, cancellationToken)
+                isFirstCycle = false;
+
+                using var observer = new Observer(_options.QueueCapacity, _liveFilter, _logger, _correlationId);
+                await using var attachment = await AttachObserverAsync(observer).ConfigureAwait(false);
+
+                var enumerator = ReadAllAsync(resumePosition, observer, attachment.OperationTime, cancellationToken)
                     .GetAsyncEnumerator(cancellationToken);
 
                 await using (enumerator.ConfigureAwait(false))
                 {
-                    while (await MoveNextAsync(enumerator, observer.OverflowToken, cancellationToken)
-                               .ConfigureAwait(false))
+                    while (await MoveNextAsync(enumerator, cancellationToken).ConfigureAwait(false))
                     {
-                        var m = enumerator.Current;
-                        yield return m;
+                        var message = enumerator.Current;
+                        yield return message;
 
-                        if (m.Event is { } e)
-                            resumeOrigin = SubscriptionOrigin.After(_positionSelector(e.Context));
+                        if (message.IsCaughtUp)
+                            isCaughtUp = true;
                     }
                 }
 
-                if (observer.OverflowToken.IsCancellationRequested)
+                // The observer logged why it stopped when it did, which can be long before the cycle ends, and the next
+                // cycle logs the restart. A subscription that had not caught up has not fallen behind: its replay has
+                // already run to the high-water mark, and the next cycle carries on from there.
+                switch (observer.StopReason)
                 {
-                    _logger?.SubscriptionFellBehind(_correlationId);
-                    yield return SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>.FellBehind;
-                    continue;
+                    case StopReason.QueueOverflow when isCaughtUp:
+                        _logger?.SubscriptionFellBehind(_correlationId);
+                        break;
+
+                    case StopReason.QueueOverflow:
+                        break;
+
+                    default:
+                        yield break;
                 }
 
-                yield break;
+                // FellBehind tells a subscriber that it is no longer caught up, so it is only reported to one that has
+                // been told it caught up. A restart before then, or a second restart before it has caught up again,
+                // e.g., when the change stream is still pumping a large batch into a small queue, only makes the
+                // catch-up longer. Every FellBehind is therefore answered by exactly one CaughtUp.
+                if (isCaughtUp)
+                {
+                    isCaughtUp = false;
+                    yield return SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>.FellBehind;
+                }
             }
         }
         finally
@@ -111,17 +174,12 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
     private async ValueTask<bool> MoveNextAsync(
         IAsyncEnumerator<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> enumerator,
-        CancellationToken overflowToken,
         CancellationToken cancellationToken)
     {
         try
         {
             return await enumerator.MoveNextAsync().ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (overflowToken.IsCancellationRequested)
-        {
-            return false;
-        }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             _logger?.SubscriptionCanceled(_correlationId);
@@ -134,23 +192,13 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
         }
     }
 
-    private async Task<SubscriptionOrigin<TPos>> PinEndAsync(CancellationToken cancellationToken)
+    // The position that a subscription from the end resumes after: the last of the sequence at the time it starts, or
+    // none if the sequence is empty, in which case it resumes from the start.
+    private async Task<TPos?> PinEndAsync(CancellationToken cancellationToken)
     {
         try
         {
-            var projection = Builders<BsonDocument>.Projection.Include(_positionFieldName);
-
-            var last = await _eventLog
-                .Find(_catchUpFilter)
-                .Sort(Builders<BsonDocument>.Sort.Descending(_positionFieldName))
-                .Limit(1)
-                .Project(projection)
-                .FirstOrDefaultAsync(cancellationToken)
-                .ConfigureAwait(false);
-
-            return last?[_positionFieldName].AsInt64 is { } position
-                ? SubscriptionOrigin.After(_positionFactory(position))
-                : SubscriptionOrigin.Start;
+            return await _endPositionReader(_reader, null, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -164,7 +212,7 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
         }
     }
 
-    private async Task<IChangeStreamAttachment> AttachObserver(Observer observer)
+    private async Task<IChangeStreamAttachment> AttachObserverAsync(Observer observer)
     {
         try
         {
@@ -178,120 +226,129 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
     }
 
     private async IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> ReadAllAsync(
-        SubscriptionOrigin<TPos> resumeOrigin,
+        ResumePosition resumePosition,
         Observer observer,
         BsonTimestamp changeStreamOperationTime,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        LogPosition? highWaterMark;
-
-        using (var catchUpCts = CancellationTokenSource.CreateLinkedTokenSource(
-                   cancellationToken,
-                   observer.OverflowToken))
+        // The session has seen everything up to the change stream's anchor, so the high-water mark it reads and the
+        // replay it serves include every event committed before the observer attached.
+        using (var session = await _reader.StartCatchUpSessionAsync(changeStreamOperationTime, cancellationToken)
+                   .ConfigureAwait(false))
         {
-            // The majority read waits until everything up to the change stream's anchor is committed, so nothing
-            // falls between catch-up and live. See docs/unpublished/event-store-database-contract.md.
-            using var session = await StartCatchUpSessionAsync(changeStreamOperationTime, catchUpCts.Token)
-                .ConfigureAwait(false);
-
-            highWaterMark = await GetHighWaterMarkAsync(session, catchUpCts.Token).ConfigureAwait(false);
+            var highWaterMark = await _endPositionReader(_reader, session, cancellationToken).ConfigureAwait(false);
 
             _logger?.CatchUpBoundary(_correlationId, highWaterMark?.Value);
 
-            if (highWaterMark is not null)
+            if (highWaterMark is { } mark)
             {
-                await foreach (var doc in ReadCatchUpAsync(session, resumeOrigin, highWaterMark.Value, catchUpCts.Token)
-                                   .ConfigureAwait(false))
-                {
-                    yield return SubscriptionMessage.Event(_eventDecoder.Decode(doc));
-                }
+                var afterExclusive = resumePosition.After is { } after ? checked((long)after.Value) : -1;
+
+                var events = _catchUpReader(
+                    _reader,
+                    session,
+                    afterExclusive,
+                    checked((long)mark.Value),
+                    cancellationToken);
+
+                await foreach (var e in events.ConfigureAwait(false))
+                    yield return SubscriptionMessage.Event(e);
+
+                // A replay is never abandoned part-way, so the resume position moves once for the whole of it. It has
+                // covered the sequence up to the mark, whether or not it delivered anything on the way.
+                resumePosition.AdvanceTo(mark);
             }
         }
+
+        // A restart signaled during the replay takes effect only now that the replay is complete. Cancelling the replay
+        // instead would throw away the part of the log it had already read through without delivering anything, and a
+        // replay that takes longer than the queue takes to overflow would never finish.
+        if (observer.StopReason != StopReason.None)
+            yield break;
 
         _logger?.SubscriptionCaughtUp(_correlationId);
 
         yield return SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>.CaughtUp;
 
+        // The observer's queue ends, once what it holds has been read, when the observer has stopped.
         await foreach (var e in observer.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
         {
-            // Catching up has delivered it.
-            if (e.Context.LogPosition.Value <= highWaterMark?.Value)
+            var position = _positionSelector(e.Context);
+
+            // The replay has covered it.
+            if (resumePosition.Covers(position))
                 continue;
 
             yield return SubscriptionMessage.Event(e);
-        }
-    }
 
-    private async Task<IClientSessionHandle> StartCatchUpSessionAsync(
-        BsonTimestamp changeStreamOperationTime,
-        CancellationToken cancellationToken)
-    {
-        var session = await _eventLog.Database.Client
-            .StartSessionAsync(new ClientSessionOptions { CausalConsistency = true }, cancellationToken)
-            .ConfigureAwait(false);
-
-        try
-        {
-            session.AdvanceOperationTime(changeStreamOperationTime);
-            return session;
-        }
-        catch
-        {
-            session.Dispose();
-            throw;
-        }
-    }
-
-    private async Task<LogPosition?> GetHighWaterMarkAsync(
-        IClientSessionHandle session,
-        CancellationToken cancellationToken)
-    {
-        var projection = Builders<BsonDocument>.Projection.Include(EventLogEntry.FieldNames.Position);
-
-        var result = await _eventLog
-            .Find(session, Builders<BsonDocument>.Filter.Empty)
-            .Sort(Builders<BsonDocument>.Sort.Descending(EventLogEntry.FieldNames.Position))
-            .Limit(1)
-            .Project(projection)
-            .FirstOrDefaultAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        return result?[EventLogEntry.FieldNames.Position].AsInt64 is { } value ? LogPosition.FromInt64(value) : null;
-    }
-
-    private async IAsyncEnumerable<BsonDocument> ReadCatchUpAsync(
-        IClientSessionHandle session,
-        SubscriptionOrigin<TPos> resumeOrigin,
-        LogPosition highWaterMark,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
-    {
-        var filter = _catchUpFilter;
-
-        if (resumeOrigin is SubscriptionOrigin<TPos>.After after)
-            filter &= Builders<BsonDocument>.Filter.Gt(_positionFieldName, after.Position.Value);
-
-        filter &= Builders<BsonDocument>.Filter.Lte(EventLogEntry.FieldNames.Position, highWaterMark.Value);
-
-        // Same session, so the snapshot includes the high-water mark.
-        using var cursor = await _eventLog
-            .Find(session, filter)
-            .Sort(Builders<BsonDocument>.Sort.Ascending(EventLogEntry.FieldNames.Position))
-            .ToCursorAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        while (await cursor.MoveNextAsync(cancellationToken).ConfigureAwait(false))
-        {
-            foreach (var doc in cursor.Current)
-                yield return doc;
+            // The subscriber has taken the event and come back for more.
+            resumePosition.AdvanceTo(position);
         }
     }
 
     /// <summary>
-    /// Buffers the live events that a subscription selects, for one subscription cycle. Never blocks the change
-    /// stream: an overflow cancels the overflow token and completes the channel so that the cycle ends and a new one
-    /// starts from the last position.
+    /// Reads the events of the sequence that the subscription follows, after one of its positions and up to another,
+    /// inclusive, in the session that read the high-water mark.
     /// </summary>
-    internal sealed class Observer(int queueCapacity, EventFilter liveFilter) :
+    public delegate IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> CatchUpReader(
+        EventLogReader<TEvent> reader,
+        IClientSessionHandle session,
+        long afterExclusive,
+        long highWaterMark,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads the last position of the sequence that the subscription follows, or <see langword="null"/> if the
+    /// sequence is empty. Read in the catch-up session for a high-water mark, and in none to pin a subscription from
+    /// the end.
+    /// </summary>
+    public delegate Task<TPos?> EndPositionReader(
+        EventLogReader<TEvent> reader,
+        IClientSessionHandle? session,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The position that a subscription resumes after: the furthest that it has delivered or that a replay has covered.
+    /// It only moves forward.
+    /// </summary>
+    private sealed class ResumePosition(TPos? after)
+    {
+        /// <summary>
+        /// The position to resume after, or <see langword="null"/> to resume from the start.
+        /// </summary>
+        public TPos? After { get; private set; } = after;
+
+        public bool Covers(TPos position) => After is { } after && position.Value <= after.Value;
+
+        public void AdvanceTo(TPos position)
+        {
+            if (!Covers(position))
+                After = position;
+        }
+    }
+
+    /// <summary>
+    /// Why an observer has stopped taking documents, if it has. A change stream that is lost resumes from its token
+    /// and misses nothing, so there is no reason for a reset.
+    /// </summary>
+    internal enum StopReason
+    {
+        None,
+        QueueOverflow,
+        Disposed
+    }
+
+    /// <summary>
+    /// Buffers the live events that a subscription selects, for one subscription cycle. Never blocks the change
+    /// stream: on an overflow it records the reason and completes its queue. The cycle ends once it has read what the
+    /// queue holds, and a new one starts from the resume position. Nothing is interrupted to bring that about, so the
+    /// restart can come much later than the overflow, which is logged when it happens.
+    /// </summary>
+    internal sealed class Observer(
+        int queueCapacity,
+        EventFilter liveFilter,
+        ILogger? logger = null,
+        string subscriptionId = "") :
         IChangeStreamObserver<EventLogDocument<TEvent>>,
         IDisposable
     {
@@ -303,16 +360,16 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
                     SingleReader = true
                 });
 
-        private readonly CancellationTokenSource _overflowCts = new();
+        private int _stopReason;
         private bool _isStopped;
 
         public ChannelReader<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Reader => _channel.Reader;
 
-        public CancellationToken OverflowToken => _overflowCts.Token;
+        public StopReason StopReason => (StopReason)Volatile.Read(ref _stopReason);
 
         public ValueTask OnNextAsync(EventLogDocument<TEvent> document, CancellationToken cancellationToken)
         {
-            // An observer that has failed or signaled an overflow takes nothing more. It stays attached until the
+            // An observer that has failed or signaled a restart takes nothing more. It stays attached until the
             // subscription replaces it, and a document that it selected would be decoded only to be dropped.
             if (_isStopped || !liveFilter.Matches(document))
                 return ValueTask.CompletedTask;
@@ -334,12 +391,8 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
                 return ValueTask.CompletedTask;
             }
 
-            if (_channel.Writer.TryWrite(e))
-                return ValueTask.CompletedTask;
-
-            _isStopped = true;
-            _overflowCts.Cancel();
-            _channel.Writer.TryComplete(new OperationCanceledException(_overflowCts.Token));
+            if (!_channel.Writer.TryWrite(e) && Stop(StopReason.QueueOverflow))
+                logger?.SubscriptionQueueOverflowed(subscriptionId, queueCapacity);
 
             return ValueTask.CompletedTask;
         }
@@ -350,6 +403,22 @@ internal class SubscriptionAsyncEnumerable<TEvent, TPos> :
             return ValueTask.CompletedTask;
         }
 
-        public void Dispose() => _overflowCts.Dispose();
+        public void Dispose() => Stop(StopReason.Disposed);
+
+        // The first reason given is the one that stands, and the result says whether this one is it. The reason is
+        // recorded before the queue is completed, so that it is there to read by the time the queue ends.
+        private bool Stop(StopReason reason)
+        {
+            _isStopped = true;
+
+            var previous = Interlocked.CompareExchange(ref _stopReason, (int)reason, (int)StopReason.None);
+
+            if (previous != (int)StopReason.None)
+                return false;
+
+            _channel.Writer.TryComplete();
+
+            return true;
+        }
     }
 }

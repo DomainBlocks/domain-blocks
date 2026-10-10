@@ -7,8 +7,7 @@ using Shouldly;
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
 /// <summary>
-/// PostgreSQL-specific subscription behaviour beyond the shared suite: slot sharing, stream-position resume, and an
-/// origin beyond the end.
+/// PostgreSQL-specific subscription behaviour beyond the shared suite: slot sharing and stream-position resume.
 /// </summary>
 [TestFixture]
 public class PostgresSubscriptionTests : PostgresIntegrationTest
@@ -128,43 +127,6 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
         observed.ShouldAllBe(x => x.Context.StreamId == "target");
         observed.Select(x => x.Context.StreamPosition.Value).ShouldBe(Enumerable.Range(0, 40).Select(i => (ulong)i));
         fellBehindCount.ShouldBeGreaterThan(0);
-    }
-
-    [Test]
-    [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task SubscribeToAll_AfterPositionBeyondEnd_ObservesOnlyEventsAfterIt(CancellationToken ct)
-    {
-        TestEvent[] events = [.. Enumerable.Range(0, 4).Select(i => new TestEvent { Value = $"event-{i}" })];
-        var origin = SubscriptionOrigin.After(LogPosition.FromInt64(2));
-
-        await using var enumerator = _eventStore.SubscribeToAll(origin).GetAsyncEnumerator(ct);
-        await ShouldBeCaughtUpAsync(enumerator);
-
-        // The log is empty, so the events take positions 0 to 3. All of them arrive live.
-        foreach (var e in events)
-            await _eventStore.AppendAsync("target", [Appendable(e)], cancellationToken: ct);
-
-        (await NextEventAsync(enumerator)).Payload.ShouldBe(events[3]);
-    }
-
-    [Test]
-    [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task SubscribeToStream_AfterPositionBeyondEnd_ObservesOnlyEventsAfterIt(CancellationToken ct)
-    {
-        TestEvent[] events = [.. Enumerable.Range(0, 4).Select(i => new TestEvent { Value = $"event-{i}" })];
-        var origin = SubscriptionOrigin.After(StreamPosition.FromInt64(2));
-
-        // An event of another stream comes first, so that positions in the stream differ from those in the log.
-        await _eventStore.AppendAsync("other", [Appendable("other")], cancellationToken: ct);
-
-        await using var enumerator = _eventStore.SubscribeToStream("target", origin).GetAsyncEnumerator(ct);
-        await ShouldBeCaughtUpAsync(enumerator);
-
-        // The stream is empty, so the events take positions 0 to 3 in it. All of them arrive live.
-        foreach (var e in events)
-            await _eventStore.AppendAsync("target", [Appendable(e)], cancellationToken: ct);
-
-        (await NextEventAsync(enumerator)).Payload.ShouldBe(events[3]);
     }
 
     private static async Task<long> CountSlotsAsync(CancellationToken ct)

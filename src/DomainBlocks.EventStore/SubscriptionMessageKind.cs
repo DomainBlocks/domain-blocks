@@ -19,7 +19,8 @@ public enum SubscriptionMessageKind
     /// <summary>
     /// The subscriber consumed events too slowly, or the store lost its live feed, and events may have been skipped.
     /// The subscription resumes from the last delivered position and emits <see cref="CaughtUp"/> once it has caught
-    /// up again.
+    /// up again. It is only sent to a subscriber that has been sent <see cref="CaughtUp"/>, so the two alternate,
+    /// starting with <see cref="CaughtUp"/>.
     /// </summary>
     FellBehind
 }

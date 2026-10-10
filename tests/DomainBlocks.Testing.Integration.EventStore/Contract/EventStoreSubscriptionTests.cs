@@ -521,6 +521,48 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(
         (await GetNextEventAsync(stream)).Payload.ShouldBe(lastEvent);
     }
 
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_AfterPositionBeyondEnd_ObservesOnlyEventsAfterIt(
+        CancellationToken cancellationToken)
+    {
+        var events = CreateEvents("event-0", "event-1", "event-2", "event-3");
+        var origin = SubscriptionOrigin.After(CreateLogPosition(2));
+
+        await using var enumerator = EventStore.SubscribeToAll(origin).GetAsyncEnumerator(cancellationToken);
+        await ShouldBeCaughtUpAsync(enumerator);
+
+        // The log is empty, so the events take positions 0 to 3. All of them arrive live.
+        foreach (var e in events)
+            await EventStore.AppendAsync("target", [e], cancellationToken: cancellationToken);
+
+        (await GetNextEventAsync(enumerator)).Payload.ShouldBe(events[3]);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToStream_AfterPositionBeyondEnd_ObservesOnlyEventsAfterIt(
+        CancellationToken cancellationToken)
+    {
+        var events = CreateEvents("event-0", "event-1", "event-2", "event-3");
+        var origin = SubscriptionOrigin.After(CreateStreamPosition(2));
+
+        // An event of another stream comes first, so that positions in the stream differ from those in the log.
+        await EventStore.AppendAsync("other", CreateEvents("other"), cancellationToken: cancellationToken);
+
+        await using var enumerator = EventStore
+            .SubscribeToStream("target", origin)
+            .GetAsyncEnumerator(cancellationToken);
+
+        await ShouldBeCaughtUpAsync(enumerator);
+
+        // The stream is empty, so the events take positions 0 to 3 in it. All of them arrive live.
+        foreach (var e in events)
+            await EventStore.AppendAsync("target", [e], cancellationToken: cancellationToken);
+
+        (await GetNextEventAsync(enumerator)).Payload.ShouldBe(events[3]);
+    }
+
     private static string NewStreamId() => $"test-{Guid.NewGuid():N}";
 
     private static TestEvent[] CreateEvents(params string[] values) =>

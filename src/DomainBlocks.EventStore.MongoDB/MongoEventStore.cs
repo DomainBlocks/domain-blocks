@@ -74,6 +74,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
     private readonly IMongoCollection<BsonDocument> _eventLog;
     private readonly IEventCodec<TEvent, BsonValue, BsonValue> _eventCodec;
     private readonly ILogger? _logger;
+    private readonly EventLogReader<TEvent> _reader;
     private readonly RefCountedChangeStreamSubject<EventLogDocument<TEvent>> _allEventsSubject;
     private readonly EventLogDocument<TEvent> _liveDocument;
 
@@ -97,6 +98,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
             .WithReadConcern(ReadConcern.Majority)
             .WithReadPreference(ReadPreference.Primary);
 
+        _reader = new EventLogReader<TEvent>(_eventLog, eventCodec);
         _liveDocument = new EventLogDocument<TEvent>(eventCodec);
         _allEventsSubject = CreateAllEventsSubject(_eventLog, logger);
     }
@@ -251,14 +253,24 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         ThrowIfFiltered(options?.Filter, nameof(SubscribeToAll));
 
         return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
-            _eventLog,
+            _reader,
             _allEventsSubject,
-            _eventCodec,
-            Builders<BsonDocument>.Filter.Empty,
+            static (reader, session, after, highWaterMark, ct) => reader.ReadCatchUpAsync(
+                session,
+                Builders<BsonDocument>.Filter.Empty,
+                EventLogEntry.FieldNames.Position,
+                after,
+                highWaterMark,
+                ct),
+            static async (reader, session, ct) => await reader.GetLastPositionAsync(
+                session,
+                Builders<BsonDocument>.Filter.Empty,
+                EventLogEntry.FieldNames.Position,
+                ct).ConfigureAwait(false) is { } pos
+                ? LogPosition.FromInt64(pos)
+                : null,
             EventFilter.All,
-            EventLogEntry.FieldNames.Position,
             static ctx => ctx.LogPosition,
-            LogPosition.FromInt64,
             origin,
             options,
             _logger);
@@ -271,15 +283,25 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
     {
         ThrowIfFiltered(options?.Filter, nameof(SubscribeToStream));
 
+        var streamFilter = Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, streamId);
+
         return new SubscriptionAsyncEnumerable<TEvent, StreamPosition>(
-            _eventLog,
+            _reader,
             _allEventsSubject,
-            _eventCodec,
-            Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, streamId),
+            (reader, session, after, highWaterMark, ct) => reader.ReadCatchUpAsync(
+                session,
+                streamFilter,
+                EventLogEntry.FieldNames.StreamPosition,
+                after,
+                highWaterMark,
+                ct),
+            async (reader, session, ct) => await reader
+                .GetLastPositionAsync(session, streamFilter, EventLogEntry.FieldNames.StreamPosition, ct)
+                .ConfigureAwait(false) is { } pos
+                ? StreamPosition.FromInt64(pos)
+                : null,
             EventFilter.StreamIds(streamId),
-            EventLogEntry.FieldNames.StreamPosition,
             static ctx => ctx.StreamPosition,
-            StreamPosition.FromInt64,
             origin,
             options,
             _logger);
