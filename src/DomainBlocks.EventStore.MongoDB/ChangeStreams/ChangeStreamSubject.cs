@@ -263,6 +263,10 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
             {
                 _logger?.ChangeStreamFailed(ex, _subjectId);
 
+                // A subscription told of the error may attach again straight away. Completing first means it sees that
+                // this connection has finished and gets a new one, rather than failing to attach to this one.
+                _completionTcs.TrySetException(ex);
+
                 try
                 {
                     await _state.NotifyErrorAsync(ex, _stopCts.Token).ConfigureAwait(false);
@@ -271,8 +275,6 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
                 {
                     _logger?.ChangeStreamCanceled(_subjectId);
                 }
-
-                _completionTcs.TrySetException(ex);
             }
             finally
             {

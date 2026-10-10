@@ -1,6 +1,11 @@
+using System.Net;
 using DomainBlocks.EventStore.Filtering;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
+using MongoDB.Driver;
+using MongoDB.Driver.Core.Clusters;
+using MongoDB.Driver.Core.Connections;
+using MongoDB.Driver.Core.Servers;
 using NUnit.Framework;
 using Shouldly;
 
@@ -11,6 +16,9 @@ using StopReason = SubscriptionAsyncEnumerable<string, LogPosition>.StopReason;
 
 public class SubscriptionObserverTests
 {
+    private const int ChangeStreamHistoryLostCode = 286;
+    private const int UnauthorizedCode = 13;
+
     private static readonly DateTime CreatedAtUtc = new(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
 
     private CountingDecoder _decoder = null!;
@@ -139,6 +147,71 @@ public class SubscriptionObserverTests
             await observer.Reader.WaitToReadAsync());
 
         exception.Message.ShouldBe("Cannot decode.");
+    }
+
+    [Test]
+    public async Task OnErrorAsync_WhenHistoryLost_SignalsRestart()
+    {
+        using var observer = new Observer(queueCapacity: 10, EventFilter.All);
+        await OfferAsync(observer, 0, "order-1");
+
+        await observer.OnErrorAsync(CreateCommandException(ChangeStreamHistoryLostCode), CancellationToken.None);
+
+        observer.StopReason.ShouldBe(StopReason.ChangeStreamHistoryLost);
+        observer.Reader.TryRead(out _).ShouldBeTrue();
+        (await observer.Reader.WaitToReadAsync()).ShouldBeFalse();
+    }
+
+    [Test]
+    public async Task OnErrorAsync_WhenHistoryLost_LogsWarningOnce()
+    {
+        var logger = new RecordingLogger();
+        using var observer = new Observer(queueCapacity: 10, EventFilter.All, logger, "sub-1");
+
+        await observer.OnErrorAsync(CreateCommandException(ChangeStreamHistoryLostCode), CancellationToken.None);
+        await observer.OnErrorAsync(CreateCommandException(ChangeStreamHistoryLostCode), CancellationToken.None);
+
+        logger.Messages.ShouldBe(
+            [(LogLevel.Warning, "[sub: sub-1] change stream history was lost; restart pending")]);
+    }
+
+    [Test]
+    public async Task OnErrorAsync_WhenHistoryLostAfterQueueOverflowed_KeepsFirstReason()
+    {
+        using var observer = new Observer(queueCapacity: 1, EventFilter.All);
+        await OfferAsync(observer, 0, "order-1");
+        await OfferAsync(observer, 1, "order-1");
+
+        await observer.OnErrorAsync(CreateCommandException(ChangeStreamHistoryLostCode), CancellationToken.None);
+
+        observer.StopReason.ShouldBe(StopReason.QueueOverflow);
+    }
+
+    [Test]
+    public async Task OnErrorAsync_WhenOtherError_FailsReader()
+    {
+        using var observer = new Observer(queueCapacity: 10, EventFilter.All);
+        var error = CreateCommandException(UnauthorizedCode);
+
+        await observer.OnErrorAsync(error, CancellationToken.None);
+
+        observer.StopReason.ShouldBe(StopReason.None);
+
+        var exception = await Should.ThrowAsync<MongoCommandException>(async () =>
+            await observer.Reader.WaitToReadAsync());
+
+        exception.ShouldBeSameAs(error);
+    }
+
+    private static MongoCommandException CreateCommandException(int code)
+    {
+        var serverId = new ServerId(new ClusterId(), new IPEndPoint(IPAddress.Loopback, 27017));
+
+        return new MongoCommandException(
+            new ConnectionId(serverId),
+            "The command failed.",
+            new BsonDocument("getMore", 1),
+            new BsonDocument { { "ok", 0 }, { "code", code } });
     }
 
     private ValueTask OfferAsync(Observer observer, long position, string streamId)

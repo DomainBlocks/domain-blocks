@@ -24,6 +24,9 @@ internal static partial class LogMessages
         string subscriptionId,
         int queueCapacity);
 
+    [LoggerMessage(LogLevel.Warning, "[sub: {SubscriptionId}] change stream history was lost; restart pending")]
+    internal static partial void SubscriptionChangeHistoryLost(this ILogger logger, string subscriptionId);
+
     [LoggerMessage(LogLevel.Information, "[sub: {SubscriptionId}] restarting from start")]
     internal static partial void SubscriptionRestartingFromStart(this ILogger logger, string subscriptionId);
 
