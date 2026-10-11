@@ -11,14 +11,4 @@ internal class ChangeStreamSubjectOptions
     public TimeSpan MaxRetryDelay { get; set; } = TimeSpan.FromMinutes(1);
 
     public int MaxRetryAttempts { get; set; } = int.MaxValue;
-
-    public ChangeStreamSubjectOptions Copy()
-    {
-        return new ChangeStreamSubjectOptions
-        {
-            MongoOptions = MongoOptions.Copy(),
-            MaxRetryDelay = MaxRetryDelay,
-            MaxRetryAttempts = MaxRetryAttempts
-        };
-    }
 }

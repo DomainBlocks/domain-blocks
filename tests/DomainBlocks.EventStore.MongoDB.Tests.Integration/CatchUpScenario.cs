@@ -12,9 +12,8 @@ using MongoDB.Driver;
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
 /// <summary>
-/// A subscription built from its parts, as the store builds it, in a database of its own. The test can see each replay
-/// that the subscription asks for and hold one back part-way, tell when the change stream has handed out live events,
-/// and make the change stream fail.
+/// Builds a subscription from its constituent components against an isolated event store, exposing controls for testing
+/// catch-up, live delivery, and change stream failures.
 /// </summary>
 internal sealed class CatchUpScenario : IAsyncDisposable
 {
@@ -22,7 +21,7 @@ internal sealed class CatchUpScenario : IAsyncDisposable
     private readonly IEventStore<object, string, StreamPosition, LogPosition> _eventStore;
     private readonly EventLogReader<object> _reader;
     private readonly RefCountedChangeStreamSubject<EventLogDocument<object>> _subject;
-    private readonly ReplayRecorder _replayRecorder = new();
+    private readonly CatchUpRecorder _catchUpRecorder = new();
     private readonly CancellationToken _cancellationToken;
 
     private CatchUpScenario(MongoEventStoreOptions options, CancellationToken cancellationToken)
@@ -42,7 +41,7 @@ internal sealed class CatchUpScenario : IAsyncDisposable
         _eventStore = new MongoEventStoreBuilder<object>()
             .UseClient(MongoTestEnvironment.MongoClient)
             .UseOptions(options)
-            .ConfigureCodec(x => x.UseEventTypeMap(typeMap).UseEventSerializer(new BsonDocumentObjectSerializer()))
+            .UseCodec(codec)
             .Build();
 
         var eventLog = MongoTestEnvironment.MongoClient
@@ -58,11 +57,11 @@ internal sealed class CatchUpScenario : IAsyncDisposable
         var liveDocument = new EventLogDocument<object>(codec);
 
         _reader = new EventLogReader<object>(eventLog, codec);
-        ChangeStream = new InstrumentedChangeStream(eventLog);
+        ChangeStreamProbe = new ChangeStreamProbe(eventLog);
 
         _subject = RefCountedChangeStreamSubject.Create(
             eventLog.Database.Client,
-            ChangeStream.WatchAsync,
+            ChangeStreamProbe.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(insertsOnly),
             static change => change.ResumeToken,
             change =>
@@ -73,21 +72,24 @@ internal sealed class CatchUpScenario : IAsyncDisposable
             logger: MongoTestEnvironment.LoggerFactory.CreateLogger("ChangeStreamSubject"));
     }
 
-    public InstrumentedChangeStream ChangeStream { get; }
+    public ChangeStreamProbe ChangeStreamProbe { get; }
 
-    public IReadOnlyList<ReplayRecorder.Replay> Replays => _replayRecorder.Replays;
+    public IReadOnlyList<CatchUpRead> CatchUpReads => _catchUpRecorder.Reads;
 
     public static async Task<CatchUpScenario> StartAsync(CancellationToken cancellationToken)
     {
         var options = new MongoEventStoreOptions { DatabaseName = $"catchup_{Guid.NewGuid():N}" };
-        await MongoEventStoreAdmin.EnsureInitializedAsync(MongoTestEnvironment.MongoClient, options);
+        await MongoEventStoreAdmin.EnsureInitializedAsync(MongoTestEnvironment.MongoClient, options, cancellationToken);
 
         return new CatchUpScenario(options, cancellationToken);
     }
 
     public async Task<TestEvent[]> AppendAsync(string prefix, int count, string streamId = "s1")
     {
-        var events = Enumerable.Range(0, count).Select(i => new TestEvent { Value = $"{prefix}-{i}" }).ToArray();
+        var events = Enumerable
+            .Range(0, count)
+            .Select(i => new TestEvent { Value = $"{prefix}-{i}" })
+            .ToArray();
 
         foreach (var e in events)
         {
@@ -101,22 +103,29 @@ internal sealed class CatchUpScenario : IAsyncDisposable
     }
 
     /// <summary>
-    /// Appends events and waits until the change stream has handed them to every subscription attached to it. Live
-    /// events appended earlier must already have been handed out.
+    /// Appends events and waits until the change stream has delivered them.
     /// </summary>
+    /// <remarks>
+    /// When this method returns, all events appended by this call, and any earlier events in the change stream have
+    /// been delivered to the stream's subscribers.
+    /// </remarks>
     public async Task<TestEvent[]> AppendLiveAsync(string prefix, int count, string streamId = "s1")
     {
-        var delivered = ChangeStream.DeliveredCount + count;
+        var total = ChangeStreamProbe.DeliveredChangeCount + count;
         var events = await AppendAsync(prefix, count, streamId);
-        await ChangeStream.DeliveredAsync(delivered, _cancellationToken);
+        await ChangeStreamProbe.WaitForDeliveredChangesAsync(total, _cancellationToken);
 
         return events;
     }
 
     /// <summary>
-    /// Subscribes to the log from its start. The store turns a subscription filter into a query for the replay and an
-    /// event filter for live events, so a filtered subscription takes both.
+    /// Creates a subscription from the beginning of the event log.
     /// </summary>
+    /// <remarks>
+    /// The catch-up filter controls which events are read during catch-up, while the live filter controls which events
+    /// are delivered from the change stream. Both filters must be specified to test equivalent filtering across the
+    /// transition from catch-up to live delivery.
+    /// </remarks>
     public SubscriptionProbe<StreamPosition, LogPosition> SubscribeToAll(
         SubscriptionOptions? options = null,
         FilterDefinition<BsonDocument>? catchUpFilter = null,
@@ -127,31 +136,34 @@ internal sealed class CatchUpScenario : IAsyncDisposable
         var subscription = new SubscriptionAsyncEnumerable<object, LogPosition>(
             _reader,
             _subject,
-            (reader, session, after, highWaterMark, ct) => _replayRecorder.Record(
-                reader.ReadCatchUpAsync(session, filter, EventLogEntry.FieldNames.Position, after, highWaterMark, ct),
-                after,
-                highWaterMark,
+            (reader, session, from, to, ct) => _catchUpRecorder.Record(
+                reader.ReadCatchUpAsync(session, filter, EventLogEntry.FieldNames.Position, from, to, ct),
+                from,
+                to,
                 ct),
-            static async (reader, session, ct) => await reader.GetLastPositionAsync(
-                session,
-                Builders<BsonDocument>.Filter.Empty,
-                EventLogEntry.FieldNames.Position,
-                ct) is { } pos
-                ? LogPosition.FromInt64(pos)
-                : null,
+            static async (reader, session, ct) =>
+            {
+                var endPos = await reader.GetEndPositionAsync(
+                    session,
+                    Builders<BsonDocument>.Filter.Empty,
+                    EventLogEntry.FieldNames.Position,
+                    ct);
+
+                return endPos is { } pos ? LogPosition.FromInt64(pos) : null;
+            },
             liveFilter ?? EventFilter.All,
             static ctx => ctx.LogPosition,
             SubscriptionOrigin.Start,
-            options ?? new SubscriptionOptions(),
+            options,
             MongoTestEnvironment.LoggerFactory.CreateLogger("Subscription"));
 
         return new SubscriptionProbe<StreamPosition, LogPosition>(subscription, _cancellationToken);
     }
 
     /// <summary>
-    /// Holds the replay with the given index once it has delivered its first event, until the hold is released.
+    /// Holds the catch-up with the given index once it has delivered its first event, until the hold is released.
     /// </summary>
-    public ReplayRecorder.Hold HoldReplay(int replayIndex) => _replayRecorder.HoldReplay(replayIndex);
+    public CatchUpHold HoldCatchUp(int index) => _catchUpRecorder.Hold(index);
 
     public async ValueTask DisposeAsync()
     {

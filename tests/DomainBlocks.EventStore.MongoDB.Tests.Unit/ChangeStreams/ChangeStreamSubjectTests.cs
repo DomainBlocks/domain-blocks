@@ -94,7 +94,7 @@ public class ChangeStreamSubjectTests
         await observer.ReadAllAsync(ct).Take(2).ToArrayAsync(ct);
 
         _helloCount.ShouldBe(1);
-        connection.OperationTime.ShouldBe(CreateOperationTime(1));
+        connection.OpTime.ShouldBe(CreateOperationTime(1));
         // The stream starts one tick after the operation time.
         _watchOptions.Select(x => x?.StartAtOperationTime).ShouldBe([new BsonTimestamp(1, 1), null]);
     }
@@ -116,7 +116,7 @@ public class ChangeStreamSubjectTests
 
         await using var connection = await subject.ConnectAsync(ct);
 
-        connection.OperationTime.ShouldBe(CreateOperationTime(1));
+        connection.OpTime.ShouldBe(CreateOperationTime(1));
         _watchOptions.Single()!.ResumeAfter.ShouldBe(resumeAfter);
         _watchOptions.Single()!.StartAtOperationTime.ShouldBeNull();
     }

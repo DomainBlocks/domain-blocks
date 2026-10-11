@@ -67,11 +67,12 @@ internal sealed class EventLogReader<TEvent>(
     }
 
     /// <summary>
-    /// Reads log events after <paramref name="afterExclusive"/> up to <paramref name="highWaterMark"/>, inclusive.
+    /// Reads events from the global event log whose positions are greater than the starting position and less than or
+    /// equal to the ending position, in ascending position order.
     /// </summary>
     public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCatchUpAllAsync(
-        long afterExclusive,
-        long highWaterMark,
+        long startExclusive,
+        long endInclusive,
         EventFilter filter,
         CancellationToken cancellationToken)
     {
@@ -82,23 +83,24 @@ internal sealed class EventLogReader<TEvent>(
             (parameters, key, limit) =>
             {
                 parameters.Add(new NpgsqlParameter<long> { TypedValue = key });
-                parameters.Add(new NpgsqlParameter<long> { TypedValue = highWaterMark });
+                parameters.Add(new NpgsqlParameter<long> { TypedValue = endInclusive });
                 parameters.Add(new NpgsqlParameter<int> { TypedValue = limit });
             },
             condition,
-            afterExclusive,
+            startExclusive,
             static e => (long)e.Context.LogPosition.Value,
             null,
             cancellationToken);
     }
 
     /// <summary>
-    /// Reads stream events after <paramref name="afterExclusive"/> up to <paramref name="highWaterMark"/>, inclusive.
+    /// Reads events from an event stream whose positions are greater than the starting position and less than or equal
+    /// to the ending position, in ascending position order.
     /// </summary>
     public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCatchUpStreamAsync(
         string streamId,
-        long afterExclusive,
-        long highWaterMark,
+        long startExclusive,
+        long endInclusive,
         EventFilter filter,
         CancellationToken cancellationToken)
     {
@@ -110,11 +112,11 @@ internal sealed class EventLogReader<TEvent>(
             {
                 parameters.Add(new NpgsqlParameter<string> { TypedValue = streamId });
                 parameters.Add(new NpgsqlParameter<long> { TypedValue = key });
-                parameters.Add(new NpgsqlParameter<long> { TypedValue = highWaterMark });
+                parameters.Add(new NpgsqlParameter<long> { TypedValue = endInclusive });
                 parameters.Add(new NpgsqlParameter<int> { TypedValue = limit });
             },
             condition,
-            afterExclusive,
+            startExclusive,
             static e => (long)e.Context.StreamPosition.Value,
             null,
             cancellationToken);

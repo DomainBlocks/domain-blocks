@@ -24,13 +24,13 @@ internal sealed class EventLogSql
     public const int ReadAllParameterCount = 2;
 
     /// <summary>
-    /// Parameters bound by a <see cref="CatchUpAll"/> page: key, high-water mark, and limit. Condition parameters
+    /// Parameters bound by a <see cref="CatchUpAll"/> page: key, to position, and limit. Condition parameters
     /// follow.
     /// </summary>
     public const int CatchUpAllParameterCount = 3;
 
     /// <summary>
-    /// Parameters bound by a <see cref="CatchUpStream"/> page: stream ID, key, high-water mark, and limit. Condition
+    /// Parameters bound by a <see cref="CatchUpStream"/> page: stream ID, key, to position, and limit. Condition
     /// parameters follow.
     /// </summary>
     public const int CatchUpStreamParameterCount = 4;

@@ -230,7 +230,7 @@ public class RefCountedChangeStreamSubjectTests
 
         public Task Disposing => _disposingTcs.Task;
 
-        public BsonTimestamp OperationTime { get; } = new(1, 1);
+        public BsonTimestamp OpTime { get; } = new(1, 1);
 
         public int DisposeCount { get; private set; }
 

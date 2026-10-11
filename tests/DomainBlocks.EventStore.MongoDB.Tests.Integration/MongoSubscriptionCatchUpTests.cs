@@ -11,8 +11,6 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
-using Replay = ReplayRecorder.Replay;
-
 /// <summary>
 /// How a subscription replays the log when it has to restart.
 /// </summary>
@@ -27,7 +25,7 @@ public class MongoSubscriptionCatchUpTests
     {
         await using var scenario = await CatchUpScenario.StartAsync(ct);
         var existing = await scenario.AppendAsync("existing", 3);
-        var hold = scenario.HoldReplay(0);
+        var hold = scenario.HoldCatchUp(0);
 
         await using var subscription = scenario.SubscribeToAll(new SubscriptionOptions { QueueCapacity = 1 });
 
@@ -41,11 +39,11 @@ public class MongoSubscriptionCatchUpTests
         hold.Release();
         var messages = await subscription.ReadUntilCaughtUpAsync(await pending);
 
-        // The first replay ran to its high-water mark, and the second went on from there.
-        scenario.Replays.ShouldBe(
+        // The first replay ran to its end position, and the second continued from there.
+        scenario.CatchUpReads.ShouldBe(
         [
-            new Replay(AfterExclusive: -1, HighWaterMark: 2, Completed: true),
-            new Replay(AfterExclusive: 2, HighWaterMark: 4, Completed: true)
+            new CatchUpRead(StartExclusive: -1, EndInclusive: 2, IsCompleted: true),
+            new CatchUpRead(StartExclusive: 2, EndInclusive: 4, IsCompleted: true)
         ]);
 
         // The subscriber had not been told that it caught up, so it is not told that it fell behind.
@@ -71,7 +69,7 @@ public class MongoSubscriptionCatchUpTests
     {
         await using var scenario = await CatchUpScenario.StartAsync(ct);
         var existing = await scenario.AppendAsync("existing", 1);
-        var hold = scenario.HoldReplay(1);
+        var hold = scenario.HoldCatchUp(1);
 
         await using var subscription = scenario.SubscribeToAll(new SubscriptionOptions { QueueCapacity = 1 });
 
@@ -95,7 +93,7 @@ public class MongoSubscriptionCatchUpTests
         var messages = await subscription.ReadUntilCaughtUpAsync(await pending);
 
         // It took a third replay to catch up, and the subscriber was not told a second time that it fell behind.
-        scenario.Replays.Count.ShouldBe(3);
+        scenario.CatchUpReads.Count.ShouldBe(3);
 
         messages.Select(x => x.Kind).ShouldBe(
         [
@@ -113,7 +111,7 @@ public class MongoSubscriptionCatchUpTests
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task SubscribeToAll_WhenRestartingAfterReplayThatEndedOnEventsFilterExcludes_ResumesFromHighWaterMark(
+    public async Task SubscribeToAll_WhenRestartingAfterFilteredCatchUp_ResumesFromLastObservedPosition(
         CancellationToken ct)
     {
         await using var scenario = await CatchUpScenario.StartAsync(ct);
@@ -121,7 +119,7 @@ public class MongoSubscriptionCatchUpTests
         // The filter selects the first of the existing events and not the two that follow it.
         var selected = await scenario.AppendAsync("existing", 1, "selected");
         await scenario.AppendAsync("existing", 2, "excluded");
-        var hold = scenario.HoldReplay(0);
+        var hold = scenario.HoldCatchUp(0);
 
         await using var subscription = scenario.SubscribeToAll(
             new SubscriptionOptions { QueueCapacity = 1 },
@@ -138,12 +136,12 @@ public class MongoSubscriptionCatchUpTests
         hold.Release();
         var messages = await subscription.ReadUntilCaughtUpAsync(await pending);
 
-        // The first replay delivered nothing after its first event, but it covered the log up to its high-water mark,
-        // so the second went on from there rather than from the last event that was delivered.
-        scenario.Replays.ShouldBe(
+        // The first replay delivered nothing after its first event, but it covered the log up to its end position, so
+        // the second should continue from there rather than from the last event that was delivered.
+        scenario.CatchUpReads.ShouldBe(
         [
-            new Replay(AfterExclusive: -1, HighWaterMark: 2, Completed: true),
-            new Replay(AfterExclusive: 2, HighWaterMark: 4, Completed: true)
+            new CatchUpRead(StartExclusive: -1, EndInclusive: 2, IsCompleted: true),
+            new CatchUpRead(StartExclusive: 2, EndInclusive: 4, IsCompleted: true)
         ]);
 
         messages
@@ -166,12 +164,14 @@ public class MongoSubscriptionCatchUpTests
         (await subscription.NextAsync()).IsCaughtUp.ShouldBeTrue();
 
         // The change stream loses its connection, and events are appended before it tries to resume.
-        var fault = scenario.ChangeStream.Disconnect(CreateCommandException(MongoErrorCodes.ChangeStreamHistoryLost));
-        await fault.Resuming.WaitAsync(ct);
+        var disconnect = scenario.ChangeStreamProbe.SimulateDisconnect();
+
+        await disconnect.ResumptionAttempt.WaitAsync(ct);
+
         var meanwhile = await scenario.AppendAsync("meanwhile", 2);
 
         // The oplog no longer holds the resume point, so the subscription restarts with a new change stream.
-        fault.Release();
+        disconnect.FailResumption(CreateCommandException(MongoErrorCodes.ChangeStreamHistoryLost));
         var messages = await subscription.ReadUntilCaughtUpAsync();
 
         messages.Select(x => x.Kind).ShouldBe(
@@ -187,7 +187,7 @@ public class MongoSubscriptionCatchUpTests
             .Select(x => x.Event!.Value.Payload)
             .ShouldBe([meanwhile[0], meanwhile[1]]);
 
-        scenario.ChangeStream.FreshOpenCount.ShouldBe(2);
+        scenario.ChangeStreamProbe.InitialOpenCount.ShouldBe(2);
 
         // The new change stream delivers live events.
         var live = await scenario.AppendAsync("live", 1);
@@ -204,12 +204,12 @@ public class MongoSubscriptionCatchUpTests
         (await subscription.NextAsync()).IsCaughtUp.ShouldBeTrue();
 
         var error = CreateCommandException(UnauthorizedCode);
-        scenario.ChangeStream.Disconnect(error).Release();
+        scenario.ChangeStreamProbe.SimulateDisconnect().FailResumption(error);
 
         var exception = await Should.ThrowAsync<MongoCommandException>(subscription.NextAsync);
 
         exception.ShouldBeSameAs(error);
-        scenario.ChangeStream.FreshOpenCount.ShouldBe(1);
+        scenario.ChangeStreamProbe.InitialOpenCount.ShouldBe(1);
     }
 
     private static MongoCommandException CreateCommandException(int code)

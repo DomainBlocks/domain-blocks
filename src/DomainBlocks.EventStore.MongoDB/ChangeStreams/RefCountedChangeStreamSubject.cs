@@ -67,7 +67,7 @@ internal sealed class RefCountedChangeStreamSubject<TResult>(
             subjectConnection.RefCount++;
 
             return new Attachment(
-                subjectConnection.Connection.OperationTime,
+                subjectConnection.Connection.OpTime,
                 () => DetachAsync(attachment, subjectConnection));
         }
         finally
@@ -116,7 +116,7 @@ internal sealed class RefCountedChangeStreamSubject<TResult>(
     {
         private int _disposed;
 
-        public BsonTimestamp OperationTime { get; } = operationTime;
+        public BsonTimestamp OpTime { get; } = operationTime;
 
         public async ValueTask DisposeAsync()
         {

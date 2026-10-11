@@ -7,39 +7,39 @@ namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 /// Opens change streams on the event log for a change stream subject, counting them, telling when they have handed out
 /// changes, and failing them on request.
 /// </summary>
-internal sealed class InstrumentedChangeStream(IMongoCollection<BsonDocument> eventLog)
+internal sealed class ChangeStreamProbe(IMongoCollection<BsonDocument> eventLog)
 {
     private readonly Lock _lock = new();
     private readonly List<(int Total, TaskCompletionSource Reached)> _deliveryWaits = [];
-    private int _deliveredCount;
-    private int _freshOpenCount;
-    private Fault? _fault;
+    private int _deliveredChangeCount;
+    private int _initialOpenCount;
+    private ChangeStreamDisconnect? _disconnect;
 
     /// <summary>
     /// The number of change streams opened without a resume token, which is one for each connection of the subject.
     /// </summary>
-    public int FreshOpenCount => Volatile.Read(ref _freshOpenCount);
+    public int InitialOpenCount => Volatile.Read(ref _initialOpenCount);
 
     /// <summary>
     /// The number of changes that the change streams have handed to every observer attached, in all.
     /// </summary>
-    public int DeliveredCount
+    public int DeliveredChangeCount
     {
         get
         {
             lock (_lock)
-                return _deliveredCount;
+                return _deliveredChangeCount;
         }
     }
 
     /// <summary>
     /// Waits until the change streams have handed out the given number of changes in all.
     /// </summary>
-    public Task DeliveredAsync(int total, CancellationToken cancellationToken)
+    public Task WaitForDeliveredChangesAsync(int total, CancellationToken cancellationToken)
     {
         lock (_lock)
         {
-            if (_deliveredCount >= total)
+            if (_deliveredChangeCount >= total)
                 return Task.CompletedTask;
 
             var reached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -53,12 +53,12 @@ internal sealed class InstrumentedChangeStream(IMongoCollection<BsonDocument> ev
     /// Makes the change stream lose its connection at its next batch, and then fail with the given error when it tries
     /// to resume. The resume waits until the fault is released.
     /// </summary>
-    public Fault Disconnect(Exception resumeError)
+    public ChangeStreamDisconnect SimulateDisconnect()
     {
-        var fault = new Fault(resumeError);
-        Volatile.Write(ref _fault, fault);
+        var disconnect = new ChangeStreamDisconnect();
+        Volatile.Write(ref _disconnect, disconnect);
 
-        return fault;
+        return disconnect;
     }
 
     public async Task<IChangeStreamCursor<ChangeStreamDocument<BsonDocument>>> WatchAsync(
@@ -68,14 +68,12 @@ internal sealed class InstrumentedChangeStream(IMongoCollection<BsonDocument> ev
     {
         if (options?.ResumeAfter is null)
         {
-            Interlocked.Increment(ref _freshOpenCount);
+            Interlocked.Increment(ref _initialOpenCount);
         }
-        else if (Interlocked.Exchange(ref _fault, null) is { } fault)
+        else if (Interlocked.Exchange(ref _disconnect, null) is { } disconnect)
         {
-            fault.SetResuming();
-            await fault.Released.WaitAsync(cancellationToken);
-
-            throw fault.ResumeError;
+            disconnect.SignalResumptionAttempt();
+            await disconnect.ResumptionRelease.WaitAsync(cancellationToken);
         }
 
         var cursor = await eventLog.WatchAsync(pipeline, options, cancellationToken);
@@ -87,46 +85,22 @@ internal sealed class InstrumentedChangeStream(IMongoCollection<BsonDocument> ev
     {
         lock (_lock)
         {
-            _deliveredCount += count;
+            _deliveredChangeCount += count;
 
-            foreach (var (_, reached) in _deliveryWaits.Where(x => x.Total <= _deliveredCount))
+            foreach (var (_, reached) in _deliveryWaits.Where(x => x.Total <= _deliveredChangeCount))
                 reached.TrySetResult();
 
-            _deliveryWaits.RemoveAll(x => x.Total <= _deliveredCount);
+            _deliveryWaits.RemoveAll(x => x.Total <= _deliveredChangeCount);
         }
     }
 
-    private Exception? TakeDisconnect() => Volatile.Read(ref _fault)?.Disconnect();
-
-    public sealed class Fault(Exception resumeError)
-    {
-        private readonly TaskCompletionSource _resuming = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private int _isDisconnected;
-
-        public Exception ResumeError { get; } = resumeError;
-
-        /// <summary>
-        /// Completes when the change stream tries to resume.
-        /// </summary>
-        public Task Resuming => _resuming.Task;
-
-        public Task Released => _released.Task;
-
-        public void Release() => _released.TrySetResult();
-
-        public void SetResuming() => _resuming.TrySetResult();
-
-        // A timeout is an error that the change stream resumes from. Only the first batch after the request fails.
-        public Exception? Disconnect() =>
-            Interlocked.Exchange(ref _isDisconnected, 1) == 0 ? new TimeoutException("Disconnected.") : null;
-    }
+    private Exception? TakeDisconnectError() => Volatile.Read(ref _disconnect)?.TakeDisconnectError();
 
     // The subject's producer hands every change in a batch to every observer before it asks for the next batch, so a
     // batch has been delivered once the next one is asked for.
     private sealed class Cursor(
         IChangeStreamCursor<ChangeStreamDocument<BsonDocument>> inner,
-        InstrumentedChangeStream changeStream) :
+        ChangeStreamProbe changeStreamProbe) :
         IChangeStreamCursor<ChangeStreamDocument<BsonDocument>>
     {
         private int _undeliveredCount;
@@ -138,10 +112,10 @@ internal sealed class InstrumentedChangeStream(IMongoCollection<BsonDocument> ev
 
         public async Task<bool> MoveNextAsync(CancellationToken cancellationToken = default)
         {
-            changeStream.OnDelivered(_undeliveredCount);
+            changeStreamProbe.OnDelivered(_undeliveredCount);
             _undeliveredCount = 0;
 
-            if (changeStream.TakeDisconnect() is { } exception)
+            if (changeStreamProbe.TakeDisconnectError() is { } exception)
                 throw exception;
 
             var hasBatch = await inner.MoveNextAsync(cancellationToken);
