@@ -131,33 +131,35 @@ internal sealed class CatchUpScenario : IAsyncDisposable
         FilterDefinition<BsonDocument>? catchUpFilter = null,
         EventFilter? liveFilter = null)
     {
-        var filter = catchUpFilter ?? Builders<BsonDocument>.Filter.Empty;
+        // var filter = catchUpFilter ?? Builders<BsonDocument>.Filter.Empty;
+        //
+        // var subscription = new SubscriptionAsyncEnumerable<object, LogPosition>(
+        //     _reader,
+        //     _subject,
+        //     (reader, session, from, to, ct) => _catchUpRecorder.Record(
+        //         reader.ReadCatchUpAsync(session, filter, EventLogEntry.FieldNames.Position, from, to, ct),
+        //         from,
+        //         to,
+        //         ct),
+        //     static async (reader, session, ct) =>
+        //     {
+        //         var endPos = await reader.GetEndPositionAsync(
+        //             session,
+        //             Builders<BsonDocument>.Filter.Empty,
+        //             EventLogEntry.FieldNames.Position,
+        //             ct);
+        //
+        //         return endPos is { } pos ? LogPosition.FromInt64(pos) : null;
+        //     },
+        //     liveFilter ?? EventFilter.All,
+        //     static ctx => ctx.LogPosition,
+        //     SubscriptionOrigin.Start,
+        //     options,
+        //     MongoTestEnvironment.LoggerFactory.CreateLogger("Subscription"));
+        //
+        // return new SubscriptionProbe<StreamPosition, LogPosition>(subscription, _cancellationToken);
 
-        var subscription = new SubscriptionAsyncEnumerable<object, LogPosition>(
-            _reader,
-            _subject,
-            (reader, session, from, to, ct) => _catchUpRecorder.Record(
-                reader.ReadCatchUpAsync(session, filter, EventLogEntry.FieldNames.Position, from, to, ct),
-                from,
-                to,
-                ct),
-            static async (reader, session, ct) =>
-            {
-                var endPos = await reader.GetEndPositionAsync(
-                    session,
-                    Builders<BsonDocument>.Filter.Empty,
-                    EventLogEntry.FieldNames.Position,
-                    ct);
-
-                return endPos is { } pos ? LogPosition.FromInt64(pos) : null;
-            },
-            liveFilter ?? EventFilter.All,
-            static ctx => ctx.LogPosition,
-            SubscriptionOrigin.Start,
-            options,
-            MongoTestEnvironment.LoggerFactory.CreateLogger("Subscription"));
-
-        return new SubscriptionProbe<StreamPosition, LogPosition>(subscription, _cancellationToken);
+        throw new NotImplementedException();
     }
 
     /// <summary>

@@ -18,10 +18,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 {
     private readonly EventLogReader<TEvent> _reader;
     private readonly IRefCountedChangeStreamSubject<EventLogDocument<TEvent>> _changeStreamSubject;
-    private readonly CatchUpReader _catchUpReader;
-    private readonly EndPositionReader _endPositionReader;
-    private readonly EventFilter _liveFilter;
-    private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> _positionSelector;
+    private readonly SubscriptionFilterSpec _filterSpec;
+    private readonly SubscriptionPositionAdapter<TPos> _positionAdapter;
     private readonly SubscriptionOrigin<TPos> _origin;
     private readonly SubscriptionOptions _options;
     private readonly ILogger? _logger;
@@ -30,22 +28,18 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     public SubscriptionAsyncEnumerable(
         EventLogReader<TEvent> reader,
         IRefCountedChangeStreamSubject<EventLogDocument<TEvent>> changeStreamSubject,
-        CatchUpReader catchUpReader,
-        EndPositionReader endPositionReader,
-        EventFilter liveFilter,
-        Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> positionSelector,
+        SubscriptionFilterSpec filterSpec,
+        SubscriptionPositionAdapter<TPos> positionAdapter,
         SubscriptionOrigin<TPos>? origin,
         SubscriptionOptions? options,
         ILogger? logger)
     {
         _origin = origin ?? SubscriptionOrigin.End;
         _options = options ?? SubscriptionOptions.Default;
-        _catchUpReader = catchUpReader;
-        _endPositionReader = endPositionReader;
-        _liveFilter = liveFilter;
-        _positionSelector = positionSelector;
         _reader = reader;
         _changeStreamSubject = changeStreamSubject;
+        _filterSpec = filterSpec;
+        _positionAdapter = positionAdapter;
         _logger = logger;
 
         _correlationId = _options.CorrelationId is { } id
@@ -84,7 +78,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
                 isFirstCycle = false;
 
-                using var observer = new Observer(_options.QueueCapacity, _liveFilter, _logger, _correlationId);
+                using var observer = new Observer(_options.QueueCapacity, _filterSpec.Live, _logger, _correlationId);
                 await using var attachment = await AttachObserverAsync(observer, cancellationToken)
                     .ConfigureAwait(false);
 
@@ -157,7 +151,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     {
         try
         {
-            return await _endPositionReader(_reader, null, cancellationToken).ConfigureAwait(false);
+            return await GetEndPosition(null, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -169,6 +163,15 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
             _logger?.SubscriptionFailed(ex, _correlationId);
             throw;
         }
+    }
+
+    private async Task<TPos?> GetEndPosition(IClientSessionHandle? session, CancellationToken cancellationToken)
+    {
+        var pos = await _reader
+            .GetEndPositionAsync(session, _filterSpec.EndPosition, _positionAdapter.FieldName, cancellationToken)
+            .ConfigureAwait(false);
+
+        return pos.HasValue ? _positionAdapter.Factory(pos.Value) : null;
     }
 
     private async Task<IChangeStreamAttachment> AttachObserverAsync(
@@ -205,7 +208,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                    .StartCatchUpSessionAsync(changeStreamOpTime, cancellationToken)
                    .ConfigureAwait(false))
         {
-            var endInclusive = await _endPositionReader(_reader, session, cancellationToken).ConfigureAwait(false);
+            var endInclusive = await GetEndPosition(session, cancellationToken).ConfigureAwait(false);
 
             _logger?.CatchUpBoundary(_correlationId, endInclusive?.Value);
 
@@ -213,9 +216,10 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
             {
                 var startExclusive = resumePosition.After is { } after ? checked((long)after.Value) : -1;
 
-                var events = _catchUpReader(
-                    _reader,
+                var events = _reader.ReadCatchUpAsync(
                     session,
+                    _filterSpec.CatchUp,
+                    _positionAdapter.FieldName,
                     startExclusive,
                     checked((long)endInclusive.Value.Value),
                     cancellationToken);
@@ -241,7 +245,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         // The queue ends once the observer has stopped and everything in the queue has been read.
         await foreach (var e in observer.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
         {
-            var position = _positionSelector(e.Context);
+            var position = _positionAdapter.Selector(e.Context);
 
             // The replay has covered it.
             if (resumePosition.Covers(position))
@@ -253,24 +257,6 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
             resumePosition.AdvanceTo(position);
         }
     }
-
-    /// <summary>
-    /// Reads the followed sequence from one position to another.
-    /// </summary>
-    public delegate IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> CatchUpReader(
-        EventLogReader<TEvent> reader,
-        IClientSessionHandle session,
-        long startExclusive,
-        long endInclusive,
-        CancellationToken cancellationToken);
-
-    /// <summary>
-    /// Reads the end position of the followed sequence, or <see langword="null"/> if it is empty.
-    /// </summary>
-    public delegate Task<TPos?> EndPositionReader(
-        EventLogReader<TEvent> reader,
-        IClientSessionHandle? session,
-        CancellationToken cancellationToken);
 
     /// <summary>
     /// The furthest position delivered or covered by a replay. It only moves forward.
