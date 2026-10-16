@@ -251,11 +251,24 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         SubscriptionOrigin<LogPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
+        var filter = options?.Filter ?? EventFilter.All;
+        var catchUpFilter = TranslateFilter(filter) ?? Builders<BsonDocument>.Filter.Empty;
+
         return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
             _reader,
             _allEventsSubject,
-            SubscriptionFilterSpec.ForAll(options?.Filter),
-            SubscriptionPositionAdapter.All,
+            (reader, session, start, end, ct) =>
+                reader.ReadCatchUpAsync(session, catchUpFilter, FieldNames.Position, start, end, ct),
+            static async (reader, session, ct) =>
+            {
+                var endPos = await reader
+                    .GetEndPositionAsync(session, Builders<BsonDocument>.Filter.Empty, FieldNames.Position, ct)
+                    .ConfigureAwait(false);
+
+                return endPos is { } pos ? LogPosition.FromInt64(pos) : null;
+            },
+            filter,
+            static ctx => ctx.LogPosition,
             origin,
             options,
             _logger);
@@ -266,11 +279,25 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         SubscriptionOrigin<StreamPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
+        var filter = options?.Filter ?? EventFilter.All;
+        var streamFilter = Builders<BsonDocument>.Filter.Eq(FieldNames.StreamId, streamId);
+        var catchUpFilter = TranslateFilter(filter) is { } translated ? streamFilter & translated : streamFilter;
+
         return new SubscriptionAsyncEnumerable<TEvent, StreamPosition>(
             _reader,
             _allEventsSubject,
-            SubscriptionFilterSpec.ForStream(streamId, options?.Filter),
-            SubscriptionPositionAdapter.Stream,
+            (reader, session, start, end, ct) =>
+                reader.ReadCatchUpAsync(session, catchUpFilter, FieldNames.StreamPosition, start, end, ct),
+            async (reader, session, ct) =>
+            {
+                var endPos = await reader
+                    .GetEndPositionAsync(session, streamFilter, FieldNames.StreamPosition, ct)
+                    .ConfigureAwait(false);
+
+                return endPos is { } pos ? StreamPosition.FromInt64(pos) : null;
+            },
+            EventFilter.StreamIds(streamId) & filter,
+            static ctx => ctx.StreamPosition,
             origin,
             options,
             _logger);

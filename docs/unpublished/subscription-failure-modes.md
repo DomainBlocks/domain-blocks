@@ -126,9 +126,10 @@ Either way the backend goes on to step 4 and the transaction becomes visible. Th
 The standby normally receives the WAL moments later, because the cancel stops only the waiting, not the replication.
 The danger is a failover in between, which is most likely when waits are long, that is, when the standby is slow.
 
-Causes: our appender passing a `CancellationToken` to the commit (Npgsql sends a cancel request), probably a
-`statement_timeout` that covers the `COMMIT` (not traced in the source), and an administrator's `pg_cancel_backend` or
-`pg_terminate_backend`.
+Causes: disposing our appender while a commit waits, probably a `statement_timeout` that covers the `COMMIT` (not
+traced in the source), and an administrator's `pg_cancel_backend` or `pg_terminate_backend`. The caller's token never
+reaches the commit: only the appender's stop token does, which `DisposeAsync` cancels (`BatchingAppender.cs` 47 and
+76-85), and Npgsql then sends a cancel request.
 
 #### Spike results
 
@@ -251,13 +252,12 @@ public interface IWakeSignal : IAsyncDisposable
 }
 
 // A read context that never goes backwards: a causal session in MongoDB, one connection in PostgreSQL.
-public interface IEventLogReadContext<TRow> : IAsyncDisposable
-    where TRow : IFeedRow
+public interface IEventLogReadContext<TSourceEvent> : IAsyncDisposable
 {
     ValueTask<LogPosition?> ReadLogEndAsync(CancellationToken cancellationToken);
 
     // Unfiltered and in position order. The tail reader uses this.
-    IAsyncEnumerable<TRow> ReadLogAfterAsync(LogPosition? after, int limit, CancellationToken cancellationToken);
+    IAsyncEnumerable<TSourceEvent> ReadLogAfterAsync(LogPosition? after, int limit, CancellationToken cancellationToken);
 }
 
 // Built per subscription. It knows the target (all events or one stream), the filter and the kind of position.
@@ -272,16 +272,22 @@ public interface ICatchUpQuery<TEvent, TPos>
     TPos GetPosition(ReadEventContext<string, StreamPosition, LogPosition> context);
 }
 
-public interface ISubscriptionStore<TRow>
-    where TRow : IFeedRow
+public interface ISubscriptionStore<TSourceEvent>
 {
-    ValueTask<IEventLogReadContext<TRow>> OpenReadContextAsync(CancellationToken cancellationToken);
+    ValueTask<IEventLogReadContext<TSourceEvent>> OpenReadContextAsync(CancellationToken cancellationToken);
     IWakeSignal CreateWakeSignal();
 }
 ```
 
-`IFeedRow` is an `IFilterableEvent` with a `LogPosition` that can produce a `ReadEvent`. It is valid only during
-`OnNext`.
+A source event is an event as its source holds it, so the shared code constrains it rather than naming a row or a
+document type:
+
+```csharp
+where TSourceEvent : IFilterableEvent, IReadEvent<TEvent, string, StreamPosition, LogPosition>
+```
+
+A filter evaluates it before it is decoded, and its payload and metadata are decoded on first access. The source reuses
+it, so it is valid only during `OnNext`.
 
 | Store      | Read context     | `ReadLogAfterAsync`                           | Wake signal                          |
 |------------|------------------|-----------------------------------------------|--------------------------------------|
@@ -291,9 +297,9 @@ public interface ISubscriptionStore<TRow>
 The shared code provides the feed and the subscription:
 
 ```csharp
-public interface IFeedObserver<in TRow>
+public interface IFeedObserver<in TSourceEvent>
 {
-    void OnNext(TRow row);           // must not block, and must not keep the row
+    void OnNext(TSourceEvent e);     // must not block, and must not keep the event
     void OnError(Exception error);   // terminal
 }
 
@@ -304,9 +310,11 @@ public interface IFeedAttachment : IAsyncDisposable
 }
 
 // One per store, ref-counted: it starts on the first attach and stops on the last detach.
-internal sealed class TailFeed<TRow> where TRow : IFeedRow
+internal sealed class TailFeed<TSourceEvent>
 {
-    public ValueTask<IFeedAttachment> AttachAsync(IFeedObserver<TRow> observer, CancellationToken cancellationToken);
+    public ValueTask<IFeedAttachment> AttachAsync(
+        IFeedObserver<TSourceEvent> observer,
+        CancellationToken cancellationToken);
 }
 ```
 
@@ -320,11 +328,12 @@ while (true)
 {
     var count = 0;
 
-    await foreach (var row in context.ReadLogAfterAsync(lastRead, _batchSize, ct))
+    await foreach (var e in context.ReadLogAfterAsync(lastRead, _batchSize, ct))
     {
-        Interlocked.Exchange(ref _floor, row.Position);  // publish before notifying
-        foreach (var observer in Volatile.Read(ref _observers)) observer.OnNext(row);
-        lastRead = row.Position;
+        var position = e.Context.LogPosition;
+        Interlocked.Exchange(ref _floor, position);  // publish before notifying
+        foreach (var observer in Volatile.Read(ref _observers)) observer.OnNext(e);
+        lastRead = position;
         count++;
     }
 
@@ -346,7 +355,7 @@ Each subscription cycle:
 
 The subscription opens its own read context, so the feed knows nothing about catch-ups. If PostgreSQL uses the same
 `string`, `StreamPosition` and `LogPosition` types as MongoDB, the shared generics shrink to `TEvent`, `TPos` and
-`TRow`.
+`TSourceEvent`.
 
 ### What goes away
 
@@ -418,7 +427,9 @@ readers see.
 - Latency of one wake plus one read round trip after a commit becomes visible.
 - In PostgreSQL, one replication barrier per tail batch and per catch-up: an xid, a few bytes of WAL and a standby
   round trip.
-- Positions must commit in order. PostgreSQL appends serialize on the sequence row. In MongoDB the counter document's
-  write conflicts imply it, as `mongodb-subscription-review.md` argues; confirm it once in the Sequencing source.
+- Positions must commit in order. PostgreSQL appends serialize on the sequence row. In MongoDB the Sequencing package
+  claims positions from the counter document and inserts the events in one transaction (`MongoSequencedAppender.cs`
+  288-303 and 393-412 in `mongodb-sequencing` 1.0.0-rc.2). A second transaction that claims from the counter gets a
+  write conflict until the first has committed, so it commits later and its positions become majority-visible later.
 - PostgreSQL needs synchronous standbys and failover tooling as described in
   [Durability of reads](#durability-of-reads).
