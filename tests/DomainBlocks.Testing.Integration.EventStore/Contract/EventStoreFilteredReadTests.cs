@@ -52,7 +52,7 @@ public abstract class EventStoreFilteredReadTests<TStreamPos, TLogPos>(
                 i,
                 x.Context.EventName,
                 x.Context.StreamId,
-                x.Context.Metadata,
+                x.Metadata,
                 x.Context.CreatedAt))
         ];
 
@@ -280,7 +280,7 @@ public abstract class EventStoreFilteredReadTests<TStreamPos, TLogPos>(
         var read = await _eventStore.ReadAll(options: options).ToArrayAsync(cancellationToken);
 
         ShouldBe(read, _loggedEvents.Where(e => e.Tenant == "acme"));
-        read.ShouldAllBe(x => x.Context.Metadata.Count == 0);
+        read.ShouldAllBe(x => x.Metadata.Count == 0);
     }
 
     [Test]

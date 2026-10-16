@@ -9,14 +9,8 @@ using MongoDB.Driver;
 namespace DomainBlocks.EventStore.MongoDB;
 
 /// <summary>
-/// A catch-up-then-live subscription to the log or one stream, over a change stream.
+/// Implements a catch-up subscription to the global event log or one event stream.
 /// </summary>
-/// <remarks>
-/// Each cycle attaches to the change stream before it reads the high-water mark, in a session that has seen every
-/// change up to the change stream's anchor. It then replays the events up to the mark and delivers the live events that
-/// come after it. The change stream delivers every change after the anchor, and the session sees every event up to it,
-/// so no event is missed. Live events that the replay has already covered are skipped, so no event is delivered twice.
-/// </remarks>
 internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>>
     where TEvent : notnull
@@ -94,7 +88,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                 await using var attachment = await AttachObserverAsync(observer, cancellationToken)
                     .ConfigureAwait(false);
 
-                var enumerator = ReadAllAsync(resumePosition, observer, attachment.OperationTime, cancellationToken)
+                var enumerator = ReadAllAsync(resumePosition, observer, attachment.OpTime, cancellationToken)
                     .GetAsyncEnumerator(cancellationToken);
 
                 await using (enumerator.ConfigureAwait(false))
@@ -202,27 +196,28 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     private async IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> ReadAllAsync(
         ResumePosition resumePosition,
         Observer observer,
-        BsonTimestamp changeStreamOperationTime,
+        BsonTimestamp changeStreamOpTime,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        // The session has seen everything up to the change stream's anchor, so the high-water mark it reads and the
-        // replay it serves include every event committed before the observer attached.
-        using (var session = await _reader.StartCatchUpSessionAsync(changeStreamOperationTime, cancellationToken)
+        // The session has seen everything up to the change stream's optime, so the end position it reads and the replay
+        // it serves include every event committed before the observer attached.
+        using (var session = await _reader
+                   .StartCatchUpSessionAsync(changeStreamOpTime, cancellationToken)
                    .ConfigureAwait(false))
         {
-            var highWaterMark = await _endPositionReader(_reader, session, cancellationToken).ConfigureAwait(false);
+            var endInclusive = await _endPositionReader(_reader, session, cancellationToken).ConfigureAwait(false);
 
-            _logger?.CatchUpBoundary(_correlationId, highWaterMark?.Value);
+            _logger?.CatchUpBoundary(_correlationId, endInclusive?.Value);
 
-            if (highWaterMark is { } mark)
+            if (endInclusive.HasValue)
             {
-                var afterExclusive = resumePosition.After is { } after ? checked((long)after.Value) : -1;
+                var startExclusive = resumePosition.After is { } after ? checked((long)after.Value) : -1;
 
                 var events = _catchUpReader(
                     _reader,
                     session,
-                    afterExclusive,
-                    checked((long)mark.Value),
+                    startExclusive,
+                    checked((long)endInclusive.Value.Value),
                     cancellationToken);
 
                 await foreach (var e in events.ConfigureAwait(false))
@@ -230,7 +225,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
                 // The replay has covered the sequence up to the mark, even if the filter selected none of its events.
                 // Moving the resume position here means the next cycle does not read that part of the sequence again.
-                resumePosition.AdvanceTo(mark);
+                resumePosition.AdvanceTo(endInclusive.Value);
             }
         }
 
@@ -260,19 +255,17 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     }
 
     /// <summary>
-    /// Reads the followed sequence after one position up to another, inclusive, in the session that read the high-water
-    /// mark.
+    /// Reads the followed sequence from one position to another.
     /// </summary>
     public delegate IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> CatchUpReader(
         EventLogReader<TEvent> reader,
         IClientSessionHandle session,
-        long afterExclusive,
-        long highWaterMark,
+        long startExclusive,
+        long endInclusive,
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Reads the last position of the followed sequence, or <see langword="null"/> if it is empty. The high-water mark
-    /// is read in the catch-up session, and the end of a subscription from the end is pinned without a session.
+    /// Reads the end position of the followed sequence, or <see langword="null"/> if it is empty.
     /// </summary>
     public delegate Task<TPos?> EndPositionReader(
         EventLogReader<TEvent> reader,

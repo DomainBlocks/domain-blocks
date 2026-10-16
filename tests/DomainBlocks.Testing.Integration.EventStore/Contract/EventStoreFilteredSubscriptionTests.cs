@@ -422,7 +422,7 @@ public abstract class EventStoreFilteredSubscriptionTests<TStreamPos, TLogPos>(
                     i,
                     x.Context.EventName,
                     x.Context.StreamId,
-                    x.Context.Metadata,
+                    x.Metadata,
                     x.Context.CreatedAt)))
         ];
     }

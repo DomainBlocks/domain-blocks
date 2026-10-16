@@ -259,7 +259,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
             _reader,
             _feed,
-            (reader, pos, hwMark, ct) => reader.ReadCatchUpAllAsync(pos, hwMark, filter, ct),
+            (reader, from, to, ct) => reader.ReadCatchUpAllAsync(from, to, filter, ct),
             static async (reader, ct) => await reader.GetMaxPositionAsync(ct).ConfigureAwait(false) is { } pos
                 ? LogPosition.FromInt64(pos)
                 : null,
@@ -282,7 +282,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         return new SubscriptionAsyncEnumerable<TEvent, StreamPosition>(
             _reader,
             _feed,
-            (reader, pos, hwMark, ct) => reader.ReadCatchUpStreamAsync(streamId, pos, hwMark, filter, ct),
+            (reader, from, to, ct) => reader.ReadCatchUpStreamAsync(streamId, from, to, filter, ct),
             async (reader, ct) => await reader.GetMaxStreamPositionAsync(streamId, ct).ConfigureAwait(false) is { } pos
                 ? StreamPosition.FromInt64(pos)
                 : null,

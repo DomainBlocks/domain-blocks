@@ -91,10 +91,12 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
         while (!messages[^1].IsCaughtUp)
             messages.Add(await NextMessageAsync(enumerator));
 
-        // The first replay ran to its high-water mark, and the second went on from there.
-        _replays.Count.ShouldBe(2);
-        _replays[0].ShouldBe(new Replay(AfterExclusive: -1, HighWaterMark: 2, Completed: true));
-        _replays[1].ShouldBe(new Replay(AfterExclusive: 2, HighWaterMark: 4, Completed: true));
+        // The first replay ran to its end, and the second continued from there.
+        _replays.ShouldBe(
+        [
+            new Replay(StartExclusive: -1, EndInclusive: 2, IsCompleted: true),
+            new Replay(StartExclusive: 2, EndInclusive: 4, IsCompleted: true)
+        ]);
 
         // The subscriber had not been told that it caught up, so it is not told that it fell behind.
         messages.Select(x => x.Kind).ShouldBe(
@@ -175,7 +177,7 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task SubscribeToAll_WhenRestartingAfterReplayThatEndedOnEventsFilterExcludes_ResumesFromHighWaterMark(
+    public async Task SubscribeToAll_WhenRestartingAfterFilteredCatchUp_ResumesFromLastObservedPosition(
         CancellationToken ct)
     {
         // The filter selects the first of the existing events and not the two that follow it.
@@ -203,11 +205,13 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
         while (!messages[^1].IsCaughtUp)
             messages.Add(await NextMessageAsync(enumerator));
 
-        // The first replay delivered nothing after its first event, but it covered the log up to its high-water mark,
-        // so the second went on from there rather than from the last event that was delivered.
-        _replays.Count.ShouldBe(2);
-        _replays[0].ShouldBe(new Replay(AfterExclusive: -1, HighWaterMark: 2, Completed: true));
-        _replays[1].ShouldBe(new Replay(AfterExclusive: 2, HighWaterMark: 4, Completed: true));
+        // The first replay delivered nothing after its first event, but it covered the log up to its end position, so
+        // the second should continue from there rather than from the last event that was delivered.
+        _replays.ShouldBe(
+        [
+            new Replay(StartExclusive: -1, EndInclusive: 2, IsCompleted: true),
+            new Replay(StartExclusive: 2, EndInclusive: 4, IsCompleted: true)
+        ]);
 
         messages
             .Where(x => x.Event is not null)
@@ -219,11 +223,8 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
     private SubscriptionAsyncEnumerable<object, LogPosition> SubscribeToAll(SubscriptionOptions options)
     {
         return SubscribeToAll(
-            (reader, after, highWaterMark, ct) => RecordAsync(
-                reader.ReadCatchUpAllAsync(after, highWaterMark, options.Filter, ct),
-                after,
-                highWaterMark,
-                ct),
+            (reader, start, end, ct) =>
+                RecordAsync(reader.ReadCatchUpAllAsync(start, end, options.Filter, ct), start, end, ct),
             SubscriptionOrigin.Start,
             options);
     }
@@ -236,11 +237,7 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
         var options = new SubscriptionOptions();
 
         var witness = SubscribeToAll(
-            static (reader, after, highWaterMark, ct) => reader.ReadCatchUpAllAsync(
-                after,
-                highWaterMark,
-                EventFilter.All,
-                ct),
+            static (reader, start, end, ct) => reader.ReadCatchUpAllAsync(start, end, EventFilter.All, ct),
             SubscriptionOrigin.End,
             options).GetAsyncEnumerator(ct);
 
@@ -271,12 +268,12 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
     // Passes a replay through, noting what was asked for and whether it was read to its end.
     private async IAsyncEnumerable<Event> RecordAsync(
         IAsyncEnumerable<Event> events,
-        long afterExclusive,
-        long highWaterMark,
+        long startExclusive,
+        long endInclusive,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var index = _replays.Count;
-        _replays.Add(new Replay(afterExclusive, highWaterMark, Completed: false));
+        _replays.Add(new Replay(startExclusive, endInclusive, IsCompleted: false));
 
         var isFirstEvent = true;
 
@@ -290,7 +287,7 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
             isFirstEvent = false;
         }
 
-        _replays[index] = _replays[index] with { Completed = true };
+        _replays[index] = _replays[index] with { IsCompleted = true };
     }
 
     // Holds the given replay once it has delivered its first event, until the returned source is completed.
@@ -329,5 +326,5 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
         return enumerator.Current;
     }
 
-    private sealed record Replay(long AfterExclusive, long HighWaterMark, bool Completed);
+    private sealed record Replay(long StartExclusive, long EndInclusive, bool IsCompleted);
 }

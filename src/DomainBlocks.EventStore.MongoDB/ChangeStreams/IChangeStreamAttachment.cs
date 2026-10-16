@@ -7,6 +7,6 @@ namespace DomainBlocks.EventStore.MongoDB.ChangeStreams;
 /// </summary>
 internal interface IChangeStreamAttachment : IAsyncDisposable
 {
-    /// <inheritdoc cref="IChangeStreamConnection.OperationTime"/>
-    BsonTimestamp OperationTime { get; }
+    /// <inheritdoc cref="IChangeStreamConnection.OpTime"/>
+    BsonTimestamp OpTime { get; }
 }

@@ -98,12 +98,11 @@ internal sealed class FakeEventStore : IEventStore<object, string, StreamPositio
         var context = ReadEventContext.Create(
             "stream-1",
             payload.GetType().Name,
-            metadata ?? new Dictionary<string, string>(),
             new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero).AddSeconds(position),
             new StreamPosition(position),
             new LogPosition(position));
 
-        return ReadEvent.Create(payload, context);
+        return ReadEvent.Create(payload, metadata ?? new Dictionary<string, string>(), context);
     }
 
     private static async IAsyncEnumerable<T> Replay<T>(

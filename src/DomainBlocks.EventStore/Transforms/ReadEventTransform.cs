@@ -52,9 +52,8 @@ public abstract class ReadEventTransform<TEventBase, TSourceEvent> : IReadEventT
     protected abstract IEnumerable<TEventBase> Apply(TSourceEvent @event, ReadEventInfo info);
 
     IEnumerable<TEventBase> IReadEventTransform<TEventBase>.Apply<TStreamId, TStreamPos, TLogPos>(
-        TEventBase @event,
-        in ReadEventContext<TStreamId, TStreamPos, TLogPos> context)
+        in ReadEvent<TEventBase, TStreamId, TStreamPos, TLogPos> @event)
     {
-        return Apply((TSourceEvent)@event, new ReadEventInfo(context.Metadata, context.CreatedAt));
+        return Apply((TSourceEvent)@event.Payload, new ReadEventInfo(@event.Metadata, @event.Context.CreatedAt));
     }
 }

@@ -268,10 +268,10 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(
 
         var observed = await GetNextEventAsync(enumerator);
         observed.Payload.ShouldBe(expected);
+        observed.Metadata["tenant"].ShouldBe("test-tenant");
         observed.Context.StreamId.ShouldBe(streamId);
         observed.Context.StreamPosition.ShouldBe(stored.Context.StreamPosition);
         observed.Context.LogPosition.ShouldBe(stored.Context.LogPosition);
-        observed.Context.Metadata["tenant"].ShouldBe("test-tenant");
         await ShouldBeCaughtUpAsync(enumerator);
     }
 

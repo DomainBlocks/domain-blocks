@@ -6,8 +6,8 @@ using MongoDB.Driver;
 namespace DomainBlocks.EventStore.MongoDB;
 
 /// <summary>
-/// The reads that a subscription makes of the event log: the last position of the sequence it follows, and the events
-/// of that sequence between two positions, for catching up.
+/// Reads event positions and events from an event log for a subscription's catch-up process, allowing the subscription
+/// to resume from a known position and read events up to a specified boundary before switching to live delivery.
 /// </summary>
 internal sealed class EventLogReader<TEvent>(
     IMongoCollection<BsonDocument> eventLog,
@@ -15,11 +15,10 @@ internal sealed class EventLogReader<TEvent>(
     where TEvent : notnull
 {
     /// <summary>
-    /// Starts a causally consistent session that has seen everything up to the change stream's anchor. A majority read
-    /// in the session then sees at least every event up to the anchor, so no event falls between catch-up and live.
+    /// Starts a causally consistent session whose optime is advanced to the change stream's anchor.
     /// </summary>
     public async Task<IClientSessionHandle> StartCatchUpSessionAsync(
-        BsonTimestamp changeStreamOperationTime,
+        BsonTimestamp changeStreamOpTime,
         CancellationToken cancellationToken)
     {
         var session = await eventLog.Database.Client
@@ -28,7 +27,7 @@ internal sealed class EventLogReader<TEvent>(
 
         try
         {
-            session.AdvanceOperationTime(changeStreamOperationTime);
+            session.AdvanceOperationTime(changeStreamOpTime);
             return session;
         }
         catch
@@ -39,10 +38,10 @@ internal sealed class EventLogReader<TEvent>(
     }
 
     /// <summary>
-    /// Reads the last position of the sequence selected by the filter and ordered by the position field, or
-    /// <see langword="null"/> if the sequence is empty.
+    /// Gets the end position in the sequence selected by the specified filter, or <see langword="null"/> if the
+    /// sequence contains no events.
     /// </summary>
-    public async Task<long?> GetLastPositionAsync(
+    public async Task<long?> GetEndPositionAsync(
         IClientSessionHandle? session,
         FilterDefinition<BsonDocument> filter,
         string positionFieldName,
@@ -64,20 +63,19 @@ internal sealed class EventLogReader<TEvent>(
     }
 
     /// <summary>
-    /// Reads the events of the sequence selected by the filter and ordered by the position field, after one position
-    /// and up to another, inclusive. Subscription catch-up reads in the session that read the high-water mark, so the
-    /// read sees every event up to the mark.
+    /// Reads events from the selected sequence whose positions are greater than the starting position and less than or
+    /// equal to the ending position, in ascending position order.
     /// </summary>
     public async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCatchUpAsync(
         IClientSessionHandle session,
         FilterDefinition<BsonDocument> filter,
         string positionFieldName,
-        long afterExclusive,
-        long highWaterMark,
+        long startExclusive,
+        long endInclusive,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        filter &= Builders<BsonDocument>.Filter.Gt(positionFieldName, afterExclusive);
-        filter &= Builders<BsonDocument>.Filter.Lte(positionFieldName, highWaterMark);
+        filter &= Builders<BsonDocument>.Filter.Gt(positionFieldName, startExclusive);
+        filter &= Builders<BsonDocument>.Filter.Lte(positionFieldName, endInclusive);
 
         using var cursor = await eventLog
             .Find(session, filter)

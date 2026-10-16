@@ -344,8 +344,8 @@ public abstract class EventStoreTests<TStreamPos, TLogPos>(IEventStoreTestHarnes
 
         var readEvents = await EventStore.ReadStream(streamId).ToArrayAsync(cancellationToken);
 
-        readEvents[0].Context.Metadata["tenant"].ShouldBe("acme");
-        readEvents[1].Context.Metadata.ShouldBeEmpty();
+        readEvents[0].Metadata["tenant"].ShouldBe("acme");
+        readEvents[1].Metadata.ShouldBeEmpty();
     }
 
     [Test]
@@ -417,13 +417,13 @@ public abstract class EventStoreTests<TStreamPos, TLogPos>(IEventStoreTestHarnes
             cancellationToken: cancellationToken);
 
         var withMetadata = await EventStore.ReadStream(streamId).SingleAsync(cancellationToken);
-        withMetadata.Context.Metadata["tenant"].ShouldBe("acme");
+        withMetadata.Metadata["tenant"].ShouldBe("acme");
 
         var withoutMetadata = await EventStore
             .ReadStream(streamId, options: new ReadStreamOptions { IncludeMetadata = false })
             .SingleAsync(cancellationToken);
 
-        withoutMetadata.Context.Metadata.ShouldBeEmpty();
+        withoutMetadata.Metadata.ShouldBeEmpty();
     }
 
     [Test]

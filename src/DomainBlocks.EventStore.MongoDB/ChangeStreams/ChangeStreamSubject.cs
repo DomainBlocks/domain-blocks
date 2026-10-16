@@ -151,7 +151,7 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
         private readonly Task _producerTask;
         private readonly CancellationTokenSource _stopCts = new();
         private readonly TaskCompletionSource _completionTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private BsonTimestamp? _operationTime;
+        private BsonTimestamp? _opTime;
         private int _disposed;
 
         public Connection(ChangeStreamSubject<TDocument, TChange, TResult> subject)
@@ -168,8 +168,8 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
 
         public Task Completion => _completionTcs.Task;
 
-        public BsonTimestamp OperationTime =>
-            _operationTime ?? throw new InvalidOperationException("The change stream connection is not connected.");
+        public BsonTimestamp OpTime =>
+            _opTime ?? throw new InvalidOperationException("The change stream connection is not connected.");
 
         public async ValueTask DisposeAsync()
         {
@@ -195,22 +195,22 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
 
             try
             {
+                // This optime anchors catch-up subscriptions. The stream delivers every change after it, and a majority
+                // read that waits for it sees at least every change up to it. It must be an oplog optime rather than a
+                // cluster time. After a transaction commits, the logical clock runs one tick ahead of the oplog, and on
+                // a replica set that is not sharded, a read that waits for such a time stalls until the periodic no-op
+                // writer runs. Without an explicit start, the server would start the stream at the same point, but the
+                // anchor would be unknown:
+                // https://github.com/mongodb/mongo/blob/r7.0.16/src/mongo/db/pipeline/document_source_change_stream.cpp#L238-L253
+                _opTime = await GetLastAppliedOpTimeAsync().ConfigureAwait(false);
+
                 BsonDocument? resumeToken = null;
 
                 while (true)
                 {
                     _stopCts.Token.ThrowIfCancellationRequested();
 
-                    // This optime anchors catch-up subscriptions. The stream delivers every change after it, and a
-                    // majority read that waits for it sees at least every change up to it. It must be an oplog optime
-                    // rather than a cluster time. After a transaction commits, the logical clock runs one tick ahead of
-                    // the oplog, and on a replica set that is not sharded, a read that waits for such a time stalls
-                    // until the periodic no-op writer runs. Without an explicit start, the server would start the
-                    // stream at the same point, but the anchor would be unknown:
-                    // https://github.com/mongodb/mongo/blob/r7.0.16/src/mongo/db/pipeline/document_source_change_stream.cpp#L238-L253
-                    _operationTime ??= await GetLastAppliedOpTimeAsync().ConfigureAwait(false);
-
-                    using var cursor = await GetChangeStreamCursorAsync(resumeToken).ConfigureAwait(false);
+                    using var cursor = await GetChangeStreamCursorAsync(resumeToken, _opTime).ConfigureAwait(false);
 
                     // The resume token is seeded when the cursor opens, so a cursor that fails before its first batch
                     // resumes rather than restarting later. The driver exposes the token when the first batch is empty,
@@ -305,7 +305,9 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
             return lastWrite["opTime"]["ts"].AsBsonTimestamp;
         }
 
-        private async Task<IChangeStreamCursor<TChange>> GetChangeStreamCursorAsync(BsonDocument? resumeToken)
+        private async Task<IChangeStreamCursor<TChange>> GetChangeStreamCursorAsync(
+            BsonDocument? resumeToken,
+            BsonTimestamp opTime)
         {
             var options = _subject._options.MongoOptions;
 
@@ -318,10 +320,10 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
             }
             else if (options.ResumeAfter is null && options.StartAfter is null && options.StartAtOperationTime is null)
             {
-                // A start point that the caller set is kept. Otherwise the stream starts one tick after the anchor,
+                // A start point that the caller set is kept. Otherwise, the stream starts one tick after the anchor,
                 // because startAtOperationTime is inclusive and the write at the anchor belongs to the catch-up read.
                 options = options.Copy();
-                options.StartAtOperationTime = new BsonTimestamp(_operationTime!.Value + 1);
+                options.StartAtOperationTime = new BsonTimestamp(opTime.Value + 1);
             }
 
             return await _subject._cursorFactory(_subject._pipeline, options, _stopCts.Token).ConfigureAwait(false);

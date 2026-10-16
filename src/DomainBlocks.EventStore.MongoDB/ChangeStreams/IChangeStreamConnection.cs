@@ -10,5 +10,5 @@ internal interface IChangeStreamConnection : IAsyncDisposable
     /// The optime the change stream is anchored to. Every change after it is delivered, and a majority read that waits
     /// for it sees at least every change up to it.
     /// </summary>
-    BsonTimestamp OperationTime { get; }
+    BsonTimestamp OpTime { get; }
 }

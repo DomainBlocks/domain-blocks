@@ -7,15 +7,8 @@ using Microsoft.Extensions.Logging;
 namespace DomainBlocks.EventStore.PostgreSQL;
 
 /// <summary>
-/// A catch-up-then-live subscription to the log or one stream.
+/// Implements a catch-up subscription to the global event log or one event stream.
 /// </summary>
-/// <remarks>
-/// Each cycle attaches to the live feed before it reads the high-water mark. It then replays the events up to the mark
-/// and delivers the live events that come after it. Positions are assigned in commit order (see
-/// <c>append_events.sql</c>), so every event at or below the mark is already committed when the mark is read, and the
-/// replay sees it. Events above the mark arrive through the live feed. As a result, no event is missed and no event is
-/// delivered twice.
-/// </remarks>
 internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>>
     where TEvent : notnull
@@ -214,21 +207,26 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         Observer observer,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var highWaterMark = await _endPositionReader(_reader, cancellationToken).ConfigureAwait(false);
+        var endInclusive = await _endPositionReader(_reader, cancellationToken).ConfigureAwait(false);
 
-        _logger?.CatchUpBoundary(_correlationId, highWaterMark?.Value);
+        _logger?.CatchUpBoundary(_correlationId, endInclusive?.Value);
 
-        if (highWaterMark is { } mark)
+        if (endInclusive.HasValue)
         {
-            var afterExclusive = resumePosition.After is { } after ? checked((long)after.Value) : -1;
-            var events = _catchUpReader(_reader, afterExclusive, checked((long)mark.Value), cancellationToken);
+            var startExclusive = resumePosition.After is { } after ? checked((long)after.Value) : -1;
+
+            var events = _catchUpReader(
+                _reader,
+                startExclusive,
+                checked((long)endInclusive.Value.Value),
+                cancellationToken);
 
             await foreach (var e in events.ConfigureAwait(false))
                 yield return SubscriptionMessage.Event(e);
 
             // The replay has covered the sequence up to the mark, even if the filter selected none of its events.
             // Moving the resume position here means the next cycle does not read that part of the sequence again.
-            resumePosition.AdvanceTo(mark);
+            resumePosition.AdvanceTo(endInclusive.Value);
         }
 
         // A restart signaled during the replay takes effect only now. Cancelling the replay would discard what it read,
@@ -257,16 +255,16 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     }
 
     /// <summary>
-    /// Reads the followed sequence after one position up to another, inclusive.
+    /// Reads the followed sequence from one position to another.
     /// </summary>
     public delegate IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> CatchUpReader(
         EventLogReader<TEvent> reader,
-        long afterExclusive,
-        long highWaterMark,
+        long startExclusive,
+        long endInclusive,
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Reads the last position of the followed sequence, or <see langword="null"/> if it is empty.
+    /// Reads the end position of the followed sequence, or <see langword="null"/> if it is empty.
     /// </summary>
     public delegate Task<TPos?> EndPositionReader(EventLogReader<TEvent> reader, CancellationToken cancellationToken);
 

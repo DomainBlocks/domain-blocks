@@ -245,9 +245,9 @@ public class EventStoreDecoratorTests
 
         foreach (var e in events)
         {
+            e.Metadata.ShouldBeSameAs(metadata);
             e.Context.StreamPosition.ShouldBe(new StreamPosition(7));
             e.Context.LogPosition.ShouldBe(new LogPosition(7));
-            e.Context.Metadata.ShouldBeSameAs(metadata);
         }
     }
 
