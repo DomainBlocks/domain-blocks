@@ -13,15 +13,17 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// selects is never decoded.
 /// </summary>
 /// <remarks>
-/// A session reuses one row for every insert, so a row is valid only until the next is read. The event is decoded once,
-/// on first request.
+/// A session reuses one row for every insert, so a row is valid only until the next is read. The payload and metadata
+/// are decoded together, once, on the first request for either.
 /// </remarks>
-internal sealed class EventLogRow<TEvent>(IEventDecoder<TEvent, PostgresEventData, string> decoder) : IFilterableEvent
+internal sealed class EventLogRow<TEvent>(IEventDecoder<TEvent, PostgresEventData, string> decoder) :
+    IFilterableEvent,
+    IReadEvent<TEvent, string, StreamPosition, LogPosition>
     where TEvent : notnull
 {
     private PostgresEventData _eventData;
     private string? _metadata;
-    private ReadEvent<TEvent, string, StreamPosition, LogPosition> _event;
+    private DecodedEvent<TEvent> _decoded;
     private bool _isDecoded;
     private ExceptionDispatchInfo? _decodeError;
 
@@ -36,9 +38,27 @@ internal sealed class EventLogRow<TEvent>(IEventDecoder<TEvent, PostgresEventDat
     public DateTimeOffset CreatedAt { get; private set; }
 
     /// <summary>
-    /// The decoded event. A decode failure is rethrown to every caller.
+    /// The decoded payload. A decode failure is rethrown to every caller.
     /// </summary>
-    public ReadEvent<TEvent, string, StreamPosition, LogPosition> DecodedEvent => _isDecoded ? _event : Decode();
+    public TEvent Payload => Decoded.Payload;
+
+    /// <summary>
+    /// The decoded metadata. A decode failure is rethrown to every caller.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> Metadata => Decoded.Metadata;
+
+    /// <summary>
+    /// The event's context, which is read from the row without decoding the event.
+    /// </summary>
+    public ReadEventContext<string, StreamPosition, LogPosition> Context =>
+        ReadEventContext.Create(
+            StreamId,
+            EventName,
+            CreatedAt,
+            EventStore.StreamPosition.FromInt64(StreamPosition),
+            LogPosition.FromInt64(Position));
+
+    private DecodedEvent<TEvent> Decoded => _isDecoded ? _decoded : Decode();
 
     /// <summary>
     /// Sets the row to the next insert. <paramref name="metadata"/> is the stored JSON, or <see langword="null"/>.
@@ -59,7 +79,7 @@ internal sealed class EventLogRow<TEvent>(IEventDecoder<TEvent, PostgresEventDat
         CreatedAt = createdAt;
         _eventData = eventData;
         _metadata = metadata;
-        _event = default;
+        _decoded = default;
         _isDecoded = false;
         _decodeError = null;
     }
@@ -118,14 +138,14 @@ internal sealed class EventLogRow<TEvent>(IEventDecoder<TEvent, PostgresEventDat
         }
     }
 
-    // Out of DecodedEvent so the getter, read by every observer that selects the row, stays small enough to inline.
-    private ReadEvent<TEvent, string, StreamPosition, LogPosition> Decode()
+    // Out of Decoded so the getter, read by every observer that selects the row, stays small enough to inline.
+    private DecodedEvent<TEvent> Decode()
     {
         _decodeError?.Throw();
 
         try
         {
-            _event = decoder.Decode(Position, StreamId, StreamPosition, EventName, _eventData, _metadata, CreatedAt);
+            _decoded = decoder.Decode(EventName, _eventData, _metadata);
         }
         catch (Exception ex)
         {
@@ -135,6 +155,6 @@ internal sealed class EventLogRow<TEvent>(IEventDecoder<TEvent, PostgresEventDat
 
         _isDecoded = true;
 
-        return _event;
+        return _decoded;
     }
 }
