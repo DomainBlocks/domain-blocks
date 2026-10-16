@@ -8,7 +8,7 @@ public class EventLogRowTests
     private static readonly DateTimeOffset CreatedAt = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
 
     [Test]
-    public void Set_Row_ExposesStoredValuesToFilter()
+    public void Set_WhenInvoked_ExposesStoredValuesToFilter()
     {
         var row = new EventLogRow<string>(new CountingDecoder());
 
@@ -62,7 +62,7 @@ public class EventLogRowTests
     }
 
     [Test]
-    public void TryGetMetadata_Row_DoesNotDecodeEvent()
+    public void TryGetMetadata_WhenInvoked_DoesNotDecodeEvent()
     {
         var decoder = new CountingDecoder();
         var row = CreateRow("""{"tenant": "acme"}""", decoder);
@@ -73,7 +73,7 @@ public class EventLogRowTests
     }
 
     [Test]
-    public void Payload_FirstRequest_DecodesPayloadAndMetadata()
+    public void Payload_FirstRead_DecodesPayloadAndMetadata()
     {
         const string metadata = """{"tenant": "acme"}""";
         var row = CreateRow(metadata);
@@ -83,7 +83,7 @@ public class EventLogRowTests
     }
 
     [Test]
-    public void Context_Row_ReadsContextWithoutDecoding()
+    public void Context_WhenRead_ReadsContextWithoutDecoding()
     {
         var decoder = new CountingDecoder();
         var row = CreateRow(null, decoder);
@@ -99,7 +99,7 @@ public class EventLogRowTests
     }
 
     [Test]
-    public void PayloadAndMetadata_RequestedSeveralTimes_DecodeOnce()
+    public void PayloadAndMetadata_ReadSeveralTimes_DecodeOnce()
     {
         var decoder = new CountingDecoder();
         var row = CreateRow(null, decoder);
@@ -114,7 +114,7 @@ public class EventLogRowTests
     }
 
     [Test]
-    public void Payload_NeverRequested_NeverDecodes()
+    public void Payload_NeverRead_NeverDecodes()
     {
         var decoder = new CountingDecoder();
         var row = CreateRow(null, decoder);
@@ -140,7 +140,7 @@ public class EventLogRowTests
     }
 
     [Test]
-    public void PayloadAndMetadata_WhenDecodingFails_ThrowSameExceptionToEveryoneAndDecodeOnce()
+    public void PayloadAndMetadata_WhenDecodingFails_ThrowSameExceptionToEveryCallAndDecodeOnce()
     {
         var decoder = new CountingDecoder { Failure = new InvalidOperationException("Cannot decode.") };
         var row = CreateRow(null, decoder);

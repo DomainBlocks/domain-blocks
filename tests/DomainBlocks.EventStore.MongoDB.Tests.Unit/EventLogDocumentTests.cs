@@ -87,7 +87,7 @@ public class EventLogDocumentTests
     }
 
     [Test]
-    public void TryGetMetadata_Document_DoesNotDecodeEvent()
+    public void TryGetMetadata_WhenInvoked_DoesNotDecodeEvent()
     {
         var decoder = new CountingDecoder();
         var document = new EventLogDocument<string>(decoder);
@@ -99,7 +99,7 @@ public class EventLogDocumentTests
     }
 
     [Test]
-    public void Payload_FirstRequest_DecodesPayloadAndMetadata()
+    public void Payload_FirstRead_DecodesPayloadAndMetadata()
     {
         var document = CreateDocument(new BsonDocument("tenant", "acme"));
 
@@ -108,7 +108,7 @@ public class EventLogDocumentTests
     }
 
     [Test]
-    public void Context_Document_ReadsContextWithoutDecoding()
+    public void Context_WhenRead_ReadsContextWithoutDecoding()
     {
         var decoder = new CountingDecoder();
         var document = new EventLogDocument<string>(decoder);
@@ -138,7 +138,7 @@ public class EventLogDocumentTests
     }
 
     [Test]
-    public void PayloadAndMetadata_RequestedSeveralTimes_DecodeOnce()
+    public void PayloadAndMetadata_ReadSeveralTimes_DecodeOnce()
     {
         var decoder = new CountingDecoder();
         var document = new EventLogDocument<string>(decoder);
@@ -154,7 +154,7 @@ public class EventLogDocumentTests
     }
 
     [Test]
-    public void Payload_NeverRequested_NeverDecodes()
+    public void Payload_NeverRead_NeverDecodes()
     {
         var decoder = new CountingDecoder();
         var document = new EventLogDocument<string>(decoder);
@@ -180,7 +180,7 @@ public class EventLogDocumentTests
     }
 
     [Test]
-    public void PayloadAndMetadata_WhenDecodingFails_ThrowSameExceptionToEveryoneAndDecodeOnce()
+    public void PayloadAndMetadata_WhenDecodingFails_ThrowSameExceptionToEveryCallAndDecodeOnce()
     {
         var decoder = new CountingDecoder { Failure = new InvalidOperationException("Cannot decode.") };
         var document = new EventLogDocument<string>(decoder);
