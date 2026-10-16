@@ -59,8 +59,15 @@ internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
-            if (_current is null || _current.Stopped.IsCompleted)
+            if (_current is null || _current.IsCompleted)
+            {
+                // A run that has failed may still be finishing. It has already disposed of its source, so waiting for it
+                // only keeps its last log lines ahead of the next run's.
+                if (_current is not null)
+                    await _current.Stopped.ConfigureAwait(false);
+
                 _current = new Run(this);
+            }
 
             var run = _current;
 
@@ -168,6 +175,11 @@ internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
         public Task Stopped { get; }
 
         /// <summary>
+        /// Whether the run has stopped or failed, which it records before it notifies anyone.
+        /// </summary>
+        public bool IsCompleted => Volatile.Read(ref _state).Completion is not null;
+
+        /// <summary>
         /// The number of attachments. The tail's gate guards it.
         /// </summary>
         public int RefCount { get; set; }
@@ -258,14 +270,14 @@ internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
             }
             catch (OperationCanceledException) when (stopToken.IsCancellationRequested)
             {
-                _startedTcs.TrySetCanceled(stopToken);
                 Complete(null);
+                _startedTcs.TrySetCanceled(stopToken);
             }
             catch (Exception ex)
             {
                 _logger?.TailFailed(ex, _tailId);
-                _startedTcs.TrySetException(ex);
                 Complete(ex);
+                _startedTcs.TrySetException(ex);
             }
             finally
             {
