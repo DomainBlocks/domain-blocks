@@ -339,7 +339,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
             try
             {
                 // The document is only valid during this call.
-                e = document.DecodedEvent;
+                e = ReadEvent.Create(document.Payload, document.Metadata, document.Context);
             }
             catch (Exception ex)
             {

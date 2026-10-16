@@ -12,15 +12,20 @@ namespace DomainBlocks.EventStore.MongoDB;
 /// </summary>
 /// <remarks>
 /// The store reuses one document for every change, so a document is valid only until the next change is delivered. The
-/// event is decoded once, on first request.
+/// payload and metadata are decoded together, once, on the first request for either. The context is read once, on
+/// first request.
 /// </remarks>
-internal sealed class EventLogDocument<TEvent>(IEventDecoder<TEvent, BsonValue, BsonValue> decoder) : IFilterableEvent
+internal sealed class EventLogDocument<TEvent>(IEventDecoder<TEvent, BsonValue, BsonValue> decoder) :
+    IFilterableEvent,
+    IReadEvent<TEvent, string, StreamPosition, LogPosition>
     where TEvent : notnull
 {
     private BsonDocument _document = [];
-    private ReadEvent<TEvent, string, StreamPosition, LogPosition> _event;
+    private DecodedEvent<TEvent> _decoded;
     private bool _isDecoded;
     private ExceptionDispatchInfo? _decodeError;
+    private ReadEventContext<string, StreamPosition, LogPosition> _context;
+    private bool _hasContext;
 
     public string EventName => _document[EventLogEntry.FieldNames.EventName].AsString;
 
@@ -30,9 +35,21 @@ internal sealed class EventLogDocument<TEvent>(IEventDecoder<TEvent, BsonValue, 
         _document[EventLogEntry.FieldNames.CreatedAtUtc].AsBsonDateTime.ToUniversalTime();
 
     /// <summary>
-    /// The decoded event. A decode failure is rethrown to every caller.
+    /// The decoded payload. A decode failure is rethrown to every caller.
     /// </summary>
-    public ReadEvent<TEvent, string, StreamPosition, LogPosition> DecodedEvent => _isDecoded ? _event : Decode();
+    public TEvent Payload => Decoded.Payload;
+
+    /// <summary>
+    /// The decoded metadata. A decode failure is rethrown to every caller.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> Metadata => Decoded.Metadata;
+
+    /// <summary>
+    /// The event's context, which is read from the document without decoding the event.
+    /// </summary>
+    public ReadEventContext<string, StreamPosition, LogPosition> Context => _hasContext ? _context : ReadContext();
+
+    private DecodedEvent<TEvent> Decoded => _isDecoded ? _decoded : Decode();
 
     /// <summary>
     /// Sets the document to the next change.
@@ -40,9 +57,11 @@ internal sealed class EventLogDocument<TEvent>(IEventDecoder<TEvent, BsonValue, 
     public void Set(BsonDocument document)
     {
         _document = document;
-        _event = default;
+        _decoded = default;
         _isDecoded = false;
         _decodeError = null;
+        _context = default;
+        _hasContext = false;
     }
 
     /// <summary>
@@ -66,15 +85,17 @@ internal sealed class EventLogDocument<TEvent>(IEventDecoder<TEvent, BsonValue, 
         return true;
     }
 
-    // Out of DecodedEvent so the getter, read by every observer that selects the document, stays small enough to
-    // inline.
-    private ReadEvent<TEvent, string, StreamPosition, LogPosition> Decode()
+    // Out of Decoded so the getter, read by every observer that selects the document, stays small enough to inline.
+    private DecodedEvent<TEvent> Decode()
     {
         _decodeError?.Throw();
 
         try
         {
-            _event = decoder.Decode(_document);
+            _decoded = decoder.Decode(
+                EventName,
+                _document[EventLogEntry.FieldNames.EventData],
+                _document.GetValue(EventLogEntry.FieldNames.Metadata, BsonNull.Value));
         }
         catch (Exception ex)
         {
@@ -84,6 +105,20 @@ internal sealed class EventLogDocument<TEvent>(IEventDecoder<TEvent, BsonValue, 
 
         _isDecoded = true;
 
-        return _event;
+        return _decoded;
+    }
+
+    private ReadEventContext<string, StreamPosition, LogPosition> ReadContext()
+    {
+        _context = ReadEventContext.Create(
+            StreamId,
+            EventName,
+            CreatedAt,
+            StreamPosition.FromInt64(_document[EventLogEntry.FieldNames.StreamPosition].AsInt64),
+            LogPosition.FromInt64(_document[EventLogEntry.FieldNames.Position].AsInt64));
+
+        _hasContext = true;
+
+        return _context;
     }
 }

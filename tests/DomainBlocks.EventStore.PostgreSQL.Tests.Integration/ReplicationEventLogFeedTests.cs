@@ -231,7 +231,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
         public ValueTask OnNextAsync(EventLogRow<RawEvent> row, CancellationToken cancellationToken)
         {
             // The row is only valid during this call.
-            _channel.Writer.TryWrite(row.DecodedEvent);
+            _channel.Writer.TryWrite(ReadEvent.Create(row.Payload, row.Metadata, row.Context));
             return ValueTask.CompletedTask;
         }
 

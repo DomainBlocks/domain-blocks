@@ -87,7 +87,7 @@ public class EventLogDocumentTests
     }
 
     [Test]
-    public void TryGetMetadata_Document_DoesNotDecodeEvent()
+    public void TryGetMetadata_WhenInvoked_DoesNotDecodeEvent()
     {
         var decoder = new CountingDecoder();
         var document = new EventLogDocument<string>(decoder);
@@ -99,38 +99,62 @@ public class EventLogDocumentTests
     }
 
     [Test]
-    public void DecodedEvent_FirstRequest_DecodesEventWithItsContext()
+    public void Payload_FirstRead_DecodesPayloadAndMetadata()
     {
-        var document = new EventLogDocument<string>(new CountingDecoder());
-        document.Set(Stored("OrderPlaced", "order-1", new BsonDocument("tenant", "acme")));
+        var document = CreateDocument(new BsonDocument("tenant", "acme"));
 
-        var e = document.DecodedEvent;
-
-        e.Payload.ShouldBe("OrderPlaced");
-        e.Metadata.ShouldBe(new Dictionary<string, string> { ["tenant"] = "acme" });
-        e.Context.LogPosition.ShouldBe(LogPosition.FromInt64(7));
-        e.Context.StreamId.ShouldBe("order-1");
-        e.Context.StreamPosition.ShouldBe(StreamPosition.FromInt64(3));
-        e.Context.EventName.ShouldBe("OrderPlaced");
-        e.Context.CreatedAt.ShouldBe(new DateTimeOffset(CreatedAtUtc));
+        document.Payload.ShouldBe("OrderPlaced");
+        document.Metadata.ShouldBe(new Dictionary<string, string> { ["tenant"] = "acme" });
     }
 
     [Test]
-    public void DecodedEvent_RequestedSeveralTimes_DecodesOnce()
+    public void Context_WhenRead_ReadsContextWithoutDecoding()
     {
         var decoder = new CountingDecoder();
         var document = new EventLogDocument<string>(decoder);
         document.Set(Stored("OrderPlaced", "order-1"));
 
-        var first = document.DecodedEvent;
-        var second = document.DecodedEvent;
+        var context = document.Context;
 
-        second.Payload.ShouldBeSameAs(first.Payload);
+        context.LogPosition.ShouldBe(LogPosition.FromInt64(7));
+        context.StreamId.ShouldBe("order-1");
+        context.StreamPosition.ShouldBe(StreamPosition.FromInt64(3));
+        context.EventName.ShouldBe("OrderPlaced");
+        context.CreatedAt.ShouldBe(new DateTimeOffset(CreatedAtUtc));
+        decoder.DecodeCount.ShouldBe(0);
+    }
+
+    [Test]
+    public void Context_AfterDocumentIsSetAgain_ReadsNewContext()
+    {
+        var document = new EventLogDocument<string>(new CountingDecoder());
+        document.Set(Stored("OrderPlaced", "order-1"));
+        _ = document.Context;
+
+        document.Set(Stored("OrderShipped", "order-2"));
+
+        document.Context.StreamId.ShouldBe("order-2");
+        document.Context.EventName.ShouldBe("OrderShipped");
+    }
+
+    [Test]
+    public void PayloadAndMetadata_ReadSeveralTimes_DecodeOnce()
+    {
+        var decoder = new CountingDecoder();
+        var document = new EventLogDocument<string>(decoder);
+        document.Set(Stored("OrderPlaced", "order-1"));
+
+        var first = document.Payload;
+        var metadata = document.Metadata;
+        var second = document.Payload;
+
+        second.ShouldBeSameAs(first);
+        document.Metadata.ShouldBeSameAs(metadata);
         decoder.DecodeCount.ShouldBe(1);
     }
 
     [Test]
-    public void DecodedEvent_NeverRequested_NeverDecodes()
+    public void Payload_NeverRead_NeverDecodes()
     {
         var decoder = new CountingDecoder();
         var document = new EventLogDocument<string>(decoder);
@@ -142,45 +166,45 @@ public class EventLogDocumentTests
     }
 
     [Test]
-    public void DecodedEvent_AfterDocumentIsSetAgain_DecodesNewEvent()
+    public void Payload_AfterDocumentIsSetAgain_DecodesNewEvent()
     {
         var decoder = new CountingDecoder();
         var document = new EventLogDocument<string>(decoder);
         document.Set(Stored("OrderPlaced", "order-1"));
-        document.DecodedEvent.Payload.ShouldBe("OrderPlaced");
+        document.Payload.ShouldBe("OrderPlaced");
 
         document.Set(Stored("OrderShipped", "order-1"));
 
-        document.DecodedEvent.Payload.ShouldBe("OrderShipped");
+        document.Payload.ShouldBe("OrderShipped");
         decoder.DecodeCount.ShouldBe(2);
     }
 
     [Test]
-    public void DecodedEvent_WhenDecodingFails_ThrowsSameExceptionToEveryoneAndDecodesOnce()
+    public void PayloadAndMetadata_WhenDecodingFails_ThrowSameExceptionToEveryCallAndDecodeOnce()
     {
         var decoder = new CountingDecoder { Failure = new InvalidOperationException("Cannot decode.") };
         var document = new EventLogDocument<string>(decoder);
         document.Set(Stored("OrderPlaced", "order-1"));
 
-        var first = Should.Throw<InvalidOperationException>(() => document.DecodedEvent);
-        var second = Should.Throw<InvalidOperationException>(() => document.DecodedEvent);
+        var first = Should.Throw<InvalidOperationException>(() => document.Payload);
+        var second = Should.Throw<InvalidOperationException>(() => document.Metadata);
 
         second.ShouldBeSameAs(first);
         decoder.DecodeCount.ShouldBe(1);
     }
 
     [Test]
-    public void DecodedEvent_AfterFailedDocumentIsSetAgain_DecodesNewEvent()
+    public void Payload_AfterFailedDocumentIsSetAgain_DecodesNewEvent()
     {
         var decoder = new CountingDecoder { Failure = new InvalidOperationException("Cannot decode.") };
         var document = new EventLogDocument<string>(decoder);
         document.Set(Stored("OrderPlaced", "order-1"));
-        Should.Throw<InvalidOperationException>(() => document.DecodedEvent);
+        Should.Throw<InvalidOperationException>(() => document.Payload);
 
         decoder.Failure = null;
         document.Set(Stored("OrderShipped", "order-1"));
 
-        document.DecodedEvent.Payload.ShouldBe("OrderShipped");
+        document.Payload.ShouldBe("OrderShipped");
         decoder.DecodeCount.ShouldBe(2);
     }
 

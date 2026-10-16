@@ -335,7 +335,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
             try
             {
                 // The row is only valid during this call.
-                e = row.DecodedEvent;
+                e = ReadEvent.Create(row.Payload, row.Metadata, row.Context);
             }
             catch (Exception ex)
             {

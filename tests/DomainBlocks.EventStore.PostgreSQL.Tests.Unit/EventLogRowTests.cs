@@ -8,7 +8,7 @@ public class EventLogRowTests
     private static readonly DateTimeOffset CreatedAt = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
 
     [Test]
-    public void Set_Row_ExposesStoredValuesToFilter()
+    public void Set_WhenInvoked_ExposesStoredValuesToFilter()
     {
         var row = new EventLogRow<string>(new CountingDecoder());
 
@@ -62,7 +62,7 @@ public class EventLogRowTests
     }
 
     [Test]
-    public void TryGetMetadata_Row_DoesNotDecodeEvent()
+    public void TryGetMetadata_WhenInvoked_DoesNotDecodeEvent()
     {
         var decoder = new CountingDecoder();
         var row = CreateRow("""{"tenant": "acme"}""", decoder);
@@ -73,40 +73,48 @@ public class EventLogRowTests
     }
 
     [Test]
-    public void DecodedEvent_FirstRequest_DecodesEventWithItsContext()
+    public void Payload_FirstRead_DecodesPayloadAndMetadata()
     {
-        var row = new EventLogRow<string>(new CountingDecoder());
         const string metadata = """{"tenant": "acme"}""";
-        row.Set(7, "order-1", 3, "OrderPlaced", PostgresEventData.FromJson("payload"), metadata, CreatedAt);
+        var row = CreateRow(metadata);
 
-        var e = row.DecodedEvent;
-
-        e.Payload.ShouldBe("OrderPlaced:payload");
-        e.Metadata["raw"].ShouldBe(metadata);
-        e.Context.LogPosition.ShouldBe(LogPosition.FromInt64(7));
-        e.Context.StreamId.ShouldBe("order-1");
-        e.Context.StreamPosition.ShouldBe(StreamPosition.FromInt64(3));
-        e.Context.EventName.ShouldBe("OrderPlaced");
-        e.Context.CreatedAt.ShouldBe(CreatedAt);
+        row.Payload.ShouldBe("OrderPlaced:{}");
+        row.Metadata["raw"].ShouldBe(metadata);
     }
 
     [Test]
-    public void DecodedEvent_RequestedSeveralTimes_DecodesOnce()
+    public void Context_WhenRead_ReadsContextWithoutDecoding()
     {
         var decoder = new CountingDecoder();
         var row = CreateRow(null, decoder);
 
-        var first = row.DecodedEvent;
-        var second = row.DecodedEvent;
-        var third = row.DecodedEvent;
+        var context = row.Context;
 
-        decoder.DecodeCount.ShouldBe(1);
-        second.Payload.ShouldBeSameAs(first.Payload);
-        third.Payload.ShouldBeSameAs(first.Payload);
+        context.LogPosition.ShouldBe(LogPosition.FromInt64(7));
+        context.StreamId.ShouldBe("order-1");
+        context.StreamPosition.ShouldBe(StreamPosition.FromInt64(3));
+        context.EventName.ShouldBe("OrderPlaced");
+        context.CreatedAt.ShouldBe(CreatedAt);
+        decoder.DecodeCount.ShouldBe(0);
     }
 
     [Test]
-    public void DecodedEvent_NeverRequested_NeverDecodes()
+    public void PayloadAndMetadata_ReadSeveralTimes_DecodeOnce()
+    {
+        var decoder = new CountingDecoder();
+        var row = CreateRow(null, decoder);
+
+        var first = row.Payload;
+        var metadata = row.Metadata;
+        var second = row.Payload;
+
+        decoder.DecodeCount.ShouldBe(1);
+        second.ShouldBeSameAs(first);
+        row.Metadata.ShouldBeSameAs(metadata);
+    }
+
+    [Test]
+    public void Payload_NeverRead_NeverDecodes()
     {
         var decoder = new CountingDecoder();
         var row = CreateRow(null, decoder);
@@ -117,29 +125,28 @@ public class EventLogRowTests
     }
 
     [Test]
-    public void DecodedEvent_AfterRowIsSetAgain_DecodesNewEvent()
+    public void Payload_AfterRowIsSetAgain_DecodesNewEvent()
     {
         var decoder = new CountingDecoder();
         var row = new EventLogRow<string>(decoder);
         row.Set(7, "order-1", 3, "OrderPlaced", PostgresEventData.FromJson("first"), null, CreatedAt);
-        _ = row.DecodedEvent;
+        _ = row.Payload;
 
         row.Set(8, "order-1", 4, "OrderShipped", PostgresEventData.FromJson("second"), null, CreatedAt);
-        var e = row.DecodedEvent;
 
-        e.Payload.ShouldBe("OrderShipped:second");
-        e.Context.LogPosition.ShouldBe(LogPosition.FromInt64(8));
+        row.Payload.ShouldBe("OrderShipped:second");
+        row.Context.LogPosition.ShouldBe(LogPosition.FromInt64(8));
         decoder.DecodeCount.ShouldBe(2);
     }
 
     [Test]
-    public void DecodedEvent_WhenDecodingFails_ThrowsSameExceptionToEveryoneAndDecodesOnce()
+    public void PayloadAndMetadata_WhenDecodingFails_ThrowSameExceptionToEveryCallAndDecodeOnce()
     {
         var decoder = new CountingDecoder { Failure = new InvalidOperationException("Cannot decode.") };
         var row = CreateRow(null, decoder);
 
-        var first = Should.Throw<InvalidOperationException>(() => row.DecodedEvent);
-        var second = Should.Throw<InvalidOperationException>(() => row.DecodedEvent);
+        var first = Should.Throw<InvalidOperationException>(() => row.Payload);
+        var second = Should.Throw<InvalidOperationException>(() => row.Metadata);
 
         first.ShouldBeSameAs(decoder.Failure);
         second.ShouldBeSameAs(decoder.Failure);
@@ -147,16 +154,16 @@ public class EventLogRowTests
     }
 
     [Test]
-    public void DecodedEvent_AfterFailedRowIsSetAgain_DecodesNewEvent()
+    public void Payload_AfterFailedRowIsSetAgain_DecodesNewEvent()
     {
         var decoder = new CountingDecoder { Failure = new InvalidOperationException("Cannot decode.") };
         var row = CreateRow(null, decoder);
-        Should.Throw<InvalidOperationException>(() => row.DecodedEvent);
+        Should.Throw<InvalidOperationException>(() => row.Payload);
 
         decoder.Failure = null;
         row.Set(8, "order-1", 4, "OrderShipped", PostgresEventData.FromJson("second"), null, CreatedAt);
 
-        row.DecodedEvent.Payload.ShouldBe("OrderShipped:second");
+        row.Payload.ShouldBe("OrderShipped:second");
     }
 
     private static EventLogRow<string> CreateRow(string? metadata, CountingDecoder? decoder = null)
