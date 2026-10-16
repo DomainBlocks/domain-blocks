@@ -20,10 +20,10 @@ namespace DomainBlocks.EventStore.Subscriptions;
 /// stops the tail and is passed to every observer.
 /// </para>
 /// <para>
-/// An async gate serializes the tail's lifecycle: starting a run, counting its attachments, and stopping it, so the next
-/// run starts only after the previous one has stopped. The read loop never takes the gate. A run's observers are held in
-/// an immutable array that is replaced by compare-and-swap, never changed in place, so the read loop never blocks, even
-/// when it detaches an observer that threw or records a failure.
+/// An async gate serializes the tail's lifecycle: starting a run, counting its attachments, and stopping it, so the
+/// next run starts only after the previous one has stopped. The read loop never takes the gate. A run's observers are
+/// held in an immutable array that is replaced by compare-and-swap, never changed in place, so the read loop never
+/// blocks, even when it detaches an observer that threw or records a failure.
 /// </para>
 /// </remarks>
 internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
@@ -115,8 +115,8 @@ internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
 
             if (_current is null || _current.IsCompleted)
             {
-                // A run that has failed may still be finishing. It has already disposed of its source, so waiting for it
-                // only keeps its last log lines ahead of the next run's.
+                // A run that has failed may still be finishing. It has already disposed of its source, so waiting for
+                // it only keeps its last log lines ahead of the next run's.
                 if (_current is not null)
                     await _current.Stopped.ConfigureAwait(false);
 
