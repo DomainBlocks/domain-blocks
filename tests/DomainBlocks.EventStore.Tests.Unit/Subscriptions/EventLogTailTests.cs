@@ -70,7 +70,7 @@ public class EventLogTailTests
         await using var attachment2 = await tail.AttachAsync(new RecordingTailObserver(), cancellationToken: ct);
 
         log.SourceCount.ShouldBe(1);
-        log.StartCount.ShouldBe(1);
+        log.EndReadCount.ShouldBe(1);
     }
 
     [Test]
@@ -89,7 +89,6 @@ public class EventLogTailTests
         await attachment2.DisposeAsync();
 
         log.DisposedSourceCount.ShouldBe(1);
-        log.DisposedSignalCount.ShouldBe(1);
     }
 
     [Test]
@@ -123,57 +122,6 @@ public class EventLogTailTests
 
         (await observer.ReadAsync(1, ct)).ShouldBe([3]);
         log.SourceCount.ShouldBe(2);
-    }
-
-    [Test]
-    [CancelAfter(TestTimeoutMillis)]
-    public async Task ReadNextAsync_FullBatch_ReadsAgainWithoutWaiting(CancellationToken ct)
-    {
-        var log = new TestEventLog();
-        var options = new EventLogTailOptions { PollInterval = Options.PollInterval, MaxBatchSize = 2 };
-        await using var tail = CreateTail(log, options);
-        var observer = new RecordingTailObserver();
-        await using var attachment = await tail.AttachAsync(observer, cancellationToken: ct);
-
-        // One signal wakes the tail once, so the last two batches are read without waiting.
-        log.Append(5);
-
-        (await observer.ReadAsync(5, ct)).ShouldBe([1, 2, 3, 4, 5]);
-    }
-
-    [Test]
-    [CancelAfter(TestTimeoutMillis)]
-    public async Task WaitAsync_NoSignal_ReadsAfterPollInterval(CancellationToken ct)
-    {
-        var log = new TestEventLog(signalsAppends: false);
-        var options = new EventLogTailOptions { PollInterval = TimeSpan.FromMilliseconds(50) };
-        await using var tail = CreateTail(log, options);
-        var observer = new RecordingTailObserver();
-        await using var attachment = await tail.AttachAsync(observer, cancellationToken: ct);
-
-        log.Append();
-
-        (await observer.ReadAsync(1, ct)).ShouldBe([1]);
-    }
-
-    [Test]
-    [CancelAfter(TestTimeoutMillis)]
-    public async Task WaitAsync_AppendSignalledDuringRead_ReadsAgainAtOnce(CancellationToken ct)
-    {
-        var log = new TestEventLog();
-        log.DuringRead = batch =>
-        {
-            if (batch.Contains(1))
-                log.Append();
-        };
-
-        await using var tail = CreateTail(log);
-        var observer = new RecordingTailObserver();
-        await using var attachment = await tail.AttachAsync(observer, cancellationToken: ct);
-
-        log.Append();
-
-        (await observer.ReadAsync(2, ct)).ShouldBe([1, 2]);
     }
 
     [Test]
@@ -239,7 +187,7 @@ public class EventLogTailTests
     public async Task AttachAsync_StartFailsTransiently_RetriesThenAttaches(CancellationToken ct)
     {
         var log = new TestEventLog();
-        log.FailNextStarts(new IOException("not yet"), new IOException("still not yet"));
+        log.FailNextEndReads(new IOException("not yet"), new IOException("still not yet"));
         await using var tail = CreateTail(log);
         var observer = new RecordingTailObserver();
 
@@ -247,7 +195,7 @@ public class EventLogTailTests
         log.Append();
 
         (await observer.ReadAsync(1, ct)).ShouldBe([1]);
-        log.StartCount.ShouldBe(3);
+        log.EndReadCount.ShouldBe(3);
     }
 
     [Test]
@@ -256,7 +204,7 @@ public class EventLogTailTests
     {
         var log = new TestEventLog();
         var exception = new InvalidOperationException("misconfigured");
-        log.FailNextStarts(exception);
+        log.FailNextEndReads(exception);
         await using var tail = CreateTail(log);
 
         var thrown = await tail.AttachAsync(new RecordingTailObserver(), cancellationToken: ct)
@@ -272,7 +220,7 @@ public class EventLogTailTests
     public async Task AttachAsync_CanceledWhileStartRetries_StopsTail(CancellationToken ct)
     {
         var log = new TestEventLog();
-        log.FailNextStarts(new IOException("down"));
+        log.FailNextEndReads(new IOException("down"));
         await using var tail = CreateTail(log, SlowRetryOptions);
         using var attachCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         attachCts.CancelAfter(100);
@@ -340,10 +288,10 @@ public class EventLogTailTests
     public async Task DisposeAsync_WhileAttachRetriesStart_StopsTailAndAttachThrows(CancellationToken ct)
     {
         var log = new TestEventLog();
-        log.FailNextStarts(new IOException("down"));
+        log.FailNextEndReads(new IOException("down"));
         var tail = CreateTail(log, SlowRetryOptions);
         var attachTask = tail.AttachAsync(new RecordingTailObserver(), cancellationToken: ct);
-        await log.StartFailed.WaitAsync(ct);
+        await log.EndReadFailed.WaitAsync(ct);
 
         await tail.DisposeAsync();
 
@@ -351,9 +299,9 @@ public class EventLogTailTests
         log.DisposedSourceCount.ShouldBe(1);
     }
 
-    private static EventLogTail<long> CreateTail(TestEventLog log, EventLogTailOptions? options = null)
+    private static EventLogTail<long, long> CreateTail(TestEventLog log, EventLogTailOptions? options = null)
     {
-        return new EventLogTail<long>(log.CreateSource, options ?? Options, Logger);
+        return new EventLogTail<long, long>(log.CreateSource, options ?? Options, Logger);
     }
 
     private sealed class ThrowingObserver : ITailObserver<long>

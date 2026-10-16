@@ -9,29 +9,26 @@ namespace DomainBlocks.EventStore.Tests.Unit.Subscriptions;
 internal sealed class TestEventLog(bool signalsAppends = true)
 {
     private readonly Lock _lock = new();
-    private readonly List<Signal> _signals = [];
-    private readonly Queue<Exception> _startFailures = new();
+    private readonly List<SemaphoreSlim> _appendSignals = [];
+    private readonly Queue<Exception> _endReadFailures = new();
     private readonly Queue<Exception> _readFailures = new();
-    private readonly TaskCompletionSource _startFailed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _endReadFailed = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _readFailed = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private long _end;
     private int _sourceCount;
-    private int _startCount;
+    private int _endReadCount;
     private int _disposedSourceCount;
-    private int _disposedSignalCount;
 
     public int SourceCount => Volatile.Read(ref _sourceCount);
 
-    public int StartCount => Volatile.Read(ref _startCount);
+    public int EndReadCount => Volatile.Read(ref _endReadCount);
 
     public int DisposedSourceCount => Volatile.Read(ref _disposedSourceCount);
 
-    public int DisposedSignalCount => Volatile.Read(ref _disposedSignalCount);
-
     /// <summary>
-    /// Completes when a start first fails.
+    /// Completes when a read of the end first fails.
     /// </summary>
-    public Task StartFailed => _startFailed.Task;
+    public Task EndReadFailed => _endReadFailed.Task;
 
     /// <summary>
     /// Completes when a read first fails.
@@ -45,24 +42,28 @@ internal sealed class TestEventLog(bool signalsAppends = true)
 
     public void Append(int count = 1)
     {
-        Signal[] signals;
-
         lock (_lock)
         {
             _end += count;
-            signals = signalsAppends ? [.. _signals] : [];
-        }
 
-        foreach (var signal in signals)
-            signal.Set();
+            if (!signalsAppends)
+                return;
+
+            // Releases happen only under the lock, so a signal's count never exceeds one.
+            foreach (var signal in _appendSignals)
+            {
+                if (signal.CurrentCount == 0)
+                    signal.Release();
+            }
+        }
     }
 
-    public void FailNextStarts(params Exception[] exceptions)
+    public void FailNextEndReads(params Exception[] exceptions)
     {
         lock (_lock)
         {
             foreach (var exception in exceptions)
-                _startFailures.Enqueue(exception);
+                _endReadFailures.Enqueue(exception);
         }
     }
 
@@ -75,35 +76,54 @@ internal sealed class TestEventLog(bool signalsAppends = true)
         }
     }
 
-    public IEventLogSource<long> CreateSource()
+    public IEventLogCursorSource<long, long> CreateSource()
     {
         Interlocked.Increment(ref _sourceCount);
         return new Source(this);
     }
 
-    private sealed class Source(TestEventLog log) : IEventLogSource<long>
+    private SemaphoreSlim AddAppendSignal()
     {
-        private long _lastRead;
+        var signal = new SemaphoreSlim(0, 1);
 
-        public ValueTask StartAsync(CancellationToken cancellationToken)
+        lock (_lock)
+            _appendSignals.Add(signal);
+
+        return signal;
+    }
+
+    private void RemoveAppendSignal(SemaphoreSlim signal)
+    {
+        lock (_lock)
+            _appendSignals.Remove(signal);
+
+        signal.Dispose();
+    }
+
+    private sealed class Source(TestEventLog log) : IEventLogCursorSource<long, long>
+    {
+        private readonly SemaphoreSlim _appendSignal = log.AddAppendSignal();
+
+        public ValueTask<long?> ReadEndAsync(CancellationToken cancellationToken)
         {
-            Interlocked.Increment(ref log._startCount);
+            Interlocked.Increment(ref log._endReadCount);
 
             lock (log._lock)
             {
-                if (log._startFailures.TryDequeue(out var exception))
+                if (log._endReadFailures.TryDequeue(out var exception))
                 {
-                    log._startFailed.TrySetResult();
-                    return ValueTask.FromException(exception);
+                    log._endReadFailed.TrySetResult();
+                    return ValueTask.FromException<long?>(exception);
                 }
 
-                _lastRead = log._end;
+                return ValueTask.FromResult<long?>(log._end > 0 ? log._end : null);
             }
-
-            return ValueTask.CompletedTask;
         }
 
-        public ValueTask<IReadOnlyList<long>> ReadNextAsync(int maxCount, CancellationToken cancellationToken)
+        public ValueTask<IReadOnlyList<long>> ReadAfterAsync(
+            long? after,
+            int maxCount,
+            CancellationToken cancellationToken)
         {
             long[] batch;
 
@@ -115,9 +135,9 @@ internal sealed class TestEventLog(bool signalsAppends = true)
                     return ValueTask.FromException<IReadOnlyList<long>>(exception);
                 }
 
-                var count = (int)Math.Min(maxCount, log._end - _lastRead);
-                batch = [.. Enumerable.Range(1, count).Select(i => _lastRead + i)];
-                _lastRead += count;
+                var start = after ?? 0;
+                var count = (int)Math.Min(maxCount, log._end - start);
+                batch = [.. Enumerable.Range(1, count).Select(i => start + i)];
             }
 
             if (batch.Length > 0)
@@ -126,58 +146,17 @@ internal sealed class TestEventLog(bool signalsAppends = true)
             return ValueTask.FromResult<IReadOnlyList<long>>(batch);
         }
 
-        public IAppendSignal CreateAppendSignal()
-        {
-            var signal = new Signal(log);
+        public long GetLogPosition(long sourceEvent) => sourceEvent;
 
-            lock (log._lock)
-                log._signals.Add(signal);
-
-            return signal;
-        }
+        public ValueTask<bool> WaitForAppendAsync(TimeSpan timeout, CancellationToken cancellationToken) =>
+            new(_appendSignal.WaitAsync(timeout, cancellationToken));
 
         public bool IsTransient(Exception exception) => exception is IOException;
 
         public ValueTask DisposeAsync()
         {
+            log.RemoveAppendSignal(_appendSignal);
             Interlocked.Increment(ref log._disposedSourceCount);
-            return ValueTask.CompletedTask;
-        }
-    }
-
-    private sealed class Signal(TestEventLog log) : IAppendSignal
-    {
-        private TaskCompletionSource _wake = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public void Set() => Volatile.Read(ref _wake).TrySetResult();
-
-        public async ValueTask WaitAsync(TimeSpan timeout, CancellationToken cancellationToken)
-        {
-            var wake = Volatile.Read(ref _wake);
-
-            try
-            {
-                await wake.Task.WaitAsync(timeout, cancellationToken);
-            }
-            catch (TimeoutException)
-            {
-                return;
-            }
-
-            // The wake is replaced only after it has fired, so an append signalled during a read ends the next wait at
-            // once.
-            Interlocked.CompareExchange(
-                ref _wake,
-                new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously),
-                wake);
-        }
-
-        public ValueTask DisposeAsync()
-        {
-            lock (log._lock)
-                log._signals.Remove(this);
-
-            Interlocked.Increment(ref log._disposedSignalCount);
             return ValueTask.CompletedTask;
         }
     }

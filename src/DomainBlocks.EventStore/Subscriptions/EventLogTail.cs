@@ -1,7 +1,5 @@
 using System.Collections.Immutable;
 using Microsoft.Extensions.Logging;
-using Polly;
-using Polly.Retry;
 
 namespace DomainBlocks.EventStore.Subscriptions;
 
@@ -11,13 +9,9 @@ namespace DomainBlocks.EventStore.Subscriptions;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A tail starts at the end of the log, then reads the events after the last one it read, up to
-/// <see cref="EventLogTailOptions.MaxBatchSize"/> at a time. After a full batch it reads again at once. Otherwise it
-/// waits until the source signals an append, or for <see cref="EventLogTailOptions.PollInterval"/>.
-/// </para>
-/// <para>
-/// A transient error is retried from the same position with backoff, so observers never miss an event. Any other error
-/// stops the tail and is passed to every observer.
+/// A tail starts at the end of the log and reads it through an <see cref="EventLogCursor{TSourceEvent,TLogPos}"/>,
+/// which waits for events to be appended and retries transient errors, so observers never miss an event. Any other
+/// error stops the tail and is passed to every observer.
 /// </para>
 /// <para>
 /// An async gate serializes the tail's lifecycle: starting a session, counting its attachments, and stopping it, so the
@@ -26,9 +20,9 @@ namespace DomainBlocks.EventStore.Subscriptions;
 /// loop never blocks, even when it detaches an observer that threw or records a failure.
 /// </para>
 /// </remarks>
-internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
+internal sealed class EventLogTail<TSourceEvent, TLogPos> : IAsyncDisposable where TLogPos : struct
 {
-    private readonly Func<IEventLogSource<TSourceEvent>> _sourceFactory;
+    private readonly Func<IEventLogCursorSource<TSourceEvent, TLogPos>> _sourceFactory;
     private readonly EventLogTailOptions _options;
     private readonly ILogger? _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -37,7 +31,7 @@ internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
     private int _disposed;
 
     public EventLogTail(
-        Func<IEventLogSource<TSourceEvent>> sourceFactory,
+        Func<IEventLogCursorSource<TSourceEvent, TLogPos>> sourceFactory,
         EventLogTailOptions? options = null,
         ILogger? logger = null)
     {
@@ -175,7 +169,7 @@ internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
     /// </summary>
     private sealed class Session
     {
-        private readonly EventLogTail<TSourceEvent> _tail;
+        private readonly EventLogTail<TSourceEvent, TLogPos> _tail;
         private readonly ILogger? _logger;
         private readonly string _tailId = CorrelationId.ReserveGenerated();
         private readonly CancellationTokenSource _stopCts = new();
@@ -183,7 +177,7 @@ internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
         private SessionState _state = new([]);
         private int _stopping;
 
-        public Session(EventLogTail<TSourceEvent> tail)
+        public Session(EventLogTail<TSourceEvent, TLogPos> tail)
         {
             _tail = tail;
             _logger = tail._logger;
@@ -253,43 +247,30 @@ internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
         {
             _logger?.TailStarting(_tailId);
 
-            var options = _tail._options;
             var stopToken = _stopCts.Token;
 
             try
             {
-                var source = _tail._sourceFactory();
+                var cursor = new EventLogCursor<TSourceEvent, TLogPos>(
+                    _tail._sourceFactory(),
+                    _tail._options,
+                    _logger,
+                    _tailId);
 
-                await using (source.ConfigureAwait(false))
+                await using (cursor.ConfigureAwait(false))
                 {
-                    var pipeline = CreatePipeline(source);
-                    var signal = source.CreateAppendSignal();
+                    await cursor.SeekToEndAsync(stopToken).ConfigureAwait(false);
 
-                    await using (signal.ConfigureAwait(false))
+                    _logger?.TailStarted(_tailId);
+                    _startedTcs.TrySetResult();
+
+                    // The cursor retries transient errors itself, so whatever it throws stops the tail.
+                    while (true)
                     {
-                        await pipeline
-                            .ExecuteAsync(static (source, ct) => source.StartAsync(ct), source, stopToken)
-                            .ConfigureAwait(false);
+                        var batch = await cursor.ReadNextAsync(stopToken).ConfigureAwait(false);
 
-                        _logger?.TailStarted(_tailId);
-                        _startedTcs.TrySetResult();
-
-                        while (true)
-                        {
-                            var batch = await pipeline
-                                .ExecuteAsync(
-                                    static (state, ct) => state.Source.ReadNextAsync(state.MaxCount, ct),
-                                    (Source: source, MaxCount: options.MaxBatchSize),
-                                    stopToken)
-                                .ConfigureAwait(false);
-
-                            foreach (var e in batch)
-                                NotifyNext(e);
-
-                            // A full batch may have left events unread, so only a short one waits.
-                            if (batch.Count < options.MaxBatchSize)
-                                await signal.WaitAsync(options.PollInterval, stopToken).ConfigureAwait(false);
-                        }
+                        foreach (var e in batch)
+                            NotifyNext(e);
                     }
                 }
             }
@@ -309,37 +290,6 @@ internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
                 _logger?.TailStopped(_tailId);
                 CorrelationId.Release(_tailId);
             }
-        }
-
-        private ResiliencePipeline CreatePipeline(IEventLogSource<TSourceEvent> source)
-        {
-            var options = _tail._options;
-
-            return new ResiliencePipelineBuilder()
-                .AddRetry(new RetryStrategyOptions
-                {
-                    MaxRetryAttempts = int.MaxValue,
-                    BackoffType = DelayBackoffType.Exponential,
-                    UseJitter = true,
-                    Delay = options.RetryDelay,
-                    MaxDelay = options.MaxRetryDelay,
-                    ShouldHandle = args =>
-                    {
-                        var shouldHandle = args.Outcome.Exception is { } ex &&
-                                           !args.Context.CancellationToken.IsCancellationRequested &&
-                                           source.IsTransient(ex);
-
-                        return ValueTask.FromResult(shouldHandle);
-                    },
-                    OnRetry = args =>
-                    {
-                        if (args.Outcome.Exception is { } ex)
-                            _logger?.TailRetrying(ex, _tailId, args.AttemptNumber + 1, args.RetryDelay);
-
-                        return ValueTask.CompletedTask;
-                    }
-                })
-                .Build();
         }
 
         private void NotifyNext(TSourceEvent sourceEvent)
