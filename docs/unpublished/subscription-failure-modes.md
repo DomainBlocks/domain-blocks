@@ -257,7 +257,10 @@ public interface IEventLogReadContext<TSourceEvent> : IAsyncDisposable
     ValueTask<LogPosition?> ReadLogEndAsync(CancellationToken cancellationToken);
 
     // Unfiltered and in position order. The tail reader uses this.
-    IAsyncEnumerable<TSourceEvent> ReadLogAfterAsync(LogPosition? after, int limit, CancellationToken cancellationToken);
+    IAsyncEnumerable<TSourceEvent> ReadLogAfterAsync(
+        LogPosition? after,
+        int limit,
+        CancellationToken cancellationToken);
 }
 
 // Built per subscription. It knows the target (all events or one stream), the filter and the kind of position.
