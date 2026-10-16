@@ -20,10 +20,10 @@ namespace DomainBlocks.EventStore.Subscriptions;
 /// stops the tail and is passed to every observer.
 /// </para>
 /// <para>
-/// An async gate serializes the tail's lifecycle: starting a run, counting its attachments, and stopping it, so the
-/// next run starts only after the previous one has stopped. The read loop never takes the gate. A run's observers are
-/// held in an immutable array that is replaced by compare-and-swap, never changed in place, so the read loop never
-/// blocks, even when it detaches an observer that threw or records a failure.
+/// An async gate serializes the tail's lifecycle: starting a session, counting its attachments, and stopping it, so the
+/// next session starts only after the previous one has stopped. The read loop never takes the gate. A session's
+/// observers are held in an immutable array that is replaced by compare-and-swap, never changed in place, so the read
+/// loop never blocks, even when it detaches an observer that threw or records a failure.
 /// </para>
 /// </remarks>
 internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
@@ -33,8 +33,8 @@ internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
     private readonly ILogger? _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly CancellationTokenSource _disposeCts = new();
-    private Run? _current;
-    private bool _disposed;
+    private Session? _session;
+    private int _disposed;
 
     public EventLogTail(
         Func<IEventLogSource<TSourceEvent>> sourceFactory,
@@ -68,8 +68,8 @@ internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
         {
             return await AttachCoreAsync(observer, correlationId, attachCts.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (
-            _disposeCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (_disposeCts.IsCancellationRequested &&
+                                                 !cancellationToken.IsCancellationRequested)
         {
             throw new ObjectDisposedException(GetType().FullName);
         }
@@ -80,20 +80,18 @@ internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
     /// </summary>
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+
         await _disposeCts.CancelAsync().ConfigureAwait(false);
         await _gate.WaitAsync().ConfigureAwait(false);
 
         try
         {
-            if (_disposed)
-                return;
-
-            _disposed = true;
-
-            if (_current is { } run)
+            if (_session is { } session)
             {
-                _current = null;
-                await run.StopAsync().ConfigureAwait(false);
+                _session = null;
+                await session.StopAsync().ConfigureAwait(false);
             }
         }
         finally
@@ -111,36 +109,36 @@ internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
 
         try
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
 
-            if (_current is null || _current.IsCompleted)
+            if (_session is null || _session.IsCompleted)
             {
-                // A run that has failed may still be finishing. It has already disposed of its source, so waiting for
-                // it only keeps its last log lines ahead of the next run's.
-                if (_current is not null)
-                    await _current.Stopped.ConfigureAwait(false);
+                // A session that has failed may still be finishing. It has already disposed of its source, so waiting
+                // for it only keeps its last log lines ahead of the next session.
+                if (_session is not null)
+                    await _session.Stopped.ConfigureAwait(false);
 
-                _current = new Run(this);
+                _session = new Session(this);
             }
 
-            var run = _current;
+            var session = _session;
 
             try
             {
-                await run.Started.WaitAsync(cancellationToken).ConfigureAwait(false);
+                await session.Started.WaitAsync(cancellationToken).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested && run.RefCount == 0)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested && session.RefCount == 0)
             {
                 // Nobody else is attached, so stop the tail rather than leave it running.
-                _current = null;
-                await run.StopAsync().ConfigureAwait(false);
+                _session = null;
+                await session.StopAsync().ConfigureAwait(false);
                 throw;
             }
 
-            var registration = run.Attach(observer, correlationId);
-            run.RefCount++;
+            var sessionAttachment = session.Attach(observer, correlationId);
+            session.RefCount++;
 
-            return new Attachment(() => DetachAsync(run, registration));
+            return new Attachment(() => DetachAsync(session, sessionAttachment));
         }
         finally
         {
@@ -148,23 +146,23 @@ internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
         }
     }
 
-    private async Task DetachAsync(Run run, IDisposable registration)
+    private async Task DetachAsync(Session session, IDisposable sessionAttachment)
     {
-        registration.Dispose();
+        sessionAttachment.Dispose();
 
         await _gate.WaitAsync().ConfigureAwait(false);
 
         try
         {
-            if (--run.RefCount > 0)
+            if (--session.RefCount > 0)
                 return;
 
-            if (ReferenceEquals(_current, run))
-                _current = null;
+            if (ReferenceEquals(_session, session))
+                _session = null;
 
-            // This runs within the gate, so the next run cannot start until this one has stopped, and a store never has
-            // two tails reading its log at once.
-            await run.StopAsync().ConfigureAwait(false);
+            // This runs within the gate, so the next session cannot start until this one has stopped, and a store never
+            // has two tails reading its log at once.
+            await session.StopAsync().ConfigureAwait(false);
         }
         finally
         {
@@ -173,19 +171,19 @@ internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
     }
 
     /// <summary>
-    /// One run of the tail, from its start to its stop or failure.
+    /// One session of the tail, from its start to its stop or failure.
     /// </summary>
-    private sealed class Run
+    private sealed class Session
     {
         private readonly EventLogTail<TSourceEvent> _tail;
         private readonly ILogger? _logger;
         private readonly string _tailId = CorrelationId.ReserveGenerated();
         private readonly CancellationTokenSource _stopCts = new();
         private readonly TaskCompletionSource _startedTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private State _state = new([]);
+        private SessionState _state = new([]);
         private int _stopping;
 
-        public Run(EventLogTail<TSourceEvent> tail)
+        public Session(EventLogTail<TSourceEvent> tail)
         {
             _tail = tail;
             _logger = tail._logger;
@@ -198,12 +196,12 @@ internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
         public Task Started => _startedTcs.Task;
 
         /// <summary>
-        /// Completes when the run has stopped or failed. It never faults.
+        /// Completes when the session has stopped or failed. It never faults.
         /// </summary>
         public Task Stopped { get; }
 
         /// <summary>
-        /// Whether the run has stopped or failed, which it records before it notifies anyone.
+        /// Whether the session has stopped or failed, which it records before it notifies anyone.
         /// </summary>
         public bool IsCompleted => Volatile.Read(ref _state).Completion is not null;
 
@@ -214,25 +212,24 @@ internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
 
         public IDisposable Attach(ITailObserver<TSourceEvent> observer, string observerId)
         {
-            var registration = new Registration(observer, observerId, Detach);
+            var attachment = new SessionAttachment(observer, observerId, Detach);
 
             TryUpdate(
-                static (current, registration) => current.Completion switch
+                static (current, attachment) => current.Completion switch
                 {
-                    { Error: { } error } => throw new InvalidOperationException(
-                        "Cannot attach to a failed event log tail.",
-                        error),
+                    { Error: { } error } =>
+                        throw new InvalidOperationException("Cannot attach to a failed event log tail.", error),
 
-                    { Error: null } => throw new InvalidOperationException(
-                        "Cannot attach to a stopped event log tail."),
+                    { Error: null } =>
+                        throw new InvalidOperationException("Cannot attach to a stopped event log tail."),
 
-                    _ => new State(current.Registrations.Add(registration))
+                    _ => new SessionState(current.Attachments.Add(attachment))
                 },
-                registration,
+                attachment,
                 out var next);
 
-            _logger?.TailObserverAttached(_tailId, observerId, next.Registrations.Length);
-            return registration;
+            _logger?.TailObserverAttached(_tailId, observerId, next.Attachments.Length);
+            return attachment;
         }
 
         public async Task StopAsync()
@@ -286,8 +283,8 @@ internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
                                     stopToken)
                                 .ConfigureAwait(false);
 
-                            for (var i = 0; i < batch.Count; i++)
-                                NotifyNext(batch[i]);
+                            foreach (var e in batch)
+                                NotifyNext(e);
 
                             // A full batch may have left events unread, so only a short one waits.
                             if (batch.Count < options.MaxBatchSize)
@@ -347,16 +344,16 @@ internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
 
         private void NotifyNext(TSourceEvent sourceEvent)
         {
-            foreach (var registration in Volatile.Read(ref _state).Registrations)
+            foreach (var attachment in Volatile.Read(ref _state).Attachments)
             {
                 try
                 {
-                    registration.Observer.OnNext(sourceEvent);
+                    attachment.Observer.OnNext(sourceEvent);
                 }
                 catch (Exception observerException)
                 {
-                    _logger?.TailObserverOnNextFailed(observerException, _tailId, registration.ObserverId);
-                    registration.Dispose();
+                    _logger?.TailObserverOnNextFailed(observerException, _tailId, attachment.ObserverId);
+                    attachment.Dispose();
                 }
             }
         }
@@ -366,40 +363,43 @@ internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
             // Completing first refuses new attachments, so no observer can join after the error is handed out.
             if (!TryUpdate(
                     static (current, completion) => current.Completion is null
-                        ? new State(current.Registrations, completion)
+                        ? new SessionState(current.Attachments, completion)
                         : null,
-                    new Completion(error),
+                    new SessionCompletion(error),
                     out var completed) ||
                 error is null)
             {
                 return;
             }
 
-            foreach (var registration in completed.Registrations)
+            foreach (var attachment in completed.Attachments)
             {
                 try
                 {
-                    registration.Observer.OnError(error);
+                    attachment.Observer.OnError(error);
                 }
                 catch (Exception observerException)
                 {
-                    _logger?.TailObserverOnErrorFailed(observerException, _tailId, registration.ObserverId);
+                    _logger?.TailObserverOnErrorFailed(observerException, _tailId, attachment.ObserverId);
                 }
             }
         }
 
-        private void Detach(Registration registration)
+        private void Detach(SessionAttachment attachment)
         {
             TryUpdate(
-                static (current, registration) =>
-                    new State(current.Registrations.Remove(registration), current.Completion),
-                registration,
+                static (current, attachment) =>
+                    new SessionState(current.Attachments.Remove(attachment), current.Completion),
+                attachment,
                 out var next);
 
-            _logger?.TailObserverDetached(_tailId, registration.ObserverId, next.Registrations.Length);
+            _logger?.TailObserverDetached(_tailId, attachment.ObserverId, next.Attachments.Length);
         }
 
-        private bool TryUpdate<TArg>(Func<State, TArg, State?> updater, TArg argument, out State result)
+        private bool TryUpdate<TArg>(
+            Func<SessionState, TArg, SessionState?> updater,
+            TArg argument,
+            out SessionState result)
         {
             while (true)
             {
@@ -419,34 +419,37 @@ internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
                 return true;
             }
         }
+    }
 
-        private sealed class State(ImmutableArray<Registration> registrations, Completion? completion = null)
+    private sealed class SessionState(
+        ImmutableArray<SessionAttachment> attachments,
+        SessionCompletion? completion = null)
+    {
+        public ImmutableArray<SessionAttachment> Attachments { get; } = attachments;
+        public SessionCompletion? Completion { get; } = completion;
+    }
+
+    private sealed class SessionAttachment(
+        ITailObserver<TSourceEvent> observer,
+        string observerId,
+        Action<SessionAttachment> onDispose) :
+        IDisposable
+    {
+        private int _disposed;
+
+        public ITailObserver<TSourceEvent> Observer { get; } = observer;
+        public string ObserverId { get; } = observerId;
+
+        public void Dispose()
         {
-            public ImmutableArray<Registration> Registrations { get; } = registrations;
-            public Completion? Completion { get; } = completion;
+            if (Interlocked.Exchange(ref _disposed, 1) == 0)
+                onDispose(this);
         }
+    }
 
-        private sealed class Registration(
-            ITailObserver<TSourceEvent> observer,
-            string observerId,
-            Action<Registration> onDispose) : IDisposable
-        {
-            private int _disposed;
-
-            public ITailObserver<TSourceEvent> Observer { get; } = observer;
-            public string ObserverId { get; } = observerId;
-
-            public void Dispose()
-            {
-                if (Interlocked.Exchange(ref _disposed, 1) == 0)
-                    onDispose(this);
-            }
-        }
-
-        private sealed class Completion(Exception? error = null)
-        {
-            public Exception? Error { get; } = error;
-        }
+    private sealed class SessionCompletion(Exception? error = null)
+    {
+        public Exception? Error { get; } = error;
     }
 
     private sealed class Attachment(Func<Task> onDispose) : IAsyncDisposable
