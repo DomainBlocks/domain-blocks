@@ -12,6 +12,7 @@ internal sealed class TestEventLog(bool signalsAppends = true)
     private readonly List<Signal> _signals = [];
     private readonly Queue<Exception> _startFailures = new();
     private readonly Queue<Exception> _readFailures = new();
+    private readonly TaskCompletionSource _startFailed = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _readFailed = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private long _end;
     private int _sourceCount;
@@ -26,6 +27,11 @@ internal sealed class TestEventLog(bool signalsAppends = true)
     public int DisposedSourceCount => Volatile.Read(ref _disposedSourceCount);
 
     public int DisposedSignalCount => Volatile.Read(ref _disposedSignalCount);
+
+    /// <summary>
+    /// Completes when a start first fails.
+    /// </summary>
+    public Task StartFailed => _startFailed.Task;
 
     /// <summary>
     /// Completes when a read first fails.
@@ -86,7 +92,10 @@ internal sealed class TestEventLog(bool signalsAppends = true)
             lock (log._lock)
             {
                 if (log._startFailures.TryDequeue(out var exception))
+                {
+                    log._startFailed.TrySetResult();
                     return ValueTask.FromException(exception);
+                }
 
                 _lastRead = log._end;
             }

@@ -19,6 +19,12 @@ namespace DomainBlocks.EventStore.Subscriptions;
 /// A transient error is retried from the same position with backoff, so observers never miss an event. Any other error
 /// stops the tail and is passed to every observer.
 /// </para>
+/// <para>
+/// An async gate serializes the tail's lifecycle: starting a run, counting its attachments, and stopping it, so the next
+/// run starts only after the previous one has stopped. The read loop never takes the gate. A run's observers are held in
+/// an immutable array that is replaced by compare-and-swap, never changed in place, so the read loop never blocks, even
+/// when it detaches an observer that threw or records a failure.
+/// </para>
 /// </remarks>
 internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
 {
@@ -26,6 +32,7 @@ internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
     private readonly EventLogTailOptions _options;
     private readonly ILogger? _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly CancellationTokenSource _disposeCts = new();
     private Run? _current;
     private bool _disposed;
 
@@ -53,6 +60,53 @@ internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(observer);
 
+        // Disposing the tail cancels an attach that is still waiting, so disposal never waits behind a start that keeps
+        // retrying.
+        using var attachCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
+
+        try
+        {
+            return await AttachCoreAsync(observer, correlationId, attachCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (
+            _disposeCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            throw new ObjectDisposedException(GetType().FullName);
+        }
+    }
+
+    /// <summary>
+    /// Stops the tail and rejects further attachments. Observers that are still attached are not notified.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        await _disposeCts.CancelAsync().ConfigureAwait(false);
+        await _gate.WaitAsync().ConfigureAwait(false);
+
+        try
+        {
+            if (_disposed)
+                return;
+
+            _disposed = true;
+
+            if (_current is { } run)
+            {
+                _current = null;
+                await run.StopAsync().ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    private async Task<IAsyncDisposable> AttachCoreAsync(
+        ITailObserver<TSourceEvent> observer,
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
 
         try
@@ -87,32 +141,6 @@ internal sealed class EventLogTail<TSourceEvent> : IAsyncDisposable
             run.RefCount++;
 
             return new Attachment(() => DetachAsync(run, registration));
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    /// <summary>
-    /// Stops the tail and rejects further attachments. Observers that are still attached are not notified.
-    /// </summary>
-    public async ValueTask DisposeAsync()
-    {
-        await _gate.WaitAsync().ConfigureAwait(false);
-
-        try
-        {
-            if (_disposed)
-                return;
-
-            _disposed = true;
-
-            if (_current is { } run)
-            {
-                _current = null;
-                await run.StopAsync().ConfigureAwait(false);
-            }
         }
         finally
         {

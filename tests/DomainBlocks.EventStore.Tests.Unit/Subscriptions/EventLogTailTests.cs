@@ -335,6 +335,22 @@ public class EventLogTailTests
         log.DisposedSourceCount.ShouldBe(1);
     }
 
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task DisposeAsync_WhileAttachRetriesStart_StopsTailAndAttachThrows(CancellationToken ct)
+    {
+        var log = new TestEventLog();
+        log.FailNextStarts(new IOException("down"));
+        var tail = CreateTail(log, SlowRetryOptions);
+        var attachTask = tail.AttachAsync(new RecordingTailObserver(), cancellationToken: ct);
+        await log.StartFailed.WaitAsync(ct);
+
+        await tail.DisposeAsync();
+
+        await attachTask.ShouldThrowAsync<ObjectDisposedException>();
+        log.DisposedSourceCount.ShouldBe(1);
+    }
+
     private static EventLogTail<long> CreateTail(TestEventLog log, EventLogTailOptions? options = null)
     {
         return new EventLogTail<long>(log.CreateSource, options ?? Options, Logger);
