@@ -34,9 +34,9 @@ public static class SubscriptionMessage
 /// </code>
 /// </remarks>
 /// <typeparam name="TEvent">The type of the events.</typeparam>
-/// <typeparam name="TStreamId">The type of a stream identifier.</typeparam>
-/// <typeparam name="TStreamPos">The type of a position within a stream.</typeparam>
-/// <typeparam name="TLogPos">The type of a position in the event log.</typeparam>
+/// <typeparam name="TStreamId">The type of stream identifier.</typeparam>
+/// <typeparam name="TStreamPos">The type of position within a stream.</typeparam>
+/// <typeparam name="TLogPos">The type of position in the event log.</typeparam>
 public readonly struct SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>
     where TEvent : notnull
     where TStreamId : notnull

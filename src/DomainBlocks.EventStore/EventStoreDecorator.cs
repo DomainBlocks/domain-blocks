@@ -219,7 +219,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
         var context = @event.Context;
         var produced = false;
 
-        foreach (var derivedPayload in transform.Apply(@event.Payload, in context))
+        foreach (var derivedPayload in transform.Apply(in @event))
         {
             produced = true;
 
@@ -230,7 +230,7 @@ internal sealed class EventStoreDecorator<TEvent, TStreamId, TStreamPos, TLogPos
                     "would be transformed again indefinitely.");
             }
 
-            var derived = ReadEvent.Create(derivedPayload, context);
+            var derived = ReadEvent.Create(derivedPayload, @event.Metadata, context);
 
             if (_readTransforms.TryGetValue(derivedPayload.GetType(), out var next))
                 Expand(derived, next, output, depth + 1);

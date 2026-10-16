@@ -159,12 +159,11 @@ internal sealed class NoIOEventStore<TEvent, TEventData, TMetadata>(
             var context = ReadEventContext.Create(
                 streamId,
                 eventName,
-                metadata,
                 NoIOEventStore.CreatedAt,
                 StreamPosition.FromInt64(i),
                 LogPosition.FromInt64(i));
 
-            yield return ReadEvent.Create(payload, context);
+            yield return ReadEvent.Create(payload, metadata, context);
         }
     }
 

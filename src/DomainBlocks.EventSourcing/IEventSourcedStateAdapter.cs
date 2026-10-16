@@ -5,7 +5,7 @@
 /// </summary>
 /// <typeparam name="TState">The type of the state.</typeparam>
 /// <typeparam name="TEvent">The type of the events.</typeparam>
-/// <typeparam name="TStreamId">The type of a stream ID.</typeparam>
+/// <typeparam name="TStreamId">The type of stream ID.</typeparam>
 public interface IEventSourcedStateAdapter<TState, TEvent, out TStreamId>
     where TState : notnull
     where TEvent : notnull

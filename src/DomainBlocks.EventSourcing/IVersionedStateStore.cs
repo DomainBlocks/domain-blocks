@@ -6,8 +6,8 @@ namespace DomainBlocks.EventSourcing;
 /// Defines a store that loads and saves versioned state, using optimistic concurrency.
 /// </summary>
 /// <typeparam name="TState">The type of the state.</typeparam>
-/// <typeparam name="TStateId">The type of a state ID.</typeparam>
-/// <typeparam name="TVersion">The type of a version.</typeparam>
+/// <typeparam name="TStateId">The type of state ID.</typeparam>
+/// <typeparam name="TVersion">The type of version.</typeparam>
 public interface IVersionedStateStore<TState, in TStateId, TVersion>
     where TState : notnull
     where TStateId : notnull

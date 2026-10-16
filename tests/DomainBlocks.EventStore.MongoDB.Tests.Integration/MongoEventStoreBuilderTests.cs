@@ -92,7 +92,7 @@ public class MongoEventStoreBuilderTests
 
         var read = (await store.ReadStream("s1").ToArrayAsync()).ShouldHaveSingleItem();
         read.Payload.ShouldBe(appended);
-        read.Context.Metadata.ShouldBe(new Dictionary<string, string> { ["k"] = "v" });
+        read.Metadata.ShouldBe(new Dictionary<string, string> { ["k"] = "v" });
     }
 
     private sealed record OrderPlaced(Guid OrderId, string Note);

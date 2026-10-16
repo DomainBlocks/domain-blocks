@@ -118,13 +118,13 @@ public abstract class EventStoreReadAllTests<TStreamPos, TLogPos>(IEventStoreTes
             cancellationToken: cancellationToken);
 
         var withMetadata = await EventStore.ReadAll().SingleAsync(cancellationToken);
-        withMetadata.Context.Metadata["tenant"].ShouldBe("acme");
+        withMetadata.Metadata["tenant"].ShouldBe("acme");
 
         var withoutMetadata = await EventStore
             .ReadAll(options: new ReadAllOptions { IncludeMetadata = false })
             .SingleAsync(cancellationToken);
 
-        withoutMetadata.Context.Metadata.ShouldBeEmpty();
+        withoutMetadata.Metadata.ShouldBeEmpty();
     }
 
     [TestCase(ReadDirection.Forward, true)]

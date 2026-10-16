@@ -5,7 +5,6 @@ public static class ReadEventContext
     public static ReadEventContext<TStreamId, TStreamPos, TLogPos> Create<TStreamId, TStreamPos, TLogPos>(
         TStreamId streamId,
         string eventName,
-        IReadOnlyDictionary<string, string> metadata,
         DateTimeOffset createdAt,
         TStreamPos streamPosition,
         TLogPos logPosition)
@@ -16,7 +15,6 @@ public static class ReadEventContext
         return new ReadEventContext<TStreamId, TStreamPos, TLogPos>(
             streamId,
             eventName,
-            metadata,
             createdAt,
             streamPosition,
             logPosition);
@@ -26,7 +24,6 @@ public static class ReadEventContext
 public readonly struct ReadEventContext<TStreamId, TStreamPos, TLogPos>(
     TStreamId streamId,
     string eventName,
-    IReadOnlyDictionary<string, string> metadata,
     DateTimeOffset createdAt,
     TStreamPos streamPosition,
     TLogPos logPosition)
@@ -36,7 +33,6 @@ public readonly struct ReadEventContext<TStreamId, TStreamPos, TLogPos>(
 {
     public TStreamId StreamId { get; } = streamId;
     public string EventName { get; } = eventName;
-    public IReadOnlyDictionary<string, string> Metadata { get; } = metadata;
     public DateTimeOffset CreatedAt { get; } = createdAt;
     public TStreamPos StreamPosition { get; } = streamPosition;
     public TLogPos LogPosition { get; } = logPosition;

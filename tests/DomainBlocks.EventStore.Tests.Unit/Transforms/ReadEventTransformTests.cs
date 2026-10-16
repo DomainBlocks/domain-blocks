@@ -45,9 +45,9 @@ public class ReadEventTransformTests
 
         var readEvent = events.ShouldHaveSingleItem();
         readEvent.Payload.ShouldBe(new Current("a"));
+        readEvent.Metadata.ShouldBeSameAs(metadata);
         readEvent.Context.StreamPosition.ShouldBe(new StreamPosition(7));
         readEvent.Context.LogPosition.ShouldBe(new LogPosition(7));
-        readEvent.Context.Metadata.ShouldBeSameAs(metadata);
     }
 
     [Test]

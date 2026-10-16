@@ -107,12 +107,12 @@ public class EventLogDocumentTests
         var e = document.DecodedEvent;
 
         e.Payload.ShouldBe("OrderPlaced");
+        e.Metadata.ShouldBe(new Dictionary<string, string> { ["tenant"] = "acme" });
         e.Context.LogPosition.ShouldBe(LogPosition.FromInt64(7));
         e.Context.StreamId.ShouldBe("order-1");
         e.Context.StreamPosition.ShouldBe(StreamPosition.FromInt64(3));
         e.Context.EventName.ShouldBe("OrderPlaced");
         e.Context.CreatedAt.ShouldBe(new DateTimeOffset(CreatedAtUtc));
-        e.Context.Metadata.ShouldBe(new Dictionary<string, string> { ["tenant"] = "acme" });
     }
 
     [Test]

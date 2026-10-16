@@ -82,12 +82,12 @@ public class EventLogRowTests
         var e = row.DecodedEvent;
 
         e.Payload.ShouldBe("OrderPlaced:payload");
+        e.Metadata["raw"].ShouldBe(metadata);
         e.Context.LogPosition.ShouldBe(LogPosition.FromInt64(7));
         e.Context.StreamId.ShouldBe("order-1");
         e.Context.StreamPosition.ShouldBe(StreamPosition.FromInt64(3));
         e.Context.EventName.ShouldBe("OrderPlaced");
         e.Context.CreatedAt.ShouldBe(CreatedAt);
-        e.Context.Metadata["raw"].ShouldBe(metadata);
     }
 
     [Test]
