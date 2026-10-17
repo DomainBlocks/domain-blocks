@@ -78,7 +78,7 @@ internal sealed class ReplicationBarrier(
         if (warning is not null)
             throw new ReplicationBarrierException($"The replication barrier was not confirmed: {warning.MessageText}");
 
-        if (standbyNames is "" && requireSynchronousStandby)
+        if (standbyNames == string.Empty && requireSynchronousStandby)
         {
             logger?.SynchronousStandbyMissing();
 
