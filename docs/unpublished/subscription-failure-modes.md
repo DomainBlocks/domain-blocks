@@ -306,6 +306,16 @@ error fails the subscription.
   database, role or session sets. PostgreSQL makes a transaction visible only after the commit's flush and its wait for
   the synchronous standbys, so an acknowledged append is flushed, and is on the standbys if any are configured. No
   other session can see it before then.
+- **Appends are acknowledged after the commit.** The server sends a batch's result rows before it commits, and flushes
+  them once they fill its 8 KB output buffer, so the appender reads every row first and completes the requests only
+  once the server reports the commit. A batch that does not commit completes nothing.
+- **A commit that sends a warning is confirmed first.** A commit whose wait for the standbys is cancelled stands on the
+  primary and sends only a warning, which cannot be told apart from others: its code is the generic warning code and
+  its text is translated. So any warning during an append batch or a barrier is followed by a barrier of our own on
+  the same connection, which touches no table. If it commits without a warning, the standbys have it and everything
+  before it. Otherwise the commit is not confirmed, and the appender runs the batch again, which reports the requests
+  as duplicates once the standbys have them, while a subscription reads again. The same connection means it can only
+  confirm the server that ran the commit.
 - **The wake signal.** `append_events` notifies the channel named after the schema, with the position of its last
   event as the payload, while it still holds the sequence row's lock. The source listens on a connection of its own,
   and runs `UNLISTEN *` before returning it to the pool, because Npgsql resets a pooled connection only when it is
@@ -321,8 +331,8 @@ error fails the subscription.
 
   Its commit waits until the synchronous standbys have flushed it, and with it every commit the read saw, including
   commits whose own wait was cancelled. The tail hands on a page only once its batch completes, because rows can reach
-  the client before the commit waits. Any warning during the batch counts as an unconfirmed barrier, as does a
-  terminated backend, and the read is retried.
+  the client before the commit waits. A warning during the batch is confirmed as above, and a terminated backend fails
+  the read, which is retried.
 - **Without synchronous standbys, the barrier writes nothing.** Every visible append has already been flushed, so there
   is nothing for it to wait for. That is the case on a single server, and on services whose storage replicates the
   WAL. With synchronous standbys it closes the cases in failure 3. It decides on each read, so it follows the topology
