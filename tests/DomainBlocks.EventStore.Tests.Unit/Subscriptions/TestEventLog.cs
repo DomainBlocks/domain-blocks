@@ -10,6 +10,10 @@ namespace DomainBlocks.EventStore.Tests.Unit.Subscriptions;
 /// a store's would, treat an <see cref="IOException"/> as transient, and hear every append unless
 /// <paramref name="hearsAppends"/> is <see langword="false"/>.
 /// </summary>
+/// <remarks>
+/// A source that listens for appends is the tail's, and the others are catch-ups'. The catch-ups' reads are recorded,
+/// and can be held.
+/// </remarks>
 internal sealed class TestEventLog(bool hearsAppends = true)
 {
     private readonly Lock _lock = new();
@@ -18,21 +22,35 @@ internal sealed class TestEventLog(bool hearsAppends = true)
     private readonly List<Channel<LogPosition>> _listeners = [];
     private readonly SemaphoreSlim _listenerStarts = new(0);
     private readonly Queue<Exception> _endReadFailures = new();
+    private readonly Queue<Exception> _catchUpEndReadFailures = new();
     private readonly Queue<(int EventCount, Exception Exception)> _readFailures = new();
+    private readonly List<CatchUpRead> _catchUpReads = [];
+    private readonly Dictionary<int, CatchUpHold> _catchUpEndReadHolds = [];
+    private readonly Dictionary<int, CatchUpHold> _catchUpReadHolds = [];
+    private readonly List<(long Position, TaskCompletionSource Delivered)> _deliveryWaiters = [];
 
     private readonly TaskCompletionSource _readEndPositionFailure =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     private readonly TaskCompletionSource _readFailure = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int? _readableCount;
+    private long _deliveredThrough;
+    private int _catchUpEndReadCount;
     private int _readCount;
     private int _sourceCreatedCount;
+    private int _listenerStartCount;
     private int _endPositionReadCount;
     private int _sourceDisposedCount;
 
     public TestDecoder Decoder { get; } = new();
 
     public int SourceCreatedCount => Volatile.Read(ref _sourceCreatedCount);
+
+    /// <summary>
+    /// Gets the number of times a source has started listening, which is once for each start of the tail unless a
+    /// listener fails.
+    /// </summary>
+    public int ListenerStartCount => Volatile.Read(ref _listenerStartCount);
 
     public int EndPositionReadCount => Volatile.Read(ref _endPositionReadCount);
 
@@ -46,6 +64,15 @@ internal sealed class TestEventLog(bool hearsAppends = true)
         {
             lock (_lock)
                 return _listeners.Count;
+        }
+    }
+
+    public IReadOnlyList<CatchUpRead> CatchUpReads
+    {
+        get
+        {
+            lock (_lock)
+                return [.. _catchUpReads];
         }
     }
 
@@ -64,26 +91,52 @@ internal sealed class TestEventLog(bool hearsAppends = true)
     /// </summary>
     public Action<IReadOnlyList<long>>? OnRead { get; set; }
 
+    /// <summary>
+    /// Runs when each catch-up begins, before it reads its end position.
+    /// </summary>
+    public Action? OnCatchUpBegin { get; set; }
+
     public void Append(int count = 1, string streamId = "s1")
     {
+        Append(count, streamId, position => $"event-{position}");
+    }
+
+    /// <summary>
+    /// Appends events to a stream, with payloads made from the prefix and a count from 0.
+    /// </summary>
+    public string[] Append(string prefix, int count, string streamId = "s1")
+    {
+        var payloads = Enumerable.Range(0, count).Select(i => $"{prefix}-{i}").ToArray();
+        var next = 0;
+        Append(count, streamId, _ => payloads[next++]);
+
+        return payloads;
+    }
+
+    /// <summary>
+    /// Appends events, and waits until the tail has handed them to every observer attached to it.
+    /// </summary>
+    public async Task<string[]> AppendLiveAsync(
+        string prefix,
+        int count,
+        CancellationToken cancellationToken,
+        string streamId = "s1")
+    {
+        var payloads = Append(prefix, count, streamId);
+        TaskCompletionSource delivered;
+
         lock (_lock)
         {
-            for (var i = 0; i < count; i++)
-            {
-                var streamPosition = _streamLengths.GetValueOrDefault(streamId);
-                _streamLengths[streamId] = streamPosition + 1;
+            if (_deliveredThrough >= _events.Count)
+                return payloads;
 
-                var logPosition = _events.Count + 1;
-                var payload = $"event-{logPosition}";
-                _events.Add(new TestSourceEvent(logPosition, streamId, streamPosition, payload, Decoder));
-            }
-
-            if (!hearsAppends)
-                return;
-
-            foreach (var listener in _listeners)
-                listener.Writer.TryWrite(LogPosition.FromInt64(_events.Count));
+            delivered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _deliveryWaiters.Add((_events.Count, delivered));
         }
+
+        await delivered.Task.WaitAsync(cancellationToken);
+
+        return payloads;
     }
 
     /// <summary>
@@ -110,6 +163,12 @@ internal sealed class TestEventLog(bool hearsAppends = true)
         }
     }
 
+    public void FailNextCatchUpEndRead(Exception exception)
+    {
+        lock (_lock)
+            _catchUpEndReadFailures.Enqueue(exception);
+    }
+
     public void FailNextReads(params Exception[] exceptions)
     {
         lock (_lock)
@@ -129,6 +188,16 @@ internal sealed class TestEventLog(bool hearsAppends = true)
     }
 
     /// <summary>
+    /// Holds the catch-up with the given index once it has read its end position, until the hold is released.
+    /// </summary>
+    public CatchUpHold HoldCatchUpEndRead(int index) => AddHold(_catchUpEndReadHolds, index);
+
+    /// <summary>
+    /// Holds the catch-up read with the given index once it has returned its first event, until the hold is released.
+    /// </summary>
+    public CatchUpHold HoldCatchUpRead(int index) => AddHold(_catchUpReadHolds, index);
+
+    /// <summary>
     /// Waits until a source's listener starts.
     /// </summary>
     public Task WaitForListenerStartAsync(CancellationToken cancellationToken)
@@ -142,6 +211,38 @@ internal sealed class TestEventLog(bool hearsAppends = true)
         return new Source(this);
     }
 
+    private void Append(int count, string streamId, Func<long, string> payloadOf)
+    {
+        lock (_lock)
+        {
+            for (var i = 0; i < count; i++)
+            {
+                var streamPosition = _streamLengths.GetValueOrDefault(streamId);
+                _streamLengths[streamId] = streamPosition + 1;
+
+                var logPosition = _events.Count + 1;
+                var payload = payloadOf(logPosition);
+                _events.Add(new TestSourceEvent(logPosition, streamId, streamPosition, payload, Decoder));
+            }
+
+            if (!hearsAppends)
+                return;
+
+            foreach (var listener in _listeners)
+                listener.Writer.TryWrite(LogPosition.FromInt64(_events.Count));
+        }
+    }
+
+    private CatchUpHold AddHold(Dictionary<int, CatchUpHold> holds, int index)
+    {
+        var hold = new CatchUpHold();
+
+        lock (_lock)
+            holds[index] = hold;
+
+        return hold;
+    }
+
     private Channel<LogPosition> AddListener()
     {
         var listener = Channel.CreateUnbounded<LogPosition>();
@@ -149,6 +250,7 @@ internal sealed class TestEventLog(bool hearsAppends = true)
         lock (_lock)
             _listeners.Add(listener);
 
+        Interlocked.Increment(ref _listenerStartCount);
         _listenerStarts.Release();
 
         return listener;
@@ -162,19 +264,74 @@ internal sealed class TestEventLog(bool hearsAppends = true)
 
     private void OnSourceDisposed() => Interlocked.Increment(ref _sourceDisposedCount);
 
-    // A read returns the readable events that it selects as of its start, and fails after the number of events that the
-    // next queued failure says.
-    private IEnumerable<TestSourceEvent> Read(Func<TestSourceEvent, bool> selects, Action<TestSourceEvent[]>? onRead)
+    // The tail has handed every event up to the position to its observers.
+    private void MarkDelivered(long position)
+    {
+        lock (_lock)
+        {
+            if (position <= _deliveredThrough)
+                return;
+
+            _deliveredThrough = position;
+
+            foreach (var waiter in _deliveryWaiters.Where(x => x.Position <= position).ToArray())
+            {
+                waiter.Delivered.TrySetResult();
+                _deliveryWaiters.Remove(waiter);
+            }
+        }
+    }
+
+    private async ValueTask<T> ReadCatchUpEndAsync<T>(Func<T> readEnd, CancellationToken cancellationToken)
+    {
+        OnCatchUpBegin?.Invoke();
+
+        T end;
+        CatchUpHold? hold;
+
+        lock (_lock)
+        {
+            if (_catchUpEndReadFailures.TryDequeue(out var exception))
+                throw exception;
+
+            end = readEnd();
+            _catchUpEndReadHolds.TryGetValue(_catchUpEndReadCount++, out hold);
+        }
+
+        if (hold is not null)
+            await hold.WaitAsync(cancellationToken);
+
+        return end;
+    }
+
+    // A read returns the readable events that it selects as of its start, and fails after the number of events that
+    // the next queued failure says. A catch-up's read, which has an end, is recorded. The tail's read, which has none,
+    // tells the log when it has handed each event on, which is when it asks for the next.
+    private async IAsyncEnumerable<TestSourceEvent> ReadAsync(
+        Func<TestSourceEvent, bool> selects,
+        ulong? fromExclusive,
+        ulong? toInclusive,
+        bool notifiesOnRead,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         Interlocked.Increment(ref _readCount);
 
         TestSourceEvent[] events;
         (int EventCount, Exception Exception)? failure;
+        int? catchUpIndex = null;
+        CatchUpHold? hold = null;
 
         lock (_lock)
         {
             failure = _readFailures.TryDequeue(out var next) ? next : null;
             events = [.. _events.Take(_readableCount ?? _events.Count).Where(selects)];
+
+            if (toInclusive is { } to)
+            {
+                catchUpIndex = _catchUpReads.Count;
+                _catchUpReads.Add(new CatchUpRead(fromExclusive, to, IsCompleted: false));
+                _catchUpReadHolds.TryGetValue(catchUpIndex.Value, out hold);
+            }
         }
 
         for (var i = 0; i <= events.Length; i++)
@@ -185,19 +342,37 @@ internal sealed class TestEventLog(bool hearsAppends = true)
                 throw f.Exception;
             }
 
-            if (i < events.Length)
-                yield return events[i];
+            if (i == events.Length)
+                break;
+
+            yield return events[i];
+
+            if (catchUpIndex is null)
+                MarkDelivered((long)events[i].Context.LogPosition.Value);
+            else if (i == 0 && hold is not null)
+                await hold.WaitAsync(cancellationToken);
         }
 
-        if (events.Length > 0)
-            onRead?.Invoke(events);
+        if (catchUpIndex is { } index)
+        {
+            lock (_lock)
+                _catchUpReads[index] = _catchUpReads[index] with { IsCompleted = true };
+        }
+
+        if (notifiesOnRead && events.Length > 0)
+            OnRead?.Invoke([.. events.Select(e => (long)e.Context.LogPosition.Value)]);
     }
 
     private sealed class Source(TestEventLog log) :
         IEventSubscriptionSource<TestSourceEvent, string, StreamPosition, LogPosition>
     {
-        public ValueTask<LogPosition?> ReadEndPositionAsync(CancellationToken cancellationToken)
+        private bool _isTail;
+
+        public async ValueTask<LogPosition?> ReadEndPositionAsync(CancellationToken cancellationToken)
         {
+            if (!_isTail)
+                return await log.ReadCatchUpEndAsync(ReadEnd, cancellationToken);
+
             Interlocked.Increment(ref log._endPositionReadCount);
 
             lock (log._lock)
@@ -205,11 +380,20 @@ internal sealed class TestEventLog(bool hearsAppends = true)
                 if (log._endReadFailures.TryDequeue(out var exception))
                 {
                     log._readEndPositionFailure.TrySetResult();
-                    return ValueTask.FromException<LogPosition?>(exception);
+                    throw exception;
                 }
+            }
 
-                return ValueTask.FromResult<LogPosition?>(
-                    log._events.Count > 0 ? LogPosition.FromInt64(log._events.Count) : null);
+            // The tail starts here, so it never hands on the events before it.
+            var end = ReadEnd();
+            log.MarkDelivered((long)(end?.Value ?? 0));
+
+            return end;
+
+            LogPosition? ReadEnd()
+            {
+                lock (log._lock)
+                    return log._events.Count > 0 ? LogPosition.FromInt64(log._events.Count) : null;
             }
         }
 
@@ -219,27 +403,25 @@ internal sealed class TestEventLog(bool hearsAppends = true)
             EventFilter filter,
             CancellationToken cancellationToken)
         {
-            var events = log.Read(
+            return log.ReadAsync(
                 e => (fromExclusive is not { } from || e.Context.LogPosition.Value > from.Value) &&
                      (toInclusive is not { } to || e.Context.LogPosition.Value <= to.Value) &&
                      filter.Matches(e),
-                events => log.OnRead?.Invoke([.. events.Select(e => (long)e.Context.LogPosition.Value)]));
-
-            return events.ToAsyncEnumerable();
+                fromExclusive?.Value,
+                toInclusive?.Value,
+                notifiesOnRead: true,
+                cancellationToken);
         }
 
         public ValueTask<StreamPosition?> ReadStreamEndPositionAsync(
             string streamId,
             CancellationToken cancellationToken)
         {
-            lock (log._lock)
-            {
-                var end = log._streamLengths.TryGetValue(streamId, out var length)
+            return log.ReadCatchUpEndAsync(
+                () => log._streamLengths.TryGetValue(streamId, out var length)
                     ? StreamPosition.FromInt64(length - 1)
-                    : (StreamPosition?)null;
-
-                return ValueTask.FromResult(end);
-            }
+                    : (StreamPosition?)null,
+                cancellationToken);
         }
 
         public IAsyncEnumerable<TestSourceEvent> ReadStreamAsync(
@@ -249,19 +431,21 @@ internal sealed class TestEventLog(bool hearsAppends = true)
             EventFilter filter,
             CancellationToken cancellationToken)
         {
-            var events = log.Read(
+            return log.ReadAsync(
                 e => e.StreamId == streamId &&
                      (fromExclusive is not { } from || e.Context.StreamPosition.Value > from.Value) &&
                      e.Context.StreamPosition.Value <= toInclusive.Value &&
                      filter.Matches(e),
-                onRead: null);
-
-            return events.ToAsyncEnumerable();
+                fromExclusive?.Value,
+                toInclusive.Value,
+                notifiesOnRead: false,
+                cancellationToken);
         }
 
         public async IAsyncEnumerable<LogPosition> ListenForAppendsAsync(
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
+            _isTail = true;
             var listener = log.AddListener();
 
             try
