@@ -7,8 +7,16 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// Commits a batch of append requests with one <c>append_events</c> call and completes each from its result row.
 /// </summary>
 /// <remarks>
+/// <para>
 /// The command runs in autocommit mode and must never join a caller's transaction, because the sequence row lock must
 /// be released as soon as the batch commits.
+/// </para>
+/// <para>
+/// The requests are completed only once the batch has committed. The server sends the result rows before it commits,
+/// and flushes them as soon as they fill its output buffer, so the rows of a large batch reach the client while the
+/// commit still waits for its flush and for the synchronous standbys. A batch that fails to commit completes no
+/// request, so the caller can retry it.
+/// </para>
 /// </remarks>
 internal sealed class AppendBatchCommand : IDisposable
 {
@@ -60,51 +68,63 @@ internal sealed class AppendBatchCommand : IDisposable
     }
 
     /// <summary>
-    /// Executes the batch and completes each request from its result row. A request without a result row is completed
-    /// with an error.
+    /// Executes the batch and, once it has committed, completes each request from its result row. A request without a
+    /// result row is completed with an error.
     /// </summary>
     public async Task ExecuteAsync(IReadOnlyList<AppendRequest> batch, CancellationToken cancellationToken)
     {
         Fill(batch);
 
-        await using var reader = await _command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        var outcomes = new Exception?[batch.Count];
+        var hasOutcome = new bool[batch.Count];
 
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        await using (var reader = await _command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
         {
-            var request = batch[reader.GetInt32(0)];
-            var status = reader.GetFieldValue<AppendProtocol.Status>(1);
-
-            switch (status)
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
-                case AppendProtocol.Status.Appended:
-                case AppendProtocol.Status.Duplicate:
-                    request.TryComplete();
-                    break;
-
-                case AppendProtocol.Status.Conflict:
-                    // A NULL observed version means the stream did not exist when the request was evaluated.
-                    var observedState = reader.IsDBNull(2)
-                        ? ObservedStreamState.DoesNotExist<StreamPosition>()
-                        : ObservedStreamState.AtVersion(StreamPosition.FromInt64(reader.GetInt64(2)));
-
-                    request.TryComplete(new StreamAppendConflictException<StreamPosition>(
-                        request.StreamId,
-                        request.ExpectedState,
-                        observedState));
-
-                    break;
-
-                default:
-                    request.TryComplete(new InvalidOperationException($"Unknown append status '{status}'."));
-                    break;
+                var index = reader.GetInt32(0);
+                outcomes[index] = ReadOutcome(reader, batch[index]);
+                hasOutcome[index] = true;
             }
+
+            // The server reports the commit only after the rows, so closing the reader waits for it, and throws if the
+            // batch did not commit.
+            await reader.CloseAsync().ConfigureAwait(false);
         }
 
         // The function returns exactly one row per request, so a request without a row means the protocol was broken.
-        foreach (var request in batch)
+        for (var i = 0; i < batch.Count; i++)
         {
-            if (!request.IsCompleted)
-                request.TryComplete(new InvalidOperationException("The append function returned no result."));
+            batch[i].TryComplete(hasOutcome[i]
+                ? outcomes[i]
+                : new InvalidOperationException("The append function returned no result."));
+        }
+    }
+
+    // Returns the error to complete the request with, or null if it was appended or was a duplicate.
+    private static Exception? ReadOutcome(NpgsqlDataReader reader, AppendRequest request)
+    {
+        var status = reader.GetFieldValue<AppendProtocol.Status>(1);
+
+        switch (status)
+        {
+            case AppendProtocol.Status.Appended:
+            case AppendProtocol.Status.Duplicate:
+                return null;
+
+            case AppendProtocol.Status.Conflict:
+                // A NULL observed version means the stream did not exist when the request was evaluated.
+                var observedState = reader.IsDBNull(2)
+                    ? ObservedStreamState.DoesNotExist<StreamPosition>()
+                    : ObservedStreamState.AtVersion(StreamPosition.FromInt64(reader.GetInt64(2)));
+
+                return new StreamAppendConflictException<StreamPosition>(
+                    request.StreamId,
+                    request.ExpectedState,
+                    observedState);
+
+            default:
+                return new InvalidOperationException($"Unknown append status '{status}'.");
         }
     }
 
