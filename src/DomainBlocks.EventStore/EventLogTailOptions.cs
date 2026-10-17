@@ -51,4 +51,23 @@ public sealed class EventLogTailOptions
             field = value;
         }
     } = TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// Gets how long the tail or a catch-up keeps retrying reads that fail with transient errors, from the first
+    /// failure since it last made progress, before it gives up and the error fails its subscriptions. Handing on an
+    /// event or completing a read counts as progress, so a connection that keeps dropping while events still arrive is
+    /// not given up on. <see cref="Timeout.InfiniteTimeSpan"/> retries for as long as it takes. The default is 5
+    /// minutes.
+    /// </summary>
+    public TimeSpan RetryTimeout
+    {
+        get;
+        init
+        {
+            if (value != Timeout.InfiniteTimeSpan)
+                ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value, TimeSpan.Zero);
+
+            field = value;
+        }
+    } = TimeSpan.FromMinutes(5);
 }

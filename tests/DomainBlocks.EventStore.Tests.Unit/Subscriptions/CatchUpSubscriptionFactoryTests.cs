@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using DomainBlocks.EventStore.Filtering;
 using NUnit.Framework;
 using Shouldly;
@@ -7,6 +8,7 @@ namespace DomainBlocks.EventStore.Tests.Unit.Subscriptions;
 public class CatchUpSubscriptionFactoryTests
 {
     private const int TestTimeoutMillis = 5 * 1000;
+    private static readonly TimeSpan RetryTimeout = TimeSpan.FromMilliseconds(200);
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
@@ -434,6 +436,84 @@ public class CatchUpSubscriptionFactoryTests
 
         thrown.ShouldBeSameAs(error);
         scenario.EventLog.CatchUpReads.Count.ShouldBe(1);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task SubscribeToAll_TailReadsKeepFailingTransiently_ThrowsOnceTheRetryTimeoutPasses(
+        CancellationToken ct)
+    {
+        await using var scenario = new SubscriptionScenario(ct, RetryTimeout);
+        await using var subscription = scenario.SubscribeToAll();
+        (await subscription.NextAsync()).IsCaughtUp.ShouldBeTrue();
+        scenario.EventLog.FailNextReads([.. Enumerable.Range(0, 1_000).Select(i => new IOException($"lost {i}"))]);
+        var started = Stopwatch.GetTimestamp();
+
+        scenario.EventLog.Append("live", 1);
+
+        await Should.ThrowAsync<IOException>(subscription.NextAsync);
+        Stopwatch.GetElapsedTime(started).ShouldBeGreaterThanOrEqualTo(RetryTimeout);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task SubscribeToAll_TailReadFailsAfterEveryEvent_DeliversThemAllBecauseEachEventIsProgress(
+        CancellationToken ct)
+    {
+        await using var scenario = new SubscriptionScenario(ct, RetryTimeout);
+        await using var subscription = scenario.SubscribeToAll();
+        (await subscription.NextAsync()).IsCaughtUp.ShouldBeTrue();
+
+        for (var i = 0; i < 20; i++)
+            scenario.EventLog.FailNextReadAfter(1, new IOException($"lost {i}"));
+
+        var started = Stopwatch.GetTimestamp();
+        var live = scenario.EventLog.Append("live", 20);
+
+        foreach (var expected in live)
+            (await subscription.NextEventAsync()).ShouldBe(expected);
+
+        // The failures together outlast the retry timeout, but each streak of them ends at the next event.
+        Stopwatch.GetElapsedTime(started).ShouldBeGreaterThan(RetryTimeout);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task SubscribeToAll_CatchUpEndReadKeepsFailingTransiently_ThrowsOnceTheRetryTimeoutPasses(
+        CancellationToken ct)
+    {
+        await using var scenario = new SubscriptionScenario(ct, RetryTimeout);
+        scenario.EventLog.Append("existing", 2);
+
+        for (var i = 0; i < 1_000; i++)
+            scenario.EventLog.FailNextCatchUpEndRead(new IOException($"lost {i}"));
+
+        var started = Stopwatch.GetTimestamp();
+        await using var subscription = scenario.SubscribeToAll(SubscriptionOrigin.Start);
+
+        await Should.ThrowAsync<IOException>(subscription.NextAsync);
+        Stopwatch.GetElapsedTime(started).ShouldBeGreaterThanOrEqualTo(RetryTimeout);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task SubscribeToAll_CatchUpReadFailsAfterEveryEvent_ReplaysThemAllBecauseEachEventIsProgress(
+        CancellationToken ct)
+    {
+        await using var scenario = new SubscriptionScenario(ct, RetryTimeout);
+        var existing = scenario.EventLog.Append("existing", 60);
+
+        for (var i = 0; i < existing.Length; i++)
+            scenario.EventLog.FailNextCatchUpReadAfter(1, new IOException($"lost {i}"));
+
+        var started = Stopwatch.GetTimestamp();
+        await using var subscription = scenario.SubscribeToAll(SubscriptionOrigin.Start);
+
+        var messages = await subscription.ReadUntilCaughtUpAsync();
+
+        // The failures together outlast the retry timeout, but each streak of them ends at the next event.
+        Payloads(messages).ShouldBe(existing);
+        Stopwatch.GetElapsedTime(started).ShouldBeGreaterThan(RetryTimeout);
     }
 
     [Test]
