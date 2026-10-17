@@ -24,6 +24,7 @@ internal sealed class TestEventLog(bool hearsAppends = true)
     private readonly Queue<Exception> _endReadFailures = new();
     private readonly Queue<Exception> _catchUpEndReadFailures = new();
     private readonly Queue<(int EventCount, Exception Exception)> _readFailures = new();
+    private readonly Queue<(int EventCount, Exception Exception)> _catchUpReadFailures = new();
     private readonly List<CatchUpRead> _catchUpReads = [];
     private readonly Dictionary<int, CatchUpHold> _catchUpEndReadHolds = [];
     private readonly Dictionary<int, CatchUpHold> _catchUpReadHolds = [];
@@ -188,6 +189,16 @@ internal sealed class TestEventLog(bool hearsAppends = true)
     }
 
     /// <summary>
+    /// Makes the next catch-up read fail with the exception once it has returned the given number of events. A catch-up
+    /// read takes this failure before any that <see cref="FailNextReads"/> or <see cref="FailNextReadAfter"/> queued.
+    /// </summary>
+    public void FailNextCatchUpReadAfter(int eventCount, Exception exception)
+    {
+        lock (_lock)
+            _catchUpReadFailures.Enqueue((eventCount, exception));
+    }
+
+    /// <summary>
     /// Holds the catch-up with the given index once it has read its end position, until the hold is released.
     /// </summary>
     public CatchUpHold HoldCatchUpEndRead(int index) => AddHold(_catchUpEndReadHolds, index);
@@ -323,7 +334,10 @@ internal sealed class TestEventLog(bool hearsAppends = true)
 
         lock (_lock)
         {
-            failure = _readFailures.TryDequeue(out var next) ? next : null;
+            if (toInclusive is not null && _catchUpReadFailures.TryDequeue(out var catchUpFailure))
+                failure = catchUpFailure;
+            else
+                failure = _readFailures.TryDequeue(out var next) ? next : null;
             events = [.. _events.Take(_readableCount ?? _events.Count).Where(selects)];
 
             if (toInclusive is { } to)

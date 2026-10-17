@@ -29,12 +29,15 @@ public sealed class CatchUpSubscriptionFactory<TSourceEvent, TResultEvent, TStre
 {
     private readonly Func<IEventSubscriptionSource<TSourceEvent, TStreamId, TStreamPos, TLogPos>> _sourceFactory;
     private readonly EventLogTail<TSourceEvent, TResultEvent, TStreamId, TStreamPos, TLogPos> _tail;
+    private readonly EventLogTailOptions _tailOptions;
     private readonly ILogger? _logger;
 
     /// <param name="sourceFactory">
     /// Creates a source for each reader: the shared read of the log each time it starts, and each catch-up.
     /// </param>
-    /// <param name="options">The options for the shared read of the log.</param>
+    /// <param name="options">
+    /// The options for the shared read of the log. Its retry delays also apply to each catch-up's reads.
+    /// </param>
     /// <param name="logger">The logger for the shared read and the subscriptions.</param>
     public CatchUpSubscriptionFactory(
         Func<IEventSubscriptionSource<TSourceEvent, TStreamId, TStreamPos, TLogPos>> sourceFactory,
@@ -44,6 +47,7 @@ public sealed class CatchUpSubscriptionFactory<TSourceEvent, TResultEvent, TStre
         ArgumentNullException.ThrowIfNull(sourceFactory);
 
         _sourceFactory = sourceFactory;
+        _tailOptions = options ?? EventLogTailOptions.Default;
         _tail = new EventLogTail<TSourceEvent, TResultEvent, TStreamId, TStreamPos, TLogPos>(
             sourceFactory,
             options,
@@ -67,6 +71,7 @@ public sealed class CatchUpSubscriptionFactory<TSourceEvent, TResultEvent, TStre
             LogCatchUpTarget<TSourceEvent, TStreamId, TStreamPos, TLogPos>.Instance,
             origin,
             options,
+            _tailOptions,
             _logger);
     }
 
@@ -90,6 +95,7 @@ public sealed class CatchUpSubscriptionFactory<TSourceEvent, TResultEvent, TStre
             new StreamCatchUpTarget<TSourceEvent, TStreamId, TStreamPos, TLogPos>(streamId),
             origin,
             options,
+            _tailOptions,
             _logger);
     }
 

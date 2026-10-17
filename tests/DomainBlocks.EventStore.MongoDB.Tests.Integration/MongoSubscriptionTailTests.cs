@@ -147,6 +147,44 @@ public class MongoSubscriptionTailTests
         }
     }
 
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_CatchUpReadFailsTransiently_RetriesAndReplays(CancellationToken ct)
+    {
+        var applicationName = $"dbx-catchup-{Guid.NewGuid():N}"[..20];
+        using var client = CreateClient(new CommandRecorder(), applicationName);
+
+        var options = WithTail(new EventLogTailOptions
+        {
+            PollInterval = TimeSpan.FromHours(1),
+            RetryDelay = TimeSpan.FromMilliseconds(100),
+            MaxRetryDelay = TimeSpan.FromMilliseconds(500)
+        });
+
+        await using var eventStore = CreateEventStore(client, options);
+        await eventStore.EnsureInitializedAsync(ct);
+        await using var appender = CreateEventStore(MongoTestEnvironment.MongoClient, options);
+        var appended = await AppendAsync(appender, 3, ct);
+
+        await using var running = eventStore.SubscribeToAll().GetAsyncEnumerator(ct);
+        await ShouldBeCaughtUpAsync(running);
+
+        // The tail is idle, so the next finds are the new catch-up's. Its end read fails, and so does the driver's own
+        // retry of it, so the catch-up must retry the read.
+        await SetFailPointAsync(applicationName, new BsonDocument("times", 2), ["find"], NetworkTimeout, ct);
+
+        try
+        {
+            await using var catchingUp = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
+            (await NextEventsAsync(catchingUp, appended.Length)).ShouldBe(appended);
+            await ShouldBeCaughtUpAsync(catchingUp);
+        }
+        finally
+        {
+            await SetFailPointAsync(applicationName, "off", [], NetworkTimeout, CancellationToken.None);
+        }
+    }
+
     private MongoEventStoreOptions WithTail(EventLogTailOptions tail) => new()
     {
         DatabaseName = _options.DatabaseName,

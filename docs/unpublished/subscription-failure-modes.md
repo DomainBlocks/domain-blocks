@@ -293,8 +293,9 @@ observers need no reset.
 The end is read after the queue is attached, so together they cover every event. When the queue overflows, the replay
 still runs to its end, so every cycle makes progress. The cycle ends once the queue is drained. If the subscriber had
 caught up, it gets `FellBehind`, and the next cycle resumes after the last event that was delivered or covered.
-Losing a connection never causes `FellBehind`. Errors in a catch-up's reads still fail the subscription, because
-catch-ups don't retry yet.
+Losing a connection never causes `FellBehind`. A catch-up retries a transient error in its reads as the tail does, with
+the same delays. A replay resumes after the last event it handed on, up to the same end. Any other error fails the
+subscription.
 
 ### PostgreSQL
 

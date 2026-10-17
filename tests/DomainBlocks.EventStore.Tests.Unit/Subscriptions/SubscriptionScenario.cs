@@ -13,7 +13,11 @@ internal sealed class SubscriptionScenario : IAsyncDisposable
     private static readonly EventLogTailOptions TailOptions = new()
     {
         // Long enough that only an append that is heard wakes the tail during a test.
-        PollInterval = TimeSpan.FromHours(1)
+        PollInterval = TimeSpan.FromHours(1),
+
+        // Short, so that a test that retries a read does not wait for long.
+        RetryDelay = TimeSpan.FromMilliseconds(10),
+        MaxRetryDelay = TimeSpan.FromMilliseconds(50)
     };
 
     private static readonly ILogger Logger = new NUnitLoggerProvider().CreateLogger(nameof(SubscriptionScenario));

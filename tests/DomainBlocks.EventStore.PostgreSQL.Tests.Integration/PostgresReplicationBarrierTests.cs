@@ -26,6 +26,9 @@ public class PostgresReplicationBarrierTests
     private const string MissingStandby = "missing_standby";
     private const string AppendQuery = "append_events";
     private const string BarrierQuery = "pg_logical_emit_message";
+
+    // Only the barrier after a read of the log's end has no condition beyond the rows existing.
+    private const string EndBarrierQuery = "WHERE true)";
     private static readonly TimeSpan HoldDuration = TimeSpan.FromSeconds(1);
     private static readonly EventTypeMap EventTypeMap = new EventTypeMapBuilder().Add<TestEvent>().Build();
 
@@ -220,6 +223,32 @@ public class PostgresReplicationBarrierTests
     public async Task SubscribeToAll_BarrierBackendTerminated_DeliversOnlyOnceBarrierConfirmed(CancellationToken ct)
     {
         await InterruptBarrierAsync("pg_terminate_backend", ct);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_CatchUpEndBarrierCanceled_ReplaysOnceBarrierConfirmed(CancellationToken ct)
+    {
+        await using var eventStore = CreateEventStore();
+
+        await using var subscription = await StartTailThenSubscribeAsync(
+            eventStore,
+            x => x.SubscribeToAll(SubscriptionOrigin.Start),
+            ct);
+
+        var next = subscription.Subscription.MoveNextAsync().AsTask();
+
+        // The tail started before the standby went missing, so the catch-up's end read is the one that waits here.
+        var interrupted = await WaitForSyncRepAsync(EndBarrierQuery, ct);
+        await ExecuteAsync($"SELECT pg_cancel_backend({interrupted.Pid})");
+        await WaitForSyncRepAsync(EndBarrierQuery, ct, after: interrupted);
+
+        next.IsCompleted.ShouldBeFalse();
+
+        await SetStandbyNamesAsync(string.Empty);
+
+        await ShouldBeEventAsync(next, subscription.Subscription, subscription.Existing);
+        await ShouldBeCaughtUpAsync(subscription.Subscription);
     }
 
     // Starts the tail with one subscription, appends an event that the standby does not have, and then subscribes

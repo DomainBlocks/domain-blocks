@@ -1,7 +1,6 @@
 using DomainBlocks.EventStore.Filtering;
 using Microsoft.Extensions.Logging;
 using Polly;
-using Polly.Retry;
 
 namespace DomainBlocks.EventStore.Subscriptions;
 
@@ -35,7 +34,10 @@ internal sealed class EventLogCursor<TSourceEvent, TResultEvent, TStreamId, TStr
     where TStreamPos : struct
     where TLogPos : struct, IComparable<TLogPos>
 {
-    private readonly ResiliencePipeline _pipeline = CreatePipeline(source, options, logger, tailId);
+    private readonly ResiliencePipeline _pipeline = SubscriptionRetry.CreatePipeline(
+        source.IsTransientError,
+        options,
+        (ex, attempt, delay) => logger?.TailRetrying(ex, tailId, attempt, delay));
 
     private readonly AppendSignal<TLogPos> _appendSignal =
         new(source.ListenForAppendsAsync, options, logger, tailId);
@@ -107,38 +109,5 @@ internal sealed class EventLogCursor<TSourceEvent, TResultEvent, TStreamId, TStr
             onEvent(e);
             _readPosition = e.Context.LogPosition;
         }
-    }
-
-    private static ResiliencePipeline CreatePipeline(
-        IEventSubscriptionSource<TSourceEvent, TStreamId, TStreamPos, TLogPos> source,
-        EventLogTailOptions options,
-        ILogger? logger,
-        string tailId)
-    {
-        return new ResiliencePipelineBuilder()
-            .AddRetry(new RetryStrategyOptions
-            {
-                MaxRetryAttempts = int.MaxValue,
-                BackoffType = DelayBackoffType.Exponential,
-                UseJitter = true,
-                Delay = options.RetryDelay,
-                MaxDelay = options.MaxRetryDelay,
-                ShouldHandle = args =>
-                {
-                    var shouldHandle = args.Outcome.Exception is { } ex &&
-                                       !args.Context.CancellationToken.IsCancellationRequested &&
-                                       source.IsTransientError(ex);
-
-                    return ValueTask.FromResult(shouldHandle);
-                },
-                OnRetry = args =>
-                {
-                    if (args.Outcome.Exception is { } ex)
-                        logger?.TailRetrying(ex, tailId, args.AttemptNumber + 1, args.RetryDelay);
-
-                    return ValueTask.CompletedTask;
-                }
-            })
-            .Build();
     }
 }

@@ -17,6 +17,11 @@ namespace DomainBlocks.EventStore.Subscriptions;
 /// When the queue overflows, the cycle ends once the queue is drained, and the next cycle resumes after the last event
 /// that was delivered or covered.
 /// </para>
+/// <para>
+/// A transient error in the catch-up's reads is retried with backoff, as the tail retries its own. A replay resumes
+/// after the last event it handed on, up to the same end, so no event is missed or delivered twice. Any other error
+/// fails the subscription.
+/// </para>
 /// </remarks>
 internal sealed class CatchUpSubscription<TSourceEvent, TResultEvent, TStreamId, TStreamPos, TLogPos, TPos> :
     IAsyncEnumerable<SubscriptionMessage<TResultEvent, TStreamId, TStreamPos, TLogPos>>
@@ -32,6 +37,7 @@ internal sealed class CatchUpSubscription<TSourceEvent, TResultEvent, TStreamId,
     private readonly ICatchUpTarget<TSourceEvent, TStreamId, TStreamPos, TLogPos, TPos> _target;
     private readonly SubscriptionOrigin<TPos> _origin;
     private readonly SubscriptionOptions _options;
+    private readonly EventLogTailOptions _retryOptions;
     private readonly ILogger? _logger;
     private readonly string _correlationId;
 
@@ -41,6 +47,7 @@ internal sealed class CatchUpSubscription<TSourceEvent, TResultEvent, TStreamId,
         ICatchUpTarget<TSourceEvent, TStreamId, TStreamPos, TLogPos, TPos> target,
         SubscriptionOrigin<TPos>? origin,
         SubscriptionOptions? options,
+        EventLogTailOptions retryOptions,
         ILogger? logger)
     {
         _tail = tail;
@@ -48,6 +55,7 @@ internal sealed class CatchUpSubscription<TSourceEvent, TResultEvent, TStreamId,
         _target = target;
         _origin = origin ?? SubscriptionOrigin.End;
         _options = options ?? SubscriptionOptions.Default;
+        _retryOptions = retryOptions;
         _logger = logger;
 
         _correlationId = _options.CorrelationId is { } id
@@ -186,7 +194,17 @@ internal sealed class CatchUpSubscription<TSourceEvent, TResultEvent, TStreamId,
 
         await using (source.ConfigureAwait(false))
         {
-            var endInclusive = await _target.ReadEndPositionAsync(source, cancellationToken).ConfigureAwait(false);
+            var pipeline = SubscriptionRetry.CreatePipeline(
+                source.IsTransientError,
+                _retryOptions,
+                (ex, attempt, delay) => _logger?.SubscriptionRetrying(ex, _correlationId, attempt, delay));
+
+            var endInclusive = await pipeline
+                .ExecuteAsync(
+                    static (state, ct) => state.Target.ReadEndPositionAsync(state.Source, ct),
+                    (Target: _target, Source: source),
+                    cancellationToken)
+                .ConfigureAwait(false);
 
             _logger?.CatchUpBoundary(_correlationId, endInclusive?.Value);
 
@@ -198,16 +216,19 @@ internal sealed class CatchUpSubscription<TSourceEvent, TResultEvent, TStreamId,
             {
                 if (!resumePosition.Covers(end))
                 {
-                    var events = _target.ReadAsync(
-                        source,
-                        resumePosition.After,
-                        end,
-                        _options.Filter,
-                        cancellationToken);
+                    var replay = new Replay(_target, source, resumePosition.After, end, _options.Filter);
 
-                    // Each event is valid only until the next is read, so it is decoded before it is handed on.
-                    await foreach (var e in events.ConfigureAwait(false))
-                        yield return SubscriptionMessage.Event(ReadEvent.Create(e.Payload, e.Metadata, e.Context));
+                    await using (replay.ConfigureAwait(false))
+                    {
+                        // Each event is valid only until the next is read, so it is decoded before it is handed on.
+                        while (await pipeline
+                                   .ExecuteAsync(static (r, ct) => r.MoveNextAsync(ct), replay, cancellationToken)
+                                   .ConfigureAwait(false))
+                        {
+                            var e = replay.Current;
+                            yield return SubscriptionMessage.Event(ReadEvent.Create(e.Payload, e.Metadata, e.Context));
+                        }
+                    }
                 }
 
                 // The replay has covered the log up to the end position, even if the filter selected none of its
@@ -244,6 +265,63 @@ internal sealed class CatchUpSubscription<TSourceEvent, TResultEvent, TStreamId,
     private bool Selects(TSourceEvent sourceEvent)
     {
         return _target.Contains(sourceEvent.Context) && _options.Filter.Matches(sourceEvent);
+    }
+
+    /// <summary>
+    /// A replay of the target up to an end position, which reads again after the last event it handed on when a read
+    /// fails, so that a retry neither misses nor repeats an event.
+    /// </summary>
+    /// <remarks>
+    /// Each step is one execution of the retry pipeline, so its backoff starts again once the replay has made progress.
+    /// </remarks>
+    private sealed class Replay(
+        ICatchUpTarget<TSourceEvent, TStreamId, TStreamPos, TLogPos, TPos> target,
+        IEventSubscriptionSource<TSourceEvent, TStreamId, TStreamPos, TLogPos> source,
+        TPos? after,
+        TPos endInclusive,
+        EventFilter filter) :
+        IAsyncDisposable
+    {
+        private IAsyncEnumerator<TSourceEvent>? _events;
+        private bool _hasCurrent;
+
+        public TSourceEvent Current => _events!.Current;
+
+        public async ValueTask<bool> MoveNextAsync(CancellationToken cancellationToken)
+        {
+            // The current event has been handed on, so a read after a failure starts after it.
+            if (_hasCurrent)
+            {
+                after = target.GetPosition(_events!.Current.Context);
+                _hasCurrent = false;
+            }
+
+            _events ??= target
+                .ReadAsync(source, after, endInclusive, filter, cancellationToken)
+                .GetAsyncEnumerator(cancellationToken);
+
+            try
+            {
+                _hasCurrent = await _events.MoveNextAsync().ConfigureAwait(false);
+                return _hasCurrent;
+            }
+            catch
+            {
+                // The failed read is abandoned, so the next attempt opens a new one.
+                await DisposeAsync().ConfigureAwait(false);
+                throw;
+            }
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            if (_events is null)
+                return;
+
+            var events = _events;
+            _events = null;
+            await events.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     /// <summary>
