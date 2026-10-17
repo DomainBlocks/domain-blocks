@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.Filtering.Nodes;
-using DomainBlocks.EventStore.MongoDB.ChangeStreams;
+using DomainBlocks.EventStore.Subscriptions;
 using DomainBlocks.MongoDB.Sequencing;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
@@ -74,10 +74,8 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
     private readonly IMongoSequencedAppender<BsonDocument, AppendContext> _sequencedAppender;
     private readonly IMongoCollection<BsonDocument> _eventLog;
     private readonly IEventCodec<TEvent, BsonValue, BsonValue> _eventCodec;
-    private readonly ILogger? _logger;
-    private readonly EventLogReader<TEvent> _reader;
-    private readonly RefCountedChangeStreamSubject<EventLogDocument<TEvent>> _allEventsSubject;
-    private readonly EventLogDocument<TEvent> _liveDocument;
+    private readonly EventLogSubscriptions<TEvent, EventLogDocument<TEvent>, string, StreamPosition, LogPosition>
+        _subscriptions;
 
     internal MongoEventStore(
         IMongoClient client,
@@ -93,15 +91,19 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         _options = options;
         _sequencedAppender = sequencedAppender;
         _eventCodec = eventCodec;
-        _logger = logger;
 
         _eventLog = eventLog
             .WithReadConcern(ReadConcern.Majority)
             .WithReadPreference(ReadPreference.Primary);
 
-        _reader = new EventLogReader<TEvent>(_eventLog, eventCodec);
-        _liveDocument = new EventLogDocument<TEvent>(eventCodec);
-        _allEventsSubject = CreateAllEventsSubject(_eventLog, logger);
+        // The store's sources share one fence, so that every read sees what the others have read.
+        var fence = new OperationTimeFence();
+
+        _subscriptions =
+            new EventLogSubscriptions<TEvent, EventLogDocument<TEvent>, string, StreamPosition, LogPosition>(
+                () => new MongoSubscriptionSource<TEvent>(_eventLog, fence, eventCodec),
+                options.Tail,
+                logger);
     }
 
     /// <summary>
@@ -251,27 +253,11 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         SubscriptionOrigin<LogPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
-        var filter = options?.Filter ?? EventFilter.All;
-        var catchUpFilter = TranslateFilter(filter) ?? Builders<BsonDocument>.Filter.Empty;
+        // The source translates the filter for each read, so this translation only refuses, at the call, a filter that
+        // cannot be translated.
+        _ = TranslateFilter(options?.Filter);
 
-        return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
-            _reader,
-            _allEventsSubject,
-            (reader, session, start, end, ct) =>
-                reader.ReadCatchUpAsync(session, catchUpFilter, FieldNames.Position, start, end, ct),
-            static async (reader, session, ct) =>
-            {
-                var endPos = await reader
-                    .GetEndPositionAsync(session, Builders<BsonDocument>.Filter.Empty, FieldNames.Position, ct)
-                    .ConfigureAwait(false);
-
-                return endPos is { } pos ? LogPosition.FromInt64(pos) : null;
-            },
-            filter,
-            static ctx => ctx.LogPosition,
-            origin,
-            options,
-            _logger);
+        return _subscriptions.SubscribeToAll(origin, options);
     }
 
     public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> SubscribeToStream(
@@ -279,28 +265,10 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         SubscriptionOrigin<StreamPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
-        var filter = options?.Filter ?? EventFilter.All;
-        var streamFilter = Builders<BsonDocument>.Filter.Eq(FieldNames.StreamId, streamId);
-        var catchUpFilter = TranslateFilter(filter) is { } translated ? streamFilter & translated : streamFilter;
+        ArgumentException.ThrowIfNullOrEmpty(streamId);
+        _ = TranslateFilter(options?.Filter);
 
-        return new SubscriptionAsyncEnumerable<TEvent, StreamPosition>(
-            _reader,
-            _allEventsSubject,
-            (reader, session, start, end, ct) =>
-                reader.ReadCatchUpAsync(session, catchUpFilter, FieldNames.StreamPosition, start, end, ct),
-            async (reader, session, ct) =>
-            {
-                var endPos = await reader
-                    .GetEndPositionAsync(session, streamFilter, FieldNames.StreamPosition, ct)
-                    .ConfigureAwait(false);
-
-                return endPos is { } pos ? StreamPosition.FromInt64(pos) : null;
-            },
-            EventFilter.StreamIds(streamId) & filter,
-            static ctx => ctx.StreamPosition,
-            origin,
-            options,
-            _logger);
+        return _subscriptions.SubscribeToStream(streamId, origin, options);
     }
 
     // A filter is translated when the method is called, so a filter that cannot be translated is refused there rather
@@ -312,31 +280,8 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
     public async ValueTask DisposeAsync()
     {
         await _sequencedAppender.DisposeAsync().ConfigureAwait(false);
+        await _subscriptions.DisposeAsync().ConfigureAwait(false);
         _ownedClient?.Dispose();
-    }
-
-    // The subject sets the store's one live document to each inserted document and then hands it to every subscription.
-    // Because the document is shared, the subject replaces a connection only after that connection has handed out its
-    // last change.
-    private RefCountedChangeStreamSubject<EventLogDocument<TEvent>> CreateAllEventsSubject(
-        IMongoCollection<BsonDocument> eventLog,
-        ILogger? logger)
-    {
-        var insertsOnly = Builders<ChangeStreamDocument<BsonDocument>>.Filter.Eq(
-            x => x.OperationType,
-            ChangeStreamOperationType.Insert);
-
-        return RefCountedChangeStreamSubject.Create(
-            eventLog.Database.Client,
-            eventLog.WatchAsync,
-            new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(insertsOnly),
-            static change => change.ResumeToken,
-            change =>
-            {
-                _liveDocument.Set(change.FullDocument);
-                return _liveDocument;
-            },
-            logger: logger);
     }
 
     private static ReadQuery GetReadQuery<TPos>(

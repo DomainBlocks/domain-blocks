@@ -27,6 +27,9 @@ public sealed class MongoReplicaSet : IAsyncDisposable
 
         var container = new MongoDbBuilder("mongo:7.0")
             .WithReplicaSet()
+
+            // Test commands let a test set fail points, such as one that fails a change stream.
+            .WithCommand("--setParameter", "enableTestCommands=1")
             .WithNetwork(network)
             .WithNetworkAliases(networkAlias)
             .Build();
