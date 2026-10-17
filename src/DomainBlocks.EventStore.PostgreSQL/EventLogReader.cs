@@ -2,7 +2,6 @@ using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.Filtering.Nodes;
-using Microsoft.Extensions.Logging;
 using Npgsql;
 
 namespace DomainBlocks.EventStore.PostgreSQL;
@@ -14,9 +13,7 @@ internal sealed class EventLogReader<TEvent>(
     NpgsqlDataSource dataSource,
     EventLogSql sql,
     int pageSize,
-    IEventDecoder<TEvent, PostgresEventData, string> decoder,
-    bool requireSynchronousStandby,
-    ILogger? logger)
+    IEventDecoder<TEvent, PostgresEventData, string> decoder)
     where TEvent : notnull
 {
     public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadStreamAsync(
@@ -239,7 +236,8 @@ internal sealed class EventLogReader<TEvent>(
     // events that a failover cannot undo. The batch is one transaction, and its commit waits for the synchronous
     // standbys, so it covers every commit that the read saw. Rows can reach the client before the commit, so the read's
     // result is used only once the batch completes. A canceled wait completes with only a warning, so any warning means
-    // that the barrier was not confirmed.
+    // that the barrier was not confirmed. Without synchronous standbys the barrier does nothing: every append commits
+    // with synchronous_commit on, so it is flushed before a read can see it.
     private async Task<T> ReadWithBarrierAsync<T>(
         NpgsqlBatchCommand read,
         NpgsqlBatchCommand barrier,
@@ -248,7 +246,6 @@ internal sealed class EventLogReader<TEvent>(
     {
         var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         PostgresNotice? warning = null;
-        string? standbyNames = null;
         T result;
 
         await using (connection.ConfigureAwait(false))
@@ -266,11 +263,6 @@ internal sealed class EventLogReader<TEvent>(
                 await using (reader.ConfigureAwait(false))
                 {
                     result = await readResult(reader, cancellationToken).ConfigureAwait(false);
-                    await reader.NextResultAsync(cancellationToken).ConfigureAwait(false);
-
-                    // The barrier returns a row only if it ran, which it does only if the rows it follows exist.
-                    if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-                        standbyNames = reader.GetString(2);
 
                     // The batch completes once its commit has, so closing the reader waits for the standbys.
                     await reader.CloseAsync().ConfigureAwait(false);
@@ -287,14 +279,6 @@ internal sealed class EventLogReader<TEvent>(
 
         if (warning is not null)
             throw new ReplicationBarrierException($"The replication barrier was not confirmed: {warning.MessageText}");
-
-        if (standbyNames == string.Empty && requireSynchronousStandby)
-        {
-            logger?.SynchronousStandbyMissing();
-
-            throw new ReplicationBarrierException(
-                "No synchronous standby is configured, but RequireSynchronousStandby is set.");
-        }
 
         return result;
 
