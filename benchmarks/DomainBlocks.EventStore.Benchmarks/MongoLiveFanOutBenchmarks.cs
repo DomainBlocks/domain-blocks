@@ -12,16 +12,13 @@ namespace DomainBlocks.EventStore.Benchmarks;
 
 /// <summary>
 /// Measures the MongoDB live path without I/O: a source hands <see cref="EventCount"/> documents to the tail, which
-/// fans them out to the queues of <see cref="SubscriberCount"/> subscriptions, each of which selects
-/// <see cref="SelectedPercent"/> percent of the documents and takes their events. The tail and the queues are the real
+/// fans them out to the queues of <see cref="SubscriberCount"/> subscriptions, each of which selects the documents that
+/// <see cref="Selection"/> says and takes their events. The tail and the queues are the real
 /// ones. The source stands in for MongoDB's and reads into one reusable document, as MongoDB's does.
 /// </summary>
 [MemoryDiagnoser]
 public class MongoLiveFanOutBenchmarks
 {
-    // The documents are spread evenly over this many streams, so that one stream holds one percent of them.
-    private const int StreamCount = 100;
-
     // Long enough that the tail never polls during a run.
     private static readonly EventLogTailOptions TailOptions = new() { PollInterval = TimeSpan.FromHours(1) };
 
@@ -36,10 +33,10 @@ public class MongoLiveFanOutBenchmarks
     public int EventCount { get; set; }
 
     /// <summary>
-    /// How much of the log each subscription selects: all of it, without a filter, or the one percent in one stream.
+    /// How much of the log each subscription selects.
     /// </summary>
-    [Params(100, 1)]
-    public int SelectedPercent { get; set; }
+    [ParamsAllValues]
+    public FanOutSelection Selection { get; set; }
 
     [GlobalSetup]
     public void GlobalSetup()
@@ -55,12 +52,7 @@ public class MongoLiveFanOutBenchmarks
 
         _decoder = codec;
 
-        _filter = SelectedPercent switch
-        {
-            100 => EventFilter.All,
-            1 => EventFilter.StreamIds("test-stream-0"),
-            _ => throw new NotSupportedException($"No filter selects {SelectedPercent} percent of the documents.")
-        };
+        _filter = Selection.CreateFilter(EventCount);
 
         _documents =
         [
@@ -69,7 +61,7 @@ public class MongoLiveFanOutBenchmarks
                 .Select((x, i) => new BsonDocument
                 {
                     { EventLogEntry.FieldNames.Position, (long)i },
-                    { EventLogEntry.FieldNames.StreamId, $"test-stream-{i % StreamCount}" },
+                    { EventLogEntry.FieldNames.StreamId, FanOutSelections.StreamIdOf(i) },
                     { EventLogEntry.FieldNames.StreamPosition, (long)i },
                     { EventLogEntry.FieldNames.EventName, x.EventName },
                     { EventLogEntry.FieldNames.EventData, x.EventData },

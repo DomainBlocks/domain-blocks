@@ -11,17 +11,14 @@ namespace DomainBlocks.EventStore.Benchmarks;
 
 /// <summary>
 /// Measures the PostgreSQL live path without I/O: a source hands <see cref="EventCount"/> rows to the tail, which fans
-/// them out to the queues of <see cref="SubscriberCount"/> subscriptions, each of which selects
-/// <see cref="SelectedPercent"/> percent of the rows and takes their events. The real implementations are used for the
-/// tail and queues. The source is a stub without I/O that replaces
-/// <see cref="PostgresSubscriptionSource{TEvent}"/>, and reads into one reusable row, as the real implementation does.
+/// them out to the queues of <see cref="SubscriberCount"/> subscriptions, each of which selects the rows that
+/// <see cref="Selection"/> says and takes their events. The real implementations are used for the tail and queues.
+/// The source is a stub without I/O that replaces <see cref="PostgresSubscriptionSource{TEvent}"/>, and reads into one
+/// reusable row, as the real implementation does.
 /// </summary>
 [MemoryDiagnoser]
 public class PostgresLiveFanOutBenchmarks
 {
-    // The rows are spread evenly over this many streams, so that one stream holds one percent of them.
-    private const int StreamCount = 100;
-
     // Long enough that the tail never polls during a run.
     private static readonly EventLogTailOptions TailOptions = new() { PollInterval = TimeSpan.FromHours(1) };
 
@@ -37,10 +34,10 @@ public class PostgresLiveFanOutBenchmarks
     public int EventCount { get; set; }
 
     /// <summary>
-    /// How much of the log each subscription selects: all of it, without a filter, or the one percent in one stream.
+    /// How much of the log each subscription selects.
     /// </summary>
-    [Params(100, 1)]
-    public int SelectedPercent { get; set; }
+    [ParamsAllValues]
+    public FanOutSelection Selection { get; set; }
 
     [GlobalSetup]
     public void GlobalSetup()
@@ -56,14 +53,8 @@ public class PostgresLiveFanOutBenchmarks
 
         _decoder = codec;
         _rows = [.. codec.Encode(events)];
-        _streamIds = [.. Enumerable.Range(0, StreamCount).Select(i => $"test-stream-{i}")];
-
-        _filter = SelectedPercent switch
-        {
-            100 => EventFilter.All,
-            1 => EventFilter.StreamIds(_streamIds[0]),
-            _ => throw new NotSupportedException($"No filter selects {SelectedPercent} percent of the rows.")
-        };
+        _streamIds = [.. Enumerable.Range(0, FanOutSelections.StreamCount).Select(FanOutSelections.StreamIdOf)];
+        _filter = Selection.CreateFilter(EventCount);
     }
 
     [Benchmark]
