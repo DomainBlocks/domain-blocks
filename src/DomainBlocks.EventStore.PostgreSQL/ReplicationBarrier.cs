@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using Npgsql;
 
 namespace DomainBlocks.EventStore.PostgreSQL;
@@ -17,14 +16,15 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// <para>
 /// A canceled wait completes without an error, so any warning during the batch counts as a barrier that was not
 /// confirmed. A terminated backend fails the read. Either way the caller retries, and nothing is used until a barrier
-/// is confirmed. On a single server, with no synchronous standby configured, the barrier's commit only flushes the WAL
-/// locally, which is enough unless a synchronous standby is required.
+/// is confirmed.
+/// </para>
+/// <para>
+/// Without synchronous standbys the barrier does nothing, because every append commits with <c>synchronous_commit</c>
+/// on and so is flushed before a read can see it. Whether a failover can undo a flushed commit is then up to the
+/// deployment, as it is where the storage replicates the WAL.
 /// </para>
 /// </remarks>
-internal sealed class ReplicationBarrier(
-    NpgsqlDataSource dataSource,
-    bool requireSynchronousStandby,
-    ILogger? logger)
+internal sealed class ReplicationBarrier(NpgsqlDataSource dataSource)
 {
     /// <summary>
     /// Runs the read and then the barrier, and returns what <paramref name="readResult"/> took from the read's result
@@ -38,7 +38,6 @@ internal sealed class ReplicationBarrier(
     {
         var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         PostgresNotice? warning = null;
-        string? standbyNames = null;
         T result;
 
         await using (connection.ConfigureAwait(false))
@@ -56,11 +55,6 @@ internal sealed class ReplicationBarrier(
                 await using (reader.ConfigureAwait(false))
                 {
                     result = await readResult(reader, cancellationToken).ConfigureAwait(false);
-                    await reader.NextResultAsync(cancellationToken).ConfigureAwait(false);
-
-                    // The barrier returns a row only if it ran, which it does only if the rows it follows exist.
-                    if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-                        standbyNames = reader.GetString(2);
 
                     // The batch completes once its commit has, so closing the reader waits for the standbys.
                     await reader.CloseAsync().ConfigureAwait(false);
@@ -77,14 +71,6 @@ internal sealed class ReplicationBarrier(
 
         if (warning is not null)
             throw new ReplicationBarrierException($"The replication barrier was not confirmed: {warning.MessageText}");
-
-        if (standbyNames == string.Empty && requireSynchronousStandby)
-        {
-            logger?.SynchronousStandbyMissing();
-
-            throw new ReplicationBarrierException(
-                "No synchronous standby is configured, but RequireSynchronousStandby is set.");
-        }
 
         return result;
 

@@ -2,7 +2,6 @@ using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Events;
 using DomainBlocks.Testing.Integration.EventStore;
 using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
-using Microsoft.Extensions.Logging;
 using Npgsql;
 using NUnit.Framework;
 using Shouldly;
@@ -10,16 +9,19 @@ using Shouldly;
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
 /// <summary>
-/// The replication barrier: subscriptions are given an event only once the synchronous standbys have it. These tests
-/// run on a server of their own, because <c>synchronous_standby_names</c> applies to the whole server. Naming a standby
-/// that does not exist holds every barrier, while events appended with <c>synchronous_commit = local</c> are visible on
-/// the primary at once.
+/// Durability with synchronous standbys: an append is acknowledged and visible only once the standbys have it, and
+/// subscriptions are given an event only once the standbys have it, even when the event became visible first. These
+/// tests run on a server of their own, because <c>synchronous_standby_names</c> applies to the whole server. Naming a
+/// standby that does not exist holds every commit that waits for one, and canceling an append's wait makes its event
+/// visible on the primary while no standby has it.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
 public class PostgresReplicationBarrierTests
 {
     private const string MissingStandby = "missing_standby";
+    private const string AppendQuery = "append_events";
+    private const string BarrierQuery = "pg_logical_emit_message";
     private static readonly TimeSpan HeldFor = TimeSpan.FromSeconds(1);
     private static readonly EventTypeMap EventTypeMap = new EventTypeMapBuilder().Add<TestEvent>().Build();
 
@@ -36,7 +38,7 @@ public class PostgresReplicationBarrierTests
 
     private PostgresServer _server = null!;
     private NpgsqlDataSource _dataSource = null!;
-    private NpgsqlDataSource _localCommitDataSource = null!;
+    private NpgsqlDataSource _asyncCommitDataSource = null!;
 
     [OneTimeSetUp]
     public async Task StartServerAsync()
@@ -44,19 +46,19 @@ public class PostgresReplicationBarrierTests
         _server = await PostgresServer.StartAsync();
         _dataSource = CreateDataSource(_server.ConnectionString);
 
-        // Appends through this data source commit without waiting for a standby, as an append whose wait was canceled
-        // does, so they are visible on the primary before any standby has them.
-        _localCommitDataSource = CreateDataSource(
-            new NpgsqlConnectionStringBuilder(_server.ConnectionString) { Options = "-c synchronous_commit=local" }
+        // Sessions from this data source ask for commits that wait for nothing.
+        _asyncCommitDataSource = CreateDataSource(
+            new NpgsqlConnectionStringBuilder(_server.ConnectionString) { Options = "-c synchronous_commit=off" }
                 .ConnectionString);
 
         await PostgresEventStoreAdmin.EnsureInitializedAsync(_dataSource, _options);
+        await ExecuteAsync("CREATE EXTENSION IF NOT EXISTS pg_walinspect");
     }
 
     [OneTimeTearDown]
     public async Task StopServerAsync()
     {
-        await _localCommitDataSource.DisposeAsync();
+        await _asyncCommitDataSource.DisposeAsync();
         await _dataSource.DisposeAsync();
         await _server.DisposeAsync();
     }
@@ -76,6 +78,44 @@ public class PostgresReplicationBarrierTests
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task AppendAsync_SessionAsksForAsynchronousCommit_WaitsForTheStandby(CancellationToken ct)
+    {
+        await SetStandbyNamesAsync(MissingStandby);
+
+        await using var eventStore = CreateEventStore(_asyncCommitDataSource);
+        var e = new TestEvent { Value = "async" };
+        var append = eventStore.AppendAsync("s1", [AppendableEvent.Create<object>(e)], cancellationToken: ct);
+
+        await Task.Delay(HeldFor, ct);
+        append.IsCompleted.ShouldBeFalse();
+        (await CountEventsAsync()).ShouldBe(0);
+
+        await SetStandbyNamesAsync(string.Empty);
+
+        await append;
+        (await CountEventsAsync()).ShouldBe(1);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_NoSynchronousStandby_WritesNoBarrier(CancellationToken ct)
+    {
+        await using var eventStore = CreateEventStore();
+        var appended = new[] { await AppendAsync("first", ct), await AppendAsync("second", ct) };
+        var start = await GetWalPositionAsync();
+
+        // The tail's start, the catch-up's end and the catch-up's replay all read events that exist.
+        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
+
+        foreach (var expected in appended)
+            await ShouldBeEventAsync(subscription.MoveNextAsync().AsTask(), subscription, expected);
+
+        await ShouldBeCaughtUpAsync(subscription);
+        (await CountBarriersSinceAsync(start)).ShouldBe(0);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task SubscribeToAll_LiveEventNotOnStandby_IsDeliveredOnceTheStandbyHasIt(CancellationToken ct)
     {
         await using var eventStore = CreateEventStore();
@@ -83,7 +123,7 @@ public class PostgresReplicationBarrierTests
         await ShouldBeCaughtUpAsync(subscription);
         await SetStandbyNamesAsync(MissingStandby);
 
-        var live = await AppendLocallyAsync("live", ct);
+        var live = await AppendWithCanceledWaitAsync("live", ct);
         var next = subscription.MoveNextAsync().AsTask();
 
         await Task.Delay(HeldFor, ct);
@@ -99,7 +139,7 @@ public class PostgresReplicationBarrierTests
     public async Task SubscribeToAll_FromEndWhenTheEndIsNotOnStandby_StartsOnceTheStandbyHasIt(CancellationToken ct)
     {
         await SetStandbyNamesAsync(MissingStandby);
-        await AppendLocallyAsync("existing", ct);
+        await AppendWithCanceledWaitAsync("existing", ct);
 
         // The end position is where the subscription starts, so it must not be one that a failover could undo.
         await using var eventStore = CreateEventStore();
@@ -173,37 +213,6 @@ public class PostgresReplicationBarrierTests
         await InterruptBarrierAsync("pg_terminate_backend", ct);
     }
 
-    [Test]
-    [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task SubscribeToAll_StandbyRequiredButNotConfigured_ReportsAnErrorAndDeliversNothing(
-        CancellationToken ct)
-    {
-        var logger = new RecordingLogger();
-        var options = new PostgresEventStoreOptions
-        {
-            Schema = _options.Schema,
-            Tail = _options.Tail,
-            RequireSynchronousStandby = true
-        };
-
-        await using var eventStore = CreateEventStore(options, logger);
-        using var subscriptionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        await using var subscription = eventStore.SubscribeToAll().GetAsyncEnumerator(subscriptionCts.Token);
-        await ShouldBeCaughtUpAsync(subscription);
-
-        await AppendLocallyAsync("live", ct);
-        var next = subscription.MoveNextAsync().AsTask();
-
-        await Task.Delay(HeldFor, ct);
-
-        next.IsCompleted.ShouldBeFalse();
-        logger.Errors.ShouldContain(x => x.Contains("no synchronous standby is configured"));
-
-        // The event is never delivered, so the read in progress is canceled before the subscription is disposed.
-        await subscriptionCts.CancelAsync();
-        await Should.ThrowAsync<OperationCanceledException>(next);
-    }
-
     // Starts the tail with one subscription, appends an event that the standby does not have, and then subscribes
     // again, so that only the new subscription's catch-up stands between the event and the subscriber.
     private async Task<CatchingUp> StartTailThenSubscribeAsync(
@@ -216,7 +225,7 @@ public class PostgresReplicationBarrierTests
         await ShouldBeCaughtUpAsync(running);
         await SetStandbyNamesAsync(MissingStandby);
 
-        var existing = await AppendLocallyAsync("existing", ct);
+        var existing = await AppendWithCanceledWaitAsync("existing", ct);
 
         return new CatchingUp(running, subscribe(eventStore).GetAsyncEnumerator(ct), existing);
     }
@@ -230,12 +239,12 @@ public class PostgresReplicationBarrierTests
         await ShouldBeCaughtUpAsync(subscription);
         await SetStandbyNamesAsync(MissingStandby);
 
-        var live = await AppendLocallyAsync("live", ct);
+        var live = await AppendWithCanceledWaitAsync("live", ct);
         var next = subscription.MoveNextAsync().AsTask();
 
-        var interrupted = await WaitForBarrierAsync(ct);
+        var interrupted = await WaitForSyncRepAsync(BarrierQuery, ct);
         await ExecuteAsync($"SELECT {interrupt}({interrupted.Pid})");
-        await WaitForBarrierAsync(ct, after: interrupted);
+        await WaitForSyncRepAsync(BarrierQuery, ct, after: interrupted);
 
         next.IsCompleted.ShouldBeFalse();
 
@@ -243,21 +252,50 @@ public class PostgresReplicationBarrierTests
 
         await ShouldBeEventAsync(next, subscription, live);
 
-        var after = await AppendLocallyAsync("after", ct);
+        var after = await AppendAsync("after", ct);
         (await subscription.MoveNextAsync()).ShouldBeTrue();
         subscription.Current.Event.ShouldNotBeNull().Payload.ShouldBe(after);
     }
 
-    // Waits until a barrier waits for a standby to confirm it, and returns its session and when its transaction
-    // started. A retry can run in the same session, so a later barrier is told apart by its start.
-    private async Task<WaitingBarrier> WaitForBarrierAsync(CancellationToken ct, WaitingBarrier? after = null)
+    // Cancels the wait of an append's commit for the standby, as a client's cancel request or pg_cancel_backend does.
+    // The commit then stands on the primary, and the event is visible there, although no standby has it.
+    private async Task<TestEvent> AppendWithCanceledWaitAsync(string value, CancellationToken ct)
+    {
+        await using var appender = CreateEventStore();
+        var e = new TestEvent { Value = value };
+        var append = appender.AppendAsync("s1", [AppendableEvent.Create<object>(e)], cancellationToken: ct);
+
+        var waiting = await WaitForSyncRepAsync(AppendQuery, ct);
+        await ExecuteAsync($"SELECT pg_cancel_backend({waiting.Pid})");
+        await append;
+
+        return e;
+    }
+
+    private async Task<TestEvent> AppendAsync(string value, CancellationToken ct)
+    {
+        await using var appender = CreateEventStore();
+        var e = new TestEvent { Value = value };
+        await appender.AppendAsync("s1", [AppendableEvent.Create<object>(e)], cancellationToken: ct);
+
+        return e;
+    }
+
+    // Waits until a commit whose query contains the given text waits for a standby to confirm it, and returns its
+    // session and when its transaction started. A retry can run in the same session, so a later wait is told apart by
+    // its start.
+    private async Task<WaitingCommit> WaitForSyncRepAsync(
+        string query,
+        CancellationToken ct,
+        WaitingCommit? after = null)
     {
         while (true)
         {
             await using var command = _dataSource.CreateCommand(
                 "SELECT pid, xact_start FROM pg_stat_activity " +
-                "WHERE wait_event = 'SyncRep' AND query LIKE '%dbx_barrier%' AND xact_start > $1");
+                "WHERE wait_event = 'SyncRep' AND strpos(query, $1) > 0 AND xact_start > $2");
 
+            command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = query });
             command.Parameters.Add(new NpgsqlParameter<DateTime>
             {
                 TypedValue = after?.TransactionStart ?? DateTime.UnixEpoch
@@ -266,41 +304,47 @@ public class PostgresReplicationBarrierTests
             await using var reader = await command.ExecuteReaderAsync(ct);
 
             if (await reader.ReadAsync(ct))
-                return new WaitingBarrier(reader.GetInt32(0), reader.GetDateTime(1));
+                return new WaitingCommit(reader.GetInt32(0), reader.GetDateTime(1));
 
             await reader.CloseAsync();
             await Task.Delay(20, ct);
         }
     }
 
-    private IEventStore<object, string, StreamPosition, LogPosition> CreateEventStore(
-        PostgresEventStoreOptions? options = null,
-        ILogger? logger = null)
+    private async Task<long> CountEventsAsync()
     {
-        return CreateEventStore(_dataSource, options ?? _options, logger);
+        await using var command = _dataSource.CreateCommand($"SELECT count(*) FROM {_options.Schema}.event_log");
+        return (long)(await command.ExecuteScalarAsync())!;
     }
 
-    private static IEventStore<object, string, StreamPosition, LogPosition> CreateEventStore(
-        NpgsqlDataSource dataSource,
-        PostgresEventStoreOptions options,
-        ILogger? logger = null)
+    private async Task<string> GetWalPositionAsync()
+    {
+        await using var command = _dataSource.CreateCommand("SELECT pg_current_wal_lsn()::text");
+        return (string)(await command.ExecuteScalarAsync())!;
+    }
+
+    // Counts the logical messages written to the WAL since the given position, which only the barrier writes.
+    private async Task<long> CountBarriersSinceAsync(string start)
+    {
+        await using var command = _dataSource.CreateCommand(
+            "SELECT CASE WHEN pg_current_wal_lsn() > $1::pg_lsn THEN " +
+            "(SELECT count(*) FROM pg_get_wal_records_info($1::pg_lsn, pg_current_wal_lsn()) " +
+            "WHERE resource_manager = 'LogicalMessage') ELSE 0 END");
+
+        command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = start });
+
+        return (long)(await command.ExecuteScalarAsync())!;
+    }
+
+    private IEventStore<object, string, StreamPosition, LogPosition> CreateEventStore(
+        NpgsqlDataSource? dataSource = null)
     {
         return new PostgresEventStoreBuilder<object>()
-            .UseDataSource(dataSource)
-            .UseOptions(options)
+            .UseDataSource(dataSource ?? _dataSource)
+            .UseOptions(_options)
             .ConfigureCodec(x => x.UseEventTypeMap(EventTypeMap))
-            .UseLogger(logger ?? PostgresTestEnvironment.LoggerFactory.CreateLogger(
-                nameof(PostgresReplicationBarrierTests)))
+            .UseLogger(PostgresTestEnvironment.LoggerFactory.CreateLogger(nameof(PostgresReplicationBarrierTests)))
             .Build();
-    }
-
-    private async Task<TestEvent> AppendLocallyAsync(string value, CancellationToken ct)
-    {
-        await using var appender = CreateEventStore(_localCommitDataSource, _options);
-        var e = new TestEvent { Value = value };
-        await appender.AppendAsync("s1", [AppendableEvent.Create<object>(e)], cancellationToken: ct);
-
-        return e;
     }
 
     private NpgsqlDataSource CreateDataSource(string connectionString)
@@ -364,37 +408,5 @@ public class PostgresReplicationBarrierTests
         }
     }
 
-    private sealed record WaitingBarrier(int Pid, DateTime TransactionStart);
-
-    private sealed class RecordingLogger : ILogger
-    {
-        private readonly List<string> _errors = [];
-
-        public IReadOnlyList<string> Errors
-        {
-            get
-            {
-                lock (_errors)
-                    return [.. _errors];
-            }
-        }
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter)
-        {
-            if (logLevel < LogLevel.Error)
-                return;
-
-            lock (_errors)
-                _errors.Add(formatter(state, exception));
-        }
-    }
+    private sealed record WaitingCommit(int Pid, DateTime TransactionStart);
 }
