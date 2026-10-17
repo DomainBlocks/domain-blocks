@@ -46,7 +46,8 @@ public interface IEventLogCursorSource<TSourceEvent, TLogPos> : IAsyncDisposable
     TLogPos GetLogPosition(TSourceEvent sourceEvent);
 
     /// <summary>
-    /// Waits until an event is appended, or for <paramref name="timeout"/> to elapse.
+    /// Waits until an event is appended, or for <paramref name="timeout"/> to elapse. An append while no wait is in
+    /// progress completes the next wait immediately.
     /// </summary>
     /// <returns>
     /// <see langword="true"/> if an event was appended, or <see langword="false"/> if the timeout elapsed first.
