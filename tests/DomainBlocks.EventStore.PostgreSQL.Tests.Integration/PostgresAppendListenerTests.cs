@@ -39,10 +39,11 @@ public class PostgresAppendListenerTests() : PostgresIntegrationTest(opt =>
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task ListenForAppendsAsync_EnumerationStoppedWithoutCancellation_StopsListening(CancellationToken ct)
     {
-        // Only listening is exercised, so the source needs no reader or decoder.
+        // Only listening is exercised, so the source needs no reader, barrier or decoder.
         var source = new PostgresSubscriptionSource<object>(
             DataSource,
             reader: null!,
+            barrier: null!,
             new SchemaObjectNames(Schema),
             decoder: null!);
 

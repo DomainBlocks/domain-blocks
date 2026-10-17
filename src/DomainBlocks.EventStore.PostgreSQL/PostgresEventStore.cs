@@ -25,13 +25,15 @@ public static class PostgresEventStore
             options.ReadPageSize,
             eventCodec);
 
+        var barrier = new ReplicationBarrier(dataSource, options.RequireSynchronousStandby, logger);
+
         var subscriptionFactory = new CatchUpSubscriptionFactory<
             EventLogRow<TEvent>,
             TEvent,
             string,
             StreamPosition,
             LogPosition>(
-            () => new PostgresSubscriptionSource<TEvent>(dataSource, reader, names, eventCodec),
+            () => new PostgresSubscriptionSource<TEvent>(dataSource, reader, barrier, names, eventCodec),
             options.Tail,
             logger);
 

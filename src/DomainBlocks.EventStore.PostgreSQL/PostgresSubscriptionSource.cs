@@ -15,28 +15,35 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// <remarks>
 /// <para>
 /// Every read goes to the server that the appends go to. While that server stays the primary, a read sees every event
-/// that another source has read, because an event that one read sees stays visible to every later read. A failover
-/// keeps that only if the promoted server has every event that the old primary made visible.
+/// that another source has read, because an event that one read sees stays visible to every later read. Across a
+/// failover, the replication barrier below keeps that for every event that a source hands on or uses as a position,
+/// as long as the promoted server is one of the synchronous standbys that the barrier waited for.
 /// </para>
 /// <para>
-/// Rows are read into one row per source, which is valid only until the next is read.
+/// The replication barrier follows every read whose result is used as a position or handed on to subscriptions: the
+/// end reads, and the tail's reads of the log. A catch-up reads only up to an end position that a barrier followed, so
+/// its reads need none. The tail's rows are read a page at a time into rows that the source reuses, and handed on only
+/// once the page's barrier is confirmed. A catch-up's rows are read into one row that the source reuses. Either way, a
+/// row is valid only until the next is read.
 /// </para>
 /// </remarks>
 internal sealed class PostgresSubscriptionSource<TEvent>(
     NpgsqlDataSource dataSource,
     EventLogReader<TEvent> reader,
+    ReplicationBarrier barrier,
     SchemaObjectNames names,
     IEventDecoder<TEvent, PostgresEventData, string> decoder) :
     IEventSubscriptionSource<EventLogRow<TEvent>, string, StreamPosition, LogPosition>
     where TEvent : notnull
 {
     private readonly EventLogRow<TEvent> _row = new(decoder);
+    private readonly List<EventLogRow<TEvent>> _page = [];
 
     public async ValueTask<LogPosition?> ReadEndLogPositionAsync(CancellationToken cancellationToken)
     {
-        return await reader.GetMaxPositionAsync(cancellationToken).ConfigureAwait(false) is { } position
-            ? LogPosition.FromInt64(position)
-            : null;
+        var position = await reader.ReadMaxPositionWithBarrierAsync(barrier, cancellationToken).ConfigureAwait(false);
+
+        return position is { } p ? LogPosition.FromInt64(p) : null;
     }
 
     public IAsyncEnumerable<EventLogRow<TEvent>> ReadAllAsync(
@@ -45,21 +52,21 @@ internal sealed class PostgresSubscriptionSource<TEvent>(
         EventFilter filter,
         CancellationToken cancellationToken)
     {
-        return reader.ReadAllRowsAsync(
-            ToKey(fromExclusive),
-            toInclusive is { } to ? checked((long)to.Value) : null,
-            filter,
-            _row,
-            cancellationToken);
+        if (toInclusive is not { } to)
+            return ReadWithBarrierAsync(ToKey(fromExclusive), filter, cancellationToken);
+
+        return reader.ReadAllRowsAsync(ToKey(fromExclusive), checked((long)to.Value), filter, _row, cancellationToken);
     }
 
     public async ValueTask<StreamPosition?> ReadEndStreamPositionAsync(
         string streamId,
         CancellationToken cancellationToken)
     {
-        return await reader.GetMaxStreamPositionAsync(streamId, cancellationToken).ConfigureAwait(false) is { } position
-            ? StreamPosition.FromInt64(position)
-            : null;
+        var position = await reader
+            .ReadMaxStreamPositionWithBarrierAsync(streamId, barrier, cancellationToken)
+            .ConfigureAwait(false);
+
+        return position is { } p ? StreamPosition.FromInt64(p) : null;
     }
 
     public IAsyncEnumerable<EventLogRow<TEvent>> ReadStreamAsync(
@@ -118,6 +125,30 @@ internal sealed class PostgresSubscriptionSource<TEvent>(
     }
 
     public bool IsTransientError(Exception exception) => PostgresTransientErrors.IsTransient(exception);
+
+    // Reads to the end of the log a page at a time, and hands each page on once its barrier is confirmed.
+    private async IAsyncEnumerable<EventLogRow<TEvent>> ReadWithBarrierAsync(
+        long startExclusive,
+        EventFilter filter,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var key = startExclusive;
+
+        while (true)
+        {
+            var count = await reader
+                .ReadRowsWithBarrierAsync(key, filter, _page, barrier, cancellationToken)
+                .ConfigureAwait(false);
+
+            for (var i = 0; i < count; i++)
+                yield return _page[i];
+
+            if (count < reader.PageSize)
+                yield break;
+
+            key = _page[count - 1].Position;
+        }
+    }
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 

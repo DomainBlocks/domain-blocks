@@ -40,4 +40,16 @@ public sealed class PostgresEventStoreOptions
     /// have caught up.
     /// </summary>
     public EventLogTailOptions Tail { get; set; } = EventLogTailOptions.Default;
+
+    /// <summary>
+    /// Gets or sets a value that indicates whether subscriptions require a synchronous standby. The default is
+    /// <see langword="false"/>.
+    /// </summary>
+    /// <remarks>
+    /// Subscriptions are only given events that the synchronous standbys in <c>synchronous_standby_names</c> have
+    /// flushed, so that a failover cannot undo them. On a single server that setting is empty, and a local flush is
+    /// enough. In a replicated deployment an empty setting means that synchronous replication is off, and setting this
+    /// makes subscriptions report it as an error and stop delivering events until it is configured.
+    /// </remarks>
+    public bool RequireSynchronousStandby { get; set; }
 }

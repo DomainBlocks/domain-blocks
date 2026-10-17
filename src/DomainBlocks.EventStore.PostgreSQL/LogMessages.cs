@@ -26,4 +26,10 @@ internal static partial class LogMessages
 
     [LoggerMessage(LogLevel.Critical, "[append] loop failed; further appends will be rejected")]
     internal static partial void AppendLoopFailed(this ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        LogLevel.Error,
+        "[subscriptions] no synchronous standby is configured, but one is required; events are not delivered until " +
+        "synchronous_standby_names is set")]
+    internal static partial void SynchronousStandbyMissing(this ILogger logger);
 }
