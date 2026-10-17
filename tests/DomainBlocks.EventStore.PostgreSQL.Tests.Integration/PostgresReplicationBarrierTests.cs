@@ -64,7 +64,7 @@ public class PostgresReplicationBarrierTests
     [SetUp]
     public async Task ResetAsync()
     {
-        await SetStandbyNamesAsync("");
+        await SetStandbyNamesAsync(string.Empty);
 
         await ExecuteAsync(
             $"TRUNCATE {_options.Schema}.event_log; " +
@@ -72,7 +72,7 @@ public class PostgresReplicationBarrierTests
     }
 
     [TearDown]
-    public Task ClearStandbyNamesAsync() => SetStandbyNamesAsync("");
+    public Task ClearStandbyNamesAsync() => SetStandbyNamesAsync(string.Empty);
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
@@ -89,7 +89,7 @@ public class PostgresReplicationBarrierTests
         await Task.Delay(HeldFor, ct);
         next.IsCompleted.ShouldBeFalse();
 
-        await SetStandbyNamesAsync("");
+        await SetStandbyNamesAsync(string.Empty);
 
         await ShouldBeEventAsync(next, subscription, live);
     }
@@ -109,7 +109,7 @@ public class PostgresReplicationBarrierTests
         await Task.Delay(HeldFor, ct);
         next.IsCompleted.ShouldBeFalse();
 
-        await SetStandbyNamesAsync("");
+        await SetStandbyNamesAsync(string.Empty);
 
         (await next).ShouldBeTrue();
         subscription.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
@@ -131,7 +131,7 @@ public class PostgresReplicationBarrierTests
         await Task.Delay(HeldFor, ct);
         next.IsCompleted.ShouldBeFalse();
 
-        await SetStandbyNamesAsync("");
+        await SetStandbyNamesAsync(string.Empty);
 
         await ShouldBeEventAsync(next, subscription.Subscription, subscription.Existing);
         await ShouldBeCaughtUpAsync(subscription.Subscription);
@@ -153,7 +153,7 @@ public class PostgresReplicationBarrierTests
         await Task.Delay(HeldFor, ct);
         next.IsCompleted.ShouldBeFalse();
 
-        await SetStandbyNamesAsync("");
+        await SetStandbyNamesAsync(string.Empty);
 
         await ShouldBeEventAsync(next, subscription.Subscription, subscription.Existing);
         await ShouldBeCaughtUpAsync(subscription.Subscription);
@@ -239,7 +239,7 @@ public class PostgresReplicationBarrierTests
 
         next.IsCompleted.ShouldBeFalse();
 
-        await SetStandbyNamesAsync("");
+        await SetStandbyNamesAsync(string.Empty);
 
         await ShouldBeEventAsync(next, subscription, live);
 
