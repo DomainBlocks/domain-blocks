@@ -13,6 +13,7 @@ internal static class PostgresTransientErrors
     {
         return exception switch
         {
+            ReplicationBarrierException => true,
             PostgresException { SqlState: PostgresErrorCodes.AdminShutdown } => true,
             PostgresException { SqlState: PostgresErrorCodes.CrashShutdown } => true,
             PostgresException { SqlState: PostgresErrorCodes.CannotConnectNow } => true,

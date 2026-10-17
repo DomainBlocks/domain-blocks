@@ -149,23 +149,82 @@ internal sealed class EventLogReader<TEvent>(
             cancellationToken);
     }
 
-    public async Task<long?> GetMaxPositionAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Gets the number of rows that one page of a read holds at most.
+    /// </summary>
+    public int PageSize => pageSize;
+
+    /// <summary>
+    /// Reads up to a page of the rows in the event log after the starting position that the filter selects, in position
+    /// order, with the replication barrier after the read. The rows are read into <paramref name="page"/>, which grows
+    /// as needed, and the number read is returned once the barrier is confirmed.
+    /// </summary>
+    public Task<int> ReadRowsWithBarrierAsync(
+        long startExclusive,
+        EventFilter filter,
+        List<EventLogRow<TEvent>> page,
+        ReplicationBarrier barrier,
+        CancellationToken cancellationToken)
     {
-        await using var command = dataSource.CreateCommand(sql.MaxPosition);
+        var condition = Translate(filter, EventLogSql.ReadAllParameterCount + 1);
 
-        var result = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        var read = new NpgsqlBatchCommand(sql.ReadAll(ReadDirection.Forward, includeMetadata: true, condition?.Sql));
+        read.Parameters.Add(new NpgsqlParameter<long> { TypedValue = startExclusive });
+        read.Parameters.Add(new NpgsqlParameter<int> { TypedValue = pageSize });
+        condition?.AddParametersTo(read.Parameters);
 
-        return result is DBNull or null ? null : (long)result;
+        var after = new NpgsqlBatchCommand(sql.BarrierAfterRead);
+        after.Parameters.Add(new NpgsqlParameter<long> { TypedValue = startExclusive });
+
+        return barrier.RunAsync(
+            read,
+            after,
+            async (reader, ct) =>
+            {
+                var count = 0;
+
+                while (await reader.ReadAsync(ct).ConfigureAwait(false))
+                {
+                    if (count == page.Count)
+                        page.Add(new EventLogRow<TEvent>(decoder));
+
+                    ReadRow(reader, page[count++]);
+                }
+
+                return count;
+            },
+            cancellationToken);
     }
 
-    public async Task<long?> GetMaxStreamPositionAsync(string streamId, CancellationToken cancellationToken)
+    /// <summary>
+    /// Reads the position of the last event in the log, or <see langword="null"/> if it is empty, with the replication
+    /// barrier after the read.
+    /// </summary>
+    public Task<long?> ReadMaxPositionWithBarrierAsync(ReplicationBarrier barrier, CancellationToken cancellationToken)
     {
-        await using var command = dataSource.CreateCommand(sql.MaxStreamPosition);
-        command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = streamId });
+        return barrier.RunAsync(
+            new NpgsqlBatchCommand(sql.MaxPosition),
+            new NpgsqlBatchCommand(sql.BarrierAfterEnd),
+            ReadMaxAsync,
+            cancellationToken);
+    }
 
-        var result = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+    /// <summary>
+    /// Reads the position of the last event in a stream, or <see langword="null"/> if it is empty, with the replication
+    /// barrier after the read.
+    /// </summary>
+    public Task<long?> ReadMaxStreamPositionWithBarrierAsync(
+        string streamId,
+        ReplicationBarrier barrier,
+        CancellationToken cancellationToken)
+    {
+        var read = new NpgsqlBatchCommand(sql.MaxStreamPosition);
+        read.Parameters.Add(new NpgsqlParameter<string> { TypedValue = streamId });
 
-        return result is DBNull or null ? null : (long)result;
+        var after = new NpgsqlBatchCommand(sql.BarrierAfterStreamEnd);
+        after.Parameters.Add(new NpgsqlParameter<string> { TypedValue = streamId });
+
+        return barrier.RunAsync(read, after, ReadMaxAsync, cancellationToken);
     }
 
     public async Task<bool> StreamExistsAsync(string streamId, CancellationToken cancellationToken)
@@ -247,6 +306,13 @@ internal sealed class EventLogReader<TEvent>(
             reader.GetFieldValue<DateTimeOffset>(7));
 
         return row;
+    }
+
+    private static async Task<long?> ReadMaxAsync(NpgsqlDataReader reader, CancellationToken cancellationToken)
+    {
+        return await reader.ReadAsync(cancellationToken).ConfigureAwait(false) && !reader.IsDBNull(0)
+            ? reader.GetInt64(0)
+            : null;
     }
 
     private static PostgresEventData ReadEventData(NpgsqlDataReader reader)
