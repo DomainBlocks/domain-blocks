@@ -9,9 +9,9 @@ namespace DomainBlocks.EventStore.Subscriptions;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A tail starts at the end of the log and reads it through an <see cref="EventLogCursor{TSourceEvent,TLogPos}"/>,
-/// which waits for events to be appended and retries transient errors, so observers never miss an event. Any other
-/// error stops the tail and is passed to every observer.
+/// A tail starts at the end of the log and reads it through an <see cref="EventLogCursor{TEvent,TLogPos}"/>, which
+/// waits for events to be appended and retries transient errors, so observers never miss an event. Any other error
+/// stops the tail and is passed to every observer.
 /// </para>
 /// <para>
 /// An async gate serializes the tail's lifecycle: starting a session, counting its attachments, and stopping it, so the
@@ -20,9 +20,9 @@ namespace DomainBlocks.EventStore.Subscriptions;
 /// loop never blocks, even when it detaches an observer that threw or records a failure.
 /// </para>
 /// </remarks>
-internal sealed class EventLogTail<TSourceEvent, TLogPos> : IAsyncDisposable where TLogPos : struct
+internal sealed class EventLogTail<TEvent, TLogPos> : IAsyncDisposable where TLogPos : struct
 {
-    private readonly Func<IEventLogCursorSource<TSourceEvent, TLogPos>> _sourceFactory;
+    private readonly Func<IEventLogCursorSource<TEvent, TLogPos>> _sourceFactory;
     private readonly EventLogTailOptions _options;
     private readonly ILogger? _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -31,7 +31,7 @@ internal sealed class EventLogTail<TSourceEvent, TLogPos> : IAsyncDisposable whe
     private int _disposed;
 
     public EventLogTail(
-        Func<IEventLogCursorSource<TSourceEvent, TLogPos>> sourceFactory,
+        Func<IEventLogCursorSource<TEvent, TLogPos>> sourceFactory,
         EventLogTailOptions? options = null,
         ILogger? logger = null)
     {
@@ -48,7 +48,7 @@ internal sealed class EventLogTail<TSourceEvent, TLogPos> : IAsyncDisposable whe
     /// detaches the observer.
     /// </summary>
     public async Task<IAsyncDisposable> AttachAsync(
-        ITailObserver<TSourceEvent> observer,
+        ITailObserver<TEvent> observer,
         string correlationId = "unknown",
         CancellationToken cancellationToken = default)
     {
@@ -95,7 +95,7 @@ internal sealed class EventLogTail<TSourceEvent, TLogPos> : IAsyncDisposable whe
     }
 
     private async Task<IAsyncDisposable> AttachCoreAsync(
-        ITailObserver<TSourceEvent> observer,
+        ITailObserver<TEvent> observer,
         string correlationId,
         CancellationToken cancellationToken)
     {
@@ -169,7 +169,7 @@ internal sealed class EventLogTail<TSourceEvent, TLogPos> : IAsyncDisposable whe
     /// </summary>
     private sealed class Session
     {
-        private readonly EventLogTail<TSourceEvent, TLogPos> _tail;
+        private readonly EventLogTail<TEvent, TLogPos> _tail;
         private readonly ILogger? _logger;
         private readonly string _tailId = CorrelationId.ReserveGenerated();
         private readonly CancellationTokenSource _stopCts = new();
@@ -177,7 +177,7 @@ internal sealed class EventLogTail<TSourceEvent, TLogPos> : IAsyncDisposable whe
         private SessionState _state = new([]);
         private int _stopping;
 
-        public Session(EventLogTail<TSourceEvent, TLogPos> tail)
+        public Session(EventLogTail<TEvent, TLogPos> tail)
         {
             _tail = tail;
             _logger = tail._logger;
@@ -204,7 +204,7 @@ internal sealed class EventLogTail<TSourceEvent, TLogPos> : IAsyncDisposable whe
         /// </summary>
         public int RefCount { get; set; }
 
-        public IDisposable Attach(ITailObserver<TSourceEvent> observer, string observerId)
+        public IDisposable Attach(ITailObserver<TEvent> observer, string observerId)
         {
             var attachment = new SessionAttachment(observer, observerId, Detach);
 
@@ -251,7 +251,7 @@ internal sealed class EventLogTail<TSourceEvent, TLogPos> : IAsyncDisposable whe
 
             try
             {
-                var cursor = new EventLogCursor<TSourceEvent, TLogPos>(
+                var cursor = new EventLogCursor<TEvent, TLogPos>(
                     _tail._sourceFactory(),
                     _tail._options,
                     _logger,
@@ -292,7 +292,7 @@ internal sealed class EventLogTail<TSourceEvent, TLogPos> : IAsyncDisposable whe
             }
         }
 
-        private void NotifyNext(TSourceEvent sourceEvent)
+        private void NotifyNext(TEvent sourceEvent)
         {
             foreach (var attachment in Volatile.Read(ref _state).Attachments)
             {
@@ -380,14 +380,14 @@ internal sealed class EventLogTail<TSourceEvent, TLogPos> : IAsyncDisposable whe
     }
 
     private sealed class SessionAttachment(
-        ITailObserver<TSourceEvent> observer,
+        ITailObserver<TEvent> observer,
         string observerId,
         Action<SessionAttachment> onDispose) :
         IDisposable
     {
         private int _disposed;
 
-        public ITailObserver<TSourceEvent> Observer { get; } = observer;
+        public ITailObserver<TEvent> Observer { get; } = observer;
         public string ObserverId { get; } = observerId;
 
         public void Dispose()

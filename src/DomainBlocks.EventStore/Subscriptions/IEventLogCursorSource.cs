@@ -22,15 +22,15 @@ public interface IEventLogCursorSource<TSourceEvent, TLogPos> : IAsyncDisposable
     /// <summary>
     /// Reads the position of the last event in the log, or <see langword="null"/> if the log is empty.
     /// </summary>
-    ValueTask<TLogPos?> ReadEndAsync(CancellationToken cancellationToken);
+    ValueTask<TLogPos?> ReadEndPositionAsync(CancellationToken cancellationToken);
 
     /// <summary>
-    /// Reads up to <paramref name="maxCount"/> events after <paramref name="after"/>, or from the start of the log if
-    /// it is <see langword="null"/>, in log order. It returns at once, with no events if none have been appended. The
-    /// events are valid only until the next call.
+    /// Reads up to <paramref name="maxCount"/> events after <paramref name="fromExclusive"/>, or from the start of the
+    /// log if it is <see langword="null"/>, in log order. It returns at once, with no events if none have been
+    /// appended. The events are valid only until the next call.
     /// </summary>
-    ValueTask<IReadOnlyList<TSourceEvent>> ReadAfterAsync(
-        TLogPos? after,
+    ValueTask<IReadOnlyList<TSourceEvent>> ReadAsync(
+        TLogPos? fromExclusive,
         int maxCount,
         CancellationToken cancellationToken);
 
@@ -46,28 +46,16 @@ public interface IEventLogCursorSource<TSourceEvent, TLogPos> : IAsyncDisposable
     TLogPos GetLogPosition(TSourceEvent sourceEvent);
 
     /// <summary>
-    /// Waits until an event is appended, or for <paramref name="timeout"/>, with the semantics of
-    /// <see cref="SemaphoreSlim.WaitAsync(TimeSpan,CancellationToken)"/>. An append while no wait is in progress is
-    /// remembered, so the next wait returns at once, and several are remembered as one.
+    /// Waits until an event is appended, or for <paramref name="timeout"/> to elapse.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// A wait that returns <see langword="true"/> consumes the remembered append, and one that times out or is canceled
-    /// consumes nothing.
-    /// </para>
-    /// <para>
-    /// A wake only saves time: one that comes early, late, twice or not at all costs at most one poll interval, never
-    /// an event. So the source recovers from its own failures to listen, and the wait fails only when it is canceled.
-    /// </para>
-    /// </remarks>
     /// <returns>
     /// <see langword="true"/> if an event was appended, or <see langword="false"/> if the timeout elapsed first.
     /// </returns>
     ValueTask<bool> WaitForAppendAsync(TimeSpan timeout, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Decides whether a failure of <see cref="ReadEndAsync"/> or <see cref="ReadAfterAsync"/> is transient. A
+    /// Decides whether a failure of <see cref="ReadEndPositionAsync"/> or <see cref="ReadAsync"/> is transient. A
     /// transient failure is retried with backoff, and any other is not.
     /// </summary>
-    bool IsTransient(Exception exception);
+    bool IsTransientError(Exception exception);
 }

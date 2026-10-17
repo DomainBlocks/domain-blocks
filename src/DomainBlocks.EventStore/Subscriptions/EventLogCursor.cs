@@ -41,7 +41,7 @@ internal sealed class EventLogCursor<TSourceEvent, TLogPos>(
     public async ValueTask SeekToEndAsync(CancellationToken cancellationToken)
     {
         _position = await _pipeline
-            .ExecuteAsync(static (source, ct) => source.ReadEndAsync(ct), source, cancellationToken)
+            .ExecuteAsync(static (source, ct) => source.ReadEndPositionAsync(ct), source, cancellationToken)
             .ConfigureAwait(false);
 
         _waitForAppend = false;
@@ -61,7 +61,7 @@ internal sealed class EventLogCursor<TSourceEvent, TLogPos>(
 
             var batch = await _pipeline
                 .ExecuteAsync(
-                    static (state, ct) => state.Source.ReadAfterAsync(state.Position, state.MaxCount, ct),
+                    static (state, ct) => state.Source.ReadAsync(state.Position, state.MaxCount, ct),
                     (Source: source, Position: _position, MaxCount: options.MaxBatchSize),
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -97,7 +97,7 @@ internal sealed class EventLogCursor<TSourceEvent, TLogPos>(
                 {
                     var shouldHandle = args.Outcome.Exception is { } ex &&
                                        !args.Context.CancellationToken.IsCancellationRequested &&
-                                       source.IsTransient(ex);
+                                       source.IsTransientError(ex);
 
                     return ValueTask.FromResult(shouldHandle);
                 },

@@ -15,7 +15,7 @@ internal sealed class RecordingTailObserver : ITailObserver<long>
 
     public Task<Exception> Error => _errorTcs.Task;
 
-    public void OnNext(long sourceEvent) => _events.Writer.TryWrite(sourceEvent);
+    public void OnNext(long @event) => _events.Writer.TryWrite(@event);
 
     public void OnError(Exception error) => _errorTcs.TrySetResult(error);
 
