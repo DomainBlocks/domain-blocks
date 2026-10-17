@@ -11,8 +11,8 @@ public sealed class EventLogTailOptions
     public static readonly EventLogTailOptions Default = new();
 
     /// <summary>
-    /// Gets how long the tail waits for an append to be signalled before it reads the log anyway. This bounds the delay
-    /// when a signal is missed. The default is 1 second.
+    /// Gets how long the tail waits to hear of an append before it reads the log anyway. This bounds the delay when an
+    /// append is not heard. The default is 1 second.
     /// </summary>
     public TimeSpan PollInterval
     {
@@ -38,8 +38,9 @@ public sealed class EventLogTailOptions
     } = 1_000;
 
     /// <summary>
-    /// Gets the delay before the tail retries a read that failed with a transient error. The delay doubles, with
-    /// jitter, on each consecutive failure, up to <see cref="MaxRetryDelay"/>. The default is 1 second.
+    /// Gets the delay before the tail retries a read that failed with a transient error, or listens for appends again
+    /// after listening failed. The delay doubles, with jitter, on each consecutive failure, up to
+    /// <see cref="MaxRetryDelay"/>. The default is 1 second.
     /// </summary>
     public TimeSpan RetryDelay
     {

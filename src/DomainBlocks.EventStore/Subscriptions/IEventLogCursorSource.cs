@@ -6,13 +6,13 @@ namespace DomainBlocks.EventStore.Subscriptions;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The reads never wait for events to be appended, and keep no position: the caller tracks the position, and calls
-/// <see cref="WaitForAppendAsync"/> once it has read every event. The caller creates a source each time it starts
-/// following the log, and disposes it when it stops.
+/// The reads never wait for events to be appended, and keep no position: the caller tracks the position, and once it
+/// has read every event, it waits until <see cref="ListenForAppendsAsync"/> yields a later position. The caller creates
+/// a source each time it starts following the log, and disposes it when it stops.
 /// </para>
 /// <para>
-/// The caller makes one call at a time, so calls never overlap. A source that listens for appends in the background
-/// must still synchronize its listener with <see cref="WaitForAppendAsync"/>.
+/// The caller makes one read at a time, so the reads never overlap. It enumerates
+/// <see cref="ListenForAppendsAsync"/> alongside them, and stops enumerating it before it disposes the source.
 /// </para>
 /// </remarks>
 /// <typeparam name="TSourceEvent">An event as the store holds it, which is decoded only on request.</typeparam>
@@ -46,13 +46,15 @@ public interface IEventLogCursorSource<TSourceEvent, TLogPos> : IAsyncDisposable
     TLogPos GetLogPosition(TSourceEvent sourceEvent);
 
     /// <summary>
-    /// Waits until an event is appended, or for <paramref name="timeout"/> to elapse. An append while no wait is in
-    /// progress completes the next wait immediately.
+    /// Listens for events appended to the log, and yields the position of the last event in each append that it hears
+    /// of. It runs until it is canceled, or until listening fails.
     /// </summary>
-    /// <returns>
-    /// <see langword="true"/> if an event was appended, or <see langword="false"/> if the timeout elapsed first.
-    /// </returns>
-    ValueTask<bool> WaitForAppendAsync(TimeSpan timeout, CancellationToken cancellationToken);
+    /// <remarks>
+    /// What it yields only saves time: an append that it hears late or not at all costs at most one poll interval,
+    /// never an event. So it needs no recovery of its own: when it fails or ends, the caller logs the failure and
+    /// listens again, backing off while it keeps failing.
+    /// </remarks>
+    IAsyncEnumerable<TLogPos> ListenForAppendsAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// Decides whether a failure of <see cref="ReadEndPositionAsync"/> or <see cref="ReadAsync"/> is transient. A

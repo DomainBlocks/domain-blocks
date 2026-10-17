@@ -1,15 +1,19 @@
+using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 using DomainBlocks.EventStore.Subscriptions;
 
 namespace DomainBlocks.EventStore.Tests.Unit.Subscriptions;
 
 /// <summary>
 /// An event log in memory whose events are their positions: 1, 2, 3 and so on. Its sources read it as a store's source
-/// would, and treat an <see cref="IOException"/> as transient.
+/// would, treat an <see cref="IOException"/> as transient, and hear every append unless <paramref name="hearsAppends"/>
+/// is <see langword="false"/>.
 /// </summary>
-internal sealed class TestEventLog(bool signalsAppends = true)
+internal sealed class TestEventLog(bool hearsAppends = true)
 {
     private readonly Lock _lock = new();
-    private readonly List<SemaphoreSlim> _appendSignals = [];
+    private readonly List<Channel<long>> _listeners = [];
+    private readonly SemaphoreSlim _listenerStarts = new(0);
     private readonly Queue<Exception> _endReadFailures = new();
     private readonly Queue<Exception> _readFailures = new();
 
@@ -18,6 +22,8 @@ internal sealed class TestEventLog(bool signalsAppends = true)
 
     private readonly TaskCompletionSource _readFailure = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private long _end;
+    private long? _readableEnd;
+    private int _readCount;
     private int _cursorSourceCreatedCount;
     private int _endPositionReadCount;
     private int _cursorSourceDisposedCount;
@@ -25,6 +31,17 @@ internal sealed class TestEventLog(bool signalsAppends = true)
     public int CursorSourceCreatedCount => Volatile.Read(ref _cursorSourceCreatedCount);
 
     public int EndPositionReadCount => Volatile.Read(ref _endPositionReadCount);
+
+    public int ReadCount => Volatile.Read(ref _readCount);
+
+    public int ActiveListenerCount
+    {
+        get
+        {
+            lock (_lock)
+                return _listeners.Count;
+        }
+    }
 
     public int CursorSourceDisposedCount => Volatile.Read(ref _cursorSourceDisposedCount);
 
@@ -49,16 +66,49 @@ internal sealed class TestEventLog(bool signalsAppends = true)
         {
             _end += count;
 
-            if (!signalsAppends)
+            if (!hearsAppends)
                 return;
 
-            // Releases happen only under the lock, so a signal's count never exceeds one.
-            foreach (var signal in _appendSignals)
-            {
-                if (signal.CurrentCount == 0)
-                    signal.Release();
-            }
+            foreach (var listener in _listeners)
+                listener.Writer.TryWrite(_end);
         }
+    }
+
+    /// <summary>
+    /// Makes the events appended from now on unreadable until <see cref="ShowAppends"/>, although they are still heard.
+    /// </summary>
+    public void HideAppends()
+    {
+        lock (_lock)
+            _readableEnd = _end;
+    }
+
+    public void ShowAppends()
+    {
+        lock (_lock)
+            _readableEnd = null;
+    }
+
+    /// <summary>
+    /// Makes every source's listener fail with the exception.
+    /// </summary>
+    public void FailListeners(Exception exception)
+    {
+        lock (_lock)
+        {
+            foreach (var listener in _listeners)
+                listener.Writer.TryComplete(exception);
+
+            _listeners.Clear();
+        }
+    }
+
+    /// <summary>
+    /// Waits until a source's listener starts.
+    /// </summary>
+    public Task WaitForListenerStartAsync(CancellationToken cancellationToken)
+    {
+        return _listenerStarts.WaitAsync(cancellationToken);
     }
 
     public void FailNextEndReads(params Exception[] exceptions)
@@ -85,27 +135,26 @@ internal sealed class TestEventLog(bool signalsAppends = true)
         return new CursorSource(this);
     }
 
-    private SemaphoreSlim AddAppendSignal()
+    private Channel<long> AddListener()
     {
-        var signal = new SemaphoreSlim(0, 1);
+        var listener = Channel.CreateUnbounded<long>();
 
         lock (_lock)
-            _appendSignals.Add(signal);
+            _listeners.Add(listener);
 
-        return signal;
+        _listenerStarts.Release();
+
+        return listener;
     }
 
-    private void RemoveAppendSignal(SemaphoreSlim signal)
+    private void RemoveListener(Channel<long> listener)
     {
         lock (_lock)
-            _appendSignals.Remove(signal);
-
-        signal.Dispose();
+            _listeners.Remove(listener);
     }
 
     private sealed class CursorSource(TestEventLog log) : IEventLogCursorSource<long, long>
     {
-        private readonly SemaphoreSlim _appendSignal = log.AddAppendSignal();
 
         public ValueTask<long?> ReadEndPositionAsync(CancellationToken cancellationToken)
         {
@@ -128,6 +177,8 @@ internal sealed class TestEventLog(bool signalsAppends = true)
             int maxCount,
             CancellationToken cancellationToken)
         {
+            Interlocked.Increment(ref log._readCount);
+
             long[] batch;
 
             lock (log._lock)
@@ -139,7 +190,7 @@ internal sealed class TestEventLog(bool signalsAppends = true)
                 }
 
                 var start = fromExclusive ?? 0;
-                var count = (int)Math.Min(maxCount, log._end - start);
+                var count = (int)Math.Max(0, Math.Min(maxCount, (log._readableEnd ?? log._end) - start));
                 batch = [.. Enumerable.Range(1, count).Select(i => start + i)];
             }
 
@@ -151,14 +202,26 @@ internal sealed class TestEventLog(bool signalsAppends = true)
 
         public long GetLogPosition(long sourceEvent) => sourceEvent;
 
-        public ValueTask<bool> WaitForAppendAsync(TimeSpan timeout, CancellationToken cancellationToken) =>
-            new(_appendSignal.WaitAsync(timeout, cancellationToken));
+        public async IAsyncEnumerable<long> ListenForAppendsAsync(
+            [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            var listener = log.AddListener();
+
+            try
+            {
+                await foreach (var position in listener.Reader.ReadAllAsync(cancellationToken))
+                    yield return position;
+            }
+            finally
+            {
+                log.RemoveListener(listener);
+            }
+        }
 
         public bool IsTransientError(Exception exception) => exception is IOException;
 
         public ValueTask DisposeAsync()
         {
-            log.RemoveAppendSignal(_appendSignal);
             Interlocked.Increment(ref log._cursorSourceDisposedCount);
             return ValueTask.CompletedTask;
         }

@@ -18,6 +18,19 @@ internal static partial class LogMessages
         int attempt,
         TimeSpan delay);
 
+    [LoggerMessage(
+        LogLevel.Warning,
+        "[tail: {TailId}, attempt: {Attempt}] listening for appends failed; retrying in {Delay}")]
+    internal static partial void TailListenerRetrying(
+        this ILogger logger,
+        Exception exception,
+        string tailId,
+        int attempt,
+        TimeSpan delay);
+
+    [LoggerMessage(LogLevel.Warning, "[tail: {TailId}] listening for appends failed; restarting")]
+    internal static partial void TailListenerRestarting(this ILogger logger, Exception exception, string tailId);
+
     [LoggerMessage(LogLevel.Debug, "[tail: {TailId}] stopping")]
     internal static partial void TailStopping(this ILogger logger, string tailId);
 

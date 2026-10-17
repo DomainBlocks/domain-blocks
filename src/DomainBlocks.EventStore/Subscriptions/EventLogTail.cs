@@ -20,7 +20,7 @@ namespace DomainBlocks.EventStore.Subscriptions;
 /// loop never blocks, even when it detaches an observer that threw or records a failure.
 /// </para>
 /// </remarks>
-internal sealed class EventLogTail<TEvent, TLogPos> : IAsyncDisposable where TLogPos : struct
+internal sealed class EventLogTail<TEvent, TLogPos> : IAsyncDisposable where TLogPos : struct, IComparable<TLogPos>
 {
     private readonly Func<IEventLogCursorSource<TEvent, TLogPos>> _sourceFactory;
     private readonly EventLogTailOptions _options;

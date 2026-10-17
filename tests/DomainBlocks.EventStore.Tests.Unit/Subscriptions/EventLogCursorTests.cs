@@ -20,7 +20,7 @@ public class EventLogCursorTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task ReadNextAsync_AfterSeek_ReadsWithoutWaiting(CancellationToken ct)
     {
-        var eventLog = new TestEventLog(signalsAppends: false);
+        var eventLog = new TestEventLog(hearsAppends: false);
         await using var cursor = CreateCursor(eventLog);
         await cursor.SeekToEndAsync(ct);
 
@@ -33,7 +33,7 @@ public class EventLogCursorTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task ReadNextAsync_AfterFullBatch_ReadsWithoutWaiting(CancellationToken ct)
     {
-        var eventLog = new TestEventLog(signalsAppends: false);
+        var eventLog = new TestEventLog(hearsAppends: false);
         var options = new EventLogTailOptions { PollInterval = Options.PollInterval, MaxBatchSize = 2 };
         await using var cursor = CreateCursor(eventLog, options);
         await cursor.SeekToEndAsync(ct);
@@ -48,7 +48,7 @@ public class EventLogCursorTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task ReadNextAsync_NothingAppended_WaitsUntilAnEventIs(CancellationToken ct)
     {
-        var eventLog = new TestEventLog(signalsAppends: false);
+        var eventLog = new TestEventLog(hearsAppends: false);
         var options = new EventLogTailOptions { PollInterval = TimeSpan.FromMilliseconds(10) };
         await using var cursor = CreateCursor(eventLog, options);
         await cursor.SeekToEndAsync(ct);
@@ -65,7 +65,7 @@ public class EventLogCursorTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task ReadNextAsync_AfterShortBatch_WaitsForAppendSignal(CancellationToken ct)
+    public async Task ReadNextAsync_AfterShortBatch_WaitsUntilAnAppendIsHeard(CancellationToken ct)
     {
         var eventLog = new TestEventLog();
         await using var cursor = CreateCursor(eventLog);
@@ -81,9 +81,9 @@ public class EventLogCursorTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task ReadNextAsync_NoSignal_ReadsAfterPollInterval(CancellationToken ct)
+    public async Task ReadNextAsync_AppendNotHeard_ReadsAfterPollInterval(CancellationToken ct)
     {
-        var eventLog = new TestEventLog(signalsAppends: false);
+        var eventLog = new TestEventLog(hearsAppends: false);
         var options = new EventLogTailOptions { PollInterval = TimeSpan.FromMilliseconds(50) };
         await using var cursor = CreateCursor(eventLog, options);
         await cursor.SeekToEndAsync(ct);
@@ -97,7 +97,7 @@ public class EventLogCursorTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task ReadNextAsync_AppendSignalledDuringRead_DoesNotWait(CancellationToken ct)
+    public async Task ReadNextAsync_AppendHeardDuringRead_DoesNotWait(CancellationToken ct)
     {
         var eventLog = new TestEventLog();
         eventLog.OnRead = batch =>
@@ -113,8 +113,36 @@ public class EventLogCursorTests
         eventLog.Append();
         (await cursor.ReadNextAsync(ct)).ShouldBe([2]);
 
-        // Event 3 was appended, and signalled, while event 2 was being read.
+        // Event 3 was appended, and heard, while event 2 was being read.
         (await cursor.ReadNextAsync(ct)).ShouldBe([3]);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task ReadNextAsync_AppendHeardBeforeItIsReadable_WaitsForALaterAppend(CancellationToken ct)
+    {
+        var eventLog = new TestEventLog();
+        await using var cursor = CreateCursor(eventLog);
+        await cursor.SeekToEndAsync(ct);
+        eventLog.Append();
+        (await cursor.ReadNextAsync(ct)).ShouldBe([1]);
+
+        // Event 2 is heard, but a read does not return it yet.
+        eventLog.HideAppends();
+        eventLog.Append();
+        var next = cursor.ReadNextAsync(ct).AsTask();
+        await Task.Delay(100, ct);
+        var readCount = eventLog.ReadCount;
+
+        // The cursor reads for it once and then waits, instead of reading for it again and again.
+        await Task.Delay(100, ct);
+        eventLog.ReadCount.ShouldBe(readCount);
+        next.IsCompleted.ShouldBeFalse();
+
+        eventLog.ShowAppends();
+        eventLog.Append();
+
+        (await next).ShouldBe([2, 3]);
     }
 
     [Test]
@@ -195,6 +223,21 @@ public class EventLogCursorTests
 
         await cursor.DisposeAsync();
 
+        eventLog.CursorSourceDisposedCount.ShouldBe(1);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task DisposeAsync_AfterSeek_StopsListeningBeforeDisposingCursorSource(CancellationToken ct)
+    {
+        var eventLog = new TestEventLog();
+        var cursor = CreateCursor(eventLog);
+        await cursor.SeekToEndAsync(ct);
+        await eventLog.WaitForListenerStartAsync(ct);
+
+        await cursor.DisposeAsync();
+
+        eventLog.ActiveListenerCount.ShouldBe(0);
         eventLog.CursorSourceDisposedCount.ShouldBe(1);
     }
 
