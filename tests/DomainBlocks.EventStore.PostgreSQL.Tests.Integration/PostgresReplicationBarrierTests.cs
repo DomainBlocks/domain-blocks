@@ -1,3 +1,4 @@
+using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Events;
 using DomainBlocks.Testing.Integration.EventStore;
@@ -104,6 +105,45 @@ public class PostgresReplicationBarrierTests
 
         await append;
         (await CountEventsAsync()).ShouldBe(1);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task ExecuteAsync_ResultsOutgrowTheServersOutputBuffer_CompletesNothingUntilTheStandbyHasTheCommit(
+        CancellationToken ct)
+    {
+        await SetStandbyNamesAsync(MissingStandby);
+
+        var batch = CreateLargeBatch();
+        using var command = new AppendBatchCommand(_dataSource, new SchemaObjectNames(_options.Schema));
+        var execute = command.ExecuteAsync(batch, ct);
+
+        await WaitForSyncRepAsync(AppendQuery, ct);
+        await Task.Delay(HeldFor, ct);
+        batch.Count(x => x.IsCompleted).ShouldBe(0);
+
+        await SetStandbyNamesAsync(string.Empty);
+
+        await execute;
+        batch.ShouldAllBe(x => x.Completion.IsCompletedSuccessfully);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task ExecuteAsync_BackendTerminatedWhileTheCommitWaits_CompletesNothing(CancellationToken ct)
+    {
+        await SetStandbyNamesAsync(MissingStandby);
+
+        var batch = CreateLargeBatch();
+        using var command = new AppendBatchCommand(_dataSource, new SchemaObjectNames(_options.Schema));
+        var execute = command.ExecuteAsync(batch, ct);
+
+        var waiting = await WaitForSyncRepAsync(AppendQuery, ct);
+        await ExecuteAsync($"SELECT pg_terminate_backend({waiting.Pid})");
+
+        // The commit stands on the primary, but the client cannot know that, so no request is reported as appended.
+        await Should.ThrowAsync<NpgsqlException>(execute);
+        batch.ShouldAllBe(x => !x.IsCompleted);
     }
 
     [Test]
@@ -307,6 +347,20 @@ public class PostgresReplicationBarrierTests
         await append;
 
         return e;
+    }
+
+    // The server buffers its output up to 8 KB, so the result rows of a batch this large reach the client before the
+    // commit has waited for the standby.
+    private static AppendRequest[] CreateLargeBatch()
+    {
+        return Enumerable
+            .Range(0, 2_000)
+            .Select(i => new AppendRequest(
+                $"large-{i}",
+                ExpectedStreamState.Any<StreamPosition>(),
+                Guid.NewGuid(),
+                [EncodedEvent.Create<PostgresEventData, string>("TestEvent", PostgresEventData.FromJson("{}"), null)]))
+            .ToArray();
     }
 
     private async Task<TestEvent> AppendAsync(string value, CancellationToken ct)
