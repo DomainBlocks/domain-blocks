@@ -1,6 +1,5 @@
 using DomainBlocks.EventStore.Filtering;
 using Microsoft.Extensions.Logging;
-using Polly;
 
 namespace DomainBlocks.EventStore.Subscriptions;
 
@@ -15,7 +14,8 @@ namespace DomainBlocks.EventStore.Subscriptions;
 /// </para>
 /// <para>
 /// A transient error is retried with backoff from the last event that was handed on, so no event is missed or handed
-/// on twice. Any other error is thrown.
+/// on twice. Any other error is thrown, as is a transient one once the cursor has gone
+/// <see cref="EventLogTailOptions.RetryTimeout"/> without handing on an event or completing a read.
 /// </para>
 /// </remarks>
 /// <param name="source">The source to read, which the cursor disposes.</param>
@@ -34,7 +34,7 @@ internal sealed class EventLogCursor<TEvent, TSourceEvent, TStreamId, TStreamPos
     where TStreamPos : struct
     where TLogPos : struct, IComparable<TLogPos>
 {
-    private readonly ResiliencePipeline _pipeline = SubscriptionRetry.CreatePipeline(
+    private readonly SubscriptionRetry _retry = new(
         source.IsTransientError,
         options,
         (ex, attempt, delay) => logger?.TailRetrying(ex, tailId, attempt, delay));
@@ -55,10 +55,11 @@ internal sealed class EventLogCursor<TEvent, TSourceEvent, TStreamId, TStreamPos
         // Listening starts first, so the appends just after the end are heard.
         _appendWatcher.Start();
 
-        _position = await _pipeline
+        _position = await _retry.Pipeline
             .ExecuteAsync(static (source, ct) => source.ReadEndPositionAsync(ct), source, cancellationToken)
             .ConfigureAwait(false);
 
+        _retry.OnProgress();
         _waitForAppend = false;
     }
 
@@ -81,7 +82,7 @@ internal sealed class EventLogCursor<TEvent, TSourceEvent, TStreamId, TStreamPos
         // Taken before the read, so an append heard during the read ends the next wait at once.
         var heardBeforeRead = _appendWatcher.HighWaterMark;
 
-        await _pipeline
+        await _retry.Pipeline
             .ExecuteAsync(
                 static (state, ct) => state.Cursor.ReadToEndAsync(state.OnEvent, ct),
                 (Cursor: this, OnEvent: onEvent),
@@ -110,6 +111,9 @@ internal sealed class EventLogCursor<TEvent, TSourceEvent, TStreamId, TStreamPos
         {
             onEvent(e);
             _position = e.Context.LogPosition;
+            _retry.OnProgress();
         }
+
+        _retry.OnProgress();
     }
 }
