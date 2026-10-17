@@ -14,9 +14,9 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// only once the batch has completed, because rows can reach the client before the commit has waited.
 /// </para>
 /// <para>
-/// A canceled wait completes without an error, so any warning during the batch counts as a barrier that was not
-/// confirmed. A terminated backend fails the read. Either way the caller retries, and nothing is used until a barrier
-/// is confirmed.
+/// A canceled wait completes without an error, with only a warning, so a warning during the batch is followed by a
+/// <see cref="CommitConfirmation"/>, and the result is used only if it confirms the barrier. A terminated backend fails
+/// the read. Either way the caller retries, and nothing is used until a barrier is confirmed.
 /// </para>
 /// <para>
 /// Without synchronous standbys the barrier does nothing, because every append commits with <c>synchronous_commit</c>
@@ -64,19 +64,23 @@ internal sealed class ReplicationBarrier(NpgsqlDataSource dataSource)
             {
                 connection.Notice -= OnNotice;
             }
+
+            // A canceled wait completes as if it had been confirmed, so a canceled caller must not use the result.
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (warning is not null)
+            {
+                await CommitConfirmation
+                    .ConfirmAsync(connection, warning, "The replication barrier", cancellationToken)
+                    .ConfigureAwait(false);
+            }
         }
-
-        // A canceled wait completes as if it had been confirmed, so a canceled caller must not use the result.
-        cancellationToken.ThrowIfCancellationRequested();
-
-        if (warning is not null)
-            throw new ReplicationBarrierException($"The replication barrier was not confirmed: {warning.MessageText}");
 
         return result;
 
         void OnNotice(object? sender, NpgsqlNoticeEventArgs e)
         {
-            if (e.Notice.InvariantSeverity == "WARNING")
+            if (CommitConfirmation.IsWarning(e.Notice))
                 warning ??= e.Notice;
         }
     }

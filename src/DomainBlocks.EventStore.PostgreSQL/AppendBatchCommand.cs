@@ -17,9 +17,15 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// commit still waits for its flush and for the synchronous standbys. A batch that fails to commit completes no
 /// request, so the caller can retry it.
 /// </para>
+/// <para>
+/// A commit whose wait is canceled, by a cancel request or <c>pg_cancel_backend</c>, stands on the primary and
+/// completes without an error, with only a warning. So a warning during the batch is followed by a
+/// <see cref="CommitConfirmation"/>, and a commit that it does not confirm completes no request either.
+/// </para>
 /// </remarks>
 internal sealed class AppendBatchCommand : IDisposable
 {
+    private readonly NpgsqlDataSource _dataSource;
     private readonly NpgsqlCommand _command;
     private readonly NpgsqlParameter<string[]> _streamIds;
     private readonly NpgsqlParameter<AppendProtocol.ExpectedKind[]> _expectedKinds;
@@ -33,7 +39,10 @@ internal sealed class AppendBatchCommand : IDisposable
 
     public AppendBatchCommand(NpgsqlDataSource dataSource, SchemaObjectNames names)
     {
-        _command = dataSource.CreateCommand(
+        _dataSource = dataSource;
+
+        // The command runs on a connection that each batch opens, so that the batch can see the warnings it is sent.
+        _command = new NpgsqlCommand(
             "SELECT request_index, status, observed_version " +
             $"FROM {names.AppendEventsFunction}($1, $2, $3, $4, $5, $6, $7, $8, $9)");
 
@@ -77,19 +86,45 @@ internal sealed class AppendBatchCommand : IDisposable
 
         var outcomes = new Exception?[batch.Count];
         var hasOutcome = new bool[batch.Count];
+        PostgresNotice? warning = null;
 
-        await using (var reader = await _command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+        var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+        await using (connection.ConfigureAwait(false))
         {
-            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            connection.Notice += OnNotice;
+            _command.Connection = connection;
+
+            try
             {
-                var index = reader.GetInt32(0);
-                outcomes[index] = ReadOutcome(reader, batch[index]);
-                hasOutcome[index] = true;
+                var reader = await _command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+
+                await using (reader.ConfigureAwait(false))
+                {
+                    while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                    {
+                        var index = reader.GetInt32(0);
+                        outcomes[index] = ReadOutcome(reader, batch[index]);
+                        hasOutcome[index] = true;
+                    }
+
+                    // The server reports the commit only after the rows, so closing the reader waits for it, and throws
+                    // if the batch did not commit.
+                    await reader.CloseAsync().ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                _command.Connection = null;
+                connection.Notice -= OnNotice;
             }
 
-            // The server reports the commit only after the rows, so closing the reader waits for it, and throws if the
-            // batch did not commit.
-            await reader.CloseAsync().ConfigureAwait(false);
+            if (warning is not null)
+            {
+                await CommitConfirmation
+                    .ConfirmAsync(connection, warning, "The append batch", cancellationToken)
+                    .ConfigureAwait(false);
+            }
         }
 
         // The function returns exactly one row per request, so a request without a row means the protocol was broken.
@@ -98,6 +133,14 @@ internal sealed class AppendBatchCommand : IDisposable
             batch[i].TryComplete(hasOutcome[i]
                 ? outcomes[i]
                 : new InvalidOperationException("The append function returned no result."));
+        }
+
+        return;
+
+        void OnNotice(object? sender, NpgsqlNoticeEventArgs e)
+        {
+            if (CommitConfirmation.IsWarning(e.Notice))
+                warning ??= e.Notice;
         }
     }
 

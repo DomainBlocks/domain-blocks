@@ -22,7 +22,9 @@ public class PostgresReplicationBarrierTests
 {
     private const string MissingStandby = "missing_standby";
     private const string AppendQuery = "append_events";
-    private const string BarrierQuery = "pg_logical_emit_message";
+    // The barriers are told apart by their messages, which are quoted because the schema shares the barrier's name.
+    private const string BarrierQuery = "'dbx_barrier'";
+    private const string ConfirmQuery = "'dbx_confirm'";
 
     // Only the barrier after a read of the log's end has no condition beyond the rows existing.
     private const string EndBarrierQuery = "WHERE true)";
@@ -107,7 +109,7 @@ public class PostgresReplicationBarrierTests
     {
         await SetStandbyNamesAsync(MissingStandby);
 
-        var batch = CreateLargeBatch();
+        var batch = CreateBatch(2_000);
         using var command = new AppendBatchCommand(_dataSource, new SchemaObjectNames(_options.Schema));
         var execute = command.ExecuteAsync(batch, ct);
 
@@ -127,7 +129,7 @@ public class PostgresReplicationBarrierTests
     {
         await SetStandbyNamesAsync(MissingStandby);
 
-        var batch = CreateLargeBatch();
+        var batch = CreateBatch(2_000);
         using var command = new AppendBatchCommand(_dataSource, new SchemaObjectNames(_options.Schema));
         var execute = command.ExecuteAsync(batch, ct);
 
@@ -137,6 +139,99 @@ public class PostgresReplicationBarrierTests
         // The commit stands on the primary, but the client cannot know that, so no request is reported as appended.
         await Should.ThrowAsync<NpgsqlException>(execute);
         batch.ShouldAllBe(x => !x.IsCompleted);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task ExecuteAsync_CommitWaitCanceled_CompletesOnceAConfirmingBarrierShowsTheStandbyHasIt(
+        CancellationToken ct)
+    {
+        await SetStandbyNamesAsync(MissingStandby);
+
+        var batch = CreateBatch(1);
+        using var command = new AppendBatchCommand(_dataSource, new SchemaObjectNames(_options.Schema));
+        var execute = command.ExecuteAsync(batch, ct);
+
+        var waiting = await WaitForSyncRepAsync(AppendQuery, ct);
+        await ExecuteAsync($"SELECT pg_cancel_backend({waiting.Pid})");
+
+        // The commit stands on the primary, with only a warning, so a barrier on the same connection waits instead.
+        await WaitForSyncRepAsync(ConfirmQuery, ct);
+        batch.ShouldAllBe(x => !x.IsCompleted);
+        (await CountEventsAsync()).ShouldBe(1);
+
+        await SetStandbyNamesAsync(string.Empty);
+
+        await execute;
+        batch.ShouldAllBe(x => x.Completion.IsCompletedSuccessfully);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task ExecuteAsync_ConfirmingBarrierWaitCanceledToo_ThrowsAndCompletesNothing(CancellationToken ct)
+    {
+        await SetStandbyNamesAsync(MissingStandby);
+
+        var batch = CreateBatch(1);
+        using var command = new AppendBatchCommand(_dataSource, new SchemaObjectNames(_options.Schema));
+        var execute = command.ExecuteAsync(batch, ct);
+
+        var waiting = await WaitForSyncRepAsync(AppendQuery, ct);
+        await ExecuteAsync($"SELECT pg_cancel_backend({waiting.Pid})");
+        var confirming = await WaitForSyncRepAsync(ConfirmQuery, ct);
+        await ExecuteAsync($"SELECT pg_cancel_backend({confirming.Pid})");
+
+        await Should.ThrowAsync<CommitNotConfirmedException>(execute);
+        batch.ShouldAllBe(x => !x.IsCompleted);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task AppendAsync_TriggerRaisesWarning_Appends(CancellationToken ct)
+    {
+        var table = $"{_options.Schema}.event_log";
+
+        await ExecuteAsync(
+            $"CREATE FUNCTION {_options.Schema}.warn() RETURNS trigger LANGUAGE plpgsql AS " +
+            "$$ BEGIN RAISE WARNING 'audited'; RETURN NULL; END $$; " +
+            $"CREATE TRIGGER warn AFTER INSERT ON {table} " +
+            $"FOR EACH STATEMENT EXECUTE FUNCTION {_options.Schema}.warn()");
+
+        try
+        {
+            // The warning is not the one a canceled wait sends, so the confirming barrier confirms the append.
+            var e = await AppendAsync("audited", ct);
+
+            (await CountEventsAsync()).ShouldBe(1);
+            e.Value.ShouldBe("audited");
+        }
+        finally
+        {
+            await ExecuteAsync($"DROP TRIGGER warn ON {table}; DROP FUNCTION {_options.Schema}.warn()");
+        }
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task AppendAsync_CommitWaitCanceled_AcknowledgesOnlyOnceTheStandbyHasIt(CancellationToken ct)
+    {
+        await SetStandbyNamesAsync(MissingStandby);
+
+        await using var eventStore = CreateEventStore();
+        var e = new TestEvent { Value = "canceled" };
+        var append = eventStore.AppendAsync("s1", [AppendableEvent.Create<object>(e)], cancellationToken: ct);
+
+        var waiting = await WaitForSyncRepAsync(AppendQuery, ct);
+        await ExecuteAsync($"SELECT pg_cancel_backend({waiting.Pid})");
+
+        // A barrier on the same connection waits for the standby, which then has the append too.
+        await WaitForSyncRepAsync(ConfirmQuery, ct);
+        append.IsCompleted.ShouldBeFalse();
+
+        await SetStandbyNamesAsync(string.Empty);
+
+        await append;
+        (await CountEventsAsync()).ShouldBe(1);
     }
 
     [Test]
@@ -246,19 +341,22 @@ public class PostgresReplicationBarrierTests
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task SubscribeToAll_BarrierWaitCanceled_DeliversOnlyOnceTheStandbyHasIt(CancellationToken ct)
     {
-        await InterruptBarrierAsync("pg_cancel_backend", ct);
+        // A canceled wait leaves the connection, so a barrier on it confirms the first.
+        await InterruptBarrierAsync("pg_cancel_backend", ConfirmQuery, ct);
     }
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task SubscribeToAll_BarrierBackendTerminated_DeliversOnlyOnceTheStandbyHasIt(CancellationToken ct)
     {
-        await InterruptBarrierAsync("pg_terminate_backend", ct);
+        // A terminated backend loses the connection, so the tail reads again with a new barrier.
+        await InterruptBarrierAsync("pg_terminate_backend", BarrierQuery, ct);
     }
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task SubscribeToAll_CatchUpEndBarrierCanceled_ReplaysOnceTheStandbyHasIt(CancellationToken ct)
+    public async Task SubscribeToAll_CatchUpEndBarrierBackendTerminated_ReplaysOnceTheStandbyHasIt(
+        CancellationToken ct)
     {
         await using var eventStore = CreateEventStore();
         await using var subscription = await StartTailThenSubscribeAsync(
@@ -268,9 +366,10 @@ public class PostgresReplicationBarrierTests
 
         var next = subscription.Subscription.MoveNextAsync().AsTask();
 
-        // The tail started before the standby went missing, so the catch-up's end read is the one that waits here.
+        // The tail started before the standby went missing, so the catch-up's end read is the one that waits here. Its
+        // connection is lost, so the catch-up reads its end again.
         var interrupted = await WaitForSyncRepAsync(EndBarrierQuery, ct);
-        await ExecuteAsync($"SELECT pg_cancel_backend({interrupted.Pid})");
+        await ExecuteAsync($"SELECT pg_terminate_backend({interrupted.Pid})");
         await WaitForSyncRepAsync(EndBarrierQuery, ct, after: interrupted);
 
         next.IsCompleted.ShouldBeFalse();
@@ -300,7 +399,7 @@ public class PostgresReplicationBarrierTests
 
     // A barrier that is interrupted while it waits must not count as confirmed. The tail reads again, waits again, and
     // delivers the event once, when the standby has it.
-    private async Task InterruptBarrierAsync(string interrupt, CancellationToken ct)
+    private async Task InterruptBarrierAsync(string interrupt, string nextWait, CancellationToken ct)
     {
         await using var eventStore = CreateEventStore();
         await using var subscription = eventStore.SubscribeToAll().GetAsyncEnumerator(ct);
@@ -312,7 +411,7 @@ public class PostgresReplicationBarrierTests
 
         var interrupted = await WaitForSyncRepAsync(BarrierQuery, ct);
         await ExecuteAsync($"SELECT {interrupt}({interrupted.Pid})");
-        await WaitForSyncRepAsync(BarrierQuery, ct, after: interrupted);
+        await WaitForSyncRepAsync(nextWait, ct, after: interrupted);
 
         next.IsCompleted.ShouldBeFalse();
 
@@ -326,26 +425,34 @@ public class PostgresReplicationBarrierTests
     }
 
     // Cancels the wait of an append's commit for the standby, as a client's cancel request or pg_cancel_backend does.
-    // The commit then stands on the primary, and the event is visible there, although no standby has it.
+    // The commit then stands on the primary, and the event is visible there, although no standby has it. A barrier on
+    // the same connection then waits for the standby, and the appender is disposed while it waits, so the append fails.
     private async Task<TestEvent> AppendWithCanceledWaitAsync(string value, CancellationToken ct)
     {
-        await using var appender = CreateEventStore();
         var e = new TestEvent { Value = value };
-        var append = appender.AppendAsync("s1", [AppendableEvent.Create<object>(e)], cancellationToken: ct);
+        Task append;
 
-        var waiting = await WaitForSyncRepAsync(AppendQuery, ct);
-        await ExecuteAsync($"SELECT pg_cancel_backend({waiting.Pid})");
-        await append;
+        await using (var appender = CreateEventStore())
+        {
+            append = appender.AppendAsync("s1", [AppendableEvent.Create<object>(e)], cancellationToken: ct);
+
+            var waiting = await WaitForSyncRepAsync(AppendQuery, ct);
+            await ExecuteAsync($"SELECT pg_cancel_backend({waiting.Pid})");
+            await WaitForSyncRepAsync(ConfirmQuery, ct);
+        }
+
+        await Task.WhenAny(append);
+        append.IsFaulted.ShouldBeTrue();
 
         return e;
     }
 
-    // The server buffers its output up to 8 KB, so the result rows of a batch this large reach the client before the
-    // commit has waited for the standby.
-    private static AppendRequest[] CreateLargeBatch()
+    // The server buffers its output up to 8 KB, so the result rows of a batch of 2,000 requests reach the client before
+    // the commit has waited for the standby.
+    private static AppendRequest[] CreateBatch(int count)
     {
         return Enumerable
-            .Range(0, 2_000)
+            .Range(0, count)
             .Select(i => new AppendRequest(
                 $"large-{i}",
                 ExpectedStreamState.Any<StreamPosition>(),
