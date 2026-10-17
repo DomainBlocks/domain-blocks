@@ -65,6 +65,15 @@ The default origin is the end of the log, so omitting it receives only new event
 way for a single event stream. A subscriber that consumes too slowly receives a message with `IsFellBehind` set to
 `true`, then catches up again.
 
+Appends and subscriptions set their own durability, so a subscriber is never given an event that a failover could
+undo, provided the deployment does its part:
+
+- **MongoDB** needs a replica set.
+- **PostgreSQL** needs nothing more on a single server, or on a service whose storage replicates the WAL, such as
+  Amazon Aurora. With streaming replication, name synchronous standbys in `synchronous_standby_names`, and use a
+  failover manager that promotes only a synchronous standby, such as Patroni in synchronous mode.
+- **Either store** must connect to the primary, or to the writer endpoint, never to a read replica.
+
 ### Event filtering
 
 Pass an `EventFilter` to a read to select events by name, stream, metadata, or creation time:
