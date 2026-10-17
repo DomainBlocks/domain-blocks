@@ -7,10 +7,9 @@ namespace DomainBlocks.Testing.Integration.EventStore;
 public static class TestStoreName
 {
     /// <summary>
-    /// PostgreSQL identifiers and MongoDB database names are limited to 63 characters, and the PostgreSQL publication
-    /// name appends "_event_log_pub" to the schema.
+    /// PostgreSQL identifiers and MongoDB database names are limited to 63 characters.
     /// </summary>
-    private const int MaxLength = 48;
+    private const int MaxLength = 63;
 
     public static string For(object fixture)
     {

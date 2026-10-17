@@ -30,7 +30,6 @@ internal sealed partial class SchemaObjectNames
         ExpectedStateKindType = $"{schema}.{ExpectedStateKindTypeName}";
         ExpectedStateKindArrayType = $"{ExpectedStateKindType}[]";
         AppendStatusType = $"{schema}.{AppendStatusTypeName}";
-        Publication = $"{schema}_{EventLogTableName}_pub";
         AppendChannel = schema;
     }
 
@@ -50,11 +49,6 @@ internal sealed partial class SchemaObjectNames
     public string ExpectedStateKindArrayType { get; }
 
     public string AppendStatusType { get; }
-
-    /// <summary>
-    /// The publication name, which embeds the schema because publication names are database-wide.
-    /// </summary>
-    public string Publication { get; }
 
     /// <summary>
     /// The channel that append_events notifies when it appends events, unquoted. It is the schema name, because channel
