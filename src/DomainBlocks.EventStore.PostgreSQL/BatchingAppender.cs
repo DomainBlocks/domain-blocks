@@ -169,9 +169,12 @@ internal sealed class BatchingAppender : IAppender
         {
             await _command.ExecuteAsync(batch, ct).ConfigureAwait(false);
         }
-        catch (NpgsqlException ex) when (ex.IsTransient && !ct.IsCancellationRequested)
+        catch (Exception ex) when (ex is NpgsqlException { IsTransient: true } or CommitNotConfirmedException &&
+                                   !ct.IsCancellationRequested)
         {
-            // Retrying is safe because commit IDs make already-committed requests report as duplicates.
+            // Retrying is safe because commit IDs make already-committed requests report as duplicates. A batch of
+            // duplicates still locks the sequence row, which writes WAL, so its commit waits for the synchronous
+            // standbys, and they then have the earlier commit too.
             _logger?.AppendBatchRetrying(ex, batch.Count);
             await _command.ExecuteAsync(batch, ct).ConfigureAwait(false);
         }
