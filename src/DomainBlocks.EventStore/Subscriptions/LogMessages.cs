@@ -82,6 +82,16 @@ internal static partial class LogMessages
 
     [LoggerMessage(
         LogLevel.Warning,
+        "[sub: {SubscriptionId}, attempt: {Attempt}] catch-up read failed; retrying in {Delay}")]
+    internal static partial void SubscriptionRetrying(
+        this ILogger logger,
+        Exception exception,
+        string subscriptionId,
+        int attempt,
+        TimeSpan delay);
+
+    [LoggerMessage(
+        LogLevel.Warning,
         "[sub: {SubscriptionId}] queue overflowed (capacity {QueueCapacity}); restart pending")]
     internal static partial void SubscriptionQueueOverflowed(
         this ILogger logger,
