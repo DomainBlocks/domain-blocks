@@ -345,7 +345,7 @@ public class EventLogSubscriptionsTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task SubscribeToAll_CatchUpFails_ThrowsItsError(CancellationToken ct)
+    public async Task SubscribeToAll_CatchUpFailsWithNonTransientError_ThrowsItsError(CancellationToken ct)
     {
         await using var scenario = new SubscriptionScenario(ct);
         await using var subscription = scenario.SubscribeToAll(SubscriptionOrigin.Start);
@@ -355,6 +355,85 @@ public class EventLogSubscriptionsTests
         var thrown = await Should.ThrowAsync<InvalidOperationException>(subscription.NextAsync);
 
         thrown.ShouldBeSameAs(error);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task SubscribeToAll_CatchUpEndReadFailsTransiently_RetriesAndReplays(CancellationToken ct)
+    {
+        await using var scenario = new SubscriptionScenario(ct);
+        var existing = scenario.EventLog.Append("existing", 2);
+        scenario.EventLog.FailNextCatchUpEndRead(new IOException("lost"));
+        scenario.EventLog.FailNextCatchUpEndRead(new IOException("lost again"));
+        await using var subscription = scenario.SubscribeToAll(SubscriptionOrigin.Start);
+
+        var messages = await subscription.ReadUntilCaughtUpAsync();
+
+        Payloads(messages).ShouldBe(existing);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task SubscribeToAll_CatchUpReadFailsTransientlyMidReplay_ResumesAfterTheLastEventHandedOn(
+        CancellationToken ct)
+    {
+        await using var scenario = new SubscriptionScenario(ct);
+        var existing = scenario.EventLog.Append("existing", 4);
+        scenario.EventLog.FailNextCatchUpReadAfter(2, new IOException("lost"));
+        await using var subscription = scenario.SubscribeToAll(SubscriptionOrigin.Start);
+
+        var messages = await subscription.ReadUntilCaughtUpAsync();
+
+        Payloads(messages).ShouldBe(existing);
+
+        scenario.EventLog.CatchUpReads.ShouldBe(
+        [
+            new CatchUpRead(FromExclusive: null, EndInclusive: 4, IsCompleted: false),
+            new CatchUpRead(FromExclusive: 2, EndInclusive: 4, IsCompleted: true)
+        ]);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task SubscribeToStream_CatchUpReadFailsTransientlyMidReplay_ResumesAfterTheLastEventHandedOn(
+        CancellationToken ct)
+    {
+        await using var scenario = new SubscriptionScenario(ct);
+        scenario.EventLog.Append("other", 1, streamId: "s2");
+        var existing = scenario.EventLog.Append("existing", 4, streamId: "s1");
+        scenario.EventLog.FailNextCatchUpReadAfter(2, new IOException("lost"));
+        await using var subscription = scenario.SubscribeToStream("s1", SubscriptionOrigin.Start);
+
+        var messages = await subscription.ReadUntilCaughtUpAsync();
+
+        Payloads(messages).ShouldBe(existing);
+
+        // A stream's positions start at 0, so the retry resumes after the second event's position, 1.
+        scenario.EventLog.CatchUpReads.ShouldBe(
+        [
+            new CatchUpRead(FromExclusive: null, EndInclusive: 3, IsCompleted: false),
+            new CatchUpRead(FromExclusive: 1, EndInclusive: 3, IsCompleted: true)
+        ]);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task SubscribeToAll_CatchUpReadFailsMidReplayWithNonTransientError_ThrowsAfterTheEventsHandedOn(
+        CancellationToken ct)
+    {
+        await using var scenario = new SubscriptionScenario(ct);
+        var existing = scenario.EventLog.Append("existing", 4);
+        var error = new InvalidOperationException("unavailable");
+        scenario.EventLog.FailNextCatchUpReadAfter(2, error);
+        await using var subscription = scenario.SubscribeToAll(SubscriptionOrigin.Start);
+
+        (await subscription.NextEventAsync()).ShouldBe(existing[0]);
+        (await subscription.NextEventAsync()).ShouldBe(existing[1]);
+
+        var thrown = await Should.ThrowAsync<InvalidOperationException>(subscription.NextAsync);
+
+        thrown.ShouldBeSameAs(error);
+        scenario.EventLog.CatchUpReads.Count.ShouldBe(1);
     }
 
     [Test]
