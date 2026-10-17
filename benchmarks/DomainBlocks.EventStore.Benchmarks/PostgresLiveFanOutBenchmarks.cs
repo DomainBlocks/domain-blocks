@@ -3,25 +3,26 @@ using BenchmarkDotNet.Attributes;
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.PostgreSQL;
-using DomainBlocks.EventStore.PostgreSQL.Feeds;
+using DomainBlocks.EventStore.Subscriptions;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.SystemTextJson;
 
 namespace DomainBlocks.EventStore.Benchmarks;
 
-using SubscriptionObserver = SubscriptionAsyncEnumerable<IDomainEvent, LogPosition>.Observer;
-
 /// <summary>
-/// Measures the PostgreSQL live path without I/O: a session hands <see cref="EventCount"/> rows to the feed, which fans
-/// them out to the observers of <see cref="SubscriberCount"/> subscriptions, each of which selects
-/// <see cref="SelectedPercent"/> percent of the rows and takes their events. The feed and the observers are the real
-/// ones. The session stands in for the replication session and handles each row as the replication session does.
+/// Measures the PostgreSQL live path without I/O: a source hands <see cref="EventCount"/> rows to the tail, which fans
+/// them out to the queues of <see cref="SubscriberCount"/> subscriptions, each of which selects
+/// <see cref="SelectedPercent"/> percent of the rows and takes their events. The tail and the queues are the real ones.
+/// The source stands in for PostgreSQL's and reads into one reusable row, as PostgreSQL's does.
 /// </summary>
 [MemoryDiagnoser]
 public class PostgresLiveFanOutBenchmarks
 {
     // The rows are spread evenly over this many streams, so that one stream holds one percent of them.
     private const int StreamCount = 100;
+
+    // Long enough that the tail never polls during a run.
+    private static readonly EventLogTailOptions TailOptions = new() { PollInterval = TimeSpan.FromHours(1) };
 
     private IEventDecoder<IDomainEvent, PostgresEventData, string> _decoder = null!;
     private EncodedEvent<PostgresEventData, string>[] _rows = null!;
@@ -67,28 +68,29 @@ public class PostgresLiveFanOutBenchmarks
     [Benchmark]
     public async Task<int> FanOut_NoIO()
     {
-        var feed = new EventLogFeed<EventLogRow<IDomainEvent>>(_ =>
-            Task.FromResult<IEventLogSession<EventLogRow<IDomainEvent>>>(new Session(_decoder, _rows, _streamIds)));
+        var source = new Source(_decoder, _rows, _streamIds);
+
+        await using var tail = new EventLogTail<IDomainEvent, EventLogRow<IDomainEvent>, string, StreamPosition,
+            LogPosition>(() => source, TailOptions);
 
         var subscribers = new Subscriber[SubscriberCount];
-        var attachments = new IDisposable[SubscriberCount];
+        var attachments = new IAsyncDisposable[SubscriberCount];
 
         for (var i = 0; i < subscribers.Length; i++)
         {
             subscribers[i] = new Subscriber(EventCount, _filter);
-            attachments[i] = feed.Attach(subscribers[i]);
+            attachments[i] = await tail.AttachAsync(subscribers[i]);
         }
 
-        await using (await feed.ConnectAsync())
-        {
-            await Task.WhenAll(subscribers.Select(x => x.Completion));
-        }
+        // The source's read waits until every subscriber has attached, so that each one is offered every row.
+        source.Release();
+        await Task.WhenAll(subscribers.Select(x => x.Completion));
 
         var deliveredCount = 0;
 
         for (var i = 0; i < subscribers.Length; i++)
         {
-            attachments[i].Dispose();
+            await attachments[i].DisposeAsync();
             subscribers[i].Dispose();
             deliveredCount += subscribers[i].DeliveredCount;
         }
@@ -97,48 +99,90 @@ public class PostgresLiveFanOutBenchmarks
     }
 
     /// <summary>
-    /// Sets its one row for each insert and yields it undecoded, as the replication session does, then stays open, as a
-    /// live session would.
+    /// Starts at an empty log, then, once released, sets its one row for each event and yields it undecoded, as
+    /// PostgreSQL's source does. Later reads find nothing, and nothing is ever heard.
     /// </summary>
-    private sealed class Session(
+    private sealed class Source(
         IEventDecoder<IDomainEvent, PostgresEventData, string> decoder,
         EncodedEvent<PostgresEventData, string>[] rows,
-        string[] streamIds) : IEventLogSession<EventLogRow<IDomainEvent>>
+        string[] streamIds) :
+        IEventSubscriptionSource<EventLogRow<IDomainEvent>, string, StreamPosition, LogPosition>
     {
         private readonly EventLogRow<IDomainEvent> _row = new(decoder);
+        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private bool _hasRead;
 
-        public string Description => "no I/O";
+        public void Release() => _released.TrySetResult();
 
-        public async IAsyncEnumerable<EventLogRow<IDomainEvent>> ReadAsync(
+        public ValueTask<LogPosition?> ReadEndPositionAsync(CancellationToken cancellationToken)
+        {
+            return new ValueTask<LogPosition?>((LogPosition?)null);
+        }
+
+        public async IAsyncEnumerable<EventLogRow<IDomainEvent>> ReadAllAsync(
+            LogPosition? fromExclusive,
+            LogPosition? toInclusive,
+            EventFilter filter,
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
+            if (_hasRead)
+                yield break;
+
+            _hasRead = true;
+            await _released.Task.WaitAsync(cancellationToken);
+
             for (var i = 0; i < rows.Length; i++)
             {
                 var (eventName, eventData, metadata) = rows[i];
-
                 var streamId = streamIds[i % streamIds.Length];
 
                 _row.Set(i, streamId, i, eventName, eventData, metadata, NoIOEventStore.CreatedAt);
 
                 yield return _row;
             }
-
-            await Task.Delay(Timeout.Infinite, cancellationToken);
         }
+
+        public ValueTask<StreamPosition?> ReadStreamEndPositionAsync(
+            string streamId,
+            CancellationToken cancellationToken)
+        {
+            return new ValueTask<StreamPosition?>((StreamPosition?)null);
+        }
+
+        public IAsyncEnumerable<EventLogRow<IDomainEvent>> ReadStreamAsync(
+            string streamId,
+            StreamPosition? fromExclusive,
+            StreamPosition toInclusive,
+            EventFilter filter,
+            CancellationToken cancellationToken)
+        {
+            return AsyncEnumerable.Empty<EventLogRow<IDomainEvent>>();
+        }
+
+        public async IAsyncEnumerable<LogPosition> ListenForAppendsAsync(
+            [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            yield break;
+        }
+
+        public bool IsTransientError(Exception exception) => false;
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     /// <summary>
-    /// Stands in for a subscription. It passes each row to the observer that a subscription attaches to the feed, and
-    /// takes whatever the observer queued straight off the queue again, in place of a subscriber reading on another
-    /// thread, so that a run does the same work every time.
+    /// Stands in for a subscription. It passes each row to the queue that a subscription attaches to the tail, and
+    /// takes whatever the queue holds straight off it again, in place of a subscriber reading on another thread, so
+    /// that a run does the same work every time.
     /// </summary>
     private sealed class Subscriber(int expectedCount, EventFilter filter) :
-        IEventLogObserver<EventLogRow<IDomainEvent>>,
+        ITailObserver<EventLogRow<IDomainEvent>>,
         IDisposable
     {
-        private readonly SubscriptionObserver _observer = new(SubscriptionOptions.Default.QueueCapacity, filter);
+        private readonly
+            SubscriptionQueue<IDomainEvent, EventLogRow<IDomainEvent>, string, StreamPosition, LogPosition> _queue =
+                new(SubscriptionOptions.Default.QueueCapacity, filter.Matches);
 
         private readonly TaskCompletionSource _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _offeredCount;
@@ -147,28 +191,19 @@ public class PostgresLiveFanOutBenchmarks
 
         public int DeliveredCount { get; private set; }
 
-        public ValueTask OnNextAsync(EventLogRow<IDomainEvent> row, CancellationToken cancellationToken)
+        public void OnNext(EventLogRow<IDomainEvent> sourceEvent)
         {
-            // The observer never waits.
-            _observer.OnNextAsync(row, cancellationToken).GetAwaiter().GetResult();
+            _queue.OnNext(sourceEvent);
 
-            if (_observer.Reader.TryRead(out _))
+            if (_queue.Reader.TryRead(out _))
                 DeliveredCount++;
 
             if (++_offeredCount == expectedCount)
                 _completion.TrySetResult();
-
-            return ValueTask.CompletedTask;
         }
 
-        public ValueTask OnResetAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
+        public void OnError(Exception error) => _completion.TrySetException(error);
 
-        public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken)
-        {
-            _completion.TrySetException(exception);
-            return ValueTask.CompletedTask;
-        }
-
-        public void Dispose() => _observer.Dispose();
+        public void Dispose() => _queue.Dispose();
     }
 }

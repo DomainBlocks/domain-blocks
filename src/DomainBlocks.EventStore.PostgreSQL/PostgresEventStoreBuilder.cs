@@ -114,8 +114,7 @@ public sealed class PostgresEventStoreBuilder<TEvent> :
                 _options,
                 _adminOptions,
                 logger,
-                isDataSourceOwned,
-                replicationConnectionStringFallback: isDataSourceOwned ? _connectionString : null);
+                isDataSourceOwned);
 
             return Decorate(store);
         }
