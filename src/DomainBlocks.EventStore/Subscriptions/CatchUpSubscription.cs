@@ -20,7 +20,8 @@ namespace DomainBlocks.EventStore.Subscriptions;
 /// <para>
 /// A transient error in the catch-up's reads is retried with backoff, as the tail retries its own. A replay resumes
 /// after the last event it handed on, up to the same end, so no event is missed or delivered twice. Any other error
-/// fails the subscription.
+/// fails the subscription, as does a transient one once the catch-up has gone
+/// <see cref="EventLogTailOptions.RetryTimeout"/> without handing on an event or completing a read.
 /// </para>
 /// </remarks>
 internal sealed class CatchUpSubscription<TEvent, TSourceEvent, TStreamId, TStreamPos, TLogPos, TPos> :
@@ -202,17 +203,19 @@ internal sealed class CatchUpSubscription<TEvent, TSourceEvent, TStreamId, TStre
 
         await using (source.ConfigureAwait(false))
         {
-            var pipeline = SubscriptionRetry.CreatePipeline(
+            var retry = new SubscriptionRetry(
                 source.IsTransientError,
                 _retryOptions,
                 (ex, attempt, delay) => _logger?.SubscriptionRetrying(ex, _correlationId, attempt, delay));
 
-            var endInclusive = await pipeline
+            var endInclusive = await retry.Pipeline
                 .ExecuteAsync(
                     static (state, ct) => state.Target.ReadEndPositionAsync(state.Source, ct),
                     (Target: _target, Source: source),
                     cancellationToken)
                 .ConfigureAwait(false);
+
+            retry.OnProgress();
 
             _logger?.CatchUpBoundary(_correlationId, endInclusive?.Value);
 
@@ -220,12 +223,12 @@ internal sealed class CatchUpSubscription<TEvent, TSourceEvent, TStreamId, TStre
             {
                 if (!resumeFromEnd && !resumePosition.Covers(end))
                 {
-                    var replay = new Replay(_target, source, resumePosition.After, end, _options.Filter);
+                    var replay = new Replay(_target, source, resumePosition.After, end, _options.Filter, retry);
 
                     await using (replay.ConfigureAwait(false))
                     {
                         // Each event is valid only until the next is read, so it is decoded before it is handed on.
-                        while (await pipeline
+                        while (await retry.Pipeline
                                    .ExecuteAsync(static (r, ct) => r.MoveNextAsync(ct), replay, cancellationToken)
                                    .ConfigureAwait(false))
                         {
@@ -283,7 +286,8 @@ internal sealed class CatchUpSubscription<TEvent, TSourceEvent, TStreamId, TStre
         IEventSubscriptionSource<TSourceEvent, TStreamId, TStreamPos, TLogPos> source,
         TPos? after,
         TPos endInclusive,
-        EventFilter filter) :
+        EventFilter filter,
+        SubscriptionRetry retry) :
         IAsyncDisposable
     {
         private IAsyncEnumerator<TSourceEvent>? _events;
@@ -307,6 +311,8 @@ internal sealed class CatchUpSubscription<TEvent, TSourceEvent, TStreamId, TStre
             try
             {
                 _hasCurrent = await _events.MoveNextAsync().ConfigureAwait(false);
+                retry.OnProgress();
+
                 return _hasCurrent;
             }
             catch

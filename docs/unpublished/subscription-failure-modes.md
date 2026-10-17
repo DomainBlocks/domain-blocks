@@ -268,7 +268,10 @@ then reads the rest of the log in order through `EventLogCursor`, handing each e
   the highest position heard of before it read. It also reads again every `PollInterval`, 1 second by default, in case
   a wake was lost.
 - **Transient errors.** The cursor retries from the last event it handed on, with backoff from `RetryDelay` (1 second)
-  to `MaxRetryDelay` (1 minute), and logs each retry. Any other error is passed to every observer and fails the tail.
+  to `MaxRetryDelay` (1 minute), and logs each retry. It gives up once it has gone `RetryTimeout` (5 minutes) without
+  handing on an event or completing a read, so a store that stays unreachable fails the subscriptions instead of
+  stalling them, while a connection that keeps dropping but still delivers events is not given up on. A failure that
+  is given up on, and any error that is not transient, is passed to every observer and fails the tail.
 - **The wake signal.** `AppendWatcher` runs the store's listener, keeps the highest position it has heard of, and
   wakes any number of waiters. It never fails. It restarts the listener with backoff after any error or end, and its
   backoff starts again once the listener has heard something. It starts listening before the tail reads the end, so
@@ -294,8 +297,8 @@ The end is read after the queue is attached, so together they cover every event.
 still runs to its end, so every cycle makes progress. The cycle ends once the queue is drained. If the subscriber had
 caught up, it gets `FellBehind`, and the next cycle resumes after the last event that was delivered or covered.
 Losing a connection never causes `FellBehind`. A catch-up retries a transient error in its reads as the tail does, with
-the same delays. A replay resumes after the last event it handed on, up to the same end. Any other error fails the
-subscription.
+the same delays and the same timeout. A replay resumes after the last event it handed on, up to the same end. Any other
+error fails the subscription.
 
 ### PostgreSQL
 
