@@ -40,9 +40,4 @@ public sealed class PostgresEventStoreOptions
     /// have caught up.
     /// </summary>
     public EventLogTailOptions Tail { get; set; } = EventLogTailOptions.Default;
-
-    /// <summary>
-    /// Gets or sets the options for the replication connection that feeds live subscriptions.
-    /// </summary>
-    public PostgresReplicationOptions Replication { get; set; } = new();
 }

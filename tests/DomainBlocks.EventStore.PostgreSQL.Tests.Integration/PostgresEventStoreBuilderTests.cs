@@ -1,7 +1,6 @@
 using DomainBlocks.Testing.Events;
 using DomainBlocks.Testing.Integration.EventStore;
 using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
-using Npgsql;
 using NUnit.Framework;
 using Shouldly;
 
@@ -19,7 +18,7 @@ public class PostgresEventStoreBuilderTests
     public async Task OwnedPath_InitializeAppendReadSubscribeDispose_Works(CancellationToken ct)
     {
         var store = new PostgresEventStoreBuilder<object>()
-            .UseConnectionString(ConnectionStringWithoutPersistedSecurityInfo())
+            .UseConnectionString(PostgresTestEnvironment.ConnectionString)
             .UseOptions(_options)
             .ConfigureCodec(x => x.MapEvent<TestEvent>())
             .UseLoggerFactory(PostgresTestEnvironment.LoggerFactory)
@@ -87,15 +86,5 @@ public class PostgresEventStoreBuilderTests
         var read = (await store.ReadStream("s1").ToArrayAsync()).ShouldHaveSingleItem();
         read.Payload.ShouldBe(appended);
         read.Metadata.ShouldBe(new Dictionary<string, string> { ["k"] = "v" });
-    }
-
-    private static string ConnectionStringWithoutPersistedSecurityInfo()
-    {
-        var builder = new NpgsqlConnectionStringBuilder(PostgresTestEnvironment.ConnectionString)
-        {
-            PersistSecurityInfo = false
-        };
-
-        return builder.ConnectionString;
     }
 }

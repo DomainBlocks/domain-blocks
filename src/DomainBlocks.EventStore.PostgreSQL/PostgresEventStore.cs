@@ -12,7 +12,6 @@ public static class PostgresEventStore
         NpgsqlDataSource dataSource,
         IEventCodec<TEvent, PostgresEventData, string> eventCodec,
         PostgresEventStoreOptions options,
-        PostgresEventStoreAdminOptions adminOptions,
         ILogger? logger,
         bool ownsDataSource)
         where TEvent : notnull
@@ -35,7 +34,6 @@ public static class PostgresEventStore
             dataSource,
             ownsDataSource,
             options,
-            adminOptions,
             appender,
             reader,
             subscriptions,
@@ -55,7 +53,6 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
     private readonly NpgsqlDataSource _dataSource;
     private readonly bool _ownsDataSource;
     private readonly PostgresEventStoreOptions _options;
-    private readonly PostgresEventStoreAdminOptions _adminOptions;
     private readonly IAppender _appender;
     private readonly EventLogReader<TEvent> _reader;
     private readonly EventLogSubscriptions<TEvent, EventLogRow<TEvent>, string, StreamPosition, LogPosition>
@@ -66,7 +63,6 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         NpgsqlDataSource dataSource,
         bool ownsDataSource,
         PostgresEventStoreOptions options,
-        PostgresEventStoreAdminOptions adminOptions,
         IAppender appender,
         EventLogReader<TEvent> reader,
         EventLogSubscriptions<TEvent, EventLogRow<TEvent>, string, StreamPosition, LogPosition> subscriptions,
@@ -75,7 +71,6 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         _dataSource = dataSource;
         _ownsDataSource = ownsDataSource;
         _options = options;
-        _adminOptions = adminOptions;
         _appender = appender;
         _reader = reader;
         _subscriptions = subscriptions;
@@ -83,12 +78,12 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
     }
 
     /// <summary>
-    /// Creates the schema, types, tables, functions, and publication the store uses, if they do not exist. Idempotent
-    /// and safe to call concurrently from several processes.
+    /// Creates the schema, types, tables, and functions the store uses, if they do not exist. Idempotent and safe to
+    /// call concurrently from several processes.
     /// </summary>
     public Task EnsureInitializedAsync(CancellationToken cancellationToken = default)
     {
-        return PostgresEventStoreAdmin.EnsureInitializedAsync(_dataSource, _options, _adminOptions, cancellationToken);
+        return PostgresEventStoreAdmin.EnsureInitializedAsync(_dataSource, _options, cancellationToken);
     }
 
     public async Task AppendAsync(

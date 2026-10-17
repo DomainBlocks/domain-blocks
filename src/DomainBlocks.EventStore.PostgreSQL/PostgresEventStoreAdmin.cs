@@ -5,19 +5,17 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 public static class PostgresEventStoreAdmin
 {
     /// <summary>
-    /// Creates the schema, types, tables, functions, and publication the event store uses, if they do not exist.
-    /// Idempotent and safe to call concurrently from several processes.
+    /// Creates the schema, types, tables, and functions the event store uses, if they do not exist. Idempotent and safe
+    /// to call concurrently from several processes.
     /// </summary>
     public static async Task EnsureInitializedAsync(
         NpgsqlDataSource dataSource,
         PostgresEventStoreOptions? options = null,
-        PostgresEventStoreAdminOptions? adminOptions = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(dataSource);
 
         options ??= new PostgresEventStoreOptions();
-        adminOptions ??= new PostgresEventStoreAdminOptions();
 
         var names = new SchemaObjectNames(options.Schema);
 
@@ -28,9 +26,6 @@ public static class PostgresEventStoreAdmin
             await ExecuteAsync(connection, SqlScripts.AppendHelpers(names), cancellationToken).ConfigureAwait(false);
             await ExecuteAsync(connection, SqlScripts.AppendEvents(names), cancellationToken).ConfigureAwait(false);
 
-            if (adminOptions.CreatePublication)
-                await EnsurePublicationAsync(connection, names, cancellationToken).ConfigureAwait(false);
-
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
 
@@ -39,7 +34,7 @@ public static class PostgresEventStoreAdmin
     }
 
     /// <summary>
-    /// Drops the publication and the schema, including all events. Intended for tests and tooling.
+    /// Drops the schema, including all events. Intended for tests and tooling.
     /// </summary>
     public static async Task DropAsync(
         NpgsqlDataSource dataSource,
@@ -53,28 +48,7 @@ public static class PostgresEventStoreAdmin
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-        await ExecuteAsync(
-                connection,
-                $"DROP PUBLICATION IF EXISTS {names.Publication}; DROP SCHEMA IF EXISTS {names.Schema} CASCADE;",
-                cancellationToken)
-            .ConfigureAwait(false);
-    }
-
-    private static async Task EnsurePublicationAsync(
-        NpgsqlConnection connection,
-        SchemaObjectNames names,
-        CancellationToken cancellationToken)
-    {
-        await using var exists = new NpgsqlCommand("SELECT 1 FROM pg_publication WHERE pubname = $1", connection);
-        exists.Parameters.Add(new NpgsqlParameter<string> { TypedValue = names.Publication });
-
-        if (await exists.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is not null)
-            return;
-
-        await ExecuteAsync(
-                connection,
-                $"CREATE PUBLICATION {names.Publication} FOR TABLE {names.EventLog} WITH (publish = 'insert')",
-                cancellationToken)
+        await ExecuteAsync(connection, $"DROP SCHEMA IF EXISTS {names.Schema} CASCADE;", cancellationToken)
             .ConfigureAwait(false);
     }
 
