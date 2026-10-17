@@ -235,10 +235,9 @@ internal sealed class EventLogReader<TEvent>(
     // Runs the read with the replication barrier after it, in one round trip, so that subscriptions are only given
     // events that a failover cannot undo. The batch is one transaction, and its commit waits for the synchronous
     // standbys, so it covers every commit that the read saw. Rows can reach the client before the commit, so the read's
-    // result is used only once the batch completes. A canceled wait completes with only a warning, so after a warning a
-    // CommitConfirmation checks the barrier, and the result is used only if the barrier is confirmed. Without
-    // synchronous standbys the barrier does nothing: every append commits with synchronous_commit on, so it is flushed
-    // before a read can see it.
+    // result is used only once the batch completes. A canceled wait completes with only a warning, so that warning
+    // means that the barrier was not confirmed. Without synchronous standbys the barrier does nothing: every append
+    // commits with synchronous_commit on, so it is flushed before a read can see it.
     private async Task<T> ReadWithBarrierAsync<T>(
         NpgsqlBatchCommand read,
         NpgsqlBatchCommand barrier,
@@ -273,23 +272,19 @@ internal sealed class EventLogReader<TEvent>(
             {
                 connection.Notice -= OnNotice;
             }
-
-            // A canceled wait completes as if it had been confirmed, so a canceled caller must not use the result.
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (warning is not null)
-            {
-                await CommitConfirmation
-                    .ConfirmAsync(connection, warning, "The replication barrier", cancellationToken)
-                    .ConfigureAwait(false);
-            }
         }
+
+        // A canceled wait completes as if it had been confirmed, so a canceled caller must not use the result.
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (warning is not null)
+            throw new CommitNotConfirmedException($"The replication barrier was not confirmed: {warning.MessageText}");
 
         return result;
 
         void OnNotice(object? sender, NpgsqlNoticeEventArgs e)
         {
-            if (CommitConfirmation.IsWarning(e.Notice))
+            if (CommitNotices.IsUnconfirmedCommit(e.Notice))
                 warning ??= e.Notice;
         }
     }

@@ -19,8 +19,9 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// </para>
 /// <para>
 /// A commit whose wait is canceled, by a cancel request or <c>pg_cancel_backend</c>, stands on the primary and
-/// completes without an error, with only a warning. So a warning during the batch is followed by a
-/// <see cref="CommitConfirmation"/>, and a commit that it does not confirm completes no request either.
+/// completes without an error, with only a warning. So that warning makes the batch throw
+/// <see cref="CommitNotConfirmedException"/> instead of completing any request. The caller runs the batch again, and
+/// the commit IDs report the requests that committed as duplicates once the standbys have them.
 /// </para>
 /// </remarks>
 internal sealed class AppendBatchCommand : IDisposable
@@ -118,13 +119,12 @@ internal sealed class AppendBatchCommand : IDisposable
                 _command.Connection = null;
                 connection.Notice -= OnNotice;
             }
+        }
 
-            if (warning is not null)
-            {
-                await CommitConfirmation
-                    .ConfirmAsync(connection, warning, "The append batch", cancellationToken)
-                    .ConfigureAwait(false);
-            }
+        if (warning is not null)
+        {
+            throw new CommitNotConfirmedException(
+                $"The append batch committed on the primary, but its commit was not confirmed: {warning.MessageText}");
         }
 
         // The function returns exactly one row per request, so a request without a row means the protocol was broken.
@@ -139,7 +139,7 @@ internal sealed class AppendBatchCommand : IDisposable
 
         void OnNotice(object? sender, NpgsqlNoticeEventArgs e)
         {
-            if (CommitConfirmation.IsWarning(e.Notice))
+            if (CommitNotices.IsUnconfirmedCommit(e.Notice))
                 warning ??= e.Notice;
         }
     }
