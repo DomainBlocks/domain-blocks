@@ -32,7 +32,6 @@ public class PostgresEventStoreAdminTests
 
         (await TableExistsAsync("event_log")).ShouldBeTrue();
         (await TableExistsAsync("sequences")).ShouldBeTrue();
-        (await PublicationExistsAsync()).ShouldBeTrue();
         (await GetSequenceNextAsync()).ShouldBe(0);
     }
 
@@ -119,7 +118,6 @@ public class PostgresEventStoreAdminTests
         await PostgresEventStoreAdmin.EnsureInitializedAsync(PostgresTestEnvironment.DataSource, _options);
 
         (await TableExistsAsync("event_log")).ShouldBeTrue();
-        (await PublicationExistsAsync()).ShouldBeTrue();
     }
 
     [Test]
@@ -132,7 +130,6 @@ public class PostgresEventStoreAdminTests
         await Task.WhenAll(tasks);
 
         (await TableExistsAsync("event_log")).ShouldBeTrue();
-        (await PublicationExistsAsync()).ShouldBeTrue();
         (await GetSequenceNextAsync()).ShouldBe(0);
     }
 
@@ -153,18 +150,6 @@ public class PostgresEventStoreAdminTests
     }
 
     [Test]
-    public async Task EnsureInitializedAsync_CreatePublicationDisabled_SkipsPublication()
-    {
-        await PostgresEventStoreAdmin.EnsureInitializedAsync(
-            PostgresTestEnvironment.DataSource,
-            _options,
-            new PostgresEventStoreAdminOptions { CreatePublication = false });
-
-        (await TableExistsAsync("event_log")).ShouldBeTrue();
-        (await PublicationExistsAsync()).ShouldBeFalse();
-    }
-
-    [Test]
     public void EnsureInitializedAsync_InvalidSchemaName_Throws()
     {
         var options = new PostgresEventStoreOptions { Schema = "Not-Valid" };
@@ -174,14 +159,13 @@ public class PostgresEventStoreAdminTests
     }
 
     [Test]
-    public async Task DropAsync_RemovesSchemaAndPublication()
+    public async Task DropAsync_RemovesSchema()
     {
         await PostgresEventStoreAdmin.EnsureInitializedAsync(PostgresTestEnvironment.DataSource, _options);
 
         await PostgresEventStoreAdmin.DropAsync(PostgresTestEnvironment.DataSource, _options);
 
         (await TableExistsAsync("event_log")).ShouldBeFalse();
-        (await PublicationExistsAsync()).ShouldBeFalse();
     }
 
     [Test]
@@ -197,16 +181,6 @@ public class PostgresEventStoreAdminTests
 
         command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = _options.Schema });
         command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = table });
-
-        return (bool)(await command.ExecuteScalarAsync())!;
-    }
-
-    private async Task<bool> PublicationExistsAsync()
-    {
-        await using var command = PostgresTestEnvironment.DataSource.CreateCommand(
-            "SELECT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = $1)");
-
-        command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = $"{_options.Schema}_event_log_pub" });
 
         return (bool)(await command.ExecuteScalarAsync())!;
     }

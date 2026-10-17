@@ -18,7 +18,7 @@ public static class PostgresTestEnvironment
     public static NpgsqlDataSource DataSource { get; private set; } = null!;
 
     /// <summary>
-    /// The data source's connection string with the password included, for replication connections.
+    /// The connection string that data sources for the server are built from, including the password.
     /// </summary>
     public static string ConnectionString { get; private set; } = null!;
 
@@ -31,20 +31,11 @@ public static class PostgresTestEnvironment
 
         var connectionString = new NpgsqlConnectionStringBuilder(_server.ConnectionString)
         {
-            // The replication connection is built from the data source's connection string, which only carries the
-            // password when security info is persisted.
-            PersistSecurityInfo = true,
-
             MaxAutoPrepare = 16
         };
 
         ConnectionString = connectionString.ConnectionString;
         DataSource = CreateDataSource();
-
-        await using var command = DataSource.CreateCommand("SHOW wal_level");
-
-        if (await command.ExecuteScalarAsync() is not "logical")
-            throw new InvalidOperationException("The test server must be started with wal_level=logical.");
     }
 
     /// <summary>
