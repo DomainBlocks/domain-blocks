@@ -4,9 +4,9 @@ using DomainBlocks.EventStore.Subscriptions;
 namespace DomainBlocks.EventStore.Tests.Unit.Subscriptions;
 
 /// <summary>
-/// Records the events and the error that a tail hands to it.
+/// Records the log positions of the events that a tail hands to it, and the error.
 /// </summary>
-internal sealed class RecordingTailObserver : ITailObserver<long>
+internal sealed class RecordingTailObserver : ITailObserver<TestSourceEvent>
 {
     private readonly Channel<long> _events = Channel.CreateUnbounded<long>();
 
@@ -15,7 +15,10 @@ internal sealed class RecordingTailObserver : ITailObserver<long>
 
     public Task<Exception> Error => _errorTcs.Task;
 
-    public void OnNext(long @event) => _events.Writer.TryWrite(@event);
+    public void OnNext(TestSourceEvent sourceEvent)
+    {
+        _events.Writer.TryWrite((long)sourceEvent.Context.LogPosition.Value);
+    }
 
     public void OnError(Exception error) => _errorTcs.TrySetResult(error);
 

@@ -1,3 +1,4 @@
+using DomainBlocks.EventStore.Filtering;
 using Microsoft.Extensions.Logging;
 using Polly;
 using Polly.Retry;
@@ -9,25 +10,29 @@ namespace DomainBlocks.EventStore.Subscriptions;
 /// </summary>
 /// <remarks>
 /// <para>
-/// After a full batch, the next read starts at once, since events may be left unread. After a short batch, it first
-/// waits until the source's listener yields a later position, or for <see cref="EventLogTailOptions.PollInterval"/>, so
-/// an append that is not heard costs at most one poll interval.
+/// Each read runs to the end of the log, so the next read first waits until the source's listener yields a later
+/// position, or for <see cref="EventLogTailOptions.PollInterval"/>, so an append that is not heard costs at most one
+/// poll interval.
 /// </para>
 /// <para>
-/// A transient error is retried with backoff from the same position, so no event is missed or read twice. Any other
-/// error is thrown.
+/// A transient error is retried with backoff from the last event that was handed on, so no event is missed or handed
+/// on twice. Any other error is thrown.
 /// </para>
 /// </remarks>
 /// <param name="source">The source to read, which the cursor disposes.</param>
-/// <param name="options">The batch size, poll interval and retry delays.</param>
+/// <param name="options">The poll interval and retry delays.</param>
 /// <param name="logger">The logger for retries and for restarts of the listener.</param>
 /// <param name="tailId">The ID of the tail session that reads through the cursor, which correlates its logs.</param>
-internal sealed class EventLogCursor<TSourceEvent, TLogPos>(
-    IEventLogCursorSource<TSourceEvent, TLogPos> source,
+internal sealed class EventLogCursor<TEvent, TSourceEvent, TStreamId, TStreamPos, TLogPos>(
+    IEventSubscriptionSource<TSourceEvent, TStreamId, TStreamPos, TLogPos> source,
     EventLogTailOptions options,
     ILogger? logger,
     string tailId) :
     IAsyncDisposable
+    where TEvent : notnull
+    where TSourceEvent : IReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>
+    where TStreamId : notnull
+    where TStreamPos : struct
     where TLogPos : struct, IComparable<TLogPos>
 {
     private readonly ResiliencePipeline _pipeline = CreatePipeline(source, options, logger, tailId);
@@ -40,8 +45,8 @@ internal sealed class EventLogCursor<TSourceEvent, TLogPos>(
     private bool _waitForAppend;
 
     /// <summary>
-    /// Reads the end of the log and moves there. The next <see cref="ReadNextAsync"/> reads the events appended after
-    /// it, without waiting first.
+    /// Reads the end of the log and moves there. The next <see cref="ReadAsync"/> reads the events appended after it,
+    /// without waiting first.
     /// </summary>
     public async ValueTask SeekToEndAsync(CancellationToken cancellationToken)
     {
@@ -56,44 +61,36 @@ internal sealed class EventLogCursor<TSourceEvent, TLogPos>(
     }
 
     /// <summary>
-    /// Reads the next batch of events, waiting until at least one has been appended, so the batch is never empty. The
-    /// events are valid only until the next call.
+    /// Reads the events appended since the last read, to the end of the log, and hands each to
+    /// <paramref name="onEvent"/>, which must not throw. Unless this is the first read since
+    /// <see cref="SeekToEndAsync"/>, it first waits until an append is heard, or for the poll interval. Each event is
+    /// valid only during its call to <paramref name="onEvent"/>.
     /// </summary>
-    public async ValueTask<IReadOnlyList<TSourceEvent>> ReadNextAsync(CancellationToken cancellationToken)
+    public async ValueTask ReadAsync(Action<TSourceEvent> onEvent, CancellationToken cancellationToken)
     {
-        while (true)
+        // If the wait times out, the cursor reads anyway in case the append was not heard.
+        if (_waitForAppend)
         {
-            // If the wait times out, the cursor reads anyway in case the append was not heard.
-            if (_waitForAppend)
-            {
-                await _appendWatcher
-                    .WaitAsync(_waitAfter, options.PollInterval, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-
-            // Taken before the read, so an append heard during the read ends the next wait at once.
-            var heardBeforeRead = _appendWatcher.HighWaterMark;
-
-            var batch = await _pipeline
-                .ExecuteAsync(
-                    static (state, ct) => state.Source.ReadAsync(state.Position, state.MaxCount, ct),
-                    (Source: source, Position: _position, MaxCount: options.MaxBatchSize),
-                    cancellationToken)
+            await _appendWatcher
+                .WaitAsync(_waitAfter, options.PollInterval, cancellationToken)
                 .ConfigureAwait(false);
-
-            // A full batch may have left events unread, so only a short one waits before the next read.
-            _waitForAppend = batch.Count < options.MaxBatchSize;
-
-            if (batch.Count > 0)
-                _position = source.GetLogPosition(batch[^1]);
-
-            // The next wait ends at an append after both the read and what was heard before it. An append that was
-            // heard but was not yet readable then waits for a later one, instead of being read for again and again.
-            _waitAfter = AppendWatcher<TLogPos>.IsAfter(heardBeforeRead, _position) ? heardBeforeRead : _position;
-
-            if (batch.Count > 0)
-                return batch;
         }
+
+        // Taken before the read, so an append heard during the read ends the next wait at once.
+        var heardBeforeRead = _appendWatcher.HighWaterMark;
+
+        await _pipeline
+            .ExecuteAsync(
+                static (state, ct) => state.Cursor.ReadToEndAsync(state.OnEvent, ct),
+                (Cursor: this, OnEvent: onEvent),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        // The read ran to the end of the log, so the next one waits. That wait ends at an append after both the read
+        // and what was heard before it, so an append that was heard but was not yet readable waits for a later one,
+        // instead of being read for again and again.
+        _waitForAppend = true;
+        _waitAfter = AppendWatcher<TLogPos>.IsAfter(heardBeforeRead, _position) ? heardBeforeRead : _position;
     }
 
     public async ValueTask DisposeAsync()
@@ -102,8 +99,20 @@ internal sealed class EventLogCursor<TSourceEvent, TLogPos>(
         await source.DisposeAsync().ConfigureAwait(false);
     }
 
+    // The position moves past each event once it has been handed on, so a retry resumes after the last one.
+    private async ValueTask ReadToEndAsync(Action<TSourceEvent> onEvent, CancellationToken cancellationToken)
+    {
+        var events = source.ReadAllAsync(_position, toInclusive: null, EventFilter.All, cancellationToken);
+
+        await foreach (var e in events.ConfigureAwait(false))
+        {
+            onEvent(e);
+            _position = e.Context.LogPosition;
+        }
+    }
+
     private static ResiliencePipeline CreatePipeline(
-        IEventLogCursorSource<TSourceEvent, TLogPos> source,
+        IEventSubscriptionSource<TSourceEvent, TStreamId, TStreamPos, TLogPos> source,
         EventLogTailOptions options,
         ILogger? logger,
         string tailId)

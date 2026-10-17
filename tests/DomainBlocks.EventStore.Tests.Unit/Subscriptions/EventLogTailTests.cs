@@ -61,7 +61,7 @@ public class EventLogTailTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task AttachAsync_TailRunning_SharesCursorSource(CancellationToken ct)
+    public async Task AttachAsync_TailRunning_SharesSource(CancellationToken ct)
     {
         var eventLog = new TestEventLog();
         await using var tail = CreateTail(eventLog);
@@ -69,7 +69,7 @@ public class EventLogTailTests
         await using var attachment1 = await tail.AttachAsync(new RecordingTailObserver(), cancellationToken: ct);
         await using var attachment2 = await tail.AttachAsync(new RecordingTailObserver(), cancellationToken: ct);
 
-        eventLog.CursorSourceCreatedCount.ShouldBe(1);
+        eventLog.SourceCreatedCount.ShouldBe(1);
         eventLog.EndPositionReadCount.ShouldBe(1);
     }
 
@@ -84,11 +84,11 @@ public class EventLogTailTests
 
         await attachment1.DisposeAsync();
 
-        eventLog.CursorSourceDisposedCount.ShouldBe(0);
+        eventLog.SourceDisposedCount.ShouldBe(0);
 
         await attachment2.DisposeAsync();
 
-        eventLog.CursorSourceDisposedCount.ShouldBe(1);
+        eventLog.SourceDisposedCount.ShouldBe(1);
     }
 
     [Test]
@@ -103,7 +103,7 @@ public class EventLogTailTests
         await attachment1.DisposeAsync();
         await attachment1.DisposeAsync();
 
-        eventLog.CursorSourceDisposedCount.ShouldBe(0);
+        eventLog.SourceDisposedCount.ShouldBe(0);
     }
 
     [Test]
@@ -121,12 +121,12 @@ public class EventLogTailTests
         eventLog.Append();
 
         (await observer.ReadAsync(1, ct)).ShouldBe([3]);
-        eventLog.CursorSourceCreatedCount.ShouldBe(2);
+        eventLog.SourceCreatedCount.ShouldBe(2);
     }
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task ReadNextAsync_TransientFailures_RetriesWithoutGapsOrDuplicates(CancellationToken ct)
+    public async Task ReadAsync_TransientFailures_RetriesWithoutGapsOrDuplicates(CancellationToken ct)
     {
         var eventLog = new TestEventLog();
         await using var tail = CreateTail(eventLog);
@@ -139,12 +139,12 @@ public class EventLogTailTests
 
         eventLog.Append();
         (await observer.ReadAsync(1, ct)).ShouldBe([3]);
-        eventLog.CursorSourceCreatedCount.ShouldBe(1);
+        eventLog.SourceCreatedCount.ShouldBe(1);
     }
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task ReadNextAsync_NonTransientFailure_StopsTailAndNotifiesEveryObserver(CancellationToken ct)
+    public async Task ReadAsync_NonTransientFailure_StopsTailAndNotifiesEveryObserver(CancellationToken ct)
     {
         var eventLog = new TestEventLog();
         await using var tail = CreateTail(eventLog);
@@ -159,7 +159,7 @@ public class EventLogTailTests
 
         (await observer1.Error.WaitAsync(ct)).ShouldBeSameAs(exception);
         (await observer2.Error.WaitAsync(ct)).ShouldBeSameAs(exception);
-        eventLog.CursorSourceDisposedCount.ShouldBe(1);
+        eventLog.SourceDisposedCount.ShouldBe(1);
     }
 
     [Test]
@@ -179,7 +179,7 @@ public class EventLogTailTests
         eventLog.Append();
 
         (await observer.ReadAsync(1, ct)).ShouldBe([2]);
-        eventLog.CursorSourceCreatedCount.ShouldBe(2);
+        eventLog.SourceCreatedCount.ShouldBe(2);
     }
 
     [Test]
@@ -213,7 +213,7 @@ public class EventLogTailTests
 
         thrown.ShouldBeSameAs(exception);
         await using var attachment = await tail.AttachAsync(new RecordingTailObserver(), cancellationToken: ct);
-        eventLog.CursorSourceCreatedCount.ShouldBe(2);
+        eventLog.SourceCreatedCount.ShouldBe(2);
     }
 
     [Test]
@@ -230,7 +230,7 @@ public class EventLogTailTests
             .AttachAsync(new RecordingTailObserver(), cancellationToken: attachCts.Token)
             .ShouldThrowAsync<OperationCanceledException>();
 
-        eventLog.CursorSourceDisposedCount.ShouldBe(1);
+        eventLog.SourceDisposedCount.ShouldBe(1);
     }
 
     [Test]
@@ -246,7 +246,7 @@ public class EventLogTailTests
 
         await attachment.DisposeAsync();
 
-        eventLog.CursorSourceDisposedCount.ShouldBe(1);
+        eventLog.SourceDisposedCount.ShouldBe(1);
     }
 
     [Test]
@@ -276,7 +276,7 @@ public class EventLogTailTests
 
         await tail.DisposeAsync();
 
-        eventLog.CursorSourceDisposedCount.ShouldBe(1);
+        eventLog.SourceDisposedCount.ShouldBe(1);
 
         await tail
             .AttachAsync(new RecordingTailObserver(), cancellationToken: ct)
@@ -284,7 +284,7 @@ public class EventLogTailTests
 
         // Detaching after the tail is disposed is harmless.
         await attachment.DisposeAsync();
-        eventLog.CursorSourceDisposedCount.ShouldBe(1);
+        eventLog.SourceDisposedCount.ShouldBe(1);
     }
 
     [Test]
@@ -300,19 +300,24 @@ public class EventLogTailTests
         await tail.DisposeAsync();
 
         await attachTask.ShouldThrowAsync<ObjectDisposedException>();
-        eventLog.CursorSourceDisposedCount.ShouldBe(1);
+        eventLog.SourceDisposedCount.ShouldBe(1);
     }
 
-    private static EventLogTail<long, long> CreateTail(TestEventLog eventLog, EventLogTailOptions? options = null)
+    private static EventLogTail<string, TestSourceEvent, string, StreamPosition, LogPosition> CreateTail(
+        TestEventLog eventLog,
+        EventLogTailOptions? options = null)
     {
-        return new EventLogTail<long, long>(eventLog.CreateSource, options ?? Options, Logger);
+        return new EventLogTail<string, TestSourceEvent, string, StreamPosition, LogPosition>(
+            eventLog.CreateSource,
+            options ?? Options,
+            Logger);
     }
 
-    private sealed class ThrowingObserver : ITailObserver<long>
+    private sealed class ThrowingObserver : ITailObserver<TestSourceEvent>
     {
         public int OnNextCount { get; private set; }
 
-        public void OnNext(long @event)
+        public void OnNext(TestSourceEvent sourceEvent)
         {
             OnNextCount++;
             throw new InvalidOperationException("The test observer failed.");

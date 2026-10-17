@@ -25,19 +25,6 @@ public sealed class EventLogTailOptions
     } = TimeSpan.FromSeconds(1);
 
     /// <summary>
-    /// Gets the maximum number of events that one read of the log returns. The default is 1,000.
-    /// </summary>
-    public int MaxBatchSize
-    {
-        get;
-        init
-        {
-            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value);
-            field = value;
-        }
-    } = 1_000;
-
-    /// <summary>
     /// Gets the delay before the tail retries a read that failed with a transient error, or listens for appends again
     /// after listening failed. The delay doubles, with jitter, on each consecutive failure, up to
     /// <see cref="MaxRetryDelay"/>. The default is 1 second.
