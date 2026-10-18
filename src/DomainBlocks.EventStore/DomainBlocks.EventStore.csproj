@@ -4,6 +4,29 @@
     <IsPackable>true</IsPackable>
   </PropertyGroup>
 
+  <!--
+    A store must need only the public API, so that stores outside this repository can be written. These two remain
+    only while the stores' own subscriptions use CorrelationId, until the shared subscription replaces them.
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="DomainBlocks.EventStore.MongoDB"/>
+    <InternalsVisibleTo Include="DomainBlocks.EventStore.PostgreSQL"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DomainBlocks.EventStore.Benchmarks"/>
+    <InternalsVisibleTo Include="DomainBlocks.EventStore.MongoDB.Tests.Integration"/>
+    <InternalsVisibleTo Include="DomainBlocks.EventStore.MongoDB.Tests.Unit"/>
+    <InternalsVisibleTo Include="DomainBlocks.EventStore.PostgreSQL.Tests.Integration"/>
+    <InternalsVisibleTo Include="DomainBlocks.EventStore.PostgreSQL.Tests.Unit"/>
+    <InternalsVisibleTo Include="DomainBlocks.EventStore.Tests.Unit"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Polly.Core" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\DomainBlocks.Core\DomainBlocks.Core.csproj"/>
     <ProjectReference Include="..\DomainBlocks.Serialization.Abstractions\DomainBlocks.Serialization.Abstractions.csproj"/>
