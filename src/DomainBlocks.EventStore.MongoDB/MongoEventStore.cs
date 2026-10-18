@@ -74,7 +74,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
     private readonly IMongoSequencedAppender<BsonDocument, AppendContext> _sequencedAppender;
     private readonly IMongoCollection<BsonDocument> _eventLog;
     private readonly IEventCodec<TEvent, BsonValue, BsonValue> _eventCodec;
-    private readonly EventLogSubscriptions<TEvent, EventLogDocument<TEvent>, string, StreamPosition, LogPosition>
+    private readonly CatchUpSubscriptionFactory<EventLogDocument<TEvent>, TEvent, string, StreamPosition, LogPosition>
         _subscriptions;
 
     internal MongoEventStore(
@@ -100,7 +100,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         var fence = new OperationTimeFence();
 
         _subscriptions =
-            new EventLogSubscriptions<TEvent, EventLogDocument<TEvent>, string, StreamPosition, LogPosition>(
+            new CatchUpSubscriptionFactory<EventLogDocument<TEvent>, TEvent, string, StreamPosition, LogPosition>(
                 () => new MongoSubscriptionSource<TEvent>(_eventLog, fence, eventCodec),
                 options.Tail,
                 logger);

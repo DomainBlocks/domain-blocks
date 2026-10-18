@@ -84,7 +84,7 @@ public class MongoLiveFanOutBenchmarks
     {
         var source = new Source(_decoder, _documents);
 
-        await using var tail = new EventLogTail<IDomainEvent, EventLogDocument<IDomainEvent>, string, StreamPosition,
+        await using var tail = new EventLogTail<EventLogDocument<IDomainEvent>, IDomainEvent, string, StreamPosition,
             LogPosition>(() => source, TailOptions);
 
         var subscribers = new Subscriber[SubscriberCount];
@@ -188,7 +188,7 @@ public class MongoLiveFanOutBenchmarks
         IDisposable
     {
         private readonly
-            SubscriptionQueue<IDomainEvent, EventLogDocument<IDomainEvent>, string, StreamPosition, LogPosition>
+            SubscriptionQueue<EventLogDocument<IDomainEvent>, IDomainEvent, string, StreamPosition, LogPosition>
             _queue = new(SubscriptionOptions.Default.QueueCapacity, filter.Matches);
 
         private readonly TaskCompletionSource _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
