@@ -281,8 +281,8 @@ observers need no reset.
 
 ### The subscription
 
-`EventLogSubscriptions` is the public facade that a store composes, with `SubscribeToAll` and `SubscribeToStream`. Each
-subscription runs cycles of `CatchUpSubscription`:
+`CatchUpSubscriptionFactory` is the public facade that a store composes, with `SubscribeToAll` and
+`SubscribeToStream`. Each subscription runs cycles of `CatchUpSubscription`:
 
 1. Attach a new queue to the tail, then detach the previous one, so that the tail never stops between cycles.
 2. Read the end position of the log or of the stream, through a source of the subscription's own.
