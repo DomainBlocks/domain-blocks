@@ -19,12 +19,12 @@ See [Catch-up subscriptions: failure modes](subscription-failure-modes.md) for w
 
 ## Findings
 
-| | Aurora PostgreSQL 17.11, tested | Azure Flexible Server, researched | Cloud SQL, researched |
-|---|---|---|---|
-| Durable step | Storage quorum; **invisible until done** | Synchronous standby | Regional disk |
-| `synchronous_standby_names` | **Empty**: barrier skipped | Non-empty with HA: barrier runs | Empty: barrier skipped |
-| Session `set_config` | **Allowed**: `on`, `local`, `off` | Documented as allowed | No restriction documented |
-| `pg_logical_emit_message` | **Allowed** for an ordinary role | No restriction documented | No restriction documented |
+|                             | Aurora PostgreSQL 17.11, tested          | Azure Flexible Server, researched | Cloud SQL, researched     |
+|-----------------------------|------------------------------------------|-----------------------------------|---------------------------|
+| Durable step                | Storage quorum; **invisible until done** | Synchronous standby               | Regional disk             |
+| `synchronous_standby_names` | **Empty**: barrier skipped               | Non-empty with HA: barrier runs   | Empty: barrier skipped    |
+| Session `set_config`        | **Allowed**: `on`, `local`, `off`        | Documented as allowed             | No restriction documented |
+| `pg_logical_emit_message`   | **Allowed** for an ordinary role         | No restriction documented         | No restriction documented |
 
 - **Aurora makes a commit visible only after its storage quorum has acknowledged it,** as vanilla PostgreSQL does after
   its flush or standby wait. The design holds on Aurora as built, and no "always on" barrier is needed.
@@ -48,12 +48,12 @@ steps, microseconds apart:
 A VOLATILE function under READ COMMITTED takes a new snapshot for every statement, so `s0` and `s1` are distinct.
 Each waiting backend falls into one of four cases:
 
-| Case | Meaning |
-|---|---|
+| Case              | Meaning                                                                                        |
+|-------------------|------------------------------------------------------------------------------------------------|
 | `invisible_after` | Its xid is still in progress in `s1`, taken after it was seen waiting: invisible while waiting |
-| `visible_before` | Its xid is already visible in `s0`, taken before it was seen waiting: visible too early |
-| `inconclusive` | Visible in `s1` but not `s0`: it finished between the steps |
-| `null_xid` | No xid while waiting |
+| `visible_before`  | Its xid is already visible in `s0`, taken before it was seen waiting: visible too early        |
+| `inconclusive`    | Visible in `s1` but not `s0`: it finished between the steps                                    |
+| `null_xid`        | No xid while waiting                                                                           |
 
 If Aurora made a commit visible before its quorum wait, no waiting backend could be `invisible_after`: its xid would
 be visible already, or cleared from the procarray. With vanilla ordering, nearly every sample is `invisible_after`
@@ -72,12 +72,12 @@ xid, and seen waiting a moment later. Vanilla PostgreSQL shows them too.
 
 16 writers, 60 seconds per run. The client saw a median commit latency of about 58 ms, most of it network:
 
-| Run | Commits | Samples | Waiting | `invisible_after` | `inconclusive` | `visible_before` | `null_xid` |
-|---|---|---|---|---|---|---|---|
-| Aurora | 16,995 | 700,615 | 1,061,534 | 1,056,377 | 4,969 | **0** | 188 |
-| Aurora, storage congestion | 17,005 | 703,548 | 1,062,918 | 1,057,794 | 4,949 | **0** | 175 |
-| Vanilla 17, local flush (`WalSync`), 8 writers, 5 s | 37,209 | 391,135 | 351,001 | 350,947 | 46 | **0** | 8 |
-| Vanilla 17, missing sync standby (`SyncRep`), 8 writers, 5 s | 0 | 362,951 | 2,903,608 | 2,903,608 | 0 | **0** | 0 |
+| Run                                                          | Commits | Samples | Waiting   | `invisible_after` | `inconclusive` | `visible_before` | `null_xid` |
+|--------------------------------------------------------------|---------|---------|-----------|-------------------|----------------|------------------|------------|
+| Aurora                                                       | 16,995  | 700,615 | 1,061,534 | 1,056,377         | 4,969          | **0**            | 188        |
+| Aurora, storage congestion                                   | 17,005  | 703,548 | 1,062,918 | 1,057,794         | 4,949          | **0**            | 175        |
+| Vanilla 17, local flush (`WalSync`), 8 writers, 5 s          | 37,209  | 391,135 | 351,001   | 350,947           | 46             | **0**            | 8          |
+| Vanilla 17, missing sync standby (`SyncRep`), 8 writers, 5 s | 0       | 362,951 | 2,903,608 | 2,903,608         | 0              | **0**            | 0          |
 
 - On average 1.5 of the 16 writers were in `XactSync` at any moment, so each commit spent about 5 ms waiting for the
   quorum, out of the 58 ms the client saw.
