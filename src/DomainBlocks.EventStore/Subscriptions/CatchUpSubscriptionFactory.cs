@@ -12,22 +12,23 @@ namespace DomainBlocks.EventStore.Subscriptions;
 /// All of the store's live subscriptions share one read of the log, which runs while any subscription is being
 /// enumerated. Each catch-up reads through a source of its own.
 /// </remarks>
-/// <typeparam name="TEvent">The type of event payload.</typeparam>
 /// <typeparam name="TSourceEvent">
 /// An event as the store holds it, which is decoded only if a subscription selects it.
 /// </typeparam>
+/// <typeparam name="TResultEvent">The type of event payload.</typeparam>
 /// <typeparam name="TStreamId">The type of stream ID.</typeparam>
 /// <typeparam name="TStreamPos">The type of position in a stream.</typeparam>
 /// <typeparam name="TLogPos">The type of position in the event log.</typeparam>
-public sealed class EventLogSubscriptions<TEvent, TSourceEvent, TStreamId, TStreamPos, TLogPos> : IAsyncDisposable
-    where TEvent : notnull
-    where TSourceEvent : IFilterableEvent, IReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>
+public sealed class CatchUpSubscriptionFactory<TSourceEvent, TResultEvent, TStreamId, TStreamPos, TLogPos> :
+    IAsyncDisposable
+    where TSourceEvent : IFilterableEvent, IReadEvent<TResultEvent, TStreamId, TStreamPos, TLogPos>
+    where TResultEvent : notnull
     where TStreamId : notnull
     where TStreamPos : struct, IPosition<TStreamPos>
     where TLogPos : struct, IPosition<TLogPos>, IComparable<TLogPos>
 {
     private readonly Func<IEventSubscriptionSource<TSourceEvent, TStreamId, TStreamPos, TLogPos>> _sourceFactory;
-    private readonly EventLogTail<TEvent, TSourceEvent, TStreamId, TStreamPos, TLogPos> _tail;
+    private readonly EventLogTail<TSourceEvent, TResultEvent, TStreamId, TStreamPos, TLogPos> _tail;
     private readonly ILogger? _logger;
 
     /// <param name="sourceFactory">
@@ -35,7 +36,7 @@ public sealed class EventLogSubscriptions<TEvent, TSourceEvent, TStreamId, TStre
     /// </param>
     /// <param name="options">The options for the shared read of the log.</param>
     /// <param name="logger">The logger for the shared read and the subscriptions.</param>
-    public EventLogSubscriptions(
+    public CatchUpSubscriptionFactory(
         Func<IEventSubscriptionSource<TSourceEvent, TStreamId, TStreamPos, TLogPos>> sourceFactory,
         EventLogTailOptions? options = null,
         ILogger? logger = null)
@@ -43,7 +44,10 @@ public sealed class EventLogSubscriptions<TEvent, TSourceEvent, TStreamId, TStre
         ArgumentNullException.ThrowIfNull(sourceFactory);
 
         _sourceFactory = sourceFactory;
-        _tail = new EventLogTail<TEvent, TSourceEvent, TStreamId, TStreamPos, TLogPos>(sourceFactory, options, logger);
+        _tail = new EventLogTail<TSourceEvent, TResultEvent, TStreamId, TStreamPos, TLogPos>(
+            sourceFactory,
+            options,
+            logger);
         _logger = logger;
     }
 
@@ -53,11 +57,11 @@ public sealed class EventLogSubscriptions<TEvent, TSourceEvent, TStreamId, TStre
     /// </summary>
     /// <param name="origin">Where the subscription starts. It starts at the end of the log by default.</param>
     /// <param name="options">The subscription's options.</param>
-    public IAsyncEnumerable<SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>> SubscribeToAll(
+    public IAsyncEnumerable<SubscriptionMessage<TResultEvent, TStreamId, TStreamPos, TLogPos>> SubscribeToAll(
         SubscriptionOrigin<TLogPos>? origin = null,
         SubscriptionOptions? options = null)
     {
-        return new CatchUpSubscription<TEvent, TSourceEvent, TStreamId, TStreamPos, TLogPos, TLogPos>(
+        return new CatchUpSubscription<TSourceEvent, TResultEvent, TStreamId, TStreamPos, TLogPos, TLogPos>(
             _tail,
             _sourceFactory,
             LogCatchUpTarget<TSourceEvent, TStreamId, TStreamPos, TLogPos>.Instance,
@@ -73,14 +77,14 @@ public sealed class EventLogSubscriptions<TEvent, TSourceEvent, TStreamId, TStre
     /// <param name="streamId">The stream to follow.</param>
     /// <param name="origin">Where the subscription starts. It starts at the end of the stream by default.</param>
     /// <param name="options">The subscription's options.</param>
-    public IAsyncEnumerable<SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>> SubscribeToStream(
+    public IAsyncEnumerable<SubscriptionMessage<TResultEvent, TStreamId, TStreamPos, TLogPos>> SubscribeToStream(
         TStreamId streamId,
         SubscriptionOrigin<TStreamPos>? origin = null,
         SubscriptionOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(streamId);
 
-        return new CatchUpSubscription<TEvent, TSourceEvent, TStreamId, TStreamPos, TLogPos, TStreamPos>(
+        return new CatchUpSubscription<TSourceEvent, TResultEvent, TStreamId, TStreamPos, TLogPos, TStreamPos>(
             _tail,
             _sourceFactory,
             new StreamCatchUpTarget<TSourceEvent, TStreamId, TStreamPos, TLogPos>(streamId),

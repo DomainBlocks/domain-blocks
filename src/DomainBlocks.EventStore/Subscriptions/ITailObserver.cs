@@ -1,8 +1,8 @@
 namespace DomainBlocks.EventStore.Subscriptions;
 
 /// <summary>
-/// Receives the events that an <see cref="EventLogTail{TEvent,TSourceEvent,TStreamId,TStreamPos,TLogPos}"/> reads. The
-/// tail calls it from its read loop, so it must not block.
+/// Receives the events that an <see cref="EventLogTail{TSourceEvent,TResultEvent,TStreamId,TStreamPos,TLogPos}"/>
+/// reads. The tail calls it from its read loop, so it must not block.
 /// </summary>
 internal interface ITailObserver<in TEvent>
 {

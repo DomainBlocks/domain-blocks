@@ -6,12 +6,12 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.Tests.Unit.Subscriptions;
 
-using Queue = SubscriptionQueue<string, TestSourceEvent, string, StreamPosition, LogPosition>;
+using Queue = SubscriptionQueue<TestSourceEvent, string, string, StreamPosition, LogPosition>;
 
 public class SubscriptionQueueTests
 {
     [Test]
-    public void OnNext_SelectedEvent_QueuesItsEvent()
+    public void OnNext_MatchingEvent_IsQueued()
     {
         var decoder = new TestDecoder();
         using var queue = new Queue(capacity: 2, EventFilter.StreamIds("order-1").Matches);
@@ -29,7 +29,7 @@ public class SubscriptionQueueTests
     }
 
     [Test]
-    public void OnNext_QueueIsFull_StopsForOverflow()
+    public void OnNext_QueueFull_StopsForOverflow()
     {
         using var queue = new Queue(capacity: 1, EventFilter.All.Matches);
 
@@ -42,7 +42,7 @@ public class SubscriptionQueueTests
     }
 
     [Test]
-    public async Task OnNext_QueueIsFull_EndsReaderOnceQueuedEventIsRead()
+    public async Task OnNext_QueueFull_EndsReaderOnceQueuedEventIsRead()
     {
         using var queue = new Queue(capacity: 1, EventFilter.All.Matches);
         queue.OnNext(CreateEvent(0));
@@ -56,7 +56,7 @@ public class SubscriptionQueueTests
     }
 
     [Test]
-    public void OnNext_QueueIsFull_LogsOverflowAsWarningOnce()
+    public void OnNext_QueueFull_LogsOverflowWarningOnce()
     {
         var logger = new RecordingLogger();
         using var queue = new Queue(capacity: 1, EventFilter.All.Matches, logger, "sub-1");
@@ -72,7 +72,7 @@ public class SubscriptionQueueTests
     }
 
     [Test]
-    public void OnNext_AfterQueueOverflowed_DoesNotDecodeFurtherEvents()
+    public void OnNext_AfterOverflow_DoesNotDecodeEvents()
     {
         var decoder = new TestDecoder();
         using var queue = new Queue(capacity: 1, EventFilter.All.Matches);
@@ -87,7 +87,7 @@ public class SubscriptionQueueTests
     }
 
     [Test]
-    public async Task OnNext_EventCannotBeDecoded_FailsReaderAndDoesNotDecodeFurtherEvents()
+    public async Task OnNext_UndecodableEvent_FailsReaderAndStopsDecoding()
     {
         var decoder = new TestDecoder { Failure = new InvalidOperationException("Cannot decode.") };
         using var queue = new Queue(capacity: 10, EventFilter.All.Matches);
@@ -106,7 +106,7 @@ public class SubscriptionQueueTests
     }
 
     [Test]
-    public async Task OnError_Error_FailsReader()
+    public async Task OnError_TailFailed_FailsReader()
     {
         using var queue = new Queue(capacity: 10, EventFilter.All.Matches);
         var error = new InvalidOperationException("The tail failed.");
@@ -133,7 +133,7 @@ public class SubscriptionQueueTests
     }
 
     [Test]
-    public void Dispose_AlreadyStoppedByQueueOverflow_KeepsFirstReason()
+    public void Dispose_AfterOverflow_KeepsOverflowReason()
     {
         var queue = new Queue(capacity: 1, EventFilter.All.Matches);
         queue.OnNext(CreateEvent(0));

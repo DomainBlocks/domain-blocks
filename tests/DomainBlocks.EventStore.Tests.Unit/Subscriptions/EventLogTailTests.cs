@@ -322,11 +322,11 @@ public class EventLogTailTests
         eventLog.SourceDisposedCount.ShouldBe(1);
     }
 
-    private static EventLogTail<string, TestSourceEvent, string, StreamPosition, LogPosition> CreateTail(
+    private static EventLogTail<TestSourceEvent, string, string, StreamPosition, LogPosition> CreateTail(
         TestEventLog eventLog,
         EventLogTailOptions? options = null)
     {
-        return new EventLogTail<string, TestSourceEvent, string, StreamPosition, LogPosition>(
+        return new EventLogTail<TestSourceEvent, string, string, StreamPosition, LogPosition>(
             eventLog.CreateSource,
             options ?? Options,
             Logger);

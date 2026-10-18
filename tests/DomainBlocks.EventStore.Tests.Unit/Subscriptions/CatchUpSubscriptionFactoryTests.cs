@@ -4,13 +4,13 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.Tests.Unit.Subscriptions;
 
-public class EventLogSubscriptionsTests
+public class CatchUpSubscriptionFactoryTests
 {
     private const int TestTimeoutMillis = 5 * 1000;
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task SubscribeToAll_FromStart_ReplaysTheLogThenDeliversLiveEvents(CancellationToken ct)
+    public async Task SubscribeToAll_FromStart_ReplaysLogThenDeliversLiveEvents(CancellationToken ct)
     {
         await using var scenario = new SubscriptionScenario(ct);
         var existing = scenario.EventLog.Append("existing", 2);
@@ -26,7 +26,7 @@ public class EventLogSubscriptionsTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task SubscribeToAll_FromEnd_DeliversOnlyEventsAppendedAfterItStarts(CancellationToken ct)
+    public async Task SubscribeToAll_FromEnd_DeliversOnlyEventsAppendedAfterStart(CancellationToken ct)
     {
         await using var scenario = new SubscriptionScenario(ct);
         scenario.EventLog.Append("existing", 2);
@@ -41,7 +41,7 @@ public class EventLogSubscriptionsTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task SubscribeToAll_FromEndWhenQueueOverflowsBeforeCaughtUp_DeliversEventsAppendedAfterItsEnd(
+    public async Task SubscribeToAll_FromEndQueueOverflowsBeforeCaughtUp_DeliversEventsAfterEnd(
         CancellationToken ct)
     {
         await using var scenario = new SubscriptionScenario(ct);
@@ -77,7 +77,7 @@ public class EventLogSubscriptionsTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task SubscribeToAll_EventAppendedBeforeCatchUpReadsItsEnd_DeliversItOnce(CancellationToken ct)
+    public async Task SubscribeToAll_EventAppendedBeforeCatchUpReadsEnd_DeliversEventOnce(CancellationToken ct)
     {
         await using var scenario = new SubscriptionScenario(ct);
         var existing = scenario.EventLog.Append("existing", 1);
@@ -189,7 +189,7 @@ public class EventLogSubscriptionsTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task SubscribeToAll_RestartingAfterFilteredReplay_ResumesFromItsEndPosition(CancellationToken ct)
+    public async Task SubscribeToAll_RestartAfterFilteredReplay_ResumesFromReplayEnd(CancellationToken ct)
     {
         await using var scenario = new SubscriptionScenario(ct);
 
@@ -226,7 +226,7 @@ public class EventLogSubscriptionsTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task SubscribeToAll_TailAlreadyRunning_ReplaysEventsItDeliveredBeforeAndSharesIt(CancellationToken ct)
+    public async Task SubscribeToAll_TailAlreadyRunning_ReplaysDeliveredEventsAndSharesTail(CancellationToken ct)
     {
         await using var scenario = new SubscriptionScenario(ct);
         await using var first = scenario.SubscribeToAll();
@@ -249,7 +249,7 @@ public class EventLogSubscriptionsTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task SubscribeToStream_FromStart_DeliversOnlyThatStreamsEvents(CancellationToken ct)
+    public async Task SubscribeToStream_FromStart_DeliversOnlyStreamEvents(CancellationToken ct)
     {
         await using var scenario = new SubscriptionScenario(ct);
         scenario.EventLog.Append("other", 1, "s1");
@@ -274,7 +274,7 @@ public class EventLogSubscriptionsTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task SubscribeToStream_AfterPosition_ReplaysFromThereByStreamPosition(CancellationToken ct)
+    public async Task SubscribeToStream_AfterPosition_ReplaysEventsAfterSpecifiedStreamPosition(CancellationToken ct)
     {
         await using var scenario = new SubscriptionScenario(ct);
         var existing = scenario.EventLog.Append("existing", 3, "s2");
@@ -296,7 +296,7 @@ public class EventLogSubscriptionsTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task SubscribeToAll_AfterPosition_ReplaysTheEventsAfterIt(CancellationToken ct)
+    public async Task SubscribeToAll_AfterPosition_ReplaysEventsAfterSpecifiedPosition(CancellationToken ct)
     {
         await using var scenario = new SubscriptionScenario(ct);
         var existing = scenario.EventLog.Append("existing", 3);
@@ -313,7 +313,7 @@ public class EventLogSubscriptionsTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task SubscribeToAll_Filtered_DeliversOnlyTheLiveEventsItSelects(CancellationToken ct)
+    public async Task SubscribeToAll_Filtered_DeliversMatchingLiveEvents(CancellationToken ct)
     {
         await using var scenario = new SubscriptionScenario(ct);
 
@@ -329,7 +329,7 @@ public class EventLogSubscriptionsTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task SubscribeToAll_TailFails_ThrowsItsError(CancellationToken ct)
+    public async Task SubscribeToAll_TailFails_ThrowsTailError(CancellationToken ct)
     {
         await using var scenario = new SubscriptionScenario(ct);
         await using var subscription = scenario.SubscribeToAll();
@@ -345,7 +345,7 @@ public class EventLogSubscriptionsTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task SubscribeToAll_CatchUpFails_ThrowsItsError(CancellationToken ct)
+    public async Task SubscribeToAll_CatchUpFails_ThrowsCatchUpError(CancellationToken ct)
     {
         await using var scenario = new SubscriptionScenario(ct);
         await using var subscription = scenario.SubscribeToAll(SubscriptionOrigin.Start);
@@ -359,7 +359,7 @@ public class EventLogSubscriptionsTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task SubscribeToAll_LastSubscriptionDisposed_StopsReadingTheLog(CancellationToken ct)
+    public async Task SubscribeToAll_LastSubscriptionDisposed_StopsReadingLog(CancellationToken ct)
     {
         await using var scenario = new SubscriptionScenario(ct);
         var subscription = scenario.SubscribeToAll();

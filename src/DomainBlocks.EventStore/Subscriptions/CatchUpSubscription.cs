@@ -18,16 +18,16 @@ namespace DomainBlocks.EventStore.Subscriptions;
 /// that was delivered or covered.
 /// </para>
 /// </remarks>
-internal sealed class CatchUpSubscription<TEvent, TSourceEvent, TStreamId, TStreamPos, TLogPos, TPos> :
-    IAsyncEnumerable<SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>>
-    where TEvent : notnull
-    where TSourceEvent : IFilterableEvent, IReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>
+internal sealed class CatchUpSubscription<TSourceEvent, TResultEvent, TStreamId, TStreamPos, TLogPos, TPos> :
+    IAsyncEnumerable<SubscriptionMessage<TResultEvent, TStreamId, TStreamPos, TLogPos>>
+    where TSourceEvent : IFilterableEvent, IReadEvent<TResultEvent, TStreamId, TStreamPos, TLogPos>
+    where TResultEvent : notnull
     where TStreamId : notnull
     where TStreamPos : struct
     where TLogPos : struct, IComparable<TLogPos>
     where TPos : struct, IPosition<TPos>
 {
-    private readonly EventLogTail<TEvent, TSourceEvent, TStreamId, TStreamPos, TLogPos> _tail;
+    private readonly EventLogTail<TSourceEvent, TResultEvent, TStreamId, TStreamPos, TLogPos> _tail;
     private readonly Func<IEventSubscriptionSource<TSourceEvent, TStreamId, TStreamPos, TLogPos>> _sourceFactory;
     private readonly ICatchUpTarget<TSourceEvent, TStreamId, TStreamPos, TLogPos, TPos> _target;
     private readonly SubscriptionOrigin<TPos> _origin;
@@ -36,7 +36,7 @@ internal sealed class CatchUpSubscription<TEvent, TSourceEvent, TStreamId, TStre
     private readonly string _correlationId;
 
     public CatchUpSubscription(
-        EventLogTail<TEvent, TSourceEvent, TStreamId, TStreamPos, TLogPos> tail,
+        EventLogTail<TSourceEvent, TResultEvent, TStreamId, TStreamPos, TLogPos> tail,
         Func<IEventSubscriptionSource<TSourceEvent, TStreamId, TStreamPos, TLogPos>> sourceFactory,
         ICatchUpTarget<TSourceEvent, TStreamId, TStreamPos, TLogPos, TPos> target,
         SubscriptionOrigin<TPos>? origin,
@@ -55,23 +55,17 @@ internal sealed class CatchUpSubscription<TEvent, TSourceEvent, TStreamId, TStre
             : CorrelationId.ReserveGenerated();
     }
 
-    public async IAsyncEnumerator<SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>> GetAsyncEnumerator(
+    public async IAsyncEnumerator<SubscriptionMessage<TResultEvent, TStreamId, TStreamPos, TLogPos>> GetAsyncEnumerator(
         CancellationToken cancellationToken = default)
     {
-        SubscriptionQueue<TEvent, TSourceEvent, TStreamId, TStreamPos, TLogPos>? queue = null;
+        SubscriptionQueue<TSourceEvent, TResultEvent, TStreamId, TStreamPos, TLogPos>? queue = null;
         IAsyncDisposable? attachment = null;
 
         try
         {
             _logger?.SubscriptionStarted(_correlationId);
 
-            var resumePosition = new ResumePosition(_origin is SubscriptionOrigin<TPos>.After after
-                ? after.Position
-                : null);
-
-            // An origin at the end is resolved by the first cycle's catch-up, which reads the end after the queue is
-            // attached. Resolving it any earlier would miss the events appended in between.
-            var resumeFromEnd = _origin is SubscriptionOrigin<TPos>.End;
+            var resumePosition = new ResumePosition(_origin);
             var isCaughtUp = false;
 
             while (true)
@@ -87,11 +81,12 @@ internal sealed class CatchUpSubscription<TEvent, TSourceEvent, TStreamId, TStre
                 }
 
                 // The new queue is attached before the old one is detached, so the tail keeps running between cycles.
-                var nextQueue = new SubscriptionQueue<TEvent, TSourceEvent, TStreamId, TStreamPos, TLogPos>(
+                var nextQueue = new SubscriptionQueue<TSourceEvent, TResultEvent, TStreamId, TStreamPos, TLogPos>(
                     _options.QueueCapacity,
                     Selects,
                     _logger,
                     _correlationId);
+
                 var nextAttachment = await AttachAsync(nextQueue, cancellationToken).ConfigureAwait(false);
 
                 if (attachment is not null)
@@ -101,10 +96,8 @@ internal sealed class CatchUpSubscription<TEvent, TSourceEvent, TStreamId, TStre
                 queue = nextQueue;
                 attachment = nextAttachment;
 
-                var enumerator = ReadCycleAsync(resumePosition, resumeFromEnd, queue, cancellationToken)
+                var enumerator = ReadCycleAsync(resumePosition, queue, cancellationToken)
                     .GetAsyncEnumerator(cancellationToken);
-
-                resumeFromEnd = false;
 
                 await using (enumerator.ConfigureAwait(false))
                 {
@@ -126,7 +119,7 @@ internal sealed class CatchUpSubscription<TEvent, TSourceEvent, TStreamId, TStre
                     _logger?.SubscriptionFellBehind(_correlationId);
 
                     isCaughtUp = false;
-                    yield return SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>.FellBehind;
+                    yield return SubscriptionMessage<TResultEvent, TStreamId, TStreamPos, TLogPos>.FellBehind;
                 }
             }
         }
@@ -143,7 +136,7 @@ internal sealed class CatchUpSubscription<TEvent, TSourceEvent, TStreamId, TStre
     }
 
     private async ValueTask<bool> MoveNextAsync(
-        IAsyncEnumerator<SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>> enumerator,
+        IAsyncEnumerator<SubscriptionMessage<TResultEvent, TStreamId, TStreamPos, TLogPos>> enumerator,
         CancellationToken cancellationToken)
     {
         try
@@ -163,7 +156,7 @@ internal sealed class CatchUpSubscription<TEvent, TSourceEvent, TStreamId, TStre
     }
 
     private async Task<IAsyncDisposable> AttachAsync(
-        SubscriptionQueue<TEvent, TSourceEvent, TStreamId, TStreamPos, TLogPos> queue,
+        SubscriptionQueue<TSourceEvent, TResultEvent, TStreamId, TStreamPos, TLogPos> queue,
         CancellationToken cancellationToken)
     {
         try
@@ -184,10 +177,9 @@ internal sealed class CatchUpSubscription<TEvent, TSourceEvent, TStreamId, TStre
         }
     }
 
-    private async IAsyncEnumerable<SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>> ReadCycleAsync(
+    private async IAsyncEnumerable<SubscriptionMessage<TResultEvent, TStreamId, TStreamPos, TLogPos>> ReadCycleAsync(
         ResumePosition resumePosition,
-        bool resumeFromEnd,
-        SubscriptionQueue<TEvent, TSourceEvent, TStreamId, TStreamPos, TLogPos> queue,
+        SubscriptionQueue<TSourceEvent, TResultEvent, TStreamId, TStreamPos, TLogPos> queue,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var source = _sourceFactory();
@@ -198,9 +190,13 @@ internal sealed class CatchUpSubscription<TEvent, TSourceEvent, TStreamId, TStre
 
             _logger?.CatchUpBoundary(_correlationId, endInclusive?.Value);
 
+            // A subscription from the end resumes after the first end that a cycle reads, which is read after the
+            // queue is attached. Resolving it any earlier would miss the events appended in between.
+            resumePosition.ResolveEnd(endInclusive);
+
             if (endInclusive is { } end)
             {
-                if (!resumeFromEnd && !resumePosition.Covers(end))
+                if (!resumePosition.Covers(end))
                 {
                     var events = _target.ReadAsync(
                         source,
@@ -227,12 +223,12 @@ internal sealed class CatchUpSubscription<TEvent, TSourceEvent, TStreamId, TStre
 
         _logger?.SubscriptionCaughtUp(_correlationId);
 
-        yield return SubscriptionMessage<TEvent, TStreamId, TStreamPos, TLogPos>.CaughtUp;
+        yield return SubscriptionMessage<TResultEvent, TStreamId, TStreamPos, TLogPos>.CaughtUp;
 
         // The queue ends once it has stopped and everything in it has been read.
         await foreach (var e in queue.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
         {
-            var position = _target.PositionOf(e.Context);
+            var position = _target.GetPosition(e.Context);
 
             // The replay has covered it.
             if (resumePosition.Covers(position))
@@ -251,14 +247,33 @@ internal sealed class CatchUpSubscription<TEvent, TSourceEvent, TStreamId, TStre
     }
 
     /// <summary>
-    /// The furthest position delivered or covered by a replay. It only moves forward.
+    /// Where the next cycle resumes: from the start, at the end, or after the furthest position delivered or covered by
+    /// a replay. Once the end is resolved, it only moves forward.
     /// </summary>
-    private sealed class ResumePosition(TPos? after)
+    private sealed class ResumePosition(SubscriptionOrigin<TPos> origin)
     {
+        private bool _isAtEnd = origin is SubscriptionOrigin<TPos>.End;
+
         /// <summary>
-        /// The position to resume after, or <see langword="null"/> to resume from the start.
+        /// The position to resume after, or <see langword="null"/> to resume from the start. It is
+        /// <see langword="null"/> at the end until the end is resolved.
         /// </summary>
-        public TPos? After { get; private set; } = after;
+        public TPos? After { get; private set; } = origin is SubscriptionOrigin<TPos>.After after
+            ? after.Position
+            : null;
+
+        /// <summary>
+        /// Resolves a resume position at the end to the end that a cycle read, or to the start if the target was empty.
+        /// It has no effect on any other resume position, or once the end is resolved.
+        /// </summary>
+        public void ResolveEnd(TPos? end)
+        {
+            if (!_isAtEnd)
+                return;
+
+            After = end;
+            _isAtEnd = false;
+        }
 
         public bool Covers(TPos position) => After is { } after && position.Value <= after.Value;
 

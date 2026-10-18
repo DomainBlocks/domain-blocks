@@ -6,7 +6,7 @@ namespace DomainBlocks.EventStore.Subscriptions;
 /// What a subscription follows, the event log or one stream, with the reads of a source that replay it, in the target's
 /// own kind of position.
 /// </summary>
-internal interface ICatchUpTarget<TSourceEvent, TStreamId, TStreamPos, TLogPos, TPos>
+internal interface ICatchUpTarget<TEvent, TStreamId, TStreamPos, TLogPos, TPos>
     where TStreamId : notnull
     where TStreamPos : struct
     where TLogPos : struct
@@ -16,7 +16,7 @@ internal interface ICatchUpTarget<TSourceEvent, TStreamId, TStreamPos, TLogPos, 
     /// Reads the position of the target's last event, or <see langword="null"/> if it has none.
     /// </summary>
     ValueTask<TPos?> ReadEndPositionAsync(
-        IEventSubscriptionSource<TSourceEvent, TStreamId, TStreamPos, TLogPos> source,
+        IEventSubscriptionSource<TEvent, TStreamId, TStreamPos, TLogPos> source,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -24,8 +24,8 @@ internal interface ICatchUpTarget<TSourceEvent, TStreamId, TStreamPos, TLogPos, 
     /// <paramref name="fromExclusive"/>, or from the start if it is <see langword="null"/>, up to and including
     /// <paramref name="toInclusive"/>.
     /// </summary>
-    IAsyncEnumerable<TSourceEvent> ReadAsync(
-        IEventSubscriptionSource<TSourceEvent, TStreamId, TStreamPos, TLogPos> source,
+    IAsyncEnumerable<TEvent> ReadAsync(
+        IEventSubscriptionSource<TEvent, TStreamId, TStreamPos, TLogPos> source,
         TPos? fromExclusive,
         TPos toInclusive,
         EventFilter filter,
@@ -39,5 +39,5 @@ internal interface ICatchUpTarget<TSourceEvent, TStreamId, TStreamPos, TLogPos, 
     /// <summary>
     /// Gets an event's position in the target.
     /// </summary>
-    TPos PositionOf(in ReadEventContext<TStreamId, TStreamPos, TLogPos> context);
+    TPos GetPosition(in ReadEventContext<TStreamId, TStreamPos, TLogPos> context);
 }

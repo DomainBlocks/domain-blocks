@@ -6,7 +6,7 @@ namespace DomainBlocks.EventStore.Tests.Unit.Subscriptions;
 
 /// <summary>
 /// Subscribes to a <see cref="TestEventLog"/> through its own
-/// <see cref="EventLogSubscriptions{TEvent,TSourceEvent,TStreamId,TStreamPos,TLogPos}"/>, as a store does.
+/// <see cref="CatchUpSubscriptionFactory{TSourceEvent,TResultEvent,TStreamId,TStreamPos,TLogPos}"/>, as a store does.
 /// </summary>
 internal sealed class SubscriptionScenario : IAsyncDisposable
 {
@@ -18,12 +18,13 @@ internal sealed class SubscriptionScenario : IAsyncDisposable
 
     private static readonly ILogger Logger = new NUnitLoggerProvider().CreateLogger(nameof(SubscriptionScenario));
 
-    private readonly EventLogSubscriptions<string, TestSourceEvent, string, StreamPosition, LogPosition> _subscriptions;
+    private readonly CatchUpSubscriptionFactory<TestSourceEvent, string, string, StreamPosition, LogPosition>
+        _subscriptions;
     private readonly CancellationToken _cancellationToken;
 
     public SubscriptionScenario(CancellationToken cancellationToken)
     {
-        _subscriptions = new EventLogSubscriptions<string, TestSourceEvent, string, StreamPosition, LogPosition>(
+        _subscriptions = new CatchUpSubscriptionFactory<TestSourceEvent, string, string, StreamPosition, LogPosition>(
             EventLog.CreateSource,
             TailOptions,
             Logger);

@@ -9,21 +9,21 @@ namespace DomainBlocks.EventStore.Subscriptions;
 /// it records the reason and completes its queue, and the cycle restarts once the queue is drained, which can be much
 /// later.
 /// </summary>
-internal sealed class SubscriptionQueue<TEvent, TSourceEvent, TStreamId, TStreamPos, TLogPos>(
+internal sealed class SubscriptionQueue<TSourceEvent, TResultEvent, TStreamId, TStreamPos, TLogPos>(
     int capacity,
     Func<TSourceEvent, bool> selects,
     ILogger? logger = null,
     string subscriptionId = "") :
     ITailObserver<TSourceEvent>,
     IDisposable
-    where TEvent : notnull
-    where TSourceEvent : IFilterableEvent, IReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>
+    where TSourceEvent : IFilterableEvent, IReadEvent<TResultEvent, TStreamId, TStreamPos, TLogPos>
+    where TResultEvent : notnull
     where TStreamId : notnull
     where TStreamPos : notnull
     where TLogPos : notnull
 {
-    private readonly Channel<ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>> _channel =
-        Channel.CreateBounded<ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>>(
+    private readonly Channel<ReadEvent<TResultEvent, TStreamId, TStreamPos, TLogPos>> _channel =
+        Channel.CreateBounded<ReadEvent<TResultEvent, TStreamId, TStreamPos, TLogPos>>(
             new BoundedChannelOptions(capacity)
             {
                 SingleWriter = true,
@@ -33,7 +33,7 @@ internal sealed class SubscriptionQueue<TEvent, TSourceEvent, TStreamId, TStream
     private int _stopReason;
     private bool _isStopped;
 
-    public ChannelReader<ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>> Reader => _channel.Reader;
+    public ChannelReader<ReadEvent<TResultEvent, TStreamId, TStreamPos, TLogPos>> Reader => _channel.Reader;
 
     public SubscriptionStopReason StopReason => (SubscriptionStopReason)Volatile.Read(ref _stopReason);
 
@@ -44,7 +44,7 @@ internal sealed class SubscriptionQueue<TEvent, TSourceEvent, TStreamId, TStream
         if (_isStopped || !selects(sourceEvent))
             return;
 
-        ReadEvent<TEvent, TStreamId, TStreamPos, TLogPos> readEvent;
+        ReadEvent<TResultEvent, TStreamId, TStreamPos, TLogPos> readEvent;
 
         try
         {

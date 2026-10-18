@@ -311,7 +311,7 @@ internal sealed class TestEventLog(bool hearsAppends = true)
         Func<TestSourceEvent, bool> selects,
         ulong? fromExclusive,
         ulong? toInclusive,
-        bool notifiesOnRead,
+        bool notifyOnRead,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         Interlocked.Increment(ref _readCount);
@@ -359,7 +359,7 @@ internal sealed class TestEventLog(bool hearsAppends = true)
                 _catchUpReads[index] = _catchUpReads[index] with { IsCompleted = true };
         }
 
-        if (notifiesOnRead && events.Length > 0)
+        if (notifyOnRead && events.Length > 0)
             OnRead?.Invoke([.. events.Select(e => (long)e.Context.LogPosition.Value)]);
     }
 
@@ -409,7 +409,7 @@ internal sealed class TestEventLog(bool hearsAppends = true)
                      filter.Matches(e),
                 fromExclusive?.Value,
                 toInclusive?.Value,
-                notifiesOnRead: true,
+                notifyOnRead: true,
                 cancellationToken);
         }
 
@@ -438,7 +438,7 @@ internal sealed class TestEventLog(bool hearsAppends = true)
                      filter.Matches(e),
                 fromExclusive?.Value,
                 toInclusive.Value,
-                notifiesOnRead: false,
+                notifyOnRead: false,
                 cancellationToken);
         }
 

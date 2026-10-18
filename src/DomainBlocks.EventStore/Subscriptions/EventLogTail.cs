@@ -10,7 +10,7 @@ namespace DomainBlocks.EventStore.Subscriptions;
 /// <remarks>
 /// <para>
 /// A tail starts at the end of the log and reads it through an
-/// <see cref="EventLogCursor{TEvent,TSourceEvent,TStreamId,TStreamPos,TLogPos}"/>, which waits for events to be
+/// <see cref="EventLogCursor{TSourceEvent,TResultEvent,TStreamId,TStreamPos,TLogPos}"/>, which waits for events to be
 /// appended and retries transient errors, so observers never miss an event. Any other error stops the tail and is
 /// passed to every observer.
 /// </para>
@@ -21,9 +21,9 @@ namespace DomainBlocks.EventStore.Subscriptions;
 /// loop never blocks, even when it detaches an observer that threw or records a failure.
 /// </para>
 /// </remarks>
-internal sealed class EventLogTail<TEvent, TSourceEvent, TStreamId, TStreamPos, TLogPos> : IAsyncDisposable
-    where TEvent : notnull
-    where TSourceEvent : IReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>
+internal sealed class EventLogTail<TSourceEvent, TResultEvent, TStreamId, TStreamPos, TLogPos> : IAsyncDisposable
+    where TSourceEvent : IReadEvent<TResultEvent, TStreamId, TStreamPos, TLogPos>
+    where TResultEvent : notnull
     where TStreamId : notnull
     where TStreamPos : struct
     where TLogPos : struct, IComparable<TLogPos>
@@ -175,7 +175,7 @@ internal sealed class EventLogTail<TEvent, TSourceEvent, TStreamId, TStreamPos, 
     /// </summary>
     private sealed class Session
     {
-        private readonly EventLogTail<TEvent, TSourceEvent, TStreamId, TStreamPos, TLogPos> _tail;
+        private readonly EventLogTail<TSourceEvent, TResultEvent, TStreamId, TStreamPos, TLogPos> _tail;
         private readonly ILogger? _logger;
         private readonly string _tailId = CorrelationId.ReserveGenerated();
         private readonly CancellationTokenSource _stopCts = new();
@@ -183,7 +183,7 @@ internal sealed class EventLogTail<TEvent, TSourceEvent, TStreamId, TStreamPos, 
         private SessionState _state = new([]);
         private int _stopping;
 
-        public Session(EventLogTail<TEvent, TSourceEvent, TStreamId, TStreamPos, TLogPos> tail)
+        public Session(EventLogTail<TSourceEvent, TResultEvent, TStreamId, TStreamPos, TLogPos> tail)
         {
             _tail = tail;
             _logger = tail._logger;
@@ -257,7 +257,7 @@ internal sealed class EventLogTail<TEvent, TSourceEvent, TStreamId, TStreamPos, 
 
             try
             {
-                var cursor = new EventLogCursor<TEvent, TSourceEvent, TStreamId, TStreamPos, TLogPos>(
+                var cursor = new EventLogCursor<TSourceEvent, TResultEvent, TStreamId, TStreamPos, TLogPos>(
                     _tail._sourceFactory(),
                     _tail._options,
                     _logger,
