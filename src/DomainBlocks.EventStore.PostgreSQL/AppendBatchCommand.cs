@@ -18,10 +18,11 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// request, so the caller can retry it.
 /// </para>
 /// <para>
-/// A commit whose wait is canceled, by a cancel request or <c>pg_cancel_backend</c>, stands on the primary and
-/// completes without an error, with only a warning. So that warning makes the batch throw
-/// <see cref="CommitNotConfirmedException"/> instead of completing any request. The caller runs the batch again, and
-/// the commit IDs report the requests that committed as duplicates once the standbys have them.
+/// A commit whose wait is canceled stands on the primary and completes without an error, with only a warning. A cancel
+/// request does that, including the one Npgsql sends when a command times out, and so does <c>pg_cancel_backend</c>.
+/// So that warning makes the batch throw <see cref="CommitNotConfirmedException"/> instead of completing any request.
+/// The caller runs the batch again, and the commit IDs report the requests that committed as duplicates once the
+/// standbys have them.
 /// </para>
 /// </remarks>
 internal sealed class AppendBatchCommand : IDisposable

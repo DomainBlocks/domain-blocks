@@ -48,6 +48,7 @@ public class PostgresReplicationBarrierTests
     private PostgresServer _server = null!;
     private NpgsqlDataSource _dataSource = null!;
     private NpgsqlDataSource _asyncCommitDataSource = null!;
+    private NpgsqlDataSource _shortTimeoutDataSource = null!;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -63,6 +64,14 @@ public class PostgresReplicationBarrierTests
 
         _asyncCommitDataSource = CreateDataSource(asyncCommit.ConnectionString);
 
+        // Commands from this data source time out while a commit waits for a missing standby.
+        var shortTimeout = new NpgsqlConnectionStringBuilder(_server.ConnectionString)
+        {
+            CommandTimeout = 1
+        };
+
+        _shortTimeoutDataSource = CreateDataSource(shortTimeout.ConnectionString);
+
         await PostgresEventStoreAdmin.EnsureInitializedAsync(_dataSource, _options);
         await ExecuteAsync("CREATE EXTENSION IF NOT EXISTS pg_walinspect");
     }
@@ -70,6 +79,7 @@ public class PostgresReplicationBarrierTests
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
+        await _shortTimeoutDataSource.DisposeAsync();
         await _asyncCommitDataSource.DisposeAsync();
         await _dataSource.DisposeAsync();
         await _server.DisposeAsync();
@@ -162,6 +172,22 @@ public class PostgresReplicationBarrierTests
 
         // The commit stands on the primary, with only a warning, but no standby has it.
         await Should.ThrowAsync<CommitNotConfirmedException>(execute);
+        batch.ShouldAllBe(x => !x.IsCompleted);
+        (await CountEventsAsync()).ShouldBe(1);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task ExecuteAsync_CommandTimesOutWhileTheCommitWaits_ThrowsAndCompletesNothing(CancellationToken ct)
+    {
+        await SetStandbyNamesAsync(MissingStandby);
+
+        var batch = CreateBatch(1);
+        using var command = new AppendBatchCommand(_shortTimeoutDataSource, new SchemaObjectNames(_options.Schema));
+
+        // Npgsql cancels a command that times out, and the command then completes with only a warning, as it does
+        // after pg_cancel_backend.
+        await Should.ThrowAsync<CommitNotConfirmedException>(command.ExecuteAsync(batch, ct));
         batch.ShouldAllBe(x => !x.IsCompleted);
         (await CountEventsAsync()).ShouldBe(1);
     }
@@ -358,6 +384,29 @@ public class PostgresReplicationBarrierTests
     public async Task SubscribeToAll_BarrierBackendTerminated_DeliversOnlyOnceBarrierConfirmed(CancellationToken ct)
     {
         await InterruptBarrierAsync("pg_terminate_backend", ct);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_BarrierCommandTimesOut_DeliversOnlyOnceBarrierConfirmed(CancellationToken ct)
+    {
+        await using var eventStore = CreateEventStore(_shortTimeoutDataSource);
+        await using var subscription = eventStore.SubscribeToAll().GetAsyncEnumerator(ct);
+        await ShouldBeCaughtUpAsync(subscription);
+        await SetStandbyNamesAsync(MissingStandby);
+
+        var live = await AppendWithCanceledWaitAsync("live", ct);
+        var next = subscription.MoveNextAsync().AsTask();
+
+        // The barrier times out, and the tail runs it again.
+        var timedOut = await WaitForSyncRepAsync(BarrierQuery, ct);
+        await WaitForSyncRepAsync(BarrierQuery, ct, after: timedOut);
+
+        next.IsCompleted.ShouldBeFalse();
+
+        await SetStandbyNamesAsync(string.Empty);
+
+        await ShouldBeEventAsync(next, subscription, live);
     }
 
     [Test]

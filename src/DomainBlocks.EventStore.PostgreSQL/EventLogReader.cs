@@ -236,8 +236,9 @@ internal sealed class EventLogReader<TEvent>(
     // events that a failover cannot undo. The batch is one transaction, and its commit waits for the synchronous
     // standbys, so it covers every commit that the read saw. Rows can reach the client before the commit, so the read's
     // result is used only once the batch completes. A canceled wait completes with only a warning, so that warning
-    // means that the barrier was not confirmed. Without synchronous standbys the barrier does nothing: every append
-    // commits with synchronous_commit on, so it is flushed before a read can see it.
+    // means that the barrier was not confirmed. That includes a wait that Npgsql cancels because the command timed out.
+    // Without synchronous standbys the barrier does nothing: every append commits with synchronous_commit on, so it is
+    // flushed before a read can see it.
     private async Task<T> ReadWithBarrierAsync<T>(
         NpgsqlBatchCommand read,
         NpgsqlBatchCommand barrier,

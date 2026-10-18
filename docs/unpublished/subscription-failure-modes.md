@@ -134,6 +134,8 @@ Causes:
 - **Disposing our appender while a commit waits.** The caller's token never reaches the commit, only the appender's
   stop token does. `DisposeAsync` cancels that token (`BatchingAppender.cs` 47 and 76-85), and Npgsql then sends a
   cancel request.
+- **A command that times out.** Npgsql's `CommandTimeout`, 30 seconds by default, sends a cancel request too. The
+  command then returns normally, and the warning reaches the connection's `Notice` event before it does.
 - **An administrator's `pg_cancel_backend` or `pg_terminate_backend`, or a fast shutdown.**
 - **A failover manager emptying `synchronous_standby_names`.** That releases every waiting commit with no warning at all
   (`syncrep.c`, `SyncRepUpdateSyncStandbysDefined`). Non-strict Patroni, CloudNativePG with `preferred` and
