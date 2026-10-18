@@ -39,6 +39,7 @@ internal sealed class EventLogReader<TEvent>(
             firstKeyExclusive,
             static e => (long)e.Context.StreamPosition.Value,
             maxCount,
+            ReadEvent,
             cancellationToken);
     }
 
@@ -63,19 +64,42 @@ internal sealed class EventLogReader<TEvent>(
             firstKeyExclusive,
             static e => (long)e.Context.LogPosition.Value,
             maxCount,
+            ReadEvent,
             cancellationToken);
     }
 
     /// <summary>
-    /// Reads events from the global event log whose positions are greater than the starting position and less than or
-    /// equal to the ending position, in ascending position order.
+    /// Reads the rows in the event log that the filter selects, in position order, after the starting position. The
+    /// read ends at the ending position, inclusive, or at the end of the log if there is no ending position. Every row
+    /// is read into <paramref name="row"/>, which is valid only until the next row is read.
     /// </summary>
-    public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCatchUpAllAsync(
+    public IAsyncEnumerable<EventLogRow<TEvent>> ReadAllRowsAsync(
         long startExclusive,
-        long endInclusive,
+        long? endInclusive,
         EventFilter filter,
+        EventLogRow<TEvent> row,
         CancellationToken cancellationToken)
     {
+        if (endInclusive is not { } end)
+        {
+            // Without an ending position, it runs the query that reads the whole log.
+            var readAllCondition = Translate(filter, EventLogSql.ReadAllParameterCount + 1);
+
+            return ReadPagesAsync(
+                sql.ReadAll(ReadDirection.Forward, includeMetadata: true, readAllCondition?.Sql),
+                (parameters, key, limit) =>
+                {
+                    parameters.Add(new NpgsqlParameter<long> { TypedValue = key });
+                    parameters.Add(new NpgsqlParameter<int> { TypedValue = limit });
+                },
+                readAllCondition,
+                startExclusive,
+                static r => r.Position,
+                null,
+                reader => ReadRow(reader, row),
+                cancellationToken);
+        }
+
         var condition = Translate(filter, EventLogSql.CatchUpAllParameterCount + 1);
 
         return ReadPagesAsync(
@@ -83,25 +107,28 @@ internal sealed class EventLogReader<TEvent>(
             (parameters, key, limit) =>
             {
                 parameters.Add(new NpgsqlParameter<long> { TypedValue = key });
-                parameters.Add(new NpgsqlParameter<long> { TypedValue = endInclusive });
+                parameters.Add(new NpgsqlParameter<long> { TypedValue = end });
                 parameters.Add(new NpgsqlParameter<int> { TypedValue = limit });
             },
             condition,
             startExclusive,
-            static e => (long)e.Context.LogPosition.Value,
+            static r => r.Position,
             null,
+            reader => ReadRow(reader, row),
             cancellationToken);
     }
 
     /// <summary>
-    /// Reads events from an event stream whose positions are greater than the starting position and less than or equal
-    /// to the ending position, in ascending position order.
+    /// Reads the rows in an event stream that the filter selects, in stream position order, after the starting
+    /// position. The read ends at the ending position, inclusive. Every row is read into <paramref name="row"/>, which
+    /// is valid only until the next row is read.
     /// </summary>
-    public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCatchUpStreamAsync(
+    public IAsyncEnumerable<EventLogRow<TEvent>> ReadStreamRowsAsync(
         string streamId,
         long startExclusive,
         long endInclusive,
         EventFilter filter,
+        EventLogRow<TEvent> row,
         CancellationToken cancellationToken)
     {
         var condition = Translate(filter, EventLogSql.CatchUpStreamParameterCount + 1);
@@ -117,8 +144,9 @@ internal sealed class EventLogReader<TEvent>(
             },
             condition,
             startExclusive,
-            static e => (long)e.Context.StreamPosition.Value,
+            static r => r.StreamPosition,
             null,
+            reader => ReadRow(reader, row),
             cancellationToken);
     }
 
@@ -149,13 +177,16 @@ internal sealed class EventLogReader<TEvent>(
         return (bool)(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
     }
 
-    private async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadPagesAsync(
+    // Reads a page at a time. Each page starts after a key, which is the log or stream position of the last row read,
+    // in the direction of the read, so the first page starts after firstKeyExclusive.
+    private async IAsyncEnumerable<T> ReadPagesAsync<T>(
         string pageSql,
         Action<NpgsqlParameterCollection, long, int> bindPage,
         PostgresFilterCondition? condition,
         long firstKeyExclusive,
-        Func<ReadEvent<TEvent, string, StreamPosition, LogPosition>, long> keyOf,
+        Func<T, long> keyOf,
         long? maxCount,
+        Func<NpgsqlDataReader, T> read,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var key = firstKeyExclusive;
@@ -175,10 +206,10 @@ internal sealed class EventLogReader<TEvent>(
 
                 while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                 {
-                    var readEvent = ReadEvent(reader);
-                    key = keyOf(readEvent);
+                    var item = read(reader);
+                    key = keyOf(item);
                     count++;
-                    yield return readEvent;
+                    yield return item;
                 }
             }
 
@@ -200,14 +231,31 @@ internal sealed class EventLogReader<TEvent>(
         var streamId = reader.GetString(1);
         var streamPosition = reader.GetInt64(2);
         var eventName = reader.GetString(3);
-
-        var eventData = !reader.IsDBNull(4)
-            ? PostgresEventData.FromJson(reader.GetString(4))
-            : PostgresEventData.FromBytes(reader.GetFieldValue<byte[]>(5));
-
+        var eventData = ReadEventData(reader);
         var metadata = reader.IsDBNull(6) ? null : reader.GetString(6);
         var createdAt = reader.GetFieldValue<DateTimeOffset>(7);
 
         return decoder.Decode(position, streamId, streamPosition, eventName, eventData, metadata, createdAt);
+    }
+
+    private static EventLogRow<TEvent> ReadRow(NpgsqlDataReader reader, EventLogRow<TEvent> row)
+    {
+        row.Set(
+            reader.GetInt64(0),
+            reader.GetString(1),
+            reader.GetInt64(2),
+            reader.GetString(3),
+            ReadEventData(reader),
+            reader.IsDBNull(6) ? null : reader.GetString(6),
+            reader.GetFieldValue<DateTimeOffset>(7));
+
+        return row;
+    }
+
+    private static PostgresEventData ReadEventData(NpgsqlDataReader reader)
+    {
+        return !reader.IsDBNull(4)
+            ? PostgresEventData.FromJson(reader.GetString(4))
+            : PostgresEventData.FromBytes(reader.GetFieldValue<byte[]>(5));
     }
 }

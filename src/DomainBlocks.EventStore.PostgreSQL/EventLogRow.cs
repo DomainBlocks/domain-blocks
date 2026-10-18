@@ -9,12 +9,12 @@ using DomainBlocks.EventStore.Filtering;
 namespace DomainBlocks.EventStore.PostgreSQL;
 
 /// <summary>
-/// A row from the live feed whose event is decoded only when an observer asks for it, so an event that no subscription
-/// selects is never decoded.
+/// A row read for subscriptions, whose event is decoded only when a subscription asks for it, so an event that no
+/// subscription selects is never decoded.
 /// </summary>
 /// <remarks>
-/// A session reuses one row for every insert, so a row is valid only until the next is read. The payload and metadata
-/// are decoded together, once, on the first request for either.
+/// A source reuses one row for every row it reads, so a row is valid only until the next is read. The payload and
+/// metadata are decoded together, once, on the first request for either.
 /// </remarks>
 internal sealed class EventLogRow<TEvent>(IEventDecoder<TEvent, PostgresEventData, string> decoder) :
     IFilterableEvent,

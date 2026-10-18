@@ -1,13 +1,13 @@
 using System.Net.Sockets;
 using Npgsql;
 
-namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
+namespace DomainBlocks.EventStore.PostgreSQL;
 
-internal static class EventLogFeedResumePolicy
+internal static class PostgresTransientErrors
 {
     /// <summary>
     /// Treats connection loss, server restarts, and resource exhaustion as transient. Misconfiguration, such as a
-    /// missing publication, the wrong wal_level, or missing privileges, is not transient, so it surfaces immediately.
+    /// missing table or missing privileges, is not transient, so it surfaces immediately.
     /// </summary>
     public static bool IsTransient(Exception exception)
     {
