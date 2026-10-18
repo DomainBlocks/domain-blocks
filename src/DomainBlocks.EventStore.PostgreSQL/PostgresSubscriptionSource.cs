@@ -26,7 +26,7 @@ internal sealed class PostgresSubscriptionSource<TEvent>(
 {
     private readonly EventLogRow<TEvent> _row = new(decoder);
 
-    public async ValueTask<LogPosition?> ReadEndPositionAsync(CancellationToken cancellationToken)
+    public async ValueTask<LogPosition?> ReadEndLogPositionAsync(CancellationToken cancellationToken)
     {
         return await reader.GetMaxPositionAsync(cancellationToken).ConfigureAwait(false) is { } position
             ? LogPosition.FromInt64(position)
@@ -47,7 +47,7 @@ internal sealed class PostgresSubscriptionSource<TEvent>(
             cancellationToken);
     }
 
-    public async ValueTask<StreamPosition?> ReadStreamEndPositionAsync(
+    public async ValueTask<StreamPosition?> ReadEndStreamPositionAsync(
         string streamId,
         CancellationToken cancellationToken)
     {

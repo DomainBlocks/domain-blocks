@@ -114,7 +114,7 @@ public class PostgresLiveFanOutBenchmarks
 
         public void Release() => _released.TrySetResult();
 
-        public ValueTask<LogPosition?> ReadEndPositionAsync(CancellationToken cancellationToken)
+        public ValueTask<LogPosition?> ReadEndLogPositionAsync(CancellationToken cancellationToken)
         {
             return new ValueTask<LogPosition?>((LogPosition?)null);
         }
@@ -142,7 +142,7 @@ public class PostgresLiveFanOutBenchmarks
             }
         }
 
-        public ValueTask<StreamPosition?> ReadStreamEndPositionAsync(
+        public ValueTask<StreamPosition?> ReadEndStreamPositionAsync(
             string streamId,
             CancellationToken cancellationToken)
         {
