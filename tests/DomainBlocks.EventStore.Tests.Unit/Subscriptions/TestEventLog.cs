@@ -196,7 +196,7 @@ internal sealed class TestEventLog(bool hearsAppends = true)
     private sealed class Source(TestEventLog log) :
         IEventSubscriptionSource<TestSourceEvent, string, StreamPosition, LogPosition>
     {
-        public ValueTask<LogPosition?> ReadEndPositionAsync(CancellationToken cancellationToken)
+        public ValueTask<LogPosition?> ReadEndLogPositionAsync(CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref log._endPositionReadCount);
 
@@ -228,7 +228,7 @@ internal sealed class TestEventLog(bool hearsAppends = true)
             return events.ToAsyncEnumerable();
         }
 
-        public ValueTask<StreamPosition?> ReadStreamEndPositionAsync(
+        public ValueTask<StreamPosition?> ReadEndStreamPositionAsync(
             string streamId,
             CancellationToken cancellationToken)
         {

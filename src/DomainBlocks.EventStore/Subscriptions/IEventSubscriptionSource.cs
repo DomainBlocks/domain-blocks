@@ -22,11 +22,11 @@ namespace DomainBlocks.EventStore.Subscriptions;
 /// returned. Without that, a catch-up that begins after a live read could miss an event that the live read delivered.
 /// </para>
 /// </remarks>
-/// <typeparam name="TSourceEvent">An event as the store holds it, which is decoded only on request.</typeparam>
+/// <typeparam name="TEvent">An event as the store holds it, which is decoded only on request.</typeparam>
 /// <typeparam name="TStreamId">The type of stream ID.</typeparam>
 /// <typeparam name="TStreamPos">The type of position in a stream.</typeparam>
 /// <typeparam name="TLogPos">The type of position in the event log.</typeparam>
-public interface IEventSubscriptionSource<TSourceEvent, TStreamId, TStreamPos, TLogPos> : IAsyncDisposable
+public interface IEventSubscriptionSource<TEvent, TStreamId, TStreamPos, TLogPos> : IAsyncDisposable
     where TStreamId : notnull
     where TStreamPos : struct
     where TLogPos : struct
@@ -34,7 +34,13 @@ public interface IEventSubscriptionSource<TSourceEvent, TStreamId, TStreamPos, T
     /// <summary>
     /// Reads the position of the last event in the log, or <see langword="null"/> if the log is empty.
     /// </summary>
-    ValueTask<TLogPos?> ReadEndPositionAsync(CancellationToken cancellationToken);
+    ValueTask<TLogPos?> ReadEndLogPositionAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads the position of the last event in a stream, or <see langword="null"/> if the stream is empty or does not
+    /// exist.
+    /// </summary>
+    ValueTask<TStreamPos?> ReadEndStreamPositionAsync(TStreamId streamId, CancellationToken cancellationToken);
 
     /// <summary>
     /// Reads the events in the log that <paramref name="filter"/> selects, in log order, after
@@ -42,24 +48,18 @@ public interface IEventSubscriptionSource<TSourceEvent, TStreamId, TStreamPos, T
     /// <paramref name="toInclusive"/>, or to the end of the log if it is <see langword="null"/>. Each event is valid
     /// only until the next one is read.
     /// </summary>
-    IAsyncEnumerable<TSourceEvent> ReadAllAsync(
+    IAsyncEnumerable<TEvent> ReadAllAsync(
         TLogPos? fromExclusive,
         TLogPos? toInclusive,
         EventFilter filter,
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Reads the position of the last event in a stream, or <see langword="null"/> if the stream is empty or does not
-    /// exist.
-    /// </summary>
-    ValueTask<TStreamPos?> ReadStreamEndPositionAsync(TStreamId streamId, CancellationToken cancellationToken);
-
-    /// <summary>
     /// Reads the events in a stream that <paramref name="filter"/> selects, in stream order, after
     /// <paramref name="fromExclusive"/>, or from the start if it is <see langword="null"/>, up to and including
     /// <paramref name="toInclusive"/>. Each event is valid only until the next one is read.
     /// </summary>
-    IAsyncEnumerable<TSourceEvent> ReadStreamAsync(
+    IAsyncEnumerable<TEvent> ReadStreamAsync(
         TStreamId streamId,
         TStreamPos? fromExclusive,
         TStreamPos toInclusive,

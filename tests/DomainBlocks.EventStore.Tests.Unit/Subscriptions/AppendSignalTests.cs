@@ -8,7 +8,7 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.Tests.Unit.Subscriptions;
 
-public class AppendWatcherTests
+public class AppendSignalTests
 {
     private const int TestTimeoutMillis = 5 * 1000;
     private static readonly TimeSpan LongTimeout = TimeSpan.FromHours(1);
@@ -20,18 +20,18 @@ public class AppendWatcherTests
         MaxRetryDelay = TimeSpan.FromMilliseconds(50)
     };
 
-    private static readonly ILogger Logger = new NUnitLoggerProvider().CreateLogger(nameof(AppendWatcherTests));
+    private static readonly ILogger Logger = new NUnitLoggerProvider().CreateLogger(nameof(AppendSignalTests));
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
     public async Task WaitAsync_LaterAppendAlreadyHeard_ReturnsTrueAtOnce(CancellationToken ct)
     {
         var listener = new TestAppendListener();
-        await using var watcher = await StartAsync(listener, ct);
+        await using var signal = await StartAsync(listener, ct);
         await listener.HearAsync(5, ct);
 
-        (await watcher.WaitAsync(4, LongTimeout, ct)).ShouldBeTrue();
-        (await watcher.WaitAsync(null, LongTimeout, ct)).ShouldBeTrue();
+        (await signal.WaitAsync(4, LongTimeout, ct)).ShouldBeTrue();
+        (await signal.WaitAsync(null, LongTimeout, ct)).ShouldBeTrue();
     }
 
     [Test]
@@ -39,9 +39,9 @@ public class AppendWatcherTests
     public async Task WaitAsync_NothingHeard_ReturnsFalseAfterTimeout(CancellationToken ct)
     {
         var listener = new TestAppendListener();
-        await using var watcher = await StartAsync(listener, ct);
+        await using var signal = await StartAsync(listener, ct);
 
-        (await watcher.WaitAsync(null, ShortTimeout, ct)).ShouldBeFalse();
+        (await signal.WaitAsync(null, ShortTimeout, ct)).ShouldBeFalse();
     }
 
     [Test]
@@ -49,10 +49,10 @@ public class AppendWatcherTests
     public async Task WaitAsync_AppendHeardOnlyAtPosition_ReturnsFalseAfterTimeout(CancellationToken ct)
     {
         var listener = new TestAppendListener();
-        await using var watcher = await StartAsync(listener, ct);
+        await using var signal = await StartAsync(listener, ct);
         await listener.HearAsync(5, ct);
 
-        (await watcher.WaitAsync(5, ShortTimeout, ct)).ShouldBeFalse();
+        (await signal.WaitAsync(5, ShortTimeout, ct)).ShouldBeFalse();
     }
 
     [Test]
@@ -60,13 +60,14 @@ public class AppendWatcherTests
     public async Task WaitAsync_SeveralWaiters_EachReturnsWhenAnAppendAfterItsPositionIsHeard(CancellationToken ct)
     {
         var listener = new TestAppendListener();
-        await using var watcher = await StartAsync(listener, ct);
-        var afterOne = watcher.WaitAsync(1, LongTimeout, ct).AsTask();
-        var afterThree = watcher.WaitAsync(3, LongTimeout, ct).AsTask();
+        await using var signal = await StartAsync(listener, ct);
+        var afterOne = signal.WaitAsync(1, LongTimeout, ct).AsTask();
+        var afterThree = signal.WaitAsync(3, LongTimeout, ct).AsTask();
 
         await listener.HearAsync(2, ct);
 
         (await afterOne).ShouldBeTrue();
+        await Task.Delay(100, ct);
         afterThree.IsCompleted.ShouldBeFalse();
 
         await listener.HearAsync(4, ct);
@@ -79,11 +80,11 @@ public class AppendWatcherTests
     public async Task WaitAsync_Canceled_Throws(CancellationToken ct)
     {
         var listener = new TestAppendListener();
-        await using var watcher = await StartAsync(listener, ct);
+        await using var signal = await StartAsync(listener, ct);
         using var waitCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         waitCts.CancelAfter(50);
 
-        var wait = watcher.WaitAsync(null, LongTimeout, waitCts.Token).AsTask();
+        var wait = signal.WaitAsync(null, LongTimeout, waitCts.Token).AsTask();
 
         await Should.ThrowAsync<OperationCanceledException>(wait);
     }
@@ -93,13 +94,13 @@ public class AppendWatcherTests
     public async Task HighWaterMark_EarlierAppendHeard_KeepsTheLaterOne(CancellationToken ct)
     {
         var listener = new TestAppendListener();
-        await using var watcher = await StartAsync(listener, ct);
+        await using var signal = await StartAsync(listener, ct);
         await listener.HearAsync(5, ct);
 
         await listener.HearAsync(3, ct);
 
-        watcher.HighWaterMark.ShouldBe(5);
-        (await watcher.WaitAsync(4, ShortTimeout, ct)).ShouldBeTrue();
+        signal.HighWaterMark.ShouldBe(5);
+        (await signal.WaitAsync(4, ShortTimeout, ct)).ShouldBeTrue();
     }
 
     [Test]
@@ -107,14 +108,14 @@ public class AppendWatcherTests
     public async Task Start_ListenerFailsBeforeHearing_ListensAgain(CancellationToken ct)
     {
         var listener = new TestAppendListener();
-        await using var watcher = await StartAsync(listener, ct);
+        await using var signal = await StartAsync(listener, ct);
 
         listener.Fail(new IOException("lost"));
         await listener.WaitForStartAsync(ct);
         await listener.HearAsync(1, ct);
 
         listener.StartCount.ShouldBe(2);
-        watcher.HighWaterMark.ShouldBe(1);
+        signal.HighWaterMark.ShouldBe(1);
     }
 
     [Test]
@@ -123,7 +124,7 @@ public class AppendWatcherTests
     {
         var listener = new TestAppendListener();
         var options = new EventLogTailOptions { RetryDelay = LongTimeout, MaxRetryDelay = LongTimeout };
-        await using var watcher = await StartAsync(listener, ct, options);
+        await using var signal = await StartAsync(listener, ct, options);
         await listener.HearAsync(1, ct);
 
         listener.Fail(new IOException("lost"));
@@ -131,7 +132,7 @@ public class AppendWatcherTests
 
         await listener.HearAsync(2, ct);
 
-        watcher.HighWaterMark.ShouldBe(2);
+        signal.HighWaterMark.ShouldBe(2);
     }
 
     [Test]
@@ -139,7 +140,7 @@ public class AppendWatcherTests
     public async Task Start_ListenerEnds_ListensAgain(CancellationToken ct)
     {
         var listener = new TestAppendListener();
-        await using var watcher = await StartAsync(listener, ct);
+        await using var signal = await StartAsync(listener, ct);
 
         listener.End();
         await listener.WaitForStartAsync(ct);
@@ -152,23 +153,23 @@ public class AppendWatcherTests
     public async Task DisposeAsync_Listening_StopsTheListener(CancellationToken ct)
     {
         var listener = new TestAppendListener();
-        var watcher = await StartAsync(listener, ct);
+        var signal = await StartAsync(listener, ct);
 
-        await watcher.DisposeAsync();
+        await signal.DisposeAsync();
 
         listener.ActiveCount.ShouldBe(0);
     }
 
-    private static async Task<AppendWatcher<long>> StartAsync(
+    private static async Task<AppendSignal<long>> StartAsync(
         TestAppendListener listener,
         CancellationToken cancellationToken,
         EventLogTailOptions? options = null)
     {
-        var watcher = new AppendWatcher<long>(listener.ListenAsync, options ?? Options, Logger, "test");
-        watcher.Start();
+        var signal = new AppendSignal<long>(listener.ListenAsync, options ?? Options, Logger, "test");
+        signal.Start();
         await listener.WaitForStartAsync(cancellationToken);
 
-        return watcher;
+        return signal;
     }
 
     /// <summary>
@@ -200,7 +201,7 @@ public class AppendWatcherTests
                 {
                     yield return position;
 
-                    // The watcher asks for the next position only once it has taken this one in.
+                    // The signal asks for the next position only once it has taken this one in.
                     _consumptions.Release();
                 }
             }
@@ -211,7 +212,7 @@ public class AppendWatcherTests
         }
 
         /// <summary>
-        /// Hears an append, and waits until the watcher has taken it in.
+        /// Hears an append, and waits until the signal has taken it in.
         /// </summary>
         public async Task HearAsync(long position, CancellationToken cancellationToken)
         {

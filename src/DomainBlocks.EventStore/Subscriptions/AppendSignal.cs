@@ -6,15 +6,21 @@ using Polly.Retry;
 namespace DomainBlocks.EventStore.Subscriptions;
 
 /// <summary>
-/// Listens for the events appended to a store's log, and keeps the highest position it has heard of, so that any number
-/// of callers can wait for an event after their own position.
+/// Signals the events appended to a store's log, so that any number of callers can wait for an event after their own
+/// position. It runs the store's listener, and keeps the highest position the listener has yielded.
 /// </summary>
 /// <remarks>
-/// What it hears only saves time, so it never fails. When the store's listener fails or ends, it is restarted with
+/// <para>
+/// The signal only saves time, so it never fails. When the store's listener fails or ends, it is restarted with
 /// backoff, and while it is down, waits time out and the caller reads anyway. A listener that fails after it has heard
 /// an append is restarted at once, and its next failure backs off from the start.
+/// </para>
+/// <para>
+/// The high-water mark and the task that completes when it next advances are held together in one immutable state,
+/// which only the listener replaces, so reads and waits take no lock.
+/// </para>
 /// </remarks>
-internal sealed class AppendWatcher<TLogPos> : IAsyncDisposable where TLogPos : struct, IComparable<TLogPos>
+internal sealed class AppendSignal<TLogPos> : IAsyncDisposable where TLogPos : struct, IComparable<TLogPos>
 {
     private readonly Func<CancellationToken, IAsyncEnumerable<TLogPos>> _listen;
     private readonly ILogger? _logger;
@@ -22,9 +28,7 @@ internal sealed class AppendWatcher<TLogPos> : IAsyncDisposable where TLogPos : 
     private readonly ResiliencePipeline _pipeline;
     private readonly CancellationTokenSource _stopCts = new();
     private readonly CancellationToken _stopToken;
-    private readonly Lock _lock = new();
-    private TaskCompletionSource _raised = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private TLogPos? _highWaterMark;
+    private State _state = new(null);
     private Task? _listening;
     private int _started;
     private int _disposed;
@@ -33,7 +37,7 @@ internal sealed class AppendWatcher<TLogPos> : IAsyncDisposable where TLogPos : 
     /// <param name="options">The retry delays.</param>
     /// <param name="logger">The logger for restarts.</param>
     /// <param name="tailId">The ID of the tail session that listens, which correlates its restarts.</param>
-    public AppendWatcher(
+    public AppendSignal(
         Func<CancellationToken, IAsyncEnumerable<TLogPos>> listen,
         EventLogTailOptions options,
         ILogger? logger,
@@ -49,14 +53,7 @@ internal sealed class AppendWatcher<TLogPos> : IAsyncDisposable where TLogPos : 
     /// <summary>
     /// Gets the highest position heard of, or <see langword="null"/> if nothing has been heard yet.
     /// </summary>
-    public TLogPos? HighWaterMark
-    {
-        get
-        {
-            lock (_lock)
-                return _highWaterMark;
-        }
-    }
+    public TLogPos? HighWaterMark => Volatile.Read(ref _state).HighWaterMark;
 
     /// <summary>
     /// Starts listening, if it has not started. This runs the store's listener until it first waits, so a listener that
@@ -87,15 +84,10 @@ internal sealed class AppendWatcher<TLogPos> : IAsyncDisposable where TLogPos : 
 
         while (true)
         {
-            Task raised;
+            var state = Volatile.Read(ref _state);
 
-            lock (_lock)
-            {
-                if (IsAfter(_highWaterMark, fromExclusive))
-                    return true;
-
-                raised = _raised.Task;
-            }
+            if (IsAfter(state.HighWaterMark, fromExclusive))
+                return true;
 
             var remaining = timeout - Stopwatch.GetElapsedTime(started);
 
@@ -104,12 +96,14 @@ internal sealed class AppendWatcher<TLogPos> : IAsyncDisposable where TLogPos : 
 
             try
             {
-                await raised.WaitAsync(remaining, cancellationToken).ConfigureAwait(false);
+                await state.Advancement.Task.WaitAsync(remaining, cancellationToken).ConfigureAwait(false);
             }
             catch (TimeoutException)
             {
                 return false;
             }
+
+            // The high-water mark has advanced, but not necessarily past fromExclusive, so the loop checks it again.
         }
     }
 
@@ -141,7 +135,7 @@ internal sealed class AppendWatcher<TLogPos> : IAsyncDisposable where TLogPos : 
             while (true)
             {
                 await _pipeline
-                    .ExecuteAsync(static (watcher, ct) => watcher.ListenUntilFailureAsync(ct), this, _stopToken)
+                    .ExecuteAsync(static (signal, ct) => signal.ListenUntilFailureAsync(ct), this, _stopToken)
                     .ConfigureAwait(false);
             }
         }
@@ -161,7 +155,7 @@ internal sealed class AppendWatcher<TLogPos> : IAsyncDisposable where TLogPos : 
             await foreach (var position in _listen(cancellationToken).ConfigureAwait(false))
             {
                 hasHeard = true;
-                Raise(position);
+                Advance(position);
             }
 
             throw new InvalidOperationException("Listening for appends ended.");
@@ -172,21 +166,17 @@ internal sealed class AppendWatcher<TLogPos> : IAsyncDisposable where TLogPos : 
         }
     }
 
-    private void Raise(TLogPos position)
+    // Only the listener calls this, one position at a time, so the state needs no compare-and-swap. The new state is
+    // published before the old advancement completes, so a waiter it wakes sees the new high-water mark.
+    private void Advance(TLogPos position)
     {
-        TaskCompletionSource raised;
+        var state = _state;
 
-        lock (_lock)
-        {
-            if (!IsAfter(position, _highWaterMark))
-                return;
+        if (!IsAfter(position, state.HighWaterMark))
+            return;
 
-            _highWaterMark = position;
-            raised = _raised;
-            _raised = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        }
-
-        raised.TrySetResult();
+        Volatile.Write(ref _state, new State(position));
+        state.Advancement.TrySetResult();
     }
 
     private static ResiliencePipeline CreatePipeline(EventLogTailOptions options, ILogger? logger, string tailId)
@@ -215,5 +205,13 @@ internal sealed class AppendWatcher<TLogPos> : IAsyncDisposable where TLogPos : 
                 }
             })
             .Build();
+    }
+
+    private sealed class State(TLogPos? highWaterMark)
+    {
+        public TLogPos? HighWaterMark { get; } = highWaterMark;
+
+        // Completes when the high-water mark advances past this state's.
+        public TaskCompletionSource Advancement { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 }

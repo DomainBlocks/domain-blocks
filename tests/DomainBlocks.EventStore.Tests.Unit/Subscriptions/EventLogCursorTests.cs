@@ -44,7 +44,7 @@ public class EventLogCursorTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task ReadAsync_AfterRead_DoesNotReadAgainUntilAnAppendIsHeard(CancellationToken ct)
+    public async Task WaitForAppendAsync_AfterRead_WaitsUntilAppendIsHeard(CancellationToken ct)
     {
         var eventLog = new TestEventLog();
         await using var cursor = CreateCursor(eventLog);
@@ -53,7 +53,7 @@ public class EventLogCursorTests
         (await ReadAsync(cursor, ct)).ShouldBe([1]);
         var readCount = eventLog.ReadCount;
 
-        var next = ReadAsync(cursor, ct);
+        var next = WaitAndReadAsync(cursor, ct);
         await Task.Delay(100, ct);
         next.IsCompleted.ShouldBeFalse();
         eventLog.ReadCount.ShouldBe(readCount);
@@ -65,7 +65,7 @@ public class EventLogCursorTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task ReadAsync_AppendNotHeard_ReadsAfterPollInterval(CancellationToken ct)
+    public async Task WaitForAppendAsync_AppendNotHeard_EndsAfterPollInterval(CancellationToken ct)
     {
         var eventLog = new TestEventLog(hearsAppends: false);
         var options = new EventLogTailOptions { PollInterval = TimeSpan.FromMilliseconds(50) };
@@ -76,12 +76,12 @@ public class EventLogCursorTests
 
         eventLog.Append();
 
-        (await ReadAsync(cursor, ct)).ShouldBe([2]);
+        (await WaitAndReadAsync(cursor, ct)).ShouldBe([2]);
     }
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task ReadAsync_AppendHeardDuringRead_DoesNotWait(CancellationToken ct)
+    public async Task WaitForAppendAsync_AppendHeardDuringRead_EndsAtOnce(CancellationToken ct)
     {
         var eventLog = new TestEventLog();
         eventLog.OnRead = positions =>
@@ -95,15 +95,15 @@ public class EventLogCursorTests
         eventLog.Append();
         (await ReadAsync(cursor, ct)).ShouldBe([1]);
         eventLog.Append();
-        (await ReadAsync(cursor, ct)).ShouldBe([2]);
+        (await WaitAndReadAsync(cursor, ct)).ShouldBe([2]);
 
         // Event 3 was appended, and heard, while event 2 was being read.
-        (await ReadAsync(cursor, ct)).ShouldBe([3]);
+        (await WaitAndReadAsync(cursor, ct)).ShouldBe([3]);
     }
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task ReadAsync_AppendHeardBeforeItIsReadable_WaitsForALaterAppend(CancellationToken ct)
+    public async Task WaitForAppendAsync_AppendHeardBeforeItIsReadable_WaitsForLaterAppend(CancellationToken ct)
     {
         var eventLog = new TestEventLog();
         await using var cursor = CreateCursor(eventLog);
@@ -114,11 +114,11 @@ public class EventLogCursorTests
         // Event 2 is heard, but a read does not return it yet.
         eventLog.HideAppends();
         eventLog.Append();
-        (await ReadAsync(cursor, ct)).ShouldBeEmpty();
+        (await WaitAndReadAsync(cursor, ct)).ShouldBeEmpty();
         var readCount = eventLog.ReadCount;
 
         // The cursor read for it once, and now waits, instead of reading for it again and again.
-        var next = ReadAsync(cursor, ct);
+        var next = WaitAndReadAsync(cursor, ct);
         await Task.Delay(100, ct);
         next.IsCompleted.ShouldBeFalse();
         eventLog.ReadCount.ShouldBe(readCount);
@@ -147,7 +147,7 @@ public class EventLogCursorTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task ReadAsync_TransientFailurePartWayThrough_ResumesAfterTheLastEventHandedOn(CancellationToken ct)
+    public async Task ReadAsync_TransientFailureMidRead_ResumesAfterLastReadEvent(CancellationToken ct)
     {
         var eventLog = new TestEventLog(hearsAppends: false);
         await using var cursor = CreateCursor(eventLog);
@@ -259,5 +259,15 @@ public class EventLogCursorTests
         await cursor.ReadAsync(e => positions.Add((long)e.Context.LogPosition.Value), cancellationToken);
 
         return [.. positions];
+    }
+
+    // Waits for an append, as the tail does after each read, and then reads.
+    private static async Task<long[]> WaitAndReadAsync(
+        EventLogCursor<string, TestSourceEvent, string, StreamPosition, LogPosition> cursor,
+        CancellationToken cancellationToken)
+    {
+        await cursor.WaitForAppendAsync(cancellationToken);
+
+        return await ReadAsync(cursor, cancellationToken);
     }
 }

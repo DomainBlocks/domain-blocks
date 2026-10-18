@@ -272,7 +272,10 @@ internal sealed class EventLogTail<TEvent, TSourceEvent, TStreamId, TStreamPos, 
 
                     // The cursor retries transient errors itself, so whatever it throws stops the tail.
                     while (true)
+                    {
                         await cursor.ReadAsync(NotifyNext, stopToken).ConfigureAwait(false);
+                        await cursor.WaitForAppendAsync(stopToken).ConfigureAwait(false);
+                    }
                 }
             }
             catch (OperationCanceledException) when (stopToken.IsCancellationRequested)

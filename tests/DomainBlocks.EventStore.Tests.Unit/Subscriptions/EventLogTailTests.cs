@@ -46,7 +46,7 @@ public class EventLogTailTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task AttachAsync_LogHasEvents_StartsAtEnd(CancellationToken ct)
+    public async Task AttachAsync_EventLogNotEmpty_StartsAtEnd(CancellationToken ct)
     {
         var eventLog = new TestEventLog();
         eventLog.Append(2);
@@ -57,6 +57,25 @@ public class EventLogTailTests
         eventLog.Append();
 
         (await observer.ReadAsync(1, ct)).ShouldBe([3]);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task AttachAsync_TailHasReadToEnd_ReadsAgainOnlyOnAppend(CancellationToken ct)
+    {
+        var eventLog = new TestEventLog();
+        await using var tail = CreateTail(eventLog);
+        var observer = new RecordingTailObserver();
+        await using var attachment = await tail.AttachAsync(observer, cancellationToken: ct);
+        eventLog.Append();
+        (await observer.ReadAsync(1, ct)).ShouldBe([1]);
+        var readCount = eventLog.ReadCount;
+
+        await Task.Delay(100, ct);
+        eventLog.ReadCount.ShouldBe(readCount);
+        eventLog.Append();
+
+        (await observer.ReadAsync(1, ct)).ShouldBe([2]);
     }
 
     [Test]
@@ -251,7 +270,7 @@ public class EventLogTailTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task OnNext_ObserverThrows_DetachesOnlyThatObserver(CancellationToken ct)
+    public async Task OnNext_ThrowingObserver_IsDetached(CancellationToken ct)
     {
         var eventLog = new TestEventLog();
         await using var tail = CreateTail(eventLog);
