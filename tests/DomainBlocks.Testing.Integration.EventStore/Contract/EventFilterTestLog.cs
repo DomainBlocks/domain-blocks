@@ -253,8 +253,12 @@ public static class EventFilterTestLog
     {
         public string? Tenant => Metadata.GetValueOrDefault("tenant");
 
-        public bool TryGetMetadata(string key, [MaybeNullWhen(false)] out string value) =>
-            Metadata.TryGetValue(key, out value);
+        public bool TryGetMetadata(string key, out ReadOnlySpan<char> value)
+        {
+            var found = Metadata.TryGetValue(key, out var entry);
+            value = entry;
+            return found;
+        }
     }
 
     /// <summary>

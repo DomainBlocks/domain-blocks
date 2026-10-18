@@ -68,9 +68,9 @@ internal sealed class EventLogDocument<TEvent>(IEventDecoder<TEvent, BsonValue, 
     /// Reads the key from the stored metadata document. Metadata that is not stored as a document has no keys for a
     /// filter to find.
     /// </summary>
-    public bool TryGetMetadata(string key, [MaybeNullWhen(false)] out string value)
+    public bool TryGetMetadata(string key, out ReadOnlySpan<char> value)
     {
-        value = null;
+        value = default;
 
         if (!_document.TryGetValue(EventLogEntry.FieldNames.Metadata, out var metadata) ||
             metadata is not BsonDocument entries ||
@@ -80,7 +80,7 @@ internal sealed class EventLogDocument<TEvent>(IEventDecoder<TEvent, BsonValue, 
         }
 
         // The store writes metadata values as strings. Any other value is returned as written.
-        value = entry.IsString ? entry.AsString : entry.ToString()!;
+        value = entry.IsString ? entry.AsString : entry.ToString();
 
         return true;
     }

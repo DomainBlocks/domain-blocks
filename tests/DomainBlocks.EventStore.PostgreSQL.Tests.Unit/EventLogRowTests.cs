@@ -33,7 +33,7 @@ public class EventLogRowTests
         var row = CreateRow(metadata);
 
         row.TryGetMetadata(key, out var value).ShouldBeTrue();
-        value.ShouldBe(expected);
+        value.ToString().ShouldBe(expected);
     }
 
     [TestCase("""{"tenant": "acme"}""", "Tenant")]
@@ -47,7 +47,7 @@ public class EventLogRowTests
         var row = CreateRow(metadata);
 
         row.TryGetMetadata(key, out var value).ShouldBeFalse();
-        value.ShouldBeNull();
+        value.IsEmpty.ShouldBeTrue();
     }
 
     [TestCase("""{"count": 12}""", "12")]
@@ -58,7 +58,58 @@ public class EventLogRowTests
         var row = CreateRow(metadata);
 
         row.TryGetMetadata("count", out var value).ShouldBeTrue();
-        value.ShouldBe(expected);
+        value.ToString().ShouldBe(expected);
+    }
+
+    [TestCase("""{"tenant": "a\u0063me"}""", "acme")]
+    [TestCase("""{"tenant": "say \"hi\""}""", "say \"hi\"")]
+    [TestCase("""{"tenant": "caf\u00e9"}""", "café")]
+    public void TryGetMetadata_EscapedValue_GetsItUnescaped(string metadata, string expected)
+    {
+        var row = CreateRow(metadata);
+
+        row.TryGetMetadata("tenant", out var value).ShouldBeTrue();
+        value.ToString().ShouldBe(expected);
+    }
+
+    [Test]
+    public void TryGetMetadata_SameKeyAgain_GetsTheSameResult()
+    {
+        var row = CreateRow("""{"tenant": "acme"}""");
+
+        row.TryGetMetadata("tenant", out var first).ShouldBeTrue();
+        row.TryGetMetadata("region", out _).ShouldBeFalse();
+        row.TryGetMetadata("tenant", out var second).ShouldBeTrue();
+        row.TryGetMetadata("region", out _).ShouldBeFalse();
+
+        second.ToString().ShouldBe(first.ToString());
+    }
+
+    [Test]
+    public void TryGetMetadata_AfterRowIsSetToTheNext_GetsTheNextRowsValues()
+    {
+        var row = CreateRow("""{"tenant": "acme"}""");
+        row.TryGetMetadata("tenant", out _).ShouldBeTrue();
+        row.TryGetMetadata("region", out _).ShouldBeFalse();
+
+        row.Set(8, "order-2", 0, "OrderPlaced", PostgresEventData.FromJson("{}"), """{"region": "eu"}""", CreatedAt);
+
+        row.TryGetMetadata("tenant", out _).ShouldBeFalse();
+        row.TryGetMetadata("region", out var region).ShouldBeTrue();
+        region.ToString().ShouldBe("eu");
+    }
+
+    [Test]
+    public void TryGetMetadata_LaterLookupGrowsTheBuffer_LeavesTheEarlierValueValid()
+    {
+        var large = new string('x', 10_000);
+        var row = CreateRow($$"""{"tenant": "acme", "note": "{{large}}"}""");
+
+        row.TryGetMetadata("tenant", out var tenant).ShouldBeTrue();
+        row.TryGetMetadata("note", out var note).ShouldBeTrue();
+
+        tenant.ToString().ShouldBe("acme");
+        note.ToString().ShouldBe(large);
     }
 
     [Test]

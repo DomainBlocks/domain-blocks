@@ -39,7 +39,7 @@ public class EventLogDocumentTests
         var document = CreateDocument(metadata);
 
         document.TryGetMetadata(key, out var value).ShouldBeTrue();
-        value.ShouldBe(expected);
+        value.ToString().ShouldBe(expected);
     }
 
     [TestCase("Tenant")]
@@ -52,7 +52,7 @@ public class EventLogDocumentTests
         var document = CreateDocument(metadata);
 
         document.TryGetMetadata(key, out var value).ShouldBeFalse();
-        value.ShouldBeNull();
+        value.IsEmpty.ShouldBeTrue();
     }
 
     [Test]
@@ -77,13 +77,13 @@ public class EventLogDocumentTests
         var document = CreateDocument(metadata);
 
         document.TryGetMetadata("count", out var count).ShouldBeTrue();
-        count.ShouldBe("12");
+        count.ToString().ShouldBe("12");
 
         document.TryGetMetadata("flag", out var flag).ShouldBeTrue();
-        flag.ShouldBe("true");
+        flag.ToString().ShouldBe("true");
 
         document.TryGetMetadata("nested", out var nested).ShouldBeTrue();
-        nested.ShouldBe("{ \"a\" : 1 }");
+        nested.ToString().ShouldBe("{ \"a\" : 1 }");
     }
 
     [Test]

@@ -34,9 +34,9 @@ internal sealed class TestSourceEvent(
         StreamPosition.FromInt64(streamPosition),
         LogPosition.FromInt64(logPosition));
 
-    public bool TryGetMetadata(string key, [MaybeNullWhen(false)] out string value)
+    public bool TryGetMetadata(string key, out ReadOnlySpan<char> value)
     {
-        value = null;
+        value = default;
         return false;
     }
 }

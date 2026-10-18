@@ -1,5 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
-
 namespace DomainBlocks.EventStore.Filtering;
 
 /// <summary>
@@ -25,5 +23,10 @@ public interface IFilterableEvent
     /// <summary>
     /// Gets the metadata value for the specified key, if the event has one.
     /// </summary>
-    bool TryGetMetadata(string key, [MaybeNullWhen(false)] out string value);
+    /// <remarks>
+    /// The value is a span so that an implementation can return it without allocating a string for each lookup, for
+    /// example from a buffer that it reuses. It is valid only until the event changes, so a filter compares it at once
+    /// and does not keep it.
+    /// </remarks>
+    bool TryGetMetadata(string key, out ReadOnlySpan<char> value);
 }
