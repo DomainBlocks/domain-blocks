@@ -239,11 +239,11 @@ public class EventLogCursorTests
         eventLog.SourceDisposedCount.ShouldBe(1);
     }
 
-    private static EventLogCursor<string, TestSourceEvent, string, StreamPosition, LogPosition> CreateCursor(
+    private static EventLogCursor<TestSourceEvent, string, string, StreamPosition, LogPosition> CreateCursor(
         TestEventLog eventLog,
         EventLogTailOptions? options = null)
     {
-        return new EventLogCursor<string, TestSourceEvent, string, StreamPosition, LogPosition>(
+        return new EventLogCursor<TestSourceEvent, string, string, StreamPosition, LogPosition>(
             eventLog.CreateSource(),
             options ?? Options,
             logger: null,
@@ -252,7 +252,7 @@ public class EventLogCursorTests
 
     // Reads once, and returns the log positions of the events that the read handed on.
     private static async Task<long[]> ReadAsync(
-        EventLogCursor<string, TestSourceEvent, string, StreamPosition, LogPosition> cursor,
+        EventLogCursor<TestSourceEvent, string, string, StreamPosition, LogPosition> cursor,
         CancellationToken cancellationToken)
     {
         List<long> positions = [];
@@ -263,7 +263,7 @@ public class EventLogCursorTests
 
     // Waits for an append, as the tail does after each read, and then reads.
     private static async Task<long[]> WaitAndReadAsync(
-        EventLogCursor<string, TestSourceEvent, string, StreamPosition, LogPosition> cursor,
+        EventLogCursor<TestSourceEvent, string, string, StreamPosition, LogPosition> cursor,
         CancellationToken cancellationToken)
     {
         await cursor.WaitForAppendAsync(cancellationToken);

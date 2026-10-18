@@ -23,14 +23,14 @@ namespace DomainBlocks.EventStore.Subscriptions;
 /// <param name="options">The poll interval and retry delays.</param>
 /// <param name="logger">The logger for retries and for restarts of the listener.</param>
 /// <param name="tailId">The ID of the tail session that reads through the cursor, which correlates its logs.</param>
-internal sealed class EventLogCursor<TEvent, TSourceEvent, TStreamId, TStreamPos, TLogPos>(
+internal sealed class EventLogCursor<TSourceEvent, TResultEvent, TStreamId, TStreamPos, TLogPos>(
     IEventSubscriptionSource<TSourceEvent, TStreamId, TStreamPos, TLogPos> source,
     EventLogTailOptions options,
     ILogger? logger,
     string tailId) :
     IAsyncDisposable
-    where TEvent : notnull
-    where TSourceEvent : IReadEvent<TEvent, TStreamId, TStreamPos, TLogPos>
+    where TSourceEvent : IReadEvent<TResultEvent, TStreamId, TStreamPos, TLogPos>
+    where TResultEvent : notnull
     where TStreamId : notnull
     where TStreamPos : struct
     where TLogPos : struct, IComparable<TLogPos>
