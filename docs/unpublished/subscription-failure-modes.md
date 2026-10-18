@@ -364,7 +364,8 @@ primary.
 - **PostgreSQL on a single server, or on a service whose storage replicates the WAL** needs nothing more. In Aurora,
   RDS Multi-AZ with one standby, and Cloud SQL HA, the local flush is itself the durable cross-zone write, so a visible
   append survives failover. For Aurora this rests on a commit becoming visible only after its storage quorum has it,
-  which AWS documents for the acknowledgement but not for visibility. Use the writer or cluster endpoint. On a reader
+  which AWS documents for the acknowledgement but not for visibility. A test on Aurora PostgreSQL 17.11 confirmed it
+  ([Cloud durability checks](postgresql-cloud-durability-checks.md)). Use the writer or cluster endpoint. On a reader
   endpoint, a catch-up could read a replica that lags behind the tail.
 - **PostgreSQL with streaming replication** needs synchronous standbys in `synchronous_standby_names` and a failover
   manager that promotes only a standby that has the commits:
