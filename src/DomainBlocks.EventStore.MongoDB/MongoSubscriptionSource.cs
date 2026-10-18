@@ -37,7 +37,7 @@ internal sealed class MongoSubscriptionSource<TEvent>(
     private readonly EventLogDocument<TEvent> _document = new(decoder);
     private IClientSessionHandle? _session;
 
-    public async ValueTask<LogPosition?> ReadEndPositionAsync(CancellationToken cancellationToken)
+    public async ValueTask<LogPosition?> ReadEndLogPositionAsync(CancellationToken cancellationToken)
     {
         var position = await ReadEndAsync(Builders<BsonDocument>.Filter.Empty, FieldNames.Position, cancellationToken)
             .ConfigureAwait(false);
@@ -59,7 +59,7 @@ internal sealed class MongoSubscriptionSource<TEvent>(
         return ReadAsync(WithFilter(range, filter), FieldNames.Position, cancellationToken);
     }
 
-    public async ValueTask<StreamPosition?> ReadStreamEndPositionAsync(
+    public async ValueTask<StreamPosition?> ReadEndStreamPositionAsync(
         string streamId,
         CancellationToken cancellationToken)
     {

@@ -125,7 +125,7 @@ public class MongoLiveFanOutBenchmarks
 
         public void Release() => _released.TrySetResult();
 
-        public ValueTask<LogPosition?> ReadEndPositionAsync(CancellationToken cancellationToken)
+        public ValueTask<LogPosition?> ReadEndLogPositionAsync(CancellationToken cancellationToken)
         {
             return new ValueTask<LogPosition?>((LogPosition?)null);
         }
@@ -149,7 +149,7 @@ public class MongoLiveFanOutBenchmarks
             }
         }
 
-        public ValueTask<StreamPosition?> ReadStreamEndPositionAsync(
+        public ValueTask<StreamPosition?> ReadEndStreamPositionAsync(
             string streamId,
             CancellationToken cancellationToken)
         {
