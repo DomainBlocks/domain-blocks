@@ -15,7 +15,7 @@ internal sealed class StreamCatchUpTarget<TSourceEvent, TStreamId, TStreamPos, T
         IEventSubscriptionSource<TSourceEvent, TStreamId, TStreamPos, TLogPos> source,
         CancellationToken cancellationToken)
     {
-        return source.ReadStreamEndPositionAsync(streamId, cancellationToken);
+        return source.ReadEndStreamPositionAsync(streamId, cancellationToken);
     }
 
     public IAsyncEnumerable<TSourceEvent> ReadAsync(

@@ -21,7 +21,7 @@ internal sealed class LogCatchUpTarget<TSourceEvent, TStreamId, TStreamPos, TLog
         IEventSubscriptionSource<TSourceEvent, TStreamId, TStreamPos, TLogPos> source,
         CancellationToken cancellationToken)
     {
-        return source.ReadEndPositionAsync(cancellationToken);
+        return source.ReadEndLogPositionAsync(cancellationToken);
     }
 
     public IAsyncEnumerable<TSourceEvent> ReadAsync(
