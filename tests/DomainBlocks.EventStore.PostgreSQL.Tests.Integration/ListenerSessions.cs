@@ -4,8 +4,7 @@ using Npgsql;
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
 /// <summary>
-/// Finds the sessions that listen for a schema's appends. A session that listens runs LISTEN as its last query, so a
-/// session whose last query is that LISTEN is still listening.
+/// Finds the sessions that listen for a schema's appends. A session that listens runs LISTEN as its last query.
 /// </summary>
 /// <remarks>
 /// It queries through the test environment's own pool. Through the store's pool it could reuse a connection that the
