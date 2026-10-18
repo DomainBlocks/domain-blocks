@@ -70,7 +70,7 @@ public class PostgresLiveFanOutBenchmarks
     {
         var source = new Source(_decoder, _rows, _streamIds);
 
-        await using var tail = new EventLogTail<IDomainEvent, EventLogRow<IDomainEvent>, string, StreamPosition,
+        await using var tail = new EventLogTail<EventLogRow<IDomainEvent>, IDomainEvent, string, StreamPosition,
             LogPosition>(() => source, TailOptions);
 
         var subscribers = new Subscriber[SubscriberCount];
@@ -181,7 +181,7 @@ public class PostgresLiveFanOutBenchmarks
         IDisposable
     {
         private readonly
-            SubscriptionQueue<IDomainEvent, EventLogRow<IDomainEvent>, string, StreamPosition, LogPosition> _queue =
+            SubscriptionQueue<EventLogRow<IDomainEvent>, IDomainEvent, string, StreamPosition, LogPosition> _queue =
                 new(SubscriptionOptions.Default.QueueCapacity, filter.Matches);
 
         private readonly TaskCompletionSource _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);

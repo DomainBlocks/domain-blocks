@@ -26,10 +26,11 @@ public static class PostgresEventStore
             options.ReadPageSize,
             eventCodec);
 
-        var subscriptions = new EventLogSubscriptions<TEvent, EventLogRow<TEvent>, string, StreamPosition, LogPosition>(
-            () => new PostgresSubscriptionSource<TEvent>(dataSource, reader, names, eventCodec),
-            options.Tail,
-            logger);
+        var subscriptions =
+            new CatchUpSubscriptionFactory<EventLogRow<TEvent>, TEvent, string, StreamPosition, LogPosition>(
+                () => new PostgresSubscriptionSource<TEvent>(dataSource, reader, names, eventCodec),
+                options.Tail,
+                logger);
 
         return new PostgresEventStore<TEvent>(
             dataSource,
@@ -58,7 +59,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
     private readonly PostgresEventStoreAdminOptions _adminOptions;
     private readonly IAppender _appender;
     private readonly EventLogReader<TEvent> _reader;
-    private readonly EventLogSubscriptions<TEvent, EventLogRow<TEvent>, string, StreamPosition, LogPosition>
+    private readonly CatchUpSubscriptionFactory<EventLogRow<TEvent>, TEvent, string, StreamPosition, LogPosition>
         _subscriptions;
     private readonly IEventCodec<TEvent, PostgresEventData, string> _eventCodec;
 
@@ -69,7 +70,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         PostgresEventStoreAdminOptions adminOptions,
         IAppender appender,
         EventLogReader<TEvent> reader,
-        EventLogSubscriptions<TEvent, EventLogRow<TEvent>, string, StreamPosition, LogPosition> subscriptions,
+        CatchUpSubscriptionFactory<EventLogRow<TEvent>, TEvent, string, StreamPosition, LogPosition> subscriptions,
         IEventCodec<TEvent, PostgresEventData, string> eventCodec)
     {
         _dataSource = dataSource;
