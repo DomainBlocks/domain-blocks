@@ -14,7 +14,6 @@ public class SchemaObjectNamesTests
         names.QuotedSchema.ShouldBe("\"dbx_tests\"");
         names.EventLog.ShouldBe("\"dbx_tests\".\"event_log\"");
         names.AppendEventsFunction.ShouldBe("\"dbx_tests\".\"append_events\"");
-        names.Publication.ShouldBe("dbx_tests_event_log_pub");
     }
 
     [TestCase("")]

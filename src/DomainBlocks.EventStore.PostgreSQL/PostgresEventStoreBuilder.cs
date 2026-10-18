@@ -12,7 +12,6 @@ public sealed class PostgresEventStoreBuilder<TEvent> :
     private string? _connectionString;
     private Action<NpgsqlDataSourceBuilder>? _configureDataSource;
     private PostgresEventStoreOptions _options = new();
-    private PostgresEventStoreAdminOptions _adminOptions = new();
     private ILoggerFactory? _loggerFactory;
     private ILogger? _logger;
 
@@ -51,22 +50,6 @@ public sealed class PostgresEventStoreBuilder<TEvent> :
         ArgumentNullException.ThrowIfNull(configure);
 
         configure(_options);
-        return this;
-    }
-
-    public PostgresEventStoreBuilder<TEvent> UseAdminOptions(PostgresEventStoreAdminOptions adminOptions)
-    {
-        ArgumentNullException.ThrowIfNull(adminOptions);
-
-        _adminOptions = adminOptions;
-        return this;
-    }
-
-    public PostgresEventStoreBuilder<TEvent> ConfigureAdminOptions(Action<PostgresEventStoreAdminOptions> configure)
-    {
-        ArgumentNullException.ThrowIfNull(configure);
-
-        configure(_adminOptions);
         return this;
     }
 
@@ -112,7 +95,6 @@ public sealed class PostgresEventStoreBuilder<TEvent> :
                 dataSource,
                 codec,
                 _options,
-                _adminOptions,
                 logger,
                 isDataSourceOwned);
 
