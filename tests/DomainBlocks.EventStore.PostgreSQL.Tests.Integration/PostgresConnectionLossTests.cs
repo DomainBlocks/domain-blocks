@@ -10,9 +10,9 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 /// interval and listens again, so subscriptions observe every event once and never fall behind.
 /// </summary>
 [TestFixture]
-public class PostgresConnectionLossTests() : PostgresIntegrationTest(x =>
+public class PostgresConnectionLossTests() : PostgresIntegrationTest(opt =>
 {
-    x.Tail = new EventLogTailOptions
+    opt.Tail = new EventLogTailOptions
     {
         PollInterval = TimeSpan.FromMilliseconds(200),
         RetryDelay = TimeSpan.FromMilliseconds(100),

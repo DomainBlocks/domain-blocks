@@ -11,9 +11,9 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 /// test, so an event arrives only if its append was heard.
 /// </summary>
 [TestFixture]
-public class PostgresAppendListenerTests() : PostgresIntegrationTest(x =>
+public class PostgresAppendListenerTests() : PostgresIntegrationTest(opt =>
 {
-    x.Tail = new EventLogTailOptions { PollInterval = TimeSpan.FromHours(1) };
+    opt.Tail = new EventLogTailOptions { PollInterval = TimeSpan.FromHours(1) };
 })
 {
     [Test]

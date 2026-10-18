@@ -13,8 +13,14 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// events.
 /// </summary>
 /// <remarks>
-/// Every read goes to the server that the appends go to, so it sees every event that another source has read. Rows are
-/// read into one row per source, which is valid only until the next is read.
+/// <para>
+/// Every read goes to the server that the appends go to. While that server stays the primary, a read sees every event
+/// that another source has read, because an event that one read sees stays visible to every later read. A failover
+/// keeps that only if the promoted server has every event that the old primary made visible.
+/// </para>
+/// <para>
+/// Rows are read into one row per source, which is valid only until the next is read.
+/// </para>
 /// </remarks>
 internal sealed class PostgresSubscriptionSource<TEvent>(
     NpgsqlDataSource dataSource,

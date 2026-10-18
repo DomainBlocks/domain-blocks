@@ -26,11 +26,15 @@ public static class PostgresEventStore
             options.ReadPageSize,
             eventCodec);
 
-        var subscriptions =
-            new CatchUpSubscriptionFactory<EventLogRow<TEvent>, TEvent, string, StreamPosition, LogPosition>(
-                () => new PostgresSubscriptionSource<TEvent>(dataSource, reader, names, eventCodec),
-                options.Tail,
-                logger);
+        var subscriptionFactory = new CatchUpSubscriptionFactory<
+            EventLogRow<TEvent>,
+            TEvent,
+            string,
+            StreamPosition,
+            LogPosition>(
+            () => new PostgresSubscriptionSource<TEvent>(dataSource, reader, names, eventCodec),
+            options.Tail,
+            logger);
 
         return new PostgresEventStore<TEvent>(
             dataSource,
@@ -39,7 +43,7 @@ public static class PostgresEventStore
             adminOptions,
             appender,
             reader,
-            subscriptions,
+            subscriptionFactory,
             eventCodec);
     }
 }
@@ -59,8 +63,14 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
     private readonly PostgresEventStoreAdminOptions _adminOptions;
     private readonly IAppender _appender;
     private readonly EventLogReader<TEvent> _reader;
-    private readonly CatchUpSubscriptionFactory<EventLogRow<TEvent>, TEvent, string, StreamPosition, LogPosition>
-        _subscriptions;
+
+    private readonly CatchUpSubscriptionFactory<
+        EventLogRow<TEvent>,
+        TEvent,
+        string,
+        StreamPosition,
+        LogPosition> _subscriptionFactory;
+
     private readonly IEventCodec<TEvent, PostgresEventData, string> _eventCodec;
 
     internal PostgresEventStore(
@@ -70,7 +80,12 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         PostgresEventStoreAdminOptions adminOptions,
         IAppender appender,
         EventLogReader<TEvent> reader,
-        CatchUpSubscriptionFactory<EventLogRow<TEvent>, TEvent, string, StreamPosition, LogPosition> subscriptions,
+        CatchUpSubscriptionFactory<
+            EventLogRow<TEvent>,
+            TEvent,
+            string,
+            StreamPosition,
+            LogPosition> subscriptionFactory,
         IEventCodec<TEvent, PostgresEventData, string> eventCodec)
     {
         _dataSource = dataSource;
@@ -79,7 +94,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         _adminOptions = adminOptions;
         _appender = appender;
         _reader = reader;
-        _subscriptions = subscriptions;
+        _subscriptionFactory = subscriptionFactory;
         _eventCodec = eventCodec;
     }
 
@@ -210,7 +225,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         SubscriptionOrigin<LogPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
-        return _subscriptions.SubscribeToAll(origin, options);
+        return _subscriptionFactory.SubscribeToAll(origin, options);
     }
 
     public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> SubscribeToStream(
@@ -220,13 +235,13 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
     {
         ArgumentException.ThrowIfNullOrEmpty(streamId);
 
-        return _subscriptions.SubscribeToStream(streamId, origin, options);
+        return _subscriptionFactory.SubscribeToStream(streamId, origin, options);
     }
 
     public async ValueTask DisposeAsync()
     {
         await _appender.DisposeAsync().ConfigureAwait(false);
-        await _subscriptions.DisposeAsync().ConfigureAwait(false);
+        await _subscriptionFactory.DisposeAsync().ConfigureAwait(false);
 
         if (_ownsDataSource)
             await _dataSource.DisposeAsync().ConfigureAwait(false);

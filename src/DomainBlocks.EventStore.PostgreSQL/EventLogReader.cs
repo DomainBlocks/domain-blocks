@@ -69,9 +69,9 @@ internal sealed class EventLogReader<TEvent>(
     }
 
     /// <summary>
-    /// Reads the rows in the event log that the filter selects, in position order, after the starting position, up to
-    /// and including the ending position, or to the end of the log if there is none. Every row is read into
-    /// <paramref name="row"/>, which is valid only until the next is read.
+    /// Reads the rows in the event log that the filter selects, in position order, after the starting position. The
+    /// read ends at the ending position, inclusive, or at the end of the log if there is no ending position. Every row
+    /// is read into <paramref name="row"/>, which is valid only until the next row is read.
     /// </summary>
     public IAsyncEnumerable<EventLogRow<TEvent>> ReadAllRowsAsync(
         long startExclusive,
@@ -82,16 +82,17 @@ internal sealed class EventLogReader<TEvent>(
     {
         if (endInclusive is not { } end)
         {
-            var unbounded = Translate(filter, EventLogSql.ReadAllParameterCount + 1);
+            // Without an ending position, it runs the query that reads the whole log.
+            var readAllCondition = Translate(filter, EventLogSql.ReadAllParameterCount + 1);
 
             return ReadPagesAsync(
-                sql.ReadAll(ReadDirection.Forward, includeMetadata: true, unbounded?.Sql),
+                sql.ReadAll(ReadDirection.Forward, includeMetadata: true, readAllCondition?.Sql),
                 (parameters, key, limit) =>
                 {
                     parameters.Add(new NpgsqlParameter<long> { TypedValue = key });
                     parameters.Add(new NpgsqlParameter<int> { TypedValue = limit });
                 },
-                unbounded,
+                readAllCondition,
                 startExclusive,
                 static r => r.Position,
                 null,
@@ -119,8 +120,8 @@ internal sealed class EventLogReader<TEvent>(
 
     /// <summary>
     /// Reads the rows in an event stream that the filter selects, in stream position order, after the starting
-    /// position, up to and including the ending position. Every row is read into <paramref name="row"/>, which is valid
-    /// only until the next is read.
+    /// position. The read ends at the ending position, inclusive. Every row is read into <paramref name="row"/>, which
+    /// is valid only until the next row is read.
     /// </summary>
     public IAsyncEnumerable<EventLogRow<TEvent>> ReadStreamRowsAsync(
         string streamId,
@@ -176,6 +177,8 @@ internal sealed class EventLogReader<TEvent>(
         return (bool)(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
     }
 
+    // Reads a page at a time. Each page starts after a key, which is the log or stream position of the last row read,
+    // in the direction of the read, so the first page starts after firstKeyExclusive.
     private async IAsyncEnumerable<T> ReadPagesAsync<T>(
         string pageSql,
         Action<NpgsqlParameterCollection, long, int> bindPage,

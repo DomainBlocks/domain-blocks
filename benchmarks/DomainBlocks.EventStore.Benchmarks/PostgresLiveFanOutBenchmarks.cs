@@ -12,8 +12,9 @@ namespace DomainBlocks.EventStore.Benchmarks;
 /// <summary>
 /// Measures the PostgreSQL live path without I/O: a source hands <see cref="EventCount"/> rows to the tail, which fans
 /// them out to the queues of <see cref="SubscriberCount"/> subscriptions, each of which selects
-/// <see cref="SelectedPercent"/> percent of the rows and takes their events. The tail and the queues are the real ones.
-/// The source stands in for PostgreSQL's and reads into one reusable row, as PostgreSQL's does.
+/// <see cref="SelectedPercent"/> percent of the rows and takes their events. The real implementations are used for the
+/// tail and queues. The source is a stub without I/O that replaces
+/// <see cref="PostgresSubscriptionSource{TEvent}"/>, and reads into one reusable row, as the real implementation does.
 /// </summary>
 [MemoryDiagnoser]
 public class PostgresLiveFanOutBenchmarks
@@ -70,7 +71,11 @@ public class PostgresLiveFanOutBenchmarks
     {
         var source = new Source(_decoder, _rows, _streamIds);
 
-        await using var tail = new EventLogTail<EventLogRow<IDomainEvent>, IDomainEvent, string, StreamPosition,
+        await using var tail = new EventLogTail<
+            EventLogRow<IDomainEvent>,
+            IDomainEvent,
+            string,
+            StreamPosition,
             LogPosition>(() => source, TailOptions);
 
         var subscribers = new Subscriber[SubscriberCount];
@@ -172,9 +177,9 @@ public class PostgresLiveFanOutBenchmarks
     }
 
     /// <summary>
-    /// Stands in for a subscription. It passes each row to the queue that a subscription attaches to the tail, and
-    /// takes whatever the queue holds straight off it again, in place of a subscriber reading on another thread, so
-    /// that a run does the same work every time.
+    /// Stands in for a subscription. It passes each row to a queue like the one a subscription attaches to the tail.
+    /// It then takes whatever the queue holds straight off it again, instead of a subscriber reading on another thread.
+    /// That way, every run does the same work.
     /// </summary>
     private sealed class Subscriber(int expectedCount, EventFilter filter) :
         ITailObserver<EventLogRow<IDomainEvent>>,
