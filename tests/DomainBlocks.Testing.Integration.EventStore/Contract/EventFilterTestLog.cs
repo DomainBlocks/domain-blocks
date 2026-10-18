@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using DomainBlocks.EventStore;
 using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.TypeMapping;

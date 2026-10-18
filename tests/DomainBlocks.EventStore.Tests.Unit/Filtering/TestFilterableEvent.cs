@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using DomainBlocks.EventStore.Filtering;
 
 namespace DomainBlocks.EventStore.Tests.Unit.Filtering;
