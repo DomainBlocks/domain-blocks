@@ -84,7 +84,7 @@ internal sealed class PostgresSubscriptionSource<TEvent>(
 
             connection.Notification += (_, e) =>
             {
-                if (e.Channel == names.AppendsChannel &&
+                if (e.Channel == names.AppendChannel &&
                     long.TryParse(e.Payload, NumberStyles.None, CultureInfo.InvariantCulture, out var position))
                 {
                     positions.Enqueue(position);
@@ -93,7 +93,7 @@ internal sealed class PostgresSubscriptionSource<TEvent>(
 
             try
             {
-                await using (var command = new NpgsqlCommand($"LISTEN \"{names.AppendsChannel}\"", connection))
+                await using (var command = new NpgsqlCommand($"LISTEN \"{names.AppendChannel}\"", connection))
                     await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
 
                 while (true)

@@ -53,5 +53,5 @@ internal static class ListenerSessions
             await Task.Delay(20, cancellationToken);
     }
 
-    private static string ListenQuery(string schema) => $"LISTEN \"{new SchemaObjectNames(schema).AppendsChannel}\"";
+    private static string ListenQuery(string schema) => $"LISTEN \"{new SchemaObjectNames(schema).AppendChannel}\"";
 }
