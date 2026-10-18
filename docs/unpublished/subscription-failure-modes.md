@@ -222,17 +222,17 @@ twice or never costs at most one poll interval, never an event. Both stores shar
 ### What a store implements
 
 ```csharp
-public interface IEventSubscriptionSource<TSourceEvent, TStreamId, TStreamPos, TLogPos> : IAsyncDisposable
+public interface IEventSubscriptionSource<TEvent, TStreamId, TStreamPos, TLogPos> : IAsyncDisposable
 {
-    ValueTask<TLogPos?> ReadEndPositionAsync(CancellationToken cancellationToken);
+    ValueTask<TLogPos?> ReadEndLogPositionAsync(CancellationToken cancellationToken);
+
+    ValueTask<TStreamPos?> ReadEndStreamPositionAsync(TStreamId streamId, CancellationToken cancellationToken);
 
     // A null end reads to the end of the log.
-    IAsyncEnumerable<TSourceEvent> ReadAllAsync(
+    IAsyncEnumerable<TEvent> ReadAllAsync(
         TLogPos? fromExclusive, TLogPos? toInclusive, EventFilter filter, CancellationToken cancellationToken);
 
-    ValueTask<TStreamPos?> ReadStreamEndPositionAsync(TStreamId streamId, CancellationToken cancellationToken);
-
-    IAsyncEnumerable<TSourceEvent> ReadStreamAsync(
+    IAsyncEnumerable<TEvent> ReadStreamAsync(
         TStreamId streamId, TStreamPos? fromExclusive, TStreamPos toInclusive, EventFilter filter,
         CancellationToken cancellationToken);
 
@@ -269,7 +269,7 @@ then reads the rest of the log in order through `EventLogCursor`, handing each e
   a wake was lost.
 - **Transient errors.** The cursor retries from the last event it handed on, with backoff from `RetryDelay` (1 second)
   to `MaxRetryDelay` (1 minute), and logs each retry. Any other error is passed to every observer and fails the tail.
-- **The wake signal.** `AppendWatcher` runs the store's listener, keeps the highest position it has heard of, and
+- **The wake signal.** `AppendSignal` runs the store's listener, keeps the highest position it has heard of, and
   wakes any number of waiters. It never fails. It restarts the listener with backoff after any error or end, and its
   backoff starts again once the listener has heard something. It starts listening before the tail reads the end, so
   that no append between the two goes unheard.
