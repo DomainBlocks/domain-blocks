@@ -11,31 +11,31 @@ internal sealed class AppendNotificationListener : IAsyncDisposable
     private readonly NpgsqlConnection _connection;
     private readonly Channel<long> _positions = Channel.CreateUnbounded<long>();
     private readonly CancellationTokenSource _stopCts = new();
-    private Task _waiting = Task.CompletedTask;
+    private Task _notificationLoop = Task.CompletedTask;
 
-    private AppendNotificationListener(NpgsqlConnection connection, string channel)
+    private AppendNotificationListener(NpgsqlConnection connection, string channelName)
     {
         _connection = connection;
 
         _connection.Notification += (_, e) =>
         {
-            if (e.Channel == channel)
+            if (e.Channel == channelName)
                 _positions.Writer.TryWrite(long.Parse(e.Payload));
         };
     }
 
     public static async Task<AppendNotificationListener> StartAsync(
         NpgsqlDataSource dataSource,
-        string channel,
+        string channelName,
         CancellationToken cancellationToken)
     {
         var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        var listener = new AppendNotificationListener(connection, channel);
+        var listener = new AppendNotificationListener(connection, channelName);
 
-        await using (var command = new NpgsqlCommand($"LISTEN \"{channel}\"", connection))
+        await using (var command = new NpgsqlCommand($"LISTEN \"{channelName}\"", connection))
             await command.ExecuteNonQueryAsync(cancellationToken);
 
-        listener._waiting = listener.WaitForNotificationsAsync();
+        listener._notificationLoop = listener.WaitForNotificationsAsync();
 
         return listener;
     }
@@ -51,12 +51,13 @@ internal sealed class AppendNotificationListener : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await _stopCts.CancelAsync();
-        await _waiting;
+        await _notificationLoop;
         await _connection.DisposeAsync();
         _stopCts.Dispose();
     }
 
-    // A connection raises notifications only while something reads from it.
+    // A connection raises notifications only while something reads from it. The ones that arrive between waits stay
+    // buffered, and each wait raises the next, so none is lost.
     private async Task WaitForNotificationsAsync()
     {
         try

@@ -14,7 +14,7 @@ public class AppendNotificationTests : PostgresIntegrationTest
 {
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task Append_EventsAppended_NotifiesOnceWithTheLastPosition(CancellationToken ct)
+    public async Task Append_EventsAppended_NotifiesOnceWithLastPosition(CancellationToken ct)
     {
         await using var listener = await ListenAsync(ct);
 
@@ -59,7 +59,7 @@ public class AppendNotificationTests : PostgresIntegrationTest
 
     private Task<AppendNotificationListener> ListenAsync(CancellationToken cancellationToken)
     {
-        var channel = new SchemaObjectNames(Schema).AppendsChannel;
+        var channel = new SchemaObjectNames(Schema).AppendChannel;
         return AppendNotificationListener.StartAsync(DataSource, channel, cancellationToken);
     }
 }

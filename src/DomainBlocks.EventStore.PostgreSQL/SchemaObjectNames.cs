@@ -31,7 +31,7 @@ internal sealed partial class SchemaObjectNames
         ExpectedStateKindArrayType = $"{ExpectedStateKindType}[]";
         AppendStatusType = $"{schema}.{AppendStatusTypeName}";
         Publication = $"{schema}_{EventLogTableName}_pub";
-        AppendsChannel = schema;
+        AppendChannel = schema;
     }
 
     public string Schema { get; }
@@ -60,7 +60,7 @@ internal sealed partial class SchemaObjectNames
     /// The channel that append_events notifies when it appends events, unquoted. It is the schema name, because channel
     /// names are database-wide and no longer than 63 bytes, as schema names are.
     /// </summary>
-    public string AppendsChannel { get; }
+    public string AppendChannel { get; }
 
     [GeneratedRegex("^[a-z_][a-z0-9_]{0,62}$")]
     private static partial Regex SchemaNameRegex();
