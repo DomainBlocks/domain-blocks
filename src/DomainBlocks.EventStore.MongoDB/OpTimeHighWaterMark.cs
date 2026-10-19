@@ -6,12 +6,12 @@ namespace DomainBlocks.EventStore.MongoDB;
 /// The latest operation time at which the store's subscription sources have read, shared by all of them.
 /// </summary>
 /// <remarks>
-/// A source advances the fence after each response, before it hands that response's documents on, and advances its
-/// causally consistent session to the fence before each read. A read then waits on the server until its node's
-/// majority commit point has passed the fence, so a catch-up sees every event that the tail has already delivered, even
+/// A source advances the high-water mark after each response, before it hands that response's documents on, and
+/// advances its causally consistent session to it before each read. A read then waits on the server until its node's
+/// majority commit point has passed the mark, so a catch-up sees every event that the tail has already delivered, even
 /// after a failover to a node whose commit point lags.
 /// </remarks>
-internal sealed class OperationTimeFence
+internal sealed class OpTimeHighWaterMark
 {
     private BsonTimestamp? _time;
 
@@ -24,7 +24,7 @@ internal sealed class OperationTimeFence
 
         var current = Volatile.Read(ref _time);
 
-        // Sources advance the fence concurrently, so it moves only forwards, by compare-and-swap.
+        // Sources advance the mark concurrently, so it moves only forwards, by compare-and-swap.
         while (current is null || time.CompareTo(current) > 0)
         {
             var previous = Interlocked.CompareExchange(ref _time, time, current);

@@ -11,8 +11,8 @@ using Shouldly;
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
 /// <summary>
-/// MongoDB's subscription source: the operation time fence that makes a catch-up see what the tail has delivered, and
-/// the change stream that wakes the tail.
+/// MongoDB's subscription source: the operation time high-water mark that makes a catch-up see what the tail has
+/// delivered, and the change stream that wakes the tail.
 /// </summary>
 [TestFixture]
 public class MongoSubscriptionTailTests

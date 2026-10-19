@@ -74,6 +74,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
     private readonly IMongoSequencedAppender<BsonDocument, AppendContext> _sequencedAppender;
     private readonly IMongoCollection<BsonDocument> _eventLog;
     private readonly IEventCodec<TEvent, BsonValue, BsonValue> _eventCodec;
+
     private readonly CatchUpSubscriptionFactory<
         EventLogDocument<TEvent>,
         TEvent,
@@ -100,8 +101,8 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
             .WithReadConcern(ReadConcern.Majority)
             .WithReadPreference(ReadPreference.Primary);
 
-        // The store's sources share one fence, so that every read sees what the others have read.
-        var fence = new OperationTimeFence();
+        // The store's sources share one high-water mark, so that every read sees what the others have read.
+        var highWaterMark = new OpTimeHighWaterMark();
 
         _subscriptionFactory = new CatchUpSubscriptionFactory<
             EventLogDocument<TEvent>,
@@ -109,7 +110,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
             string,
             StreamPosition,
             LogPosition>(
-            () => new MongoSubscriptionSource<TEvent>(_eventLog, fence, eventCodec),
+            () => new MongoSubscriptionSource<TEvent>(_eventLog, highWaterMark, eventCodec),
             options.Tail,
             logger);
     }

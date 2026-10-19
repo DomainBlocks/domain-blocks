@@ -15,7 +15,7 @@ namespace DomainBlocks.EventStore.MongoDB;
 /// <remarks>
 /// <para>
 /// Reads are majority reads on the primary, in a causally consistent session of the source's own, advanced to the
-/// store's <see cref="OperationTimeFence"/> before each read, so a read sees every event that another source has read.
+/// store's <see cref="OpTimeHighWaterMark"/> before each read, so a read sees every event that another source has read.
 /// Documents are read into one document that the source reuses, which is valid only until the next is read.
 /// </para>
 /// <para>
@@ -24,7 +24,7 @@ namespace DomainBlocks.EventStore.MongoDB;
 /// </remarks>
 internal sealed class MongoSubscriptionSource<TEvent>(
     IMongoCollection<BsonDocument> eventLog,
-    OperationTimeFence fence,
+    OpTimeHighWaterMark highWaterMark,
     IEventDecoder<TEvent, BsonValue, BsonValue> decoder) :
     IEventSubscriptionSource<EventLogDocument<TEvent>, string, StreamPosition, LogPosition>
     where TEvent : notnull
@@ -125,7 +125,7 @@ internal sealed class MongoSubscriptionSource<TEvent>(
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        fence.Advance(session.OperationTime);
+        highWaterMark.Advance(session.OperationTime);
 
         return last?[positionFieldName].ToInt64();
     }
@@ -146,7 +146,7 @@ internal sealed class MongoSubscriptionSource<TEvent>(
         while (await cursor.MoveNextAsync(cancellationToken).ConfigureAwait(false))
         {
             // Advanced before the batch is handed on, so a later read by any source sees at least what this one saw.
-            fence.Advance(session.OperationTime);
+            highWaterMark.Advance(session.OperationTime);
 
             foreach (var document in cursor.Current)
             {
@@ -156,14 +156,14 @@ internal sealed class MongoSubscriptionSource<TEvent>(
         }
     }
 
-    // A read waits on the server until its node has a majority-committed view at least as recent as the fence.
+    // A read waits on the server until its node's majority-committed view reaches the high-water mark.
     private async Task<IClientSessionHandle> StartReadSessionAsync(CancellationToken cancellationToken)
     {
         _session ??= await eventLog.Database.Client
             .StartSessionAsync(new ClientSessionOptions { CausalConsistency = true }, cancellationToken)
             .ConfigureAwait(false);
 
-        if (fence.Time is { } time)
+        if (highWaterMark.Time is { } time)
             _session.AdvanceOperationTime(time);
 
         return _session;
