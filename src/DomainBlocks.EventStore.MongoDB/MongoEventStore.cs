@@ -74,8 +74,12 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
     private readonly IMongoSequencedAppender<BsonDocument, AppendContext> _sequencedAppender;
     private readonly IMongoCollection<BsonDocument> _eventLog;
     private readonly IEventCodec<TEvent, BsonValue, BsonValue> _eventCodec;
-    private readonly CatchUpSubscriptionFactory<EventLogDocument<TEvent>, TEvent, string, StreamPosition, LogPosition>
-        _subscriptions;
+    private readonly CatchUpSubscriptionFactory<
+        EventLogDocument<TEvent>,
+        TEvent,
+        string,
+        StreamPosition,
+        LogPosition> _subscriptionFactory;
 
     internal MongoEventStore(
         IMongoClient client,
@@ -99,11 +103,15 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         // The store's sources share one fence, so that every read sees what the others have read.
         var fence = new OperationTimeFence();
 
-        _subscriptions =
-            new CatchUpSubscriptionFactory<EventLogDocument<TEvent>, TEvent, string, StreamPosition, LogPosition>(
-                () => new MongoSubscriptionSource<TEvent>(_eventLog, fence, eventCodec),
-                options.Tail,
-                logger);
+        _subscriptionFactory = new CatchUpSubscriptionFactory<
+            EventLogDocument<TEvent>,
+            TEvent,
+            string,
+            StreamPosition,
+            LogPosition>(
+            () => new MongoSubscriptionSource<TEvent>(_eventLog, fence, eventCodec),
+            options.Tail,
+            logger);
     }
 
     /// <summary>
@@ -257,7 +265,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         // cannot be translated.
         _ = TranslateFilter(options?.Filter);
 
-        return _subscriptions.SubscribeToAll(origin, options);
+        return _subscriptionFactory.SubscribeToAll(origin, options);
     }
 
     public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> SubscribeToStream(
@@ -268,7 +276,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         ArgumentException.ThrowIfNullOrEmpty(streamId);
         _ = TranslateFilter(options?.Filter);
 
-        return _subscriptions.SubscribeToStream(streamId, origin, options);
+        return _subscriptionFactory.SubscribeToStream(streamId, origin, options);
     }
 
     // A filter is translated when the method is called, so a filter that cannot be translated is refused there rather
@@ -280,7 +288,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
     public async ValueTask DisposeAsync()
     {
         await _sequencedAppender.DisposeAsync().ConfigureAwait(false);
-        await _subscriptions.DisposeAsync().ConfigureAwait(false);
+        await _subscriptionFactory.DisposeAsync().ConfigureAwait(false);
         _ownedClient?.Dispose();
     }
 

@@ -29,8 +29,8 @@ internal sealed class MongoSubscriptionSource<TEvent>(
     IEventSubscriptionSource<EventLogDocument<TEvent>, string, StreamPosition, LogPosition>
     where TEvent : notnull
 {
-    private static readonly PipelineDefinition<ChangeStreamDocument<BsonDocument>, BsonDocument> InsertedPositions =
-        new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>()
+    private static readonly PipelineDefinition<ChangeStreamDocument<BsonDocument>, BsonDocument>
+        InsertedPositionsPipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>()
             .Match(x => x.OperationType == ChangeStreamOperationType.Insert)
             .Project(Builders<ChangeStreamDocument<BsonDocument>>.Projection.Include("documentKey"));
 
@@ -43,20 +43,6 @@ internal sealed class MongoSubscriptionSource<TEvent>(
             .ConfigureAwait(false);
 
         return position is { } p ? LogPosition.FromInt64(p) : null;
-    }
-
-    public IAsyncEnumerable<EventLogDocument<TEvent>> ReadAllAsync(
-        LogPosition? fromExclusive,
-        LogPosition? toInclusive,
-        EventFilter filter,
-        CancellationToken cancellationToken)
-    {
-        var range = Builders<BsonDocument>.Filter.Gt(FieldNames.Position, ToKey(fromExclusive));
-
-        if (toInclusive is { } to)
-            range &= Builders<BsonDocument>.Filter.Lte(FieldNames.Position, checked((long)to.Value));
-
-        return ReadAsync(WithFilter(range, filter), FieldNames.Position, cancellationToken);
     }
 
     public async ValueTask<StreamPosition?> ReadEndStreamPositionAsync(
@@ -72,6 +58,20 @@ internal sealed class MongoSubscriptionSource<TEvent>(
         return position is { } p ? StreamPosition.FromInt64(p) : null;
     }
 
+    public IAsyncEnumerable<EventLogDocument<TEvent>> ReadAllAsync(
+        LogPosition? fromExclusive,
+        LogPosition? toInclusive,
+        EventFilter filter,
+        CancellationToken cancellationToken)
+    {
+        var bounds = Builders<BsonDocument>.Filter.Gt(FieldNames.Position, ToKey(fromExclusive));
+
+        if (toInclusive is { } to)
+            bounds &= Builders<BsonDocument>.Filter.Lte(FieldNames.Position, checked((long)to.Value));
+
+        return ReadAsync(WithFilter(bounds, filter), FieldNames.Position, cancellationToken);
+    }
+
     public IAsyncEnumerable<EventLogDocument<TEvent>> ReadStreamAsync(
         string streamId,
         StreamPosition? fromExclusive,
@@ -79,11 +79,11 @@ internal sealed class MongoSubscriptionSource<TEvent>(
         EventFilter filter,
         CancellationToken cancellationToken)
     {
-        var range = Builders<BsonDocument>.Filter.Eq(FieldNames.StreamId, streamId) &
-                    Builders<BsonDocument>.Filter.Gt(FieldNames.StreamPosition, ToKey(fromExclusive)) &
-                    Builders<BsonDocument>.Filter.Lte(FieldNames.StreamPosition, checked((long)toInclusive.Value));
+        var bounds = Builders<BsonDocument>.Filter.Eq(FieldNames.StreamId, streamId) &
+                     Builders<BsonDocument>.Filter.Gt(FieldNames.StreamPosition, ToKey(fromExclusive)) &
+                     Builders<BsonDocument>.Filter.Lte(FieldNames.StreamPosition, checked((long)toInclusive.Value));
 
-        return ReadAsync(WithFilter(range, filter), FieldNames.StreamPosition, cancellationToken);
+        return ReadAsync(WithFilter(bounds, filter), FieldNames.StreamPosition, cancellationToken);
     }
 
     public async IAsyncEnumerable<LogPosition> ListenForAppendsAsync(
@@ -91,7 +91,7 @@ internal sealed class MongoSubscriptionSource<TEvent>(
     {
         // The change stream runs alongside the reads, so it does not use the source's session.
         using var cursor = await eventLog
-            .WatchAsync(InsertedPositions, cancellationToken: cancellationToken)
+            .WatchAsync(InsertedPositionsPipeline, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
         while (await cursor.MoveNextAsync(cancellationToken).ConfigureAwait(false))
@@ -115,7 +115,7 @@ internal sealed class MongoSubscriptionSource<TEvent>(
         string positionFieldName,
         CancellationToken cancellationToken)
     {
-        var session = await StartReadAsync(cancellationToken).ConfigureAwait(false);
+        var session = await StartReadSessionAsync(cancellationToken).ConfigureAwait(false);
 
         var last = await eventLog
             .Find(session, filter)
@@ -135,7 +135,7 @@ internal sealed class MongoSubscriptionSource<TEvent>(
         string positionFieldName,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var session = await StartReadAsync(cancellationToken).ConfigureAwait(false);
+        var session = await StartReadSessionAsync(cancellationToken).ConfigureAwait(false);
 
         using var cursor = await eventLog
             .Find(session, filter)
@@ -157,7 +157,7 @@ internal sealed class MongoSubscriptionSource<TEvent>(
     }
 
     // A read waits on the server until its node has a majority-committed view at least as recent as the fence.
-    private async Task<IClientSessionHandle> StartReadAsync(CancellationToken cancellationToken)
+    private async Task<IClientSessionHandle> StartReadSessionAsync(CancellationToken cancellationToken)
     {
         _session ??= await eventLog.Database.Client
             .StartSessionAsync(new ClientSessionOptions { CausalConsistency = true }, cancellationToken)
@@ -169,9 +169,9 @@ internal sealed class MongoSubscriptionSource<TEvent>(
         return _session;
     }
 
-    private static FilterDefinition<BsonDocument> WithFilter(FilterDefinition<BsonDocument> range, EventFilter filter)
+    private static FilterDefinition<BsonDocument> WithFilter(FilterDefinition<BsonDocument> bounds, EventFilter filter)
     {
-        return filter is AllEventsFilter ? range : range & MongoFilterTranslator.Translate(filter);
+        return filter is AllEventsFilter ? bounds : bounds & MongoFilterTranslator.Translate(filter);
     }
 
     private static long ToKey<TPos>(TPos? position) where TPos : struct, IPosition<TPos>

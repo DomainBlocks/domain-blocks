@@ -43,6 +43,17 @@ internal sealed class PostgresSubscriptionSource<TEvent>(
         return position is { } p ? LogPosition.FromInt64(p) : null;
     }
 
+    public async ValueTask<StreamPosition?> ReadEndStreamPositionAsync(
+        string streamId,
+        CancellationToken cancellationToken)
+    {
+        var position = await reader
+            .ReadMaxStreamPositionWithBarrierAsync(streamId, cancellationToken)
+            .ConfigureAwait(false);
+
+        return position is { } p ? StreamPosition.FromInt64(p) : null;
+    }
+
     public IAsyncEnumerable<EventLogRow<TEvent>> ReadAllAsync(
         LogPosition? fromExclusive,
         LogPosition? toInclusive,
@@ -53,17 +64,6 @@ internal sealed class PostgresSubscriptionSource<TEvent>(
             return ReadRowsWithBarrierAsync(ToKey(fromExclusive), filter, cancellationToken);
 
         return reader.ReadAllRowsAsync(ToKey(fromExclusive), checked((long)to.Value), filter, _row, cancellationToken);
-    }
-
-    public async ValueTask<StreamPosition?> ReadEndStreamPositionAsync(
-        string streamId,
-        CancellationToken cancellationToken)
-    {
-        var position = await reader
-            .ReadMaxStreamPositionWithBarrierAsync(streamId, cancellationToken)
-            .ConfigureAwait(false);
-
-        return position is { } p ? StreamPosition.FromInt64(p) : null;
     }
 
     public IAsyncEnumerable<EventLogRow<TEvent>> ReadStreamAsync(

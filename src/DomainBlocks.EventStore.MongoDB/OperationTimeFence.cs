@@ -13,27 +13,26 @@ namespace DomainBlocks.EventStore.MongoDB;
 /// </remarks>
 internal sealed class OperationTimeFence
 {
-    private readonly Lock _lock = new();
     private BsonTimestamp? _time;
 
-    public BsonTimestamp? Time
-    {
-        get
-        {
-            lock (_lock)
-                return _time;
-        }
-    }
+    public BsonTimestamp? Time => Volatile.Read(ref _time);
 
     public void Advance(BsonTimestamp? time)
     {
         if (time is null)
             return;
 
-        lock (_lock)
+        var current = Volatile.Read(ref _time);
+
+        // Sources advance the fence concurrently, so it moves only forwards, by compare-and-swap.
+        while (current is null || time.CompareTo(current) > 0)
         {
-            if (_time is null || time.CompareTo(_time) > 0)
-                _time = time;
+            var previous = Interlocked.CompareExchange(ref _time, time, current);
+
+            if (ReferenceEquals(previous, current))
+                return;
+
+            current = previous;
         }
     }
 }

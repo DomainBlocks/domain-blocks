@@ -84,7 +84,11 @@ public class MongoLiveFanOutBenchmarks
     {
         var source = new Source(_decoder, _documents);
 
-        await using var tail = new EventLogTail<EventLogDocument<IDomainEvent>, IDomainEvent, string, StreamPosition,
+        await using var tail = new EventLogTail<
+            EventLogDocument<IDomainEvent>,
+            IDomainEvent,
+            string,
+            StreamPosition,
             LogPosition>(() => source, TailOptions);
 
         var subscribers = new Subscriber[SubscriberCount];
