@@ -119,7 +119,7 @@ public class PostgresReplicationBarrierTests
         var execute = command.ExecuteAsync(batch, ct);
 
         await WaitForSyncRepAsync(AppendQuery, ct);
-        await Task.Delay(HeldFor, ct);
+        await Task.Delay(HoldDuration, ct);
         batch.Count(x => x.IsCompleted).ShouldBe(0);
 
         await SetStandbyNamesAsync(string.Empty);
