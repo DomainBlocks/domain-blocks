@@ -11,7 +11,8 @@ public class SubscriptionRetryTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task Pipeline_TransientFailuresWithoutProgress_GivesUpOnceTheStreakReachesTheTimeout(CancellationToken ct)
+    public async Task Pipeline_TransientFailuresWithoutProgress_GivesUpOnceTheStreakReachesTheTimeout(
+        CancellationToken ct)
     {
         var clock = new ManualTimeProvider();
         var retry = CreateRetry(clock, timeout: TimeSpan.FromMinutes(1));
