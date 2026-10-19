@@ -24,7 +24,7 @@ public class MongoSubscriptionTailTests
     private readonly MongoEventStoreOptions _options = new() { DatabaseName = $"tail_{Guid.NewGuid():N}" };
 
     [TearDown]
-    public Task DropDatabaseAsync() => MongoTestEnvironment.MongoClient.DropDatabaseAsync(_options.DatabaseName);
+    public Task TearDown() => MongoTestEnvironment.MongoClient.DropDatabaseAsync(_options.DatabaseName);
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
