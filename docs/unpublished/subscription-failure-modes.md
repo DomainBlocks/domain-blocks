@@ -327,11 +327,11 @@ catch-ups don't retry yet.
 ### MongoDB
 
 - **Reads.** Each source reads with majority read concern on the primary, in a causally consistent session of its own.
-- **The fence.** The store's sources share an operation time fence. A source advances the fence to each response's
-  `operationTime` before it hands on that response's documents, and advances its session to the fence before each read.
-  The server then holds a read until its node's majority commit point has passed the fence. This replaces the position
-  floor and retry loop recommended earlier for the late attacher after a failover: the server waits, so there is no
-  client loop and no extra round trip.
+- **The high-water mark.** The store's sources share a high-water mark of operation times. A source advances the mark to
+  each response's `operationTime` before it hands on that response's documents, and advances its session to the mark
+  before each read. The server then holds a read until its node's majority commit point has passed the mark. This
+  replaces the position floor and retry loop recommended earlier for the late attacher after a failover: the server
+  waits, so there is no client loop and no extra round trip.
 - **The wake signal.** A change stream of inserts that carries only each document's key, its log position. The source
   yields the last position of each batch.
 - **Transient errors.** The errors that retryable reads retry: network errors, a primary stepping down or shutting
@@ -342,10 +342,10 @@ catch-ups don't retry yet.
 Each store sets durability per operation. The deployment owns only its topology, and the store must talk to the
 primary.
 
-- **MongoDB** needs a replica set. Majority reads and the fence are set by the store, and the sequencing appender
-  commits with `w: majority` and journaling. Elections promote only a member that has every majority-committed write.
-  MongoDB Atlas is an ordinary replica set. Amazon DocumentDB and Cosmos DB's MongoDB API are different engines and
-  are untested.
+- **MongoDB** needs a replica set. Majority reads and the high-water mark are set by the store, and the sequencing
+  appender commits with `w: majority` and journaling. Elections promote only a member that has every majority-committed
+  write. MongoDB Atlas is an ordinary replica set. Amazon DocumentDB and Cosmos DB's MongoDB API are different engines
+  and are untested.
 - **PostgreSQL on a single server, or on a service whose storage replicates the WAL** needs nothing more. In Aurora,
   RDS Multi-AZ with one standby, and Cloud SQL HA, the local flush is itself the durable cross-zone write, so a visible
   append survives failover. For Aurora this rests on a commit becoming visible only after its storage quorum has it,
