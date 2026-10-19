@@ -9,18 +9,22 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
+using EventStore = IEventStore<object, string, StreamPosition, LogPosition>;
+using SubscriptionMessage = SubscriptionMessage<object, string, StreamPosition, LogPosition>;
+
 /// <summary>
 /// The replication barrier: subscriptions are given an event only once the synchronous standbys have it. These tests
 /// run on a server of their own, because <c>synchronous_standby_names</c> applies to the whole server. Naming a standby
 /// that does not exist holds every barrier, while events appended with <c>synchronous_commit = local</c> are visible on
-/// the primary at once.
+/// the primary at once. Clearing the setting then stands in for the standby: PostgreSQL releases the waiting commits as
+/// it would once a standby confirmed them, and they complete without a warning.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
 public class PostgresReplicationBarrierTests
 {
     private const string MissingStandby = "missing_standby";
-    private static readonly TimeSpan HeldFor = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan HoldDuration = TimeSpan.FromSeconds(1);
     private static readonly EventTypeMap EventTypeMap = new EventTypeMapBuilder().Add<TestEvent>().Build();
 
     private readonly PostgresEventStoreOptions _options = new()
@@ -39,22 +43,25 @@ public class PostgresReplicationBarrierTests
     private NpgsqlDataSource _localCommitDataSource = null!;
 
     [OneTimeSetUp]
-    public async Task StartServerAsync()
+    public async Task OneTimeSetUp()
     {
         _server = await PostgresServer.StartAsync();
         _dataSource = CreateDataSource(_server.ConnectionString);
 
         // Appends through this data source commit without waiting for a standby, as an append whose wait was canceled
         // does, so they are visible on the primary before any standby has them.
-        _localCommitDataSource = CreateDataSource(
-            new NpgsqlConnectionStringBuilder(_server.ConnectionString) { Options = "-c synchronous_commit=local" }
-                .ConnectionString);
+        var localCommit = new NpgsqlConnectionStringBuilder(_server.ConnectionString)
+        {
+            Options = "-c synchronous_commit=local"
+        };
+
+        _localCommitDataSource = CreateDataSource(localCommit.ConnectionString);
 
         await PostgresEventStoreAdmin.EnsureInitializedAsync(_dataSource, _options);
     }
 
     [OneTimeTearDown]
-    public async Task StopServerAsync()
+    public async Task OneTimeTearDown()
     {
         await _localCommitDataSource.DisposeAsync();
         await _dataSource.DisposeAsync();
@@ -62,7 +69,7 @@ public class PostgresReplicationBarrierTests
     }
 
     [SetUp]
-    public async Task ResetAsync()
+    public async Task SetUp()
     {
         await SetStandbyNamesAsync(string.Empty);
 
@@ -72,11 +79,11 @@ public class PostgresReplicationBarrierTests
     }
 
     [TearDown]
-    public Task ClearStandbyNamesAsync() => SetStandbyNamesAsync(string.Empty);
+    public Task TearDown() => SetStandbyNamesAsync(string.Empty);
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task SubscribeToAll_LiveEventNotOnStandby_IsDeliveredOnceTheStandbyHasIt(CancellationToken ct)
+    public async Task SubscribeToAll_LiveEventNotOnStandby_IsDeliveredOnceBarrierConfirmed(CancellationToken ct)
     {
         await using var eventStore = CreateEventStore();
         await using var subscription = eventStore.SubscribeToAll().GetAsyncEnumerator(ct);
@@ -86,7 +93,7 @@ public class PostgresReplicationBarrierTests
         var live = await AppendLocallyAsync("live", ct);
         var next = subscription.MoveNextAsync().AsTask();
 
-        await Task.Delay(HeldFor, ct);
+        await Task.Delay(HoldDuration, ct);
         next.IsCompleted.ShouldBeFalse();
 
         await SetStandbyNamesAsync(string.Empty);
@@ -96,7 +103,7 @@ public class PostgresReplicationBarrierTests
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task SubscribeToAll_FromEndWhenTheEndIsNotOnStandby_StartsOnceTheStandbyHasIt(CancellationToken ct)
+    public async Task SubscribeToAll_FromEndWhenTheEndIsNotOnStandby_StartsOnceBarrierConfirmed(CancellationToken ct)
     {
         await SetStandbyNamesAsync(MissingStandby);
         await AppendLocallyAsync("existing", ct);
@@ -106,7 +113,7 @@ public class PostgresReplicationBarrierTests
         await using var subscription = eventStore.SubscribeToAll().GetAsyncEnumerator(ct);
         var next = subscription.MoveNextAsync().AsTask();
 
-        await Task.Delay(HeldFor, ct);
+        await Task.Delay(HoldDuration, ct);
         next.IsCompleted.ShouldBeFalse();
 
         await SetStandbyNamesAsync(string.Empty);
@@ -117,10 +124,11 @@ public class PostgresReplicationBarrierTests
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task SubscribeToAll_EventNotOnStandbyWhenCatchingUp_IsReplayedOnceTheStandbyHasIt(
+    public async Task SubscribeToAll_EventNotOnStandbyWhenCatchingUp_IsReplayedOnceBarrierConfirmed(
         CancellationToken ct)
     {
         await using var eventStore = CreateEventStore();
+
         await using var subscription = await StartTailThenSubscribeAsync(
             eventStore,
             x => x.SubscribeToAll(SubscriptionOrigin.Start),
@@ -128,7 +136,7 @@ public class PostgresReplicationBarrierTests
 
         var next = subscription.Subscription.MoveNextAsync().AsTask();
 
-        await Task.Delay(HeldFor, ct);
+        await Task.Delay(HoldDuration, ct);
         next.IsCompleted.ShouldBeFalse();
 
         await SetStandbyNamesAsync(string.Empty);
@@ -139,10 +147,11 @@ public class PostgresReplicationBarrierTests
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task SubscribeToStream_EventNotOnStandbyWhenCatchingUp_IsReplayedOnceTheStandbyHasIt(
+    public async Task SubscribeToStream_EventNotOnStandbyWhenCatchingUp_IsReplayedOnceBarrierConfirmed(
         CancellationToken ct)
     {
         await using var eventStore = CreateEventStore();
+
         await using var subscription = await StartTailThenSubscribeAsync(
             eventStore,
             x => x.SubscribeToStream("s1", SubscriptionOrigin.Start),
@@ -150,7 +159,7 @@ public class PostgresReplicationBarrierTests
 
         var next = subscription.Subscription.MoveNextAsync().AsTask();
 
-        await Task.Delay(HeldFor, ct);
+        await Task.Delay(HoldDuration, ct);
         next.IsCompleted.ShouldBeFalse();
 
         await SetStandbyNamesAsync(string.Empty);
@@ -161,14 +170,14 @@ public class PostgresReplicationBarrierTests
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task SubscribeToAll_BarrierWaitCanceled_DeliversOnlyOnceTheStandbyHasIt(CancellationToken ct)
+    public async Task SubscribeToAll_BarrierWaitCanceled_DeliversOnlyOnceBarrierConfirmed(CancellationToken ct)
     {
         await InterruptBarrierAsync("pg_cancel_backend", ct);
     }
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task SubscribeToAll_BarrierBackendTerminated_DeliversOnlyOnceTheStandbyHasIt(CancellationToken ct)
+    public async Task SubscribeToAll_BarrierBackendTerminated_DeliversOnlyOnceBarrierConfirmed(CancellationToken ct)
     {
         await InterruptBarrierAsync("pg_terminate_backend", ct);
     }
@@ -194,7 +203,7 @@ public class PostgresReplicationBarrierTests
         await AppendLocallyAsync("live", ct);
         var next = subscription.MoveNextAsync().AsTask();
 
-        await Task.Delay(HeldFor, ct);
+        await Task.Delay(HoldDuration, ct);
 
         next.IsCompleted.ShouldBeFalse();
         logger.Errors.ShouldContain(x => x.Contains("no synchronous standby is configured"));
@@ -207,9 +216,8 @@ public class PostgresReplicationBarrierTests
     // Starts the tail with one subscription, appends an event that the standby does not have, and then subscribes
     // again, so that only the new subscription's catch-up stands between the event and the subscriber.
     private async Task<CatchingUp> StartTailThenSubscribeAsync(
-        IEventStore<object, string, StreamPosition, LogPosition> eventStore,
-        Func<IEventStore<object, string, StreamPosition, LogPosition>,
-            IAsyncEnumerable<SubscriptionMessage<object, string, StreamPosition, LogPosition>>> subscribe,
+        EventStore eventStore,
+        Func<EventStore, IAsyncEnumerable<SubscriptionMessage>> subscribe,
         CancellationToken ct)
     {
         var running = eventStore.SubscribeToAll().GetAsyncEnumerator(ct);
@@ -273,14 +281,12 @@ public class PostgresReplicationBarrierTests
         }
     }
 
-    private IEventStore<object, string, StreamPosition, LogPosition> CreateEventStore(
-        PostgresEventStoreOptions? options = null,
-        ILogger? logger = null)
+    private EventStore CreateEventStore(PostgresEventStoreOptions? options = null, ILogger? logger = null)
     {
         return CreateEventStore(_dataSource, options ?? _options, logger);
     }
 
-    private static IEventStore<object, string, StreamPosition, LogPosition> CreateEventStore(
+    private static EventStore CreateEventStore(
         NpgsqlDataSource dataSource,
         PostgresEventStoreOptions options,
         ILogger? logger = null)
@@ -335,7 +341,7 @@ public class PostgresReplicationBarrierTests
 
     private static async Task ShouldBeEventAsync(
         Task<bool> next,
-        IAsyncEnumerator<SubscriptionMessage<object, string, StreamPosition, LogPosition>> subscription,
+        IAsyncEnumerator<SubscriptionMessage> subscription,
         TestEvent expected)
     {
         (await next).ShouldBeTrue();
@@ -343,7 +349,7 @@ public class PostgresReplicationBarrierTests
     }
 
     private static async Task ShouldBeCaughtUpAsync(
-        IAsyncEnumerator<SubscriptionMessage<object, string, StreamPosition, LogPosition>> subscription)
+        IAsyncEnumerator<SubscriptionMessage> subscription)
     {
         (await subscription.MoveNextAsync()).ShouldBeTrue();
         subscription.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
@@ -352,8 +358,8 @@ public class PostgresReplicationBarrierTests
     // The running subscription is disposed last, after the one catching up, and is not read: the tail holds the event
     // back from it too, until the standby has it.
     private sealed record CatchingUp(
-        IAsyncEnumerator<SubscriptionMessage<object, string, StreamPosition, LogPosition>> Running,
-        IAsyncEnumerator<SubscriptionMessage<object, string, StreamPosition, LogPosition>> Subscription,
+        IAsyncEnumerator<SubscriptionMessage> Running,
+        IAsyncEnumerator<SubscriptionMessage> Subscription,
         TestEvent Existing) :
         IAsyncDisposable
     {
