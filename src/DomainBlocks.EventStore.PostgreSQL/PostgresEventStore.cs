@@ -23,9 +23,9 @@ public static class PostgresEventStore
             dataSource,
             new EventLogSql(names),
             options.ReadPageSize,
-            eventCodec);
-
-        var barrier = new ReplicationBarrier(dataSource, options.RequireSynchronousStandby, logger);
+            eventCodec,
+            options.RequireSynchronousStandby,
+            logger);
 
         var subscriptionFactory = new CatchUpSubscriptionFactory<
             EventLogRow<TEvent>,
@@ -33,7 +33,7 @@ public static class PostgresEventStore
             string,
             StreamPosition,
             LogPosition>(
-            () => new PostgresSubscriptionSource<TEvent>(dataSource, reader, barrier, names, eventCodec),
+            () => new PostgresSubscriptionSource<TEvent>(dataSource, reader, names, eventCodec),
             options.Tail,
             logger);
 

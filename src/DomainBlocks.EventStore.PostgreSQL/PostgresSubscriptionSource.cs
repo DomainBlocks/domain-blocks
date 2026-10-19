@@ -28,7 +28,6 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 internal sealed class PostgresSubscriptionSource<TEvent>(
     NpgsqlDataSource dataSource,
     EventLogReader<TEvent> reader,
-    ReplicationBarrier barrier,
     SchemaObjectNames names,
     IEventDecoder<TEvent, PostgresEventData, string> decoder) :
     IEventSubscriptionSource<EventLogRow<TEvent>, string, StreamPosition, LogPosition>
@@ -39,7 +38,7 @@ internal sealed class PostgresSubscriptionSource<TEvent>(
 
     public async ValueTask<LogPosition?> ReadEndLogPositionAsync(CancellationToken cancellationToken)
     {
-        var position = await reader.ReadMaxPositionWithBarrierAsync(barrier, cancellationToken).ConfigureAwait(false);
+        var position = await reader.ReadMaxPositionWithBarrierAsync(cancellationToken).ConfigureAwait(false);
 
         return position is { } p ? LogPosition.FromInt64(p) : null;
     }
@@ -61,7 +60,7 @@ internal sealed class PostgresSubscriptionSource<TEvent>(
         CancellationToken cancellationToken)
     {
         var position = await reader
-            .ReadMaxStreamPositionWithBarrierAsync(streamId, barrier, cancellationToken)
+            .ReadMaxStreamPositionWithBarrierAsync(streamId, cancellationToken)
             .ConfigureAwait(false);
 
         return position is { } p ? StreamPosition.FromInt64(p) : null;
@@ -135,7 +134,7 @@ internal sealed class PostgresSubscriptionSource<TEvent>(
         while (true)
         {
             var count = await reader
-                .ReadRowsWithBarrierAsync(key, filter, _page, barrier, cancellationToken)
+                .ReadRowsWithBarrierAsync(key, filter, _page, cancellationToken)
                 .ConfigureAwait(false);
 
             for (var i = 0; i < count; i++)
