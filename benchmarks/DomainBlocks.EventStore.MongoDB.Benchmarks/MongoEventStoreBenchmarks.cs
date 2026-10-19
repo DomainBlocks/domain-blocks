@@ -8,8 +8,8 @@ using Shouldly;
 namespace DomainBlocks.EventStore.MongoDB.Benchmarks;
 
 [TestFixture]
-public class MongoEventStoreBenchmarkTests() :
-    EventStoreBenchmarkTests<StreamPosition, LogPosition>(new MongoEventStoreTestHarness())
+public class MongoEventStoreBenchmarks() :
+    EventStoreBenchmarks<StreamPosition, LogPosition>(new MongoEventStoreTestHarness())
 {
     private static readonly EventTypeMap EventTypeMap = new EventTypeMapBuilder().Add<TestEvent>().Build();
 

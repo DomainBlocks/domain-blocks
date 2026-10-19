@@ -10,8 +10,8 @@ using Shouldly;
 namespace DomainBlocks.EventStore.PostgreSQL.Benchmarks;
 
 [TestFixture]
-public class PostgresEventStoreBenchmarkTests() :
-    EventStoreBenchmarkTests<StreamPosition, LogPosition>(new PostgresEventStoreTestHarness())
+public class PostgresEventStoreBenchmarks() :
+    EventStoreBenchmarks<StreamPosition, LogPosition>(new PostgresEventStoreTestHarness())
 {
     private static readonly EventTypeMap EventTypeMap = new EventTypeMapBuilder().Add<TestEvent>().Build();
 

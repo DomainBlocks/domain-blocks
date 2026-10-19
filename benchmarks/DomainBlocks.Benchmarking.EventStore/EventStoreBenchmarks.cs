@@ -15,7 +15,7 @@ namespace DomainBlocks.Benchmarking.EventStore;
 /// An append test fails only if an append fails, and a read test fails only if it reads the wrong number of events.
 /// </summary>
 [Category("Benchmark")]
-public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
+public abstract class EventStoreBenchmarks<TStreamPos, TLogPos>(
     IEventStoreTestHarness<TStreamPos, TLogPos> harness) :
     EventStoreTestBase<TStreamPos, TLogPos>(harness)
     where TStreamPos : notnull
