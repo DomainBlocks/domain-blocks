@@ -206,7 +206,7 @@ internal sealed class EventLogReader<TEvent>(
         return barrier.RunAsync(
             new NpgsqlBatchCommand(sql.MaxPosition),
             new NpgsqlBatchCommand(sql.BarrierAfterEnd),
-            ReadMaxAsync,
+            ReadMaxPositionAsync,
             cancellationToken);
     }
 
@@ -225,7 +225,7 @@ internal sealed class EventLogReader<TEvent>(
         var after = new NpgsqlBatchCommand(sql.BarrierAfterStreamEnd);
         after.Parameters.Add(new NpgsqlParameter<string> { TypedValue = streamId });
 
-        return barrier.RunAsync(read, after, ReadMaxAsync, cancellationToken);
+        return barrier.RunAsync(read, after, ReadMaxPositionAsync, cancellationToken);
     }
 
     public async Task<bool> StreamExistsAsync(string streamId, CancellationToken cancellationToken)
@@ -311,7 +311,7 @@ internal sealed class EventLogReader<TEvent>(
         return row;
     }
 
-    private static async Task<long?> ReadMaxAsync(NpgsqlDataReader reader, CancellationToken cancellationToken)
+    private static async Task<long?> ReadMaxPositionAsync(NpgsqlDataReader reader, CancellationToken cancellationToken)
     {
         return await reader.ReadAsync(cancellationToken).ConfigureAwait(false) && !reader.IsDBNull(0)
             ? reader.GetInt64(0)

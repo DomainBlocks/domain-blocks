@@ -167,8 +167,12 @@ internal sealed class EventLogSql
     // waits until the synchronous standbys have flushed it, and with it every commit that the read saw. It also returns
     // synchronous_standby_names, so that an empty setting can be refused.
     private static string Barrier(string eventLog, string condition) =>
-        "SELECT set_config('synchronous_commit', 'on', true), pg_logical_emit_message(true, 'dbx_barrier', ''), " +
-        $"current_setting('synchronous_standby_names') WHERE EXISTS (SELECT 1 FROM {eventLog} WHERE {condition})";
+        $"""
+        SELECT set_config('synchronous_commit', 'on', true),
+               pg_logical_emit_message(true, 'dbx_barrier', ''),
+               current_setting('synchronous_standby_names')
+        WHERE EXISTS (SELECT 1 FROM {eventLog} WHERE {condition})
+        """;
 
     // Every read query has a WHERE clause followed by one ORDER BY, so the condition goes between them. The limit then
     // counts only the rows that match the condition.

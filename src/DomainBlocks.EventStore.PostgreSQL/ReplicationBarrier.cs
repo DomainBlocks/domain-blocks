@@ -9,22 +9,15 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The read and the barrier run as one batch, which is one implicit transaction. The barrier commits with
-/// <c>synchronous_commit</c> on, so the batch completes only once the synchronous standbys have flushed its commit, and
-/// with it every commit that the read saw, including commits whose own wait was canceled. The read's result is used
-/// only once the batch has completed, because rows can reach the client before the commit has waited.
+/// The read and the barrier run as one batch, which is one transaction. Its commit waits for the synchronous standbys,
+/// and so covers every commit that the read saw. Rows can reach the client before the commit, so the read's result is
+/// used only once the batch completes.
 /// </para>
 /// <para>
-/// A canceled wait completes without an error, so any warning during the batch counts as a barrier that was not
-/// confirmed. A terminated backend fails the read. Either way the caller retries, and nothing is used until a barrier
-/// is confirmed. On a single server, with no synchronous standby configured, the barrier's commit only flushes the WAL
-/// locally, which is enough unless a synchronous standby is required.
+/// A canceled wait completes with only a warning, so any warning means that the barrier was not confirmed.
 /// </para>
 /// </remarks>
-internal sealed class ReplicationBarrier(
-    NpgsqlDataSource dataSource,
-    bool requireSynchronousStandby,
-    ILogger? logger)
+internal sealed class ReplicationBarrier(NpgsqlDataSource dataSource, bool requireSynchronousStandby, ILogger? logger)
 {
     /// <summary>
     /// Runs the read and then the barrier, and returns what <paramref name="readResult"/> took from the read's result

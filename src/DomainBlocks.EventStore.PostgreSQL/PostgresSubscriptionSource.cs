@@ -14,17 +14,15 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Every read goes to the server that the appends go to. While that server stays the primary, a read sees every event
-/// that another source has read, because an event that one read sees stays visible to every later read. Across a
-/// failover, the replication barrier below keeps that for every event that a source hands on or uses as a position,
-/// as long as the promoted server is one of the synchronous standbys that the barrier waited for.
+/// Every read goes to the server that the appends go to. While it stays the primary, an event that one read sees is
+/// seen by every later read. After a failover, that holds only for the events that the promoted server has.
 /// </para>
 /// <para>
-/// The replication barrier follows every read whose result is used as a position or handed on to subscriptions: the
-/// end reads, and the tail's reads of the log. A catch-up reads only up to an end position that a barrier followed, so
-/// its reads need none. The tail's rows are read a page at a time into rows that the source reuses, and handed on only
-/// once the page's barrier is confirmed. A catch-up's rows are read into one row that the source reuses. Either way, a
-/// row is valid only until the next is read.
+/// So the replication barrier follows each read whose result is handed on or used as a position: the end reads and the
+/// tail's reads. A catch-up reads only up to an end that a barrier followed, so its own reads need none.
+/// </para>
+/// <para>
+/// Rows are read into instances that the source reuses, so a row is valid only until the next is read.
 /// </para>
 /// </remarks>
 internal sealed class PostgresSubscriptionSource<TEvent>(
@@ -53,7 +51,7 @@ internal sealed class PostgresSubscriptionSource<TEvent>(
         CancellationToken cancellationToken)
     {
         if (toInclusive is not { } to)
-            return ReadWithBarrierAsync(ToKey(fromExclusive), filter, cancellationToken);
+            return ReadRowsWithBarrierAsync(ToKey(fromExclusive), filter, cancellationToken);
 
         return reader.ReadAllRowsAsync(ToKey(fromExclusive), checked((long)to.Value), filter, _row, cancellationToken);
     }
@@ -127,7 +125,7 @@ internal sealed class PostgresSubscriptionSource<TEvent>(
     public bool IsTransientError(Exception exception) => PostgresTransientErrors.IsTransient(exception);
 
     // Reads to the end of the log a page at a time, and hands each page on once its barrier is confirmed.
-    private async IAsyncEnumerable<EventLogRow<TEvent>> ReadWithBarrierAsync(
+    private async IAsyncEnumerable<EventLogRow<TEvent>> ReadRowsWithBarrierAsync(
         long startExclusive,
         EventFilter filter,
         [EnumeratorCancellation] CancellationToken cancellationToken)
