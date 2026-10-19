@@ -4,14 +4,6 @@
     <IsPackable>true</IsPackable>
   </PropertyGroup>
 
-  <!--
-    A store must need only the public API, so that stores outside this repository can be written. This remains only
-    while MongoDB's own subscriptions use CorrelationId, until the shared subscription replaces them.
-  -->
-  <ItemGroup>
-    <InternalsVisibleTo Include="DomainBlocks.EventStore.MongoDB"/>
-  </ItemGroup>
-
   <ItemGroup>
     <InternalsVisibleTo Include="DomainBlocks.EventStore.Benchmarks"/>
     <InternalsVisibleTo Include="DomainBlocks.EventStore.MongoDB.Tests.Integration"/>

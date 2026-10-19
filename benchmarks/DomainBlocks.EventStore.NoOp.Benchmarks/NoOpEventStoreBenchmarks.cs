@@ -9,5 +9,5 @@ namespace DomainBlocks.EventStore.NoOp.Benchmarks;
 /// measured. Needs no container, so it can run anywhere.
 /// </summary>
 [TestFixture]
-public class NoOpEventStoreBenchmarkTests() :
-    EventStoreBenchmarkTests<StreamPosition, LogPosition>(new NoOpEventStoreTestHarness());
+public class NoOpEventStoreBenchmarks() :
+    EventStoreBenchmarks<StreamPosition, LogPosition>(new NoOpEventStoreTestHarness());

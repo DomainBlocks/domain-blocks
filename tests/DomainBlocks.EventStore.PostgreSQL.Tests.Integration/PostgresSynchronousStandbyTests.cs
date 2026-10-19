@@ -89,8 +89,8 @@ public class PostgresSynchronousStandbyTests
         (await next).ShouldBeTrue();
         subscription.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "live" });
 
-        // A failover now promotes a standby that has the event.
-        await _server.CutOffStandbyAsync();
+        // The primary fails, and a failover promotes the standby, which has the event.
+        await _server.CrashPrimaryAsync();
         await _server.PromoteStandbyAsync();
 
         await using var standby = NpgsqlDataSource.Create(_server.StandbyConnectionString);

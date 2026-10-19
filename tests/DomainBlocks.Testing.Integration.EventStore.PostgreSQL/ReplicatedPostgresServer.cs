@@ -107,7 +107,24 @@ public sealed class ReplicatedPostgresServer : IAsyncDisposable
     }
 
     /// <summary>
-    /// Promotes the standby, which then has every event that it received before it was cut off.
+    /// Stops the primary at once, as a crash would. Unlike a clean shutdown, which first sends the rest of the WAL to a
+    /// connected standby, this sends the standby nothing more.
+    /// </summary>
+    public async Task CrashPrimaryAsync()
+    {
+        var result = await _primary.ExecAsync(
+            ["bash", "-c", "gosu postgres pg_ctl stop -m immediate -W -D \"$PGDATA\""]);
+
+        if (result.ExitCode != 0)
+            throw new InvalidOperationException($"The primary did not stop: {result.Stderr}");
+
+        // pg_ctl returns once it has signaled the server, so this waits until the server refuses connections.
+        while (await AcceptsConnectionsAsync(PrimaryConnectionString))
+            await Task.Delay(20);
+    }
+
+    /// <summary>
+    /// Promotes the standby, which then has every event that it received from the primary.
     /// </summary>
     public async Task PromoteStandbyAsync()
     {
@@ -121,6 +138,22 @@ public sealed class ReplicatedPostgresServer : IAsyncDisposable
         await _standby.DisposeAsync();
         await _primary.DisposeAsync();
         await _network.DisposeAsync();
+    }
+
+    private static async Task<bool> AcceptsConnectionsAsync(string connectionString)
+    {
+        var builder = new NpgsqlConnectionStringBuilder(connectionString) { Pooling = false, Timeout = 1 };
+
+        try
+        {
+            await using var connection = new NpgsqlConnection(builder.ConnectionString);
+            await connection.OpenAsync();
+            return true;
+        }
+        catch (Exception ex) when (ex is NpgsqlException or TimeoutException)
+        {
+            return false;
+        }
     }
 
     // The commit doesn't wait for the standby, which may be cut off.

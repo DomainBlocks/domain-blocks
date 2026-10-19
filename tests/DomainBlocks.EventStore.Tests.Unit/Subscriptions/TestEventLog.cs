@@ -397,6 +397,17 @@ internal sealed class TestEventLog(bool hearsAppends = true)
             }
         }
 
+        public ValueTask<StreamPosition?> ReadEndStreamPositionAsync(
+            string streamId,
+            CancellationToken cancellationToken)
+        {
+            return log.ReadCatchUpEndAsync(
+                () => log._streamLengths.TryGetValue(streamId, out var length)
+                    ? StreamPosition.FromInt64(length - 1)
+                    : (StreamPosition?)null,
+                cancellationToken);
+        }
+
         public IAsyncEnumerable<TestSourceEvent> ReadAllAsync(
             LogPosition? fromExclusive,
             LogPosition? toInclusive,
@@ -410,17 +421,6 @@ internal sealed class TestEventLog(bool hearsAppends = true)
                 fromExclusive?.Value,
                 toInclusive?.Value,
                 notifyOnRead: true,
-                cancellationToken);
-        }
-
-        public ValueTask<StreamPosition?> ReadEndStreamPositionAsync(
-            string streamId,
-            CancellationToken cancellationToken)
-        {
-            return log.ReadCatchUpEndAsync(
-                () => log._streamLengths.TryGetValue(streamId, out var length)
-                    ? StreamPosition.FromInt64(length - 1)
-                    : (StreamPosition?)null,
                 cancellationToken);
         }
 
