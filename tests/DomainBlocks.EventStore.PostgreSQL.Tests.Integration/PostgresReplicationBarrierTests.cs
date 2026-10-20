@@ -335,17 +335,22 @@ public class PostgresReplicationBarrierTests
     private async Task<long> CountBarriersSinceAsync(string start)
     {
         await using var command = _dataSource.CreateCommand(
-            "SELECT CASE WHEN pg_current_wal_lsn() > $1::pg_lsn THEN " +
-            "(SELECT count(*) FROM pg_get_wal_records_info($1::pg_lsn, pg_current_wal_lsn()) " +
-            "WHERE resource_manager = 'LogicalMessage') ELSE 0 END");
+            """
+            SELECT CASE
+                WHEN pg_current_wal_lsn() > $1::pg_lsn THEN (
+                    SELECT count(*)
+                    FROM pg_get_wal_records_info($1::pg_lsn, pg_current_wal_lsn())
+                    WHERE resource_manager = 'LogicalMessage')
+                ELSE 0
+            END
+            """);
 
         command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = start });
 
         return (long)(await command.ExecuteScalarAsync())!;
     }
 
-    private EventStore CreateEventStore(
-        NpgsqlDataSource? dataSource = null)
+    private EventStore CreateEventStore(NpgsqlDataSource? dataSource = null)
     {
         return new PostgresEventStoreBuilder<object>()
             .UseDataSource(dataSource ?? _dataSource)
