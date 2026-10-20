@@ -23,9 +23,7 @@ public static class PostgresEventStore
             dataSource,
             new EventLogSql(names),
             options.ReadPageSize,
-            eventCodec,
-            options.RequireSynchronousStandby,
-            logger);
+            eventCodec);
 
         var subscriptionFactory = new CatchUpSubscriptionFactory<
             EventLogRow<TEvent>,

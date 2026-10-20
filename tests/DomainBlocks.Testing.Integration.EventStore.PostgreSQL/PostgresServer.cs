@@ -26,12 +26,7 @@ public sealed class PostgresServer : IAsyncDisposable
             ? configured
             : DefaultImage;
 
-        var container = new PostgreSqlBuilder(image)
-            // Testcontainers turns synchronous_commit off. A commit is then visible, and acknowledged, before it is
-            // flushed, unlike on a server with the default settings. This turns it back on. It costs little here,
-            // because the container does not sync the flush to disk.
-            .WithCommand("-c", "synchronous_commit=on")
-            .Build();
+        var container = new PostgreSqlBuilder(image).Build();
 
         await container.StartAsync();
 
