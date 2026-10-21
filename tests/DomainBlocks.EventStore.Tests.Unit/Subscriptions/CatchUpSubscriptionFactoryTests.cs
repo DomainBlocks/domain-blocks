@@ -374,7 +374,7 @@ public class CatchUpSubscriptionFactoryTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task SubscribeToAll_CatchUpReadFailsTransientlyMidReplay_ResumesAfterTheLastEventHandedOn(
+    public async Task SubscribeToAll_CatchUpReadFailsTransientlyMidReplay_ResumesAfterLastDeliveredEvent(
         CancellationToken ct)
     {
         await using var scenario = new SubscriptionScenario(ct);
@@ -395,7 +395,7 @@ public class CatchUpSubscriptionFactoryTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task SubscribeToStream_CatchUpReadFailsTransientlyMidReplay_ResumesAfterTheLastEventHandedOn(
+    public async Task SubscribeToStream_CatchUpReadFailsTransientlyMidReplay_ResumesAfterLastDeliveredEvent(
         CancellationToken ct)
     {
         await using var scenario = new SubscriptionScenario(ct);
@@ -418,7 +418,7 @@ public class CatchUpSubscriptionFactoryTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task SubscribeToAll_CatchUpReadFailsMidReplayWithNonTransientError_ThrowsAfterTheEventsHandedOn(
+    public async Task SubscribeToAll_CatchUpReadFailsMidReplayWithNonTransientError_ThrowsAfterDeliveringEarlierEvents(
         CancellationToken ct)
     {
         await using var scenario = new SubscriptionScenario(ct);
