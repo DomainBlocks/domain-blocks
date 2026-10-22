@@ -142,13 +142,16 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task Connect_WhenPublicationIsMissing_Faults(CancellationToken ct)
     {
-        var missingNames = new SchemaObjectNames("dbx_no_such_schema");
+        var options = new PostgresEventStoreOptions { Schema = "dbx_no_publication" };
+        var adminOptions = new PostgresEventStoreAdminOptions { CreatePublication = false };
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(DataSource, options, adminOptions, ct);
 
         var feed = new EventLogFeed<EventLogRow<RawEvent>>(
             token => ReplicationEventLogSession.OpenAsync(
                 PostgresTestEnvironment.ConnectionString,
+                DataSource,
                 NextSlotName(),
-                missingNames,
+                new SchemaObjectNames(options.Schema),
                 Options.Replication,
                 RawDecoder.Instance,
                 LoggerFactory.CreateLogger("ReplicationEventLogSession"),
@@ -175,6 +178,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
         return new EventLogFeed<EventLogRow<RawEvent>>(
             ct => ReplicationEventLogSession.OpenAsync(
                 PostgresTestEnvironment.ConnectionString,
+                DataSource,
                 NextSlotName(),
                 Names,
                 Options.Replication,

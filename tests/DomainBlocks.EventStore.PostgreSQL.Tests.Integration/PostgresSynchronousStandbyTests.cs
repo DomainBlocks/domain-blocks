@@ -99,6 +99,42 @@ public class PostgresSynchronousStandbyTests
         subscription2.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
     }
 
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_EventSkippedBySlotButNotVisible_ReplaysEventOnceVisible(CancellationToken ct)
+    {
+        await using var dataSource = CreateDataSource();
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
+        await using var eventStore = CreateEventStore(dataSource);
+
+        // The subscription's slot can't become consistent while X runs.
+        await using var x = await XidTransaction.BeginAsync(dataSource, ct);
+        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
+        var next = subscription.MoveNextAsync().AsTask();
+        await WaitForXidLockWaitAsync(dataSource, x.Xid, ct);
+
+        // Once X ends, the slot waits for Y, which started after X was recorded as running.
+        await using var y = await XidTransaction.BeginAsync(dataSource, ct);
+        await x.CommitAsync(ct);
+        await WaitForXidLockWaitAsync(dataSource, y.Xid, ct);
+
+        // The event commits and waits for the standby to apply it, so queries can't see it. Once Y ends, the slot
+        // becomes consistent at a point after the event's commit, so it won't stream the event either.
+        await _server.PauseReplayAsync();
+        var append = AppendWithRemoteApplyAsync(dataSource, "e", ct);
+        await WaitForSyncRepAsync(ct);
+        await y.CommitAsync(ct);
+
+        await Task.Delay(HoldDuration, ct);
+        next.IsCompleted.ShouldBeFalse();
+
+        await _server.ResumeReplayAsync();
+        await append;
+
+        (await next).ShouldBeTrue();
+        subscription.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
+    }
+
     // Calls append_events directly, and commits waiting for the standby to apply the event rather than flush it.
     private async Task AppendWithRemoteApplyAsync(NpgsqlDataSource dataSource, string value, CancellationToken ct)
     {
@@ -122,6 +158,21 @@ public class PostgresSynchronousStandbyTests
             $"SELECT count(*) FROM {new SchemaObjectNames(_options.Schema).EventLog}");
 
         return (long)(await command.ExecuteScalarAsync(ct)).ShouldNotBeNull();
+    }
+
+    private static async Task WaitForXidLockWaitAsync(NpgsqlDataSource dataSource, string xid, CancellationToken ct)
+    {
+        await using var command = dataSource.CreateCommand(
+            """
+            SELECT EXISTS (SELECT 1
+                           FROM pg_locks
+                           WHERE locktype = 'transactionid' AND NOT granted AND transactionid::text = $1)
+            """);
+
+        command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = xid });
+
+        while (!(bool)(await command.ExecuteScalarAsync(ct))!)
+            await Task.Delay(20, ct);
     }
 
     // Returns the process ID of a backend whose commit waits for the standby, once there is one.
@@ -175,5 +226,31 @@ public class PostgresSynchronousStandbyTests
         var builder = new NpgsqlDataSourceBuilder(connectionString.ConnectionString);
         builder.UsePostgresEventStore(_options);
         return builder.Build();
+    }
+
+    // A transaction that has taken an xid, so a slot being created waits for it to end.
+    private sealed class XidTransaction(NpgsqlConnection connection, NpgsqlTransaction transaction, string xid) :
+        IAsyncDisposable
+    {
+        public string Xid { get; } = xid;
+
+        public static async Task<XidTransaction> BeginAsync(NpgsqlDataSource dataSource, CancellationToken ct)
+        {
+            var connection = await dataSource.OpenConnectionAsync(ct);
+            var transaction = await connection.BeginTransactionAsync(ct);
+
+            await using var command = new NpgsqlCommand("SELECT pg_current_xact_id()::text", connection);
+            var xid = (string)(await command.ExecuteScalarAsync(ct))!;
+
+            return new XidTransaction(connection, transaction, xid);
+        }
+
+        public Task CommitAsync(CancellationToken ct) => transaction.CommitAsync(ct);
+
+        public async ValueTask DisposeAsync()
+        {
+            await transaction.DisposeAsync();
+            await connection.DisposeAsync();
+        }
     }
 }
