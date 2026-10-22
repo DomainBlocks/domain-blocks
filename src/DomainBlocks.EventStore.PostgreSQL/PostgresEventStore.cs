@@ -81,6 +81,7 @@ public static class PostgresEventStore
                     decoder,
                     logger,
                     ct),
+                static row => row.Position,
                 feedOptions,
                 logger));
     }

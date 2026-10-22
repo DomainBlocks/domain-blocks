@@ -5,6 +5,7 @@ using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
 using Npgsql;
 using NUnit.Framework;
 using Shouldly;
+using static DomainBlocks.EventStore.PostgreSQL.Tests.Integration.AppendFunctionClient;
 
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
@@ -62,6 +63,55 @@ public class PostgresSynchronousStandbyTests
         await append;
     }
 
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_EventDeliveredButNotVisible_ReplaysEventOnceVisible(CancellationToken ct)
+    {
+        await using var dataSource = CreateDataSource();
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
+        await using var eventStore = CreateEventStore(dataSource);
+
+        await using var first = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
+        (await first.MoveNextAsync()).ShouldBeTrue();
+        first.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
+
+        // The standby flushes the commit but doesn't apply it, so the commit stays invisible while the feed has it.
+        await _server.PauseReplayAsync();
+        var append = AppendWithRemoteApplyAsync(dataSource, "e", ct);
+
+        (await first.MoveNextAsync()).ShouldBeTrue();
+        first.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
+
+        // The second subscription attaches after the feed delivered the event, so only its catch-up can deliver it.
+        await using var second = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
+        var next = second.MoveNextAsync().AsTask();
+
+        await Task.Delay(HoldDuration, ct);
+        next.IsCompleted.ShouldBeFalse();
+
+        await _server.ResumeReplayAsync();
+        await append;
+
+        (await next).ShouldBeTrue();
+        second.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
+    }
+
+    // Calls append_events directly, and commits waiting for the standby to apply the event rather than flush it.
+    private async Task AppendWithRemoteApplyAsync(NpgsqlDataSource dataSource, string value, CancellationToken ct)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var transaction = await connection.BeginTransactionAsync(ct);
+
+        var client = new AppendFunctionClient(dataSource, _options.Schema);
+        var e = JsonEvent(nameof(TestEvent), $"{{\"Value\": \"{value}\"}}");
+        await client.AppendAsync(connection, [Any("s1", e)], ct);
+
+        await using (var command = new NpgsqlCommand("SET LOCAL synchronous_commit = remote_apply", connection))
+            await command.ExecuteNonQueryAsync(ct);
+
+        await transaction.CommitAsync(ct);
+    }
+
     // Returns the process ID of a backend whose commit waits for the standby, once there is one.
     private async Task<int> WaitForSyncRepAsync(CancellationToken ct)
     {
@@ -102,7 +152,12 @@ public class PostgresSynchronousStandbyTests
 
     private NpgsqlDataSource CreateDataSource(Action<NpgsqlConnectionStringBuilder>? configure = null)
     {
-        var connectionString = new NpgsqlConnectionStringBuilder(_server.PrimaryConnectionString);
+        // The feed's replication connection uses this connection string, so it keeps the password.
+        var connectionString = new NpgsqlConnectionStringBuilder(_server.PrimaryConnectionString)
+        {
+            PersistSecurityInfo = true
+        };
+
         configure?.Invoke(connectionString);
 
         var builder = new NpgsqlDataSourceBuilder(connectionString.ConnectionString);

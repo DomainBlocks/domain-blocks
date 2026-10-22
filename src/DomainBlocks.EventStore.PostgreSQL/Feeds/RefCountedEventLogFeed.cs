@@ -12,7 +12,7 @@ internal sealed class RefCountedEventLogFeed<T>(Func<IEventLogFeed<T>> feedFacto
     private FeedConnection? _current;
     private bool _disposed;
 
-    public async Task<IAsyncDisposable> AttachAsync(
+    public async Task<IEventLogFeedAttachment> AttachAsync(
         IEventLogObserver<T> observer,
         string correlationId = "unknown",
         CancellationToken cancellationToken = default)
@@ -44,7 +44,9 @@ internal sealed class RefCountedEventLogFeed<T>(Func<IEventLogFeed<T>> feedFacto
 
             feedConnection.RefCount++;
 
-            return new AsyncDisposable(() => DetachAsync(attachment, feedConnection));
+            return new Attachment(
+                feedConnection.Connection.PositionHighWaterMark,
+                () => DetachAsync(attachment, feedConnection));
         }
         finally
         {
@@ -120,9 +122,11 @@ internal sealed class RefCountedEventLogFeed<T>(Func<IEventLogFeed<T>> feedFacto
         public bool IsDisposed { get; set; }
     }
 
-    private sealed class AsyncDisposable(Func<Task> onDispose) : IAsyncDisposable
+    private sealed class Attachment(long? positionHighWaterMark, Func<Task> onDispose) : IEventLogFeedAttachment
     {
         private int _disposed;
+
+        public long? PositionHighWaterMark { get; } = positionHighWaterMark;
 
         public async ValueTask DisposeAsync()
         {

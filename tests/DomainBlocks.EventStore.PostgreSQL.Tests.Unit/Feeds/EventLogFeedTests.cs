@@ -54,6 +54,23 @@ public class EventLogFeedTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
+    public async Task Connect_WhenDeliveringRow_RaisesHighWaterMarkBeforeNotifying(CancellationToken ct)
+    {
+        var feed = CreateFeed(new ScriptedSession("s1", Row(7)));
+
+        var observer = new HighWaterMarkRecordingObserver();
+        using var attachment = feed.Attach(observer);
+        await using var connection = await feed.ConnectAsync(ct);
+
+        // The observer holds the row until it knows the connection.
+        observer.Connection = connection;
+        observer.Release();
+
+        (await observer.HighWaterMarkWhenNotified.WaitAsync(ct)).ShouldBe(7);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
     public async Task Connect_WhenSessionFailsTransiently_ReconnectsAndResetsBeforeNewRows(CancellationToken ct)
     {
         var feed = CreateFeed(
@@ -115,6 +132,7 @@ public class EventLogFeedTests
                     ? throw new IOException("not yet")
                     : Task.FromResult<IEventLogSession<long>>(new ScriptedSession("s1", Row(1)));
             },
+            static x => x,
             FastRetryOptions,
             _logger);
 
@@ -134,6 +152,7 @@ public class EventLogFeedTests
 
         var feed = new EventLogFeed<long>(
             _ => throw exception,
+            static x => x,
             new EventLogFeedOptions
             {
                 MaxRetryAttempts = 2,
@@ -210,6 +229,7 @@ public class EventLogFeedTests
                 await release.Task;
                 return new ScriptedSession("s1", Row(1));
             },
+            static x => x,
             FastRetryOptions,
             _logger);
 
@@ -229,6 +249,7 @@ public class EventLogFeedTests
     {
         var feed = new EventLogFeed<long>(
             _ => throw new IOException("down"),
+            static x => x,
             new EventLogFeedOptions { RetryDelay = TimeSpan.FromMinutes(1), MaxRetryDelay = TimeSpan.FromMinutes(1) },
             _logger);
 
@@ -276,8 +297,33 @@ public class EventLogFeedTests
             _ => Task.FromResult(queue.Count > 0
                 ? queue.Dequeue()
                 : throw new InvalidOperationException("The test ran out of scripted sessions.")),
+            static x => x,
             FastRetryOptions,
             _logger);
+    }
+
+    private sealed class HighWaterMarkRecordingObserver : IEventLogObserver<long>
+    {
+        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private readonly TaskCompletionSource<long?> _highWaterMarkWhenNotified =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public IEventLogFeedConnection? Connection { get; set; }
+
+        public Task<long?> HighWaterMarkWhenNotified => _highWaterMarkWhenNotified.Task;
+
+        public void Release() => _released.TrySetResult();
+
+        public async ValueTask OnNextAsync(long position, CancellationToken cancellationToken)
+        {
+            await _released.Task;
+            _highWaterMarkWhenNotified.TrySetResult(Connection!.PositionHighWaterMark);
+        }
+
+        public ValueTask OnResetAsync(CancellationToken cancellationToken) => default;
+
+        public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken) => default;
     }
 
     private sealed class ThrowingObserver(bool throwOnNext = false, bool throwOnReset = false) : IEventLogObserver<long>

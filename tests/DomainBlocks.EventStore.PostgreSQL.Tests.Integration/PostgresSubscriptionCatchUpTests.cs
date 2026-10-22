@@ -46,14 +46,16 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
         _reader = new EventLogReader<object>(DataSource, new EventLogSql(names), Options.ReadPageSize, codec);
 
         _feed = new RefCountedEventLogFeed<EventLogRow<object>>(() =>
-            new EventLogFeed<EventLogRow<object>>(ct => ReplicationEventLogSession.OpenAsync(
-                PostgresTestEnvironment.ConnectionString,
-                $"dbx_test_{Guid.NewGuid():N}",
-                names,
-                Options.Replication,
-                codec,
-                LoggerFactory.CreateLogger("ReplicationEventLogSession"),
-                ct)));
+            new EventLogFeed<EventLogRow<object>>(
+                ct => ReplicationEventLogSession.OpenAsync(
+                    PostgresTestEnvironment.ConnectionString,
+                    $"dbx_test_{Guid.NewGuid():N}",
+                    names,
+                    Options.Replication,
+                    codec,
+                    LoggerFactory.CreateLogger("ReplicationEventLogSession"),
+                    ct),
+                static row => row.Position));
     }
 
     [TearDown]
