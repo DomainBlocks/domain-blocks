@@ -136,6 +136,102 @@ public class PostgresSynchronousStandbyTests
         subscription.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
     }
 
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_EventVisibleButNotOnStandby_ReplaysEventOnceOnStandby(CancellationToken ct)
+    {
+        await using var dataSource = CreateDataSource();
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
+        await using var eventStore = CreateEventStore(dataSource);
+
+        await _server.CutOffStandbyAsync();
+        await AppendWithCanceledWaitAsync(dataSource, "e", ct);
+
+        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
+        var next = subscription.MoveNextAsync().AsTask();
+
+        await Task.Delay(HoldDuration, ct);
+        next.IsCompleted.ShouldBeFalse();
+
+        await _server.ReconnectStandbyAsync();
+
+        (await next).ShouldBeTrue();
+        subscription.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
+
+        // The primary fails, and a failover promotes the standby, which has the event.
+        await _server.CrashPrimaryAsync();
+        await _server.PromoteStandbyAsync();
+
+        await using var standby = NpgsqlDataSource.Create(_server.StandbyConnectionString);
+        await using var count = standby.CreateCommand($"SELECT count(*) FROM {_options.Schema}.event_log");
+        ((long)(await count.ExecuteScalarAsync(ct))!).ShouldBe(1);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToStream_EventVisibleButNotOnStandby_ReplaysEventOnceOnStandby(CancellationToken ct)
+    {
+        await using var dataSource = CreateDataSource();
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
+        await using var eventStore = CreateEventStore(dataSource);
+
+        await _server.CutOffStandbyAsync();
+        await AppendWithCanceledWaitAsync(dataSource, "e", ct);
+
+        await using var subscription = eventStore
+            .SubscribeToStream("s1", SubscriptionOrigin.Start)
+            .GetAsyncEnumerator(ct);
+
+        var next = subscription.MoveNextAsync().AsTask();
+
+        await Task.Delay(HoldDuration, ct);
+        next.IsCompleted.ShouldBeFalse();
+
+        await _server.ReconnectStandbyAsync();
+
+        (await next).ShouldBeTrue();
+        subscription.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_BarrierWaitCanceled_Fails(CancellationToken ct)
+    {
+        await using var dataSource = CreateDataSource();
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
+        await using var eventStore = CreateEventStore(dataSource);
+
+        await _server.CutOffStandbyAsync();
+        await AppendWithCanceledWaitAsync(dataSource, "e", ct);
+
+        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
+        var next = subscription.MoveNextAsync().AsTask();
+
+        // The barrier's commit completes as the append's did, without the standby.
+        await CancelBackendAsync(dataSource, await WaitForSyncRepAsync(ct), ct);
+
+        await Should.ThrowAsync<ReplicationBarrierException>(next);
+    }
+
+    // Calls append_events directly, and cancels its commit's wait for the standby, so the event is visible on the
+    // primary although the standby doesn't have it.
+    private async Task AppendWithCanceledWaitAsync(NpgsqlDataSource dataSource, string value, CancellationToken ct)
+    {
+        var client = new AppendFunctionClient(dataSource, _options.Schema);
+        var e = JsonEvent(nameof(TestEvent), $"{{\"Value\": \"{value}\"}}");
+        var append = client.AppendAsync([Any("s1", e)], ct);
+
+        await CancelBackendAsync(dataSource, await WaitForSyncRepAsync(ct), ct);
+        await append;
+    }
+
+    private static async Task CancelBackendAsync(NpgsqlDataSource dataSource, int pid, CancellationToken ct)
+    {
+        await using var command = dataSource.CreateCommand("SELECT pg_cancel_backend($1)");
+        command.Parameters.Add(new NpgsqlParameter<int> { TypedValue = pid });
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
     // Counts the events that queries on the primary see.
     private async Task<long> CountEventsAsync(NpgsqlDataSource dataSource, CancellationToken ct)
     {

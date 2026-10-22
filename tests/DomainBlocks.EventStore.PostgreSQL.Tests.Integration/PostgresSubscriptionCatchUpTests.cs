@@ -258,7 +258,7 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
             _reader,
             _feed,
             catchUpReader,
-            static async (reader, ct) => await reader.GetMaxPositionAsync(ct) is { } pos
+            static async (reader, ct) => await reader.ReadMaxPositionWithBarrierAsync(ct) is { } pos
                 ? LogPosition.FromInt64(pos)
                 : null,
             options.Filter,

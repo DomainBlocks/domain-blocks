@@ -302,7 +302,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Reads the end position of the followed sequence, or <see langword="null"/> if it is empty.
+    /// Reads the end position of the followed sequence, or <see langword="null"/> if it is empty. The subscription
+    /// replays up to the end, or starts after it, so the read must be followed by the replication barrier.
     /// </summary>
     public delegate Task<TPos?> EndPositionReader(EventLogReader<TEvent> reader, CancellationToken cancellationToken);
 
