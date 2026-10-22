@@ -12,6 +12,10 @@
 -- advances the sequence row, and returns the results. Requests to the same stream chain through a recursive CTE that
 -- handles one request per stream in each iteration, so a batch of distinct streams needs a single iteration.
 --
+-- A batch commits with synchronous_commit on, whatever the server, database, role or session sets, so it is
+-- acknowledged only once it is flushed, and on the synchronous standbys if any are configured. Until then it is not
+-- visible to other sessions either.
+--
 -- The expected kinds and statuses are the expected_state_kind and append_status enums from schema.sql.
 
 CREATE OR REPLACE FUNCTION __schema__.append_events(
@@ -49,6 +53,9 @@ BEGIN
             current_setting('transaction_isolation')
             USING ERRCODE = 'invalid_transaction_state';
     END IF;
+
+    -- A local setting lasts until the transaction commits, which is when it takes effect.
+    PERFORM set_config('synchronous_commit', 'on', true);
 
     PERFORM __schema__.validate_append_batch(
             p_stream_ids,

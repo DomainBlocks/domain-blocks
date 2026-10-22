@@ -19,8 +19,6 @@ public class PostgresEventStoreBenchmarkTests() :
 
     /// <summary>
     /// Append-to-observe latency for a live subscription: each sample appends one event and waits for it to arrive.
-    /// With <c>synchronous_commit</c> off, the server sends a commit only once the WAL writer flushes it, so this
-    /// latency then tracks <c>wal_writer_delay</c>. The report includes both settings.
     /// </summary>
     [Test]
     [Explicit("Benchmark")]
@@ -47,8 +45,6 @@ public class PostgresEventStoreBenchmarkTests() :
             },
             new LatencyOptions
             {
-                // The run is bounded by time as well as by sample count, because each sample waits for a WAL writer
-                // cycle (200 ms by default) when synchronous_commit is off.
                 WarmUp = TimeSpan.FromSeconds(1),
                 MinWarmUpOperations = 10,
                 SampleCount = 1_000,
