@@ -73,15 +73,14 @@ public static class PostgresEventStore
 
         return new RefCountedEventLogFeed<EventLogRow<TEvent>>(() =>
             new EventLogFeed<EventLogRow<TEvent>>(
-                ct => ReplicationEventLogSession.OpenAsync(
+                new ReplicationEventLogSessionFactory<TEvent>(
                     connectionString,
                     dataSource,
-                    slotNames.Next(),
+                    slotNames,
                     names,
                     replicationOptions,
                     decoder,
-                    logger,
-                    ct),
+                    logger),
                 static row => row.Position,
                 feedOptions,
                 logger));

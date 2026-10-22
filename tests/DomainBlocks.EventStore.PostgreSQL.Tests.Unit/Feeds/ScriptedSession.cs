@@ -21,6 +21,8 @@ internal sealed class ScriptedSession(string description, params ScriptedSession
 
     public string Description { get; } = description;
 
+    public bool IsResumed { get; init; }
+
     public int DisposeCount { get; private set; }
 
     public static Step.Row Row(long position) => new(position);
