@@ -91,8 +91,20 @@ internal static partial class LogMessages
     [LoggerMessage(LogLevel.Debug, "[feed: {FeedId}] started")]
     internal static partial void FeedStarted(this ILogger logger, string feedId);
 
-    [LoggerMessage(LogLevel.Debug, "[replication] created temporary slot {SlotName} (walsender pid {ProcessId})")]
-    internal static partial void ReplicationSlotCreated(this ILogger logger, string slotName, int processId);
+    [LoggerMessage(LogLevel.Debug, "[replication] created slot {SlotName}")]
+    internal static partial void ReplicationSlotCreated(this ILogger logger, string slotName);
+
+    [LoggerMessage(LogLevel.Debug, "[replication] dropped slot {SlotName}")]
+    internal static partial void ReplicationSlotDropped(this ILogger logger, string slotName);
+
+    [LoggerMessage(LogLevel.Warning, "[replication] could not drop slot {SlotName}; a later cleanup will")]
+    internal static partial void ReplicationSlotDropFailed(this ILogger logger, Exception exception, string slotName);
+
+    [LoggerMessage(LogLevel.Information, "[replication] dropped inactive slot {SlotName}")]
+    internal static partial void InactiveReplicationSlotDropped(this ILogger logger, string slotName);
+
+    [LoggerMessage(LogLevel.Warning, "[replication] slot {SlotName} was dropped or invalidated; creating a new one")]
+    internal static partial void ReplicationSlotLost(this ILogger logger, string slotName);
 
     [LoggerMessage(LogLevel.Debug, "[feed: {FeedId}] connected ({Session})")]
     internal static partial void FeedConnected(this ILogger logger, string feedId, string session);

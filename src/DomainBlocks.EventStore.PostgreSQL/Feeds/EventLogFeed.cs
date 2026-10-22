@@ -10,13 +10,14 @@ namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 /// lost.
 /// </summary>
 /// <remarks>
-/// A new session sees only rows committed after it is established, so observers get
+/// A session that doesn't resume the previous one sees only rows committed after it is established, so observers get
 /// <see cref="IEventLogObserver{T}.OnResetAsync"/> first and recover missed rows by re-reading from their last
 /// position.
 /// </remarks>
 internal sealed class EventLogFeed<T> : IEventLogFeed<T>
 {
-    private readonly Func<CancellationToken, Task<IEventLogSession<T>>> _sessionFactory;
+    private readonly IEventLogSessionFactory<T> _sessionFactory;
+    private readonly Func<CancellationToken, Task<IEventLogSession<T>>> _openSession;
     private readonly Func<T, long> _positionSelector;
     private readonly EventLogFeedOptions _options;
     private readonly ILogger? _logger;
@@ -25,8 +26,11 @@ internal sealed class EventLogFeed<T> : IEventLogFeed<T>
     private readonly TaskCompletionSource _connectedTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _connected;
 
+    /// <remarks>
+    /// The feed owns <paramref name="sessionFactory"/>, and disposes it once it has stopped.
+    /// </remarks>
     public EventLogFeed(
-        Func<CancellationToken, Task<IEventLogSession<T>>> sessionFactory,
+        IEventLogSessionFactory<T> sessionFactory,
         Func<T, long> positionSelector,
         EventLogFeedOptions? options = null,
         ILogger? logger = null)
@@ -36,7 +40,8 @@ internal sealed class EventLogFeed<T> : IEventLogFeed<T>
 
         options ??= EventLogFeedOptions.Default;
 
-        _sessionFactory = AddResilience(sessionFactory, options, logger, _feedId);
+        _sessionFactory = sessionFactory;
+        _openSession = AddResilience(sessionFactory.OpenAsync, options, logger, _feedId);
         _positionSelector = positionSelector;
         _options = options;
         _logger = logger;
@@ -172,15 +177,15 @@ internal sealed class EventLogFeed<T> : IEventLogFeed<T>
                 {
                     _stopCts.Token.ThrowIfCancellationRequested();
 
-                    var session = await _feed._sessionFactory(_stopCts.Token).ConfigureAwait(false);
+                    var session = await _feed._openSession(_stopCts.Token).ConfigureAwait(false);
 
                     await using (session.ConfigureAwait(false))
                     {
                         _logger?.FeedConnected(_feedId, session.Description);
 
-                        // Rows committed while disconnected were missed. Reset observers before pumping the new
-                        // session, so no row advances a position past the gap.
-                        if (hasConnectedBefore)
+                        // Unless the session resumes the previous one, rows committed in between were missed. Reset
+                        // observers before pumping the new session, so no row advances a position past the gap.
+                        if (hasConnectedBefore && !session.IsResumed)
                             await _state.NotifyResetAsync(_stopCts.Token).ConfigureAwait(false);
 
                         hasConnectedBefore = true;
@@ -231,6 +236,7 @@ internal sealed class EventLogFeed<T> : IEventLogFeed<T>
             }
             finally
             {
+                await _feed._sessionFactory.DisposeAsync().ConfigureAwait(false);
                 _logger?.FeedStopped(_feedId);
             }
         }

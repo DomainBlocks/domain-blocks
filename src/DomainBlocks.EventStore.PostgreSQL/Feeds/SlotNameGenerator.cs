@@ -3,8 +3,8 @@ using System.Text.RegularExpressions;
 namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 
 /// <summary>
-/// Generates slot names from a random ID per store and a counter per session, so a reconnecting feed does not reuse the
-/// name of a slot that the server has not yet dropped.
+/// Generates slot names from a random ID per store and a counter per slot, so a new slot never takes the name of one
+/// that the server has not yet dropped.
 /// </summary>
 internal sealed partial class SlotNameGenerator
 {
