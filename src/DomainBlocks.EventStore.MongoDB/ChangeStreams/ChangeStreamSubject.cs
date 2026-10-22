@@ -14,6 +14,7 @@ internal static class ChangeStreamSubject
         ChangeStreamCursorFactory<TDocument, TChange> cursorFactory,
         PipelineDefinition<ChangeStreamDocument<TDocument>, TChange> pipeline,
         Func<TChange, BsonDocument> resumeTokenSelector,
+        Func<TChange, BsonTimestamp> clusterTimeSelector,
         Func<TChange, TResult> resultSelector,
         ChangeStreamSubjectOptions? options = null,
         ILogger? logger = null)
@@ -23,6 +24,7 @@ internal static class ChangeStreamSubject
             cursorFactory,
             pipeline,
             resumeTokenSelector,
+            clusterTimeSelector,
             resultSelector,
             options,
             logger);
@@ -35,6 +37,7 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
     private readonly ChangeStreamCursorFactory<TDocument, TChange> _cursorFactory;
     private readonly PipelineDefinition<ChangeStreamDocument<TDocument>, TChange> _pipeline;
     private readonly Func<TChange, BsonDocument> _resumeTokenSelector;
+    private readonly Func<TChange, BsonTimestamp> _clusterTimeSelector;
     private readonly Func<TChange, TResult> _resultSelector;
     private readonly ChangeStreamSubjectOptions _options;
     private readonly ILogger? _logger;
@@ -48,6 +51,7 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
         ChangeStreamCursorFactory<TDocument, TChange> cursorFactory,
         PipelineDefinition<ChangeStreamDocument<TDocument>, TChange> pipeline,
         Func<TChange, BsonDocument> resumeTokenSelector,
+        Func<TChange, BsonTimestamp> clusterTimeSelector,
         Func<TChange, TResult> resultSelector,
         ChangeStreamSubjectOptions? options = null,
         ILogger? logger = null)
@@ -65,6 +69,7 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
         _cursorFactory = cursorFactory;
         _pipeline = pipeline;
         _resumeTokenSelector = resumeTokenSelector;
+        _clusterTimeSelector = clusterTimeSelector;
         _resultSelector = resultSelector;
         _options = options;
         _logger = logger;
@@ -144,6 +149,7 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
     {
         private readonly ChangeStreamSubject<TDocument, TChange, TResult> _subject;
         private readonly Func<TChange, BsonDocument> _resumeTokenSelector;
+        private readonly Func<TChange, BsonTimestamp> _clusterTimeSelector;
         private readonly Func<TChange, TResult> _resultSelector;
         private readonly ConnectionState _state;
         private readonly ILogger? _logger;
@@ -151,13 +157,14 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
         private readonly Task _producerTask;
         private readonly CancellationTokenSource _stopCts = new();
         private readonly TaskCompletionSource _completionTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private BsonTimestamp? _opTime;
+        private BsonTimestamp? _opTimeHighWaterMark;
         private int _disposed;
 
         public Connection(ChangeStreamSubject<TDocument, TChange, TResult> subject)
         {
             _subject = subject;
             _resumeTokenSelector = subject._resumeTokenSelector;
+            _clusterTimeSelector = subject._clusterTimeSelector;
             _resultSelector = subject._resultSelector;
             _state = subject._connectionState;
             _logger = subject._logger;
@@ -168,8 +175,9 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
 
         public Task Completion => _completionTcs.Task;
 
-        public BsonTimestamp OpTime =>
-            _opTime ?? throw new InvalidOperationException("The change stream connection is not connected.");
+        public BsonTimestamp OpTimeHighWaterMark =>
+            Volatile.Read(ref _opTimeHighWaterMark) ??
+            throw new InvalidOperationException("The change stream connection is not connected.");
 
         public async ValueTask DisposeAsync()
         {
@@ -195,22 +203,15 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
 
             try
             {
-                // This optime anchors catch-up subscriptions. The stream delivers every change after it, and a majority
-                // read that waits for it sees at least every change up to it. It must be an oplog optime rather than a
-                // cluster time. After a transaction commits, the logical clock runs one tick ahead of the oplog, and on
-                // a replica set that is not sharded, a read that waits for such a time stalls until the periodic no-op
-                // writer runs. Without an explicit start, the server would start the stream at the same point, but the
-                // anchor would be unknown:
-                // https://github.com/mongodb/mongo/blob/r7.0.16/src/mongo/db/pipeline/document_source_change_stream.cpp#L238-L253
-                _opTime = await GetLastAppliedOpTimeAsync().ConfigureAwait(false);
-
+                var initialOptions = await GetInitialOptionsAsync().ConfigureAwait(false);
                 BsonDocument? resumeToken = null;
 
                 while (true)
                 {
                     _stopCts.Token.ThrowIfCancellationRequested();
 
-                    using var cursor = await GetChangeStreamCursorAsync(resumeToken, _opTime).ConfigureAwait(false);
+                    using var cursor = await GetChangeStreamCursorAsync(initialOptions, resumeToken)
+                        .ConfigureAwait(false);
 
                     // The resume token is seeded when the cursor opens, so a cursor that fails before its first batch
                     // resumes rather than restarting later. The driver exposes the token when the first batch is empty,
@@ -232,6 +233,16 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
                             foreach (var change in cursor.Current)
                             {
                                 var result = _resultSelector(change);
+                                var clusterTime = _clusterTimeSelector(change);
+
+                                // A change's cluster time is the optime of the oplog entry that committed it, so a read
+                                // can wait for it. The mark only moves forwards, because the first changes after a
+                                // resume token can be older than the last write that the mark started at. It is raised
+                                // before observers are notified, and the exchange is a full fence, so an observer that
+                                // attaches too late for a change reads a mark that covers it.
+                                if (clusterTime.CompareTo(_opTimeHighWaterMark) > 0)
+                                    Interlocked.Exchange(ref _opTimeHighWaterMark, clusterTime);
+
                                 await _state.NotifyNextAsync(result, _stopCts.Token).ConfigureAwait(false);
                                 resumeToken = _resumeTokenSelector(change);
                                 batchCount++;
@@ -282,10 +293,43 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
             }
         }
 
+        // Returns the options for the first open, and starts the high-water mark at or after every change that the
+        // stream won't deliver.
+        private async Task<ChangeStreamOptions> GetInitialOptionsAsync()
+        {
+            var options = _subject._options.MongoOptions;
+
+            if (options.ResumeAfter is not null || options.StartAfter is not null)
+            {
+                // A resume token's time can't be read, but the token comes from a majority-committed change, which the
+                // primary's last write is at or after.
+                Volatile.Write(ref _opTimeHighWaterMark, await GetLastAppliedOpTimeAsync().ConfigureAwait(false));
+                return options;
+            }
+
+            if (options.StartAtOperationTime is null)
+            {
+                // Without a start, the stream starts one tick after the primary's last write. The mark must be an
+                // oplog optime rather than the current cluster time. After a transaction commits, the logical clock
+                // runs one tick ahead of the oplog, and on a replica set that is not sharded, a read that waits for
+                // such a time stalls until the periodic no-op writer runs. The server would start the stream at the
+                // same point by default, but the mark would be unknown:
+                // https://github.com/mongodb/mongo/blob/r7.0.16/src/mongo/db/pipeline/document_source_change_stream.cpp#L238-L253
+                var lastApplied = await GetLastAppliedOpTimeAsync().ConfigureAwait(false);
+
+                options = options.Copy();
+                options.StartAtOperationTime = new BsonTimestamp(lastApplied.Value + 1);
+            }
+
+            // The start is inclusive, so the stream won't deliver the changes up to the tick before it.
+            Volatile.Write(ref _opTimeHighWaterMark, new BsonTimestamp(options.StartAtOperationTime.Value - 1));
+            return options;
+        }
+
         private async Task<BsonTimestamp> GetLastAppliedOpTimeAsync()
         {
-            // hello.lastWrite.opTime is the optime of the last write applied on the node that answers. The primary read
-            // preference is there for freshness, not for correctness.
+            // hello.lastWrite.opTime is the optime of the last write applied on the node that answers. After a
+            // failover, only the primary is sure to have applied every majority-committed write.
             // https://www.mongodb.com/docs/manual/reference/command/hello/
             //
             // This requires MongoDB 4.4.2 or later. The driver requires 4.4, and the hello command arrived in 4.4.2.
@@ -306,10 +350,10 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
         }
 
         private async Task<IChangeStreamCursor<TChange>> GetChangeStreamCursorAsync(
-            BsonDocument? resumeToken,
-            BsonTimestamp opTime)
+            ChangeStreamOptions initialOptions,
+            BsonDocument? resumeToken)
         {
-            var options = _subject._options.MongoOptions;
+            var options = initialOptions;
 
             if (resumeToken is not null)
             {
@@ -317,13 +361,6 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
                 options.ResumeAfter = resumeToken;
                 options.StartAfter = null;
                 options.StartAtOperationTime = null;
-            }
-            else if (options.ResumeAfter is null && options.StartAfter is null && options.StartAtOperationTime is null)
-            {
-                // A start point that the caller set is kept. Otherwise, the stream starts one tick after the anchor,
-                // because startAtOperationTime is inclusive and the write at the anchor belongs to the catch-up read.
-                options = options.Copy();
-                options.StartAtOperationTime = new BsonTimestamp(opTime.Value + 1);
             }
 
             return await _subject._cursorFactory(_subject._pipeline, options, _stopCts.Token).ConfigureAwait(false);

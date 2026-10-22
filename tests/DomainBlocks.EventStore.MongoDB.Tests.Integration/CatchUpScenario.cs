@@ -22,6 +22,7 @@ internal sealed class CatchUpScenario : IAsyncDisposable
     private readonly EventLogReader<object> _reader;
     private readonly RefCountedChangeStreamSubject<EventLogDocument<object>> _subject;
     private readonly CatchUpRecorder _catchUpRecorder = new();
+    private readonly List<BsonTimestamp> _catchUpOpTimes = [];
     private readonly CancellationToken _cancellationToken;
 
     private CatchUpScenario(MongoEventStoreOptions options, CancellationToken cancellationToken)
@@ -64,6 +65,7 @@ internal sealed class CatchUpScenario : IAsyncDisposable
             ChangeStreamProbe.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(insertsOnly),
             static change => change.ResumeToken,
+            static change => change.ClusterTime,
             change =>
             {
                 liveDocument.Set(change.FullDocument);
@@ -75,6 +77,11 @@ internal sealed class CatchUpScenario : IAsyncDisposable
     public ChangeStreamProbe ChangeStreamProbe { get; }
 
     public IReadOnlyList<CatchUpRead> CatchUpReads => _catchUpRecorder.Reads;
+
+    /// <summary>
+    /// The operation time that each catch-up's session waited for before its first read, in order.
+    /// </summary>
+    public IReadOnlyList<BsonTimestamp> CatchUpOpTimes => _catchUpOpTimes;
 
     public static async Task<CatchUpScenario> StartAsync(CancellationToken cancellationToken)
     {
@@ -141,8 +148,12 @@ internal sealed class CatchUpScenario : IAsyncDisposable
                 from,
                 to,
                 ct),
-            static async (reader, session, ct) =>
+            async (reader, session, ct) =>
             {
+                // The end position is a catch-up's first read, so the session still holds the time it will wait for.
+                if (session is not null)
+                    _catchUpOpTimes.Add(session.OperationTime);
+
                 var endPos = await reader.GetEndPositionAsync(
                     session,
                     Builders<BsonDocument>.Filter.Empty,

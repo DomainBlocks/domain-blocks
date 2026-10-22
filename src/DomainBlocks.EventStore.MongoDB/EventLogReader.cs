@@ -15,10 +15,10 @@ internal sealed class EventLogReader<TEvent>(
     where TEvent : notnull
 {
     /// <summary>
-    /// Starts a causally consistent session whose optime is advanced to the change stream's anchor.
+    /// Starts a causally consistent session whose reads wait until they can see every change up to the given optime.
     /// </summary>
     public async Task<IClientSessionHandle> StartCatchUpSessionAsync(
-        BsonTimestamp changeStreamOpTime,
+        BsonTimestamp opTime,
         CancellationToken cancellationToken)
     {
         var session = await eventLog.Database.Client
@@ -27,7 +27,7 @@ internal sealed class EventLogReader<TEvent>(
 
         try
         {
-            session.AdvanceOperationTime(changeStreamOpTime);
+            session.AdvanceOperationTime(opTime);
             return session;
         }
         catch
