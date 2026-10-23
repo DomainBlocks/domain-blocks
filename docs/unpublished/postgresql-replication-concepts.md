@@ -1,8 +1,8 @@
 # PostgreSQL replication concepts
 
 > **Generated note.** Written by Claude Code (Claude Opus 5.5) on 23 October 2026 at the request of the author, while
-> building #168. It describes the reactive feed as built in that PR. Where it disagrees with the code, the code is
-> right.
+> building #168, and updated with the Aurora findings in #171. It describes the reactive feed as built in those PRs.
+> Where it disagrees with the code, the code is right.
 
 How the server's settings and the store work together, so that a subscriber is never given an event that a failover
 loses.
@@ -60,8 +60,9 @@ What the settings and the store do, in the order they come into play.
    before queries on the primary can see it, so a catch-up waits until its reads reach the highest position the feed
    has delivered. A new slot can skip a commit that isn't visible yet, so opening one waits on the sequence row.
 10. **Aurora needs none of the standby machinery.** Its shared storage makes a commit durable before it is visible,
-    and `synchronous_standby_names` is empty, so there is no barrier, gate or copy. A writer failover means a new
-    slot, a reset, and a catch-up.
+    and `synchronous_standby_names` is empty, so there is no barrier, gate or copy. The slot lives in the shared
+    storage too, so after a writer failover the feed resumes on it from the new writer. The failover option has no
+    effect there: a plain slot survives in the same way.
 
 ```mermaid
 flowchart LR
@@ -115,9 +116,15 @@ Keeping them aligned:
 - **The store connects through one endpoint.** Its data source and its replication connection string must each name a
   single host that always reaches the primary, such as a writer endpoint, a virtual IP, or a proxy. Live
   subscriptions fail if either lists several hosts: Npgsql can't open a replication connection to several hosts, and a
-  multi-host data source fails rather than waits while a failover leaves no primary.
+  multi-host data source fails rather than waits while a failover leaves no primary. While the endpoint still reaches
+  a standby, as it can for a while during a failover, the feed keeps retrying.
 
-## Open questions
+## Aurora assumptions
 
-- **Aurora and `failover => true`.** Whether Aurora accepts it hasn't been checked yet. If it refuses, the store will
-  need to fall back to a plain slot there.
+AWS documents neither of these. The Aurora tests (`tests/DomainBlocks.EventStore.PostgreSQL.Tests.Aurora`) check the
+first on Aurora PostgreSQL 17.11.
+
+- **Slots survive a writer failover.** If one didn't, the feed would create a new slot, reset subscribers, and catch
+  them up: slower, but nothing missed.
+- **Logical decoding sends only commits that the storage has acknowledged,** as queries see only those. The tests
+  can't produce the opposite. If it happened, a failover could lose an event that a subscriber already had.
