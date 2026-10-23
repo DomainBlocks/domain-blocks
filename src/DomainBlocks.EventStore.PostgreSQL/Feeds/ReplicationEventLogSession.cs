@@ -28,6 +28,8 @@ internal sealed class ReplicationEventLogSession<TEvent>(
     where TEvent : notnull
 {
     private readonly EventLogRow<TEvent> _row = new(decoder);
+    private bool _inTransaction;
+    private Task<bool>? _statusTick;
 
     public string Description => $"slot {slot.Name}";
 
@@ -42,6 +44,8 @@ internal sealed class ReplicationEventLogSession<TEvent>(
             .StartReplication(pgOutputSlot, pgOutputOptions, cancellationToken, slot.ResumeLsn)
             .GetAsyncEnumerator(cancellationToken);
 
+        using var statusTimer = new PeriodicTimer(connection.WalReceiverStatusInterval);
+
         await using (messages.ConfigureAwait(false))
         {
             ColumnMap? columnMap = null;
@@ -49,10 +53,14 @@ internal sealed class ReplicationEventLogSession<TEvent>(
 
             // Npgsql reuses message instances and row tuples are forward-only, so each message is fully consumed before
             // the next one is read.
-            while (await MoveNextAsync(messages, cancellationToken).ConfigureAwait(false))
+            while (await MoveNextAsync(messages, statusTimer, cancellationToken).ConfigureAwait(false))
             {
                 switch (messages.Current)
                 {
+                    case BeginMessage:
+                        _inTransaction = true;
+                        break;
+
                     case RelationMessage relation when IsEventLog(relation):
                         columnMap = ColumnMap.From(relation);
                         relationId = relation.RelationId;
@@ -80,6 +88,8 @@ internal sealed class ReplicationEventLogSession<TEvent>(
                         break;
 
                     case CommitMessage commit:
+                        _inTransaction = false;
+
                         // Everything up to here has been handed to observers, so the server may release the WAL, and a
                         // later session starts after this transaction.
                         slot.RecordDeliveredTransaction(commit.WalEnd);
@@ -96,11 +106,16 @@ internal sealed class ReplicationEventLogSession<TEvent>(
     // errors share these codes, such as a missing publication, so the slot itself is checked.
     private async ValueTask<bool> MoveNextAsync(
         IAsyncEnumerator<PgOutputReplicationMessage> messages,
+        PeriodicTimer statusTimer,
         CancellationToken cancellationToken)
     {
         try
         {
-            return await messages.MoveNextAsync().ConfigureAwait(false);
+            var next = messages.MoveNextAsync();
+
+            return next.IsCompleted || _inTransaction
+                ? await next.ConfigureAwait(false)
+                : await WaitBetweenTransactionsAsync(next.AsTask(), statusTimer).ConfigureAwait(false);
         }
         catch (PostgresException ex) when (ex.SqlState is PostgresErrorCodes.UndefinedObject
                                                or PostgresErrorCodes.ObjectNotInPrerequisiteState)
@@ -109,6 +124,25 @@ internal sealed class ReplicationEventLogSession<TEvent>(
                 throw new ReplicationSlotLostException(slot.Name, ex);
 
             throw;
+        }
+    }
+
+    // For transactions that don't touch the event log, the server sends only keepalives, which Npgsql handles
+    // itself, so a position reported only at event commits would make the slot hold all WAL written since the last
+    // one. Between transactions, the commit record of every transaction still to come starts at or after the latest
+    // received position, so the session reports that position, as PostgreSQL's own subscriber does. Npgsql sends it
+    // with its next status update.
+    private async Task<bool> WaitBetweenTransactionsAsync(Task<bool> next, PeriodicTimer statusTimer)
+    {
+        while (true)
+        {
+            _statusTick ??= statusTimer.WaitForNextTickAsync().AsTask();
+
+            if (await Task.WhenAny(next, _statusTick).ConfigureAwait(false) == next)
+                return await next.ConfigureAwait(false);
+
+            _statusTick = null;
+            connection.SetReplicationStatus(connection.LastReceivedLsn);
         }
     }
 

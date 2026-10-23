@@ -58,6 +58,7 @@ public static class PostgresEventStore
     {
         var replicationOptions = options.Replication;
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(replicationOptions.InactiveSlotTimeout, TimeSpan.Zero);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(replicationOptions.WalReceiverStatusInterval, TimeSpan.Zero);
 
         var connectionString = replicationOptions.ConnectionString
                                ?? replicationConnectionStringFallback

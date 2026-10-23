@@ -51,4 +51,17 @@ public class PostgresEventStoreBuilderTests
 
         Should.Throw<ArgumentOutOfRangeException>(builder.Build);
     }
+
+    [TestCaseSource(nameof(NonPositiveIntervals))]
+    public async Task Build_NonPositiveStatusInterval_Throws(TimeSpan interval)
+    {
+        await using var dataSource = new NpgsqlDataSourceBuilder("Host=localhost").Build();
+
+        var builder = new PostgresEventStoreBuilder<object>()
+            .UseDataSource(dataSource)
+            .ConfigureOptions(o => o.Replication.WalReceiverStatusInterval = interval)
+            .ConfigureCodec(x => x.MapEvent<TestEvent>());
+
+        Should.Throw<ArgumentOutOfRangeException>(builder.Build);
+    }
 }
