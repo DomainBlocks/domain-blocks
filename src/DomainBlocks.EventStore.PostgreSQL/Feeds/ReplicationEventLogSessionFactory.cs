@@ -32,9 +32,9 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent>(
     IEventLogSessionFactory<EventLogRow<TEvent>>
     where TEvent : notnull
 {
-    private const string StandbySlotsUnsetSql =
-        "SELECT current_setting('synchronous_standby_names') <> '' " +
-        "AND current_setting('synchronized_standby_slots') = ''";
+    private const string ServerStateSql =
+        "SELECT pg_is_in_recovery(), " +
+        "current_setting('synchronous_standby_names') <> '' AND current_setting('synchronized_standby_slots') = ''";
 
     private readonly PgOutputReplicationOptions _pgOutputOptions = new(
         names.Publication,
@@ -159,11 +159,19 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent>(
                 $"Live subscriptions require PostgreSQL 17 or later, but the server is {connection.ServerVersion}.");
         }
 
+        await using var command = new NpgsqlCommand(ServerStateSql, connection);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+
+        // The feed's slot lives on the primary, and a standby or an Aurora reader can neither create it nor stream from
+        // it. An endpoint can reach one for a while during a failover, or while its name still resolves to the old
+        // primary.
+        if (reader.GetBoolean(0))
+            throw new ReplicationServerInRecoveryException(connection.Host);
+
         // With synchronous standbys, an append is acknowledged once they have it, so a failover keeps it. Unless the
         // slot waits for them too, the feed can deliver an event before they have it, and a failover then loses it.
-        await using var command = new NpgsqlCommand(StandbySlotsUnsetSql, connection);
-
-        if (await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is true)
+        if (reader.GetBoolean(1))
             logger?.ReplicationSlotNotSynchronized();
     }
 }

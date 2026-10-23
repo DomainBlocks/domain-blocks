@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.RDS" />
+    <PackageReference Include="AWSSDK.SecretsManager" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit3TestAdapter" />
+    <PackageReference Include="Shouldly" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DomainBlocks.EventStore.PostgreSQL\DomainBlocks.EventStore.PostgreSQL.csproj" />
+    <ProjectReference Include="..\..\src\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Testing.Integration.EventStore.PostgreSQL\DomainBlocks.Testing.Integration.EventStore.PostgreSQL.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Testing\DomainBlocks.Testing.csproj" />
+  </ItemGroup>
+
+</Project>
