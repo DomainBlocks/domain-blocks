@@ -316,6 +316,42 @@ public class PostgresSynchronousStandbyTests
         subscription.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
     }
 
+    [Test]
+    [CancelAfter(2 * TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_OtherWritesWhileIdle_StandbyCopyBecomesUsable(CancellationToken ct)
+    {
+        await using var dataSource = CreateDataSource();
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
+
+        await using var eventStore = CreateEventStore(dataSource, new PostgresEventStoreOptions
+        {
+            Schema = _options.Schema,
+            Replication = { WalReceiverStatusInterval = TimeSpan.FromMilliseconds(100) }
+        });
+
+        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
+        (await subscription.MoveNextAsync()).ShouldBeTrue();
+        subscription.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
+
+        // With no events, only the keepalives' position can move the slot. Logging the running transactions here saves
+        // waiting for the primary to log them.
+        await using var create = dataSource.CreateCommand("CREATE TABLE other (value bigint)");
+        await create.ExecuteNonQueryAsync(ct);
+
+        await using var write = dataSource.CreateCommand(
+            "INSERT INTO other VALUES (1); SELECT pg_log_standby_snapshot()");
+
+        var copied = WaitForSlotCopyAsync(ct);
+
+        while (!copied.IsCompleted)
+        {
+            await write.ExecuteNonQueryAsync(ct);
+            await Task.WhenAny(copied, Task.Delay(200, ct));
+        }
+
+        await copied;
+    }
+
     // Calls append_events directly, and cancels its commit's wait for the standby, so the event is visible on the
     // primary although the standby doesn't have it.
     private async Task AppendWithCanceledWaitAsync(NpgsqlDataSource dataSource, string value, CancellationToken ct)
