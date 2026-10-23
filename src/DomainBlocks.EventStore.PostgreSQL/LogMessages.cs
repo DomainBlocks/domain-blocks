@@ -106,6 +106,12 @@ internal static partial class LogMessages
     [LoggerMessage(LogLevel.Warning, "[replication] slot {SlotName} was dropped or invalidated; creating a new one")]
     internal static partial void ReplicationSlotLost(this ILogger logger, string slotName);
 
+    [LoggerMessage(
+        LogLevel.Warning,
+        "[replication] the server has synchronous standbys but no synchronized_standby_slots, so live subscriptions " +
+        "can receive events that a failover loses")]
+    internal static partial void ReplicationSlotNotSynchronized(this ILogger logger);
+
     [LoggerMessage(LogLevel.Debug, "[feed: {FeedId}] connected ({Session})")]
     internal static partial void FeedConnected(this ILogger logger, string feedId, string session);
 
