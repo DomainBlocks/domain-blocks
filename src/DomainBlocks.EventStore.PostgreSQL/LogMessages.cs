@@ -122,6 +122,12 @@ internal static partial class LogMessages
 
     [LoggerMessage(
         LogLevel.Warning,
+        "[replication] the server has synchronous standbys but no synchronized_standby_slots, so live subscriptions " +
+        "can receive events that a failover loses")]
+    internal static partial void ReplicationSlotNotSynchronized(this ILogger logger);
+
+    [LoggerMessage(
+        LogLevel.Warning,
         "[replication] could not end walsender {ProcessId}, which holds slot {SlotName}; waiting for it to notice " +
         "that its client has gone")]
     internal static partial void WalSenderTerminationDenied(

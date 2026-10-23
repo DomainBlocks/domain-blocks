@@ -9,7 +9,7 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
 /// <summary>
 /// PostgreSQL-specific subscription behavior beyond the shared suite: slot sharing, stream-position resume, the order
-/// of a large append, and the replication barrier without synchronous standbys.
+/// of a large append, the replication barrier without synchronous standbys, and connection strings with several hosts.
 /// </summary>
 [TestFixture]
 public class PostgresSubscriptionTests : PostgresIntegrationTest
@@ -182,12 +182,54 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
         (await CountLogicalMessagesSinceAsync(start, ct)).ShouldBe(0);
     }
 
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_DataSourceWithSeveralHosts_Fails(CancellationToken ct)
+    {
+        await using var dataSource = new NpgsqlDataSourceBuilder(WithTwoHosts(PostgresTestEnvironment.ConnectionString))
+            .UsePostgresEventStore(Options)
+            .Build();
+
+        await using var eventStore = new PostgresEventStoreBuilder<object>()
+            .UseDataSource(dataSource)
+            .UseOptions(Options)
+            .ConfigureCodec(x => x.UseEventTypeMap(DefaultEventTypeMap))
+            .Build();
+
+        await using var subscription = eventStore.SubscribeToAll().GetAsyncEnumerator(ct);
+        var exception = await Should.ThrowAsync<NotSupportedException>(subscription.MoveNextAsync().AsTask());
+        exception.Message.ShouldContain("data source with a single host");
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_ReplicationConnectionStringWithSeveralHosts_Fails(CancellationToken ct)
+    {
+        await using var eventStore = CreateEventStore(options: new PostgresEventStoreOptions
+        {
+            Schema = Schema,
+            Replication = { ConnectionString = WithTwoHosts(PostgresTestEnvironment.ConnectionString) }
+        });
+
+        await using var subscription = eventStore.SubscribeToAll().GetAsyncEnumerator(ct);
+        var exception = await Should.ThrowAsync<NotSupportedException>(subscription.MoveNextAsync().AsTask());
+        exception.Message.ShouldContain("replication connection string with a single host");
+    }
+
     private static async Task<long> CountSlotsAsync(CancellationToken ct)
     {
         await using var command = PostgresTestEnvironment.DataSource.CreateCommand(
             "SELECT count(*) FROM pg_replication_slots WHERE slot_name LIKE 'dbx_%'");
 
         return (long)(await command.ExecuteScalarAsync(ct))!;
+    }
+
+    // The same server twice makes a connection string with several hosts.
+    private static string WithTwoHosts(string connectionString)
+    {
+        var builder = new NpgsqlConnectionStringBuilder(connectionString);
+        builder.Host = $"{builder.Host}:{builder.Port},{builder.Host}:{builder.Port}";
+        return builder.ConnectionString;
     }
 
     private async Task<string> GetWalPositionAsync(CancellationToken ct)

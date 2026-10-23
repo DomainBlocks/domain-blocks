@@ -13,7 +13,9 @@ namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 /// </summary>
 internal sealed class FeedReplicationSlot : IAsyncDisposable
 {
-    private const string CreateSql = "SELECT pg_create_logical_replication_slot($1, 'pgoutput')";
+    // A failover slot sends a commit only once the standbys whose physical slots synchronized_standby_slots lists have
+    // it. Standbys with sync_replication_slots keep a copy of it, which the feed resumes from after a failover.
+    private const string CreateSql = "SELECT pg_create_logical_replication_slot($1, 'pgoutput', failover => true)";
 
     private const string StateSql =
         "SELECT invalidation_reason IS NULL, active_pid FROM pg_replication_slots WHERE slot_name = $1";
