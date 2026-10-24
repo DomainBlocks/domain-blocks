@@ -149,7 +149,7 @@ public class ChangeStreamSubjectTests
 
         _helloCount.ShouldBe(0);
         connection.OpTimeHighWaterMark.ShouldBe(new BsonTimestamp(5, 2));
-        _watchOptions.Single()!.StartAtOperationTime.ShouldBe(startAt);
+        _watchOptions.ShouldHaveSingleItem().ShouldNotBeNull().StartAtOperationTime.ShouldBe(startAt);
     }
 
     [Test]
@@ -171,8 +171,9 @@ public class ChangeStreamSubjectTests
         await using var connection = await subject.ConnectAsync(ct);
 
         connection.OpTimeHighWaterMark.ShouldBe(CreateOperationTime(1));
-        _watchOptions.Single()!.ResumeAfter.ShouldBe(resumeAfter);
-        _watchOptions.Single()!.StartAtOperationTime.ShouldBeNull();
+        var watchOptions = _watchOptions.ShouldHaveSingleItem().ShouldNotBeNull();
+        watchOptions.ResumeAfter.ShouldBe(resumeAfter);
+        watchOptions.StartAtOperationTime.ShouldBeNull();
     }
 
     [Test]

@@ -310,10 +310,12 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
             if (options.StartAtOperationTime is null)
             {
                 // Without a start, the stream starts one tick after the primary's last write. The mark must be an
-                // oplog optime rather than the current cluster time. After a transaction commits, the logical clock
-                // runs one tick ahead of the oplog, and on a replica set that is not sharded, a read that waits for
-                // such a time stalls until the periodic no-op writer runs. The server would start the stream at the
-                // same point by default, but the mark would be unknown:
+                // oplog optime rather than the current cluster time, because a catch-up reads only once the oplog
+                // reaches the mark. After a transaction commits, the logical clock runs one tick ahead of the oplog,
+                // so a mark at the current cluster time would stall a catch-up until the periodic no-op writer runs,
+                // every 10 seconds by default. Only a shard writes a no-op to reach the time at once:
+                // https://github.com/mongodb/mongo/blob/r7.0.16/src/mongo/db/read_concern_mongod.cpp#L146-L153
+                // The server would start the stream at the same point by default, but the mark would be unknown:
                 // https://github.com/mongodb/mongo/blob/r7.0.16/src/mongo/db/pipeline/document_source_change_stream.cpp#L238-L253
                 var lastApplied = await GetLastAppliedOpTimeAsync().ConfigureAwait(false);
 
