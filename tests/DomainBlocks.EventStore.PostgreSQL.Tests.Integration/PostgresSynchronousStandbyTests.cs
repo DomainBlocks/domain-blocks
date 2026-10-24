@@ -107,23 +107,23 @@ public class PostgresSynchronousStandbyTests
         await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
         await using var eventStore = CreateEventStore(dataSource);
 
-        // The subscription's slot can't become consistent while X runs.
-        await using var x = await XidTransaction.BeginAsync(dataSource, ct);
+        // The subscription's slot can't become consistent while txn1 runs.
+        await using var txn1 = await XidTransaction.BeginAsync(dataSource, ct);
         await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
         var next = subscription.MoveNextAsync().AsTask();
-        await WaitForXidLockWaitAsync(dataSource, x.Xid, ct);
+        await WaitForXidLockWaitAsync(dataSource, txn1.Xid, ct);
 
-        // Once X ends, the slot waits for Y, which started after X was recorded as running.
-        await using var y = await XidTransaction.BeginAsync(dataSource, ct);
-        await x.CommitAsync(ct);
-        await WaitForXidLockWaitAsync(dataSource, y.Xid, ct);
+        // Once txn1 ends, the slot waits for txn2, which started after txn1 was recorded as running.
+        await using var txn2 = await XidTransaction.BeginAsync(dataSource, ct);
+        await txn1.CommitAsync(ct);
+        await WaitForXidLockWaitAsync(dataSource, txn2.Xid, ct);
 
-        // The event commits and waits for the standby to apply it, so queries can't see it. Once Y ends, the slot
+        // The event commits and waits for the standby to apply it, so queries can't see it. Once txn2 ends, the slot
         // becomes consistent at a point after the event's commit, so it won't stream the event either.
         await _server.PauseWalReplayOnStandbyAsync();
         var append = AppendWithRemoteApplyAsync(dataSource, "e", ct);
         await WaitForSyncRepAsync(ct);
-        await y.CommitAsync(ct);
+        await txn2.CommitAsync(ct);
 
         // Only the catch-up can deliver the event, so it must not report caught up while the event is invisible.
         await Task.Delay(HoldDuration, ct);
