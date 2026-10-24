@@ -131,14 +131,32 @@ internal sealed class EventLogReader<TEvent>(
         return result is DBNull or null ? null : (long)result;
     }
 
-    public async Task<long?> GetMaxStreamPositionAsync(string streamId, CancellationToken cancellationToken)
+    /// <summary>
+    /// Reads the position of the last event in the log, or <see langword="null"/> if it is empty, with the replication
+    /// barrier after the read.
+    /// </summary>
+    public Task<long?> ReadMaxPositionWithBarrierAsync(CancellationToken cancellationToken)
     {
-        await using var command = dataSource.CreateCommand(sql.MaxStreamPosition);
-        command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = streamId });
+        return ReadWithBarrierAsync(
+            new NpgsqlBatchCommand(sql.MaxPosition),
+            new NpgsqlBatchCommand(sql.BarrierAfterEnd),
+            ReadMaxPositionAsync,
+            cancellationToken);
+    }
 
-        var result = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+    /// <summary>
+    /// Reads the position of the last event in a stream, or <see langword="null"/> if it is empty, with the replication
+    /// barrier after the read.
+    /// </summary>
+    public Task<long?> ReadMaxStreamPositionWithBarrierAsync(string streamId, CancellationToken cancellationToken)
+    {
+        var read = new NpgsqlBatchCommand(sql.MaxStreamPosition);
+        read.Parameters.Add(new NpgsqlParameter<string> { TypedValue = streamId });
 
-        return result is DBNull or null ? null : (long)result;
+        var barrier = new NpgsqlBatchCommand(sql.BarrierAfterStreamEnd);
+        barrier.Parameters.Add(new NpgsqlParameter<string> { TypedValue = streamId });
+
+        return ReadWithBarrierAsync(read, barrier, ReadMaxPositionAsync, cancellationToken);
     }
 
     public async Task<bool> StreamExistsAsync(string streamId, CancellationToken cancellationToken)
@@ -147,6 +165,61 @@ internal sealed class EventLogReader<TEvent>(
         command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = streamId });
 
         return (bool)(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+    }
+
+    // Runs the read and then the replication barrier in one round trip, so a failover can't undo what the read saw. The
+    // batch is one transaction, and its commit waits for the synchronous standbys, so it covers every commit that the
+    // read saw. Rows can reach the client before the commit, so the read's result is used only once the batch
+    // completes. A canceled wait completes with only a warning, so any warning means the barrier was not confirmed.
+    private async Task<T> ReadWithBarrierAsync<T>(
+        NpgsqlBatchCommand read,
+        NpgsqlBatchCommand barrier,
+        Func<NpgsqlDataReader, CancellationToken, Task<T>> readResult,
+        CancellationToken cancellationToken)
+    {
+        var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        PostgresNotice? warning = null;
+        T result;
+
+        await using (connection.ConfigureAwait(false))
+        {
+            connection.Notice += OnNotice;
+
+            try
+            {
+                await using var batch = new NpgsqlBatch(connection);
+                batch.BatchCommands.Add(read);
+                batch.BatchCommands.Add(barrier);
+
+                var reader = await batch.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+
+                await using (reader.ConfigureAwait(false))
+                {
+                    result = await readResult(reader, cancellationToken).ConfigureAwait(false);
+
+                    // The batch completes once its commit has, so closing the reader waits for the standbys.
+                    await reader.CloseAsync().ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                connection.Notice -= OnNotice;
+            }
+        }
+
+        // A canceled wait completes as if it had been confirmed, so a canceled caller must not use the result.
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (warning is not null)
+            throw new ReplicationBarrierException($"The replication barrier was not confirmed: {warning.MessageText}");
+
+        return result;
+
+        void OnNotice(object? sender, NpgsqlNoticeEventArgs e)
+        {
+            if (e.Notice.InvariantSeverity == "WARNING")
+                warning ??= e.Notice;
+        }
     }
 
     private async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadPagesAsync(
@@ -209,5 +282,12 @@ internal sealed class EventLogReader<TEvent>(
         var createdAt = reader.GetFieldValue<DateTimeOffset>(7);
 
         return decoder.Decode(position, streamId, streamPosition, eventName, eventData, metadata, createdAt);
+    }
+
+    private static async Task<long?> ReadMaxPositionAsync(NpgsqlDataReader reader, CancellationToken cancellationToken)
+    {
+        return await reader.ReadAsync(cancellationToken).ConfigureAwait(false) && !reader.IsDBNull(0)
+            ? reader.GetInt64(0)
+            : null;
     }
 }

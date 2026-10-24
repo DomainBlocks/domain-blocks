@@ -262,9 +262,10 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
             _reader,
             _feed,
             (reader, from, to, ct) => reader.ReadCatchUpAllAsync(from, to, filter, ct),
-            static async (reader, ct) => await reader.GetMaxPositionAsync(ct).ConfigureAwait(false) is { } pos
-                ? LogPosition.FromInt64(pos)
-                : null,
+            static async (reader, ct) =>
+                await reader.ReadMaxPositionWithBarrierAsync(ct).ConfigureAwait(false) is { } pos
+                    ? LogPosition.FromInt64(pos)
+                    : null,
             filter,
             static ctx => ctx.LogPosition,
             origin,
@@ -285,9 +286,10 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
             _reader,
             _feed,
             (reader, from, to, ct) => reader.ReadCatchUpStreamAsync(streamId, from, to, filter, ct),
-            async (reader, ct) => await reader.GetMaxStreamPositionAsync(streamId, ct).ConfigureAwait(false) is { } pos
-                ? StreamPosition.FromInt64(pos)
-                : null,
+            async (reader, ct) =>
+                await reader.ReadMaxStreamPositionWithBarrierAsync(streamId, ct).ConfigureAwait(false) is { } pos
+                    ? StreamPosition.FromInt64(pos)
+                    : null,
             EventFilter.StreamIds(streamId) & filter,
             static ctx => ctx.StreamPosition,
             origin,

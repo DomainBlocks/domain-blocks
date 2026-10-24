@@ -7,21 +7,33 @@ namespace DomainBlocks.Testing.Integration.EventStore;
 /// Reads a subscription one message at a time, for tests that interleave reading with appending events or releasing
 /// held replays.
 /// </summary>
-public sealed class SubscriptionProbe<TStreamPos, TLogPos>(
-    IAsyncEnumerable<SubscriptionMessage<object, string, TStreamPos, TLogPos>> subscription,
-    CancellationToken cancellationToken) :
-    IAsyncDisposable
+/// <remarks>
+/// Disposing the probe cancels a read that is still pending, and waits for it to end, before it disposes the
+/// subscription. Disposing a subscription during a read throws, and that exception would hide the failure that ended
+/// the test.
+/// </remarks>
+public sealed class SubscriptionProbe<TStreamPos, TLogPos> : IAsyncDisposable
     where TStreamPos : notnull
     where TLogPos : notnull
 {
-    private readonly IAsyncEnumerator<SubscriptionMessage<object, string, TStreamPos, TLogPos>> _enumerator =
-        subscription.GetAsyncEnumerator(cancellationToken);
+    private readonly CancellationTokenSource _cancellation;
+    private readonly IAsyncEnumerator<SubscriptionMessage<object, string, TStreamPos, TLogPos>> _enumerator;
+    private Task _read = Task.CompletedTask;
 
-    public async Task<SubscriptionMessage<object, string, TStreamPos, TLogPos>> NextAsync()
+    public SubscriptionProbe(
+        IAsyncEnumerable<SubscriptionMessage<object, string, TStreamPos, TLogPos>> subscription,
+        CancellationToken cancellationToken)
     {
-        (await _enumerator.MoveNextAsync()).ShouldBeTrue();
+        _cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _enumerator = subscription.GetAsyncEnumerator(_cancellation.Token);
+    }
 
-        return _enumerator.Current;
+    public Task<SubscriptionMessage<object, string, TStreamPos, TLogPos>> NextAsync()
+    {
+        var read = ReadNextAsync();
+        _read = read;
+
+        return read;
     }
 
     /// <summary>
@@ -52,5 +64,22 @@ public sealed class SubscriptionProbe<TStreamPos, TLogPos>(
         return messages;
     }
 
-    public ValueTask DisposeAsync() => _enumerator.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+        if (!_read.IsCompleted)
+        {
+            await _cancellation.CancelAsync();
+            await _read.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        }
+
+        await _enumerator.DisposeAsync();
+        _cancellation.Dispose();
+    }
+
+    private async Task<SubscriptionMessage<object, string, TStreamPos, TLogPos>> ReadNextAsync()
+    {
+        (await _enumerator.MoveNextAsync()).ShouldBeTrue();
+
+        return _enumerator.Current;
+    }
 }
