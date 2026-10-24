@@ -142,13 +142,13 @@ public sealed class ReplicatedPostgresServer : IAsyncDisposable
     /// commit that waits for the standby to flush it completes, but one that waits for it to apply it, with
     /// <c>remote_apply</c>, waits until replay resumes.
     /// </summary>
-    public async Task PauseWalReplayAsync()
+    public async Task PauseWalReplayOnStandbyAsync()
     {
         await ExecuteOnStandbyAsync("SELECT pg_wal_replay_pause()");
         await WaitUntilAsync(StandbyConnectionString, "SELECT pg_get_wal_replay_pause_state() = 'paused'");
     }
 
-    public Task ResumeWalReplayAsync() => ExecuteOnStandbyAsync("SELECT pg_wal_replay_resume()");
+    public Task ResumeWalReplayOnStandbyAsync() => ExecuteOnStandbyAsync("SELECT pg_wal_replay_resume()");
 
     public async ValueTask DisposeAsync()
     {

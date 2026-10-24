@@ -77,7 +77,7 @@ public class PostgresSynchronousStandbyTests
 
         // With WAL replay paused, the standby flushes the event but doesn't apply it, and a commit with remote_apply
         // waits until the standby has applied it. So the event stays invisible on the primary while the feed has it.
-        await _server.PauseWalReplayAsync();
+        await _server.PauseWalReplayOnStandbyAsync();
         var append = AppendWithRemoteApplyAsync(dataSource, "e", ct);
         var appendPid = await WaitForSyncRepAsync(ct);
 
@@ -93,7 +93,7 @@ public class PostgresSynchronousStandbyTests
         (await IsWaitingForSyncRepAsync(appendPid, ct)).ShouldBeTrue();
         next.IsCompleted.ShouldBeFalse();
 
-        await _server.ResumeWalReplayAsync();
+        await _server.ResumeWalReplayOnStandbyAsync();
         await append;
 
         (await next).ShouldBeTrue();
