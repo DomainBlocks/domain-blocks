@@ -16,10 +16,11 @@ session.
 
 ## 1. Set up
 
-Start a server.
+Start a server. `wal_level=logical` is only needed by the replication feed, but it matches the test container so the
+same database works for the other parts of the store too.
 
 ```powershell
-docker run --name dbx-pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres:17
+docker run --name dbx-pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres:17 -c wal_level=logical
 ```
 
 Install the schema. The scripts contain a `__schema__` token that `SqlScripts.Load` replaces with the configured schema

@@ -7,11 +7,11 @@ using MongoDB.Bson;
 namespace DomainBlocks.EventStore.MongoDB;
 
 /// <summary>
-/// A document read for subscriptions, whose event is decoded only when a subscription asks for it, so an event that no
+/// A document from the change stream whose event is decoded only when an observer asks for it, so an event that no
 /// subscription selects is never decoded.
 /// </summary>
 /// <remarks>
-/// A source reuses one document for every document it reads, so a document is valid only until the next is read. The
+/// The store reuses one document for every change, so a document is valid only until the next change is delivered. The
 /// payload and metadata are decoded together, once, on the first request for either. The context is read once, on
 /// first request.
 /// </remarks>

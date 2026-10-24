@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Codecs;
-using DomainBlocks.EventStore.Subscriptions;
+using DomainBlocks.EventStore.Filtering;
+using DomainBlocks.EventStore.PostgreSQL.Feeds;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 
@@ -8,12 +9,19 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 
 public static class PostgresEventStore
 {
+    /// <remarks>
+    /// <paramref name="replicationConnectionStringFallback"/> applies when
+    /// <see cref="PostgresReplicationOptions.ConnectionString"/> is not set. It takes precedence over the data source's
+    /// connection string, which has no password unless security info is persisted.
+    /// </remarks>
     internal static PostgresEventStore<TEvent> Create<TEvent>(
         NpgsqlDataSource dataSource,
         IEventCodec<TEvent, PostgresEventData, string> eventCodec,
         PostgresEventStoreOptions options,
+        PostgresEventStoreAdminOptions adminOptions,
         ILogger? logger,
-        bool ownsDataSource)
+        bool ownsDataSource,
+        string? replicationConnectionStringFallback)
         where TEvent : notnull
     {
         var names = new SchemaObjectNames(options.Schema);
@@ -25,24 +33,56 @@ public static class PostgresEventStore
             options.ReadPageSize,
             eventCodec);
 
-        var subscriptionFactory = new CatchUpSubscriptionFactory<
-            EventLogRow<TEvent>,
-            TEvent,
-            string,
-            StreamPosition,
-            LogPosition>(
-            () => new PostgresSubscriptionSource<TEvent>(dataSource, reader, names, eventCodec),
-            options.Tail,
-            logger);
+        var feed = CreateFeed(dataSource, names, options, eventCodec, logger, replicationConnectionStringFallback);
 
         return new PostgresEventStore<TEvent>(
             dataSource,
             ownsDataSource,
             options,
+            adminOptions,
             appender,
             reader,
-            subscriptionFactory,
-            eventCodec);
+            feed,
+            eventCodec,
+            logger);
+    }
+
+    private static RefCountedEventLogFeed<EventLogRow<TEvent>> CreateFeed<TEvent>(
+        NpgsqlDataSource dataSource,
+        SchemaObjectNames names,
+        PostgresEventStoreOptions options,
+        IEventDecoder<TEvent, PostgresEventData, string> decoder,
+        ILogger? logger,
+        string? replicationConnectionStringFallback)
+        where TEvent : notnull
+    {
+        var replicationOptions = options.Replication;
+
+        var connectionString = replicationOptions.ConnectionString
+                               ?? replicationConnectionStringFallback
+                               ?? dataSource.ConnectionString;
+
+        var slotNames = new SlotNameGenerator(replicationOptions.SlotNamePrefix);
+
+        var feedOptions = new EventLogFeedOptions
+        {
+            RetryDelay = replicationOptions.RetryDelay,
+            MaxRetryDelay = replicationOptions.MaxRetryDelay,
+            MaxRetryAttempts = replicationOptions.MaxRetryAttempts
+        };
+
+        return new RefCountedEventLogFeed<EventLogRow<TEvent>>(() =>
+            new EventLogFeed<EventLogRow<TEvent>>(
+                ct => ReplicationEventLogSession.OpenAsync(
+                    connectionString,
+                    slotNames.Next(),
+                    names,
+                    replicationOptions,
+                    decoder,
+                    logger,
+                    ct),
+                feedOptions,
+                logger));
     }
 }
 
@@ -58,48 +98,42 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
     private readonly NpgsqlDataSource _dataSource;
     private readonly bool _ownsDataSource;
     private readonly PostgresEventStoreOptions _options;
+    private readonly PostgresEventStoreAdminOptions _adminOptions;
     private readonly IAppender _appender;
     private readonly EventLogReader<TEvent> _reader;
-
-    private readonly CatchUpSubscriptionFactory<
-        EventLogRow<TEvent>,
-        TEvent,
-        string,
-        StreamPosition,
-        LogPosition> _subscriptionFactory;
-
+    private readonly RefCountedEventLogFeed<EventLogRow<TEvent>> _feed;
     private readonly IEventCodec<TEvent, PostgresEventData, string> _eventCodec;
+    private readonly ILogger? _logger;
 
     internal PostgresEventStore(
         NpgsqlDataSource dataSource,
         bool ownsDataSource,
         PostgresEventStoreOptions options,
+        PostgresEventStoreAdminOptions adminOptions,
         IAppender appender,
         EventLogReader<TEvent> reader,
-        CatchUpSubscriptionFactory<
-            EventLogRow<TEvent>,
-            TEvent,
-            string,
-            StreamPosition,
-            LogPosition> subscriptionFactory,
-        IEventCodec<TEvent, PostgresEventData, string> eventCodec)
+        RefCountedEventLogFeed<EventLogRow<TEvent>> feed,
+        IEventCodec<TEvent, PostgresEventData, string> eventCodec,
+        ILogger? logger)
     {
         _dataSource = dataSource;
         _ownsDataSource = ownsDataSource;
         _options = options;
+        _adminOptions = adminOptions;
         _appender = appender;
         _reader = reader;
-        _subscriptionFactory = subscriptionFactory;
+        _feed = feed;
         _eventCodec = eventCodec;
+        _logger = logger;
     }
 
     /// <summary>
-    /// Creates the schema, types, tables, and functions the store uses, if they do not exist. Idempotent and safe to
-    /// call concurrently from several processes.
+    /// Creates the schema, types, tables, functions, and publication the store uses, if they do not exist. Idempotent
+    /// and safe to call concurrently from several processes.
     /// </summary>
     public Task EnsureInitializedAsync(CancellationToken cancellationToken = default)
     {
-        return PostgresEventStoreAdmin.EnsureInitializedAsync(_dataSource, _options, cancellationToken);
+        return PostgresEventStoreAdmin.EnsureInitializedAsync(_dataSource, _options, _adminOptions, cancellationToken);
     }
 
     public async Task AppendAsync(
@@ -220,7 +254,20 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         SubscriptionOrigin<LogPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
-        return _subscriptionFactory.SubscribeToAll(origin, options);
+        var filter = options?.Filter ?? EventFilter.All;
+
+        return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
+            _reader,
+            _feed,
+            (reader, from, to, ct) => reader.ReadCatchUpAllAsync(from, to, filter, ct),
+            static async (reader, ct) => await reader.GetMaxPositionAsync(ct).ConfigureAwait(false) is { } pos
+                ? LogPosition.FromInt64(pos)
+                : null,
+            filter,
+            static ctx => ctx.LogPosition,
+            origin,
+            options,
+            _logger);
     }
 
     public IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> SubscribeToStream(
@@ -230,13 +277,26 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
     {
         ArgumentException.ThrowIfNullOrEmpty(streamId);
 
-        return _subscriptionFactory.SubscribeToStream(streamId, origin, options);
+        var filter = options?.Filter ?? EventFilter.All;
+
+        return new SubscriptionAsyncEnumerable<TEvent, StreamPosition>(
+            _reader,
+            _feed,
+            (reader, from, to, ct) => reader.ReadCatchUpStreamAsync(streamId, from, to, filter, ct),
+            async (reader, ct) => await reader.GetMaxStreamPositionAsync(streamId, ct).ConfigureAwait(false) is { } pos
+                ? StreamPosition.FromInt64(pos)
+                : null,
+            EventFilter.StreamIds(streamId) & filter,
+            static ctx => ctx.StreamPosition,
+            origin,
+            options,
+            _logger);
     }
 
     public async ValueTask DisposeAsync()
     {
         await _appender.DisposeAsync().ConfigureAwait(false);
-        await _subscriptionFactory.DisposeAsync().ConfigureAwait(false);
+        await _feed.DisposeAsync().ConfigureAwait(false);
 
         if (_ownsDataSource)
             await _dataSource.DisposeAsync().ConfigureAwait(false);

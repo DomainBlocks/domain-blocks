@@ -1,13 +1,13 @@
 using DomainBlocks.Testing.Events;
 using DomainBlocks.Testing.Integration.EventStore;
+using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
 using NUnit.Framework;
 using Shouldly;
 
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
 /// <summary>
-/// PostgreSQL-specific subscription behavior beyond the shared suite: one listener for every subscription, and
-/// stream-position resume.
+/// PostgreSQL-specific subscription behavior beyond the shared suite: slot sharing and stream-position resume.
 /// </summary>
 [TestFixture]
 public class PostgresSubscriptionTests : PostgresIntegrationTest
@@ -28,14 +28,17 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task SubscribeToAll_TwoSubscribers_ShareOneListenerUntilTheLastUnsubscribes(CancellationToken ct)
+    public async Task SubscribeToAll_TwoSubscribers_ShareOneSlotUntilTheLastUnsubscribes(CancellationToken ct)
     {
         var first = _eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
-        var second = _eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
+
+        await using var second = _eventStore
+            .SubscribeToAll(SubscriptionOrigin.Start)
+            .GetAsyncEnumerator(ct);
 
         await ShouldBeCaughtUpAsync(first);
         await ShouldBeCaughtUpAsync(second);
-        await ListenerSessions.WaitForCountAsync(Schema, 1, ct);
+        (await CountSlotsAsync(ct)).ShouldBe(1);
 
         var firstLive = new TestEvent { Value = "first-live" };
         await _eventStore.AppendAsync("s1", [Appendable(firstLive)], cancellationToken: ct);
@@ -47,12 +50,12 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
         var secondLive = new TestEvent { Value = "second-live" };
         await _eventStore.AppendAsync("s2", [Appendable(secondLive)], cancellationToken: ct);
         (await NextEventAsync(second)).Payload.ShouldBe(secondLive);
-        (await ListenerSessions.CountAsync(Schema, ct)).ShouldBe(1);
+        (await CountSlotsAsync(ct)).ShouldBe(1);
 
         await second.DisposeAsync();
 
-        // A session left listening would hold back the server's notification queue.
-        await ListenerSessions.WaitForCountAsync(Schema, 0, ct);
+        while (await CountSlotsAsync(ct) > 0)
+            await Task.Delay(50, ct);
     }
 
     [Test]
@@ -66,7 +69,7 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
             })
             .GetAsyncEnumerator(ct);
 
-        // A second subscription shows when the tail has delivered all the appended events.
+        // A second subscription shows when the live feed has delivered all the appended events.
         await using var witness = _eventStore.SubscribeToAll().GetAsyncEnumerator(ct);
 
         await ShouldBeCaughtUpAsync(enumerator);
@@ -89,7 +92,7 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
             await _eventStore.AppendAsync("target", [Appendable(targetEvent)], cancellationToken: ct);
         }
 
-        // Wait until the witness has seen every appended event before reading the subscription under test. The tail
+        // Wait until the witness has seen every appended event before reading the subscription under test. The feed
         // delivers each event to all subscribers, so by then the subscription's queue (capacity 1) must have
         // overflowed. Without this wait, the test could start reading before the events arrive, keep up with them, and
         // never fall behind.
@@ -124,6 +127,14 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
         observed.ShouldAllBe(x => x.Context.StreamId == "target");
         observed.Select(x => x.Context.StreamPosition.Value).ShouldBe(Enumerable.Range(0, 40).Select(i => (ulong)i));
         fellBehindCount.ShouldBeGreaterThan(0);
+    }
+
+    private static async Task<long> CountSlotsAsync(CancellationToken ct)
+    {
+        await using var command = PostgresTestEnvironment.DataSource.CreateCommand(
+            "SELECT count(*) FROM pg_replication_slots WHERE slot_name LIKE 'dbx_%'");
+
+        return (long)(await command.ExecuteScalarAsync(ct))!;
     }
 
     private static async Task<ReadEvent<object, string, StreamPosition, LogPosition>> NextEventAsync(

@@ -13,14 +13,6 @@
 -- handles one request per stream in each iteration, so a batch of distinct streams needs a single iteration.
 --
 -- The expected kinds and statuses are the expected_state_kind and append_status enums from schema.sql.
---
--- A batch that appends events notifies the channel named after the schema, with the position of its last event as the
--- payload. Listeners hear of it only when it commits, and appenders commit in position order because they serialize on
--- the lock, so notifications arrive in position order.
---
--- A batch commits with synchronous_commit on, whatever the server, database, role or session sets, so it is
--- acknowledged only once it is flushed, and on the synchronous standbys if any are configured. Until then it is not
--- visible to other sessions either.
 
 CREATE OR REPLACE FUNCTION __schema__.append_events(
     p_stream_ids text[],
@@ -47,7 +39,6 @@ $fn$
 DECLARE
     c_sequence_name CONSTANT text := 'event_log';
     v_position_start         bigint;
-    v_position_end           bigint;
     v_created_at             timestamptz;
     v_existing_commits       uuid[];
 BEGIN
@@ -58,9 +49,6 @@ BEGIN
             current_setting('transaction_isolation')
             USING ERRCODE = 'invalid_transaction_state';
     END IF;
-
-    -- A local setting lasts until the transaction commits, which is when it takes effect.
-    PERFORM set_config('synchronous_commit', 'on', true);
 
     PERFORM __schema__.validate_append_batch(
             p_stream_ids,
@@ -195,16 +183,6 @@ BEGIN
                CASE WHEN d.status = 'appended' THEN d.first_pos + d.event_count - 1 END AS last_position
         FROM decided AS d
         ORDER BY d.ord;
-
-    -- The sequence row is still locked, so it shows how far this batch advanced it.
-    SELECT s.next
-    INTO v_position_end
-    FROM __schema__.sequences AS s
-    WHERE s.name = c_sequence_name;
-
-    IF v_position_end > v_position_start THEN
-        PERFORM pg_notify('__schema__', (v_position_end - 1)::text);
-    END IF;
 
     RETURN;
 END
