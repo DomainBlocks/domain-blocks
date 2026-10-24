@@ -78,7 +78,8 @@ public class PostgresSynchronousStandbyTests
         // With WAL replay paused, the standby flushes the event but doesn't apply it, and a commit with remote_apply
         // waits until the standby has applied it. So the event stays invisible on the primary while the feed has it.
         await _server.PauseWalReplayOnStandbyAsync();
-        var append = AppendWithRemoteApplyAsync(dataSource, "e", ct);
+        await using var appendConnection = await dataSource.OpenConnectionAsync(ct);
+        var append = AppendWithRemoteApplyAsync(dataSource, appendConnection, "e", ct);
 
         (await subscription1.MoveNextAsync()).ShouldBeTrue();
         subscription1.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
@@ -121,8 +122,9 @@ public class PostgresSynchronousStandbyTests
         // The event commits and waits for the standby to apply it, so queries can't see it. Once txn2 ends, the slot
         // becomes consistent at a point after the event's commit, so it won't stream the event either.
         await _server.PauseWalReplayOnStandbyAsync();
-        var append = AppendWithRemoteApplyAsync(dataSource, "e", ct);
-        await WaitForSyncRepAsync(ct);
+        await using var appendConnection = await dataSource.OpenConnectionAsync(ct);
+        var append = AppendWithRemoteApplyAsync(dataSource, appendConnection, "e", ct);
+        await WaitForSyncRepAsync(appendConnection.ProcessID, ct);
         await txn2.CommitAsync(ct);
 
         // Only the catch-up can deliver the event, so it must not report caught up while the event is invisible.
@@ -136,10 +138,14 @@ public class PostgresSynchronousStandbyTests
         subscription.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
     }
 
-    // Calls append_events directly, and commits waiting for the standby to apply the event rather than flush it.
-    private async Task AppendWithRemoteApplyAsync(NpgsqlDataSource dataSource, string value, CancellationToken ct)
+    // Calls append_events directly on the connection, and commits waiting for the standby to apply the event rather
+    // than flush it.
+    private async Task AppendWithRemoteApplyAsync(
+        NpgsqlDataSource dataSource,
+        NpgsqlConnection connection,
+        string value,
+        CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
 
         var client = new AppendFunctionClient(dataSource, _options.Schema);
@@ -194,6 +200,13 @@ public class PostgresSynchronousStandbyTests
 
             await Task.Delay(20, ct);
         }
+    }
+
+    // Waits until the backend's commit waits for the standby.
+    private async Task WaitForSyncRepAsync(int pid, CancellationToken ct)
+    {
+        while (!await IsWaitingForSyncRepAsync(pid, ct))
+            await Task.Delay(20, ct);
     }
 
     private async Task<bool> IsWaitingForSyncRepAsync(int pid, CancellationToken ct)
