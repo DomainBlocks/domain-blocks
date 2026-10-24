@@ -30,7 +30,9 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
 {
     private const string CreateSlotSql = "SELECT pg_create_logical_replication_slot($1, 'pgoutput')";
     private const string DropSlotSql = "SELECT pg_drop_replication_slot($1)";
-    private const string TerminateBackendSql = "SELECT pg_terminate_backend($1, 5000)";
+
+    private const string TerminateWalSenderSql =
+        "SELECT pg_terminate_backend(pid, 5000) FROM pg_stat_activity WHERE pid = $1 AND backend_type = 'walsender'";
 
     private const string SlotStateSql =
         "SELECT invalidation_reason IS NULL, active_pid FROM pg_replication_slots WHERE slot_name = $1";
@@ -169,14 +171,16 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
     }
 
     // The slot can be lost while no session streams from it. The walsender of a session whose connection was lost holds
-    // the slot until it notices, and that walsender is this feed's, so it is ended rather than waited for.
+    // the slot until it notices, and that walsender is this feed's, so it is ended rather than waited for. Any other
+    // backend, such as one that drops the slot, holds it only while its statement runs, so it is left to finish, and
+    // the session waits for it as for a slot in use.
     private async Task PrepareToResumeAsync(string slotName, CancellationToken cancellationToken)
     {
         var (isValid, activePid) = await ReadSlotStateAsync(slotName, cancellationToken).ConfigureAwait(false);
 
         if (isValid && activePid is { } pid)
         {
-            await TryTerminateBackendAsync(pid, cancellationToken).ConfigureAwait(false);
+            await TryTerminateWalSenderAsync(_dataSource, pid, cancellationToken).ConfigureAwait(false);
             (isValid, activePid) = await ReadSlotStateAsync(slotName, cancellationToken).ConfigureAwait(false);
         }
 
@@ -202,10 +206,16 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
         return (true, reader.IsDBNull(1) ? null : reader.GetInt32(1));
     }
 
-    // It waits up to five seconds for the backend to exit. Ending a backend of another role needs pg_signal_backend.
-    private async Task TryTerminateBackendAsync(int pid, CancellationToken cancellationToken)
+    /// <summary>
+    /// Ends the backend with the given process ID if it is a walsender, waiting up to five seconds for it to exit.
+    /// Ending one of another role needs pg_signal_backend.
+    /// </summary>
+    internal static async Task TryTerminateWalSenderAsync(
+        NpgsqlDataSource dataSource,
+        int pid,
+        CancellationToken cancellationToken)
     {
-        await using var command = _dataSource.CreateCommand(TerminateBackendSql);
+        await using var command = dataSource.CreateCommand(TerminateWalSenderSql);
         command.Parameters.Add(new NpgsqlParameter<int> { TypedValue = pid });
 
         try
