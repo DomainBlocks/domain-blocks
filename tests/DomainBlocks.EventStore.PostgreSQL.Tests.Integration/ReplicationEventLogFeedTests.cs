@@ -4,6 +4,7 @@ using DomainBlocks.EventStore.PostgreSQL.Feeds;
 using DomainBlocks.Testing.Integration.EventStore;
 using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
 using Npgsql;
+using Npgsql.Replication;
 using NUnit.Framework;
 using Shouldly;
 using static DomainBlocks.EventStore.PostgreSQL.Tests.Integration.AppendFunctionClient;
@@ -225,6 +226,41 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
         await connection.Completion.WaitAsync(ct).ShouldThrowAsync<PostgresException>();
     }
 
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task TryTerminateWalSenderAsync_OrdinaryBackend_LeavesItRunning(CancellationToken ct)
+    {
+        await using var connection = await DataSource.OpenConnectionAsync(ct);
+
+        await ReplicationEventLogSessionFactory<RawEvent>.TryTerminateWalSenderAsync(
+            DataSource,
+            connection.ProcessID,
+            ct);
+
+        await using var command = new NpgsqlCommand("SELECT 1", connection);
+        (await command.ExecuteScalarAsync(ct)).ShouldBe(1);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task TryTerminateWalSenderAsync_WalSender_EndsIt(CancellationToken ct)
+    {
+        const string applicationName = "dbx_test_walsender";
+
+        var connectionString = new NpgsqlConnectionStringBuilder(PostgresTestEnvironment.ConnectionString)
+        {
+            ApplicationName = applicationName
+        }.ConnectionString;
+
+        await using var replication = new LogicalReplicationConnection(connectionString);
+        await replication.Open(ct);
+
+        var pid = await GetWalSenderPidAsync(applicationName, ct);
+        await ReplicationEventLogSessionFactory<RawEvent>.TryTerminateWalSenderAsync(DataSource, pid, ct);
+
+        (await IsBackendRunningAsync(pid, ct)).ShouldBeFalse();
+    }
+
     private EventLogFeed<EventLogRow<RawEvent>> CreateFeed() => CreateFeed(_slotNames, Options.Replication);
 
     private EventLogFeed<EventLogRow<RawEvent>> CreateFeed(
@@ -278,6 +314,24 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
 
         command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = slotName });
         await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task<int> GetWalSenderPidAsync(string applicationName, CancellationToken ct)
+    {
+        await using var command = PostgresTestEnvironment.DataSource.CreateCommand(
+            "SELECT pid FROM pg_stat_activity WHERE application_name = $1 AND backend_type = 'walsender'");
+
+        command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = applicationName });
+        return (int)(await command.ExecuteScalarAsync(ct)).ShouldNotBeNull();
+    }
+
+    private static async Task<bool> IsBackendRunningAsync(int pid, CancellationToken ct)
+    {
+        await using var command = PostgresTestEnvironment.DataSource.CreateCommand(
+            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid = $1)");
+
+        command.Parameters.Add(new NpgsqlParameter<int> { TypedValue = pid });
+        return (bool)(await command.ExecuteScalarAsync(ct)).ShouldNotBeNull();
     }
 
     private static async Task<List<string>> GetSlotNamesAsync(string prefix, CancellationToken ct)
