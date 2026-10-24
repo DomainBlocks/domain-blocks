@@ -79,7 +79,6 @@ public class PostgresSynchronousStandbyTests
         // waits until the standby has applied it. So the event stays invisible on the primary while the feed has it.
         await _server.PauseWalReplayOnStandbyAsync();
         var append = AppendWithRemoteApplyAsync(dataSource, "e", ct);
-        var appendPid = await WaitForSyncRepAsync(ct);
 
         (await subscription1.MoveNextAsync()).ShouldBeTrue();
         subscription1.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
@@ -88,9 +87,9 @@ public class PostgresSynchronousStandbyTests
         await using var subscription2 = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
         var next = subscription2.MoveNextAsync().AsTask();
 
-        // The commit still waits after the hold, so the event was invisible throughout, and the catch-up waits too.
+        // The event is still invisible after the hold, so it was invisible throughout, and the catch-up waits too.
         await Task.Delay(HoldDuration, ct);
-        (await IsWaitingForSyncRepAsync(appendPid, ct)).ShouldBeTrue();
+        (await CountEventsAsync(dataSource, ct)).ShouldBe(0);
         next.IsCompleted.ShouldBeFalse();
 
         await _server.ResumeWalReplayOnStandbyAsync();
@@ -114,6 +113,15 @@ public class PostgresSynchronousStandbyTests
             await command.ExecuteNonQueryAsync(ct);
 
         await transaction.CommitAsync(ct);
+    }
+
+    // Counts the events that queries on the primary see.
+    private async Task<long> CountEventsAsync(NpgsqlDataSource dataSource, CancellationToken ct)
+    {
+        await using var command = dataSource.CreateCommand(
+            $"SELECT count(*) FROM {new SchemaObjectNames(_options.Schema).EventLog}");
+
+        return (long)(await command.ExecuteScalarAsync(ct)).ShouldNotBeNull();
     }
 
     // Returns the process ID of a backend whose commit waits for the standby, once there is one.
