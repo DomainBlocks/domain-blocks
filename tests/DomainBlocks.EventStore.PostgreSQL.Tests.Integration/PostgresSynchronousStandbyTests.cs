@@ -107,6 +107,20 @@ public class PostgresSynchronousStandbyTests
         await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
         await using var eventStore = CreateEventStore(dataSource);
 
+        // Creating the slot waits for the transactions running when it starts (X), then for those that started
+        // meanwhile (Y), and the slot streams only commits after the point where the last of them ends. The append
+        // starts once the slot waits for Y, so the slot doesn't wait for it, and it commits before that point while
+        // the standby still holds it back:
+        //
+        //   X        |=================|
+        //   Y                  |===========================|
+        //   slot         | waits for X |--- waits for Y ---| ready: start point
+        //   append                          |======|---- waits for the standby -----| visible
+        //   session                                        |- waits for the append -| opens
+        //
+        //   = runs, - waits. The append commits where its = ends. Without the wait on the sequence row, the session
+        //   would open as soon as the slot is ready, and the catch-up would miss the append.
+
         // The subscription's slot can't become consistent while X runs.
         await using var x = await XidTransaction.BeginAsync(dataSource, ct);
         await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
