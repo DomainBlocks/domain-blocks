@@ -144,8 +144,13 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
     public async Task Connect_CreatesPermanentSlotAndDisposeDropsIt(CancellationToken ct)
     {
         var feed = CreateFeed();
-        using var attachment = feed.Attach(new CollectingObserver());
+        var observer = new CollectingObserver();
+        using var attachment = feed.Attach(observer);
         var connection = await feed.ConnectAsync(ct);
+
+        // The feed connects before it starts streaming, and the slot is active only once it streams.
+        await Client.AppendAsync([Any("s1", JsonEvent("e"))], ct);
+        await observer.ReadAsync(1, ct);
 
         var slots = await GetSlotsAsync(ct);
         var (name, plugin, temporary, active) = slots.ShouldHaveSingleItem();
