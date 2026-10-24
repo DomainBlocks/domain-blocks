@@ -120,7 +120,7 @@ public class PostgresSynchronousStandbyTests
 
         // The event commits and waits for the standby to apply it, so queries can't see it. Once Y ends, the slot
         // becomes consistent at a point after the event's commit, so it won't stream the event either.
-        await _server.PauseReplayAsync();
+        await _server.PauseWalReplayOnStandbyAsync();
         var append = AppendWithRemoteApplyAsync(dataSource, "e", ct);
         await WaitForSyncRepAsync(ct);
         await y.CommitAsync(ct);
@@ -128,7 +128,7 @@ public class PostgresSynchronousStandbyTests
         await Task.Delay(HoldDuration, ct);
         next.IsCompleted.ShouldBeFalse();
 
-        await _server.ResumeReplayAsync();
+        await _server.ResumeWalReplayOnStandbyAsync();
         await append;
 
         (await next).ShouldBeTrue();
