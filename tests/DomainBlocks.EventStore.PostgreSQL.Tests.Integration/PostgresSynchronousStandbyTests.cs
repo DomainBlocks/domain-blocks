@@ -78,7 +78,7 @@ public class PostgresSynchronousStandbyTests
         // With WAL replay paused, the standby flushes the event but doesn't apply it, and a commit with remote_apply
         // waits until the standby has applied it. So the event stays invisible on the primary while the feed has it.
         await _server.PauseWalReplayOnStandbyAsync();
-        var append = AppendWithRemoteApplyAsync(dataSource, "e", ct);
+        await using var append = await RemoteApplyAppend.StartAsync(dataSource, _options.Schema, "e", ct);
 
         (await subscription1.MoveNextAsync()).ShouldBeTrue();
         subscription1.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
@@ -93,26 +93,47 @@ public class PostgresSynchronousStandbyTests
         next.IsCompleted.ShouldBeFalse();
 
         await _server.ResumeWalReplayOnStandbyAsync();
-        await append;
+        await append.Completion;
 
         (await next).ShouldBeTrue();
         subscription2.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
     }
 
-    // Calls append_events directly, and commits waiting for the standby to apply the event rather than flush it.
-    private async Task AppendWithRemoteApplyAsync(NpgsqlDataSource dataSource, string value, CancellationToken ct)
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_EventSkippedBySlotButNotVisible_ReplaysEventOnceVisible(CancellationToken ct)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
-        await using var transaction = await connection.BeginTransactionAsync(ct);
+        await using var dataSource = CreateDataSource();
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
+        await using var eventStore = CreateEventStore(dataSource);
 
-        var client = new AppendFunctionClient(dataSource, _options.Schema);
-        var e = JsonEvent(nameof(TestEvent), $"{{\"Value\": \"{value}\"}}");
-        await client.AppendAsync(connection, [Any("s1", e)], ct);
+        // The subscription's slot can't become consistent while txn1 runs.
+        await using var txn1 = await XidTransaction.BeginAsync(dataSource, ct);
+        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
+        var next = subscription.MoveNextAsync().AsTask();
+        await WaitForXidLockWaitAsync(dataSource, txn1.Xid, ct);
 
-        await using (var command = new NpgsqlCommand("SET LOCAL synchronous_commit = remote_apply", connection))
-            await command.ExecuteNonQueryAsync(ct);
+        // Once txn1 ends, the slot waits for txn2, which started after txn1 was recorded as running.
+        await using var txn2 = await XidTransaction.BeginAsync(dataSource, ct);
+        await txn1.CommitAsync(ct);
+        await WaitForXidLockWaitAsync(dataSource, txn2.Xid, ct);
 
-        await transaction.CommitAsync(ct);
+        // The event commits and waits for the standby to apply it, so queries can't see it. Once txn2 ends, the slot
+        // becomes consistent at a point after the event's commit, so it won't stream the event either.
+        await _server.PauseWalReplayOnStandbyAsync();
+        await using var append = await RemoteApplyAppend.StartAsync(dataSource, _options.Schema, "e", ct);
+        await WaitForSyncRepAsync(append.ProcessId, ct);
+        await txn2.CommitAsync(ct);
+
+        // Only the catch-up can deliver the event, so it must not report caught up while the event is invisible.
+        await Task.Delay(HoldDuration, ct);
+        next.IsCompleted.ShouldBeFalse();
+
+        await _server.ResumeWalReplayOnStandbyAsync();
+        await append.Completion;
+
+        (await next).ShouldBeTrue();
+        subscription.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
     }
 
     // Counts the events that queries on the primary see.
@@ -122,6 +143,24 @@ public class PostgresSynchronousStandbyTests
             $"SELECT count(*) FROM {new SchemaObjectNames(_options.Schema).EventLog}");
 
         return (long)(await command.ExecuteScalarAsync(ct)).ShouldNotBeNull();
+    }
+
+    // Waits until a walsender waits for the transaction to end, as one does while it creates a logical slot.
+    private static async Task WaitForXidLockWaitAsync(NpgsqlDataSource dataSource, string xid, CancellationToken ct)
+    {
+        await using var command = dataSource.CreateCommand(
+            """
+            SELECT EXISTS (SELECT 1
+                           FROM pg_locks l
+                           JOIN pg_stat_activity a ON a.pid = l.pid
+                           WHERE l.locktype = 'transactionid' AND NOT l.granted AND l.transactionid::text = $1
+                             AND a.backend_type = 'walsender')
+            """);
+
+        command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = xid });
+
+        while (!(bool)(await command.ExecuteScalarAsync(ct))!)
+            await Task.Delay(20, ct);
     }
 
     // Returns the process ID of a backend whose commit waits for the standby, once there is one.
@@ -139,6 +178,13 @@ public class PostgresSynchronousStandbyTests
 
             await Task.Delay(20, ct);
         }
+    }
+
+    // Waits until the backend's commit waits for the standby.
+    private async Task WaitForSyncRepAsync(int pid, CancellationToken ct)
+    {
+        while (!await IsWaitingForSyncRepAsync(pid, ct))
+            await Task.Delay(20, ct);
     }
 
     private async Task<bool> IsWaitingForSyncRepAsync(int pid, CancellationToken ct)
@@ -175,5 +221,87 @@ public class PostgresSynchronousStandbyTests
         var builder = new NpgsqlDataSourceBuilder(connectionString.ConnectionString);
         builder.UsePostgresEventStore(_options);
         return builder.Build();
+    }
+
+    // A transaction that has taken an xid, so a slot being created waits for it to end.
+    private sealed class XidTransaction(NpgsqlConnection connection, NpgsqlTransaction transaction, string xid) :
+        IAsyncDisposable
+    {
+        public string Xid { get; } = xid;
+
+        public static async Task<XidTransaction> BeginAsync(NpgsqlDataSource dataSource, CancellationToken ct)
+        {
+            var connection = await dataSource.OpenConnectionAsync(ct);
+            var transaction = await connection.BeginTransactionAsync(ct);
+
+            await using var command = new NpgsqlCommand("SELECT pg_current_xact_id()::text", connection);
+            var xid = (string)(await command.ExecuteScalarAsync(ct))!;
+
+            return new XidTransaction(connection, transaction, xid);
+        }
+
+        public Task CommitAsync(CancellationToken ct) => transaction.CommitAsync(ct);
+
+        public async ValueTask DisposeAsync()
+        {
+            await transaction.DisposeAsync();
+            await connection.DisposeAsync();
+        }
+    }
+
+    // An append that calls append_events directly, and commits waiting for the standby to apply the event rather than
+    // flush it.
+    private sealed class RemoteApplyAppend(
+        NpgsqlConnection connection,
+        CancellationTokenSource cancellation,
+        Task completion) :
+        IAsyncDisposable
+    {
+        public int ProcessId { get; } = connection.ProcessID;
+
+        public Task Completion { get; } = completion;
+
+        public static async Task<RemoteApplyAppend> StartAsync(
+            NpgsqlDataSource dataSource,
+            string schema,
+            string value,
+            CancellationToken ct)
+        {
+            var connection = await dataSource.OpenConnectionAsync(ct);
+            var cancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            var client = new AppendFunctionClient(dataSource, schema);
+
+            return new RemoteApplyAppend(
+                connection,
+                cancellation,
+                AppendAsync(client, connection, value, cancellation.Token));
+        }
+
+        // Cancels a commit that still waits for the standby, as when a test fails first, since closing the
+        // connection mid-command would throw. The test observes the append's outcome through Completion.
+        public async ValueTask DisposeAsync()
+        {
+            await cancellation.CancelAsync();
+            await Completion.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            cancellation.Dispose();
+            await connection.DisposeAsync();
+        }
+
+        private static async Task AppendAsync(
+            AppendFunctionClient client,
+            NpgsqlConnection connection,
+            string value,
+            CancellationToken ct)
+        {
+            await using var transaction = await connection.BeginTransactionAsync(ct);
+
+            var e = JsonEvent(nameof(TestEvent), $"{{\"Value\": \"{value}\"}}");
+            await client.AppendAsync(connection, [Any("s1", e)], ct);
+
+            await using (var command = new NpgsqlCommand("SET LOCAL synchronous_commit = remote_apply", connection))
+                await command.ExecuteNonQueryAsync(ct);
+
+            await transaction.CommitAsync(ct);
+        }
     }
 }

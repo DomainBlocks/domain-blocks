@@ -49,6 +49,7 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
             new EventLogFeed<EventLogRow<object>>(
                 ct => ReplicationEventLogSession.OpenAsync(
                     PostgresTestEnvironment.ConnectionString,
+                    DataSource,
                     $"dbx_test_{Guid.NewGuid():N}",
                     names,
                     Options.Replication,

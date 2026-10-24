@@ -1,6 +1,8 @@
+using System.Data;
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Codecs;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Npgsql.Replication;
 using Npgsql.Replication.PgOutput;
 using Npgsql.Replication.PgOutput.Messages;
@@ -11,6 +13,7 @@ internal static class ReplicationEventLogSession
 {
     public static Task<IEventLogSession<EventLogRow<TEvent>>> OpenAsync<TEvent>(
         string connectionString,
+        NpgsqlDataSource dataSource,
         string slotName,
         SchemaObjectNames names,
         PostgresReplicationOptions options,
@@ -21,6 +24,7 @@ internal static class ReplicationEventLogSession
     {
         return ReplicationEventLogSession<TEvent>.OpenAsync(
             connectionString,
+            dataSource,
             slotName,
             names,
             options,
@@ -71,8 +75,13 @@ internal sealed class ReplicationEventLogSession<TEvent> : IEventLogSession<Even
 
     public string Description => $"slot {_slot.Name}";
 
+    /// <remarks>
+    /// The sequence row is taken through <paramref name="dataSource"/>, which must reach the same database as
+    /// <paramref name="connectionString"/>.
+    /// </remarks>
     public static async Task<IEventLogSession<EventLogRow<TEvent>>> OpenAsync(
         string connectionString,
+        NpgsqlDataSource dataSource,
         string slotName,
         SchemaObjectNames names,
         PostgresReplicationOptions options,
@@ -90,7 +99,10 @@ internal sealed class ReplicationEventLogSession<TEvent> : IEventLogSession<Even
         {
             await connection.Open(cancellationToken).ConfigureAwait(false);
 
-            // This blocks until a consistent point exists, that is, until every transaction now in progress has ended.
+            // This blocks until a consistent point exists. A transaction can commit just before that point and still be
+            // invisible to queries when this returns, while the slot won't stream it. Appends hold the sequence row
+            // until they are visible, so taking the row afterwards waits for any such append. Once the session opens,
+            // queries see every row that the slot won't stream.
             var slot = await connection
                 .CreatePgOutputReplicationSlot(
                     slotName,
@@ -100,6 +112,8 @@ internal sealed class ReplicationEventLogSession<TEvent> : IEventLogSession<Even
                 .ConfigureAwait(false);
 
             logger?.ReplicationSlotCreated(slotName, connection.ProcessID);
+
+            await WaitForAppendInFlightAsync(dataSource, names, cancellationToken).ConfigureAwait(false);
 
             var pgOutputOptions = new PgOutputReplicationOptions(
                 names.Publication,
@@ -158,6 +172,24 @@ internal sealed class ReplicationEventLogSession<TEvent> : IEventLogSession<Even
     {
         // Closing the session drops the temporary slot on the server.
         return _connection.DisposeAsync();
+    }
+
+    private static async Task WaitForAppendInFlightAsync(
+        NpgsqlDataSource dataSource,
+        SchemaObjectNames names,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+        // Only READ COMMITTED takes the row once the append ends. A stricter level fails with a serialization error.
+        await using var transaction = await connection
+            .BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
+            .ConfigureAwait(false);
+
+        await using (var command = new NpgsqlCommand(new EventLogSql(names).ShareSequenceRow, connection))
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private bool IsEventLog(RelationMessage relation)

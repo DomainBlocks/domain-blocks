@@ -56,6 +56,7 @@ internal sealed class EventLogSql
         StreamExists = $"SELECT EXISTS (SELECT 1 FROM {eventLog} WHERE stream_id = $1)";
         MaxPosition = $"SELECT max(position) FROM {eventLog}";
         MaxStreamPosition = $"SELECT max(stream_position) FROM {eventLog} WHERE stream_id = $1";
+        ShareSequenceRow = $"SELECT 1 FROM {names.QuotedSchema}.\"sequences\" WHERE name = 'event_log' FOR SHARE";
 
         ReadCatchUpAll = $"SELECT {Columns} FROM {eventLog} " +
                          "WHERE position > $1 AND position <= $2 ORDER BY position LIMIT $3";
@@ -86,6 +87,12 @@ internal sealed class EventLogSql
     public string MaxPosition { get; }
 
     public string MaxStreamPosition { get; }
+
+    /// <summary>
+    /// Takes the log's sequence row for share. Appends hold the row until they are visible, so this waits for the
+    /// append in flight, if any.
+    /// </summary>
+    public string ShareSequenceRow { get; }
 
     public string ReadCatchUpAll { get; }
 

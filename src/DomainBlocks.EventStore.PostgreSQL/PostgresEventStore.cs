@@ -75,6 +75,7 @@ public static class PostgresEventStore
             new EventLogFeed<EventLogRow<TEvent>>(
                 ct => ReplicationEventLogSession.OpenAsync(
                     connectionString,
+                    dataSource,
                     slotNames.Next(),
                     names,
                     replicationOptions,
