@@ -64,9 +64,9 @@ public class EventLogFeedTests
 
         // The observer holds the row until it knows the connection.
         observer.Connection = connection;
-        observer.Release();
+        observer.ReleaseOnNext();
 
-        (await observer.HighWaterMarkWhenNotified.WaitAsync(ct)).ShouldBe(7);
+        (await observer.HighWaterMarkOnNext.WaitAsync(ct)).ShouldBe(7);
     }
 
     [Test]
@@ -304,21 +304,21 @@ public class EventLogFeedTests
 
     private sealed class HighWaterMarkRecordingObserver : IEventLogObserver<long>
     {
-        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _onNextReleased = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        private readonly TaskCompletionSource<long?> _highWaterMarkWhenNotified =
+        private readonly TaskCompletionSource<long?> _highWaterMarkOnNext =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public IEventLogFeedConnection? Connection { get; set; }
 
-        public Task<long?> HighWaterMarkWhenNotified => _highWaterMarkWhenNotified.Task;
+        public Task<long?> HighWaterMarkOnNext => _highWaterMarkOnNext.Task;
 
-        public void Release() => _released.TrySetResult();
+        public void ReleaseOnNext() => _onNextReleased.TrySetResult();
 
         public async ValueTask OnNextAsync(long position, CancellationToken cancellationToken)
         {
-            await _released.Task;
-            _highWaterMarkWhenNotified.TrySetResult(Connection!.PositionHighWaterMark);
+            await _onNextReleased.Task;
+            _highWaterMarkOnNext.TrySetResult(Connection!.PositionHighWaterMark);
         }
 
         public ValueTask OnResetAsync(CancellationToken cancellationToken) => default;

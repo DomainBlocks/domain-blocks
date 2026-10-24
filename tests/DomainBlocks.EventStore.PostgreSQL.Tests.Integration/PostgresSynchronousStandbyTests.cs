@@ -75,9 +75,11 @@ public class PostgresSynchronousStandbyTests
         (await subscription1.MoveNextAsync()).ShouldBeTrue();
         subscription1.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
 
-        // The standby flushes the commit but doesn't apply it, so the commit stays invisible while the feed has it.
-        await _server.PauseReplayAsync();
+        // With WAL replay paused, the standby flushes the event but doesn't apply it, and a commit with remote_apply
+        // waits until the standby has applied it. So the event stays invisible on the primary while the feed has it.
+        await _server.PauseWalReplayAsync();
         var append = AppendWithRemoteApplyAsync(dataSource, "e", ct);
+        var appendPid = await WaitForSyncRepAsync(ct);
 
         (await subscription1.MoveNextAsync()).ShouldBeTrue();
         subscription1.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
@@ -86,10 +88,12 @@ public class PostgresSynchronousStandbyTests
         await using var subscription2 = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
         var next = subscription2.MoveNextAsync().AsTask();
 
+        // The commit still waits after the hold, so the event was invisible throughout, and the catch-up waits too.
         await Task.Delay(HoldDuration, ct);
+        (await IsWaitingForSyncRepAsync(appendPid, ct)).ShouldBeTrue();
         next.IsCompleted.ShouldBeFalse();
 
-        await _server.ResumeReplayAsync();
+        await _server.ResumeWalReplayAsync();
         await append;
 
         (await next).ShouldBeTrue();
