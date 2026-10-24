@@ -71,20 +71,20 @@ public class PostgresSynchronousStandbyTests
         await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
         await using var eventStore = CreateEventStore(dataSource);
 
-        await using var first = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
-        (await first.MoveNextAsync()).ShouldBeTrue();
-        first.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
+        await using var subscription1 = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
+        (await subscription1.MoveNextAsync()).ShouldBeTrue();
+        subscription1.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
 
         // The standby flushes the commit but doesn't apply it, so the commit stays invisible while the feed has it.
         await _server.PauseReplayAsync();
         var append = AppendWithRemoteApplyAsync(dataSource, "e", ct);
 
-        (await first.MoveNextAsync()).ShouldBeTrue();
-        first.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
+        (await subscription1.MoveNextAsync()).ShouldBeTrue();
+        subscription1.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
 
         // The second subscription attaches after the feed delivered the event, so only its catch-up can deliver it.
-        await using var second = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
-        var next = second.MoveNextAsync().AsTask();
+        await using var subscription2 = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
+        var next = subscription2.MoveNextAsync().AsTask();
 
         await Task.Delay(HoldDuration, ct);
         next.IsCompleted.ShouldBeFalse();
@@ -93,7 +93,7 @@ public class PostgresSynchronousStandbyTests
         await append;
 
         (await next).ShouldBeTrue();
-        second.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
+        subscription2.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
     }
 
     // Calls append_events directly, and commits waiting for the standby to apply the event rather than flush it.
