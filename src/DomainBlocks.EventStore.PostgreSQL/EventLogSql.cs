@@ -63,10 +63,6 @@ internal sealed class EventLogSql
         ReadCatchUpStream = $"SELECT {Columns} FROM {eventLog} " +
                             "WHERE stream_id = $1 AND stream_position > $2 AND stream_position <= $3 " +
                             "ORDER BY stream_position LIMIT $4";
-
-        BarrierAfterRead = Barrier(eventLog, "position > $1");
-        BarrierAfterEnd = Barrier(eventLog, "true");
-        BarrierAfterStreamEnd = Barrier(eventLog, "stream_id = $1");
     }
 
     public string ReadStreamForward { get; }
@@ -94,21 +90,6 @@ internal sealed class EventLogSql
     public string ReadCatchUpAll { get; }
 
     public string ReadCatchUpStream { get; }
-
-    /// <summary>
-    /// The replication barrier after a read of the rows after a position, which binds that position.
-    /// </summary>
-    public string BarrierAfterRead { get; }
-
-    /// <summary>
-    /// The replication barrier after a read of the log's end position.
-    /// </summary>
-    public string BarrierAfterEnd { get; }
-
-    /// <summary>
-    /// The replication barrier after a read of a stream's end position, which binds the stream ID.
-    /// </summary>
-    public string BarrierAfterStreamEnd { get; }
 
     public string CatchUpAll(string? condition = null) =>
         condition is null ? ReadCatchUpAll : WithCondition(ReadCatchUpAll, condition);
@@ -162,18 +143,6 @@ internal sealed class EventLogSql
         // Positions beyond long.MaxValue cannot exist, and clamping keeps the arithmetic above in range.
         static long ToKey(ulong value) => value >= long.MaxValue - 1 ? long.MaxValue - 1 : (long)value;
     }
-
-    // The barrier writes WAL only when synchronous standbys are configured and the rows it follows exist, and commits
-    // with synchronous_commit on, so its commit waits until the synchronous standbys have flushed it, and with it every
-    // commit that the read saw. Without synchronous standbys there is nothing to wait for: every append commits with
-    // synchronous_commit on, so it was flushed before the read could see it.
-    private static string Barrier(string eventLog, string condition) =>
-        $"""
-        SELECT set_config('synchronous_commit', 'on', true),
-               pg_logical_emit_message(true, 'dbx_barrier', '')
-        WHERE current_setting('synchronous_standby_names') <> ''
-          AND EXISTS (SELECT 1 FROM {eventLog} WHERE {condition})
-        """;
 
     // Every read query has a WHERE clause followed by one ORDER BY, so the condition goes between them. The limit then
     // counts only the rows that match the condition.

@@ -31,10 +31,4 @@ public sealed class MongoEventStoreOptions
     /// Gets or sets the maximum number of append requests committed in one transaction. The default is 500.
     /// </summary>
     public int AppendMaxBatchSize { get; set; } = 500;
-
-    /// <summary>
-    /// Gets or sets the options for the tail: the read of the event log that the store's subscriptions share once they
-    /// have caught up.
-    /// </summary>
-    public EventLogTailOptions Tail { get; set; } = EventLogTailOptions.Default;
 }

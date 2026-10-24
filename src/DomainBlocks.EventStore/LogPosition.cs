@@ -4,7 +4,7 @@ namespace DomainBlocks.EventStore;
 /// Represents the position of an event in the event log.
 /// </summary>
 /// <param name="Value">The position.</param>
-public readonly record struct LogPosition(ulong Value) : IPosition<LogPosition>, IComparable<LogPosition>
+public readonly record struct LogPosition(ulong Value) : IPosition<LogPosition>
 {
     /// <summary>
     /// Creates a log position from a 64-bit signed integer.
@@ -17,11 +17,6 @@ public readonly record struct LogPosition(ulong Value) : IPosition<LogPosition>,
         ArgumentOutOfRangeException.ThrowIfNegative(value);
         return new LogPosition((ulong)value);
     }
-
-    /// <summary>
-    /// Compares the position with another, so that positions sort in log order.
-    /// </summary>
-    public int CompareTo(LogPosition other) => Value.CompareTo(other.Value);
 
     /// <summary>
     /// Returns the position as a string.
