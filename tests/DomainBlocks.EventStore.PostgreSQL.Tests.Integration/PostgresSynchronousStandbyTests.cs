@@ -125,6 +125,7 @@ public class PostgresSynchronousStandbyTests
         await WaitForSyncRepAsync(ct);
         await y.CommitAsync(ct);
 
+        // Only the catch-up can deliver the event, so it must not report caught up while the event is invisible.
         await Task.Delay(HoldDuration, ct);
         next.IsCompleted.ShouldBeFalse();
 
