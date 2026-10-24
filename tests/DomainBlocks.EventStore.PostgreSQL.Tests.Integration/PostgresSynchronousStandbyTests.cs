@@ -17,6 +17,7 @@ using EventStore = IEventStore<object, string, StreamPosition, LogPosition>;
 [NonParallelizable]
 public class PostgresSynchronousStandbyTests
 {
+    private static readonly TimeSpan HoldDuration = TimeSpan.FromSeconds(1);
     private static readonly EventTypeMap EventTypeMap = new EventTypeMapBuilder().Add<TestEvent>().Build();
 
     private readonly PostgresEventStoreOptions _options = new() { Schema = "dbx_standby" };
@@ -50,22 +51,43 @@ public class PostgresSynchronousStandbyTests
             [AppendableEvent.Create<object>(new TestEvent { Value = "e" })],
             cancellationToken: ct);
 
-        await WaitForSyncRepAsync(ct);
+        var pid = await WaitForSyncRepAsync(ct);
+
+        // A commit whose wait ended soon after it began would have completed during the hold.
+        await Task.Delay(HoldDuration, ct);
+        (await IsWaitingForSyncRepAsync(pid, ct)).ShouldBeTrue();
         append.IsCompleted.ShouldBeFalse();
 
         await _server.ReconnectStandbyAsync();
         await append;
     }
 
-    private async Task WaitForSyncRepAsync(CancellationToken ct)
+    // Returns the process ID of a backend whose commit waits for the standby, once there is one.
+    private async Task<int> WaitForSyncRepAsync(CancellationToken ct)
     {
         await using var dataSource = CreateDataSource();
 
         await using var command = dataSource.CreateCommand(
-            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE wait_event = 'SyncRep')");
+            "SELECT pid FROM pg_stat_activity WHERE wait_event = 'SyncRep' LIMIT 1");
 
-        while (!(bool)(await command.ExecuteScalarAsync(ct))!)
+        while (true)
+        {
+            if (await command.ExecuteScalarAsync(ct) is int pid)
+                return pid;
+
             await Task.Delay(20, ct);
+        }
+    }
+
+    private async Task<bool> IsWaitingForSyncRepAsync(int pid, CancellationToken ct)
+    {
+        await using var dataSource = CreateDataSource();
+
+        await using var command = dataSource.CreateCommand(
+            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid = $1 AND wait_event = 'SyncRep')");
+
+        command.Parameters.Add(new NpgsqlParameter<int> { TypedValue = pid });
+        return (bool)(await command.ExecuteScalarAsync(ct)).ShouldNotBeNull();
     }
 
     private EventStore CreateEventStore(NpgsqlDataSource dataSource)
