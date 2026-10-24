@@ -7,7 +7,7 @@ namespace DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
 /// Forwards local connections to a target that can be moved, as a virtual IP in front of a primary is. Moving it ends
 /// the connections to the old target.
 /// </summary>
-internal sealed class TcpProxy : IAsyncDisposable
+public sealed class TcpProxy : IAsyncDisposable
 {
     private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
     private readonly CancellationTokenSource _stopping = new();

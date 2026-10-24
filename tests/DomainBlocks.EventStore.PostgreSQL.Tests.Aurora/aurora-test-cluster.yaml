@@ -1,0 +1,78 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  A temporary Aurora PostgreSQL cluster for the DomainBlocks PostgreSQL store's Aurora tests: a writer and a reader,
+  with logical replication on. It holds nothing worth keeping. run.sh creates and deletes it.
+
+Parameters:
+  ClientCidr:
+    Type: String
+    Description: The only address range that can reach port 5432, such as 203.0.113.7/32.
+  EngineVersion:
+    Type: String
+    Default: '17.11'
+
+Resources:
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub '${AWS::StackName}: PostgreSQL from the test machine only'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: !Ref ClientCidr
+
+  ClusterParameterGroup:
+    Type: AWS::RDS::DBClusterParameterGroup
+    Properties:
+      Description: !Sub '${AWS::StackName}: logical replication on'
+      Family: aurora-postgresql17
+      Parameters:
+        rds.logical_replication: '1'
+
+  # The master password is kept in Secrets Manager, which the tests read, and is deleted with the cluster. With logical
+  # replication on, the instances never pause, so the minimum capacity is the lowest that runs.
+  Cluster:
+    Type: AWS::RDS::DBCluster
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      DBClusterIdentifier: !Ref AWS::StackName
+      Engine: aurora-postgresql
+      EngineVersion: !Ref EngineVersion
+      DBClusterParameterGroupName: !Ref ClusterParameterGroup
+      MasterUsername: dbxadmin
+      ManageMasterUserPassword: true
+      VpcSecurityGroupIds:
+        - !GetAtt SecurityGroup.GroupId
+      ServerlessV2ScalingConfiguration:
+        MinCapacity: 0.5
+        MaxCapacity: 2
+      BackupRetentionPeriod: 1
+      DeletionProtection: false
+
+  # The instances are created together, and either can become the writer. A failover swaps them, so the tests look up
+  # which is which.
+  Instance1:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      DBInstanceIdentifier: !Sub '${AWS::StackName}-1'
+      DBClusterIdentifier: !Ref Cluster
+      Engine: aurora-postgresql
+      DBInstanceClass: db.serverless
+      PubliclyAccessible: true
+      PromotionTier: 0
+
+  Instance2:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      DBInstanceIdentifier: !Sub '${AWS::StackName}-2'
+      DBClusterIdentifier: !Ref Cluster
+      Engine: aurora-postgresql
+      DBInstanceClass: db.serverless
+      PubliclyAccessible: true
+      PromotionTier: 1
