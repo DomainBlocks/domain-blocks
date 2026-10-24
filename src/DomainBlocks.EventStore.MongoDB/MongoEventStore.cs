@@ -331,6 +331,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
             eventLog.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(insertsOnly),
             static change => change.ResumeToken,
+            static change => change.ClusterTime,
             change =>
             {
                 _liveDocument.Set(change.FullDocument);

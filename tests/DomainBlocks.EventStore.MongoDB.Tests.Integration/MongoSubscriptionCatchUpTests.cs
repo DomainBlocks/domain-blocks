@@ -212,6 +212,27 @@ public class MongoSubscriptionCatchUpTests
         scenario.ChangeStreamProbe.InitialOpenCount.ShouldBe(1);
     }
 
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_AfterLiveDelivery_WaitsForDeliveredClusterTime(CancellationToken ct)
+    {
+        await using var scenario = await CatchUpScenario.StartAsync(ct);
+        await using var subscription1 = scenario.SubscribeToAll();
+
+        (await subscription1.NextAsync()).IsCaughtUp.ShouldBeTrue();
+
+        var liveEvents = await scenario.AppendLiveAsync("live", 1);
+
+        // The second subscription joins the stream after it delivered the event, so only its catch-up can deliver it.
+        // After a failover, the new primary's commit point can lag behind the event, and a catch-up that waited only
+        // for the stream's anchor would not see it.
+        await using var subscription2 = scenario.SubscribeToAll();
+
+        (await subscription2.NextEventAsync()).ShouldBe(liveEvents[0]);
+        var deliveredClusterTime = scenario.ChangeStreamProbe.LastDeliveredClusterTime.ShouldNotBeNull();
+        scenario.CatchUpOpTimes[^1].ShouldBeGreaterThanOrEqualTo(deliveredClusterTime);
+    }
+
     private static MongoCommandException CreateCommandException(int code)
     {
         var serverId = new ServerId(new ClusterId(), new IPEndPoint(IPAddress.Loopback, 27017));

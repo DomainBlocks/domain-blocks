@@ -88,7 +88,11 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                 await using var attachment = await AttachObserverAsync(observer, cancellationToken)
                     .ConfigureAwait(false);
 
-                var enumerator = ReadAllAsync(resumePosition, observer, attachment.OpTime, cancellationToken)
+                var enumerator = ReadAllAsync(
+                        resumePosition,
+                        observer,
+                        attachment.OpTimeHighWaterMark,
+                        cancellationToken)
                     .GetAsyncEnumerator(cancellationToken);
 
                 await using (enumerator.ConfigureAwait(false))
@@ -196,13 +200,13 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     private async IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> ReadAllAsync(
         ResumePosition resumePosition,
         Observer observer,
-        BsonTimestamp changeStreamOpTime,
+        BsonTimestamp opTimeHighWaterMark,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        // The session has seen everything up to the change stream's optime, so the end position it reads and the replay
-        // it serves include every event committed before the observer attached.
+        // Reads in the session wait for the change stream's high-water mark, so the end position and the replay include
+        // every event that the observer won't receive from the stream.
         using (var session = await _reader
-                   .StartCatchUpSessionAsync(changeStreamOpTime, cancellationToken)
+                   .StartCatchUpSessionAsync(opTimeHighWaterMark, cancellationToken)
                    .ConfigureAwait(false))
         {
             var endInclusive = await _endPositionReader(_reader, session, cancellationToken).ConfigureAwait(false);

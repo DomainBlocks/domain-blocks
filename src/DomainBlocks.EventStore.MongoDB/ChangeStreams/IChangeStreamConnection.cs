@@ -7,8 +7,10 @@ internal interface IChangeStreamConnection : IAsyncDisposable
     Task Completion { get; }
 
     /// <summary>
-    /// The optime the change stream is anchored to. Every change after it is delivered, and a majority read that waits
-    /// for it sees at least every change up to it.
+    /// An optime at or after every change that the stream has delivered or won't deliver. It starts just before the
+    /// stream's start, or at the primary's last write when a resume token sets the start, and moves forwards with each
+    /// change delivered. A majority read that waits for it sees every such change, even on a node whose commit point
+    /// lagged after a failover.
     /// </summary>
-    BsonTimestamp OpTime { get; }
+    BsonTimestamp OpTimeHighWaterMark { get; }
 }

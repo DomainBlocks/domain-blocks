@@ -43,6 +43,7 @@ public class ChangeStreamSubjectTests
             _collection.WatchAsync,
             pipeline,
             static x => x.ResumeToken,
+            static x => x.ClusterTime,
             static x => x,
             logger: logger);
 

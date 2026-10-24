@@ -85,6 +85,7 @@ public class ChangeStreamSubjectTests
             _mockCollection.Object.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
             static x => x.ResumeToken,
+            static x => x.ClusterTime,
             static x => x);
 
         var observer = new TestObserver();
@@ -94,14 +95,66 @@ public class ChangeStreamSubjectTests
         await observer.ReadAllAsync(ct).Take(2).ToArrayAsync(ct);
 
         _helloCount.ShouldBe(1);
-        connection.OpTime.ShouldBe(CreateOperationTime(1));
         // The stream starts one tick after the operation time.
         _watchOptions.Select(x => x?.StartAtOperationTime).ShouldBe([new BsonTimestamp(1, 1), null]);
     }
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task Connect_WithExplicitStartPoint_KeepsIt(CancellationToken ct)
+    public async Task Connect_WhenDeliveringChange_RaisesHighWaterMarkBeforeNotifying(CancellationToken ct)
+    {
+        var clusterTime = new BsonTimestamp(5, 1);
+        var change = CreateChange(new BsonDocument("_data", "1"), clusterTime);
+        SetupChangeStream([new ChangeStreamBatch { Items = [change] }]);
+
+        var subject = ChangeStreamSubject.Create(
+            _mockClient.Object,
+            _mockCollection.Object.WatchAsync,
+            new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
+            static x => x.ResumeToken,
+            static x => x.ClusterTime,
+            static x => x);
+
+        var observer = new HighWaterMarkRecordingObserver();
+        using var attachment = subject.Attach(observer);
+        await using var connection = await subject.ConnectAsync(ct);
+
+        // The observer holds the change until it knows the connection.
+        observer.Connection = connection;
+        observer.Release();
+
+        (await observer.ReadMarksAsync(ct).FirstAsync(ct)).ShouldBe(clusterTime);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task Connect_WithStartAtOperationTime_MarksTickBeforeStart(CancellationToken ct)
+    {
+        SetupChangeStream([new ChangeStreamBatch { Items = [] }]);
+        var startAt = new BsonTimestamp(5, 3);
+
+        var subject = ChangeStreamSubject.Create(
+            _mockClient.Object,
+            _mockCollection.Object.WatchAsync,
+            new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
+            static x => x.ResumeToken,
+            static x => x.ClusterTime,
+            static x => x,
+            new ChangeStreamSubjectOptions
+            {
+                MongoOptions = new ChangeStreamOptions { StartAtOperationTime = startAt }
+            });
+
+        await using var connection = await subject.ConnectAsync(ct);
+
+        _helloCount.ShouldBe(0);
+        connection.OpTimeHighWaterMark.ShouldBe(new BsonTimestamp(5, 2));
+        _watchOptions.ShouldHaveSingleItem().ShouldNotBeNull().StartAtOperationTime.ShouldBe(startAt);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task Connect_WithResumeToken_ResumesAfterTokenAndMarksLastWrite(CancellationToken ct)
     {
         SetupChangeStream([new ChangeStreamBatch { Items = [] }]);
         var resumeAfter = new BsonDocument("_data", "explicit");
@@ -111,14 +164,48 @@ public class ChangeStreamSubjectTests
             _mockCollection.Object.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
             static x => x.ResumeToken,
+            static x => x.ClusterTime,
             static x => x,
             new ChangeStreamSubjectOptions { MongoOptions = new ChangeStreamOptions { ResumeAfter = resumeAfter } });
 
         await using var connection = await subject.ConnectAsync(ct);
 
-        connection.OpTime.ShouldBe(CreateOperationTime(1));
-        _watchOptions.Single()!.ResumeAfter.ShouldBe(resumeAfter);
-        _watchOptions.Single()!.StartAtOperationTime.ShouldBeNull();
+        connection.OpTimeHighWaterMark.ShouldBe(CreateOperationTime(1));
+        var watchOptions = _watchOptions.ShouldHaveSingleItem().ShouldNotBeNull();
+        watchOptions.ResumeAfter.ShouldBe(resumeAfter);
+        watchOptions.StartAtOperationTime.ShouldBeNull();
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task Connect_WithResumeToken_KeepsMarkAboveOlderChanges(CancellationToken ct)
+    {
+        // The token's change, and the one after it, are older than the last write that the mark starts at.
+        var older = CreateChange(new BsonDocument("_data", "1"), new BsonTimestamp(0, 5));
+        var newer = CreateChange(new BsonDocument("_data", "2"), new BsonTimestamp(3, 0));
+        SetupChangeStream([new ChangeStreamBatch { Items = [older, newer] }]);
+
+        var subject = ChangeStreamSubject.Create(
+            _mockClient.Object,
+            _mockCollection.Object.WatchAsync,
+            new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
+            static x => x.ResumeToken,
+            static x => x.ClusterTime,
+            static x => x,
+            new ChangeStreamSubjectOptions
+            {
+                MongoOptions = new ChangeStreamOptions { ResumeAfter = new BsonDocument("_data", "0") }
+            });
+
+        var observer = new HighWaterMarkRecordingObserver();
+        using var attachment = subject.Attach(observer);
+        await using var connection = await subject.ConnectAsync(ct);
+
+        observer.Connection = connection;
+        observer.Release();
+
+        var marks = await observer.ReadMarksAsync(ct).Take(2).ToArrayAsync(ct);
+        marks.ShouldBe([CreateOperationTime(1), new BsonTimestamp(3, 0)]);
     }
 
     [Test]
@@ -135,6 +222,7 @@ public class ChangeStreamSubjectTests
             _mockCollection.Object.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
             static x => x.ResumeToken,
+            static x => x.ClusterTime,
             static x => x);
 
         var observer = new TestObserver();
@@ -178,6 +266,7 @@ public class ChangeStreamSubjectTests
             _mockCollection.Object.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
             static x => x.ResumeToken,
+            static x => x.ClusterTime,
             static x => x,
             logger: logger);
 
@@ -222,6 +311,7 @@ public class ChangeStreamSubjectTests
             _mockCollection.Object.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
             static x => x.ResumeToken,
+            static x => x.ClusterTime,
             static x => x,
             new ChangeStreamSubjectOptions
             {
@@ -248,6 +338,7 @@ public class ChangeStreamSubjectTests
             _mockCollection.Object.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
             static x => x.ResumeToken,
+            static x => x.ClusterTime,
             static x => x);
 
         var observer1 = new TestObserver();
@@ -279,6 +370,7 @@ public class ChangeStreamSubjectTests
             _mockCollection.Object.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
             static x => x.ResumeToken,
+            static x => x.ClusterTime,
             static x => x);
 
         var observer = new CompletionRecordingObserver();
@@ -304,6 +396,7 @@ public class ChangeStreamSubjectTests
             _mockCollection.Object.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
             static x => x.ResumeToken,
+            static x => x.ClusterTime,
             static x => x);
 
         await using var connection = await subject.ConnectAsync(ct);
@@ -333,6 +426,7 @@ public class ChangeStreamSubjectTests
             _mockCollection.Object.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
             static x => x.ResumeToken,
+            static x => x.ClusterTime,
             static x => x);
 
         var throwingObserver = new ThrowingObserver();
@@ -358,6 +452,7 @@ public class ChangeStreamSubjectTests
             _mockCollection.Object.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
             static x => x.ResumeToken,
+            static x => x.ClusterTime,
             static x => x);
 
         var connection = await subject.ConnectAsync(ct);
@@ -383,6 +478,7 @@ public class ChangeStreamSubjectTests
             _mockCollection.Object.WatchAsync,
             new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
             static x => x.ResumeToken,
+            static x => x.ClusterTime,
             static x => x,
             new ChangeStreamSubjectOptions { MaxRetryDelay = TimeSpan.FromMinutes(1) });
 
@@ -412,10 +508,11 @@ public class ChangeStreamSubjectTests
         return new ConnectionId(serverId);
     }
 
-    private static ChangeStreamDocument<BsonDocument> CreateChange(BsonDocument id)
+    // Changes are committed after the first hello's operation time unless the test says otherwise.
+    private static ChangeStreamDocument<BsonDocument> CreateChange(BsonDocument id, BsonTimestamp? clusterTime = null)
     {
         return new ChangeStreamDocument<BsonDocument>(
-            new BsonDocument("_id", id),
+            new BsonDocument { { "_id", id }, { "clusterTime", clusterTime ?? new BsonTimestamp(2, 0) } },
             BsonSerializer.SerializerRegistry.GetSerializer<BsonDocument>());
     }
 
@@ -547,6 +644,30 @@ public class ChangeStreamSubjectTests
             _wasCompletedWhenNotified.TrySetResult(Connection!.Completion.IsCompleted);
             return ValueTask.CompletedTask;
         }
+    }
+
+    // Records the connection's high-water mark as each change is handed to it, once it is released.
+    private sealed class HighWaterMarkRecordingObserver : IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>
+    {
+        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly Channel<BsonTimestamp> _marks = Channel.CreateUnbounded<BsonTimestamp>();
+
+        public IChangeStreamConnection? Connection { get; set; }
+
+        public IAsyncEnumerable<BsonTimestamp> ReadMarksAsync(CancellationToken ct) => _marks.Reader.ReadAllAsync(ct);
+
+        public void Release() => _released.TrySetResult();
+
+        public async ValueTask OnNextAsync(
+            ChangeStreamDocument<BsonDocument> change,
+            CancellationToken cancellationToken)
+        {
+            await _released.Task;
+            _marks.Writer.TryWrite(Connection!.OpTimeHighWaterMark);
+        }
+
+        public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken) =>
+            ValueTask.CompletedTask;
     }
 
     private class TestMongoConnectionException(bool isNetworkException) :

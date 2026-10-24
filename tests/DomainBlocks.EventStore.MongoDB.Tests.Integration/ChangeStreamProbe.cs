@@ -12,6 +12,7 @@ internal sealed class ChangeStreamProbe(IMongoCollection<BsonDocument> eventLog)
     private readonly Lock _lock = new();
     private readonly List<(int Total, TaskCompletionSource Reached)> _deliveryWaits = [];
     private int _deliveredChangeCount;
+    private BsonTimestamp? _lastDeliveredClusterTime;
     private int _initialOpenCount;
     private ChangeStreamDisconnect? _disconnect;
 
@@ -29,6 +30,18 @@ internal sealed class ChangeStreamProbe(IMongoCollection<BsonDocument> eventLog)
         {
             lock (_lock)
                 return _deliveredChangeCount;
+        }
+    }
+
+    /// <summary>
+    /// The cluster time of the last change that the change streams have handed to every observer attached.
+    /// </summary>
+    public BsonTimestamp? LastDeliveredClusterTime
+    {
+        get
+        {
+            lock (_lock)
+                return _lastDeliveredClusterTime;
         }
     }
 
@@ -81,11 +94,12 @@ internal sealed class ChangeStreamProbe(IMongoCollection<BsonDocument> eventLog)
         return new Cursor(cursor, this);
     }
 
-    private void OnDelivered(int count)
+    private void OnDelivered(int count, BsonTimestamp? lastClusterTime)
     {
         lock (_lock)
         {
             _deliveredChangeCount += count;
+            _lastDeliveredClusterTime = lastClusterTime ?? _lastDeliveredClusterTime;
 
             foreach (var (_, reached) in _deliveryWaits.Where(x => x.Total <= _deliveredChangeCount))
                 reached.TrySetResult();
@@ -104,6 +118,7 @@ internal sealed class ChangeStreamProbe(IMongoCollection<BsonDocument> eventLog)
         IChangeStreamCursor<ChangeStreamDocument<BsonDocument>>
     {
         private int _undeliveredCount;
+        private BsonTimestamp? _undeliveredClusterTime;
 
         public IEnumerable<ChangeStreamDocument<BsonDocument>> Current => inner.Current;
 
@@ -112,8 +127,9 @@ internal sealed class ChangeStreamProbe(IMongoCollection<BsonDocument> eventLog)
 
         public async Task<bool> MoveNextAsync(CancellationToken cancellationToken = default)
         {
-            changeStreamProbe.OnDelivered(_undeliveredCount);
+            changeStreamProbe.OnDelivered(_undeliveredCount, _undeliveredClusterTime);
             _undeliveredCount = 0;
+            _undeliveredClusterTime = null;
 
             if (changeStreamProbe.TakeDisconnectError() is { } exception)
                 throw exception;
@@ -121,7 +137,10 @@ internal sealed class ChangeStreamProbe(IMongoCollection<BsonDocument> eventLog)
             var hasBatch = await inner.MoveNextAsync(cancellationToken);
 
             if (hasBatch)
+            {
                 _undeliveredCount = inner.Current.Count();
+                _undeliveredClusterTime = inner.Current.LastOrDefault()?.ClusterTime;
+            }
 
             return hasBatch;
         }

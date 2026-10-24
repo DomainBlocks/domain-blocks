@@ -7,6 +7,9 @@ namespace DomainBlocks.EventStore.MongoDB.ChangeStreams;
 /// </summary>
 internal interface IChangeStreamAttachment : IAsyncDisposable
 {
-    /// <inheritdoc cref="IChangeStreamConnection.OpTime"/>
-    BsonTimestamp OpTime { get; }
+    /// <summary>
+    /// The connection's <see cref="IChangeStreamConnection.OpTimeHighWaterMark"/>, read once the observer was attached,
+    /// so it covers every change delivered before the observer could receive it.
+    /// </summary>
+    BsonTimestamp OpTimeHighWaterMark { get; }
 }

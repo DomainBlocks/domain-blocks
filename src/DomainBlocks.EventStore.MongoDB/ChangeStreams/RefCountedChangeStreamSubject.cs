@@ -11,6 +11,7 @@ internal static class RefCountedChangeStreamSubject
         ChangeStreamCursorFactory<TDocument, TChange> cursorFactory,
         PipelineDefinition<ChangeStreamDocument<TDocument>, TChange> pipeline,
         Func<TChange, BsonDocument> resumeTokenSelector,
+        Func<TChange, BsonTimestamp> clusterTimeSelector,
         Func<TChange, TResult> resultSelector,
         ChangeStreamSubjectOptions? options = null,
         ILogger? logger = null)
@@ -20,6 +21,7 @@ internal static class RefCountedChangeStreamSubject
             cursorFactory,
             pipeline,
             resumeTokenSelector,
+            clusterTimeSelector,
             resultSelector,
             options,
             logger));
@@ -67,7 +69,7 @@ internal sealed class RefCountedChangeStreamSubject<TResult>(
             subjectConnection.RefCount++;
 
             return new Attachment(
-                subjectConnection.Connection.OpTime,
+                subjectConnection.Connection.OpTimeHighWaterMark,
                 () => DetachAsync(attachment, subjectConnection));
         }
         finally
@@ -112,11 +114,11 @@ internal sealed class RefCountedChangeStreamSubject<TResult>(
         public int RefCount { get; set; }
     }
 
-    private sealed class Attachment(BsonTimestamp operationTime, Func<Task> onDispose) : IChangeStreamAttachment
+    private sealed class Attachment(BsonTimestamp opTimeHighWaterMark, Func<Task> onDispose) : IChangeStreamAttachment
     {
         private int _disposed;
 
-        public BsonTimestamp OpTime { get; } = operationTime;
+        public BsonTimestamp OpTimeHighWaterMark { get; } = opTimeHighWaterMark;
 
         public async ValueTask DisposeAsync()
         {
