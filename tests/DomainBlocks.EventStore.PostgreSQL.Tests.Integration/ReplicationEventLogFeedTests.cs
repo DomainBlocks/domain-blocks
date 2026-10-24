@@ -153,6 +153,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
                 RawDecoder.Instance,
                 LoggerFactory.CreateLogger("ReplicationEventLogSession"),
                 token),
+            static row => row.Position,
             new EventLogFeedOptions { RetryDelay = TimeSpan.FromMilliseconds(10), MaxRetryAttempts = 1 },
             LoggerFactory.CreateLogger("EventLogFeed"));
 
@@ -180,6 +181,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
                 RawDecoder.Instance,
                 LoggerFactory.CreateLogger("ReplicationEventLogSession"),
                 ct),
+            static row => row.Position,
             new EventLogFeedOptions { RetryDelay = TimeSpan.FromMilliseconds(100) },
             LoggerFactory.CreateLogger("EventLogFeed"));
     }

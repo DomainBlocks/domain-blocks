@@ -33,6 +33,15 @@ internal static partial class LogMessages
     [LoggerMessage(LogLevel.Debug, "[sub: {SubscriptionId}] catch-up boundary is {EndPos}")]
     internal static partial void CatchUpBoundary(this ILogger logger, string subscriptionId, ulong? endPos);
 
+    [LoggerMessage(
+        LogLevel.Warning,
+        "[sub: {SubscriptionId}] catch-up still waiting after {Elapsed} for queries to see position {Position}")]
+    internal static partial void CatchUpWaitingForVisibility(
+        this ILogger logger,
+        string subscriptionId,
+        long position,
+        TimeSpan elapsed);
+
     [LoggerMessage(LogLevel.Information, "[sub: {SubscriptionId}] caught up")]
     internal static partial void SubscriptionCaughtUp(this ILogger logger, string subscriptionId);
 

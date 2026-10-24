@@ -70,6 +70,7 @@ public sealed class ReplicatedPostgresServer : IAsyncDisposable
             .WithNetworkAliases("primary")
             .WithResourceMapping(Encoding.UTF8.GetBytes(CreateRoleScript), "/docker-entrypoint-initdb.d/1-role.sql")
             .WithResourceMapping(Encoding.UTF8.GetBytes(AllowReplicationScript), "/docker-entrypoint-initdb.d/2-hba.sh")
+            .WithCommand("-c", "wal_level=logical")
             .Build();
 
         var standby = new ContainerBuilder(image)
@@ -136,6 +137,19 @@ public sealed class ReplicatedPostgresServer : IAsyncDisposable
         await command.ExecuteNonQueryAsync();
     }
 
+    /// <summary>
+    /// Stops the standby applying WAL, and waits until it has stopped. It still receives and flushes the WAL, so a
+    /// commit that waits for the standby to flush it completes, but one that waits for it to apply it, with
+    /// <c>remote_apply</c>, waits until replay resumes.
+    /// </summary>
+    public async Task PauseWalReplayOnStandbyAsync()
+    {
+        await ExecuteOnStandbyAsync("SELECT pg_wal_replay_pause()");
+        await WaitUntilAsync(StandbyConnectionString, "SELECT pg_get_wal_replay_pause_state() = 'paused'");
+    }
+
+    public Task ResumeWalReplayOnStandbyAsync() => ExecuteOnStandbyAsync("SELECT pg_wal_replay_resume()");
+
     public async ValueTask DisposeAsync()
     {
         await _standby.DisposeAsync();
@@ -177,6 +191,13 @@ public sealed class ReplicatedPostgresServer : IAsyncDisposable
         await WaitUntilAsync($"SELECT current_setting('synchronous_standby_names') = '{StandbyName}'");
     }
 
+    private async Task ExecuteOnStandbyAsync(string sql)
+    {
+        await using var dataSource = NpgsqlDataSource.Create(StandbyConnectionString);
+        await using var command = dataSource.CreateCommand(sql);
+        await command.ExecuteNonQueryAsync();
+    }
+
     // The commit doesn't wait for the standby, which may be cut off.
     private async Task ExecuteOnPrimaryAsync(string sql)
     {
@@ -185,9 +206,11 @@ public sealed class ReplicatedPostgresServer : IAsyncDisposable
         await command.ExecuteNonQueryAsync();
     }
 
-    private async Task WaitUntilAsync(string condition)
+    private Task WaitUntilAsync(string condition) => WaitUntilAsync(PrimaryConnectionString, condition);
+
+    private static async Task WaitUntilAsync(string connectionString, string condition)
     {
-        await using var dataSource = NpgsqlDataSource.Create(PrimaryConnectionString);
+        await using var dataSource = NpgsqlDataSource.Create(connectionString);
         await using var command = dataSource.CreateCommand(condition);
 
         while (!(bool)(await command.ExecuteScalarAsync())!)

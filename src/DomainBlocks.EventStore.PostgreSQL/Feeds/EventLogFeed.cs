@@ -17,6 +17,7 @@ namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 internal sealed class EventLogFeed<T> : IEventLogFeed<T>
 {
     private readonly Func<CancellationToken, Task<IEventLogSession<T>>> _sessionFactory;
+    private readonly Func<T, long> _positionSelector;
     private readonly EventLogFeedOptions _options;
     private readonly ILogger? _logger;
     private readonly ConnectionState _connectionState;
@@ -26,14 +27,17 @@ internal sealed class EventLogFeed<T> : IEventLogFeed<T>
 
     public EventLogFeed(
         Func<CancellationToken, Task<IEventLogSession<T>>> sessionFactory,
+        Func<T, long> positionSelector,
         EventLogFeedOptions? options = null,
         ILogger? logger = null)
     {
         ArgumentNullException.ThrowIfNull(sessionFactory);
+        ArgumentNullException.ThrowIfNull(positionSelector);
 
         options ??= EventLogFeedOptions.Default;
 
         _sessionFactory = AddResilience(sessionFactory, options, logger, _feedId);
+        _positionSelector = positionSelector;
         _options = options;
         _logger = logger;
         _connectionState = new ConnectionState(logger, _feedId);
@@ -120,6 +124,7 @@ internal sealed class EventLogFeed<T> : IEventLogFeed<T>
         private readonly Task _producerTask;
         private readonly CancellationTokenSource _stopCts = new();
         private readonly TaskCompletionSource _completionTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private long _positionHighWaterMark = -1;
         private int _disposed;
 
         public Connection(EventLogFeed<T> feed)
@@ -133,6 +138,9 @@ internal sealed class EventLogFeed<T> : IEventLogFeed<T>
         }
 
         public Task Completion => _completionTcs.Task;
+
+        public long? PositionHighWaterMark =>
+            Volatile.Read(ref _positionHighWaterMark) is var position and >= 0 ? position : null;
 
         public async ValueTask DisposeAsync()
         {
@@ -181,7 +189,14 @@ internal sealed class EventLogFeed<T> : IEventLogFeed<T>
                         try
                         {
                             await foreach (var item in session.ReadAsync(_stopCts.Token).ConfigureAwait(false))
+                            {
+                                // Rows arrive in position order. The mark is raised before observers are notified,
+                                // and the exchange is a full fence, so an observer that attaches too late for a row
+                                // reads a mark that covers it.
+                                Interlocked.Exchange(ref _positionHighWaterMark, _feed._positionSelector(item));
+
                                 await _state.NotifyNextAsync(item, _stopCts.Token).ConfigureAwait(false);
+                            }
 
                             // A live session should never end, so reconnect.
                             _logger?.FeedEnded(_feedId);

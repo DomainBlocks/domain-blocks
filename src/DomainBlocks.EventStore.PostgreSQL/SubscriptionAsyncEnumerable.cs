@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using DomainBlocks.EventStore.Filtering;
@@ -14,6 +15,10 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     where TEvent : notnull
     where TPos : struct, IPosition<TPos>
 {
+    private static readonly TimeSpan MinVisibilityPollDelay = TimeSpan.FromMilliseconds(1);
+    private static readonly TimeSpan MaxVisibilityPollDelay = TimeSpan.FromMilliseconds(100);
+    private static readonly TimeSpan VisibilityWaitWarningInterval = TimeSpan.FromSeconds(10);
+
     private readonly EventLogReader<TEvent> _reader;
     private readonly IRefCountedEventLogFeed<EventLogRow<TEvent>> _feed;
     private readonly CatchUpReader _catchUpReader;
@@ -55,7 +60,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         CancellationToken cancellationToken = default)
     {
         Observer? observer = null;
-        IAsyncDisposable? attachment = null;
+        IEventLogFeedAttachment? attachment = null;
 
         try
         {
@@ -94,7 +99,11 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                 observer = nextObserver;
                 attachment = nextAttachment;
 
-                var enumerator = ReadAllAsync(resumePosition, observer, cancellationToken)
+                var enumerator = ReadAllAsync(
+                        resumePosition,
+                        observer,
+                        attachment.PositionHighWaterMark,
+                        cancellationToken)
                     .GetAsyncEnumerator(cancellationToken);
 
                 await using (enumerator.ConfigureAwait(false))
@@ -182,7 +191,9 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         }
     }
 
-    private async Task<IAsyncDisposable> AttachObserverAsync(Observer observer, CancellationToken cancellationToken)
+    private async Task<IEventLogFeedAttachment> AttachObserverAsync(
+        Observer observer,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -205,8 +216,12 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     private async IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> ReadAllAsync(
         ResumePosition resumePosition,
         Observer observer,
+        long? positionHighWaterMark,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        if (positionHighWaterMark.HasValue)
+            await WaitUntilVisibleAsync(positionHighWaterMark.Value, cancellationToken).ConfigureAwait(false);
+
         var endInclusive = await _endPositionReader(_reader, cancellationToken).ConfigureAwait(false);
 
         _logger?.CatchUpBoundary(_correlationId, endInclusive?.Value);
@@ -251,6 +266,29 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
             // The subscriber has taken the event and come back for more.
             resumePosition.AdvanceTo(position);
+        }
+    }
+
+    // The feed can deliver a row before queries can see it: the walsender sends a commit once it is flushed, and the
+    // commit becomes visible only later, after any wait for the synchronous standbys. Commits become visible in
+    // position order, and a later query sees at least as much, so once a query sees the position, the end that the
+    // catch-up reads next covers every row the observer missed.
+    private async Task WaitUntilVisibleAsync(long position, CancellationToken cancellationToken)
+    {
+        var delay = MinVisibilityPollDelay;
+        var stopwatch = Stopwatch.StartNew();
+        var nextWarning = VisibilityWaitWarningInterval;
+
+        while ((await _reader.GetMaxPositionAsync(cancellationToken).ConfigureAwait(false) ?? -1) < position)
+        {
+            if (stopwatch.Elapsed >= nextWarning)
+            {
+                _logger?.CatchUpWaitingForVisibility(_correlationId, position, stopwatch.Elapsed);
+                nextWarning += VisibilityWaitWarningInterval;
+            }
+
+            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+            delay = TimeSpan.FromTicks(Math.Min(delay.Ticks * 2, MaxVisibilityPollDelay.Ticks));
         }
     }
 

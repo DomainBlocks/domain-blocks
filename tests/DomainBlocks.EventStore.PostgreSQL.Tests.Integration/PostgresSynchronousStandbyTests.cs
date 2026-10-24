@@ -5,6 +5,7 @@ using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
 using Npgsql;
 using NUnit.Framework;
 using Shouldly;
+using static DomainBlocks.EventStore.PostgreSQL.Tests.Integration.AppendFunctionClient;
 
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
@@ -62,6 +63,67 @@ public class PostgresSynchronousStandbyTests
         await append;
     }
 
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_EventDeliveredButNotVisible_ReplaysEventOnceVisible(CancellationToken ct)
+    {
+        await using var dataSource = CreateDataSource();
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
+        await using var eventStore = CreateEventStore(dataSource);
+
+        await using var subscription1 = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
+        (await subscription1.MoveNextAsync()).ShouldBeTrue();
+        subscription1.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
+
+        // With WAL replay paused, the standby flushes the event but doesn't apply it, and a commit with remote_apply
+        // waits until the standby has applied it. So the event stays invisible on the primary while the feed has it.
+        await _server.PauseWalReplayOnStandbyAsync();
+        var append = AppendWithRemoteApplyAsync(dataSource, "e", ct);
+
+        (await subscription1.MoveNextAsync()).ShouldBeTrue();
+        subscription1.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
+
+        // The second subscription attaches after the feed delivered the event, so only its catch-up can deliver it.
+        await using var subscription2 = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
+        var next = subscription2.MoveNextAsync().AsTask();
+
+        // The event is still invisible after the hold, so it was invisible throughout, and the catch-up waits too.
+        await Task.Delay(HoldDuration, ct);
+        (await CountEventsAsync(dataSource, ct)).ShouldBe(0);
+        next.IsCompleted.ShouldBeFalse();
+
+        await _server.ResumeWalReplayOnStandbyAsync();
+        await append;
+
+        (await next).ShouldBeTrue();
+        subscription2.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
+    }
+
+    // Calls append_events directly, and commits waiting for the standby to apply the event rather than flush it.
+    private async Task AppendWithRemoteApplyAsync(NpgsqlDataSource dataSource, string value, CancellationToken ct)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var transaction = await connection.BeginTransactionAsync(ct);
+
+        var client = new AppendFunctionClient(dataSource, _options.Schema);
+        var e = JsonEvent(nameof(TestEvent), $"{{\"Value\": \"{value}\"}}");
+        await client.AppendAsync(connection, [Any("s1", e)], ct);
+
+        await using (var command = new NpgsqlCommand("SET LOCAL synchronous_commit = remote_apply", connection))
+            await command.ExecuteNonQueryAsync(ct);
+
+        await transaction.CommitAsync(ct);
+    }
+
+    // Counts the events that queries on the primary see.
+    private async Task<long> CountEventsAsync(NpgsqlDataSource dataSource, CancellationToken ct)
+    {
+        await using var command = dataSource.CreateCommand(
+            $"SELECT count(*) FROM {new SchemaObjectNames(_options.Schema).EventLog}");
+
+        return (long)(await command.ExecuteScalarAsync(ct)).ShouldNotBeNull();
+    }
+
     // Returns the process ID of a backend whose commit waits for the standby, once there is one.
     private async Task<int> WaitForSyncRepAsync(CancellationToken ct)
     {
@@ -102,7 +164,12 @@ public class PostgresSynchronousStandbyTests
 
     private NpgsqlDataSource CreateDataSource(Action<NpgsqlConnectionStringBuilder>? configure = null)
     {
-        var connectionString = new NpgsqlConnectionStringBuilder(_server.PrimaryConnectionString);
+        // The feed's replication connection uses this connection string, so it keeps the password.
+        var connectionString = new NpgsqlConnectionStringBuilder(_server.PrimaryConnectionString)
+        {
+            PersistSecurityInfo = true
+        };
+
         configure?.Invoke(connectionString);
 
         var builder = new NpgsqlDataSourceBuilder(connectionString.ConnectionString);

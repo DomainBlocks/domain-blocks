@@ -176,6 +176,8 @@ public class RefCountedEventLogFeedTests
 
         public Task Completion => _completionTcs.Task;
 
+        public long? PositionHighWaterMark => null;
+
         public int DisposeCount { get; private set; }
 
         public void Fault(Exception exception) => _completionTcs.TrySetException(exception);
