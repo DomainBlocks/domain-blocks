@@ -3,6 +3,34 @@
 > **Generated note.** Written by Claude Code (Claude Opus 5.5) on 16 October 2026 at the request of the author, after
 > reading the MongoDB r7.0.16 and PostgreSQL 17 sources. Where it disagrees with the code, the code is right.
 
+## On the reactive PRs
+
+This analysis is of 6be935a (#140), and its recommended design, wake-up plus polling, is the one #141 to #149 built. As
+of 24 October 2026, #159 reverts those, and the PRs stacked on it keep the change stream and the logical replication
+feed instead, and fix each failure below in them:
+
+- **MongoDB, late attacher after a failover** (#160): the second solution. The catch-up waits for the cluster time of
+  the latest change delivered.
+- **PostgreSQL failure 1, late attacher** (#162): the catch-up waits until its reads reach the highest position
+  delivered.
+- **PostgreSQL failure 2, phantom and position reuse** (#165, #168): a permanent failover slot, which the primary holds
+  back until the standbys listed in `synchronized_standby_slots` have each commit.
+- **PostgreSQL failure 3, a commit visible before the standby has it** (#164): a barrier after the catch-up's end read.
+
+They also fix failures found since:
+
+- **Appends took the session's `synchronous_commit`** (#161), so with `local` or `off` a visible append wasn't durable.
+  Appends now set it to `on`.
+- **A new slot could skip a commit that wasn't visible yet** (#163). A session now opens only once every commit the slot
+  skipped is visible.
+- **A large append inserted its rows out of position order** (#166), and live subscriptions dropped some. Appends now
+  insert in position order.
+- **An idle store's slot held WAL in a busy database** (#169). The session now reports its position while idle.
+- **A feed failed its subscriptions when its endpoint reached a standby** (#170), as an endpoint can during a failover.
+  It now retries until it reaches the primary.
+
+[PostgreSQL replication concepts](postgresql-replication-concepts.md) describes the PostgreSQL design as built.
+
 ## The handover
 
 Every subscription makes the same handover from history to live events:
