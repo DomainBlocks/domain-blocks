@@ -78,7 +78,8 @@ internal sealed class ReplicationEventLogSession<TEvent> : IEventLogSession<Even
                         var row = await ReadRowAsync(insert.NewRow, columnMap, cancellationToken).ConfigureAwait(false);
 
                         // A session resumes after the last transaction delivered in full, so it can repeat the rows of
-                        // a transaction that the previous session delivered in part.
+                        // a transaction that the previous session delivered in part. append_events inserts rows in
+                        // position order, so the repeated rows are those at or below the last position delivered.
                         if (row.Position <= _factory.LastPosition)
                             break;
 
