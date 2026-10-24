@@ -204,6 +204,109 @@ public class PostgresSynchronousStandbyTests
         await Should.ThrowAsync<ReplicationBarrierException>(next);
     }
 
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_LiveEventNotOnStandby_DeliversEventOnceOnStandby(CancellationToken ct)
+    {
+        await using var dataSource = CreateDataSource();
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
+        await using var eventStore = CreateEventStore(dataSource);
+
+        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
+        (await subscription.MoveNextAsync()).ShouldBeTrue();
+        subscription.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
+
+        await _server.CutOffStandbyAsync();
+        await AppendWithCanceledWaitAsync(dataSource, "e", ct);
+        var next = subscription.MoveNextAsync().AsTask();
+
+        await Task.Delay(HoldDuration, ct);
+        next.IsCompleted.ShouldBeFalse();
+
+        await _server.ReconnectStandbyAsync();
+
+        (await next).ShouldBeTrue();
+        subscription.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
+    }
+
+    [Test]
+    [CancelAfter(2 * TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_FailoverLosesLiveEvent_ResumesWithoutIt(CancellationToken ct)
+    {
+        await using var dataSource = CreateDataSource(_server.FailoverConnectionString);
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
+
+        // The feed reports its progress often, which lets the standby's copy of the slot become usable, and reconnects
+        // quickly after the failover.
+        await using var eventStore = CreateEventStore(dataSource, new PostgresEventStoreOptions
+        {
+            Schema = _options.Schema,
+            Replication =
+            {
+                WalReceiverStatusInterval = TimeSpan.FromMilliseconds(100),
+                RetryDelay = TimeSpan.FromMilliseconds(100),
+                MaxRetryDelay = TimeSpan.FromMilliseconds(500)
+            }
+        });
+
+        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
+        (await subscription.MoveNextAsync()).ShouldBeTrue();
+        subscription.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
+
+        await eventStore.AppendAsync(
+            "s1",
+            [AppendableEvent.Create<object>(new TestEvent { Value = "before" })],
+            cancellationToken: ct);
+
+        (await subscription.MoveNextAsync()).ShouldBeTrue();
+        subscription.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "before" });
+        await WaitForSlotCopyAsync(ct);
+
+        await _server.CutOffStandbyAsync();
+        await AppendWithCanceledWaitAsync(dataSource, "lost", ct);
+        var next = subscription.MoveNextAsync().AsTask();
+
+        await Task.Delay(HoldDuration, ct);
+        next.IsCompleted.ShouldBeFalse();
+
+        // Until the standby is promoted there is no primary, and the feed keeps reconnecting. The promoted standby
+        // never had the event, so the next append reuses its position.
+        await _server.CrashPrimaryAsync();
+        await Task.Delay(TimeSpan.FromSeconds(2), ct);
+        await _server.PromoteStandbyAsync();
+
+        await eventStore.AppendAsync(
+            "s1",
+            [AppendableEvent.Create<object>(new TestEvent { Value = "after" })],
+            cancellationToken: ct);
+
+        (await next).ShouldBeTrue();
+        var e = subscription.Current.Event.ShouldNotBeNull();
+        e.Payload.ShouldBe(new TestEvent { Value = "after" });
+        e.Context.LogPosition.ShouldBe(LogPosition.FromInt64(1));
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_SynchronizedStandbySlotsEmpty_DeliversEventNotOnStandby(CancellationToken ct)
+    {
+        await using var dataSource = CreateDataSource();
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
+        await using var eventStore = CreateEventStore(dataSource);
+
+        await _server.ClearSynchronizedStandbySlotsAsync();
+
+        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
+        (await subscription.MoveNextAsync()).ShouldBeTrue();
+        subscription.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
+
+        await _server.CutOffStandbyAsync();
+        await AppendWithCanceledWaitAsync(dataSource, "e", ct);
+
+        (await subscription.MoveNextAsync()).ShouldBeTrue();
+        subscription.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
+    }
+
     // Calls append_events directly, and cancels its commit's wait for the standby, so the event is visible on the
     // primary although the standby doesn't have it.
     private async Task AppendWithCanceledWaitAsync(NpgsqlDataSource dataSource, string value, CancellationToken ct)
@@ -250,6 +353,20 @@ public class PostgresSynchronousStandbyTests
             await Task.Delay(20, ct);
     }
 
+    // The standby's copy of a new slot stays temporary, and a promotion drops it, until the slot advances past a record
+    // of the running transactions, which the primary logs every 15 seconds.
+    private async Task WaitForSlotCopyAsync(CancellationToken ct)
+    {
+        await using var standby = NpgsqlDataSource.Create(_server.StandbyConnectionString);
+
+        await using var isCopied = standby.CreateCommand(
+            "SELECT EXISTS (SELECT 1 FROM pg_replication_slots " +
+            "WHERE slot_type = 'logical' AND synced AND NOT temporary)");
+
+        while (!(bool)(await isCopied.ExecuteScalarAsync(ct))!)
+            await Task.Delay(100, ct);
+    }
+
     // Returns the process ID of a backend whose commit waits for the standby, once there is one.
     private async Task<int> WaitForSyncRepAsync(CancellationToken ct)
     {
@@ -285,11 +402,11 @@ public class PostgresSynchronousStandbyTests
         return (bool)(await command.ExecuteScalarAsync(ct)).ShouldNotBeNull();
     }
 
-    private EventStore CreateEventStore(NpgsqlDataSource dataSource)
+    private EventStore CreateEventStore(NpgsqlDataSource dataSource, PostgresEventStoreOptions? options = null)
     {
         return new PostgresEventStoreBuilder<object>()
             .UseDataSource(dataSource)
-            .UseOptions(_options)
+            .UseOptions(options ?? _options)
             .ConfigureCodec(x => x.UseEventTypeMap(EventTypeMap))
             .UseLogger(PostgresTestEnvironment.LoggerFactory.CreateLogger(nameof(PostgresSynchronousStandbyTests)))
             .Build();
@@ -297,8 +414,15 @@ public class PostgresSynchronousStandbyTests
 
     private NpgsqlDataSource CreateDataSource(Action<NpgsqlConnectionStringBuilder>? configure = null)
     {
+        return CreateDataSource(_server.PrimaryConnectionString, configure);
+    }
+
+    private NpgsqlDataSource CreateDataSource(
+        string serverConnectionString,
+        Action<NpgsqlConnectionStringBuilder>? configure = null)
+    {
         // The feed's replication connection uses this connection string, so it keeps the password.
-        var connectionString = new NpgsqlConnectionStringBuilder(_server.PrimaryConnectionString)
+        var connectionString = new NpgsqlConnectionStringBuilder(serverConnectionString)
         {
             PersistSecurityInfo = true
         };

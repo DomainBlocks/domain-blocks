@@ -25,10 +25,25 @@ namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 /// reconnects. If a slot is dropped anyway, its feed creates a new one and resets.
 /// </para>
 /// </remarks>
-internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessionFactory<EventLogRow<TEvent>>
+internal sealed class ReplicationEventLogSessionFactory<TEvent>(
+    string connectionString,
+    NpgsqlDataSource dataSource,
+    SlotNameGenerator slotNames,
+    SchemaObjectNames names,
+    PostgresReplicationOptions options,
+    IEventDecoder<TEvent, PostgresEventData, string> decoder,
+    ILogger? logger) :
+    IEventLogSessionFactory<EventLogRow<TEvent>>
     where TEvent : notnull
 {
-    private const string CreateSlotSql = "SELECT pg_create_logical_replication_slot($1, 'pgoutput')";
+    // A failover slot sends a commit only once the standbys whose physical slots synchronized_standby_slots lists have
+    // it. Standbys with sync_replication_slots keep a copy of it, which the feed resumes from after a failover.
+    private const string CreateSlotSql = "SELECT pg_create_logical_replication_slot($1, 'pgoutput', failover => true)";
+
+    private const string StandbySlotsUnsetSql =
+        "SELECT current_setting('synchronous_standby_names') <> '' " +
+        "AND current_setting('synchronized_standby_slots') = ''";
+
     private const string DropSlotSql = "SELECT pg_drop_replication_slot($1)";
 
     private const string TerminateWalSenderSql =
@@ -53,40 +68,14 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
     // can't be dropped in time is left to a later cleanup.
     private static readonly TimeSpan DropSlotTimeout = TimeSpan.FromSeconds(10);
 
-    private readonly string _connectionString;
-    private readonly NpgsqlDataSource _dataSource;
-    private readonly SlotNameGenerator _slotNames;
-    private readonly SchemaObjectNames _names;
-    private readonly PostgresReplicationOptions _options;
-    private readonly PgOutputReplicationOptions _pgOutputOptions;
-    private readonly IEventDecoder<TEvent, PostgresEventData, string> _decoder;
-    private readonly ILogger? _logger;
+    private readonly PgOutputReplicationOptions _pgOutputOptions = new(
+        names.Publication,
+        PgOutputProtocolVersion.V1,
+        binary: options.UseBinaryProtocol,
+        streamingMode: PgOutputStreamingMode.Off);
+
     private string? _slotName;
     private bool _hasOpenedSession;
-
-    public ReplicationEventLogSessionFactory(
-        string connectionString,
-        NpgsqlDataSource dataSource,
-        SlotNameGenerator slotNames,
-        SchemaObjectNames names,
-        PostgresReplicationOptions options,
-        IEventDecoder<TEvent, PostgresEventData, string> decoder,
-        ILogger? logger)
-    {
-        _connectionString = connectionString;
-        _dataSource = dataSource;
-        _slotNames = slotNames;
-        _names = names;
-        _options = options;
-        _decoder = decoder;
-        _logger = logger;
-
-        _pgOutputOptions = new PgOutputReplicationOptions(
-            names.Publication,
-            PgOutputProtocolVersion.V1,
-            binary: options.UseBinaryProtocol,
-            streamingMode: PgOutputStreamingMode.Off);
-    }
 
     /// <summary>
     /// The end of the last transaction that a session delivered in full, which the next session starts after, or
@@ -101,6 +90,9 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
 
     public async Task<IEventLogSession<EventLogRow<TEvent>>> OpenAsync(CancellationToken cancellationToken)
     {
+        ThrowIfMultipleHosts();
+        await CheckServerAsync(cancellationToken).ConfigureAwait(false);
+
         if (_slotName is not null)
             await PrepareToResumeAsync(_slotName, cancellationToken).ConfigureAwait(false);
 
@@ -111,10 +103,10 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
             ResumeLsn = null;
         }
 
-        var connection = new LogicalReplicationConnection(_connectionString)
+        var connection = new LogicalReplicationConnection(connectionString)
         {
-            WalReceiverTimeout = _options.WalReceiverTimeout,
-            WalReceiverStatusInterval = _options.WalReceiverStatusInterval
+            WalReceiverTimeout = options.WalReceiverTimeout,
+            WalReceiverStatusInterval = options.WalReceiverStatusInterval
         };
 
         try
@@ -137,8 +129,8 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
             new PgOutputReplicationSlot(_slotName),
             isResumed,
             _pgOutputOptions,
-            _names,
-            _decoder);
+            names,
+            decoder);
     }
 
     public async ValueTask DisposeAsync()
@@ -180,7 +172,7 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
 
         if (isValid && activePid is { } pid)
         {
-            await TryTerminateWalSenderAsync(_dataSource, pid, cancellationToken).ConfigureAwait(false);
+            await TryTerminateWalSenderAsync(dataSource, pid, cancellationToken).ConfigureAwait(false);
             (isValid, activePid) = await ReadSlotStateAsync(slotName, cancellationToken).ConfigureAwait(false);
         }
 
@@ -195,7 +187,7 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
         string slotName,
         CancellationToken cancellationToken)
     {
-        await using var command = _dataSource.CreateCommand(SlotStateSql);
+        await using var command = dataSource.CreateCommand(SlotStateSql);
         command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = slotName });
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
@@ -231,23 +223,60 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
     private void ForgetSlot(string slotName)
     {
         _slotName = null;
-        _logger?.ReplicationSlotLost(slotName);
+        logger?.ReplicationSlotLost(slotName);
     }
 
-    private async Task<string> CreateSlotAsync(CancellationToken cancellationToken)
+    // Npgsql refuses replication connections with several hosts, and a multi-host data source fails rather than waits
+    // while a failover leaves no primary. So the feed follows a failover only through one host that reaches the
+    // primary.
+    private void ThrowIfMultipleHosts()
     {
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        if (HasMultipleHosts(dataSource.ConnectionString))
+        {
+            throw new NotSupportedException(
+                "Live subscriptions require a data source with a single host. Use an endpoint that always reaches " +
+                "the primary, such as a writer endpoint, a virtual IP, or a proxy.");
+        }
 
-        // The cleanup reads inactive_since, which PostgreSQL 17 added.
+        if (HasMultipleHosts(connectionString))
+        {
+            throw new NotSupportedException(
+                "Live subscriptions require a replication connection string with a single host. Use an endpoint that " +
+                "always reaches the primary, such as a writer endpoint, a virtual IP, or a proxy.");
+        }
+
+        static bool HasMultipleHosts(string connectionString) =>
+            new NpgsqlConnectionStringBuilder(connectionString).Host?.Contains(',') == true;
+    }
+
+    // Every session checks, because a session can reach another server after a failover, and the settings can change
+    // while the feed runs.
+    private async Task CheckServerAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+        // PostgreSQL 17 added failover slots, and inactive_since, which the cleanup reads.
         if (connection.PostgreSqlVersion.Major < 17)
         {
             throw new NotSupportedException(
                 $"Live subscriptions require PostgreSQL 17 or later, but the server is {connection.ServerVersion}.");
         }
 
+        // With synchronous standbys, an append is acknowledged once they have it, so a failover keeps it. Unless the
+        // slot waits for them too, the feed can deliver an event before they have it, and a failover then loses it.
+        await using var command = new NpgsqlCommand(StandbySlotsUnsetSql, connection);
+
+        if (await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is true)
+            logger?.ReplicationSlotNotSynchronized();
+    }
+
+    private async Task<string> CreateSlotAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+
         await DropInactiveSlotsAsync(connection, cancellationToken).ConfigureAwait(false);
 
-        var slotName = _slotNames.Next();
+        var slotName = slotNames.Next();
 
         await using (var create = new NpgsqlCommand(CreateSlotSql, connection))
         {
@@ -255,7 +284,7 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
             await create.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        _logger?.ReplicationSlotCreated(slotName);
+        logger?.ReplicationSlotCreated(slotName);
 
         try
         {
@@ -276,8 +305,8 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
 
         await using (var select = new NpgsqlCommand(SelectInactiveSlotsSql, connection))
         {
-            select.Parameters.Add(new NpgsqlParameter<string> { TypedValue = _options.SlotNamePrefix });
-            select.Parameters.Add(new NpgsqlParameter<TimeSpan> { TypedValue = _options.InactiveSlotTimeout });
+            select.Parameters.Add(new NpgsqlParameter<string> { TypedValue = options.SlotNamePrefix });
+            select.Parameters.Add(new NpgsqlParameter<TimeSpan> { TypedValue = options.InactiveSlotTimeout });
 
             await using var reader = await select.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
 
@@ -293,7 +322,7 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
             try
             {
                 await drop.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-                _logger?.InactiveReplicationSlotDropped(slotName);
+                logger?.InactiveReplicationSlotDropped(slotName);
             }
             catch (PostgresException ex) when (ex.SqlState is PostgresErrorCodes.UndefinedObject
                                                    or PostgresErrorCodes.ObjectInUse)
@@ -313,7 +342,7 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
             .BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
             .ConfigureAwait(false);
 
-        await using (var command = new NpgsqlCommand(new EventLogSql(_names).ShareSequenceRow, connection))
+        await using (var command = new NpgsqlCommand(new EventLogSql(names).ShareSequenceRow, connection))
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -326,7 +355,7 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
 
         try
         {
-            var connection = new LogicalReplicationConnection(_connectionString);
+            var connection = new LogicalReplicationConnection(connectionString);
 
             await using (connection.ConfigureAwait(false))
             {
@@ -334,11 +363,11 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
                 await connection.DropReplicationSlot(slotName, wait: true, timeout.Token).ConfigureAwait(false);
             }
 
-            _logger?.ReplicationSlotDropped(slotName);
+            logger?.ReplicationSlotDropped(slotName);
         }
         catch (Exception ex)
         {
-            _logger?.ReplicationSlotDropFailed(ex, slotName);
+            logger?.ReplicationSlotDropFailed(ex, slotName);
         }
     }
 }
