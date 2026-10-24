@@ -71,21 +71,19 @@ public class PostgresSynchronousStandbyTests
         await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
         await using var eventStore = CreateEventStore(dataSource);
 
-        await using var subscription1 = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
-        (await subscription1.MoveNextAsync()).ShouldBeTrue();
-        subscription1.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
+        await using var subscription1 = eventStore.SubscribeToAll(SubscriptionOrigin.Start).Probe(ct);
+        (await subscription1.NextAsync()).IsCaughtUp.ShouldBeTrue();
 
         // With WAL replay paused, the standby flushes the event but doesn't apply it, and a commit with remote_apply
         // waits until the standby has applied it. So the event stays invisible on the primary while the feed has it.
         await _server.PauseWalReplayOnStandbyAsync();
         await using var append = await RemoteApplyAppend.StartAsync(dataSource, _options.Schema, "e", ct);
 
-        (await subscription1.MoveNextAsync()).ShouldBeTrue();
-        subscription1.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
+        (await subscription1.NextEventAsync()).ShouldBe(new TestEvent { Value = "e" });
 
         // The second subscription attaches after the feed delivered the event, so only its catch-up can deliver it.
-        await using var subscription2 = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
-        var next = subscription2.MoveNextAsync().AsTask();
+        await using var subscription2 = eventStore.SubscribeToAll(SubscriptionOrigin.Start).Probe(ct);
+        var next = subscription2.NextAsync();
 
         // The event is still invisible after the hold, so it was invisible throughout, and the catch-up waits too.
         await Task.Delay(HoldDuration, ct);
@@ -95,8 +93,7 @@ public class PostgresSynchronousStandbyTests
         await _server.ResumeWalReplayOnStandbyAsync();
         await append.Completion;
 
-        (await next).ShouldBeTrue();
-        subscription2.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
+        (await next).Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
     }
 
     [Test]
@@ -109,8 +106,8 @@ public class PostgresSynchronousStandbyTests
 
         // The subscription's slot can't become consistent while txn1 runs.
         await using var txn1 = await XidTransaction.BeginAsync(dataSource, ct);
-        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
-        var next = subscription.MoveNextAsync().AsTask();
+        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).Probe(ct);
+        var next = subscription.NextAsync();
         await WaitForXidLockWaitAsync(dataSource, txn1.Xid, ct);
 
         // Once txn1 ends, the slot waits for txn2, which started after txn1 was recorded as running.
@@ -132,8 +129,7 @@ public class PostgresSynchronousStandbyTests
         await _server.ResumeWalReplayOnStandbyAsync();
         await append.Completion;
 
-        (await next).ShouldBeTrue();
-        subscription.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
+        (await next).Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
     }
 
     [Test]
@@ -147,16 +143,15 @@ public class PostgresSynchronousStandbyTests
         await _server.CutOffStandbyAsync();
         await AppendWithCanceledWaitAsync(dataSource, "e", ct);
 
-        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
-        var next = subscription.MoveNextAsync().AsTask();
+        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).Probe(ct);
+        var next = subscription.NextAsync();
 
         await Task.Delay(HoldDuration, ct);
         next.IsCompleted.ShouldBeFalse();
 
         await _server.ReconnectStandbyAsync();
 
-        (await next).ShouldBeTrue();
-        subscription.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
+        (await next).Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
 
         // The primary fails, and a failover promotes the standby, which has the event.
         await _server.CrashPrimaryAsync();
@@ -178,19 +173,15 @@ public class PostgresSynchronousStandbyTests
         await _server.CutOffStandbyAsync();
         await AppendWithCanceledWaitAsync(dataSource, "e", ct);
 
-        await using var subscription = eventStore
-            .SubscribeToStream("s1", SubscriptionOrigin.Start)
-            .GetAsyncEnumerator(ct);
-
-        var next = subscription.MoveNextAsync().AsTask();
+        await using var subscription = eventStore.SubscribeToStream("s1", SubscriptionOrigin.Start).Probe(ct);
+        var next = subscription.NextAsync();
 
         await Task.Delay(HoldDuration, ct);
         next.IsCompleted.ShouldBeFalse();
 
         await _server.ReconnectStandbyAsync();
 
-        (await next).ShouldBeTrue();
-        subscription.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
+        (await next).Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
     }
 
     [Test]
@@ -204,8 +195,8 @@ public class PostgresSynchronousStandbyTests
         await _server.CutOffStandbyAsync();
         await AppendWithCanceledWaitAsync(dataSource, "e", ct);
 
-        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
-        var next = subscription.MoveNextAsync().AsTask();
+        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).Probe(ct);
+        var next = subscription.NextAsync();
 
         // The barrier's commit completes as the append's did, without the standby.
         await CancelBackendAsync(dataSource, await WaitForSyncRepAsync(ct), ct);
