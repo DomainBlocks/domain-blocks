@@ -63,7 +63,7 @@ public static class PostgresEventStore
                                ?? replicationConnectionStringFallback
                                ?? dataSource.ConnectionString;
 
-        var slotNameGenerator = new SlotNameGenerator(replicationOptions.SlotNamePrefix);
+        var slotNameGenerator = new SlotNameGenerator(names);
 
         var feedOptions = new EventLogFeedOptions
         {

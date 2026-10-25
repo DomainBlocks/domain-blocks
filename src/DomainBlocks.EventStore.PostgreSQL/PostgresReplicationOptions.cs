@@ -17,19 +17,15 @@ public sealed class PostgresReplicationOptions
     public string? ConnectionString { get; set; }
 
     /// <summary>
-    /// Gets or sets the prefix of the replication slot names. The prefix must be 1 to 32 characters long and contain
-    /// only lowercase letters, digits, or underscores. The default is <c>dbx</c>.
-    /// </summary>
-    public string SlotNamePrefix { get; set; } = "dbx";
-
-    /// <summary>
-    /// Gets or sets how long a slot that a store named with <see cref="SlotNamePrefix"/> can stay inactive before a
-    /// store drops it. The value must be positive. The default is 10 minutes.
+    /// Gets or sets how long a replication slot of the store's schema can stay inactive before a store on that schema
+    /// drops it. The value must be positive. The default is 10 minutes.
     /// </summary>
     /// <remarks>
-    /// A process that stops without dropping its slot leaves it behind, holding WAL. Stores drop such slots before they
-    /// create one, and at this interval while subscriptions are live. A live store's slot is inactive only while the
-    /// store reconnects. To cap the WAL that a leftover slot holds, set the server's <c>max_slot_wal_keep_size</c>.
+    /// A store names its slots after its schema. A process that stops without dropping its slot leaves it behind,
+    /// holding WAL. Stores drop the leftover slots of their schema before they create one, and at this interval while
+    /// subscriptions are live. A live store's slot is inactive only while the store reconnects. Each store on a schema
+    /// applies its value to all of the schema's slots, so stores on the same schema should use the same value. To cap
+    /// the WAL that a leftover slot holds, set the server's <c>max_slot_wal_keep_size</c>.
     /// </remarks>
     public TimeSpan InactiveSlotTimeout { get; set; } = TimeSpan.FromMinutes(10);
 

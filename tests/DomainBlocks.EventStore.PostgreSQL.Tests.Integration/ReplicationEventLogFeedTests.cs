@@ -23,7 +23,7 @@ using RawReadEvent = ReadEvent<
 [TestFixture]
 public class ReplicationEventLogFeedTests : PostgresIntegrationTest
 {
-    private readonly SlotNameGenerator _slotNameGenerator = new("dbx_test");
+    private readonly SlotNameGenerator _slotNameGenerator = new(new SchemaObjectNames("dbx_test"));
 
     private SchemaObjectNames Names => new(Schema);
 
@@ -165,21 +165,17 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task Connect_LeftoverSlots_DropsOnlyExpiredSlotsInStoreNameFormat(CancellationToken ct)
+    public async Task Connect_LeftoverSlots_DropsOnlyExpiredSlotsOfSchema(CancellationToken ct)
     {
-        var options = new PostgresReplicationOptions
-        {
-            SlotNamePrefix = "dbx_cleanup",
-            InactiveSlotTimeout = TimeSpan.FromSeconds(1)
-        };
+        const string schema = "dbx_cleanup";
+        var options = new PostgresReplicationOptions { InactiveSlotTimeout = TimeSpan.FromSeconds(1) };
+        var slotNameGenerator = new SlotNameGenerator(new SchemaObjectNames(schema));
 
-        var slotNameGenerator = new SlotNameGenerator(options.SlotNamePrefix);
-
-        // Slots that other stores named, as a process that stopped without dropping its slot leaves them, and one that
-        // a store didn't name.
-        var orphan = new SlotNameGenerator(options.SlotNamePrefix).Next();
-        var longerPrefix = new SlotNameGenerator($"{options.SlotNamePrefix}_x").Next();
-        var recent = new SlotNameGenerator(options.SlotNamePrefix).Next();
+        // Slots that other stores on the schema left behind, as a process that stops without dropping its slot does, a
+        // slot of a schema whose name starts with this one, and a slot that no store named.
+        var orphan = slotNameGenerator.Next();
+        var longerSchema = new SlotNameGenerator(new SchemaObjectNames($"{schema}_x")).Next();
+        var recent = slotNameGenerator.Next();
         const string notStoreNamed = "dbx_cleanup_orphan";
 
         try
@@ -189,7 +185,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
             await using var runningConnection = await running.ConnectAsync(ct);
 
             await CreateSlotAsync(orphan, ct);
-            await CreateSlotAsync(longerPrefix, ct);
+            await CreateSlotAsync(longerSchema, ct);
             await CreateSlotAsync(notStoreNamed, ct);
             await Task.Delay(options.InactiveSlotTimeout * 2, ct);
             await CreateSlotAsync(recent, ct);
@@ -199,16 +195,16 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
             await using var startingConnection = await starting.ConnectAsync(ct);
 
             // Only the orphan is dropped. The running and starting feeds' slots are kept as well.
-            var names = await GetSlotNamesAsync(options.SlotNamePrefix, ct);
+            var names = await GetSlotNamesAsync(schema, ct);
             names.ShouldNotContain(orphan);
-            names.ShouldContain(longerPrefix);
+            names.ShouldContain(longerSchema);
             names.ShouldContain(notStoreNamed);
             names.ShouldContain(recent);
             names.Count.ShouldBe(5);
         }
         finally
         {
-            foreach (var name in new[] { orphan, longerPrefix, notStoreNamed, recent })
+            foreach (var name in new[] { orphan, longerSchema, notStoreNamed, recent })
                 await DropSlotIfExistsAsync(name);
         }
     }
@@ -217,27 +213,24 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task Connect_LeftoverSlotAfterStart_DropsSlotWhileRunning(CancellationToken ct)
     {
-        var options = new PostgresReplicationOptions
-        {
-            SlotNamePrefix = "dbx_sweep",
-            InactiveSlotTimeout = TimeSpan.FromSeconds(1)
-        };
-
-        var leftover = new SlotNameGenerator(options.SlotNamePrefix).Next();
+        const string schema = "dbx_sweep";
+        var options = new PostgresReplicationOptions { InactiveSlotTimeout = TimeSpan.FromSeconds(1) };
+        var slotNameGenerator = new SlotNameGenerator(new SchemaObjectNames(schema));
+        var leftover = slotNameGenerator.Next();
 
         try
         {
-            var feed = CreateFeed(new SlotNameGenerator(options.SlotNamePrefix), options);
+            var feed = CreateFeed(slotNameGenerator, options);
             using var attachment = feed.Attach(new CollectingObserver());
             await using var connection = await feed.ConnectAsync(ct);
 
             // The feed has created its slot, so only the timer can drop a slot that another store leaves behind now.
             await CreateSlotAsync(leftover, ct);
 
-            while ((await GetSlotNamesAsync(options.SlotNamePrefix, ct)).Contains(leftover))
+            while ((await GetSlotNamesAsync(schema, ct)).Contains(leftover))
                 await Task.Delay(100, ct);
 
-            (await GetSlotNamesAsync(options.SlotNamePrefix, ct)).Count.ShouldBe(1);
+            (await GetSlotNamesAsync(schema, ct)).Count.ShouldBe(1);
         }
         finally
         {

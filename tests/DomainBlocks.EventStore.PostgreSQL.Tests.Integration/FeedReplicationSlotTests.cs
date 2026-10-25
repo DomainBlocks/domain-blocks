@@ -17,7 +17,7 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 [TestFixture]
 public class FeedReplicationSlotTests : PostgresIntegrationTest
 {
-    private readonly SlotNameGenerator _slotNameGenerator = new("dbx_slot");
+    private readonly SlotNameGenerator _slotNameGenerator = new(new SchemaObjectNames("dbx_slot"));
 
     private SchemaObjectNames Names => new(Schema);
 

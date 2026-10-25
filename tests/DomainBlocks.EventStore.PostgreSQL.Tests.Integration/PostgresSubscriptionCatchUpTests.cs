@@ -44,7 +44,7 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
         _eventStore = CreateEventStore();
         _reader = new EventLogReader<object>(DataSource, new EventLogSql(names), Options.ReadPageSize, codec);
 
-        var slotNameGenerator = new SlotNameGenerator("dbx_test");
+        var slotNameGenerator = new SlotNameGenerator(names);
 
         _feed = new RefCountedEventLogFeed<EventLogRow<object>>(() =>
             new EventLogFeed<EventLogRow<object>>(
