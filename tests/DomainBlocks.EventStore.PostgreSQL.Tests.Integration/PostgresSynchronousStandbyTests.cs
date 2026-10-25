@@ -232,16 +232,16 @@ public class PostgresSynchronousStandbyTests
         return (long)(await command.ExecuteScalarAsync(ct)).ShouldNotBeNull();
     }
 
-    // Waits until a walsender waits for the transaction to end, as one does while it creates a logical slot.
+    // Waits until a backend that is creating a replication slot waits for the given transaction to end. The query finds
+    // the backend through the slot, which it holds while it creates it.
     private static async Task WaitForXidLockWaitAsync(NpgsqlDataSource dataSource, string xid, CancellationToken ct)
     {
         await using var command = dataSource.CreateCommand(
             """
             SELECT EXISTS (SELECT 1
                            FROM pg_locks l
-                           JOIN pg_stat_activity a ON a.pid = l.pid
-                           WHERE l.locktype = 'transactionid' AND NOT l.granted AND l.transactionid::text = $1
-                             AND a.backend_type = 'walsender')
+                           JOIN pg_replication_slots s ON s.active_pid = l.pid
+                           WHERE l.locktype = 'transactionid' AND NOT l.granted AND l.transactionid::text = $1)
             """);
 
         command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = xid });

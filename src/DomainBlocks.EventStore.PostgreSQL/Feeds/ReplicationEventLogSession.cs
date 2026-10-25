@@ -1,7 +1,5 @@
-using System.Data;
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Codecs;
-using Microsoft.Extensions.Logging;
 using Npgsql;
 using Npgsql.Replication;
 using Npgsql.Replication.PgOutput;
@@ -9,192 +7,113 @@ using Npgsql.Replication.PgOutput.Messages;
 
 namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 
-internal static class ReplicationEventLogSession
-{
-    public static Task<IEventLogSession<EventLogRow<TEvent>>> OpenAsync<TEvent>(
-        string connectionString,
-        NpgsqlDataSource dataSource,
-        string slotName,
-        SchemaObjectNames names,
-        PostgresReplicationOptions options,
-        IEventDecoder<TEvent, PostgresEventData, string> decoder,
-        ILogger? logger,
-        CancellationToken cancellationToken)
-        where TEvent : notnull
-    {
-        return ReplicationEventLogSession<TEvent>.OpenAsync(
-            connectionString,
-            dataSource,
-            slotName,
-            names,
-            options,
-            decoder,
-            logger,
-            cancellationToken);
-    }
-}
-
 /// <summary>
-/// A logical replication session over a temporary pgoutput slot. It yields committed inserts in commit order, which is
-/// also position order because appends serialize on the sequence row. Each yield is the one
+/// A logical replication session on a feed's <see cref="FeedReplicationSlot"/>. It yields committed inserts in commit
+/// order, which is also position order because appends serialize on the sequence row. Each yield is the one
 /// <see cref="EventLogRow{TEvent}"/> that the session reuses, still undecoded, and it is valid only until the next row
 /// is read.
 /// </summary>
 /// <remarks>
-/// <para>
-/// Creating the slot sets a consistent point, and only transactions that commit after it are streamed. That is why the
-/// feed resets its observers when it reconnects.
-/// </para>
-/// <para>
-/// The server drops the temporary slot when the connection closes, even if the process crashes, so no WAL is retained
-/// for a consumer that never returns.
-/// </para>
+/// The session starts after the last transaction that the feed delivered from the slot. It records on the slot what it
+/// delivers, so that the next session continues where this one stops.
 /// </remarks>
-internal sealed class ReplicationEventLogSession<TEvent> : IEventLogSession<EventLogRow<TEvent>>
+internal sealed class ReplicationEventLogSession<TEvent>(
+    LogicalReplicationConnection connection,
+    FeedReplicationSlot slot,
+    bool isResumed,
+    PgOutputReplicationOptions pgOutputOptions,
+    SchemaObjectNames names,
+    IEventDecoder<TEvent, PostgresEventData, string> decoder) :
+    IEventLogSession<EventLogRow<TEvent>>
     where TEvent : notnull
 {
-    private readonly LogicalReplicationConnection _connection;
-    private readonly PgOutputReplicationSlot _slot;
-    private readonly PgOutputReplicationOptions _pgOutputOptions;
-    private readonly SchemaObjectNames _names;
-    private readonly EventLogRow<TEvent> _row;
+    private readonly EventLogRow<TEvent> _row = new(decoder);
 
-    private ReplicationEventLogSession(
-        LogicalReplicationConnection connection,
-        PgOutputReplicationSlot slot,
-        PgOutputReplicationOptions pgOutputOptions,
-        SchemaObjectNames names,
-        IEventDecoder<TEvent, PostgresEventData, string> decoder)
-    {
-        _connection = connection;
-        _slot = slot;
-        _pgOutputOptions = pgOutputOptions;
-        _names = names;
-        _row = new EventLogRow<TEvent>(decoder);
-    }
+    public string Description => $"slot {slot.Name}";
 
-    public string Description => $"slot {_slot.Name}";
-
-    /// <remarks>
-    /// The sequence row is taken through <paramref name="dataSource"/>, which must reach the same database as
-    /// <paramref name="connectionString"/>.
-    /// </remarks>
-    public static async Task<IEventLogSession<EventLogRow<TEvent>>> OpenAsync(
-        string connectionString,
-        NpgsqlDataSource dataSource,
-        string slotName,
-        SchemaObjectNames names,
-        PostgresReplicationOptions options,
-        IEventDecoder<TEvent, PostgresEventData, string> decoder,
-        ILogger? logger,
-        CancellationToken cancellationToken)
-    {
-        var connection = new LogicalReplicationConnection(connectionString)
-        {
-            WalReceiverTimeout = options.WalReceiverTimeout,
-            WalReceiverStatusInterval = options.WalReceiverStatusInterval
-        };
-
-        try
-        {
-            await connection.Open(cancellationToken).ConfigureAwait(false);
-
-            // This blocks until a consistent point exists. A transaction can commit just before that point and still be
-            // invisible to queries when this returns, while the slot won't stream it. Appends hold the sequence row
-            // until they are visible, so taking the row afterwards waits for any such append. Once the session opens,
-            // queries see every row that the slot won't stream.
-            var slot = await connection
-                .CreatePgOutputReplicationSlot(
-                    slotName,
-                    temporarySlot: true,
-                    slotSnapshotInitMode: LogicalSlotSnapshotInitMode.NoExport,
-                    cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-
-            logger?.ReplicationSlotCreated(slotName, connection.ProcessID);
-
-            await WaitForAppendInFlightAsync(dataSource, names, cancellationToken).ConfigureAwait(false);
-
-            var pgOutputOptions = new PgOutputReplicationOptions(
-                names.Publication,
-                PgOutputProtocolVersion.V1,
-                binary: options.UseBinaryProtocol,
-                streamingMode: PgOutputStreamingMode.Off);
-
-            return new ReplicationEventLogSession<TEvent>(connection, slot, pgOutputOptions, names, decoder);
-        }
-        catch
-        {
-            await connection.DisposeAsync().ConfigureAwait(false);
-            throw;
-        }
-    }
+    public bool IsResumed { get; } = isResumed;
 
     public async IAsyncEnumerable<EventLogRow<TEvent>> ReadAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var messages = _connection.StartReplication(_slot, _pgOutputOptions, cancellationToken);
+        var pgOutputSlot = new PgOutputReplicationSlot(slot.Name);
 
-        ColumnMap? columnMap = null;
-        uint relationId = 0;
+        var messages = connection
+            .StartReplication(pgOutputSlot, pgOutputOptions, cancellationToken, slot.ResumeLsn)
+            .GetAsyncEnumerator(cancellationToken);
 
-        // Npgsql reuses message instances and row tuples are forward-only, so each message is fully consumed before the
-        // next one is read.
-        await foreach (var message in messages.ConfigureAwait(false))
+        await using (messages.ConfigureAwait(false))
         {
-            switch (message)
+            ColumnMap? columnMap = null;
+            uint relationId = 0;
+
+            // Npgsql reuses message instances and row tuples are forward-only, so each message is fully consumed before
+            // the next one is read.
+            while (await MoveNextAsync(messages, cancellationToken).ConfigureAwait(false))
             {
-                case RelationMessage relation when IsEventLog(relation):
-                    columnMap = ColumnMap.From(relation);
-                    relationId = relation.RelationId;
-                    break;
+                switch (messages.Current)
+                {
+                    case RelationMessage relation when IsEventLog(relation):
+                        columnMap = ColumnMap.From(relation);
+                        relationId = relation.RelationId;
+                        break;
 
-                case InsertMessage insert when IsEventLog(insert.Relation):
-                    if (columnMap is null || insert.Relation.RelationId != relationId)
-                    {
-                        columnMap = ColumnMap.From(insert.Relation);
-                        relationId = insert.Relation.RelationId;
-                    }
+                    case InsertMessage insert when IsEventLog(insert.Relation):
+                        if (columnMap is null || insert.Relation.RelationId != relationId)
+                        {
+                            columnMap = ColumnMap.From(insert.Relation);
+                            relationId = insert.Relation.RelationId;
+                        }
 
-                    yield return await ReadRowAsync(insert.NewRow, columnMap, cancellationToken)
-                        .ConfigureAwait(false);
-                    break;
+                        var row = await ReadRowAsync(insert.NewRow, columnMap, cancellationToken).ConfigureAwait(false);
 
-                case CommitMessage commit:
-                    // Everything up to here has been handed to observers, so the server may release the WAL.
-                    _connection.SetReplicationStatus(commit.WalEnd);
-                    break;
+                        // A session resumes after the last transaction delivered in full, so it can repeat the rows of
+                        // a transaction that the previous session delivered in part.
+                        if (row.Position <= slot.LastDeliveredPosition)
+                            break;
+
+                        yield return row;
+
+                        // The feed has handed the row to its observers.
+                        slot.RecordDeliveredRow(row.Position);
+                        break;
+
+                    case CommitMessage commit:
+                        // Everything up to here has been handed to observers, so the server may release the WAL, and a
+                        // later session starts after this transaction.
+                        slot.RecordDeliveredTransaction(commit.WalEnd);
+                        connection.SetReplicationStatus(commit.WalEnd);
+                        break;
+                }
             }
         }
     }
 
-    public ValueTask DisposeAsync()
-    {
-        // Closing the session drops the temporary slot on the server.
-        return _connection.DisposeAsync();
-    }
+    public ValueTask DisposeAsync() => connection.DisposeAsync();
 
-    private static async Task WaitForAppendInFlightAsync(
-        NpgsqlDataSource dataSource,
-        SchemaObjectNames names,
+    // A dropped or invalidated slot fails START_REPLICATION with UndefinedObject or ObjectNotInPrerequisiteState. Other
+    // errors share these codes, such as a missing publication, so the slot itself is checked.
+    private async ValueTask<bool> MoveNextAsync(
+        IAsyncEnumerator<PgOutputReplicationMessage> messages,
         CancellationToken cancellationToken)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await messages.MoveNextAsync().ConfigureAwait(false);
+        }
+        catch (PostgresException ex) when (ex.SqlState is PostgresErrorCodes.UndefinedObject
+                                               or PostgresErrorCodes.ObjectNotInPrerequisiteState)
+        {
+            if (await slot.IsLostAsync(cancellationToken).ConfigureAwait(false))
+                throw new ReplicationSlotLostException(slot.Name, ex);
 
-        // Only READ COMMITTED takes the row once the append ends. A stricter level fails with a serialization error.
-        await using var transaction = await connection
-            .BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
-            .ConfigureAwait(false);
-
-        await using (var command = new NpgsqlCommand(new EventLogSql(names).ShareSequenceRow, connection))
-            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            throw;
+        }
     }
 
     private bool IsEventLog(RelationMessage relation)
     {
-        return relation.Namespace == _names.Schema && relation.RelationName == SchemaObjectNames.EventLogTableName;
+        return relation.Namespace == names.Schema && relation.RelationName == SchemaObjectNames.EventLogTableName;
     }
 
     private async ValueTask<EventLogRow<TEvent>> ReadRowAsync(

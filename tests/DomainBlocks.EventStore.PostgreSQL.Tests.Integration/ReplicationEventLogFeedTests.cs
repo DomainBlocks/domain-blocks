@@ -23,7 +23,7 @@ using RawReadEvent = ReadEvent<
 [TestFixture]
 public class ReplicationEventLogFeedTests : PostgresIntegrationTest
 {
-    private int _slotCounter;
+    private readonly SlotNameGenerator _slotNameGenerator = new(new SchemaObjectNames("dbx_test"));
 
     private SchemaObjectNames Names => new(Schema);
 
@@ -119,23 +119,123 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task Connect_CreatesTemporarySlotAndDisposeDropsIt(CancellationToken ct)
+    public async Task Connect_WhenWalSenderIsTerminated_ResumesWithoutRepeatingRows(CancellationToken ct)
     {
         var feed = CreateFeed();
-        using var attachment = feed.Attach(new CollectingObserver());
+        var observer = new CollectingObserver();
+        using var attachment = feed.Attach(observer);
+        await using var connection = await feed.ConnectAsync(ct);
+
+        await Client.AppendAsync([Any("s1", JsonEvent("e0"), JsonEvent("e1"))], ct);
+        await Client.AppendAsync([Any("s1", JsonEvent("e2"))], ct);
+        (await observer.ReadAsync(3, ct)).Select(x => x.Payload.EventName).ShouldBe(["e0", "e1", "e2"]);
+
+        // The feed hasn't yet reported these rows to the server, so its slot would start before them.
+        await TerminateWalSenderAsync(ct);
+        await Client.AppendAsync([Any("s1", JsonEvent("e3"))], ct);
+
+        (await observer.ReadAsync(1, ct)).Single().Payload.EventName.ShouldBe("e3");
+        observer.ResetCount.ShouldBe(0);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task Connect_Streaming_HoldsPermanentSlotUntilDisposed(CancellationToken ct)
+    {
+        var feed = CreateFeed();
+        var observer = new CollectingObserver();
+        using var attachment = feed.Attach(observer);
         var connection = await feed.ConnectAsync(ct);
+
+        // The feed connects before it starts streaming, and the slot is active only once it streams.
+        await Client.AppendAsync([Any("s1", JsonEvent("e"))], ct);
+        await observer.ReadAsync(1, ct);
 
         var slots = await GetSlotsAsync(ct);
         var (name, plugin, temporary, active) = slots.ShouldHaveSingleItem();
-        temporary.ShouldBeTrue();
+        temporary.ShouldBeFalse();
         active.ShouldBeTrue();
         plugin.ShouldBe("pgoutput");
         name.ShouldStartWith("dbx_test_");
 
         await connection.DisposeAsync();
 
-        while ((await GetSlotsAsync(ct)).Count > 0)
-            await Task.Delay(50, ct);
+        (await GetSlotsAsync(ct)).ShouldBeEmpty();
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task Connect_LeftoverSlots_DropsOnlyExpiredSlotsOfSchema(CancellationToken ct)
+    {
+        const string schema = "dbx_cleanup";
+        var options = new PostgresReplicationOptions { InactiveSlotTimeout = TimeSpan.FromSeconds(1) };
+        var slotNameGenerator = new SlotNameGenerator(new SchemaObjectNames(schema));
+
+        // Slots that other stores on the schema left behind, as a process that stops without dropping its slot does, a
+        // slot of a schema whose name starts with this one, and a slot that no store named.
+        var orphan = slotNameGenerator.Next();
+        var longerSchema = new SlotNameGenerator(new SchemaObjectNames($"{schema}_x")).Next();
+        var recent = slotNameGenerator.Next();
+        const string notStoreNamed = "dbx_cleanup_orphan";
+
+        try
+        {
+            var running = CreateFeed(slotNameGenerator, options);
+            using var runningAttachment = running.Attach(new CollectingObserver());
+            await using var runningConnection = await running.ConnectAsync(ct);
+
+            await CreateSlotAsync(orphan, ct);
+            await CreateSlotAsync(longerSchema, ct);
+            await CreateSlotAsync(notStoreNamed, ct);
+            await Task.Delay(options.InactiveSlotTimeout * 2, ct);
+            await CreateSlotAsync(recent, ct);
+
+            var starting = CreateFeed(slotNameGenerator, options);
+            using var startingAttachment = starting.Attach(new CollectingObserver());
+            await using var startingConnection = await starting.ConnectAsync(ct);
+
+            // Only the orphan is dropped. The running and starting feeds' slots are kept as well.
+            var names = await GetSlotNamesAsync(schema, ct);
+            names.ShouldNotContain(orphan);
+            names.ShouldContain(longerSchema);
+            names.ShouldContain(notStoreNamed);
+            names.ShouldContain(recent);
+            names.Count.ShouldBe(5);
+        }
+        finally
+        {
+            foreach (var name in new[] { orphan, longerSchema, notStoreNamed, recent })
+                await DropSlotIfExistsAsync(name);
+        }
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task Connect_LeftoverSlotAfterStart_DropsSlotWhileRunning(CancellationToken ct)
+    {
+        const string schema = "dbx_sweep";
+        var options = new PostgresReplicationOptions { InactiveSlotTimeout = TimeSpan.FromSeconds(1) };
+        var slotNameGenerator = new SlotNameGenerator(new SchemaObjectNames(schema));
+        var leftover = slotNameGenerator.Next();
+
+        try
+        {
+            var feed = CreateFeed(slotNameGenerator, options);
+            using var attachment = feed.Attach(new CollectingObserver());
+            await using var connection = await feed.ConnectAsync(ct);
+
+            // The feed has created its slot, so only the timer can drop a slot that another store leaves behind now.
+            await CreateSlotAsync(leftover, ct);
+
+            while ((await GetSlotNamesAsync(schema, ct)).Contains(leftover))
+                await Task.Delay(100, ct);
+
+            (await GetSlotNamesAsync(schema, ct)).Count.ShouldBe(1);
+        }
+        finally
+        {
+            await DropSlotIfExistsAsync(leftover);
+        }
     }
 
     [Test]
@@ -147,15 +247,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
         await PostgresEventStoreAdmin.EnsureInitializedAsync(DataSource, options, adminOptions, ct);
 
         var feed = new EventLogFeed<EventLogRow<RawEvent>>(
-            token => ReplicationEventLogSession.OpenAsync(
-                PostgresTestEnvironment.ConnectionString,
-                DataSource,
-                NextSlotName(),
-                new SchemaObjectNames(options.Schema),
-                Options.Replication,
-                RawDecoder.Instance,
-                LoggerFactory.CreateLogger("ReplicationEventLogSession"),
-                token),
+            CreateSessionFactory(_slotNameGenerator, new SchemaObjectNames(options.Schema), Options.Replication),
             static row => row.Position,
             new EventLogFeedOptions { RetryDelay = TimeSpan.FromMilliseconds(10), MaxRetryAttempts = 1 },
             LoggerFactory.CreateLogger("EventLogFeed"));
@@ -173,24 +265,77 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
         await connection.Completion.WaitAsync(ct).ShouldThrowAsync<PostgresException>();
     }
 
-    private EventLogFeed<EventLogRow<RawEvent>> CreateFeed()
+    private EventLogFeed<EventLogRow<RawEvent>> CreateFeed() => CreateFeed(_slotNameGenerator, Options.Replication);
+
+    private EventLogFeed<EventLogRow<RawEvent>> CreateFeed(
+        SlotNameGenerator slotNameGenerator,
+        PostgresReplicationOptions replicationOptions)
     {
         return new EventLogFeed<EventLogRow<RawEvent>>(
-            ct => ReplicationEventLogSession.OpenAsync(
-                PostgresTestEnvironment.ConnectionString,
-                DataSource,
-                NextSlotName(),
-                Names,
-                Options.Replication,
-                RawDecoder.Instance,
-                LoggerFactory.CreateLogger("ReplicationEventLogSession"),
-                ct),
+            CreateSessionFactory(slotNameGenerator, Names, replicationOptions),
             static row => row.Position,
             new EventLogFeedOptions { RetryDelay = TimeSpan.FromMilliseconds(100) },
             LoggerFactory.CreateLogger("EventLogFeed"));
     }
 
-    private string NextSlotName() => $"dbx_test_{Interlocked.Increment(ref _slotCounter)}_{Guid.NewGuid():N}"[..40];
+    private ReplicationEventLogSessionFactory<RawEvent> CreateSessionFactory(
+        SlotNameGenerator slotNameGenerator,
+        SchemaObjectNames names,
+        PostgresReplicationOptions replicationOptions)
+    {
+        return new ReplicationEventLogSessionFactory<RawEvent>(
+            PostgresTestEnvironment.ConnectionString,
+            DataSource,
+            slotNameGenerator,
+            names,
+            replicationOptions,
+            RawDecoder.Instance,
+            LoggerFactory.CreateLogger("ReplicationEventLogSession"));
+    }
+
+    private static async Task TerminateWalSenderAsync(CancellationToken ct)
+    {
+        await using var command = PostgresTestEnvironment.DataSource.CreateCommand(
+            "SELECT pg_terminate_backend(active_pid) FROM pg_replication_slots " +
+            "WHERE slot_name LIKE 'dbx_test_%' AND active_pid IS NOT NULL");
+
+        (await command.ExecuteScalarAsync(ct)).ShouldBe(true);
+    }
+
+    private static async Task CreateSlotAsync(string slotName, CancellationToken ct)
+    {
+        await using var command = PostgresTestEnvironment.DataSource.CreateCommand(
+            "SELECT pg_create_logical_replication_slot($1, 'pgoutput')");
+
+        command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = slotName });
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task DropSlotIfExistsAsync(string slotName)
+    {
+        await using var command = PostgresTestEnvironment.DataSource.CreateCommand(
+            "SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE slot_name = $1");
+
+        command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = slotName });
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task<List<string>> GetSlotNamesAsync(string prefix, CancellationToken ct)
+    {
+        await using var command = PostgresTestEnvironment.DataSource.CreateCommand(
+            "SELECT slot_name FROM pg_replication_slots WHERE starts_with(slot_name, $1)");
+
+        command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = prefix });
+
+        var names = new List<string>();
+
+        await using var reader = await command.ExecuteReaderAsync(ct);
+
+        while (await reader.ReadAsync(ct))
+            names.Add(reader.GetString(0));
+
+        return names;
+    }
 
     private static async Task<List<(string Name, string Plugin, bool Temporary, bool Active)>> GetSlotsAsync(
         CancellationToken ct)
@@ -234,6 +379,8 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
 
         public Task<Exception> Error => _errorTcs.Task;
 
+        public int ResetCount { get; private set; }
+
         public ValueTask OnNextAsync(EventLogRow<RawEvent> row, CancellationToken cancellationToken)
         {
             // The row is only valid during this call.
@@ -241,7 +388,11 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
             return ValueTask.CompletedTask;
         }
 
-        public ValueTask OnResetAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
+        public ValueTask OnResetAsync(CancellationToken cancellationToken)
+        {
+            ResetCount++;
+            return ValueTask.CompletedTask;
+        }
 
         public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken)
         {

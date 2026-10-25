@@ -57,12 +57,13 @@ public static class PostgresEventStore
         where TEvent : notnull
     {
         var replicationOptions = options.Replication;
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(replicationOptions.InactiveSlotTimeout, TimeSpan.Zero);
 
         var connectionString = replicationOptions.ConnectionString
                                ?? replicationConnectionStringFallback
                                ?? dataSource.ConnectionString;
 
-        var slotNames = new SlotNameGenerator(replicationOptions.SlotNamePrefix);
+        var slotNameGenerator = new SlotNameGenerator(names);
 
         var feedOptions = new EventLogFeedOptions
         {
@@ -73,15 +74,14 @@ public static class PostgresEventStore
 
         return new RefCountedEventLogFeed<EventLogRow<TEvent>>(() =>
             new EventLogFeed<EventLogRow<TEvent>>(
-                ct => ReplicationEventLogSession.OpenAsync(
+                new ReplicationEventLogSessionFactory<TEvent>(
                     connectionString,
                     dataSource,
-                    slotNames.Next(),
+                    slotNameGenerator,
                     names,
                     replicationOptions,
                     decoder,
-                    logger,
-                    ct),
+                    logger),
                 static row => row.Position,
                 feedOptions,
                 logger));

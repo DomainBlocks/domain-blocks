@@ -11,19 +11,27 @@ public sealed class PostgresReplicationOptions
     /// </summary>
     /// <remarks>
     /// A data source's connection string includes the password only with <c>Persist Security Info=true</c>. The role
-    /// needs the REPLICATION attribute or superuser rights, and the server must run with <c>wal_level = logical</c>.
+    /// needs the REPLICATION attribute or superuser rights, and the server must be PostgreSQL 17 or later and run with
+    /// <c>wal_level = logical</c>.
     /// </remarks>
     public string? ConnectionString { get; set; }
 
     /// <summary>
-    /// Gets or sets the prefix of the temporary replication slot names. The prefix must be 1 to 32 characters long and
-    /// contain only lowercase letters, digits, or underscores. The default is <c>dbx</c>.
+    /// Gets or sets how long a replication slot of the store's schema can stay inactive before a store on that schema
+    /// drops it. The value must be positive. The default is 10 minutes.
     /// </summary>
-    public string SlotNamePrefix { get; set; } = "dbx";
+    /// <remarks>
+    /// A store names its slots after its schema. A process that stops without dropping its slot leaves it behind,
+    /// holding WAL. Stores drop the leftover slots of their schema before they create one, and at this interval while
+    /// subscriptions are live. A live store's slot is inactive only while the store reconnects. Each store on a schema
+    /// applies its value to all of the schema's slots, so stores on the same schema should use the same value. To cap
+    /// the WAL that a leftover slot holds, set the server's <c>max_slot_wal_keep_size</c>.
+    /// </remarks>
+    public TimeSpan InactiveSlotTimeout { get; set; } = TimeSpan.FromMinutes(10);
 
     /// <summary>
-    /// Gets or sets a value that indicates whether to receive row values in binary rather than text. Binary values
-    /// require PostgreSQL 14 or later. The default is <see langword="true"/>.
+    /// Gets or sets a value that indicates whether to receive row values in binary rather than text. The default is
+    /// <see langword="true"/>.
     /// </summary>
     public bool UseBinaryProtocol { get; set; } = true;
 

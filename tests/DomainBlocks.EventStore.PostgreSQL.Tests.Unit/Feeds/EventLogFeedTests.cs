@@ -101,6 +101,36 @@ public class EventLogFeedTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
+    public async Task Connect_WhenSessionResumes_ReconnectsWithoutReset(CancellationToken ct)
+    {
+        var feed = CreateFeed(
+            new ScriptedSession("s1", Row(1), Row(2), Throw(new IOException("lost"))),
+            new ScriptedSession("s2", Row(3)) { IsResumed = true });
+
+        var observer = new RecordingObserver();
+        using var attachment = feed.Attach(observer);
+        await using var connection = await feed.ConnectAsync(ct);
+
+        (await observer.ReadAsync(3, ct)).ShouldBe(["row:1", "row:2", "row:3"]);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task Connect_WhenConnectionIsDisposed_DisposesSessionFactory(CancellationToken ct)
+    {
+        var sessionFactory = CreateSessionFactory(new ScriptedSession("s1"));
+        var feed = CreateFeed(sessionFactory);
+
+        var connection = await feed.ConnectAsync(ct);
+        sessionFactory.DisposeCount.ShouldBe(0);
+
+        await connection.DisposeAsync();
+
+        sessionFactory.DisposeCount.ShouldBe(1);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
     public async Task Connect_WhenSessionFailsNonTransiently_FaultsCompletionAndNotifiesObservers(CancellationToken ct)
     {
         var exception = new InvalidOperationException("misconfigured");
@@ -125,13 +155,13 @@ public class EventLogFeedTests
         var attempts = 0;
 
         var feed = new EventLogFeed<long>(
-            _ =>
+            new DelegateSessionFactory<long>(_ =>
             {
                 attempts++;
                 return attempts < 3
                     ? throw new IOException("not yet")
                     : Task.FromResult<IEventLogSession<long>>(new ScriptedSession("s1", Row(1)));
-            },
+            }),
             static x => x,
             FastRetryOptions,
             _logger);
@@ -151,7 +181,7 @@ public class EventLogFeedTests
         var exception = new IOException("still down");
 
         var feed = new EventLogFeed<long>(
-            _ => throw exception,
+            new DelegateSessionFactory<long>(_ => throw exception),
             static x => x,
             new EventLogFeedOptions
             {
@@ -224,11 +254,11 @@ public class EventLogFeedTests
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         var feed = new EventLogFeed<long>(
-            async _ =>
+            new DelegateSessionFactory<long>(async _ =>
             {
                 await release.Task;
                 return new ScriptedSession("s1", Row(1));
-            },
+            }),
             static x => x,
             FastRetryOptions,
             _logger);
@@ -248,7 +278,7 @@ public class EventLogFeedTests
     public async Task ConnectAsync_WhenCancelledDuringRetryBackoff_StopsTheFeed(CancellationToken ct)
     {
         var feed = new EventLogFeed<long>(
-            _ => throw new IOException("down"),
+            new DelegateSessionFactory<long>(_ => throw new IOException("down")),
             static x => x,
             new EventLogFeedOptions { RetryDelay = TimeSpan.FromMinutes(1), MaxRetryDelay = TimeSpan.FromMinutes(1) },
             _logger);
@@ -289,17 +319,19 @@ public class EventLogFeedTests
         await feed.ConnectAsync(ct).ShouldThrowAsync<InvalidOperationException>();
     }
 
-    private EventLogFeed<long> CreateFeed(params IEventLogSession<long>[] sessions)
+    private EventLogFeed<long> CreateFeed(params IEventLogSession<long>[] sessions) =>
+        CreateFeed(CreateSessionFactory(sessions));
+
+    private EventLogFeed<long> CreateFeed(IEventLogSessionFactory<long> sessionFactory) =>
+        new(sessionFactory, static x => x, FastRetryOptions, _logger);
+
+    private static DelegateSessionFactory<long> CreateSessionFactory(params IEventLogSession<long>[] sessions)
     {
         var queue = new Queue<IEventLogSession<long>>(sessions);
 
-        return new EventLogFeed<long>(
-            _ => Task.FromResult(queue.Count > 0
-                ? queue.Dequeue()
-                : throw new InvalidOperationException("The test ran out of scripted sessions.")),
-            static x => x,
-            FastRetryOptions,
-            _logger);
+        return new DelegateSessionFactory<long>(_ => Task.FromResult(queue.Count > 0
+            ? queue.Dequeue()
+            : throw new InvalidOperationException("The test ran out of scripted sessions.")));
     }
 
     private sealed class HighWaterMarkRecordingObserver : IEventLogObserver<long>

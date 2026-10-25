@@ -68,7 +68,7 @@ public class PostgresLiveFanOutBenchmarks
     public async Task<int> FanOut_NoIO()
     {
         var feed = new EventLogFeed<EventLogRow<IDomainEvent>>(
-            _ => Task.FromResult<IEventLogSession<EventLogRow<IDomainEvent>>>(new Session(_decoder, _rows, _streamIds)),
+            new SessionFactory(_decoder, _rows, _streamIds),
             static row => row.Position);
 
         var subscribers = new Subscriber[SubscriberCount];
@@ -98,6 +98,21 @@ public class PostgresLiveFanOutBenchmarks
     }
 
     /// <summary>
+    /// Opens a <see cref="Session"/> and holds nothing across sessions.
+    /// </summary>
+    private sealed class SessionFactory(
+        IEventDecoder<IDomainEvent, PostgresEventData, string> decoder,
+        EncodedEvent<PostgresEventData, string>[] rows,
+        string[] streamIds) :
+        IEventLogSessionFactory<EventLogRow<IDomainEvent>>
+    {
+        public Task<IEventLogSession<EventLogRow<IDomainEvent>>> OpenAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IEventLogSession<EventLogRow<IDomainEvent>>>(new Session(decoder, rows, streamIds));
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    /// <summary>
     /// Sets its one row for each insert and yields it undecoded, as the replication session does, then stays open, as a
     /// live session would.
     /// </summary>
@@ -109,6 +124,8 @@ public class PostgresLiveFanOutBenchmarks
         private readonly EventLogRow<IDomainEvent> _row = new(decoder);
 
         public string Description => "no I/O";
+
+        public bool IsResumed => false;
 
         public async IAsyncEnumerable<EventLogRow<IDomainEvent>> ReadAsync(
             [EnumeratorCancellation] CancellationToken cancellationToken)
