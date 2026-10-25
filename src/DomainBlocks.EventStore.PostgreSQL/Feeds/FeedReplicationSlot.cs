@@ -124,20 +124,16 @@ internal sealed class FeedReplicationSlot : IAsyncDisposable
     }
 
     /// <summary>
-    /// Prepares the slot for the feed's next session, unless the slot has been dropped or invalidated.
+    /// Prepares the slot for the feed's next session.
     /// </summary>
     /// <remarks>
     /// After a session loses its connection, its walsender holds the slot until it notices that the client has gone.
     /// Only the feed's own sessions stream from the slot, so the method ends that walsender rather than wait for it.
     /// Any other process, such as one that is dropping the slot, holds it only while its statement runs. The method
-    /// leaves that process to finish and throws <see cref="ReplicationSlotInUseException"/>, which the feed retries.
+    /// leaves that process to finish and returns <see cref="PrepareForSessionResult.InUse"/>. It returns the same while
+    /// a walsender that it can't end holds the slot.
     /// </remarks>
-    /// <returns>
-    /// <see langword="true"/> if a session can stream from the slot, or <see langword="false"/> if the slot has been
-    /// dropped or invalidated.
-    /// </returns>
-    /// <exception cref="ReplicationSlotInUseException">Another process still holds the slot.</exception>
-    public async Task<bool> TryPrepareForSessionAsync(CancellationToken cancellationToken)
+    public async Task<PrepareForSessionResult> PrepareForSessionAsync(CancellationToken cancellationToken)
     {
         var (isValid, activePid) = await ReadStateAsync(cancellationToken).ConfigureAwait(false);
 
@@ -147,10 +143,10 @@ internal sealed class FeedReplicationSlot : IAsyncDisposable
             (isValid, activePid) = await ReadStateAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        if (isValid && activePid is { } stillActivePid)
-            throw new ReplicationSlotInUseException(Name, stillActivePid);
+        if (!isValid)
+            return PrepareForSessionResult.Lost;
 
-        return isValid;
+        return activePid is null ? PrepareForSessionResult.Ready : PrepareForSessionResult.InUse;
     }
 
     /// <summary>

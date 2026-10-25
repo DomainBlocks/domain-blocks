@@ -52,11 +52,19 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent>(
         // A long-lived feed may never create another slot, so the scavenger also runs on a timer.
         _scavenger.EnsureStarted();
 
-        if (_slot is not null && !await _slot.TryPrepareForSessionAsync(cancellationToken).ConfigureAwait(false))
+        if (_slot is not null)
         {
-            logger?.ReplicationSlotLost(_slot.Name);
-            await _slot.DisposeAsync().ConfigureAwait(false);
-            _slot = null;
+            switch (await _slot.PrepareForSessionAsync(cancellationToken).ConfigureAwait(false))
+            {
+                case PrepareForSessionResult.Lost:
+                    logger?.ReplicationSlotLost(_slot.Name);
+                    await _slot.DisposeAsync().ConfigureAwait(false);
+                    _slot = null;
+                    break;
+
+                case PrepareForSessionResult.InUse:
+                    throw new ReplicationSlotInUseException(_slot.Name);
+            }
         }
 
         if (_slot is null)

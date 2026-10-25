@@ -23,7 +23,7 @@ public class FeedReplicationSlotTests : PostgresIntegrationTest
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task TryPrepareForSessionAsync_HeldByWalSender_EndsWalSender(CancellationToken ct)
+    public async Task PrepareForSessionAsync_HeldByWalSender_EndsWalSender(CancellationToken ct)
     {
         await using var slot = await CreateSlotAsync(ct);
 
@@ -33,7 +33,7 @@ public class FeedReplicationSlotTests : PostgresIntegrationTest
         var streaming = StreamAsync(replication, slot.Name, ct);
         var walSenderPid = await WaitForHolderAsync(slot.Name, ct);
 
-        (await slot.TryPrepareForSessionAsync(ct)).ShouldBeTrue();
+        (await slot.PrepareForSessionAsync(ct)).ShouldBe(PrepareForSessionResult.Ready);
 
         (await IsBackendRunningAsync(walSenderPid, ct)).ShouldBeFalse();
         await Should.ThrowAsync<NpgsqlException>(streaming);
@@ -41,7 +41,7 @@ public class FeedReplicationSlotTests : PostgresIntegrationTest
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task TryPrepareForSessionAsync_HeldByClientBackend_ThrowsInUseWithoutEndingBackend(
+    public async Task PrepareForSessionAsync_HeldByClientBackend_ReturnsInUseWithoutEndingBackend(
         CancellationToken ct)
     {
         await using var slot = await CreateSlotAsync(ct);
@@ -51,7 +51,7 @@ public class FeedReplicationSlotTests : PostgresIntegrationTest
         await DropSlotAsync(slot.Name, ct);
         await using var creation = await BlockedSlotCreation.StartAsync(DataSource, slot.Name, ct);
 
-        await Should.ThrowAsync<ReplicationSlotInUseException>(() => slot.TryPrepareForSessionAsync(ct));
+        (await slot.PrepareForSessionAsync(ct)).ShouldBe(PrepareForSessionResult.InUse);
         (await IsBackendRunningAsync(creation.ProcessId, ct)).ShouldBeTrue();
 
         await creation.CompleteAsync(ct);
@@ -59,12 +59,12 @@ public class FeedReplicationSlotTests : PostgresIntegrationTest
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task TryPrepareForSessionAsync_Dropped_ReturnsFalse(CancellationToken ct)
+    public async Task PrepareForSessionAsync_Dropped_ReturnsLost(CancellationToken ct)
     {
         await using var slot = await CreateSlotAsync(ct);
         await DropSlotAsync(slot.Name, ct);
 
-        (await slot.TryPrepareForSessionAsync(ct)).ShouldBeFalse();
+        (await slot.PrepareForSessionAsync(ct)).ShouldBe(PrepareForSessionResult.Lost);
     }
 
     [Test]
