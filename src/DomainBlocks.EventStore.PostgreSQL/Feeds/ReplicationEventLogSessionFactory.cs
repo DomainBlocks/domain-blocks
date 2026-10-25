@@ -9,8 +9,7 @@ namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 /// <summary>
 /// Opens one feed's logical replication sessions on a <see cref="FeedReplicationSlot"/>, which it creates for the
 /// first session and drops when it is disposed. Each later session resumes on the slot where the previous one stopped,
-/// so a lost connection costs no reset. A dropped or invalidated slot does cost one, because the factory replaces it
-/// with a new slot.
+/// so a lost connection costs no reset. A dropped or invalidated slot is replaced, and the feed resets.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -19,62 +18,43 @@ namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 /// </para>
 /// <para>
 /// Before it creates a slot, and every <see cref="PostgresReplicationOptions.InactiveSlotTimeout"/> while the feed
-/// runs, the factory drops the slots that stores left behind, through an <see cref="InactiveSlotCleaner"/>.
+/// runs, the factory drops the slots that stores left behind, through an <see cref="InactiveSlotScavenger"/>.
 /// </para>
 /// </remarks>
-internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessionFactory<EventLogRow<TEvent>>
+internal sealed class ReplicationEventLogSessionFactory<TEvent>(
+    string connectionString,
+    NpgsqlDataSource dataSource,
+    SlotNameGenerator slotNameGenerator,
+    SchemaObjectNames names,
+    PostgresReplicationOptions options,
+    IEventDecoder<TEvent, PostgresEventData, string> decoder,
+    ILogger? logger) :
+    IEventLogSessionFactory<EventLogRow<TEvent>>
     where TEvent : notnull
 {
-    private readonly string _connectionString;
-    private readonly NpgsqlDataSource _dataSource;
-    private readonly SlotNameGenerator _slotNameGenerator;
-    private readonly SchemaObjectNames _names;
-    private readonly PostgresReplicationOptions _options;
-    private readonly PgOutputReplicationOptions _pgOutputOptions;
-    private readonly IEventDecoder<TEvent, PostgresEventData, string> _decoder;
-    private readonly ILogger? _logger;
-    private readonly InactiveSlotCleaner _cleaner;
+    private readonly PgOutputReplicationOptions _pgOutputOptions = new(
+        names.Publication,
+        PgOutputProtocolVersion.V1,
+        binary: options.UseBinaryProtocol,
+        streamingMode: PgOutputStreamingMode.Off);
+
+    private readonly InactiveSlotScavenger _scavenger = new(
+        dataSource,
+        slotNameGenerator.NamePattern,
+        options.InactiveSlotTimeout,
+        logger);
+
     private FeedReplicationSlot? _slot;
     private bool _hasOpenedSessionOnSlot;
 
-    public ReplicationEventLogSessionFactory(
-        string connectionString,
-        NpgsqlDataSource dataSource,
-        SlotNameGenerator slotNameGenerator,
-        SchemaObjectNames names,
-        PostgresReplicationOptions options,
-        IEventDecoder<TEvent, PostgresEventData, string> decoder,
-        ILogger? logger)
-    {
-        _connectionString = connectionString;
-        _dataSource = dataSource;
-        _slotNameGenerator = slotNameGenerator;
-        _names = names;
-        _options = options;
-        _decoder = decoder;
-        _logger = logger;
-
-        _pgOutputOptions = new PgOutputReplicationOptions(
-            names.Publication,
-            PgOutputProtocolVersion.V1,
-            binary: options.UseBinaryProtocol,
-            streamingMode: PgOutputStreamingMode.Off);
-
-        _cleaner = new InactiveSlotCleaner(
-            dataSource,
-            slotNameGenerator.NamePattern,
-            options.InactiveSlotTimeout,
-            logger);
-    }
-
     public async Task<IEventLogSession<EventLogRow<TEvent>>> OpenAsync(CancellationToken cancellationToken)
     {
-        // A long-lived feed may never create another slot, so the cleanup also runs on a timer.
-        _cleaner.EnsureStarted();
+        // A long-lived feed may never create another slot, so the scavenger also runs on a timer.
+        _scavenger.EnsureStarted();
 
         if (_slot is not null && !await _slot.TryPrepareForSessionAsync(cancellationToken).ConfigureAwait(false))
         {
-            _logger?.ReplicationSlotLost(_slot.Name);
+            logger?.ReplicationSlotLost(_slot.Name);
             await _slot.DisposeAsync().ConfigureAwait(false);
             _slot = null;
         }
@@ -85,10 +65,10 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
             _hasOpenedSessionOnSlot = false;
         }
 
-        var connection = new LogicalReplicationConnection(_connectionString)
+        var connection = new LogicalReplicationConnection(connectionString)
         {
-            WalReceiverTimeout = _options.WalReceiverTimeout,
-            WalReceiverStatusInterval = _options.WalReceiverStatusInterval
+            WalReceiverTimeout = options.WalReceiverTimeout,
+            WalReceiverStatusInterval = options.WalReceiverStatusInterval
         };
 
         try
@@ -105,12 +85,12 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
         var isResumed = _hasOpenedSessionOnSlot;
         _hasOpenedSessionOnSlot = true;
 
-        return new ReplicationEventLogSession<TEvent>(connection, _slot, isResumed, _pgOutputOptions, _names, _decoder);
+        return new ReplicationEventLogSession<TEvent>(connection, _slot, isResumed, _pgOutputOptions, names, decoder);
     }
 
     public async ValueTask DisposeAsync()
     {
-        await _cleaner.DisposeAsync().ConfigureAwait(false);
+        await _scavenger.DisposeAsync().ConfigureAwait(false);
 
         if (_slot is null)
             return;
@@ -122,17 +102,17 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
     private async Task<FeedReplicationSlot> CreateSlotAsync(CancellationToken cancellationToken)
     {
         await CheckServerVersionAsync(cancellationToken).ConfigureAwait(false);
-        await _cleaner.DropInactiveSlotsAsync(cancellationToken).ConfigureAwait(false);
+        await _scavenger.DropInactiveSlotsAsync(cancellationToken).ConfigureAwait(false);
 
         return await FeedReplicationSlot
-            .CreateAsync(_slotNameGenerator.Next(), _connectionString, _dataSource, _names, _logger, cancellationToken)
+            .CreateAsync(slotNameGenerator.Next(), connectionString, dataSource, names, logger, cancellationToken)
             .ConfigureAwait(false);
     }
 
-    // The cleanup reads inactive_since, which PostgreSQL 17 added.
+    // The scavenger reads inactive_since, which PostgreSQL 17 added.
     private async Task CheckServerVersionAsync(CancellationToken cancellationToken)
     {
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         if (connection.PostgreSqlVersion.Major < 17)
         {

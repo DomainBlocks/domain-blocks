@@ -84,7 +84,7 @@ internal sealed class FeedReplicationSlot : IAsyncDisposable
 
         try
         {
-            await WaitForAppendInFlightAsync(connection, names, cancellationToken).ConfigureAwait(false);
+            await WaitForInFlightAppendAsync(connection, names, cancellationToken).ConfigureAwait(false);
         }
         catch
         {
@@ -143,7 +143,7 @@ internal sealed class FeedReplicationSlot : IAsyncDisposable
 
         if (isValid && activePid is { } pid)
         {
-            await TryTerminateWalSenderAsync(pid, cancellationToken).ConfigureAwait(false);
+            await TerminateIfWalSenderAsync(pid, cancellationToken).ConfigureAwait(false);
             (isValid, activePid) = await ReadStateAsync(cancellationToken).ConfigureAwait(false);
         }
 
@@ -208,7 +208,7 @@ internal sealed class FeedReplicationSlot : IAsyncDisposable
 
     // Ends the backend with the given process ID if it is a walsender, and waits up to five seconds for it to exit.
     // Ending a walsender of another role needs pg_signal_backend.
-    private async Task TryTerminateWalSenderAsync(int processId, CancellationToken cancellationToken)
+    private async Task TerminateIfWalSenderAsync(int processId, CancellationToken cancellationToken)
     {
         await using var command = _dataSource.CreateCommand(TerminateWalSenderSql);
         command.Parameters.Add(new NpgsqlParameter<int> { TypedValue = processId });
@@ -220,13 +220,14 @@ internal sealed class FeedReplicationSlot : IAsyncDisposable
         catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.InsufficientPrivilege)
         {
             // The walsender ends on its own once it notices that its client has gone.
+            _logger?.WalSenderTerminationDenied(ex, processId, Name);
         }
     }
 
     // A transaction can commit just before the slot's consistent point and still be invisible to queries, while the
     // slot won't stream it. Appends hold the sequence row until they are visible, so taking the row waits for any such
     // append. Once the first session opens, queries see every row that the slot won't stream.
-    private static async Task WaitForAppendInFlightAsync(
+    private static async Task WaitForInFlightAppendAsync(
         NpgsqlConnection connection,
         SchemaObjectNames names,
         CancellationToken cancellationToken)

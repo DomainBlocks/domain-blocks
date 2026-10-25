@@ -103,6 +103,14 @@ internal static partial class LogMessages
     [LoggerMessage(LogLevel.Information, "[replication] dropped inactive slot {SlotName}")]
     internal static partial void InactiveReplicationSlotDropped(this ILogger logger, string slotName);
 
+    [LoggerMessage(
+        LogLevel.Debug,
+        "[replication] skipped inactive slot {SlotName}, which was dropped or became active")]
+    internal static partial void InactiveReplicationSlotDropSkipped(
+        this ILogger logger,
+        Exception exception,
+        string slotName);
+
     [LoggerMessage(LogLevel.Warning, "[replication] could not drop inactive slots; trying again in {Interval}")]
     internal static partial void InactiveReplicationSlotCleanupFailed(
         this ILogger logger,
@@ -111,6 +119,16 @@ internal static partial class LogMessages
 
     [LoggerMessage(LogLevel.Warning, "[replication] slot {SlotName} was dropped or invalidated; creating a new one")]
     internal static partial void ReplicationSlotLost(this ILogger logger, string slotName);
+
+    [LoggerMessage(
+        LogLevel.Warning,
+        "[replication] could not end walsender {ProcessId}, which holds slot {SlotName}; waiting for it to notice " +
+        "that its client has gone")]
+    internal static partial void WalSenderTerminationDenied(
+        this ILogger logger,
+        Exception exception,
+        int processId,
+        string slotName);
 
     [LoggerMessage(LogLevel.Debug, "[feed: {FeedId}] connected ({Session})")]
     internal static partial void FeedConnected(this ILogger logger, string feedId, string session);

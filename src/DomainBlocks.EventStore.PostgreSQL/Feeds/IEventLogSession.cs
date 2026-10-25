@@ -17,9 +17,12 @@ internal interface IEventLogSession<out T> : IAsyncDisposable
     string Description { get; }
 
     /// <summary>
-    /// Gets a value that indicates whether the session continues where the feed's previous session stopped, so that no
-    /// row was missed in between.
+    /// Gets a value that indicates whether the session continues where the feed's previous session stopped.
     /// </summary>
+    /// <remarks>
+    /// When this is <see langword="false"/> for any session but the feed's first, the feed resets its observers, which
+    /// re-read from their last position the rows committed in between.
+    /// </remarks>
     bool IsResumed { get; }
 
     IAsyncEnumerable<T> ReadAsync(CancellationToken cancellationToken);

@@ -11,7 +11,7 @@ namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 /// A process that stops without dropping its slot leaves it behind, holding WAL. A live feed's slot is inactive only
 /// while the feed reconnects. If the slot is dropped anyway, the feed creates a new one and resets.
 /// </remarks>
-internal sealed class InactiveSlotCleaner(
+internal sealed class InactiveSlotScavenger(
     NpgsqlDataSource dataSource,
     string slotNamePattern,
     TimeSpan inactiveSlotTimeout,
@@ -37,8 +37,8 @@ internal sealed class InactiveSlotCleaner(
     private Task? _periodicCleanup;
 
     /// <summary>
-    /// Starts dropping inactive slots every <c>inactiveSlotTimeout</c> until the cleaner is disposed. It does nothing
-    /// if the cleaner has already started.
+    /// Starts dropping inactive slots every <c>inactiveSlotTimeout</c> until the scavenger is disposed. It does nothing
+    /// if the scavenger has already started.
     /// </summary>
     public void EnsureStarted() => _periodicCleanup ??= DropInactiveSlotsPeriodicallyAsync(_stop.Token);
 
@@ -76,6 +76,7 @@ internal sealed class InactiveSlotCleaner(
                                                    or PostgresErrorCodes.ObjectInUse)
             {
                 // Another feed dropped it first, or its own feed reconnected.
+                logger?.InactiveReplicationSlotDropSkipped(ex, slotName);
             }
         }
     }
@@ -110,7 +111,7 @@ internal sealed class InactiveSlotCleaner(
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            // The cleaner has been disposed.
+            // The scavenger has been disposed.
         }
     }
 }
