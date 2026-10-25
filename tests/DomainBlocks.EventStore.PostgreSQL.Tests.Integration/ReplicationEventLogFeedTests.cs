@@ -140,6 +140,35 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task Connect_WhenWalSenderIsTerminatedMidTransaction_ResumesWithoutRepeatingRows(CancellationToken ct)
+    {
+        var feed = CreateFeed();
+        var observer = new CollectingObserver();
+        using var attachment = feed.Attach(observer);
+        await using var connection = await feed.ConnectAsync(ct);
+
+        // The transaction is far larger than the buffers between the walsender and the feed, so while the observer
+        // holds the feed on the first row, the walsender can't send the commit.
+        var bytes = new byte[64 * 1024];
+        var events = Enumerable.Range(0, 500).Select(i => Event.WithBytes($"e{i}", bytes)).ToArray();
+        var hold = observer.HoldNext();
+        await Client.AppendAsync([Any("s1", events)], ct);
+        await hold.WaitAsync(ct);
+
+        await WaitForWalSenderToBlockAsync(ct);
+        await TerminateWalSenderAsync(ct);
+        observer.Release();
+        await Client.AppendAsync([Any("s1", JsonEvent("marker"))], ct);
+
+        (await observer.ReadThroughAsync("marker", ct))
+            .Select(x => x.Context.LogPosition)
+            .ShouldBe(Enumerable.Range(0, events.Length + 1).Select(i => LogPosition.FromInt64(i)));
+
+        observer.ResetCount.ShouldBe(0);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task Connect_Streaming_HoldsPermanentSlotUntilDisposed(CancellationToken ct)
     {
         var feed = CreateFeed();
@@ -302,6 +331,16 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
         (await command.ExecuteScalarAsync(ct)).ShouldBe(true);
     }
 
+    private static async Task WaitForWalSenderToBlockAsync(CancellationToken ct)
+    {
+        await using var command = PostgresTestEnvironment.DataSource.CreateCommand(
+            "SELECT EXISTS (SELECT FROM pg_stat_activity a JOIN pg_replication_slots s ON a.pid = s.active_pid " +
+            "WHERE s.slot_name LIKE 'dbx_test_%' AND a.wait_event = 'WalSenderWriteData')");
+
+        while (await command.ExecuteScalarAsync(ct) is not true)
+            await Task.Delay(10, ct);
+    }
+
     private static async Task CreateSlotAsync(string slotName, CancellationToken ct)
     {
         await using var command = PostgresTestEnvironment.DataSource.CreateCommand(
@@ -377,15 +416,36 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
         private readonly TaskCompletionSource<Exception> _errorTcs =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        private readonly TaskCompletionSource _releaseTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private TaskCompletionSource? _holdTcs;
+
         public Task<Exception> Error => _errorTcs.Task;
 
         public int ResetCount { get; private set; }
 
-        public ValueTask OnNextAsync(EventLogRow<RawEvent> row, CancellationToken cancellationToken)
+        /// <summary>
+        /// Holds the feed in the next row's notification, after the row is collected, until <see cref="Release"/>.
+        /// The returned task completes once the feed is held.
+        /// </summary>
+        public Task HoldNext()
+        {
+            var holdTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            Volatile.Write(ref _holdTcs, holdTcs);
+            return holdTcs.Task;
+        }
+
+        public void Release() => _releaseTcs.TrySetResult();
+
+        public async ValueTask OnNextAsync(EventLogRow<RawEvent> row, CancellationToken cancellationToken)
         {
             // The row is only valid during this call.
             _channel.Writer.TryWrite(ReadEvent.Create(row.Payload, row.Metadata, row.Context));
-            return ValueTask.CompletedTask;
+
+            if (Interlocked.Exchange(ref _holdTcs, null) is { } holdTcs)
+            {
+                holdTcs.SetResult();
+                await _releaseTcs.Task.WaitAsync(cancellationToken);
+            }
         }
 
         public ValueTask OnResetAsync(CancellationToken cancellationToken)
@@ -403,6 +463,16 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
         public async Task<RawReadEvent[]> ReadAsync(int count, CancellationToken cancellationToken)
         {
             return await _channel.Reader.ReadAllAsync(cancellationToken).Take(count).ToArrayAsync(cancellationToken);
+        }
+
+        public async Task<List<RawReadEvent>> ReadThroughAsync(string eventName, CancellationToken cancellationToken)
+        {
+            var events = new List<RawReadEvent>();
+
+            while (events.Count == 0 || events[^1].Payload.EventName != eventName)
+                events.Add(await _channel.Reader.ReadAsync(cancellationToken));
+
+            return events;
         }
     }
 }

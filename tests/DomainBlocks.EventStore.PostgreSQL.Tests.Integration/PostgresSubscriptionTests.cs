@@ -8,8 +8,8 @@ using Shouldly;
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
 /// <summary>
-/// PostgreSQL-specific subscription behavior beyond the shared suite: slot sharing, stream-position resume, and the
-/// replication barrier without synchronous standbys.
+/// PostgreSQL-specific subscription behavior beyond the shared suite: slot sharing, stream-position resume, the order
+/// of a large append, and the replication barrier without synchronous standbys.
 /// </summary>
 [TestFixture]
 public class PostgresSubscriptionTests : PostgresIntegrationTest
@@ -129,6 +129,37 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
         observed.ShouldAllBe(x => x.Context.StreamId == "target");
         observed.Select(x => x.Context.StreamPosition.Value).ShouldBe(Enumerable.Range(0, 40).Select(i => (ulong)i));
         fellBehindCount.ShouldBeGreaterThan(0);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_LargeAppendWhileLive_ObservesEveryEventInOrder(CancellationToken ct)
+    {
+        await using var enumerator = _eventStore
+            .SubscribeToAll(SubscriptionOrigin.Start)
+            .GetAsyncEnumerator(ct);
+
+        await ShouldBeCaughtUpAsync(enumerator);
+
+        // More event data than a hash join keeps in memory by default (work_mem x hash_mem_multiplier, 8 MB). Past
+        // that, an unordered insert returns its rows batch by batch rather than in position order.
+        var padding = new string('x', 48 * 1024);
+        var events = Enumerable.Range(0, 300).Select(i => new TestEvent { Value = $"{i}-{padding}" }).ToArray();
+        await _eventStore.AppendAsync("s1", [.. events.Select(Appendable)], cancellationToken: ct);
+
+        var markerEvent = new TestEvent { Value = "marker" };
+        await _eventStore.AppendAsync("s2", [Appendable(markerEvent)], cancellationToken: ct);
+
+        var observedEvents = new List<ReadEvent<object, string, StreamPosition, LogPosition>>();
+
+        while (observedEvents.Count == 0 || observedEvents[^1].Context.StreamId != "s2")
+            observedEvents.Add(await NextEventAsync(enumerator));
+
+        observedEvents.Select(x => x.Payload).ShouldBe(events.Append(markerEvent));
+
+        observedEvents
+            .Select(x => x.Context.LogPosition)
+            .ShouldBe(Enumerable.Range(0, events.Length + 1).Select(i => LogPosition.FromInt64(i)));
     }
 
     [Test]

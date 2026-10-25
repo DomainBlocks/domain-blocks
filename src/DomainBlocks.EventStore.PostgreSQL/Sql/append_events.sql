@@ -146,8 +146,9 @@ BEGIN
                                         0) AS first_pos
                         FROM chain AS c
                                  JOIN request AS r ON r.ord = c.ord),
-            -- One insert for every accepted event. The arrays are read through unnest rather than by subscript, so the
-            -- cost stays linear in the batch size.
+            -- One insert for every accepted event, in position order, which is the order logical replication sends
+            -- them in. Without the ORDER BY, a hash join that spills to disk returns them out of order. The arrays are
+            -- read through unnest rather than by subscript, so the cost stays linear in the batch size.
             inserted AS (
                 INSERT INTO __schema__.event_log (position,
                                                   stream_id,
@@ -159,7 +160,7 @@ BEGIN
                                                   event_data_bytes,
                                                   metadata,
                                                   created_at)
-                    SELECT d.first_pos + g.k,
+                    SELECT d.first_pos + g.k AS position,
                            d.stream_id,
                            d.head_before + 1 + g.k,
                            d.commit_id,
@@ -175,6 +176,7 @@ BEGIN
                         WITH ORDINALITY AS ev(event_name, event_data, event_data_bytes, metadata, ord)
                                   ON ev.ord = d.event_offset + g.k
                     WHERE d.status = 'appended'
+                    ORDER BY position
                     RETURNING 1),
             -- The sequence advances by exactly the number of rows inserted. Conflicts and duplicates leave no gap, and
             -- a batch that appended nothing leaves the row untouched.
