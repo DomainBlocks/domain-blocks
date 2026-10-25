@@ -212,21 +212,19 @@ public class PostgresSynchronousStandbyTests
         await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
         await using var eventStore = CreateEventStore(dataSource);
 
-        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
-        (await subscription.MoveNextAsync()).ShouldBeTrue();
-        subscription.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
+        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).Probe(ct);
+        (await subscription.NextAsync()).IsCaughtUp.ShouldBeTrue();
 
         await _server.CutOffStandbyAsync();
         await AppendWithCanceledWaitAsync(dataSource, "e", ct);
-        var next = subscription.MoveNextAsync().AsTask();
+        var next = subscription.NextAsync();
 
         await Task.Delay(HoldDuration, ct);
         next.IsCompleted.ShouldBeFalse();
 
         await _server.ReconnectStandbyAsync();
 
-        (await next).ShouldBeTrue();
-        subscription.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
+        (await next).Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
     }
 
     [Test]
@@ -249,22 +247,20 @@ public class PostgresSynchronousStandbyTests
             }
         });
 
-        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
-        (await subscription.MoveNextAsync()).ShouldBeTrue();
-        subscription.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
+        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).Probe(ct);
+        (await subscription.NextAsync()).IsCaughtUp.ShouldBeTrue();
 
         await eventStore.AppendAsync(
             "s1",
             [AppendableEvent.Create<object>(new TestEvent { Value = "before" })],
             cancellationToken: ct);
 
-        (await subscription.MoveNextAsync()).ShouldBeTrue();
-        subscription.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "before" });
+        (await subscription.NextEventAsync()).ShouldBe(new TestEvent { Value = "before" });
         await WaitForSlotCopyAsync(ct);
 
         await _server.CutOffStandbyAsync();
         await AppendWithCanceledWaitAsync(dataSource, "lost", ct);
-        var next = subscription.MoveNextAsync().AsTask();
+        var next = subscription.NextAsync();
 
         await Task.Delay(HoldDuration, ct);
         next.IsCompleted.ShouldBeFalse();
@@ -280,8 +276,7 @@ public class PostgresSynchronousStandbyTests
             [AppendableEvent.Create<object>(new TestEvent { Value = "after" })],
             cancellationToken: ct);
 
-        (await next).ShouldBeTrue();
-        var e = subscription.Current.Event.ShouldNotBeNull();
+        var e = (await next).Event.ShouldNotBeNull();
         e.Payload.ShouldBe(new TestEvent { Value = "after" });
         e.Context.LogPosition.ShouldBe(LogPosition.FromInt64(1));
     }
@@ -296,15 +291,13 @@ public class PostgresSynchronousStandbyTests
 
         await _server.ClearSynchronizedStandbySlotsAsync();
 
-        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
-        (await subscription.MoveNextAsync()).ShouldBeTrue();
-        subscription.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
+        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).Probe(ct);
+        (await subscription.NextAsync()).IsCaughtUp.ShouldBeTrue();
 
         await _server.CutOffStandbyAsync();
         await AppendWithCanceledWaitAsync(dataSource, "e", ct);
 
-        (await subscription.MoveNextAsync()).ShouldBeTrue();
-        subscription.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
+        (await subscription.NextEventAsync()).ShouldBe(new TestEvent { Value = "e" });
     }
 
     // Calls append_events directly, and cancels its commit's wait for the standby, so the event is visible on the
@@ -363,7 +356,7 @@ public class PostgresSynchronousStandbyTests
             "SELECT EXISTS (SELECT 1 FROM pg_replication_slots " +
             "WHERE slot_type = 'logical' AND synced AND NOT temporary)");
 
-        while (!(bool)(await isCopied.ExecuteScalarAsync(ct))!)
+        while (!(bool)(await isCopied.ExecuteScalarAsync(ct)).ShouldNotBeNull())
             await Task.Delay(100, ct);
     }
 
