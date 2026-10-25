@@ -218,9 +218,9 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
 
         await stop.CancelAsync();
         await Task.WhenAll(otherWrites, terminations);
-        await Client.AppendAsync([Any("s1", JsonEvent("after"))], ct);
+        await Client.AppendAsync([Any("s1", JsonEvent("marker"))], ct);
 
-        (await observer.ReadThroughAsync("after", ct))
+        (await observer.ReadThroughAsync("marker", ct))
             .Select(x => x.Context.LogPosition)
             .ShouldBe(Enumerable.Range(0, count + 1).Select(i => LogPosition.FromInt64(i)));
 
