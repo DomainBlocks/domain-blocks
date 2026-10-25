@@ -17,8 +17,9 @@ internal static class EventLogFeedResumePolicy
             ReplicationSlotLostException => true,
             ReplicationSlotInUseException => true,
 
-            // Npgsql counts this as transient, but the session factory has already turned an invalidated slot's into a
-            // lost slot, so what remains is misconfiguration, such as the wrong wal_level.
+            // Npgsql counts this error as transient. An invalidated slot raises it too, but the session reports that as
+            // ReplicationSlotLostException. What remains is misconfiguration, such as the wrong wal_level, which
+            // retrying can't fix.
             PostgresException { SqlState: PostgresErrorCodes.ObjectNotInPrerequisiteState } => false,
 
             PostgresException { SqlState: PostgresErrorCodes.AdminShutdown } => true,
