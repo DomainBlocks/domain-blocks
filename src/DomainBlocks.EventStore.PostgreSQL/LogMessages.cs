@@ -103,6 +103,12 @@ internal static partial class LogMessages
     [LoggerMessage(LogLevel.Information, "[replication] dropped inactive slot {SlotName}")]
     internal static partial void InactiveReplicationSlotDropped(this ILogger logger, string slotName);
 
+    [LoggerMessage(LogLevel.Warning, "[replication] could not drop inactive slots; trying again in {Interval}")]
+    internal static partial void InactiveReplicationSlotCleanupFailed(
+        this ILogger logger,
+        Exception exception,
+        TimeSpan interval);
+
     [LoggerMessage(LogLevel.Warning, "[replication] slot {SlotName} was dropped or invalidated; creating a new one")]
     internal static partial void ReplicationSlotLost(this ILogger logger, string slotName);
 

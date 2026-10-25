@@ -19,10 +19,11 @@ namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 /// <c>connectionString</c>.
 /// </para>
 /// <para>
-/// A process that stops without dropping its slot leaves it behind, holding WAL. Before it creates a slot, the factory
-/// drops the inactive slots that stores named with the configured prefix, and that are invalidated or have been
-/// inactive for longer than <see cref="PostgresReplicationOptions.InactiveSlotTimeout"/>. A live feed's slot is
-/// inactive only while the feed reconnects. If a slot is dropped anyway, its feed creates a new one and resets.
+/// A process that stops without dropping its slot leaves it behind, holding WAL. Before it creates a slot, and
+/// periodically while the feed runs, the factory drops the inactive slots that stores named with the configured prefix,
+/// and that are invalidated or have been inactive for longer than
+/// <see cref="PostgresReplicationOptions.InactiveSlotTimeout"/>. A live feed's slot is inactive only while the feed
+/// reconnects. If a slot is dropped anyway, its feed creates a new one and resets.
 /// </para>
 /// </remarks>
 internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessionFactory<EventLogRow<TEvent>>
@@ -62,8 +63,10 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
     private readonly PgOutputReplicationOptions _pgOutputOptions;
     private readonly IEventDecoder<TEvent, PostgresEventData, string> _decoder;
     private readonly ILogger? _logger;
+    private readonly CancellationTokenSource _cleanupStop = new();
     private string? _slotName;
     private bool _hasOpenedSession;
+    private Task? _cleanup;
 
     public ReplicationEventLogSessionFactory(
         string connectionString,
@@ -102,6 +105,8 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
 
     public async Task<IEventLogSession<EventLogRow<TEvent>>> OpenAsync(CancellationToken cancellationToken)
     {
+        _cleanup ??= DropInactiveSlotsPeriodicallyAsync(_cleanupStop.Token);
+
         if (_slotName is not null)
             await PrepareToResumeAsync(_slotName, cancellationToken).ConfigureAwait(false);
 
@@ -144,6 +149,13 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
 
     public async ValueTask DisposeAsync()
     {
+        await _cleanupStop.CancelAsync().ConfigureAwait(false);
+
+        if (_cleanup is not null)
+            await _cleanup.ConfigureAwait(false);
+
+        _cleanupStop.Dispose();
+
         if (_slotName is not { } slotName)
             return;
 
@@ -301,6 +313,35 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
             {
                 // Another feed dropped it first, or its own feed reconnected.
             }
+        }
+    }
+
+    // A long-lived feed may not create another slot, so the cleanup also runs on a timer. Each run takes a connection
+    // from the pool only while it runs.
+    private async Task DropInactiveSlotsPeriodicallyAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(_options.InactiveSlotTimeout);
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+            {
+                try
+                {
+                    await using var connection =
+                        await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+                    await DropInactiveSlotsAsync(connection, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+                {
+                    _logger?.InactiveReplicationSlotCleanupFailed(ex, _options.InactiveSlotTimeout);
+                }
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The feed has stopped.
         }
     }
 

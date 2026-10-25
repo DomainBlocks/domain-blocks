@@ -216,6 +216,38 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task Connect_LeftoverSlotAfterStart_DropsSlotWhileRunning(CancellationToken ct)
+    {
+        var options = new PostgresReplicationOptions
+        {
+            SlotNamePrefix = "dbx_sweep",
+            InactiveSlotTimeout = TimeSpan.FromSeconds(1)
+        };
+
+        var leftover = new SlotNameGenerator(options.SlotNamePrefix).Next();
+
+        try
+        {
+            var feed = CreateFeed(new SlotNameGenerator(options.SlotNamePrefix), options);
+            using var attachment = feed.Attach(new CollectingObserver());
+            await using var connection = await feed.ConnectAsync(ct);
+
+            // The feed has created its slot, so only the timer can drop a slot that another store leaves behind now.
+            await CreateSlotAsync(leftover, ct);
+
+            while ((await GetSlotNamesAsync(options.SlotNamePrefix, ct)).Contains(leftover))
+                await Task.Delay(100, ct);
+
+            (await GetSlotNamesAsync(options.SlotNamePrefix, ct)).Count.ShouldBe(1);
+        }
+        finally
+        {
+            await DropSlotIfExistsAsync(leftover);
+        }
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task Connect_WhenPublicationIsMissing_Faults(CancellationToken ct)
     {
         var options = new PostgresEventStoreOptions { Schema = "dbx_no_publication" };
