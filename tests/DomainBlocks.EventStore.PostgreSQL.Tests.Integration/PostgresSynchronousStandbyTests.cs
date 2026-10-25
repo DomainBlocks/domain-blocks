@@ -313,9 +313,8 @@ public class PostgresSynchronousStandbyTests
             Replication = { WalReceiverStatusInterval = TimeSpan.FromMilliseconds(100) }
         });
 
-        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
-        (await subscription.MoveNextAsync()).ShouldBeTrue();
-        subscription.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
+        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).Probe(ct);
+        (await subscription.NextAsync()).IsCaughtUp.ShouldBeTrue();
 
         // With no events, only the keepalives' position can move the slot. Logging the running transactions here saves
         // waiting for the primary to log them.

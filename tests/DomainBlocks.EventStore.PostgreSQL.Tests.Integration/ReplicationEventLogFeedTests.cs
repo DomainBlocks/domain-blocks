@@ -426,7 +426,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
     private static async Task<NpgsqlLogSequenceNumber> GetCurrentWalLsnAsync(CancellationToken ct)
     {
         await using var command = PostgresTestEnvironment.DataSource.CreateCommand("SELECT pg_current_wal_lsn()");
-        return (NpgsqlLogSequenceNumber)(await command.ExecuteScalarAsync(ct))!;
+        return (NpgsqlLogSequenceNumber)(await command.ExecuteScalarAsync(ct)).ShouldNotBeNull();
     }
 
     private static async Task<bool> HasSlotPassedAsync(NpgsqlLogSequenceNumber lsn, CancellationToken ct)
@@ -440,7 +440,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
             NpgsqlDbType = NpgsqlDbType.PgLsn
         });
 
-        return (bool)(await command.ExecuteScalarAsync(ct))!;
+        return (bool)(await command.ExecuteScalarAsync(ct)).ShouldNotBeNull();
     }
 
     private static async Task WaitForWalSenderToBlockAsync(CancellationToken ct)
