@@ -150,13 +150,13 @@ internal sealed class EventLogReader<TEvent>(
     /// </summary>
     public Task<long?> ReadMaxStreamPositionWithBarrierAsync(string streamId, CancellationToken cancellationToken)
     {
-        var read = new NpgsqlBatchCommand(sql.MaxStreamPosition);
-        read.Parameters.Add(new NpgsqlParameter<string> { TypedValue = streamId });
+        var query = new NpgsqlBatchCommand(sql.MaxStreamPosition);
+        query.Parameters.Add(new NpgsqlParameter<string> { TypedValue = streamId });
 
         var barrier = new NpgsqlBatchCommand(sql.BarrierAfterStreamEnd);
         barrier.Parameters.Add(new NpgsqlParameter<string> { TypedValue = streamId });
 
-        return ReadWithBarrierAsync(read, barrier, ReadMaxPositionAsync, cancellationToken);
+        return ReadWithBarrierAsync(query, barrier, ReadMaxPositionAsync, cancellationToken);
     }
 
     public async Task<bool> StreamExistsAsync(string streamId, CancellationToken cancellationToken)
@@ -167,14 +167,14 @@ internal sealed class EventLogReader<TEvent>(
         return (bool)(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
     }
 
-    // Runs the read and then the replication barrier in one round trip, so a failover can't undo what the read saw. The
-    // batch is one transaction, and its commit waits for the synchronous standbys, so it covers every commit that the
-    // read saw. Rows can reach the client before the commit, so the read's result is used only once the batch
+    // Runs the query and then the replication barrier in one round trip, so a failover can't undo what the query saw.
+    // The batch is one transaction, and its commit waits for the synchronous standbys, so it covers every commit that
+    // the query saw. Rows can reach the client before the commit, so the query's result is used only once the batch
     // completes. A canceled wait completes with only a warning, so any warning means the barrier was not confirmed.
     private async Task<T> ReadWithBarrierAsync<T>(
-        NpgsqlBatchCommand read,
+        NpgsqlBatchCommand query,
         NpgsqlBatchCommand barrier,
-        Func<NpgsqlDataReader, CancellationToken, Task<T>> readResult,
+        Func<NpgsqlDataReader, CancellationToken, Task<T>> resultReader,
         CancellationToken cancellationToken)
     {
         var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -188,14 +188,14 @@ internal sealed class EventLogReader<TEvent>(
             try
             {
                 await using var batch = new NpgsqlBatch(connection);
-                batch.BatchCommands.Add(read);
+                batch.BatchCommands.Add(query);
                 batch.BatchCommands.Add(barrier);
 
                 var reader = await batch.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
 
                 await using (reader.ConfigureAwait(false))
                 {
-                    result = await readResult(reader, cancellationToken).ConfigureAwait(false);
+                    result = await resultReader(reader, cancellationToken).ConfigureAwait(false);
 
                     // The batch completes once its commit has, so closing the reader waits for the standbys.
                     await reader.CloseAsync().ConfigureAwait(false);

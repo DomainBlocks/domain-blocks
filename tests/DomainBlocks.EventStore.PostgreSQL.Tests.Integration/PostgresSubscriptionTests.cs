@@ -162,7 +162,7 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
     private async Task<string> GetWalPositionAsync(CancellationToken ct)
     {
         await using var command = DataSource.CreateCommand("SELECT pg_current_wal_lsn()::text");
-        return (string)(await command.ExecuteScalarAsync(ct))!;
+        return (string)(await command.ExecuteScalarAsync(ct)).ShouldNotBeNull();
     }
 
     // Only the barrier writes logical messages.
@@ -181,7 +181,7 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
 
         command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = start });
 
-        return (long)(await command.ExecuteScalarAsync(ct))!;
+        return (long)(await command.ExecuteScalarAsync(ct)).ShouldNotBeNull();
     }
 
     private static async Task<ReadEvent<object, string, StreamPosition, LogPosition>> NextEventAsync(

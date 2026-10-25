@@ -159,7 +159,7 @@ public class PostgresSynchronousStandbyTests
 
         await using var standby = NpgsqlDataSource.Create(_server.StandbyConnectionString);
         await using var count = standby.CreateCommand($"SELECT count(*) FROM {_options.Schema}.event_log");
-        ((long)(await count.ExecuteScalarAsync(ct))!).ShouldBe(1);
+        ((long)(await count.ExecuteScalarAsync(ct)).ShouldNotBeNull()).ShouldBe(1);
     }
 
     [Test]
