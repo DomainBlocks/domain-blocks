@@ -147,17 +147,17 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
         var events = Enumerable.Range(0, 300).Select(i => new TestEvent { Value = $"{i}-{padding}" }).ToArray();
         await _eventStore.AppendAsync("s1", [.. events.Select(Appendable)], cancellationToken: ct);
 
-        var after = new TestEvent { Value = "after" };
-        await _eventStore.AppendAsync("s2", [Appendable(after)], cancellationToken: ct);
+        var markerEvent = new TestEvent { Value = "marker" };
+        await _eventStore.AppendAsync("s2", [Appendable(markerEvent)], cancellationToken: ct);
 
-        var observed = new List<ReadEvent<object, string, StreamPosition, LogPosition>>();
+        var observedEvents = new List<ReadEvent<object, string, StreamPosition, LogPosition>>();
 
-        while (observed.Count == 0 || observed[^1].Context.StreamId != "s2")
-            observed.Add(await NextEventAsync(enumerator));
+        while (observedEvents.Count == 0 || observedEvents[^1].Context.StreamId != "s2")
+            observedEvents.Add(await NextEventAsync(enumerator));
 
-        observed.Select(x => x.Payload).ShouldBe(events.Append(after));
+        observedEvents.Select(x => x.Payload).ShouldBe(events.Append(markerEvent));
 
-        observed
+        observedEvents
             .Select(x => x.Context.LogPosition)
             .ShouldBe(Enumerable.Range(0, events.Length + 1).Select(i => LogPosition.FromInt64(i)));
     }

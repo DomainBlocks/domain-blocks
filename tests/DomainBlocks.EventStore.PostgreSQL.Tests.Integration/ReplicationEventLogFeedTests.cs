@@ -151,16 +151,16 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
         // holds the feed on the first row, the walsender can't send the commit.
         var bytes = new byte[64 * 1024];
         var events = Enumerable.Range(0, 500).Select(i => Event.WithBytes($"e{i}", bytes)).ToArray();
-        var held = observer.HoldNext();
+        var hold = observer.HoldNext();
         await Client.AppendAsync([Any("s1", events)], ct);
-        await held.WaitAsync(ct);
+        await hold.WaitAsync(ct);
 
         await WaitForWalSenderToBlockAsync(ct);
         await TerminateWalSenderAsync(ct);
         observer.Release();
-        await Client.AppendAsync([Any("s1", JsonEvent("after"))], ct);
+        await Client.AppendAsync([Any("s1", JsonEvent("marker"))], ct);
 
-        (await observer.ReadThroughAsync("after", ct))
+        (await observer.ReadThroughAsync("marker", ct))
             .Select(x => x.Context.LogPosition)
             .ShouldBe(Enumerable.Range(0, events.Length + 1).Select(i => LogPosition.FromInt64(i)));
 
@@ -417,7 +417,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         private readonly TaskCompletionSource _releaseTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private TaskCompletionSource? _heldTcs;
+        private TaskCompletionSource? _holdTcs;
 
         public Task<Exception> Error => _errorTcs.Task;
 
@@ -429,9 +429,9 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
         /// </summary>
         public Task HoldNext()
         {
-            var heldTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            Volatile.Write(ref _heldTcs, heldTcs);
-            return heldTcs.Task;
+            var holdTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            Volatile.Write(ref _holdTcs, holdTcs);
+            return holdTcs.Task;
         }
 
         public void Release() => _releaseTcs.TrySetResult();
@@ -441,9 +441,9 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
             // The row is only valid during this call.
             _channel.Writer.TryWrite(ReadEvent.Create(row.Payload, row.Metadata, row.Context));
 
-            if (Interlocked.Exchange(ref _heldTcs, null) is { } heldTcs)
+            if (Interlocked.Exchange(ref _holdTcs, null) is { } holdTcs)
             {
-                heldTcs.SetResult();
+                holdTcs.SetResult();
                 await _releaseTcs.Task.WaitAsync(cancellationToken);
             }
         }
