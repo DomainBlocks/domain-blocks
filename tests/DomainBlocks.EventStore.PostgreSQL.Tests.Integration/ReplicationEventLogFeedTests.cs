@@ -166,7 +166,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task Connect_SlotsWithPrefix_DropsOnlyInactiveOnesPastTimeout(CancellationToken ct)
+    public async Task Connect_LeftoverSlots_DropsOnlyStoreNamedOnesPastTimeout(CancellationToken ct)
     {
         var options = new PostgresReplicationOptions
         {
@@ -176,31 +176,41 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
 
         var slotNames = new SlotNameGenerator(options.SlotNamePrefix);
 
+        // Slots that other stores named, as a process that stopped without dropping its slot leaves them, and one that
+        // a store didn't name.
+        var orphan = new SlotNameGenerator(options.SlotNamePrefix).Next();
+        var longerPrefix = new SlotNameGenerator($"{options.SlotNamePrefix}_x").Next();
+        var recent = new SlotNameGenerator(options.SlotNamePrefix).Next();
+        const string notStoreNamed = "dbx_cleanup_orphan";
+
         try
         {
             var running = CreateFeed(slotNames, options);
             using var runningAttachment = running.Attach(new CollectingObserver());
             await using var runningConnection = await running.ConnectAsync(ct);
 
-            await CreateSlotAsync("dbx_cleanup_orphan", ct);
-            await CreateSlotAsync("dbx_cleanupx_orphan", ct);
+            await CreateSlotAsync(orphan, ct);
+            await CreateSlotAsync(longerPrefix, ct);
+            await CreateSlotAsync(notStoreNamed, ct);
             await Task.Delay(options.InactiveSlotTimeout * 2, ct);
-            await CreateSlotAsync("dbx_cleanup_recent", ct);
+            await CreateSlotAsync(recent, ct);
 
             var starting = CreateFeed(slotNames, options);
             using var startingAttachment = starting.Attach(new CollectingObserver());
             await using var startingConnection = await starting.ConnectAsync(ct);
 
-            var names = await GetSlotNamesAsync("dbx_cleanup", ct);
-            names.ShouldNotContain("dbx_cleanup_orphan");
-            names.ShouldContain("dbx_cleanupx_orphan");
-            names.ShouldContain("dbx_cleanup_recent");
-            names.Count(x => x.StartsWith($"{options.SlotNamePrefix}_", StringComparison.Ordinal)).ShouldBe(3);
+            // Only the orphan is dropped. The running and starting feeds' slots are kept as well.
+            var names = await GetSlotNamesAsync(options.SlotNamePrefix, ct);
+            names.ShouldNotContain(orphan);
+            names.ShouldContain(longerPrefix);
+            names.ShouldContain(notStoreNamed);
+            names.ShouldContain(recent);
+            names.Count.ShouldBe(5);
         }
         finally
         {
-            await DropSlotIfExistsAsync("dbx_cleanupx_orphan");
-            await DropSlotIfExistsAsync("dbx_cleanup_recent");
+            foreach (var name in new[] { orphan, longerPrefix, notStoreNamed, recent })
+                await DropSlotIfExistsAsync(name);
         }
     }
 

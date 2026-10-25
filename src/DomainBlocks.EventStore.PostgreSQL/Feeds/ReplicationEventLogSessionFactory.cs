@@ -20,9 +20,9 @@ namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 /// </para>
 /// <para>
 /// A process that stops without dropping its slot leaves it behind, holding WAL. Before it creates a slot, the factory
-/// drops the inactive slots with the configured prefix that are invalidated or have been inactive for longer than
-/// <see cref="PostgresReplicationOptions.InactiveSlotTimeout"/>. A live feed's slot is inactive only while the feed
-/// reconnects. If a slot is dropped anyway, its feed creates a new one and resets.
+/// drops the inactive slots that stores named with the configured prefix, and that are invalidated or have been
+/// inactive for longer than <see cref="PostgresReplicationOptions.InactiveSlotTimeout"/>. A live feed's slot is
+/// inactive only while the feed reconnects. If a slot is dropped anyway, its feed creates a new one and resets.
 /// </para>
 /// </remarks>
 internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessionFactory<EventLogRow<TEvent>>
@@ -37,7 +37,8 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
     private const string SlotStateSql =
         "SELECT invalidation_reason IS NULL, active_pid FROM pg_replication_slots WHERE slot_name = $1";
 
-    // The slots in this database with the prefix ($1) that are invalidated or inactive for longer than $2.
+    // The slots in this database whose names match the pattern ($1) and that are invalidated or inactive for longer
+    // than $2.
     private const string SelectInactiveSlotsSql =
         """
         SELECT slot_name
@@ -45,7 +46,7 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
         WHERE database = current_database()
           AND slot_type = 'logical'
           AND NOT active
-          AND left(slot_name, length($1) + 1) = $1 || '_'
+          AND slot_name ~ $1
           AND (invalidation_reason IS NOT NULL OR inactive_since < now() - $2)
         """;
 
@@ -276,7 +277,7 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
 
         await using (var select = new NpgsqlCommand(SelectInactiveSlotsSql, connection))
         {
-            select.Parameters.Add(new NpgsqlParameter<string> { TypedValue = _options.SlotNamePrefix });
+            select.Parameters.Add(new NpgsqlParameter<string> { TypedValue = _slotNames.NamePattern });
             select.Parameters.Add(new NpgsqlParameter<TimeSpan> { TypedValue = _options.InactiveSlotTimeout });
 
             await using var reader = await select.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);

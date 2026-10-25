@@ -9,8 +9,9 @@ namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 internal sealed partial class SlotNameGenerator
 {
     private const int MaxSlotNameLength = 63;
+    private const int InstanceIdLength = 12;
     private readonly string _prefix;
-    private readonly string _instanceId = Guid.NewGuid().ToString("N")[..12];
+    private readonly string _instanceId = Guid.NewGuid().ToString("N")[..InstanceIdLength];
     private int _counter;
 
     public SlotNameGenerator(string prefix)
@@ -26,6 +27,12 @@ internal sealed partial class SlotNameGenerator
 
         _prefix = prefix;
     }
+
+    /// <summary>
+    /// A PostgreSQL regular expression that matches the names that any generator with this prefix creates. The prefix
+    /// needs no escaping, since it contains no special characters.
+    /// </summary>
+    public string NamePattern => $"^{_prefix}_[0-9a-f]{{{InstanceIdLength}}}_[0-9]+$";
 
     public string Next()
     {

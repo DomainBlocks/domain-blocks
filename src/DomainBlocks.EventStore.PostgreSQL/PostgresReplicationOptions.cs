@@ -23,9 +23,9 @@ public sealed class PostgresReplicationOptions
     public string SlotNamePrefix { get; set; } = "dbx";
 
     /// <summary>
-    /// Gets or sets how long a replication slot with the prefix can stay inactive before a store that creates a slot
-    /// drops it. A process that stops without dropping its slot leaves it behind, and the slot holds WAL until it is
-    /// dropped. The default is 10 minutes.
+    /// Gets or sets how long a replication slot that a store named with the prefix can stay inactive before a store
+    /// that creates a slot drops it. A process that stops without dropping its slot leaves it behind, and the slot
+    /// holds WAL until it is dropped. The default is 10 minutes.
     /// </summary>
     /// <remarks>
     /// A store's slot is inactive only while the store reconnects. If it is dropped anyway, the store creates a new
