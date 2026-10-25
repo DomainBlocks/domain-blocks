@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing;
 using DomainBlocks.Testing.Events;
+using DomainBlocks.Testing.Integration.EventStore;
 using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -11,7 +12,6 @@ using Shouldly;
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Aurora;
 
 using EventStore = IEventStore<object, string, StreamPosition, LogPosition>;
-using Subscription = IAsyncEnumerator<SubscriptionMessage<object, string, StreamPosition, LogPosition>>;
 
 /// <summary>
 /// Live subscriptions on an Aurora PostgreSQL cluster with a writer and a reader, which <c>run.sh</c> creates. See
@@ -170,14 +170,12 @@ public class AuroraSubscriptionTests
         await using var dataSource = CreateDataSource(_connectionString);
         await using var eventStore = CreateEventStore(dataSource);
 
-        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
-        (await subscription.MoveNextAsync()).ShouldBeTrue();
-        subscription.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
+        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).Probe(ct);
+        (await subscription.NextAsync()).IsCaughtUp.ShouldBeTrue();
 
         await AppendAsync(eventStore, "e", ct);
 
-        (await subscription.MoveNextAsync()).ShouldBeTrue();
-        subscription.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
+        (await subscription.NextEventAsync()).ShouldBe(new TestEvent { Value = "e" });
     }
 
     [Test]
@@ -193,8 +191,8 @@ public class AuroraSubscriptionTests
         await using var proxiedDataSource = CreateDataSource(proxied.ConnectionString);
         await using var eventStore = CreateEventStore(proxiedDataSource);
 
-        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
-        var next = subscription.MoveNextAsync().AsTask();
+        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).Probe(ct);
+        var next = subscription.NextAsync();
 
         // The subscription keeps trying while it reaches the reader. If it fails instead, this throws its error.
         await Task.WhenAny(next, Task.Delay(ReaderDuration, ct));
@@ -208,10 +206,10 @@ public class AuroraSubscriptionTests
         await using var appender = CreateEventStore(dataSource);
         await AppendAsync(appender, "e", ct);
 
-        (await next).ShouldBeTrue();
+        var message = await next;
 
-        while (subscription.Current.Event is not { Payload: TestEvent { Value: "e" } })
-            (await subscription.MoveNextAsync()).ShouldBeTrue();
+        while (message.Event is not { Payload: TestEvent { Value: "e" } })
+            message = await subscription.NextAsync();
     }
 
     [Test]
@@ -221,7 +219,7 @@ public class AuroraSubscriptionTests
         await using var dataSource = CreateDataSource(_connectionString);
         await using var eventStore = CreateEventStore(dataSource);
 
-        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
+        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).Probe(ct);
         var delivered = ReadUntilAsync(subscription, "end");
 
         var appender = new ContinuousAppender(eventStore);
@@ -257,13 +255,15 @@ public class AuroraSubscriptionTests
     }
 
     // Returns the position and value of every event delivered, up to and including the one with the given value.
-    private static async Task<List<(LogPosition, string)>> ReadUntilAsync(Subscription subscription, string last)
+    private static async Task<List<(LogPosition, string)>> ReadUntilAsync(
+        SubscriptionProbe<StreamPosition, LogPosition> subscription,
+        string last)
     {
         var events = new List<(LogPosition, string)>();
 
-        while (await subscription.MoveNextAsync())
+        while (true)
         {
-            if (subscription.Current.Event is not { } e)
+            if ((await subscription.NextAsync()).Event is not { } e)
                 continue;
 
             var value = ((TestEvent)e.Payload).Value;
@@ -272,8 +272,6 @@ public class AuroraSubscriptionTests
             if (value == last)
                 return events;
         }
-
-        throw new InvalidOperationException("The subscription ended.");
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition, CancellationToken ct)

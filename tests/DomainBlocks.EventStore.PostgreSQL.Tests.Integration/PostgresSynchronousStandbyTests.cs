@@ -294,7 +294,7 @@ public class PostgresSynchronousStandbyTests
         await using var appender = CreateEventStore(dataSource);
 
         // The proxy stands in for an endpoint that still reaches a standby, as one can for a while after a failover.
-        await using var proxy = new TcpProxy(new DnsEndPoint(standby.Host!, standby.Port));
+        await using var proxy = new TcpProxy(new DnsEndPoint(standby.Host.ShouldNotBeNull(), standby.Port));
 
         await using var proxiedDataSource = CreateDataSource(x =>
         {
@@ -312,24 +312,22 @@ public class PostgresSynchronousStandbyTests
             }
         });
 
-        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
-        var next = subscription.MoveNextAsync().AsTask();
+        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).Probe(ct);
+        var next = subscription.NextAsync();
 
         await Task.Delay(HoldDuration, ct);
         next.IsCompleted.ShouldBeFalse();
 
-        proxy.MoveTo(new DnsEndPoint(primary.Host!, primary.Port));
+        proxy.MoveTo(new DnsEndPoint(primary.Host.ShouldNotBeNull(), primary.Port));
 
-        (await next).ShouldBeTrue();
-        subscription.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
+        (await next).IsCaughtUp.ShouldBeTrue();
 
         await appender.AppendAsync(
             "s1",
             [AppendableEvent.Create<object>(new TestEvent { Value = "e" })],
             cancellationToken: ct);
 
-        (await subscription.MoveNextAsync()).ShouldBeTrue();
-        subscription.Current.Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
+        (await subscription.NextEventAsync()).ShouldBe(new TestEvent { Value = "e" });
     }
 
     [Test]
