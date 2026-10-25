@@ -8,32 +8,33 @@ using Npgsql.Replication.PgOutput.Messages;
 namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 
 /// <summary>
-/// A logical replication session over the slot of a <see cref="ReplicationEventLogSessionFactory{TEvent}"/>. It yields
-/// committed inserts in commit order, which is also position order because appends serialize on the sequence row. Each
-/// yield is the one <see cref="EventLogRow{TEvent}"/> that the session reuses, still undecoded, and it is valid only
-/// until the next row is read.
+/// A logical replication session on a feed's <see cref="FeedReplicationSlot"/>. It yields committed inserts in commit
+/// order, which is also position order because appends serialize on the sequence row. Each yield is the one
+/// <see cref="EventLogRow{TEvent}"/> that the session reuses, still undecoded, and it is valid only until the next row
+/// is read.
 /// </summary>
+/// <remarks>
+/// The session starts after the last transaction that the feed delivered from the slot. It records on the slot what it
+/// delivers, so that the next session continues where this one stops.
+/// </remarks>
 internal sealed class ReplicationEventLogSession<TEvent> : IEventLogSession<EventLogRow<TEvent>>
     where TEvent : notnull
 {
     private readonly LogicalReplicationConnection _connection;
-    private readonly ReplicationEventLogSessionFactory<TEvent> _factory;
-    private readonly PgOutputReplicationSlot _slot;
+    private readonly FeedReplicationSlot _slot;
     private readonly PgOutputReplicationOptions _pgOutputOptions;
     private readonly SchemaObjectNames _names;
     private readonly EventLogRow<TEvent> _row;
 
     public ReplicationEventLogSession(
         LogicalReplicationConnection connection,
-        ReplicationEventLogSessionFactory<TEvent> factory,
-        PgOutputReplicationSlot slot,
+        FeedReplicationSlot slot,
         bool isResumed,
         PgOutputReplicationOptions pgOutputOptions,
         SchemaObjectNames names,
         IEventDecoder<TEvent, PostgresEventData, string> decoder)
     {
         _connection = connection;
-        _factory = factory;
         _slot = slot;
         IsResumed = isResumed;
         _pgOutputOptions = pgOutputOptions;
@@ -48,8 +49,10 @@ internal sealed class ReplicationEventLogSession<TEvent> : IEventLogSession<Even
     public async IAsyncEnumerable<EventLogRow<TEvent>> ReadAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        var pgOutputSlot = new PgOutputReplicationSlot(_slot.Name);
+
         var messages = _connection
-            .StartReplication(_slot, _pgOutputOptions, cancellationToken, _factory.ResumeLsn)
+            .StartReplication(pgOutputSlot, _pgOutputOptions, cancellationToken, _slot.ResumeLsn)
             .GetAsyncEnumerator(cancellationToken);
 
         await using (messages.ConfigureAwait(false))
@@ -79,19 +82,19 @@ internal sealed class ReplicationEventLogSession<TEvent> : IEventLogSession<Even
 
                         // A session resumes after the last transaction delivered in full, so it can repeat the rows of
                         // a transaction that the previous session delivered in part.
-                        if (row.Position <= _factory.LastPosition)
+                        if (row.Position <= _slot.LastDeliveredPosition)
                             break;
 
                         yield return row;
 
                         // The feed has handed the row to its observers.
-                        _factory.LastPosition = row.Position;
+                        _slot.RecordDeliveredRow(row.Position);
                         break;
 
                     case CommitMessage commit:
                         // Everything up to here has been handed to observers, so the server may release the WAL, and a
                         // later session starts after this transaction.
-                        _factory.ResumeLsn = commit.WalEnd;
+                        _slot.RecordDeliveredTransaction(commit.WalEnd);
                         _connection.SetReplicationStatus(commit.WalEnd);
                         break;
                 }
@@ -101,7 +104,8 @@ internal sealed class ReplicationEventLogSession<TEvent> : IEventLogSession<Even
 
     public ValueTask DisposeAsync() => _connection.DisposeAsync();
 
-    // A dropped or invalidated slot fails START_REPLICATION, which the factory turns into a lost slot.
+    // A dropped or invalidated slot fails START_REPLICATION with UndefinedObject or ObjectNotInPrerequisiteState. Other
+    // errors share these codes, such as a missing publication, so the slot itself is checked.
     private async ValueTask<bool> MoveNextAsync(
         IAsyncEnumerator<PgOutputReplicationMessage> messages,
         CancellationToken cancellationToken)
@@ -113,7 +117,9 @@ internal sealed class ReplicationEventLogSession<TEvent> : IEventLogSession<Even
         catch (PostgresException ex) when (ex.SqlState is PostgresErrorCodes.UndefinedObject
                                                or PostgresErrorCodes.ObjectNotInPrerequisiteState)
         {
-            await _factory.ThrowIfSlotLostAsync(_slot.Name, ex, cancellationToken).ConfigureAwait(false);
+            if (await _slot.IsLostAsync(cancellationToken).ConfigureAwait(false))
+                throw new ReplicationSlotLostException(_slot.Name, ex);
+
             throw;
         }
     }

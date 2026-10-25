@@ -1,17 +1,16 @@
-using System.Data;
 using DomainBlocks.EventStore.Codecs;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Npgsql.Replication;
 using Npgsql.Replication.PgOutput;
-using NpgsqlTypes;
 
 namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 
 /// <summary>
-/// Opens one feed's logical replication sessions over a permanent pgoutput slot, which it creates for the first session
-/// and drops when it is disposed. Each later session resumes where the previous one stopped, so a lost connection costs
-/// no reset. A dropped or invalidated slot does: the next session gets a new slot.
+/// Opens one feed's logical replication sessions on a <see cref="FeedReplicationSlot"/>, which it creates for the
+/// first session and drops when it is disposed. Each later session resumes on the slot where the previous one stopped,
+/// so a lost connection costs no reset. A dropped or invalidated slot does cost one, because the factory replaces it
+/// with a new slot.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -19,42 +18,13 @@ namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 /// <c>connectionString</c>.
 /// </para>
 /// <para>
-/// A process that stops without dropping its slot leaves it behind, holding WAL. Before it creates a slot, and
-/// periodically while the feed runs, the factory drops the inactive slots that stores named with the configured prefix,
-/// and that are invalidated or have been inactive for longer than
-/// <see cref="PostgresReplicationOptions.InactiveSlotTimeout"/>. A live feed's slot is inactive only while the feed
-/// reconnects. If a slot is dropped anyway, its feed creates a new one and resets.
+/// Before it creates a slot, and every <see cref="PostgresReplicationOptions.InactiveSlotTimeout"/> while the feed
+/// runs, the factory drops the slots that stores left behind, through an <see cref="InactiveSlotCleaner"/>.
 /// </para>
 /// </remarks>
 internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessionFactory<EventLogRow<TEvent>>
     where TEvent : notnull
 {
-    private const string CreateSlotSql = "SELECT pg_create_logical_replication_slot($1, 'pgoutput')";
-    private const string DropSlotSql = "SELECT pg_drop_replication_slot($1)";
-
-    private const string TerminateWalSenderSql =
-        "SELECT pg_terminate_backend(pid, 5000) FROM pg_stat_activity WHERE pid = $1 AND backend_type = 'walsender'";
-
-    private const string SlotStateSql =
-        "SELECT invalidation_reason IS NULL, active_pid FROM pg_replication_slots WHERE slot_name = $1";
-
-    // The slots in this database whose names match the pattern ($1) and that are invalidated or inactive for longer
-    // than $2.
-    private const string SelectInactiveSlotsSql =
-        """
-        SELECT slot_name
-        FROM pg_replication_slots
-        WHERE database = current_database()
-          AND slot_type = 'logical'
-          AND NOT active
-          AND slot_name ~ $1
-          AND (invalidation_reason IS NOT NULL OR inactive_since < now() - $2)
-        """;
-
-    // A walsender that hasn't yet noticed that its client has gone holds the slot until wal_sender_timeout. A slot that
-    // can't be dropped in time is left to a later cleanup.
-    private static readonly TimeSpan DropSlotTimeout = TimeSpan.FromSeconds(10);
-
     private readonly string _connectionString;
     private readonly NpgsqlDataSource _dataSource;
     private readonly SlotNameGenerator _slotNameGenerator;
@@ -63,10 +33,9 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
     private readonly PgOutputReplicationOptions _pgOutputOptions;
     private readonly IEventDecoder<TEvent, PostgresEventData, string> _decoder;
     private readonly ILogger? _logger;
-    private readonly CancellationTokenSource _cleanupStop = new();
-    private string? _slotName;
-    private bool _hasOpenedSession;
-    private Task? _cleanup;
+    private readonly InactiveSlotCleaner _cleaner;
+    private FeedReplicationSlot? _slot;
+    private bool _hasOpenedSessionOnSlot;
 
     public ReplicationEventLogSessionFactory(
         string connectionString,
@@ -90,31 +59,30 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
             PgOutputProtocolVersion.V1,
             binary: options.UseBinaryProtocol,
             streamingMode: PgOutputStreamingMode.Off);
+
+        _cleaner = new InactiveSlotCleaner(
+            dataSource,
+            slotNameGenerator.NamePattern,
+            options.InactiveSlotTimeout,
+            logger);
     }
-
-    /// <summary>
-    /// The end of the last transaction that a session delivered in full, which the next session starts after, or
-    /// <see langword="null"/> to start where the slot does.
-    /// </summary>
-    public NpgsqlLogSequenceNumber? ResumeLsn { get; set; }
-
-    /// <summary>
-    /// The position of the last row that a session delivered.
-    /// </summary>
-    public long LastPosition { get; set; } = -1;
 
     public async Task<IEventLogSession<EventLogRow<TEvent>>> OpenAsync(CancellationToken cancellationToken)
     {
-        _cleanup ??= DropInactiveSlotsPeriodicallyAsync(_cleanupStop.Token);
+        // A long-lived feed may never create another slot, so the cleanup also runs on a timer.
+        _cleaner.EnsureStarted();
 
-        if (_slotName is not null)
-            await PrepareToResumeAsync(_slotName, cancellationToken).ConfigureAwait(false);
-
-        if (_slotName is null)
+        if (_slot is not null && !await _slot.TryPrepareForSessionAsync(cancellationToken).ConfigureAwait(false))
         {
-            _slotName = await CreateSlotAsync(cancellationToken).ConfigureAwait(false);
-            _hasOpenedSession = false;
-            ResumeLsn = null;
+            _logger?.ReplicationSlotLost(_slot.Name);
+            await _slot.DisposeAsync().ConfigureAwait(false);
+            _slot = null;
+        }
+
+        if (_slot is null)
+        {
+            _slot = await CreateSlotAsync(cancellationToken).ConfigureAwait(false);
+            _hasOpenedSessionOnSlot = false;
         }
 
         var connection = new LogicalReplicationConnection(_connectionString)
@@ -134,253 +102,42 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
         }
 
         // The first session on a slot starts where the slot does, and a later one resumes the session before it.
-        var isResumed = _hasOpenedSession;
-        _hasOpenedSession = true;
+        var isResumed = _hasOpenedSessionOnSlot;
+        _hasOpenedSessionOnSlot = true;
 
-        return new ReplicationEventLogSession<TEvent>(
-            connection,
-            this,
-            new PgOutputReplicationSlot(_slotName),
-            isResumed,
-            _pgOutputOptions,
-            _names,
-            _decoder);
+        return new ReplicationEventLogSession<TEvent>(connection, _slot, isResumed, _pgOutputOptions, _names, _decoder);
     }
 
     public async ValueTask DisposeAsync()
     {
-        await _cleanupStop.CancelAsync().ConfigureAwait(false);
+        await _cleaner.DisposeAsync().ConfigureAwait(false);
 
-        if (_cleanup is not null)
-            await _cleanup.ConfigureAwait(false);
-
-        _cleanupStop.Dispose();
-
-        if (_slotName is not { } slotName)
+        if (_slot is null)
             return;
 
-        _slotName = null;
-        await TryDropSlotAsync(slotName).ConfigureAwait(false);
+        await _slot.DisposeAsync().ConfigureAwait(false);
+        _slot = null;
     }
 
-    /// <summary>
-    /// Called when START_REPLICATION fails with an error that a dropped or invalidated slot causes. Other failures
-    /// share those error codes, such as a missing publication, so the slot itself is checked. If it is lost, the next
-    /// session gets a new slot.
-    /// </summary>
-    /// <exception cref="ReplicationSlotLostException">The slot was dropped or invalidated.</exception>
-    public async Task ThrowIfSlotLostAsync(
-        string slotName,
-        PostgresException exception,
-        CancellationToken cancellationToken)
+    private async Task<FeedReplicationSlot> CreateSlotAsync(CancellationToken cancellationToken)
     {
-        var (isValid, _) = await ReadSlotStateAsync(slotName, cancellationToken).ConfigureAwait(false);
+        await CheckServerVersionAsync(cancellationToken).ConfigureAwait(false);
+        await _cleaner.DropInactiveSlotsAsync(cancellationToken).ConfigureAwait(false);
 
-        if (isValid)
-            return;
-
-        ForgetSlot(slotName);
-        throw new ReplicationSlotLostException(slotName, exception);
+        return await FeedReplicationSlot
+            .CreateAsync(_slotNameGenerator.Next(), _connectionString, _dataSource, _names, _logger, cancellationToken)
+            .ConfigureAwait(false);
     }
 
-    // The slot can be lost while no session streams from it. The walsender of a session whose connection was lost holds
-    // the slot until it notices, and that walsender is this feed's, so it is ended rather than waited for. Any other
-    // backend, such as one that drops the slot, holds it only while its statement runs, so it is left to finish, and
-    // the session waits for it as for a slot in use.
-    private async Task PrepareToResumeAsync(string slotName, CancellationToken cancellationToken)
-    {
-        var (isValid, activePid) = await ReadSlotStateAsync(slotName, cancellationToken).ConfigureAwait(false);
-
-        if (isValid && activePid is { } pid)
-        {
-            await TryTerminateWalSenderAsync(_dataSource, pid, cancellationToken).ConfigureAwait(false);
-            (isValid, activePid) = await ReadSlotStateAsync(slotName, cancellationToken).ConfigureAwait(false);
-        }
-
-        if (!isValid)
-            ForgetSlot(slotName);
-        else if (activePid is { } stillActivePid)
-            throw new ReplicationSlotInUseException(slotName, stillActivePid);
-    }
-
-    // A missing slot is not valid either.
-    private async Task<(bool IsValid, int? ActivePid)> ReadSlotStateAsync(
-        string slotName,
-        CancellationToken cancellationToken)
-    {
-        await using var command = _dataSource.CreateCommand(SlotStateSql);
-        command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = slotName });
-
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-
-        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false) || !reader.GetBoolean(0))
-            return (false, null);
-
-        return (true, reader.IsDBNull(1) ? null : reader.GetInt32(1));
-    }
-
-    /// <summary>
-    /// Ends the backend with the given process ID if it is a walsender, waiting up to five seconds for it to exit.
-    /// Ending one of another role needs pg_signal_backend.
-    /// </summary>
-    internal static async Task TryTerminateWalSenderAsync(
-        NpgsqlDataSource dataSource,
-        int pid,
-        CancellationToken cancellationToken)
-    {
-        await using var command = dataSource.CreateCommand(TerminateWalSenderSql);
-        command.Parameters.Add(new NpgsqlParameter<int> { TypedValue = pid });
-
-        try
-        {
-            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.InsufficientPrivilege)
-        {
-            // The walsender ends on its own once it notices that its client has gone.
-        }
-    }
-
-    private void ForgetSlot(string slotName)
-    {
-        _slotName = null;
-        _logger?.ReplicationSlotLost(slotName);
-    }
-
-    private async Task<string> CreateSlotAsync(CancellationToken cancellationToken)
+    // The cleanup reads inactive_since, which PostgreSQL 17 added.
+    private async Task CheckServerVersionAsync(CancellationToken cancellationToken)
     {
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-        // The cleanup reads inactive_since, which PostgreSQL 17 added.
         if (connection.PostgreSqlVersion.Major < 17)
         {
             throw new NotSupportedException(
                 $"Live subscriptions require PostgreSQL 17 or later, but the server is {connection.ServerVersion}.");
-        }
-
-        await DropInactiveSlotsAsync(connection, cancellationToken).ConfigureAwait(false);
-
-        var slotName = _slotNameGenerator.Next();
-
-        await using (var create = new NpgsqlCommand(CreateSlotSql, connection))
-        {
-            create.Parameters.Add(new NpgsqlParameter<string> { TypedValue = slotName });
-            await create.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-        }
-
-        _logger?.ReplicationSlotCreated(slotName);
-
-        try
-        {
-            await WaitForAppendInFlightAsync(connection, cancellationToken).ConfigureAwait(false);
-        }
-        catch
-        {
-            await TryDropSlotAsync(slotName).ConfigureAwait(false);
-            throw;
-        }
-
-        return slotName;
-    }
-
-    private async Task DropInactiveSlotsAsync(NpgsqlConnection connection, CancellationToken cancellationToken)
-    {
-        var slotNames = new List<string>();
-
-        await using (var select = new NpgsqlCommand(SelectInactiveSlotsSql, connection))
-        {
-            select.Parameters.Add(new NpgsqlParameter<string> { TypedValue = _slotNameGenerator.NamePattern });
-            select.Parameters.Add(new NpgsqlParameter<TimeSpan> { TypedValue = _options.InactiveSlotTimeout });
-
-            await using var reader = await select.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-
-            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-                slotNames.Add(reader.GetString(0));
-        }
-
-        foreach (var slotName in slotNames)
-        {
-            await using var drop = new NpgsqlCommand(DropSlotSql, connection);
-            drop.Parameters.Add(new NpgsqlParameter<string> { TypedValue = slotName });
-
-            try
-            {
-                await drop.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-                _logger?.InactiveReplicationSlotDropped(slotName);
-            }
-            catch (PostgresException ex) when (ex.SqlState is PostgresErrorCodes.UndefinedObject
-                                                   or PostgresErrorCodes.ObjectInUse)
-            {
-                // Another feed dropped it first, or its own feed reconnected.
-            }
-        }
-    }
-
-    // A long-lived feed may not create another slot, so the cleanup also runs on a timer. Each run takes a connection
-    // from the pool only while it runs.
-    private async Task DropInactiveSlotsPeriodicallyAsync(CancellationToken cancellationToken)
-    {
-        using var timer = new PeriodicTimer(_options.InactiveSlotTimeout);
-
-        try
-        {
-            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
-            {
-                try
-                {
-                    await using var connection =
-                        await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-
-                    await DropInactiveSlotsAsync(connection, cancellationToken).ConfigureAwait(false);
-                }
-                catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
-                {
-                    _logger?.InactiveReplicationSlotCleanupFailed(ex, _options.InactiveSlotTimeout);
-                }
-            }
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            // The feed has stopped.
-        }
-    }
-
-    // A transaction can commit just before the slot's consistent point and still be invisible to queries, while the
-    // slot won't stream it. Appends hold the sequence row until they are visible, so taking the row waits for any such
-    // append. Once the first session opens, queries see every row that the slot won't stream.
-    private async Task WaitForAppendInFlightAsync(NpgsqlConnection connection, CancellationToken cancellationToken)
-    {
-        // Only READ COMMITTED takes the row once the append ends. A stricter level fails with a serialization error.
-        await using var transaction = await connection
-            .BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
-            .ConfigureAwait(false);
-
-        await using (var command = new NpgsqlCommand(new EventLogSql(_names).ShareSequenceRow, connection))
-            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    // A slot that can't be dropped here is left to a later cleanup.
-    private async Task TryDropSlotAsync(string slotName)
-    {
-        using var timeout = new CancellationTokenSource(DropSlotTimeout);
-
-        try
-        {
-            var connection = new LogicalReplicationConnection(_connectionString);
-
-            await using (connection.ConfigureAwait(false))
-            {
-                await connection.Open(timeout.Token).ConfigureAwait(false);
-                await connection.DropReplicationSlot(slotName, wait: true, timeout.Token).ConfigureAwait(false);
-            }
-
-            _logger?.ReplicationSlotDropped(slotName);
-        }
-        catch (Exception ex)
-        {
-            _logger?.ReplicationSlotDropFailed(ex, slotName);
         }
     }
 }
