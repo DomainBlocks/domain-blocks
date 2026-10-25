@@ -1,13 +1,15 @@
 using DomainBlocks.Testing.Events;
 using DomainBlocks.Testing.Integration.EventStore;
 using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
+using Npgsql;
 using NUnit.Framework;
 using Shouldly;
 
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
 /// <summary>
-/// PostgreSQL-specific subscription behavior beyond the shared suite: slot sharing and stream-position resume.
+/// PostgreSQL-specific subscription behavior beyond the shared suite: slot sharing, stream-position resume, and the
+/// replication barrier without synchronous standbys.
 /// </summary>
 [TestFixture]
 public class PostgresSubscriptionTests : PostgresIntegrationTest
@@ -129,12 +131,57 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
         fellBehindCount.ShouldBeGreaterThan(0);
     }
 
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_NoSynchronousStandby_WritesNoBarrier(CancellationToken ct)
+    {
+        var e = new TestEvent { Value = "e" };
+        await _eventStore.AppendAsync("s1", [Appendable(e)], cancellationToken: ct);
+
+        await using (var command = DataSource.CreateCommand("CREATE EXTENSION IF NOT EXISTS pg_walinspect"))
+            await command.ExecuteNonQueryAsync(ct);
+
+        var start = await GetWalPositionAsync(ct);
+
+        // The catch-up's end read finds the event, so the barrier would write if a synchronous standby were configured.
+        await using var subscription = _eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
+        (await NextEventAsync(subscription)).Payload.ShouldBe(e);
+        await ShouldBeCaughtUpAsync(subscription);
+
+        (await CountLogicalMessagesSinceAsync(start, ct)).ShouldBe(0);
+    }
+
     private static async Task<long> CountSlotsAsync(CancellationToken ct)
     {
         await using var command = PostgresTestEnvironment.DataSource.CreateCommand(
             "SELECT count(*) FROM pg_replication_slots WHERE slot_name LIKE 'dbx_%'");
 
         return (long)(await command.ExecuteScalarAsync(ct))!;
+    }
+
+    private async Task<string> GetWalPositionAsync(CancellationToken ct)
+    {
+        await using var command = DataSource.CreateCommand("SELECT pg_current_wal_lsn()::text");
+        return (string)(await command.ExecuteScalarAsync(ct)).ShouldNotBeNull();
+    }
+
+    // Only the barrier writes logical messages.
+    private async Task<long> CountLogicalMessagesSinceAsync(string start, CancellationToken ct)
+    {
+        await using var command = DataSource.CreateCommand(
+            """
+            SELECT CASE
+                WHEN pg_current_wal_lsn() > $1::pg_lsn THEN (
+                    SELECT count(*)
+                    FROM pg_get_wal_records_info($1::pg_lsn, pg_current_wal_lsn())
+                    WHERE resource_manager = 'LogicalMessage')
+                ELSE 0
+            END
+            """);
+
+        command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = start });
+
+        return (long)(await command.ExecuteScalarAsync(ct)).ShouldNotBeNull();
     }
 
     private static async Task<ReadEvent<object, string, StreamPosition, LogPosition>> NextEventAsync(
