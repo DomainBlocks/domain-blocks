@@ -103,7 +103,8 @@ public class PostgresLiveFanOutBenchmarks
     private sealed class SessionFactory(
         IEventDecoder<IDomainEvent, PostgresEventData, string> decoder,
         EncodedEvent<PostgresEventData, string>[] rows,
-        string[] streamIds) : IEventLogSessionFactory<EventLogRow<IDomainEvent>>
+        string[] streamIds) :
+        IEventLogSessionFactory<EventLogRow<IDomainEvent>>
     {
         public Task<IEventLogSession<EventLogRow<IDomainEvent>>> OpenAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IEventLogSession<EventLogRow<IDomainEvent>>>(new Session(decoder, rows, streamIds));

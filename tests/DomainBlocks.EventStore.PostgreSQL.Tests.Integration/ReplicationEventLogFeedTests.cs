@@ -24,7 +24,7 @@ using RawReadEvent = ReadEvent<
 [TestFixture]
 public class ReplicationEventLogFeedTests : PostgresIntegrationTest
 {
-    private readonly SlotNameGenerator _slotNames = new("dbx_test");
+    private readonly SlotNameGenerator _slotNameGenerator = new("dbx_test");
 
     private SchemaObjectNames Names => new(Schema);
 
@@ -141,7 +141,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task Connect_CreatesPermanentSlotAndDisposeDropsIt(CancellationToken ct)
+    public async Task Connect_Streaming_HoldsPermanentSlotUntilDisposed(CancellationToken ct)
     {
         var feed = CreateFeed();
         var observer = new CollectingObserver();
@@ -166,7 +166,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task Connect_LeftoverSlots_DropsOnlyStoreNamedOnesPastTimeout(CancellationToken ct)
+    public async Task Connect_LeftoverSlots_DropsOnlyExpiredSlotsInStoreNameFormat(CancellationToken ct)
     {
         var options = new PostgresReplicationOptions
         {
@@ -174,7 +174,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
             InactiveSlotTimeout = TimeSpan.FromSeconds(1)
         };
 
-        var slotNames = new SlotNameGenerator(options.SlotNamePrefix);
+        var slotNameGenerator = new SlotNameGenerator(options.SlotNamePrefix);
 
         // Slots that other stores named, as a process that stopped without dropping its slot leaves them, and one that
         // a store didn't name.
@@ -185,7 +185,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
 
         try
         {
-            var running = CreateFeed(slotNames, options);
+            var running = CreateFeed(slotNameGenerator, options);
             using var runningAttachment = running.Attach(new CollectingObserver());
             await using var runningConnection = await running.ConnectAsync(ct);
 
@@ -195,7 +195,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
             await Task.Delay(options.InactiveSlotTimeout * 2, ct);
             await CreateSlotAsync(recent, ct);
 
-            var starting = CreateFeed(slotNames, options);
+            var starting = CreateFeed(slotNameGenerator, options);
             using var startingAttachment = starting.Attach(new CollectingObserver());
             await using var startingConnection = await starting.ConnectAsync(ct);
 
@@ -255,7 +255,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
         await PostgresEventStoreAdmin.EnsureInitializedAsync(DataSource, options, adminOptions, ct);
 
         var feed = new EventLogFeed<EventLogRow<RawEvent>>(
-            CreateSessionFactory(_slotNames, new SchemaObjectNames(options.Schema), Options.Replication),
+            CreateSessionFactory(_slotNameGenerator, new SchemaObjectNames(options.Schema), Options.Replication),
             static row => row.Position,
             new EventLogFeedOptions { RetryDelay = TimeSpan.FromMilliseconds(10), MaxRetryAttempts = 1 },
             LoggerFactory.CreateLogger("EventLogFeed"));
@@ -308,28 +308,28 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
         (await IsBackendRunningAsync(pid, ct)).ShouldBeFalse();
     }
 
-    private EventLogFeed<EventLogRow<RawEvent>> CreateFeed() => CreateFeed(_slotNames, Options.Replication);
+    private EventLogFeed<EventLogRow<RawEvent>> CreateFeed() => CreateFeed(_slotNameGenerator, Options.Replication);
 
     private EventLogFeed<EventLogRow<RawEvent>> CreateFeed(
-        SlotNameGenerator slotNames,
+        SlotNameGenerator slotNameGenerator,
         PostgresReplicationOptions replicationOptions)
     {
         return new EventLogFeed<EventLogRow<RawEvent>>(
-            CreateSessionFactory(slotNames, Names, replicationOptions),
+            CreateSessionFactory(slotNameGenerator, Names, replicationOptions),
             static row => row.Position,
             new EventLogFeedOptions { RetryDelay = TimeSpan.FromMilliseconds(100) },
             LoggerFactory.CreateLogger("EventLogFeed"));
     }
 
     private ReplicationEventLogSessionFactory<RawEvent> CreateSessionFactory(
-        SlotNameGenerator slotNames,
+        SlotNameGenerator slotNameGenerator,
         SchemaObjectNames names,
         PostgresReplicationOptions replicationOptions)
     {
         return new ReplicationEventLogSessionFactory<RawEvent>(
             PostgresTestEnvironment.ConnectionString,
             DataSource,
-            slotNames,
+            slotNameGenerator,
             names,
             replicationOptions,
             RawDecoder.Instance,

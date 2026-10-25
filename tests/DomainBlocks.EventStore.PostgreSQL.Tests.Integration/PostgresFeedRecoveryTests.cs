@@ -7,10 +7,11 @@ using Shouldly;
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
 /// <summary>
-/// Loss of the replication connection, which the feed resumes on its slot, and loss of the slot, after which the feed
-/// continues on a new slot and subscriptions recover the events committed in the meantime from their last position.
+/// Tests that the feed resumes on its slot after it loses its replication connection, and that after it loses its slot,
+/// it continues on a new one and subscriptions catch up from their last position.
 /// </summary>
 [TestFixture]
+[NonParallelizable]
 public class PostgresFeedRecoveryTests() : PostgresIntegrationTest(x =>
 {
     x.Replication.RetryDelay = TimeSpan.FromMilliseconds(100);
@@ -42,22 +43,22 @@ public class PostgresFeedRecoveryTests() : PostgresIntegrationTest(x =>
 
         await ShouldBeCaughtUpAsync(enumerator);
 
-        var before = await AppendEventsAsync("before", 10, ct);
-        var observed = new List<TestEvent>();
+        var eventsBeforeTermination = await AppendEventsAsync("before", 10, ct);
+        var observedEvents = new List<TestEvent>();
 
-        for (var i = 0; i < before.Length; i++)
-            observed.Add((await NextEventAsync(enumerator)).Payload.ShouldBeOfType<TestEvent>());
+        for (var i = 0; i < eventsBeforeTermination.Length; i++)
+            observedEvents.Add((await NextEventAsync(enumerator)).Payload.ShouldBeOfType<TestEvent>());
 
-        var slot = await TerminateWalSenderAsync(ct);
+        var slotName = await TerminateWalSenderAsync(ct);
 
         // These commit while the feed reconnects, and its slot keeps them.
-        var during = await AppendEventsAsync("during", 20, ct);
+        var eventsWhileReconnecting = await AppendEventsAsync("during", 20, ct);
 
-        for (var i = 0; i < during.Length; i++)
-            observed.Add((await NextEventAsync(enumerator)).Payload.ShouldBeOfType<TestEvent>());
+        for (var i = 0; i < eventsWhileReconnecting.Length; i++)
+            observedEvents.Add((await NextEventAsync(enumerator)).Payload.ShouldBeOfType<TestEvent>());
 
-        observed.ShouldBe(before.Concat(during));
-        (await GetSlotNamesAsync(ct)).ShouldHaveSingleItem().ShouldBe(slot);
+        observedEvents.ShouldBe(eventsBeforeTermination.Concat(eventsWhileReconnecting));
+        (await GetSlotNamesAsync(ct)).ShouldHaveSingleItem().ShouldBe(slotName);
     }
 
     [Test]
@@ -70,29 +71,29 @@ public class PostgresFeedRecoveryTests() : PostgresIntegrationTest(x =>
 
         await ShouldBeCaughtUpAsync(enumerator);
 
-        var before = await AppendEventsAsync("before", 10, ct);
-        var observed = new List<TestEvent>();
+        var eventsBeforeDrop = await AppendEventsAsync("before", 10, ct);
+        var observedEvents = new List<TestEvent>();
 
-        for (var i = 0; i < before.Length; i++)
-            observed.Add((await NextEventAsync(enumerator)).Payload.ShouldBeOfType<TestEvent>());
+        for (var i = 0; i < eventsBeforeDrop.Length; i++)
+            observedEvents.Add((await NextEventAsync(enumerator)).Payload.ShouldBeOfType<TestEvent>());
 
-        var oldSlot = await DropSlotAsync(ct);
+        var droppedSlotName = await DropSlotAsync(ct);
 
         // These commit before the feed has a new slot, which never streams them, so catch-up must recover them.
-        var during = await AppendEventsAsync("during", 20, ct);
+        var eventsBeforeNewSlot = await AppendEventsAsync("during", 20, ct);
 
-        var recovered = await ReadUntilRecoveredAsync(enumerator);
-        observed.AddRange(recovered.Events);
+        var recovery = await ReadUntilRecoveredAsync(enumerator);
+        observedEvents.AddRange(recovery.Events);
 
-        var after = new TestEvent { Value = "after" };
-        await _eventStore.AppendAsync("s1", [Appendable(after)], cancellationToken: ct);
-        observed.Add((await NextEventAsync(enumerator)).Payload.ShouldBeOfType<TestEvent>());
+        var liveEvent = new TestEvent { Value = "after" };
+        await _eventStore.AppendAsync("s1", [Appendable(liveEvent)], cancellationToken: ct);
+        observedEvents.Add((await NextEventAsync(enumerator)).Payload.ShouldBeOfType<TestEvent>());
 
-        recovered.FellBehindCount.ShouldBeGreaterThan(0);
-        observed.ShouldBe(before.Concat(during).Append(after));
+        recovery.FellBehindCount.ShouldBeGreaterThan(0);
+        observedEvents.ShouldBe(eventsBeforeDrop.Concat(eventsBeforeNewSlot).Append(liveEvent));
 
-        var slots = await GetSlotNamesAsync(ct);
-        slots.ShouldHaveSingleItem().ShouldNotBe(oldSlot);
+        var slotNames = await GetSlotNamesAsync(ct);
+        slotNames.ShouldHaveSingleItem().ShouldNotBe(droppedSlotName);
     }
 
     [Test]
@@ -111,9 +112,9 @@ public class PostgresFeedRecoveryTests() : PostgresIntegrationTest(x =>
         enumerator.Current.Kind.ShouldBe(SubscriptionMessageKind.FellBehind);
         await ShouldBeCaughtUpAsync(enumerator);
 
-        var live = new TestEvent { Value = "live" };
-        await _eventStore.AppendAsync("s1", [Appendable(live)], cancellationToken: ct);
-        (await NextEventAsync(enumerator)).Payload.ShouldBe(live);
+        var liveEvent = new TestEvent { Value = "live" };
+        await _eventStore.AppendAsync("s1", [Appendable(liveEvent)], cancellationToken: ct);
+        (await NextEventAsync(enumerator)).Payload.ShouldBe(liveEvent);
     }
 
     [Test]
@@ -125,47 +126,47 @@ public class PostgresFeedRecoveryTests() : PostgresIntegrationTest(x =>
             .GetAsyncEnumerator(ct);
 
         await ShouldBeCaughtUpAsync(enumerator);
-        var oldSlot = await InvalidateSlotAsync(ct);
+        var invalidatedSlotName = await InvalidateSlotAsync(ct);
 
         (await enumerator.MoveNextAsync()).ShouldBeTrue();
         enumerator.Current.Kind.ShouldBe(SubscriptionMessageKind.FellBehind);
         await ShouldBeCaughtUpAsync(enumerator);
 
-        var live = new TestEvent { Value = "live" };
-        await _eventStore.AppendAsync("s1", [Appendable(live)], cancellationToken: ct);
-        (await NextEventAsync(enumerator)).Payload.ShouldBe(live);
+        var liveEvent = new TestEvent { Value = "live" };
+        await _eventStore.AppendAsync("s1", [Appendable(liveEvent)], cancellationToken: ct);
+        (await NextEventAsync(enumerator)).Payload.ShouldBe(liveEvent);
 
-        (await GetSlotNamesAsync(ct)).ShouldHaveSingleItem().ShouldNotBe(oldSlot);
+        (await GetSlotNamesAsync(ct)).ShouldHaveSingleItem().ShouldNotBe(invalidatedSlotName);
     }
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task SubscribeToAll_TwoSubscribers_BothRecoverAfterSlotLoss(CancellationToken ct)
     {
-        await using var first = _eventStore
+        await using var allSubscription = _eventStore
             .SubscribeToAll(SubscriptionOrigin.Start)
             .GetAsyncEnumerator(ct);
 
-        await using var second = _eventStore
+        await using var streamSubscription = _eventStore
             .SubscribeToStream("s1", SubscriptionOrigin.Start)
             .GetAsyncEnumerator(ct);
 
-        await ShouldBeCaughtUpAsync(first);
-        await ShouldBeCaughtUpAsync(second);
+        await ShouldBeCaughtUpAsync(allSubscription);
+        await ShouldBeCaughtUpAsync(streamSubscription);
 
         await DropSlotAsync(ct);
-        var during = await AppendEventsAsync("during", 5, ct);
+        var eventsBeforeNewSlot = await AppendEventsAsync("during", 5, ct);
 
-        var firstRecovered = await ReadUntilRecoveredAsync(first);
-        var secondRecovered = await ReadUntilRecoveredAsync(second);
+        var allRecovery = await ReadUntilRecoveredAsync(allSubscription);
+        var streamRecovery = await ReadUntilRecoveredAsync(streamSubscription);
 
-        firstRecovered.Events.ShouldBe(during);
-        secondRecovered.Events.ShouldBe(during);
+        allRecovery.Events.ShouldBe(eventsBeforeNewSlot);
+        streamRecovery.Events.ShouldBe(eventsBeforeNewSlot);
 
-        var live = new TestEvent { Value = "live" };
-        await _eventStore.AppendAsync("s1", [Appendable(live)], cancellationToken: ct);
-        (await NextEventAsync(first)).Payload.ShouldBe(live);
-        (await NextEventAsync(second)).Payload.ShouldBe(live);
+        var liveEvent = new TestEvent { Value = "live" };
+        await _eventStore.AppendAsync("s1", [Appendable(liveEvent)], cancellationToken: ct);
+        (await NextEventAsync(allSubscription)).Payload.ShouldBe(liveEvent);
+        (await NextEventAsync(streamSubscription)).Payload.ShouldBe(liveEvent);
     }
 
     [Test]
@@ -180,12 +181,12 @@ public class PostgresFeedRecoveryTests() : PostgresIntegrationTest(x =>
 
         // The subscription has observed nothing yet, so it recovers from where it started. Recovering from a later end
         // would skip these.
-        var during = await AppendEventsAsync("during", 5, ct);
+        var eventsBeforeNewSlot = await AppendEventsAsync("during", 5, ct);
 
-        var recovered = await ReadUntilRecoveredAsync(enumerator);
+        var recovery = await ReadUntilRecoveredAsync(enumerator);
 
-        recovered.Events.ShouldBe(during);
-        recovered.FellBehindCount.ShouldBeGreaterThan(0);
+        recovery.Events.ShouldBe(eventsBeforeNewSlot);
+        recovery.FellBehindCount.ShouldBeGreaterThan(0);
     }
 
     private async Task<TestEvent[]> AppendEventsAsync(string prefix, int count, CancellationToken ct)
@@ -244,8 +245,8 @@ public class PostgresFeedRecoveryTests() : PostgresIntegrationTest(x =>
     }
 
     // Lets slots hold back only 1 MB of WAL, then moves to new WAL files until a checkpoint invalidates the feed's
-    // slot. The checkpoint ends the walsender that holds the slot first. The setting is server-wide, which is safe
-    // only because the tests run one at a time.
+    // slot. The checkpoint ends the walsender that holds the slot first. The setting is server-wide, so the fixture
+    // doesn't run in parallel with other tests.
     private static async Task<string> InvalidateSlotAsync(CancellationToken ct)
     {
         var slotName = await GetActiveSlotNameAsync(ct);

@@ -232,8 +232,8 @@ public class PostgresSynchronousStandbyTests
         return (long)(await command.ExecuteScalarAsync(ct)).ShouldNotBeNull();
     }
 
-    // Waits until the backend creating a replication slot, which holds the slot meanwhile, waits for the transaction
-    // to end.
+    // Waits until a backend that is creating a replication slot waits for the given transaction to end. The query finds
+    // the backend through the slot, which it holds while it creates it.
     private static async Task WaitForXidLockWaitAsync(NpgsqlDataSource dataSource, string xid, CancellationToken ct)
     {
         await using var command = dataSource.CreateCommand(

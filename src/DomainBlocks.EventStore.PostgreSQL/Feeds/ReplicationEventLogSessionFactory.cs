@@ -57,7 +57,7 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
 
     private readonly string _connectionString;
     private readonly NpgsqlDataSource _dataSource;
-    private readonly SlotNameGenerator _slotNames;
+    private readonly SlotNameGenerator _slotNameGenerator;
     private readonly SchemaObjectNames _names;
     private readonly PostgresReplicationOptions _options;
     private readonly PgOutputReplicationOptions _pgOutputOptions;
@@ -71,7 +71,7 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
     public ReplicationEventLogSessionFactory(
         string connectionString,
         NpgsqlDataSource dataSource,
-        SlotNameGenerator slotNames,
+        SlotNameGenerator slotNameGenerator,
         SchemaObjectNames names,
         PostgresReplicationOptions options,
         IEventDecoder<TEvent, PostgresEventData, string> decoder,
@@ -79,7 +79,7 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
     {
         _connectionString = connectionString;
         _dataSource = dataSource;
-        _slotNames = slotNames;
+        _slotNameGenerator = slotNameGenerator;
         _names = names;
         _options = options;
         _decoder = decoder;
@@ -260,7 +260,7 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
 
         await DropInactiveSlotsAsync(connection, cancellationToken).ConfigureAwait(false);
 
-        var slotName = _slotNames.Next();
+        var slotName = _slotNameGenerator.Next();
 
         await using (var create = new NpgsqlCommand(CreateSlotSql, connection))
         {
@@ -289,7 +289,7 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent> : IEventLogSessi
 
         await using (var select = new NpgsqlCommand(SelectInactiveSlotsSql, connection))
         {
-            select.Parameters.Add(new NpgsqlParameter<string> { TypedValue = _slotNames.NamePattern });
+            select.Parameters.Add(new NpgsqlParameter<string> { TypedValue = _slotNameGenerator.NamePattern });
             select.Parameters.Add(new NpgsqlParameter<TimeSpan> { TypedValue = _options.InactiveSlotTimeout });
 
             await using var reader = await select.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);

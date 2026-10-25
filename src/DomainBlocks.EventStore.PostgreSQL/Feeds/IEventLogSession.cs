@@ -12,13 +12,13 @@ namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 internal interface IEventLogSession<out T> : IAsyncDisposable
 {
     /// <summary>
-    /// A short description for diagnostics, e.g., the replication slot name.
+    /// Gets a short description for diagnostics, such as the replication slot name.
     /// </summary>
     string Description { get; }
 
     /// <summary>
-    /// Whether the session's establishment point is where the previous session of the feed stopped, so that no row was
-    /// missed in between.
+    /// Gets a value that indicates whether the session continues where the feed's previous session stopped, so that no
+    /// row was missed in between.
     /// </summary>
     bool IsResumed { get; }
 

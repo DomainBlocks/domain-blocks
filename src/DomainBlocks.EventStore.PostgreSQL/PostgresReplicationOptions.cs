@@ -23,15 +23,13 @@ public sealed class PostgresReplicationOptions
     public string SlotNamePrefix { get; set; } = "dbx";
 
     /// <summary>
-    /// Gets or sets how long a replication slot that a store named with the prefix can stay inactive before a store
-    /// drops it. A process that stops without dropping its slot leaves it behind, and the slot holds WAL until it is
-    /// dropped. A store looks for such slots before it creates a slot, and at this interval while its subscriptions are
-    /// live. The value must be positive. The default is 10 minutes.
+    /// Gets or sets how long a slot that a store named with <see cref="SlotNamePrefix"/> can stay inactive before a
+    /// store drops it. The value must be positive. The default is 10 minutes.
     /// </summary>
     /// <remarks>
-    /// A store's slot is inactive only while the store reconnects. If it is dropped anyway, the store creates a new
-    /// one, and its subscriptions catch up. To cap the WAL that a slot can hold until then, set the server's
-    /// <c>max_slot_wal_keep_size</c>.
+    /// A process that stops without dropping its slot leaves it behind, holding WAL. Stores drop such slots before they
+    /// create one, and at this interval while subscriptions are live. A live store's slot is inactive only while the
+    /// store reconnects. To cap the WAL that a leftover slot holds, set the server's <c>max_slot_wal_keep_size</c>.
     /// </remarks>
     public TimeSpan InactiveSlotTimeout { get; set; } = TimeSpan.FromMinutes(10);
 
