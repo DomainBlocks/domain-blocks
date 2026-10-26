@@ -75,6 +75,12 @@ public sealed class ReplicatedPostgresServer : IAsyncDisposable
         Port = _proxy.Port
     }.ConnectionString;
 
+    /// <summary>
+    /// Gets the number of connections made through <see cref="FailoverConnectionString"/>, including those that found
+    /// no server.
+    /// </summary>
+    public int FailoverConnectionCount => _proxy.ConnectionCount;
+
     public static async Task<ReplicatedPostgresServer> StartAsync()
     {
         var image = Environment.GetEnvironmentVariable(PostgresServer.ImageEnvironmentVariable);

@@ -8,8 +8,9 @@ using Shouldly;
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
 /// <summary>
-/// PostgreSQL-specific subscription behavior beyond the shared suite: slot sharing, stream-position resume, the order
-/// of a large append, the replication barrier without synchronous standbys, and connection strings with several hosts.
+/// Tests PostgreSQL-specific subscription behavior beyond the shared suite: slot sharing, stream-position resume, the
+/// order of a large append, the replication barrier without synchronous standbys, and connection strings with multiple
+/// hosts.
 /// </summary>
 [TestFixture]
 public class PostgresSubscriptionTests : PostgresIntegrationTest
@@ -184,9 +185,11 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task SubscribeToAll_DataSourceWithSeveralHosts_Fails(CancellationToken ct)
+    public async Task SubscribeToAll_DataSourceWithMultipleHosts_Fails(CancellationToken ct)
     {
-        await using var dataSource = new NpgsqlDataSourceBuilder(WithTwoHosts(PostgresTestEnvironment.ConnectionString))
+        var connectionString = WithStandbyHost(PostgresTestEnvironment.ConnectionString);
+
+        await using var dataSource = new NpgsqlDataSourceBuilder(connectionString)
             .UsePostgresEventStore(Options)
             .Build();
 
@@ -203,12 +206,12 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task SubscribeToAll_ReplicationConnectionStringWithSeveralHosts_Fails(CancellationToken ct)
+    public async Task SubscribeToAll_ReplicationConnectionStringWithMultipleHosts_Fails(CancellationToken ct)
     {
         await using var eventStore = CreateEventStore(options: new PostgresEventStoreOptions
         {
             Schema = Schema,
-            Replication = { ConnectionString = WithTwoHosts(PostgresTestEnvironment.ConnectionString) }
+            Replication = { ConnectionString = WithStandbyHost(PostgresTestEnvironment.ConnectionString) }
         });
 
         await using var subscription = eventStore.SubscribeToAll().GetAsyncEnumerator(ct);
@@ -224,11 +227,12 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
         return (long)(await command.ExecuteScalarAsync(ct))!;
     }
 
-    // The same server twice makes a connection string with several hosts.
-    private static string WithTwoHosts(string connectionString)
+    // Lists a primary and a standby, as a connection string that follows a failover does. The test server is the
+    // primary, so connections never try the standby, whose host name can't resolve.
+    private static string WithStandbyHost(string connectionString)
     {
-        var builder = new NpgsqlConnectionStringBuilder(connectionString);
-        builder.Host = $"{builder.Host}:{builder.Port},{builder.Host}:{builder.Port}";
+        var builder = new NpgsqlConnectionStringBuilder(connectionString) { TargetSessionAttributes = "primary" };
+        builder.Host = $"{builder.Host}:{builder.Port},standby.invalid:5432";
         return builder.ConnectionString;
     }
 

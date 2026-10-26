@@ -12,7 +12,7 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 using EventStore = IEventStore<object, string, StreamPosition, LogPosition>;
 
 /// <summary>
-/// The store with a real synchronous standby, which the primary can cut off from its WAL.
+/// Tests the store with a real synchronous standby, which the primary can cut off from its WAL.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -229,7 +229,7 @@ public class PostgresSynchronousStandbyTests
 
     [Test]
     [CancelAfter(2 * TestTimeouts.DefaultMillis)]
-    public async Task SubscribeToAll_FailoverLosesLiveEvent_ResumesWithoutIt(CancellationToken ct)
+    public async Task SubscribeToAll_FailoverLosesLiveEvent_ResumesWithoutLostEvent(CancellationToken ct)
     {
         await using var dataSource = CreateDataSource(_server.FailoverConnectionString);
         await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
@@ -265,10 +265,10 @@ public class PostgresSynchronousStandbyTests
         await Task.Delay(HoldDuration, ct);
         next.IsCompleted.ShouldBeFalse();
 
-        // Until the standby is promoted there is no primary, and the feed keeps reconnecting. The promoted standby
-        // never had the event, so the next append reuses its position.
+        // Until the standby is promoted there is no primary, and the feed keeps trying to reconnect through the
+        // failover endpoint. The promoted standby never had the event, so the next append reuses its position.
         await _server.CrashPrimaryAsync();
-        await Task.Delay(TimeSpan.FromSeconds(2), ct);
+        await WaitForFailoverConnectionsAsync(2, ct);
         await _server.PromoteStandbyAsync();
 
         await eventStore.AppendAsync(
@@ -343,6 +343,15 @@ public class PostgresSynchronousStandbyTests
         command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = xid });
 
         while (!(bool)(await command.ExecuteScalarAsync(ct))!)
+            await Task.Delay(20, ct);
+    }
+
+    // Returns once the given number of further connections have reached the failover endpoint.
+    private async Task WaitForFailoverConnectionsAsync(int count, CancellationToken ct)
+    {
+        var target = _server.FailoverConnectionCount + count;
+
+        while (_server.FailoverConnectionCount < target)
             await Task.Delay(20, ct);
     }
 

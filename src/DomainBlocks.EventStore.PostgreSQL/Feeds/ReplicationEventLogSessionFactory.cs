@@ -123,7 +123,7 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent>(
             .ConfigureAwait(false);
     }
 
-    // Npgsql refuses replication connections with several hosts, and a multi-host data source fails rather than waits
+    // Npgsql refuses replication connections with multiple hosts, and a multi-host data source fails rather than waits
     // while a failover leaves no primary. So the feed follows a failover only through one host that reaches the
     // primary.
     private void ThrowIfMultipleHosts()

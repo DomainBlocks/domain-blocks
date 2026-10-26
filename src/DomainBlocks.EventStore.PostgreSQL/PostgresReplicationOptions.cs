@@ -18,7 +18,7 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// <para>
 /// Live subscriptions follow a failover only through a host that always reaches the primary, such as a writer
 /// endpoint, a virtual IP, or a proxy. They fail if the store's data source or the replication connection string lists
-/// several hosts.
+/// multiple hosts.
 /// </para>
 /// </remarks>
 public sealed class PostgresReplicationOptions

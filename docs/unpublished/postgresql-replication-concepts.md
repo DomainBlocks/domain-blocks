@@ -50,8 +50,10 @@ What the settings and the store do, in the order they come into play.
    changes.
 7. **The copy keeps the feed's place.** Standbys with `sync_replication_slots = on` keep a copy of the feed's slot.
    After a failover, the feed resumes from the copy on the new primary. Without a copy, the feed creates a new slot,
-   and subscribers reset and catch up. That is still correct, just slower, so the copy is optional. In our tests a new
-   slot's copy became usable about 13 s after the slot was created.
+   and subscribers reset and catch up. That is still correct, just slower, so the copy is optional. A copy works as
+   soon as its standby is promoted. But a new slot's copy becomes usable only once the slot has passed a record of the
+   running transactions, which the primary writes every 15 s while it writes WAL. Until then, a failover drops the
+   copy, and the feed resets. In our tests that took about 13 s after the feed created its slot.
 8. **A failover manager ties it together.** PostgreSQL never promotes a standby by itself. The manager must promote
    only a standby that has every acknowledged commit, and that standby must be covered by both
    `synchronous_standby_names` and `synchronized_standby_slots`. The two lists name standbys differently, and nothing
@@ -114,8 +116,8 @@ Keeping them aligned:
   own physical slots for its standbys, and its own `synchronized_standby_slots`.
 - **The store connects through one endpoint.** Its data source and its replication connection string must each name a
   single host that always reaches the primary, such as a writer endpoint, a virtual IP, or a proxy. Live
-  subscriptions fail if either lists several hosts: Npgsql can't open a replication connection to several hosts, and a
-  multi-host data source fails rather than waits while a failover leaves no primary.
+  subscriptions fail if either lists multiple hosts: Npgsql can't open a replication connection to multiple hosts,
+  and a multi-host data source fails rather than waits while a failover leaves no primary.
 
 ## Open questions
 

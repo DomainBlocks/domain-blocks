@@ -15,6 +15,7 @@ internal sealed class TcpProxy : IAsyncDisposable
     private readonly Task _accepting;
     private DnsEndPoint _target;
     private CancellationTokenSource _connections = new();
+    private int _connectionCount;
 
     public TcpProxy(DnsEndPoint target)
     {
@@ -24,6 +25,11 @@ internal sealed class TcpProxy : IAsyncDisposable
     }
 
     public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
+
+    /// <summary>
+    /// Gets the number of connections that the proxy has accepted, including those it couldn't forward.
+    /// </summary>
+    public int ConnectionCount => Volatile.Read(ref _connectionCount);
 
     public void MoveTo(DnsEndPoint target)
     {
@@ -62,6 +68,7 @@ internal sealed class TcpProxy : IAsyncDisposable
         while (true)
         {
             var client = await _listener.AcceptTcpClientAsync(_stopping.Token);
+            Interlocked.Increment(ref _connectionCount);
 
             lock (_lock)
                 _ = ForwardAsync(client, _target, _connections.Token);
