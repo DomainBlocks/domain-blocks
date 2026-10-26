@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
@@ -8,13 +9,15 @@ using Testcontainers.PostgreSql;
 namespace DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
 
 /// <summary>
-/// A throw-away primary with a synchronous standby that streams its WAL. The standby connects as a replication role, so
-/// the primary can cut it off, and let it back in, with SQL alone.
+/// A throw-away primary with a synchronous standby that streams its WAL through a physical slot. The primary's failover
+/// slots wait for the standby, which keeps copies of them. The standby connects as a replication role, so the primary
+/// can cut it off, and let it back in, with SQL alone. A proxy reaches whichever server is the primary.
 /// </summary>
 public sealed class ReplicatedPostgresServer : IAsyncDisposable
 {
     /// <summary>
-    /// The standby's name, which the primary's <c>synchronous_standby_names</c> lists.
+    /// The standby's name, which the primary's <c>synchronous_standby_names</c> lists, and the name of its physical
+    /// slot, which the primary's <c>synchronized_standby_slots</c> lists.
     /// </summary>
     public const string StandbyName = "standby";
 
@@ -28,24 +31,30 @@ public sealed class ReplicatedPostgresServer : IAsyncDisposable
     private const string AllowReplicationScript =
         $"echo 'host replication {ReplicationRole} all scram-sha-256' >> \"$PGDATA/pg_hba.conf\"";
 
-    // Copies the primary, and then runs it as a standby. The standby's cluster name is its application name, and it
-    // tries again soon after its connection is refused.
+    // Copies the primary, creating the standby's physical slot, and then runs the copy as a standby. The standby's
+    // cluster name is its application name, and it tries again soon after its connection is refused. Copying failover
+    // slots needs the database in its connection settings, hot_standby_feedback, and wal_level = logical.
     private const string StandbyScript =
         $"""
          set -e
-         gosu postgres pg_basebackup -h primary -U {ReplicationRole} -D /tmp/standby -R -X stream -c fast
-         exec gosu postgres postgres -D /tmp/standby -c cluster_name={StandbyName} -c wal_retrieve_retry_interval=100ms
+         gosu postgres pg_basebackup -d "host=primary user={ReplicationRole} dbname=postgres" -D /tmp/standby \
+             -R -X stream -c fast -C -S {StandbyName}
+         exec gosu postgres postgres -D /tmp/standby -c cluster_name={StandbyName} \
+             -c wal_retrieve_retry_interval=100ms -c sync_replication_slots=on -c hot_standby_feedback=on \
+             -c wal_level=logical
          """;
 
     private readonly INetwork _network;
     private readonly PostgreSqlContainer _primary;
     private readonly IContainer _standby;
+    private readonly TcpProxy _proxy;
 
     private ReplicatedPostgresServer(INetwork network, PostgreSqlContainer primary, IContainer standby)
     {
         _network = network;
         _primary = primary;
         _standby = standby;
+        _proxy = new TcpProxy(new DnsEndPoint(primary.Hostname, primary.GetMappedPublicPort(5432)));
     }
 
     public string PrimaryConnectionString => _primary.GetConnectionString();
@@ -55,6 +64,22 @@ public sealed class ReplicatedPostgresServer : IAsyncDisposable
         Host = _standby.Hostname,
         Port = _standby.GetMappedPublicPort(5432)
     }.ConnectionString;
+
+    /// <summary>
+    /// Reaches the primary through the proxy, which <see cref="PromoteStandbyAsync"/> moves to the standby, as a
+    /// failover manager moves a virtual IP.
+    /// </summary>
+    public string FailoverConnectionString => new NpgsqlConnectionStringBuilder(PrimaryConnectionString)
+    {
+        Host = IPAddress.Loopback.ToString(),
+        Port = _proxy.Port
+    }.ConnectionString;
+
+    /// <summary>
+    /// Gets the number of connections made through <see cref="FailoverConnectionString"/>, including those that found
+    /// no server.
+    /// </summary>
+    public int FailoverConnectionCount => _proxy.ConnectionCount;
 
     public static async Task<ReplicatedPostgresServer> StartAsync()
     {
@@ -86,7 +111,8 @@ public sealed class ReplicatedPostgresServer : IAsyncDisposable
         await standby.StartAsync();
 
         var server = new ReplicatedPostgresServer(network, primary, standby);
-        await server.MakeStandbySynchronousAsync();
+        await server.SetOnPrimaryAsync("synchronous_standby_names", StandbyName);
+        await server.SetOnPrimaryAsync("synchronized_standby_slots", StandbyName);
 
         return server;
     }
@@ -97,8 +123,10 @@ public sealed class ReplicatedPostgresServer : IAsyncDisposable
     public async Task CutOffStandbyAsync()
     {
         await ExecuteOnPrimaryAsync($"ALTER ROLE {ReplicationRole} NOLOGIN");
-        await ExecuteOnPrimaryAsync("SELECT pg_terminate_backend(pid) FROM pg_stat_replication");
-        await WaitUntilAsync("SELECT NOT EXISTS (SELECT 1 FROM pg_stat_replication)");
+        await ExecuteOnPrimaryAsync(
+            $"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename = '{ReplicationRole}'");
+
+        await WaitUntilAsync($"SELECT NOT EXISTS (SELECT 1 FROM pg_stat_activity WHERE usename = '{ReplicationRole}')");
     }
 
     /// <summary>
@@ -109,6 +137,12 @@ public sealed class ReplicatedPostgresServer : IAsyncDisposable
         await ExecuteOnPrimaryAsync($"ALTER ROLE {ReplicationRole} LOGIN");
         await WaitUntilAsync("SELECT EXISTS (SELECT 1 FROM pg_stat_replication WHERE state = 'streaming')");
     }
+
+    /// <summary>
+    /// Empties the primary's <c>synchronized_standby_slots</c>, so that its failover slots no longer wait for the
+    /// standby.
+    /// </summary>
+    public Task ClearSynchronizedStandbySlotsAsync() => SetOnPrimaryAsync("synchronized_standby_slots", string.Empty);
 
     /// <summary>
     /// Stops the primary at once, as a crash would. Unlike a clean shutdown, which first sends the rest of the WAL to a
@@ -128,13 +162,17 @@ public sealed class ReplicatedPostgresServer : IAsyncDisposable
     }
 
     /// <summary>
-    /// Promotes the standby, which then has every event that it received from the primary.
+    /// Promotes the standby, which then has every event that it received from the primary, and moves the proxy to it.
     /// </summary>
     public async Task PromoteStandbyAsync()
     {
-        await using var dataSource = NpgsqlDataSource.Create(StandbyConnectionString);
-        await using var command = dataSource.CreateCommand("SELECT pg_promote()");
-        await command.ExecuteNonQueryAsync();
+        await using (var dataSource = NpgsqlDataSource.Create(StandbyConnectionString))
+        {
+            await using var command = dataSource.CreateCommand("SELECT pg_promote()");
+            await command.ExecuteNonQueryAsync();
+        }
+
+        _proxy.MoveTo(new DnsEndPoint(_standby.Hostname, _standby.GetMappedPublicPort(5432)));
     }
 
     /// <summary>
@@ -152,6 +190,7 @@ public sealed class ReplicatedPostgresServer : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        await _proxy.DisposeAsync();
         await _standby.DisposeAsync();
         await _primary.DisposeAsync();
         await _network.DisposeAsync();
@@ -174,21 +213,19 @@ public sealed class ReplicatedPostgresServer : IAsyncDisposable
     }
 
     // pg_reload_conf only signals the server, so this waits until a session has the setting. Sessions started after
-    // that have it too.
-    private async Task MakeStandbySynchronousAsync()
+    // that have it too. The standby was copied before this, so a promoted standby doesn't have the setting.
+    private async Task SetOnPrimaryAsync(string name, string value)
     {
         await using (var dataSource = NpgsqlDataSource.Create(PrimaryConnectionString))
         {
-            await using var alter = dataSource.CreateCommand(
-                $"ALTER SYSTEM SET synchronous_standby_names = '{StandbyName}'");
-
+            await using var alter = dataSource.CreateCommand($"ALTER SYSTEM SET {name} = '{value}'");
             await alter.ExecuteNonQueryAsync();
 
             await using var reload = dataSource.CreateCommand("SELECT pg_reload_conf()");
             await reload.ExecuteNonQueryAsync();
         }
 
-        await WaitUntilAsync($"SELECT current_setting('synchronous_standby_names') = '{StandbyName}'");
+        await WaitUntilAsync($"SELECT current_setting('{name}') = '{value}'");
     }
 
     private async Task ExecuteOnStandbyAsync(string sql)

@@ -3,6 +3,24 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// <summary>
 /// Provides options for the logical replication connection that feeds live subscriptions.
 /// </summary>
+/// <remarks>
+/// <para>
+/// The feed reads a failover slot. When the server lists its standbys' physical replication slots in
+/// <c>synchronized_standby_slots</c>, the slot sends a commit only once they have it, so live subscriptions never
+/// receive an event that a failover loses. List every standby that a failover can promote. With synchronous standbys
+/// and no list, live subscriptions still work but lack that guarantee, and the store logs a warning. The slot waits for
+/// every listed slot, so an inactive one holds live subscriptions back.
+/// </para>
+/// <para>
+/// Standbys with <c>sync_replication_slots</c> and <c>hot_standby_feedback</c> keep a copy of the slot, so that after a
+/// failover the feed resumes on the promoted standby instead of resetting subscriptions.
+/// </para>
+/// <para>
+/// Live subscriptions follow a failover only through a host that always reaches the primary, such as a writer
+/// endpoint, a virtual IP, or a proxy. They fail if the store's data source or the replication connection string lists
+/// multiple hosts.
+/// </para>
+/// </remarks>
 public sealed class PostgresReplicationOptions
 {
     /// <summary>

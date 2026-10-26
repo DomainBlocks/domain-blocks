@@ -32,6 +32,10 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent>(
     IEventLogSessionFactory<EventLogRow<TEvent>>
     where TEvent : notnull
 {
+    private const string StandbySlotsUnsetSql =
+        "SELECT current_setting('synchronous_standby_names') <> '' " +
+        "AND current_setting('synchronized_standby_slots') = ''";
+
     private readonly PgOutputReplicationOptions _pgOutputOptions = new(
         names.Publication,
         PgOutputProtocolVersion.V1,
@@ -49,6 +53,9 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent>(
 
     public async Task<IEventLogSession<EventLogRow<TEvent>>> OpenAsync(CancellationToken cancellationToken)
     {
+        ThrowIfMultipleHosts();
+        await CheckServerAsync(cancellationToken).ConfigureAwait(false);
+
         // A long-lived feed may never create another slot, so the scavenger also runs on a timer.
         _scavenger.EnsureStarted();
 
@@ -109,7 +116,6 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent>(
 
     private async Task<FeedReplicationSlot> CreateSlotAsync(CancellationToken cancellationToken)
     {
-        await CheckServerVersionAsync(cancellationToken).ConfigureAwait(false);
         await _scavenger.DropInactiveSlotsAsync(cancellationToken).ConfigureAwait(false);
 
         return await FeedReplicationSlot
@@ -117,15 +123,47 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent>(
             .ConfigureAwait(false);
     }
 
-    // The scavenger reads inactive_since, which PostgreSQL 17 added.
-    private async Task CheckServerVersionAsync(CancellationToken cancellationToken)
+    // Npgsql refuses replication connections with multiple hosts, and a multi-host data source fails rather than waits
+    // while a failover leaves no primary. So the feed follows a failover only through one host that reaches the
+    // primary.
+    private void ThrowIfMultipleHosts()
+    {
+        if (HasMultipleHosts(dataSource.ConnectionString))
+        {
+            throw new NotSupportedException(
+                "Live subscriptions require a data source with a single host. Use an endpoint that always reaches " +
+                "the primary, such as a writer endpoint, a virtual IP, or a proxy.");
+        }
+
+        if (HasMultipleHosts(connectionString))
+        {
+            throw new NotSupportedException(
+                "Live subscriptions require a replication connection string with a single host. Use an endpoint that " +
+                "always reaches the primary, such as a writer endpoint, a virtual IP, or a proxy.");
+        }
+
+        static bool HasMultipleHosts(string connectionString) =>
+            new NpgsqlConnectionStringBuilder(connectionString).Host?.Contains(',') == true;
+    }
+
+    // Every session checks, because a session can reach another server after a failover, and the settings can change
+    // while the feed runs.
+    private async Task CheckServerAsync(CancellationToken cancellationToken)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
+        // PostgreSQL 17 added failover slots, and inactive_since, which the scavenger reads.
         if (connection.PostgreSqlVersion.Major < 17)
         {
             throw new NotSupportedException(
                 $"Live subscriptions require PostgreSQL 17 or later, but the server is {connection.ServerVersion}.");
         }
+
+        // With synchronous standbys, an append is acknowledged once they have it, so a failover keeps it. Unless the
+        // slot waits for them too, the feed can deliver an event before they have it, and a failover then loses it.
+        await using var command = new NpgsqlCommand(StandbySlotsUnsetSql, connection);
+
+        if (await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is true)
+            logger?.ReplicationSlotNotSynchronized();
     }
 }
