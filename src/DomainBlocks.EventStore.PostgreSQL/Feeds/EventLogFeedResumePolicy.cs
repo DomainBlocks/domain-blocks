@@ -16,6 +16,12 @@ internal static class EventLogFeedResumePolicy
         {
             ReplicationSlotLostException => true,
             ReplicationSlotInUseException => true,
+
+            // Npgsql counts this error as transient. An invalidated slot raises it too, but the session reports that as
+            // ReplicationSlotLostException. What remains is misconfiguration, such as the wrong wal_level, which
+            // retrying can't fix.
+            PostgresException { SqlState: PostgresErrorCodes.ObjectNotInPrerequisiteState } => false,
+
             PostgresException { SqlState: PostgresErrorCodes.AdminShutdown } => true,
             PostgresException { SqlState: PostgresErrorCodes.CrashShutdown } => true,
             PostgresException { SqlState: PostgresErrorCodes.CannotConnectNow } => true,
