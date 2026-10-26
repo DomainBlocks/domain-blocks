@@ -181,7 +181,7 @@ The store needs PostgreSQL 17 or later. Subscriptions receive new events through
 need `wal_level = logical` and a role with the `REPLICATION` attribute.
 
 Connect through a single host that always reaches the primary. Subscriptions fail if the connection string lists
-several hosts, because Npgsql can't open a replication connection to them. Never connect to a standby, even a
+multiple hosts, because Npgsql can't open a replication connection to them. Never connect to a standby, even a
 synchronous one: it has a commit once its disk has it, not once its queries can see it, so a subscription reading
 there could miss an event.
 
