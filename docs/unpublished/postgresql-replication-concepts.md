@@ -20,11 +20,12 @@ What the settings and the store do, in the order they come into play.
    far the standby has flushed, and so which WAL to keep for it. Streaming works without a slot, but the gate and the
    copy below both need one.
 3. **Synchronous commit makes appends durable.** `synchronous_standby_names` names standbys by application name, as
-   `FIRST n (…)` or `ANY n (…)`, and the store runs every append with `synchronous_commit = on`. A commit is first
-   written to the primary's WAL, then waits until the named standbys have flushed it, and only then is it
-   acknowledged and visible to other sessions. The primary learns this from the progress each standby reports over
-   its own connection to the primary, not from slots. Flushed means safe on the standby's disk, which is what
-   survives a failover. It doesn't mean visible to queries on the standby.
+   `FIRST n (…)` or `ANY n (…)`, and the store runs every append with `synchronous_commit = on`, or `remote_apply`
+   if that is set. A commit is first written to the primary's WAL, then waits until the named standbys have flushed
+   it, and only then is it acknowledged and visible to other sessions. The primary learns this from the progress each
+   standby reports over its own connection to the primary, not from slots. Flushed means safe on the standby's disk,
+   which is what survives a failover. It doesn't mean visible to queries on the standby, which only `remote_apply`
+   waits for.
 4. **The wait can end early.** If the waiting backend is cancelled or terminated, the primary restarts, or
    `synchronous_standby_names` is emptied, the commit becomes visible on the primary even though the standbys don't
    have it. A failover then loses it, and the next append reuses its position. A subscriber that was given the lost
@@ -86,8 +87,8 @@ Solid arrows are what happens to every commit. Dotted arrows are the copy, which
 
 ## Settings for a cluster with standbys
 
-Example values for two standbys named `standby_a` and `standby_b`. The store sets `synchronous_commit = on` on its own
-transactions, and creates its slot with `failover => true`, whatever the server says.
+Example values for two standbys named `standby_a` and `standby_b`. The store runs its own transactions with at least
+`synchronous_commit = on`, and creates its slot with `failover => true`, whatever the server says.
 
 | Where   | Setting                                                                                                    | What it does                                                                                |
 |---------|------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------|

@@ -1,8 +1,8 @@
 # PostgreSQL with standbys
 
 Each standby keeps its own copy of the WAL, so a commit is durable only once the standbys that a failover can promote
-have it. The store runs its appends with `synchronous_commit = on`, and a catch-up delivers what it read only once the
-synchronous standbys have it. The server has to do the rest:
+have it. The store runs its appends with `synchronous_commit = on`, or `remote_apply` if that is set, and a catch-up
+delivers what it read only once the synchronous standbys have it. The server has to do the rest:
 
 - Name the standbys that a failover can promote in `synchronous_standby_names`, and use a failover manager that
   promotes only a synchronous standby, such as Patroni in synchronous mode.

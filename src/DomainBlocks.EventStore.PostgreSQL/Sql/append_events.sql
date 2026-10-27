@@ -12,9 +12,10 @@
 -- advances the sequence row, and returns the results. Requests to the same stream chain through a recursive CTE that
 -- handles one request per stream in each iteration, so a batch of distinct streams needs a single iteration.
 --
--- A batch commits with synchronous_commit on, whatever the server, database, role or session sets, so it is
+-- A batch commits with at least synchronous_commit on, whatever the server, database, role or session sets, so it is
 -- acknowledged only once it is flushed, and on the synchronous standbys if any are configured. Until then it is not
--- visible to other sessions either.
+-- visible to other sessions either. A setting of remote_apply is kept, because applications that read their writes on
+-- a standby rely on it.
 --
 -- The expected kinds and statuses are the expected_state_kind and append_status enums from schema.sql.
 
@@ -54,8 +55,11 @@ BEGIN
             USING ERRCODE = 'invalid_transaction_state';
     END IF;
 
-    -- A local setting lasts until the transaction commits, which is when it takes effect.
-    PERFORM set_config('synchronous_commit', 'on', true);
+    -- A local setting lasts until the transaction commits, which is when it takes effect. Only remote_apply is
+    -- stronger than on.
+    IF current_setting('synchronous_commit') <> 'remote_apply' THEN
+        PERFORM set_config('synchronous_commit', 'on', true);
+    END IF;
 
     PERFORM __schema__.validate_append_batch(
             p_stream_ids,
