@@ -177,8 +177,8 @@ public sealed record Ignored : IDomainEvent
 
 ## Deploying PostgreSQL
 
-The store needs PostgreSQL 17 or later. Subscriptions receive new events through logical replication, so they also
-need `wal_level = logical` and a role with the `REPLICATION` attribute.
+The PostgreSQL implementation of the event store needs PostgreSQL 17 or later. Its subscriptions receive new events
+through logical replication, so they also need `wal_level = logical` and a role with the `REPLICATION` attribute.
 
 Connect through a single host that always reaches the primary. Subscriptions fail if the connection string lists
 multiple hosts, because Npgsql can't open a replication connection to them. Never connect to a standby, even a
