@@ -1,8 +1,8 @@
 # Aurora tests
 
-These tests run live subscriptions on Aurora PostgreSQL, which the local test servers can't stand in for. Aurora
-replicates storage rather than WAL, so it has no synchronous standbys, and a writer failover moves the writer to
-another instance. The tests check that:
+These tests run live subscriptions on Aurora PostgreSQL, which the local test servers can't stand in for. Aurora makes
+a commit durable in a cluster volume that every instance shares, so it has no synchronous standbys, and a writer
+failover moves the writer to another instance. The tests check that:
 
 - a live subscription works: the feed creates its failover slot and passes the store's server checks;
 - a subscription whose endpoint still reaches the old writer, now a reader, keeps trying, and delivers events once

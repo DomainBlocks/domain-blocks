@@ -65,6 +65,12 @@ The default origin is the end of the log, so omitting it receives only new event
 way for a single event stream. A subscriber that consumes too slowly receives a message with `IsFellBehind` set to
 `true`, then catches up again.
 
+Subscriptions never deliver an event that a failover could undo, provided the deployment does its part:
+
+- **MongoDB** needs a replica set. The store sends its reads to the primary, whatever read preference the connection
+  string sets.
+- **PostgreSQL** needs version 17 or later, set up as [Deploying PostgreSQL](#deploying-postgresql) describes.
+
 ### Event filtering
 
 Pass an `EventFilter` to a read to select events by name, stream, metadata, or creation time:
@@ -168,6 +174,41 @@ public sealed record Ignored : IDomainEvent
     public static readonly Ignored Instance = new();
 }
 ```
+
+## Deploying PostgreSQL
+
+The store needs PostgreSQL 17 or later. Subscriptions receive new events through logical replication, so they also
+need `wal_level = logical` and a role with the `REPLICATION` attribute.
+
+Connect through a single host that always reaches the primary. Subscriptions fail if the connection string lists
+multiple hosts, because Npgsql can't open a replication connection to them. Never connect to a standby, even a
+synchronous one. Appends and the store's replication slot need the primary, so on a standby appends fail, and live
+subscriptions keep retrying until the connection reaches the primary.
+
+What else the server needs depends on how it is replicated:
+
+|                              | Single server | Amazon Aurora        | Cluster with standbys                 |
+|------------------------------|---------------|----------------------|---------------------------------------|
+| Commits are durable on       | its disk      | the cluster volume   | the synchronous standbys              |
+| Connect to                   | the server    | the cluster endpoint | a virtual IP or proxy for the primary |
+| `synchronous_standby_names`  | empty         | empty                | the standbys a failover can promote   |
+| `synchronized_standby_slots` | not used      | not available        | their physical slots                  |
+| `sync_replication_slots`     | not used      | not available        | on, optionally                        |
+| After a failover             | no failover   | subscriptions resume | subscriptions resume or catch up      |
+
+### Amazon Aurora
+
+Aurora needs no standbys: a commit is durable once Aurora's shared cluster volume has it. Use Aurora PostgreSQL 17 or
+later with `rds.logical_replication = 1`, grant the store's role `rds_replication`, and connect to the cluster
+endpoint. [PostgreSQL on Amazon Aurora](docs/unpublished/postgresql-on-aurora.md) covers the setup, what happens in a
+failover, and an assumption about Aurora that hasn't been confirmed yet.
+
+### A cluster with standbys
+
+A commit is durable only once the synchronous standbys have it. Name the standbys that a failover can promote in
+`synchronous_standby_names`, list their physical slots in `synchronized_standby_slots`, and use a failover manager
+that keeps both lists in step. [PostgreSQL with standbys](docs/unpublished/postgresql-with-standbys.md) explains each
+setting, the optional copies of the store's slot, and what happens when the lists drift.
 
 ## Contributing
 

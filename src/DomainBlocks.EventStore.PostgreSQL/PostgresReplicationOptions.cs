@@ -16,9 +16,16 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// failover the feed resumes on the promoted standby instead of resetting subscriptions.
 /// </para>
 /// <para>
+/// Aurora PostgreSQL needs neither. A commit is durable once Aurora's shared cluster volume has it, and its readers
+/// read that volume, using the writer's log only to keep their page caches current. The failover option has no
+/// effect there: Aurora keeps slots in the cluster volume, so after a writer failover the feed resumes on the new
+/// writer.
+/// </para>
+/// <para>
 /// Live subscriptions follow a failover only through a host that always reaches the primary, such as a writer
-/// endpoint, a virtual IP, or a proxy. They fail if the store's data source or the replication connection string lists
-/// multiple hosts.
+/// endpoint, a virtual IP, or a proxy. While that host still reaches a standby, as it can for a while during a
+/// failover, the feed keeps retrying. Live subscriptions fail if the store's data source or the replication connection
+/// string lists multiple hosts.
 /// </para>
 /// </remarks>
 public sealed class PostgresReplicationOptions
@@ -29,8 +36,9 @@ public sealed class PostgresReplicationOptions
     /// </summary>
     /// <remarks>
     /// A data source's connection string includes the password only with <c>Persist Security Info=true</c>. The role
-    /// needs the REPLICATION attribute or superuser rights, and the server must be PostgreSQL 17 or later and run with
-    /// <c>wal_level = logical</c>.
+    /// needs the REPLICATION attribute or superuser rights (on Aurora, the <c>rds_replication</c> role), and the server
+    /// must be PostgreSQL 17 or later and run with <c>wal_level = logical</c> (on Aurora,
+    /// <c>rds.logical_replication = 1</c>).
     /// </remarks>
     public string? ConnectionString { get; set; }
 
