@@ -238,12 +238,15 @@ synchronous standbys have it. The server has to do the rest:
   `wal_level = logical`, and a `dbname` in `primary_conninfo`. They then keep a copy of the store's slot, and after a
   failover subscriptions resume from it instead of catching up.
 - Keep the lists in step, on whichever server is the primary. `synchronous_standby_names` names standbys by
-  application name and `synchronized_standby_slots` by slot name, and PostgreSQL doesn't check that they agree. Patroni
-  can own both with `manage_synchronized_standby_slots`, which needs `synchronous_mode`. It was added after Patroni
-  4.1.5, in [patroni/patroni#3527](https://github.com/patroni/patroni/pull/3527). With a failover manager that
-  maintains only `synchronous_standby_names`, set the new primary's `synchronized_standby_slots` after each failover.
-  Until then, an empty list leaves subscriptions without the guarantee above, and a list that names a missing slot
-  holds them back.
+  application name and `synchronized_standby_slots` by slot name, and PostgreSQL doesn't check that they agree. The
+  slot list also waits for every standby it names, while synchronous replication needs only as many as
+  `synchronous_standby_names` asks for. So a listed standby that goes offline holds subscriptions back, even while
+  appends carry on through the others. List only the synchronous standbys that are connected, and update the list
+  whenever that set changes: after a failover, and when a standby goes offline or comes back. Patroni does this when
+  `manage_synchronized_standby_slots` is on, with `synchronous_mode`. The option was added after Patroni 4.1.5, in
+  [patroni/patroni#3527](https://github.com/patroni/patroni/pull/3527). In quorum mode it lists every synchronous
+  standby, so one that falls behind still holds subscriptions back. Without such a manager, the list is yours to
+  maintain, and an empty one leaves subscriptions without the guarantee above.
 
 ## Contributing
 
