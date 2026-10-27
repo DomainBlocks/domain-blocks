@@ -200,15 +200,15 @@ What else the server needs depends on how it is replicated:
 
 Aurora needs no standbys: a commit is durable once Aurora's shared cluster volume has it. Use Aurora PostgreSQL 17 or
 later with `rds.logical_replication = 1`, grant the store's role `rds_replication`, and connect to the cluster
-endpoint. [PostgreSQL on Amazon Aurora](docs/postgresql-on-aurora.md) covers the setup, what happens in a failover,
-and an assumption about Aurora that hasn't been confirmed yet.
+endpoint. [PostgreSQL on Amazon Aurora](docs/unpublished/postgresql-on-aurora.md) covers the setup, what happens in a
+failover, and an assumption about Aurora that hasn't been confirmed yet.
 
 ### A cluster with standbys
 
 A commit is durable only once the synchronous standbys have it. Name the standbys that a failover can promote in
 `synchronous_standby_names`, list their physical slots in `synchronized_standby_slots`, and use a failover manager
-that keeps both lists in step. [PostgreSQL with standbys](docs/postgresql-with-standbys.md) explains each setting,
-the optional copies of the store's slot, and what happens when the lists drift.
+that keeps both lists in step. [PostgreSQL with standbys](docs/unpublished/postgresql-with-standbys.md) explains each
+setting, the optional copies of the store's slot, and what happens when the lists drift.
 
 ## Contributing
 
