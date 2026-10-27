@@ -21,7 +21,7 @@ internal sealed class InactiveSlotScavenger(
     private const string DropSlotSql = "SELECT pg_drop_replication_slot($1)";
 
     // The slots in this database whose names match the pattern ($1) and that are invalidated or inactive for longer
-    // than $2.
+    // than $2. Subtracting $2 from now() instead would fail with "timestamp out of range" for a very long timeout.
     private const string SelectInactiveSlotsSql =
         """
         SELECT slot_name
@@ -30,7 +30,7 @@ internal sealed class InactiveSlotScavenger(
           AND slot_type = 'logical'
           AND NOT active
           AND slot_name ~ $1
-          AND (invalidation_reason IS NOT NULL OR inactive_since < now() - $2)
+          AND (invalidation_reason IS NOT NULL OR now() - inactive_since > $2)
         """;
 
     private readonly CancellationTokenSource _stop = new();
@@ -93,7 +93,7 @@ internal sealed class InactiveSlotScavenger(
 
     private async Task DropInactiveSlotsPeriodicallyAsync(CancellationToken cancellationToken)
     {
-        using var timer = new PeriodicTimer(inactiveSlotTimeout);
+        using var timer = new PeriodicTimer(TimerDurations.ClampPeriod(inactiveSlotTimeout));
 
         try
         {

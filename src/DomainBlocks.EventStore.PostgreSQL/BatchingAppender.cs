@@ -27,14 +27,9 @@ internal sealed class BatchingAppender : IAppender
         PostgresEventStoreOptions options,
         ILogger? logger)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(options.AppendQueueCapacity);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(options.AppendMaxBatchSize);
-        ArgumentOutOfRangeException.ThrowIfLessThan(options.AppendBatchingDelay, TimeSpan.Zero);
-        ArgumentOutOfRangeException.ThrowIfNegative(options.AppendBatchingDelayMinCount);
-
         _command = new AppendBatchCommand(dataSource, names);
         _maxBatchSize = options.AppendMaxBatchSize;
-        _batchingDelay = options.AppendBatchingDelay;
+        _batchingDelay = TimerDurations.Clamp(options.AppendBatchingDelay);
         _batchingDelayMinCount = options.AppendBatchingDelayMinCount;
         _logger = logger;
 
@@ -87,7 +82,8 @@ internal sealed class BatchingAppender : IAppender
 
     private async Task RunAppendLoopAsync(CancellationToken ct)
     {
-        var batch = new List<AppendRequest>(_maxBatchSize);
+        // The batch grows as it fills, since the maximum batch size can be far larger than any real batch.
+        var batch = new List<AppendRequest>();
 
         try
         {

@@ -80,10 +80,11 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent>(
             _hasOpenedSessionOnSlot = false;
         }
 
+        // Npgsql passes both values to timers without checking them.
         var connection = new LogicalReplicationConnection(connectionString)
         {
-            WalReceiverTimeout = options.WalReceiverTimeout,
-            WalReceiverStatusInterval = options.WalReceiverStatusInterval
+            WalReceiverTimeout = TimerDurations.Clamp(options.WalReceiverTimeout),
+            WalReceiverStatusInterval = TimerDurations.Clamp(options.WalReceiverStatusInterval)
         };
 
         try

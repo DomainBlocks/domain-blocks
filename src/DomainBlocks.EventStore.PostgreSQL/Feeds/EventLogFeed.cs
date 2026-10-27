@@ -16,6 +16,9 @@ namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 /// </remarks>
 internal sealed class EventLogFeed<T> : IEventLogFeed<T>
 {
+    // Polly rejects retry delays longer than 1 day.
+    private static readonly TimeSpan PollyMaxDelay = TimeSpan.FromDays(1);
+
     private readonly IEventLogSessionFactory<T> _sessionFactory;
     private readonly Func<CancellationToken, Task<IEventLogSession<T>>> _openSession;
     private readonly Func<T, long> _positionSelector;
@@ -95,8 +98,8 @@ internal sealed class EventLogFeed<T> : IEventLogFeed<T>
                 MaxRetryAttempts = options.MaxRetryAttempts,
                 BackoffType = DelayBackoffType.Exponential,
                 UseJitter = true,
-                Delay = options.RetryDelay,
-                MaxDelay = options.MaxRetryDelay,
+                Delay = TimeSpan.FromTicks(Math.Min(options.RetryDelay.Ticks, PollyMaxDelay.Ticks)),
+                MaxDelay = TimeSpan.FromTicks(Math.Min(options.MaxRetryDelay.Ticks, PollyMaxDelay.Ticks)),
                 ShouldHandle = args =>
                 {
                     var shouldHandle = args.Outcome.Exception is { } ex &&

@@ -6,23 +6,13 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Unit;
 public class PostgresReplicationOptionsTests
 {
     private static readonly TimeSpan[] OutOfRangeIntervals =
-    [
-        TimeSpan.Zero,
-        TimeSpan.FromSeconds(-1),
-        Timeout.InfiniteTimeSpan,
-        TimeSpan.FromDays(1) + TimeSpan.FromTicks(1)
-    ];
+        [TimeSpan.Zero, TimeSpan.FromSeconds(-1), Timeout.InfiniteTimeSpan];
 
-    private static readonly TimeSpan[] BoundaryIntervals = [TimeSpan.FromTicks(1), TimeSpan.FromDays(1)];
+    private static readonly TimeSpan[] BoundaryIntervals = [TimeSpan.FromTicks(1), TimeSpan.MaxValue];
 
-    private static readonly TimeSpan[] OutOfRangeDelays =
-    [
-        TimeSpan.FromTicks(-1),
-        Timeout.InfiniteTimeSpan,
-        TimeSpan.FromDays(1) + TimeSpan.FromTicks(1)
-    ];
+    private static readonly TimeSpan[] OutOfRangeDelays = [TimeSpan.FromTicks(-1), Timeout.InfiniteTimeSpan];
 
-    private static readonly TimeSpan[] BoundaryDelays = [TimeSpan.Zero, TimeSpan.FromDays(1)];
+    private static readonly TimeSpan[] BoundaryDelays = [TimeSpan.Zero, TimeSpan.MaxValue];
 
     [TestCaseSource(nameof(OutOfRangeIntervals))]
     public void InactiveSlotTimeout_OutOfRange_Throws(TimeSpan timeout)
