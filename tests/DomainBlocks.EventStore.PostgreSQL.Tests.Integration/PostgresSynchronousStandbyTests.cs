@@ -1,3 +1,4 @@
+using System.Net;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Events;
 using DomainBlocks.Testing.Integration.EventStore;
@@ -279,6 +280,54 @@ public class PostgresSynchronousStandbyTests
         var e = (await next).Event.ShouldNotBeNull();
         e.Payload.ShouldBe(new TestEvent { Value = "after" });
         e.Context.LogPosition.ShouldBe(LogPosition.FromInt64(1));
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_EndpointReachesStandby_DeliversOnceEndpointReachesPrimary(CancellationToken ct)
+    {
+        var primary = new NpgsqlConnectionStringBuilder(_server.PrimaryConnectionString);
+        var standby = new NpgsqlConnectionStringBuilder(_server.StandbyConnectionString);
+
+        await using var dataSource = CreateDataSource();
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
+        await using var appender = CreateEventStore(dataSource);
+
+        // The proxy stands in for an endpoint that still reaches a standby, as one can for a while after a failover.
+        await using var proxy = new TcpProxy(new DnsEndPoint(standby.Host.ShouldNotBeNull(), standby.Port));
+
+        await using var proxiedDataSource = CreateDataSource(x =>
+        {
+            x.Host = IPAddress.Loopback.ToString();
+            x.Port = proxy.Port;
+        });
+
+        await using var eventStore = CreateEventStore(proxiedDataSource, new PostgresEventStoreOptions
+        {
+            Schema = _options.Schema,
+            Replication =
+            {
+                RetryDelay = TimeSpan.FromMilliseconds(100),
+                MaxRetryDelay = TimeSpan.FromMilliseconds(500)
+            }
+        });
+
+        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).Probe(ct);
+        var next = subscription.NextAsync();
+
+        await Task.Delay(HoldDuration, ct);
+        next.IsCompleted.ShouldBeFalse();
+
+        proxy.MoveTo(new DnsEndPoint(primary.Host.ShouldNotBeNull(), primary.Port));
+
+        (await next).IsCaughtUp.ShouldBeTrue();
+
+        await appender.AppendAsync(
+            "s1",
+            [AppendableEvent.Create<object>(new TestEvent { Value = "e" })],
+            cancellationToken: ct);
+
+        (await subscription.NextEventAsync()).ShouldBe(new TestEvent { Value = "e" });
     }
 
     [Test]

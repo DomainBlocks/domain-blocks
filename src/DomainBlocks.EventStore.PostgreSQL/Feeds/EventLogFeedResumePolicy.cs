@@ -6,9 +6,9 @@ namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 internal static class EventLogFeedResumePolicy
 {
     /// <summary>
-    /// Treats connection loss, server restarts, resource exhaustion, and a replication slot that is lost or still in
-    /// use as transient. Misconfiguration, such as a missing publication, the wrong wal_level, or missing privileges,
-    /// is not transient, so it surfaces immediately.
+    /// Treats connection loss, server restarts, resource exhaustion, a replication slot that is lost or still in use,
+    /// and a server in recovery as transient. Misconfiguration, such as a missing publication, the wrong wal_level, or
+    /// missing privileges, is not transient, so it surfaces immediately.
     /// </summary>
     public static bool IsTransient(Exception exception)
     {
@@ -16,6 +16,7 @@ internal static class EventLogFeedResumePolicy
         {
             ReplicationSlotLostException => true,
             ReplicationSlotInUseException => true,
+            ReplicationServerInRecoveryException => true,
 
             // Npgsql counts this error as transient. An invalidated slot raises it too, but the session reports that as
             // ReplicationSlotLostException. What remains is misconfiguration, such as the wrong wal_level, which
