@@ -189,7 +189,7 @@ What else the server needs depends on how it is replicated:
 
 |                              | Single server | Amazon Aurora        | Cluster with standbys                 |
 |------------------------------|---------------|----------------------|---------------------------------------|
-| Commits are durable on       | its disk      | the shared storage   | the synchronous standbys              |
+| Commits are durable on       | its disk      | the cluster volume   | the synchronous standbys              |
 | Connect to                   | the server    | the cluster endpoint | a virtual IP or proxy for the primary |
 | `synchronous_standby_names`  | empty         | empty                | the standbys a failover can promote   |
 | `synchronized_standby_slots` | not used      | not available        | their physical slots                  |
@@ -198,27 +198,10 @@ What else the server needs depends on how it is replicated:
 
 ### Amazon Aurora
 
-Aurora keeps its data in a cluster volume that every instance shares, and a commit is durable once that volume has
-it. The writer also sends its log to the readers, but only to keep their page caches current, so there are no
-standbys to set up. A commit is durable before any query can see it, and the cluster endpoint follows the writer.
-
-- Use Aurora PostgreSQL 17 or later.
-- Set `rds.logical_replication = 1` in the cluster parameter group, which is how Aurora sets `wal_level = logical`. It
-  takes effect after a reboot.
-- Grant the store's role `rds_replication`, which stands in for the `REPLICATION` attribute.
-- Connect to the cluster endpoint. During a failover it can reach the old writer for a while, now a reader, and
-  subscriptions keep retrying until it reaches the new writer.
-
-The store creates its replication slot with PostgreSQL's failover option, which has no effect on Aurora. Aurora keeps
-slots in its shared storage instead, so after a writer failover subscriptions resume on the new writer without
-catching up. AWS doesn't document this, but the [Aurora tests](tests/DomainBlocks.EventStore.PostgreSQL.Tests.Aurora)
-check it. If a failover did lose the slot, subscriptions would catch up from where they were and miss nothing.
-
-The store also relies on something that hasn't been confirmed yet: that Aurora's logical replication sends a commit
-only once its storage has it, as Aurora's queries see a commit only then. If it sent one earlier, a failover could
-lose an event that a subscription had already received. AWS doesn't document this either. Two checks are pending:
-asking AWS, and a test that slows Aurora's storage with its fault injection functions and checks that no
-subscription receives an event before the append that wrote it returns.
+Aurora needs no standbys: a commit is durable once Aurora's shared cluster volume has it. Use Aurora PostgreSQL 17 or
+later with `rds.logical_replication = 1`, grant the store's role `rds_replication`, and connect to the cluster
+endpoint. [PostgreSQL on Amazon Aurora](docs/postgresql-on-aurora.md) covers the setup, what happens in a failover,
+and an assumption about Aurora that hasn't been confirmed yet.
 
 ### A cluster with standbys
 
