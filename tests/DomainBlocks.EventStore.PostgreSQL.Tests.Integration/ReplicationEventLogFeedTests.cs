@@ -205,6 +205,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
         // Each reconnect resumes from the slot, which the feed advances while it waits between transactions.
         using var stop = new CancellationTokenSource();
         var otherWrites = RepeatUntilAsync(WriteOtherTableAsync, TimeSpan.FromMilliseconds(1), stop.Token, ct);
+
         var terminations = RepeatUntilAsync(
             TerminateWalSenderIfActiveAsync,
             TimeSpan.FromMilliseconds(100),
