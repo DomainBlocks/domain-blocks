@@ -5,4 +5,4 @@ namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 /// instead of the primary.
 /// </summary>
 internal sealed class ReplicationServerInRecoveryException(string? host) :
-    Exception($"The server at '{host}' is in recovery, so the feed can't use it.");
+    Exception($"The server at '{host}' is in recovery. Live subscriptions need the primary.");

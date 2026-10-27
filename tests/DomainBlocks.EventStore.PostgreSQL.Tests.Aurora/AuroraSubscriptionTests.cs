@@ -14,8 +14,8 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Aurora;
 using EventStore = IEventStore<object, string, StreamPosition, LogPosition>;
 
 /// <summary>
-/// Live subscriptions on an Aurora PostgreSQL cluster with a writer and a reader, which <c>run.sh</c> creates. See
-/// README.md.
+/// Tests live subscriptions on an Aurora PostgreSQL cluster with a writer and a reader, which <c>run.sh</c> creates.
+/// See README.md.
 /// </summary>
 [TestFixture]
 [Explicit("Needs an Aurora cluster. See README.md.")]
@@ -224,7 +224,7 @@ public class AuroraSubscriptionTests
 
         var appender = new ContinuousAppender(eventStore);
         using var stop = new CancellationTokenSource();
-        var appending = appender.RunAsync(stop.Token);
+        var appending = appender.RunAsync(stop.Token, ct);
 
         await WaitUntilAsync(() => appender.Count >= 20, ct);
         await _cluster.FailOverAsync(ct);
@@ -236,13 +236,13 @@ public class AuroraSubscriptionTests
         await appending;
         await AppendAsync(eventStore, "end", ct);
 
-        // An append that failed during the failover may have committed, so the log, not the appender, says which
-        // events exist.
         var logged = await eventStore
             .ReadAll()
             .Select(x => (x.Context.LogPosition, ((TestEvent)x.Payload).Value))
             .ToListAsync(ct);
 
+        // The appender retried each append with its commit ID until it succeeded, so the log holds each event once.
+        logged.Select(x => x.Value).ShouldBe([.. Enumerable.Range(0, appender.Count).Select(i => $"e{i}"), "end"]);
         (await delivered).ShouldBe(logged);
     }
 
@@ -297,7 +297,7 @@ public class AuroraSubscriptionTests
         return builder.Build();
     }
 
-    // Appends one event at a time until stopped, and retries after a failure, as an application would through a
+    // Appends one event at a time until stopped, and retries each until it commits, as an application would through a
     // failover.
     private sealed class ContinuousAppender(EventStore eventStore)
     {
@@ -305,18 +305,36 @@ public class AuroraSubscriptionTests
 
         public int Count => Volatile.Read(ref _count);
 
-        public async Task RunAsync(CancellationToken stop)
+        public async Task RunAsync(CancellationToken stop, CancellationToken ct)
         {
             while (!stop.IsCancellationRequested)
             {
+                await AppendUntilCommittedAsync($"e{Count}", ct);
+                Interlocked.Increment(ref _count);
+            }
+        }
+
+        // An append that failed may still have committed, so each retry reuses the commit ID, and the store doesn't
+        // write the event again.
+        private async Task AppendUntilCommittedAsync(string value, CancellationToken ct)
+        {
+            var commitId = Guid.NewGuid();
+
+            while (true)
+            {
                 try
                 {
-                    await AppendAsync(eventStore, $"e{Count}", CancellationToken.None);
-                    Interlocked.Increment(ref _count);
+                    await eventStore.AppendAsync(
+                        "s1",
+                        [AppendableEvent.Create<object>(new TestEvent { Value = value })],
+                        commitId: commitId,
+                        cancellationToken: ct);
+
+                    return;
                 }
-                catch (Exception)
+                catch (Exception) when (!ct.IsCancellationRequested)
                 {
-                    await Task.Delay(100, CancellationToken.None);
+                    await Task.Delay(100, ct);
                 }
             }
         }
