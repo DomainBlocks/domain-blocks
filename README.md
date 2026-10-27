@@ -67,8 +67,8 @@ way for a single event stream. A subscriber that consumes too slowly receives a 
 
 Subscriptions never deliver an event that a failover could undo, provided the deployment does its part:
 
-- **MongoDB** needs a replica set. The store reads from the primary itself, so the connection string's read preference
-  doesn't matter.
+- **MongoDB** needs a replica set. The store sends its reads to the primary, whatever read preference the connection
+  string sets.
 - **PostgreSQL** needs version 17 or later, set up as [Deploying PostgreSQL](#deploying-postgresql) describes.
 
 ### Event filtering
@@ -182,8 +182,8 @@ need `wal_level = logical` and a role with the `REPLICATION` attribute.
 
 Connect through a single host that always reaches the primary. Subscriptions fail if the connection string lists
 multiple hosts, because Npgsql can't open a replication connection to them. Never connect to a standby, even a
-synchronous one: it has a commit once its disk has it, not once its queries can see it, so a subscription reading
-there could miss an event.
+synchronous one. Appends and the store's replication slot need the primary, so on a standby appends fail, and live
+subscriptions keep retrying until the connection reaches the primary.
 
 What else the server needs depends on how it is replicated:
 
@@ -198,15 +198,16 @@ What else the server needs depends on how it is replicated:
 
 ### Amazon Aurora
 
-Aurora replicates its storage rather than the WAL, so it has no standbys to set up. A commit is durable before any
-query can see it, and the cluster endpoint follows the writer.
+Aurora keeps its data in a cluster volume that every instance shares, and a commit is durable once that volume has
+it. The writer also sends its log to the readers, but only to keep their page caches current, so there are no
+standbys to set up. A commit is durable before any query can see it, and the cluster endpoint follows the writer.
 
 - Use Aurora PostgreSQL 17 or later.
 - Set `rds.logical_replication = 1` in the cluster parameter group, which is how Aurora sets `wal_level = logical`. It
   takes effect after a reboot.
 - Grant the store's role `rds_replication`, which stands in for the `REPLICATION` attribute.
 - Connect to the cluster endpoint. During a failover it can reach the old writer for a while, now a reader, and
-  subscriptions keep retrying until it reaches the new one.
+  subscriptions keep retrying until it reaches the new writer.
 
 The store creates its replication slot with PostgreSQL's failover option, which has no effect on Aurora. Aurora keeps
 slots in its shared storage instead, so after a writer failover subscriptions resume on the new writer without
@@ -229,13 +230,17 @@ synchronous standbys have it. The server has to do the rest:
   primary then holds each commit back from subscriptions until those standbys have it. Without the list,
   subscriptions still work, and the store logs a warning, but a failover can lose an event that a subscription has
   received, and the subscription then skips the event that reuses its position. A listed slot that is missing,
-  invalidated or inactive holds subscriptions back, and only the server's log says why.
+  invalidated or inactive holds subscriptions back without an error: they stop receiving new events, and only a
+  warning in the primary's log names the slot.
 - Optionally, set `sync_replication_slots = on` on those standbys, with `hot_standby_feedback = on`,
   `wal_level = logical`, and a `dbname` in `primary_conninfo`. They then keep a copy of the store's slot, and after a
   failover subscriptions resume from it instead of catching up.
-- Keep the lists in step. `synchronous_standby_names` names standbys by application name and
-  `synchronized_standby_slots` by slot name, and PostgreSQL doesn't check that they agree, so let the failover manager
-  own both.
+- Keep the lists in step, on whichever server is the primary. `synchronous_standby_names` names standbys by
+  application name and `synchronized_standby_slots` by slot name, and PostgreSQL doesn't check that they agree. Patroni
+  can own both with `manage_synchronized_standby_slots`, added after Patroni 4.1.5, which needs `synchronous_mode`. With
+  a failover manager that maintains only `synchronous_standby_names`, set the new primary's
+  `synchronized_standby_slots` after each failover. Until then, an empty list leaves subscriptions without the
+  guarantee above, and a list that names a missing slot holds them back.
 
 ## Contributing
 

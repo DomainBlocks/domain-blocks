@@ -16,8 +16,10 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// failover the feed resumes on the promoted standby instead of resetting subscriptions.
 /// </para>
 /// <para>
-/// Aurora PostgreSQL replicates storage rather than WAL, so it needs neither. The failover option has no effect there:
-/// Aurora keeps slots in its shared storage, so after a writer failover the feed resumes on the new writer.
+/// Aurora PostgreSQL needs neither. A commit is durable once Aurora's shared cluster volume has it, and its readers
+/// read that volume, using the writer's log only to keep their page caches current. The failover option has no
+/// effect there: Aurora keeps slots in the cluster volume, so after a writer failover the feed resumes on the new
+/// writer.
 /// </para>
 /// <para>
 /// Live subscriptions follow a failover only through a host that always reaches the primary, such as a writer
