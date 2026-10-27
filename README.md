@@ -214,9 +214,11 @@ slots in its shared storage instead, so after a writer failover subscriptions re
 catching up. AWS doesn't document this, but the [Aurora tests](tests/DomainBlocks.EventStore.PostgreSQL.Tests.Aurora)
 check it. If a failover did lose the slot, subscriptions would catch up from where they were and miss nothing.
 
-The store also relies on something the tests can't check: that Aurora's logical replication sends a commit only once
-its storage has it, as Aurora's queries see a commit only then. If it sent one earlier, a failover could lose an
-event that a subscription had already received. AWS doesn't document this either.
+The store also relies on something that hasn't been confirmed yet: that Aurora's logical replication sends a commit
+only once its storage has it, as Aurora's queries see a commit only then. If it sent one earlier, a failover could
+lose an event that a subscription had already received. AWS doesn't document this either. Two checks are pending:
+asking AWS, and a test that slows Aurora's storage with its fault injection functions and checks that no
+subscription receives an event before the append that wrote it returns.
 
 ### A cluster with standbys
 
@@ -237,10 +239,11 @@ synchronous standbys have it. The server has to do the rest:
   failover subscriptions resume from it instead of catching up.
 - Keep the lists in step, on whichever server is the primary. `synchronous_standby_names` names standbys by
   application name and `synchronized_standby_slots` by slot name, and PostgreSQL doesn't check that they agree. Patroni
-  can own both with `manage_synchronized_standby_slots`, added after Patroni 4.1.5, which needs `synchronous_mode`. With
-  a failover manager that maintains only `synchronous_standby_names`, set the new primary's
-  `synchronized_standby_slots` after each failover. Until then, an empty list leaves subscriptions without the
-  guarantee above, and a list that names a missing slot holds them back.
+  can own both with `manage_synchronized_standby_slots`, which needs `synchronous_mode`. It was added after Patroni
+  4.1.5, in [patroni/patroni#3527](https://github.com/patroni/patroni/pull/3527). With a failover manager that
+  maintains only `synchronous_standby_names`, set the new primary's `synchronized_standby_slots` after each failover.
+  Until then, an empty list leaves subscriptions without the guarantee above, and a list that names a missing slot
+  holds them back.
 
 ## Contributing
 
