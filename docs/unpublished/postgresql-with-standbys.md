@@ -6,15 +6,18 @@ synchronous standbys have it. The server has to do the rest:
 
 - Name the standbys that a failover can promote in `synchronous_standby_names`, and use a failover manager that
   promotes only a synchronous standby, such as Patroni in synchronous mode.
+- Set up those standbys as the primary is: `wal_level = logical`, and `pg_hba.conf` rules that let the store's role
+  connect. Replication copies roles, the store's schema and its publication to the standbys, but not server settings
+  or `pg_hba.conf`. After a failover to a standby with `wal_level = replica`, every live subscription fails.
 - Give each of those standbys a physical replication slot, and list the slots in `synchronized_standby_slots`. The
   primary then holds each commit back from subscriptions until those standbys have it. Without the list,
   subscriptions still work, and the store logs a warning, but a failover can lose an event that a subscription has
   received, and the subscription then skips the event that reuses its position. A listed slot that is missing,
   invalidated or inactive holds subscriptions back without an error: they stop receiving new events, and only a
   warning in the primary's log names the slot.
-- Optionally, set `sync_replication_slots = on` on those standbys, with `hot_standby_feedback = on`,
-  `wal_level = logical`, and a `dbname` in `primary_conninfo`. They then keep a copy of the store's slot, and after a
-  failover subscriptions resume from it instead of catching up.
+- Optionally, set `sync_replication_slots = on` on those standbys, with `hot_standby_feedback = on` and a `dbname` in
+  `primary_conninfo`. They then keep a copy of the store's slot, and after a failover subscriptions resume from it
+  instead of catching up.
 - Keep the lists in step, on whichever server is the primary. `synchronous_standby_names` names standbys by
   application name and `synchronized_standby_slots` by slot name, and PostgreSQL doesn't check that they agree. The
   slot list also waits for every standby it names, while synchronous replication needs only as many as
