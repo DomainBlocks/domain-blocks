@@ -30,6 +30,10 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// </remarks>
 public sealed class PostgresReplicationOptions
 {
+    // Polly rejects retry delays over a day, and the timers that the other intervals drive reject long values too, so
+    // every interval has Polly's limit.
+    private static readonly TimeSpan MaxInterval = TimeSpan.FromDays(1);
+
     /// <summary>
     /// Gets or sets the connection string for the replication connection, or <see langword="null"/> (the default) to
     /// use the store's.
@@ -44,7 +48,7 @@ public sealed class PostgresReplicationOptions
 
     /// <summary>
     /// Gets or sets how long a replication slot of the store's schema can stay inactive before a store on that schema
-    /// drops it. The value must be positive and at most 1 day. The default is 10 minutes.
+    /// drops it. The default is 10 minutes.
     /// </summary>
     /// <remarks>
     /// A store names its slots after its schema. A process that stops without dropping its slot leaves it behind,
@@ -53,7 +57,17 @@ public sealed class PostgresReplicationOptions
     /// applies its value to all of the schema's slots, so stores on the same schema should use the same value. To cap
     /// the WAL that a leftover slot holds, set the server's <c>max_slot_wal_keep_size</c>.
     /// </remarks>
-    public TimeSpan InactiveSlotTimeout { get; set; } = TimeSpan.FromMinutes(10);
+    /// <exception cref="ArgumentOutOfRangeException">The value is zero, negative, or longer than 1 day.</exception>
+    public TimeSpan InactiveSlotTimeout
+    {
+        get;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value, TimeSpan.Zero);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(value, MaxInterval);
+            field = value;
+        }
+    } = TimeSpan.FromMinutes(10);
 
     /// <summary>
     /// Gets or sets a value that indicates whether to receive row values in binary rather than text. The default is
@@ -62,32 +76,80 @@ public sealed class PostgresReplicationOptions
     public bool UseBinaryProtocol { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets how long to wait for a message from the server before treating the connection as lost. The value
-    /// must be positive and at most 1 day. The default is 60 seconds.
+    /// Gets or sets how long to wait for a message from the server before treating the connection as lost. The default
+    /// is 60 seconds.
     /// </summary>
-    public TimeSpan WalReceiverTimeout { get; set; } = TimeSpan.FromSeconds(60);
+    /// <exception cref="ArgumentOutOfRangeException">The value is zero, negative, or longer than 1 day.</exception>
+    public TimeSpan WalReceiverTimeout
+    {
+        get;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value, TimeSpan.Zero);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(value, MaxInterval);
+            field = value;
+        }
+    } = TimeSpan.FromSeconds(60);
 
     /// <summary>
-    /// Gets or sets how often to report the consumed WAL position, so the server can release WAL. The value must be
-    /// positive and at most 1 day. The default is 10 seconds.
+    /// Gets or sets how often to report the consumed WAL position, so the server can release WAL. The default is 10
+    /// seconds.
     /// </summary>
-    public TimeSpan WalReceiverStatusInterval { get; set; } = TimeSpan.FromSeconds(10);
+    /// <exception cref="ArgumentOutOfRangeException">The value is zero, negative, or longer than 1 day.</exception>
+    public TimeSpan WalReceiverStatusInterval
+    {
+        get;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value, TimeSpan.Zero);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(value, MaxInterval);
+            field = value;
+        }
+    } = TimeSpan.FromSeconds(10);
 
     /// <summary>
     /// Gets or sets the initial delay before reconnecting a lost replication connection. It grows exponentially, with
-    /// jitter, up to <see cref="MaxRetryDelay"/>. The value must be between zero and 1 day. The default is 1 second.
+    /// jitter, up to <see cref="MaxRetryDelay"/>. The default is 1 second.
     /// </summary>
-    public TimeSpan RetryDelay { get; set; } = TimeSpan.FromSeconds(1);
+    /// <exception cref="ArgumentOutOfRangeException">The value is negative or longer than 1 day.</exception>
+    public TimeSpan RetryDelay
+    {
+        get;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.Zero);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(value, MaxInterval);
+            field = value;
+        }
+    } = TimeSpan.FromSeconds(1);
 
     /// <summary>
-    /// Gets or sets the maximum delay between reconnection attempts. The value must be between zero and 1 day. The
-    /// default is 1 minute.
+    /// Gets or sets the maximum delay between reconnection attempts. The default is 1 minute.
     /// </summary>
-    public TimeSpan MaxRetryDelay { get; set; } = TimeSpan.FromMinutes(1);
+    /// <exception cref="ArgumentOutOfRangeException">The value is negative or longer than 1 day.</exception>
+    public TimeSpan MaxRetryDelay
+    {
+        get;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.Zero);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(value, MaxInterval);
+            field = value;
+        }
+    } = TimeSpan.FromMinutes(1);
 
     /// <summary>
-    /// Gets or sets how many times in a row to retry a failed connection attempt before subscriptions fail. The value
-    /// must be positive. The default is <see cref="int.MaxValue"/>.
+    /// Gets or sets how many times in a row to retry a failed connection attempt before subscriptions fail. The default
+    /// is <see cref="int.MaxValue"/>.
     /// </summary>
-    public int MaxRetryAttempts { get; set; } = int.MaxValue;
+    /// <exception cref="ArgumentOutOfRangeException">The value is zero or negative.</exception>
+    public int MaxRetryAttempts
+    {
+        get;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value);
+            field = value;
+        }
+    } = int.MaxValue;
 }
