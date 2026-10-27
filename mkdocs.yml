@@ -33,3 +33,4 @@ theme:
 nav:
   - Home: index.md
   - PostgreSQL on Amazon Aurora: postgresql-on-aurora.md
+  - PostgreSQL with standbys: postgresql-with-standbys.md
