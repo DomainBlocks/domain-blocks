@@ -62,10 +62,10 @@ plus standby):
 - **Data.** Each variant had its own schema, prefilled with 1M events and analyzed. On a small, new log, pull's tail
   read ran as sequential scans, which a real log wouldn't.
 - **Servers.** PostgreSQL 17.11 in Docker Desktop on Windows, on a 32-core machine that also ran the client. The
-  replicated setup is a primary and one synchronous standby, set up as the README's cluster with standbys: a physical
-  slot, `synchronous_standby_names`, `synchronized_standby_slots`, and `sync_replication_slots` on the standby. The
-  extra 1 ms was added with `tc netem` on the standby's outgoing traffic, and took a synchronous commit from 1.34 to
-  2.37 ms.
+  replicated setup is a primary and one synchronous standby, set up as
+  [PostgreSQL with standbys](postgresql-with-standbys.md) describes: a physical slot, `synchronous_standby_names`,
+  `synchronized_standby_slots`, and `sync_replication_slots` on the standby. The extra 1 ms was added with
+  `tc netem` on the standby's outgoing traffic, and took a synchronous commit from 1.34 to 2.37 ms.
 
 Not covered:
 
