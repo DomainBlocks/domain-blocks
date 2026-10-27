@@ -71,6 +71,7 @@ public static class PostgresEventStore
         ArgumentOutOfRangeException.ThrowIfGreaterThan(replicationOptions.RetryDelay, maxInterval);
         ArgumentOutOfRangeException.ThrowIfLessThan(replicationOptions.MaxRetryDelay, TimeSpan.Zero);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(replicationOptions.MaxRetryDelay, maxInterval);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(replicationOptions.MaxRetryAttempts);
 
         var connectionString = replicationOptions.ConnectionString
                                ?? replicationConnectionStringFallback

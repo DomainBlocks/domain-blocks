@@ -86,8 +86,8 @@ public sealed class PostgresReplicationOptions
     public TimeSpan MaxRetryDelay { get; set; } = TimeSpan.FromMinutes(1);
 
     /// <summary>
-    /// Gets or sets the maximum number of consecutive failed connection attempts before subscriptions fail. The default
-    /// is <see cref="int.MaxValue"/>.
+    /// Gets or sets how many times in a row to retry a failed connection attempt before subscriptions fail. The value
+    /// must be positive. The default is <see cref="int.MaxValue"/>.
     /// </summary>
     public int MaxRetryAttempts { get; set; } = int.MaxValue;
 }

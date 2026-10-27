@@ -102,6 +102,18 @@ public class PostgresEventStoreBuilderTests
         ex.ParamName.ShouldEndWith($".{nameof(PostgresReplicationOptions.MaxRetryDelay)}");
     }
 
+    [TestCase(0)]
+    [TestCase(-1)]
+    public async Task Build_NonPositiveMaxRetryAttempts_Throws(int attempts)
+    {
+        await using var dataSource = new NpgsqlDataSourceBuilder("Host=localhost").Build();
+        var builder = CreateBuilder(dataSource, o => o.MaxRetryAttempts = attempts);
+
+        var ex = Should.Throw<ArgumentOutOfRangeException>(builder.Build);
+
+        ex.ParamName.ShouldEndWith($".{nameof(PostgresReplicationOptions.MaxRetryAttempts)}");
+    }
+
     [Test]
     public async Task Build_OneDayIntervals_Succeeds()
     {
@@ -127,6 +139,15 @@ public class PostgresEventStoreBuilderTests
             o.RetryDelay = TimeSpan.Zero;
             o.MaxRetryDelay = TimeSpan.Zero;
         });
+
+        await using var store = builder.Build();
+    }
+
+    [Test]
+    public async Task Build_OneRetryAttempt_Succeeds()
+    {
+        await using var dataSource = new NpgsqlDataSourceBuilder("Host=localhost").Build();
+        var builder = CreateBuilder(dataSource, o => o.MaxRetryAttempts = 1);
 
         await using var store = builder.Build();
     }
