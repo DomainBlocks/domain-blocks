@@ -4,6 +4,7 @@ using DomainBlocks.EventStore.PostgreSQL.Feeds;
 using DomainBlocks.Testing.Integration.EventStore;
 using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
 using Npgsql;
+using NpgsqlTypes;
 using NUnit.Framework;
 using Shouldly;
 using static DomainBlocks.EventStore.PostgreSQL.Tests.Integration.AppendFunctionClient;
@@ -169,6 +170,66 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task Connect_WhenIdleAmidOtherWrites_AdvancesSlotPastLastRow(CancellationToken ct)
+    {
+        var options = new PostgresReplicationOptions { WalReceiverStatusInterval = TimeSpan.FromMilliseconds(100) };
+        var feed = CreateFeed(_slotNameGenerator, options);
+        var observer = new CollectingObserver();
+        using var attachment = feed.Attach(observer);
+        await using var connection = await feed.ConnectAsync(ct);
+        await CreateOtherTableAsync(ct);
+
+        await Client.AppendAsync([Any("s1", JsonEvent("e0"))], ct);
+        await observer.ReadAsync(1, ct);
+        var afterRow = await GetCurrentWalLsnAsync(ct);
+
+        // The server sends the feed nothing for these writes, only keepalives.
+        while (!await HasSlotPassedAsync(afterRow, ct))
+        {
+            await WriteOtherTableAsync(ct);
+            await Task.Delay(50, ct);
+        }
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task Connect_WhenWalSenderIsTerminatedAmidOtherWrites_DeliversEveryRowOnce(CancellationToken ct)
+    {
+        var options = new PostgresReplicationOptions { WalReceiverStatusInterval = TimeSpan.FromMilliseconds(10) };
+        var feed = CreateFeed(_slotNameGenerator, options);
+        var observer = new CollectingObserver();
+        using var attachment = feed.Attach(observer);
+        await using var connection = await feed.ConnectAsync(ct);
+        await CreateOtherTableAsync(ct);
+
+        // Each reconnect resumes from the slot, which the feed advances while it waits between transactions.
+        using var stop = new CancellationTokenSource();
+        var otherWrites = RepeatUntilAsync(WriteOtherTableAsync, TimeSpan.FromMilliseconds(1), stop.Token, ct);
+
+        var terminations = RepeatUntilAsync(
+            TerminateWalSenderIfActiveAsync,
+            TimeSpan.FromMilliseconds(100),
+            stop.Token,
+            ct);
+
+        const int count = 2000;
+
+        for (var i = 0; i < count; i++)
+            await Client.AppendAsync([Any("s1", JsonEvent($"e{i}"))], ct);
+
+        await stop.CancelAsync();
+        await Task.WhenAll(otherWrites, terminations);
+        await Client.AppendAsync([Any("s1", JsonEvent("marker"))], ct);
+
+        (await observer.ReadThroughAsync("marker", ct))
+            .Select(x => x.Context.LogPosition)
+            .ShouldBe(Enumerable.Range(0, count + 1).Select(i => LogPosition.FromInt64(i)));
+
+        observer.ResetCount.ShouldBe(0);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task Connect_Streaming_HoldsPermanentSlotUntilDisposed(CancellationToken ct)
     {
         var feed = CreateFeed();
@@ -322,6 +383,19 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
             LoggerFactory.CreateLogger("ReplicationEventLogSession"));
     }
 
+    private static async Task RepeatUntilAsync(
+        Func<CancellationToken, Task> action,
+        TimeSpan interval,
+        CancellationToken stop,
+        CancellationToken ct)
+    {
+        while (!stop.IsCancellationRequested)
+        {
+            await action(ct);
+            await Task.Delay(interval, ct);
+        }
+    }
+
     private static async Task TerminateWalSenderAsync(CancellationToken ct)
     {
         await using var command = PostgresTestEnvironment.DataSource.CreateCommand(
@@ -329,6 +403,49 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
             "WHERE slot_name LIKE 'dbx_test_%' AND active_pid IS NOT NULL");
 
         (await command.ExecuteScalarAsync(ct)).ShouldBe(true);
+    }
+
+    // The feed may be reconnecting, so there may be no walsender to end.
+    private static async Task TerminateWalSenderIfActiveAsync(CancellationToken ct)
+    {
+        await using var command = PostgresTestEnvironment.DataSource.CreateCommand(
+            "SELECT pg_terminate_backend(active_pid) FROM pg_replication_slots " +
+            "WHERE slot_name LIKE 'dbx_test_%' AND active_pid IS NOT NULL");
+
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
+    // A table outside the publication, as another application sharing the database would have.
+    private async Task CreateOtherTableAsync(CancellationToken ct)
+    {
+        await using var command = DataSource.CreateCommand($"CREATE TABLE IF NOT EXISTS {Schema}.other (value bigint)");
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
+    private async Task WriteOtherTableAsync(CancellationToken ct)
+    {
+        await using var command = DataSource.CreateCommand($"INSERT INTO {Schema}.other VALUES (1)");
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task<NpgsqlLogSequenceNumber> GetCurrentWalLsnAsync(CancellationToken ct)
+    {
+        await using var command = PostgresTestEnvironment.DataSource.CreateCommand("SELECT pg_current_wal_lsn()");
+        return (NpgsqlLogSequenceNumber)(await command.ExecuteScalarAsync(ct)).ShouldNotBeNull();
+    }
+
+    private static async Task<bool> HasSlotPassedAsync(NpgsqlLogSequenceNumber lsn, CancellationToken ct)
+    {
+        await using var command = PostgresTestEnvironment.DataSource.CreateCommand(
+            "SELECT confirmed_flush_lsn > $1 FROM pg_replication_slots WHERE slot_name LIKE 'dbx_test_%'");
+
+        command.Parameters.Add(new NpgsqlParameter<NpgsqlLogSequenceNumber>
+        {
+            TypedValue = lsn,
+            NpgsqlDbType = NpgsqlDbType.PgLsn
+        });
+
+        return (bool)(await command.ExecuteScalarAsync(ct)).ShouldNotBeNull();
     }
 
     private static async Task WaitForWalSenderToBlockAsync(CancellationToken ct)
