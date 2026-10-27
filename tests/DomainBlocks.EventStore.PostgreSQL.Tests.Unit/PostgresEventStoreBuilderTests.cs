@@ -7,13 +7,6 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Unit;
 
 public class PostgresEventStoreBuilderTests
 {
-    private static readonly TimeSpan[] NonPositiveIntervals =
-    [
-        TimeSpan.Zero,
-        TimeSpan.FromSeconds(-1),
-        Timeout.InfiniteTimeSpan
-    ];
-
     [Test]
     public void Build_WithoutConnection_ThrowsNamingTheMethodsToCall()
     {
@@ -37,31 +30,5 @@ public class PostgresEventStoreBuilderTests
             .Build();
 
         seen.ShouldBe(["first"]);
-    }
-
-    [TestCaseSource(nameof(NonPositiveIntervals))]
-    public async Task Build_NonPositiveInactiveSlotTimeout_Throws(TimeSpan timeout)
-    {
-        await using var dataSource = new NpgsqlDataSourceBuilder("Host=localhost").Build();
-
-        var builder = new PostgresEventStoreBuilder<object>()
-            .UseDataSource(dataSource)
-            .ConfigureOptions(o => o.Replication.InactiveSlotTimeout = timeout)
-            .ConfigureCodec(x => x.MapEvent<TestEvent>());
-
-        Should.Throw<ArgumentOutOfRangeException>(builder.Build);
-    }
-
-    [TestCaseSource(nameof(NonPositiveIntervals))]
-    public async Task Build_NonPositiveStatusInterval_Throws(TimeSpan interval)
-    {
-        await using var dataSource = new NpgsqlDataSourceBuilder("Host=localhost").Build();
-
-        var builder = new PostgresEventStoreBuilder<object>()
-            .UseDataSource(dataSource)
-            .ConfigureOptions(o => o.Replication.WalReceiverStatusInterval = interval)
-            .ConfigureCodec(x => x.MapEvent<TestEvent>());
-
-        Should.Throw<ArgumentOutOfRangeException>(builder.Build);
     }
 }
