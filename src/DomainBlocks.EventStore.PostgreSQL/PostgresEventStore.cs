@@ -57,8 +57,20 @@ public static class PostgresEventStore
         where TEvent : notnull
     {
         var replicationOptions = options.Replication;
+
+        // Polly rejects retry delays over a day, and the timers that the other intervals drive reject long values too,
+        // so every interval has Polly's limit.
+        var maxInterval = TimeSpan.FromDays(1);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(replicationOptions.InactiveSlotTimeout, TimeSpan.Zero);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(replicationOptions.InactiveSlotTimeout, maxInterval);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(replicationOptions.WalReceiverTimeout, TimeSpan.Zero);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(replicationOptions.WalReceiverTimeout, maxInterval);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(replicationOptions.WalReceiverStatusInterval, TimeSpan.Zero);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(replicationOptions.WalReceiverStatusInterval, maxInterval);
+        ArgumentOutOfRangeException.ThrowIfLessThan(replicationOptions.RetryDelay, TimeSpan.Zero);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(replicationOptions.RetryDelay, maxInterval);
+        ArgumentOutOfRangeException.ThrowIfLessThan(replicationOptions.MaxRetryDelay, TimeSpan.Zero);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(replicationOptions.MaxRetryDelay, maxInterval);
 
         var connectionString = replicationOptions.ConnectionString
                                ?? replicationConnectionStringFallback

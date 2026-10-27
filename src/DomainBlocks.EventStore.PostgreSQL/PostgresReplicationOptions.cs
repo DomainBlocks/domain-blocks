@@ -44,7 +44,7 @@ public sealed class PostgresReplicationOptions
 
     /// <summary>
     /// Gets or sets how long a replication slot of the store's schema can stay inactive before a store on that schema
-    /// drops it. The value must be positive. The default is 10 minutes.
+    /// drops it. The value must be positive and at most 1 day. The default is 10 minutes.
     /// </summary>
     /// <remarks>
     /// A store names its slots after its schema. A process that stops without dropping its slot leaves it behind,
@@ -62,25 +62,26 @@ public sealed class PostgresReplicationOptions
     public bool UseBinaryProtocol { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets how long to wait for a message from the server before treating the connection as lost. The default
-    /// is 60 seconds.
+    /// Gets or sets how long to wait for a message from the server before treating the connection as lost. The value
+    /// must be positive and at most 1 day. The default is 60 seconds.
     /// </summary>
     public TimeSpan WalReceiverTimeout { get; set; } = TimeSpan.FromSeconds(60);
 
     /// <summary>
-    /// Gets or sets how often to report the consumed WAL position, so the server can release WAL. The default is 10
-    /// seconds.
+    /// Gets or sets how often to report the consumed WAL position, so the server can release WAL. The value must be
+    /// positive and at most 1 day. The default is 10 seconds.
     /// </summary>
     public TimeSpan WalReceiverStatusInterval { get; set; } = TimeSpan.FromSeconds(10);
 
     /// <summary>
     /// Gets or sets the initial delay before reconnecting a lost replication connection. It grows exponentially, with
-    /// jitter, up to <see cref="MaxRetryDelay"/>. The default is 1 second.
+    /// jitter, up to <see cref="MaxRetryDelay"/>. The value must be between zero and 1 day. The default is 1 second.
     /// </summary>
     public TimeSpan RetryDelay { get; set; } = TimeSpan.FromSeconds(1);
 
     /// <summary>
-    /// Gets or sets the maximum delay between reconnection attempts. The default is 1 minute.
+    /// Gets or sets the maximum delay between reconnection attempts. The value must be between zero and 1 day. The
+    /// default is 1 minute.
     /// </summary>
     public TimeSpan MaxRetryDelay { get; set; } = TimeSpan.FromMinutes(1);
 
