@@ -66,6 +66,32 @@ public class PostgresSynchronousStandbyTests
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task AppendAsync_SessionWithRemoteApply_WaitsForReplay(CancellationToken ct)
+    {
+        await using var dataSource = CreateDataSource(x => x.Options = "-c synchronous_commit=remote_apply");
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
+        await using var eventStore = CreateEventStore(dataSource);
+
+        await _server.PauseWalReplayOnStandbyAsync();
+
+        var append = eventStore.AppendAsync(
+            "s1",
+            [AppendableEvent.Create<object>(new TestEvent { Value = "e" })],
+            cancellationToken: ct);
+
+        var pid = await WaitForSyncRepAsync(ct);
+
+        // The standby flushes the event during the hold, so a commit with synchronous_commit on would complete.
+        await Task.Delay(HoldDuration, ct);
+        (await IsWaitingForSyncRepAsync(pid, ct)).ShouldBeTrue();
+        append.IsCompleted.ShouldBeFalse();
+
+        await _server.ResumeWalReplayOnStandbyAsync();
+        await append;
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task SubscribeToAll_EventDeliveredButNotVisible_ReplaysEventOnceVisible(CancellationToken ct)
     {
         await using var dataSource = CreateDataSource();
