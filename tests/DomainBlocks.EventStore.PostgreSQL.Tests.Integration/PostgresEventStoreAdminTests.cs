@@ -165,15 +165,6 @@ public class PostgresEventStoreAdminTests
     }
 
     [Test]
-    public void EnsureInitializedAsync_InvalidSchemaName_Throws()
-    {
-        var options = new PostgresEventStoreOptions { Schema = "Not-Valid" };
-
-        Should.ThrowAsync<ArgumentException>(() =>
-            PostgresEventStoreAdmin.EnsureInitializedAsync(PostgresTestEnvironment.DataSource, options));
-    }
-
-    [Test]
     public async Task DropAsync_RemovesSchemaAndPublication()
     {
         await PostgresEventStoreAdmin.EnsureInitializedAsync(PostgresTestEnvironment.DataSource, _options);

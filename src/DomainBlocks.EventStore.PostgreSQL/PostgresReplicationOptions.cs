@@ -30,10 +30,6 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// </remarks>
 public sealed class PostgresReplicationOptions
 {
-    // Polly rejects retry delays over a day, and the timers that the other intervals drive reject long values too, so
-    // every interval has Polly's limit.
-    private static readonly TimeSpan MaxInterval = TimeSpan.FromDays(1);
-
     /// <summary>
     /// Gets or sets the connection string for the replication connection, or <see langword="null"/> (the default) to
     /// use the store's.
@@ -57,14 +53,13 @@ public sealed class PostgresReplicationOptions
     /// applies its value to all of the schema's slots, so stores on the same schema should use the same value. To cap
     /// the WAL that a leftover slot holds, set the server's <c>max_slot_wal_keep_size</c>.
     /// </remarks>
-    /// <exception cref="ArgumentOutOfRangeException">The value is zero, negative, or longer than 1 day.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The value is zero or negative.</exception>
     public TimeSpan InactiveSlotTimeout
     {
         get;
         set
         {
             ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value, TimeSpan.Zero);
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(value, MaxInterval);
             field = value;
         }
     } = TimeSpan.FromMinutes(10);
@@ -79,14 +74,13 @@ public sealed class PostgresReplicationOptions
     /// Gets or sets how long to wait for a message from the server before treating the connection as lost. The default
     /// is 60 seconds.
     /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException">The value is zero, negative, or longer than 1 day.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The value is zero or negative.</exception>
     public TimeSpan WalReceiverTimeout
     {
         get;
         set
         {
             ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value, TimeSpan.Zero);
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(value, MaxInterval);
             field = value;
         }
     } = TimeSpan.FromSeconds(60);
@@ -95,14 +89,13 @@ public sealed class PostgresReplicationOptions
     /// Gets or sets how often to report the consumed WAL position, so the server can release WAL. The default is 10
     /// seconds.
     /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException">The value is zero, negative, or longer than 1 day.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The value is zero or negative.</exception>
     public TimeSpan WalReceiverStatusInterval
     {
         get;
         set
         {
             ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value, TimeSpan.Zero);
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(value, MaxInterval);
             field = value;
         }
     } = TimeSpan.FromSeconds(10);
@@ -111,14 +104,13 @@ public sealed class PostgresReplicationOptions
     /// Gets or sets the initial delay before reconnecting a lost replication connection. It grows exponentially, with
     /// jitter, up to <see cref="MaxRetryDelay"/>. The default is 1 second.
     /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException">The value is negative or longer than 1 day.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
     public TimeSpan RetryDelay
     {
         get;
         set
         {
             ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.Zero);
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(value, MaxInterval);
             field = value;
         }
     } = TimeSpan.FromSeconds(1);
@@ -126,14 +118,13 @@ public sealed class PostgresReplicationOptions
     /// <summary>
     /// Gets or sets the maximum delay between reconnection attempts. The default is 1 minute.
     /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException">The value is negative or longer than 1 day.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
     public TimeSpan MaxRetryDelay
     {
         get;
         set
         {
             ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.Zero);
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(value, MaxInterval);
             field = value;
         }
     } = TimeSpan.FromMinutes(1);

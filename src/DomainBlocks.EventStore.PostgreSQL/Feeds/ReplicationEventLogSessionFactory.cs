@@ -7,6 +7,28 @@ using Npgsql.Replication.PgOutput;
 namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 
 /// <summary>
+/// Validates options for a <see cref="ReplicationEventLogSessionFactory{TEvent}"/>.
+/// </summary>
+internal static class ReplicationEventLogSessionFactory
+{
+    /// <summary>
+    /// Throws if a factory and the sessions it opens cannot use the options.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// An option is outside the range that a factory or its sessions support.
+    /// </exception>
+    public static void ValidateOptions(PostgresReplicationOptions options)
+    {
+        // The scavenger and each session drive a PeriodicTimer with these.
+        PeriodicTimer.ThrowIfPeriodOutOfRange(options.InactiveSlotTimeout);
+        PeriodicTimer.ThrowIfPeriodOutOfRange(options.WalReceiverStatusInterval);
+
+        // Npgsql passes the receiver timeout to CancelAfter, and half of it to a Timer, without checking it.
+        CancellationTokenSource.ThrowIfDelayOutOfRange(options.WalReceiverTimeout);
+    }
+}
+
+/// <summary>
 /// Opens one feed's logical replication sessions on a <see cref="FeedReplicationSlot"/>, which it creates for the
 /// first session and drops when it is disposed. Each later session resumes on the slot where the previous one stopped,
 /// so a lost connection costs no reset. A dropped or invalidated slot is replaced, and the feed resets.

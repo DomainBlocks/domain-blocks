@@ -25,6 +25,9 @@ public static class PostgresEventStore
         where TEvent : notnull
     {
         var names = new SchemaObjectNames(options.Schema);
+
+        // Create the feed first, so that a validation error can't leave the appender's loop running.
+        var feed = CreateFeed(dataSource, names, options, eventCodec, logger, replicationConnectionStringFallback);
         var appender = new BatchingAppender(dataSource, names, options, logger);
 
         var reader = new EventLogReader<TEvent>(
@@ -32,8 +35,6 @@ public static class PostgresEventStore
             new EventLogSql(names),
             options.ReadPageSize,
             eventCodec);
-
-        var feed = CreateFeed(dataSource, names, options, eventCodec, logger, replicationConnectionStringFallback);
 
         return new PostgresEventStore<TEvent>(
             dataSource,
@@ -69,6 +70,9 @@ public static class PostgresEventStore
             MaxRetryDelay = replicationOptions.MaxRetryDelay,
             MaxRetryAttempts = replicationOptions.MaxRetryAttempts
         };
+
+        ReplicationEventLogSessionFactory.ValidateOptions(replicationOptions);
+        EventLogFeed.ValidateOptions(feedOptions);
 
         return new RefCountedEventLogFeed<EventLogRow<TEvent>>(() =>
             new EventLogFeed<EventLogRow<TEvent>>(

@@ -6,6 +6,25 @@ using Polly.Retry;
 namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 
 /// <summary>
+/// Validates options for an <see cref="EventLogFeed{T}"/>.
+/// </summary>
+internal static class EventLogFeed
+{
+    // Polly rejects retry delays longer than 1 day.
+    private static readonly TimeSpan PollyMaxDelay = TimeSpan.FromDays(1);
+
+    /// <summary>
+    /// Throws if a feed cannot use the options.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">An option is outside the range that a feed supports.</exception>
+    public static void ValidateOptions(EventLogFeedOptions options)
+    {
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(options.RetryDelay, PollyMaxDelay);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(options.MaxRetryDelay, PollyMaxDelay);
+    }
+}
+
+/// <summary>
 /// Pumps items from an <see cref="IEventLogSession{T}"/> to observers, reconnecting with backoff when the session is
 /// lost.
 /// </summary>

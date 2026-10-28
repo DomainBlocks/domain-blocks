@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 
 namespace DomainBlocks.EventStore.PostgreSQL;
@@ -14,14 +16,7 @@ internal sealed partial class SchemaObjectNames
 
     public SchemaObjectNames(string schema)
     {
-        ArgumentNullException.ThrowIfNull(schema);
-
-        if (!SchemaNameRegex().IsMatch(schema))
-        {
-            throw new ArgumentException(
-                $"Schema name '{schema}' is invalid. It must match {SchemaNameRegex()}.",
-                nameof(schema));
-        }
+        ThrowIfInvalidSchema(schema);
 
         Schema = schema;
         QuotedSchema = $"\"{schema}\"";
@@ -54,6 +49,20 @@ internal sealed partial class SchemaObjectNames
     /// The publication name, which embeds the schema because publication names are database-wide.
     /// </summary>
     public string Publication { get; }
+
+    public static void ThrowIfInvalidSchema(
+        [NotNull] string? schema,
+        [CallerArgumentExpression(nameof(schema))] string? paramName = null)
+    {
+        ArgumentNullException.ThrowIfNull(schema, paramName);
+
+        if (!SchemaNameRegex().IsMatch(schema))
+        {
+            throw new ArgumentException(
+                $"Schema name '{schema}' is invalid. It must match {SchemaNameRegex()}.",
+                paramName);
+        }
+    }
 
     [GeneratedRegex("^[a-z_][a-z0-9_]{0,62}$")]
     private static partial Regex SchemaNameRegex();
