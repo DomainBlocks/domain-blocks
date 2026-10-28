@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using DomainBlocks.EventStore.Filtering;
+using DomainBlocks.EventStore.Internal;
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
@@ -60,10 +61,16 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         {
             _logger?.SubscriptionStarted(_correlationId);
 
+            // The subscription's reads share one retry, so progress in any of them resets the backoff.
+            var retry = new CatchUpRetry(
+                MongoTransientErrors.IsTransient,
+                new RetryBackoff(_options.RetryTimeout),
+                (ex, delay) => _logger?.CatchUpRetrying(ex, _correlationId, delay));
+
             var resumePosition = new ResumePosition(_origin switch
             {
                 SubscriptionOrigin<TPos>.After after => after.Position,
-                SubscriptionOrigin<TPos>.End => await PinEndAsync(cancellationToken).ConfigureAwait(false),
+                SubscriptionOrigin<TPos>.End => await PinEndAsync(retry, cancellationToken).ConfigureAwait(false),
                 _ => null
             });
 
@@ -92,6 +99,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                         resumePosition,
                         observer,
                         attachment.OpTimeHighWaterMark,
+                        retry,
                         cancellationToken)
                     .GetAsyncEnumerator(cancellationToken);
 
@@ -157,11 +165,13 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     // The end is pinned when the subscription starts. Otherwise, a restart before the first event is delivered would
     // resume from a later end and skip the events appended in between. If the sequence is empty, the subscription
     // resumes from the start.
-    private async Task<TPos?> PinEndAsync(CancellationToken cancellationToken)
+    private async Task<TPos?> PinEndAsync(CatchUpRetry retry, CancellationToken cancellationToken)
     {
         try
         {
-            return await _endPositionReader(_reader, null, cancellationToken).ConfigureAwait(false);
+            return await retry
+                .ReadAsync(ct => _endPositionReader(_reader, null, ct), cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -201,27 +211,29 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         ResumePosition resumePosition,
         Observer observer,
         BsonTimestamp opTimeHighWaterMark,
+        CatchUpRetry retry,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         // Reads in the session wait for the change stream's high-water mark, so the end position and the replay include
         // every event that the observer won't receive from the stream.
-        using (var session = await _reader
-                   .StartCatchUpSessionAsync(opTimeHighWaterMark, cancellationToken)
+        using (var session = await retry
+                   .ReadAsync(ct => _reader.StartCatchUpSessionAsync(opTimeHighWaterMark, ct), cancellationToken)
                    .ConfigureAwait(false))
         {
-            var endInclusive = await _endPositionReader(_reader, session, cancellationToken).ConfigureAwait(false);
+            var endInclusive = await retry
+                .ReadAsync(ct => _endPositionReader(_reader, session, ct), cancellationToken)
+                .ConfigureAwait(false);
 
             _logger?.CatchUpBoundary(_correlationId, endInclusive?.Value);
 
             if (endInclusive.HasValue)
             {
-                var startExclusive = resumePosition.After is { } after ? checked((long)after.Value) : -1;
+                var end = checked((long)endInclusive.Value.Value);
 
-                var events = _catchUpReader(
-                    _reader,
-                    session,
-                    startExclusive,
-                    checked((long)endInclusive.Value.Value),
+                // After a transient error, the replay reads again after the last event that the subscriber took.
+                var events = retry.ReplayAsync(
+                    ct => _catchUpReader(_reader, session, resumePosition.StartExclusive, end, ct),
+                    e => resumePosition.AdvanceTo(_positionSelector(e.Context)),
                     cancellationToken);
 
                 await foreach (var e in events.ConfigureAwait(false))
@@ -285,6 +297,11 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         /// The position to resume after, or <see langword="null"/> to resume from the start.
         /// </summary>
         public TPos? After { get; private set; } = after;
+
+        /// <summary>
+        /// Gets the position that a read starts after, which is -1 to read from the start.
+        /// </summary>
+        public long StartExclusive => After is { } after ? checked((long)after.Value) : -1;
 
         public bool Covers(TPos position) => After is { } after && position.Value <= after.Value;
 

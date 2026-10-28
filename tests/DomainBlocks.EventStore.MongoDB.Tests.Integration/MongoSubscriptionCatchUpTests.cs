@@ -152,6 +152,41 @@ public class MongoSubscriptionCatchUpTests
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_WhenReplayCursorIsKilled_ResumesAfterLastEvent(CancellationToken ct)
+    {
+        await using var scenario = await CatchUpScenario.StartAsync(ct);
+
+        // A find's first batch holds fewer events than this, so the replay reads the rest with getMore.
+        var existing = await scenario.AppendAsync("existing", 150);
+        var hold = scenario.HoldCatchUp(0);
+
+        await using var subscription = scenario.SubscribeToAll();
+
+        (await subscription.NextEventAsync()).ShouldBe(existing[0]);
+        var pending = subscription.NextAsync();
+
+        await scenario.KillReplayCursorsAsync();
+
+        hold.Release();
+        var messages = await subscription.ReadUntilCaughtUpAsync(await pending);
+
+        // The first replay failed at its getMore, and the second continued after the last event delivered.
+        scenario.CatchUpReads.Count.ShouldBe(2);
+        scenario.CatchUpReads[0].IsCompleted.ShouldBeFalse();
+
+        var resumedRead = scenario.CatchUpReads[1];
+        resumedRead.StartExclusive.ShouldBeGreaterThan(0);
+        resumedRead.EndInclusive.ShouldBe(149);
+        resumedRead.IsCompleted.ShouldBeTrue();
+
+        messages
+            .Where(x => x.Event is not null)
+            .Select(x => x.Event.ShouldNotBeNull().Payload)
+            .ShouldBe(existing.Skip(1));
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task SubscribeToAll_WhenChangeHistoryIsLost_RestartsAndDeliversEventsAppendedMeanwhile(
         CancellationToken ct)
     {
