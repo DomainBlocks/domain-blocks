@@ -85,7 +85,8 @@ internal sealed class BatchingAppender : IAppender
 
     private async Task RunAppendLoopAsync(CancellationToken ct)
     {
-        var batch = new List<AppendRequest>(_maxBatchSize);
+        // The batch grows as it fills, since the maximum batch size can be far larger than any real batch.
+        var batch = new List<AppendRequest>();
 
         try
         {
