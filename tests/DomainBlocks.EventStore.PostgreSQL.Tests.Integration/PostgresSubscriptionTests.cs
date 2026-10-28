@@ -9,8 +9,8 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
 /// <summary>
 /// Tests PostgreSQL-specific subscription behavior beyond the shared suite: slot sharing, stream-position resume, the
-/// order of a large append, the replication barrier without synchronous standbys, and connection strings with multiple
-/// hosts.
+/// order of a large append, the replication barrier without synchronous standbys, a replay that loses its connections,
+/// and connection strings with multiple hosts.
 /// </summary>
 [TestFixture]
 public class PostgresSubscriptionTests : PostgresIntegrationTest
@@ -181,6 +181,50 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
         await ShouldBeCaughtUpAsync(subscription);
 
         (await CountLogicalMessagesSinceAsync(start, ct)).ShouldBe(0);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_ConnectionsEndedMidReplay_ResumesAfterLastEvent(CancellationToken ct)
+    {
+        // Each page of the replay holds one event, so the replay takes a connection from the pool for each event.
+        const string applicationName = "replay-under-test";
+        var options = new PostgresEventStoreOptions { Schema = Schema, ReadPageSize = 1 };
+
+        await using var dataSource = PostgresTestEnvironment.CreateDataSource(x =>
+        {
+            x.ConnectionStringBuilder.ApplicationName = applicationName;
+            x.UsePostgresEventStore(options);
+        });
+
+        await using var eventStore = new PostgresEventStoreBuilder<object>()
+            .UseDataSource(dataSource)
+            .UseOptions(options)
+            .ConfigureCodec(x => x.UseEventTypeMap(DefaultEventTypeMap))
+            .UseLogger(LoggerFactory.CreateLogger(nameof(PostgresSubscriptionTests)))
+            .Build();
+
+        TestEvent[] events = [new() { Value = "e0" }, new() { Value = "e1" }, new() { Value = "e2" }];
+
+        foreach (var e in events)
+            await eventStore.AppendAsync("s1", [Appendable(e)], cancellationToken: ct);
+
+        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
+        (await NextEventAsync(subscription)).Payload.ShouldBe(events[0]);
+
+        // The server ends the store's connections while the replay waits for the subscriber, so the replay's next page
+        // fails to read.
+        await using (var command = DataSource.CreateCommand(
+                         "SELECT pg_terminate_backend(pid, 5000) FROM pg_stat_activity " +
+                         "WHERE application_name = $1 AND backend_type = 'client backend'"))
+        {
+            command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = applicationName });
+            await command.ExecuteNonQueryAsync(ct);
+        }
+
+        (await NextEventAsync(subscription)).Payload.ShouldBe(events[1]);
+        (await NextEventAsync(subscription)).Payload.ShouldBe(events[2]);
+        await ShouldBeCaughtUpAsync(subscription);
     }
 
     [Test]

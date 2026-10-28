@@ -16,7 +16,7 @@ internal static class EventLogFeedResumePolicy
         {
             ReplicationSlotLostException => true,
             ReplicationSlotInUseException => true,
-            ReplicationServerInRecoveryException => true,
+            ServerInRecoveryException => true,
 
             // Npgsql counts this error as transient. An invalidated slot raises it too, but the session reports that as
             // ReplicationSlotLostException. What remains is misconfiguration, such as the wrong wal_level, which

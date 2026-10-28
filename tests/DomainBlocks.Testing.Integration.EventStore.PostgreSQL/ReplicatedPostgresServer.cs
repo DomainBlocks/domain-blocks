@@ -145,6 +145,20 @@ public sealed class ReplicatedPostgresServer : IAsyncDisposable
     public Task ClearSynchronizedStandbySlotsAsync() => SetOnPrimaryAsync("synchronized_standby_slots", string.Empty);
 
     /// <summary>
+    /// Sets the standby's <c>synchronous_standby_names</c> as the primary's is set, as a failover manager that gives
+    /// every server the same settings would. The standby, still in recovery, then runs the replication barrier.
+    /// </summary>
+    public async Task SetSynchronousStandbyNamesOnStandbyAsync()
+    {
+        await ExecuteOnStandbyAsync($"ALTER SYSTEM SET synchronous_standby_names = '{StandbyName}'");
+        await ExecuteOnStandbyAsync("SELECT pg_reload_conf()");
+
+        await WaitUntilAsync(
+            StandbyConnectionString,
+            $"SELECT current_setting('synchronous_standby_names') = '{StandbyName}'");
+    }
+
+    /// <summary>
     /// Stops the primary at once, as a crash would. Unlike a clean shutdown, which first sends the rest of the WAL to a
     /// connected standby, this sends the standby nothing more.
     /// </summary>
