@@ -47,6 +47,7 @@ internal sealed class BatchingAppender : IAppender
     public async Task AppendAsync(AppendRequest request, TimeSpan timeout, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        CancellationTokenSource.ThrowIfDelayOutOfRange(timeout);
 
         using var linkedTimeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         linkedTimeoutCts.CancelAfter(timeout);

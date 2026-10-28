@@ -13,16 +13,20 @@ internal static class CancellationTokenSourceExtensions
         public static TimeSpan MaxSupportedDelay => TimeSpan.FromMilliseconds(uint.MaxValue) - TimeSpan.FromTicks(1);
 
         /// <summary>
-        /// Throws if the delay is negative or longer than <see cref="CancellationTokenSource.CancelAfter(TimeSpan)"/>
-        /// accepts.
+        /// Throws if the delay is negative, other than <see cref="Timeout.InfiniteTimeSpan"/>, or longer than
+        /// <see cref="CancellationTokenSource.CancelAfter(TimeSpan)"/> accepts.
         /// </summary>
         /// <exception cref="ArgumentOutOfRangeException">
-        /// The delay is negative or longer than <c>MaxSupportedDelay</c>.
+        /// The delay is negative and not <see cref="Timeout.InfiniteTimeSpan"/>, or longer than
+        /// <c>MaxSupportedDelay</c>.
         /// </exception>
         public static void ThrowIfDelayOutOfRange(
             TimeSpan delay,
             [CallerArgumentExpression(nameof(delay))] string? paramName = null)
         {
+            if (delay == Timeout.InfiniteTimeSpan)
+                return;
+
             ArgumentOutOfRangeException.ThrowIfLessThan(delay, TimeSpan.Zero, paramName);
             ArgumentOutOfRangeException.ThrowIfGreaterThan(delay, CancellationTokenSource.MaxSupportedDelay, paramName);
         }

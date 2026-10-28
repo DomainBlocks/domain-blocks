@@ -125,6 +125,9 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         commitId ??= Guid.NewGuid();
         options ??= new AppendOptions();
 
+        // The sequencing library passes the timeout to CancelAfter without checking it.
+        CancellationTokenSource.ThrowIfDelayOutOfRange(options.Timeout);
+
         var bsonStreamId = new BsonString(streamId);
         var bsonCommitId = new BsonBinaryData(commitId.Value, GuidRepresentation.Standard);
 

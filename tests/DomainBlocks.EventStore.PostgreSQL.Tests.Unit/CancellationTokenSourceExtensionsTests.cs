@@ -7,10 +7,11 @@ public class CancellationTokenSourceExtensionsTests
 {
     private static readonly TimeSpan OneTick = TimeSpan.FromTicks(1);
 
-    private static readonly TimeSpan[] BoundaryDelays = [TimeSpan.Zero, CancellationTokenSource.MaxSupportedDelay];
+    private static readonly TimeSpan[] BoundaryDelays =
+        [TimeSpan.Zero, CancellationTokenSource.MaxSupportedDelay, Timeout.InfiniteTimeSpan];
 
     private static readonly TimeSpan[] OutOfRangeDelays =
-        [-OneTick, CancellationTokenSource.MaxSupportedDelay + OneTick];
+        [-OneTick, Timeout.InfiniteTimeSpan - OneTick, CancellationTokenSource.MaxSupportedDelay + OneTick];
 
     [Test]
     public void CancelAfter_MaxSupportedDelay_DoesNotThrow()
