@@ -11,7 +11,21 @@ public sealed class AppendOptions
     public static readonly AppendOptions Default = new();
 
     /// <summary>
-    /// Gets how long to wait for the store to acknowledge the append before timing out. The default is 30 seconds.
+    /// Gets how long to wait for the store to acknowledge the append before timing out, or
+    /// <see cref="System.Threading.Timeout.InfiniteTimeSpan"/> to wait without a timeout. The default is 30 seconds.
     /// </summary>
-    public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(30);
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The value is zero, or negative and not <see cref="System.Threading.Timeout.InfiniteTimeSpan"/>.
+    /// </exception>
+    public TimeSpan Timeout
+    {
+        get;
+        init
+        {
+            if (value != System.Threading.Timeout.InfiniteTimeSpan)
+                ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value, TimeSpan.Zero);
+
+            field = value;
+        }
+    } = TimeSpan.FromSeconds(30);
 }

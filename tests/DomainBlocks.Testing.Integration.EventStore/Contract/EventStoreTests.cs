@@ -349,6 +349,21 @@ public abstract class EventStoreTests<TStreamPos, TLogPos>(IEventStoreTestHarnes
     }
 
     [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task AppendAsync_InfiniteTimeout_AppendsEvents(CancellationToken cancellationToken)
+    {
+        var streamId = NewStreamId();
+        TestEvent[] events = [new() { Value = "TestEvent1" }];
+        var options = new AppendOptions { Timeout = Timeout.InfiniteTimeSpan };
+
+        await EventStore.AppendAsync(streamId, events, options: options, cancellationToken: cancellationToken);
+
+        var readEvents = await EventStore.ReadStream(streamId).ToArrayAsync(cancellationToken);
+
+        readEvents.Select(x => x.Payload).ShouldBe(events);
+    }
+
+    [Test]
     public async Task AppendAsync_CallerCancels_ThrowsOperationCanceled()
     {
         using var cts = new CancellationTokenSource();
