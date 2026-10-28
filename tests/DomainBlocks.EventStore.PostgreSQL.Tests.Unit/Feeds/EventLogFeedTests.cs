@@ -176,6 +176,31 @@ public class EventLogFeedTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
+    public async Task Connect_NoRetries_FaultsOnFirstFailure(CancellationToken ct)
+    {
+        var attempts = 0;
+        var exception = new IOException("down");
+
+        var feed = new EventLogFeed<long>(
+            new DelegateSessionFactory<long>(_ =>
+            {
+                attempts++;
+                throw exception;
+            }),
+            static x => x,
+            new EventLogFeedOptions { MaxRetryAttempts = 0 },
+            _logger);
+
+        var observer = new RecordingObserver();
+        using var attachment = feed.Attach(observer);
+
+        await feed.ConnectAsync(ct).ShouldThrowAsync<IOException>();
+        (await observer.Error.WaitAsync(ct)).ShouldBeSameAs(exception);
+        attempts.ShouldBe(1);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
     public async Task Connect_WhenRetriesAreExhausted_Faults(CancellationToken ct)
     {
         var exception = new IOException("still down");

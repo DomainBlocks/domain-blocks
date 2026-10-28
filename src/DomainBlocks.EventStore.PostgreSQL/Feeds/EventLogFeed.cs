@@ -108,6 +108,10 @@ internal sealed class EventLogFeed<T> : IEventLogFeed<T>
         ILogger? logger,
         string feedId)
     {
+        // Polly requires at least one retry.
+        if (options.MaxRetryAttempts == 0)
+            return sessionFactory;
+
         var resiliencePipeline = new ResiliencePipelineBuilder()
             .AddRetry(new RetryStrategyOptions
             {

@@ -5,7 +5,7 @@ internal sealed class EventLogFeedOptions
     public static readonly EventLogFeedOptions Default = new();
 
     /// <summary>
-    /// The maximum number of consecutive attempts to establish a session before the feed faults.
+    /// How many times in a row to retry a failed attempt to establish a session before the feed faults.
     /// </summary>
     public int MaxRetryAttempts { get; set; } = int.MaxValue;
 
