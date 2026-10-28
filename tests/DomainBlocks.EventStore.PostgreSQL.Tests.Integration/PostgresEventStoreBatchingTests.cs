@@ -157,4 +157,19 @@ public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
 
         await Should.ThrowAsync<ObjectDisposedException>(() => eventStore.AppendAsync("s1", [Appendable("a")]));
     }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task AppendAsync_LargestMaxBatchSize_Commits(CancellationToken ct)
+    {
+        await using var eventStore = CreateEventStore("_largest", new PostgresEventStoreOptions
+        {
+            Schema = Schema,
+            AppendMaxBatchSize = int.MaxValue
+        });
+
+        await eventStore.AppendAsync("s1", [Appendable("e")], cancellationToken: ct);
+
+        (await Client.ReadRowsAsync(cancellationToken: ct)).Count.ShouldBe(1);
+    }
 }
