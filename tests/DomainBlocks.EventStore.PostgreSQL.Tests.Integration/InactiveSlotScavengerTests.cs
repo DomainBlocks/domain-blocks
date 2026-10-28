@@ -24,7 +24,7 @@ public class InactiveSlotScavengerTests : PostgresIntegrationTest
         try
         {
             await CreateSlotAsync(leftover, ct);
-            await using var scavenger = CreateScavenger(TimerDurations.MinPeriod);
+            await using var scavenger = CreateScavenger(PeriodicTimer.MinSupportedPeriod);
 
             scavenger.EnsureStarted();
 
@@ -46,7 +46,7 @@ public class InactiveSlotScavengerTests : PostgresIntegrationTest
         try
         {
             await CreateSlotAsync(leftover, ct);
-            await using var scavenger = CreateScavenger(TimerDurations.MaxDuration);
+            await using var scavenger = CreateScavenger(PeriodicTimer.MaxSupportedPeriod);
 
             scavenger.EnsureStarted();
             await scavenger.DropInactiveSlotsAsync(ct);

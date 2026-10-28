@@ -6,6 +6,25 @@ using Polly.Retry;
 namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 
 /// <summary>
+/// Checks the options for an <see cref="EventLogFeed{T}"/>.
+/// </summary>
+internal static class EventLogFeed
+{
+    // Polly rejects retry delays longer than 1 day.
+    private static readonly TimeSpan PollyMaxDelay = TimeSpan.FromDays(1);
+
+    /// <summary>
+    /// Throws if Polly cannot take the options' retry delays.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">A retry delay is longer than 1 day.</exception>
+    public static void ThrowIfUnsupported(EventLogFeedOptions options)
+    {
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(options.RetryDelay, PollyMaxDelay);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(options.MaxRetryDelay, PollyMaxDelay);
+    }
+}
+
+/// <summary>
 /// Pumps items from an <see cref="IEventLogSession{T}"/> to observers, reconnecting with backoff when the session is
 /// lost.
 /// </summary>
@@ -16,9 +35,6 @@ namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 /// </remarks>
 internal sealed class EventLogFeed<T> : IEventLogFeed<T>
 {
-    // Polly rejects retry delays longer than 1 day.
-    private static readonly TimeSpan PollyMaxDelay = TimeSpan.FromDays(1);
-
     private readonly IEventLogSessionFactory<T> _sessionFactory;
     private readonly Func<CancellationToken, Task<IEventLogSession<T>>> _openSession;
     private readonly Func<T, long> _positionSelector;
@@ -49,16 +65,6 @@ internal sealed class EventLogFeed<T> : IEventLogFeed<T>
         _options = options;
         _logger = logger;
         _connectionState = new ConnectionState(logger, _feedId);
-    }
-
-    /// <summary>
-    /// Throws if Polly cannot take the options' retry delays.
-    /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException">A retry delay is longer than 1 day.</exception>
-    public static void ThrowIfUnsupported(EventLogFeedOptions options)
-    {
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(options.RetryDelay, PollyMaxDelay);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(options.MaxRetryDelay, PollyMaxDelay);
     }
 
     public IDisposable Attach(IEventLogObserver<T> observer, string correlationId = "unknown")

@@ -7,6 +7,28 @@ using Npgsql.Replication.PgOutput;
 namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 
 /// <summary>
+/// Checks the options for a <see cref="ReplicationEventLogSessionFactory{TEvent}"/>.
+/// </summary>
+internal static class ReplicationEventLogSessionFactory
+{
+    /// <summary>
+    /// Throws if the timers that the options' intervals reach do not accept them.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// An interval is outside the range of the timer that it reaches.
+    /// </exception>
+    public static void ThrowIfUnsupported(PostgresReplicationOptions options)
+    {
+        // The scavenger and each session drive a PeriodicTimer with these.
+        PeriodicTimer.ThrowIfOutOfRange(options.InactiveSlotTimeout);
+        PeriodicTimer.ThrowIfOutOfRange(options.WalReceiverStatusInterval);
+
+        // Npgsql passes the receiver timeout to CancelAfter, and half of it to a Timer, without checking it.
+        CancellationTokenSource.ThrowIfOutOfRange(options.WalReceiverTimeout);
+    }
+}
+
+/// <summary>
 /// Opens one feed's logical replication sessions on a <see cref="FeedReplicationSlot"/>, which it creates for the
 /// first session and drops when it is disposed. Each later session resumes on the slot where the previous one stopped,
 /// so a lost connection costs no reset. A dropped or invalidated slot is replaced, and the feed resets.
@@ -50,24 +72,6 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent>(
 
     private FeedReplicationSlot? _slot;
     private bool _hasOpenedSessionOnSlot;
-
-    /// <summary>
-    /// Throws if the timers that the options' intervals drive do not support them.
-    /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <see cref="PostgresReplicationOptions.InactiveSlotTimeout"/> or
-    /// <see cref="PostgresReplicationOptions.WalReceiverStatusInterval"/> is shorter than
-    /// <see cref="TimerDurations.MinPeriod"/>, or an interval is longer than <see cref="TimerDurations.MaxDuration"/>.
-    /// </exception>
-    public static void ThrowIfUnsupported(PostgresReplicationOptions options)
-    {
-        // The scavenger and each session pace their work with a PeriodicTimer.
-        TimerDurations.ThrowIfUnsupportedPeriod(options.InactiveSlotTimeout);
-        TimerDurations.ThrowIfUnsupportedPeriod(options.WalReceiverStatusInterval);
-
-        // Npgsql passes the receiver timeout to timers without checking it.
-        TimerDurations.ThrowIfUnsupportedDuration(options.WalReceiverTimeout);
-    }
 
     public async Task<IEventLogSession<EventLogRow<TEvent>>> OpenAsync(CancellationToken cancellationToken)
     {

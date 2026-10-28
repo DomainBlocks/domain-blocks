@@ -27,8 +27,7 @@ internal sealed class BatchingAppender : IAppender
         PostgresEventStoreOptions options,
         ILogger? logger)
     {
-        // The batching delay is passed to CancelAfter.
-        TimerDurations.ThrowIfUnsupportedDuration(options.AppendBatchingDelay);
+        CancellationTokenSource.ThrowIfOutOfRange(options.AppendBatchingDelay);
 
         _command = new AppendBatchCommand(dataSource, names);
         _maxBatchSize = options.AppendMaxBatchSize;
@@ -85,8 +84,7 @@ internal sealed class BatchingAppender : IAppender
 
     private async Task RunAppendLoopAsync(CancellationToken ct)
     {
-        // The batch grows as it fills, since the maximum batch size can be far larger than any real batch.
-        var batch = new List<AppendRequest>();
+        var batch = new List<AppendRequest>(_maxBatchSize);
 
         try
         {
