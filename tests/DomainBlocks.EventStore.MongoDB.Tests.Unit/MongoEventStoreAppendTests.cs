@@ -1,3 +1,4 @@
+using DomainBlocks.EventStore.Internal;
 using DomainBlocks.Testing.Events;
 using MongoDB.Driver;
 using NUnit.Framework;

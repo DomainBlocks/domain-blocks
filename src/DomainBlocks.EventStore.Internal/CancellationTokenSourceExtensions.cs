@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 
-namespace DomainBlocks.EventStore.MongoDB;
+namespace DomainBlocks.EventStore.Internal;
 
 internal static class CancellationTokenSourceExtensions
 {

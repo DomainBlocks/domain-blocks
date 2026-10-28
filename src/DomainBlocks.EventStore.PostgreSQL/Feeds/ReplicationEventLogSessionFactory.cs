@@ -1,4 +1,5 @@
 using DomainBlocks.EventStore.Codecs;
+using DomainBlocks.EventStore.Internal;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Npgsql.Replication;

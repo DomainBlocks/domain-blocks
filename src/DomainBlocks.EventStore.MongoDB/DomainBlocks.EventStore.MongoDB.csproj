@@ -18,6 +18,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\DomainBlocks.EventStore.Internal\**\*.cs" LinkBase="DomainBlocks.EventStore.Internal" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj"/>
     <ProjectReference Include="..\DomainBlocks.Serialization.MongoDB.Bson\DomainBlocks.Serialization.MongoDB.Bson.csproj"/>
   </ItemGroup>
