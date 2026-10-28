@@ -26,15 +26,15 @@ public class PeriodicTimerExtensionsTests
     }
 
     [TestCaseSource(nameof(BoundaryPeriods))]
-    public void ThrowIfOutOfRange_BoundaryPeriod_DoesNotThrow(TimeSpan period)
+    public void ThrowIfPeriodOutOfRange_BoundaryPeriod_DoesNotThrow(TimeSpan period)
     {
-        Should.NotThrow(() => PeriodicTimer.ThrowIfOutOfRange(period));
+        Should.NotThrow(() => PeriodicTimer.ThrowIfPeriodOutOfRange(period));
     }
 
     [TestCaseSource(nameof(OutOfRangePeriods))]
-    public void ThrowIfOutOfRange_OutOfRangePeriod_ThrowsNamingArgument(TimeSpan period)
+    public void ThrowIfPeriodOutOfRange_OutOfRangePeriod_ThrowsNamingArgument(TimeSpan period)
     {
-        var ex = Should.Throw<ArgumentOutOfRangeException>(() => PeriodicTimer.ThrowIfOutOfRange(period));
+        var ex = Should.Throw<ArgumentOutOfRangeException>(() => PeriodicTimer.ThrowIfPeriodOutOfRange(period));
 
         ex.ParamName.ShouldBe(nameof(period));
     }

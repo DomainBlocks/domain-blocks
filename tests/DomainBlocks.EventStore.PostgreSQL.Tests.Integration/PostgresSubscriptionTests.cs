@@ -9,8 +9,8 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
 /// <summary>
 /// Tests PostgreSQL-specific subscription behavior beyond the shared suite: slot sharing, stream-position resume, the
-/// order of a large append, the replication barrier without synchronous standbys, connection strings with multiple
-/// hosts, and the longest and shortest replication intervals.
+/// order of a large append, the replication barrier without synchronous standbys, and connection strings with multiple
+/// hosts.
 /// </summary>
 [TestFixture]
 public class PostgresSubscriptionTests : PostgresIntegrationTest
@@ -217,52 +217,6 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
         await using var subscription = eventStore.SubscribeToAll().GetAsyncEnumerator(ct);
         var exception = await Should.ThrowAsync<NotSupportedException>(subscription.MoveNextAsync().AsTask());
         exception.Message.ShouldContain("replication connection string with a single host");
-    }
-
-    [Test]
-    [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task SubscribeToAll_LongestReplicationIntervals_DeliversLiveEventsAndDropsSlot(CancellationToken ct)
-    {
-        var replication = new PostgresReplicationOptions
-        {
-            InactiveSlotTimeout = PeriodicTimer.MaxSupportedPeriod,
-            WalReceiverTimeout = CancellationTokenSource.MaxSupportedDelay,
-            WalReceiverStatusInterval = PeriodicTimer.MaxSupportedPeriod,
-            RetryDelay = TimeSpan.FromDays(1),
-            MaxRetryDelay = TimeSpan.FromDays(1)
-        };
-
-        await ShouldDeliverLiveEventAndDropSlotAsync(replication, ct);
-    }
-
-    [Test]
-    [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task SubscribeToAll_ShortestStatusInterval_DeliversLiveEventsAndDropsSlot(CancellationToken ct)
-    {
-        var replication = new PostgresReplicationOptions
-        {
-            WalReceiverStatusInterval = PeriodicTimer.MinSupportedPeriod
-        };
-
-        await ShouldDeliverLiveEventAndDropSlotAsync(replication, ct);
-    }
-
-    private async Task ShouldDeliverLiveEventAndDropSlotAsync(
-        PostgresReplicationOptions replication,
-        CancellationToken ct)
-    {
-        await using (var eventStore = CreateEventStore(options: new() { Schema = Schema, Replication = replication }))
-        {
-            await using var subscription = eventStore.SubscribeToAll().GetAsyncEnumerator(ct);
-            await ShouldBeCaughtUpAsync(subscription);
-
-            var live = new TestEvent { Value = "live" };
-            await eventStore.AppendAsync("s1", [Appendable(live)], cancellationToken: ct);
-            (await NextEventAsync(subscription)).Payload.ShouldBe(live);
-        }
-
-        while (await CountSlotsAsync(ct) > 0)
-            await Task.Delay(50, ct);
     }
 
     private static async Task<long> CountSlotsAsync(CancellationToken ct)

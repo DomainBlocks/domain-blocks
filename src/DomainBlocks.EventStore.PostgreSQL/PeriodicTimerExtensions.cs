@@ -23,7 +23,7 @@ internal static class PeriodicTimerExtensions
         /// <exception cref="ArgumentOutOfRangeException">
         /// The period is shorter than <c>MinSupportedPeriod</c> or longer than <c>MaxSupportedPeriod</c>.
         /// </exception>
-        public static void ThrowIfOutOfRange(
+        public static void ThrowIfPeriodOutOfRange(
             TimeSpan period,
             [CallerArgumentExpression(nameof(period))] string? paramName = null)
         {

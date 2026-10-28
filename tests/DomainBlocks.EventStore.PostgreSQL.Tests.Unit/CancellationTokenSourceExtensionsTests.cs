@@ -30,15 +30,15 @@ public class CancellationTokenSourceExtensionsTests
     }
 
     [TestCaseSource(nameof(BoundaryDelays))]
-    public void ThrowIfOutOfRange_BoundaryDelay_DoesNotThrow(TimeSpan delay)
+    public void ThrowIfDelayOutOfRange_BoundaryDelay_DoesNotThrow(TimeSpan delay)
     {
-        Should.NotThrow(() => CancellationTokenSource.ThrowIfOutOfRange(delay));
+        Should.NotThrow(() => CancellationTokenSource.ThrowIfDelayOutOfRange(delay));
     }
 
     [TestCaseSource(nameof(OutOfRangeDelays))]
-    public void ThrowIfOutOfRange_OutOfRangeDelay_ThrowsNamingArgument(TimeSpan delay)
+    public void ThrowIfDelayOutOfRange_OutOfRangeDelay_ThrowsNamingArgument(TimeSpan delay)
     {
-        var ex = Should.Throw<ArgumentOutOfRangeException>(() => CancellationTokenSource.ThrowIfOutOfRange(delay));
+        var ex = Should.Throw<ArgumentOutOfRangeException>(() => CancellationTokenSource.ThrowIfDelayOutOfRange(delay));
 
         ex.ParamName.ShouldBe(nameof(delay));
     }

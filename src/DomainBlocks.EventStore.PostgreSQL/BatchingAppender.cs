@@ -27,7 +27,7 @@ internal sealed class BatchingAppender : IAppender
         PostgresEventStoreOptions options,
         ILogger? logger)
     {
-        CancellationTokenSource.ThrowIfOutOfRange(options.AppendBatchingDelay);
+        CancellationTokenSource.ThrowIfDelayOutOfRange(options.AppendBatchingDelay);
 
         _command = new AppendBatchCommand(dataSource, names);
         _maxBatchSize = options.AppendMaxBatchSize;

@@ -71,8 +71,8 @@ public static class PostgresEventStore
             MaxRetryAttempts = replicationOptions.MaxRetryAttempts
         };
 
-        ReplicationEventLogSessionFactory.ThrowIfUnsupported(replicationOptions);
-        EventLogFeed.ThrowIfUnsupported(feedOptions);
+        ReplicationEventLogSessionFactory.ValidateOptions(replicationOptions);
+        EventLogFeed.ValidateOptions(feedOptions);
 
         return new RefCountedEventLogFeed<EventLogRow<TEvent>>(() =>
             new EventLogFeed<EventLogRow<TEvent>>(

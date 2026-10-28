@@ -19,7 +19,7 @@ internal static class CancellationTokenSourceExtensions
         /// <exception cref="ArgumentOutOfRangeException">
         /// The delay is negative or longer than <c>MaxSupportedDelay</c>.
         /// </exception>
-        public static void ThrowIfOutOfRange(
+        public static void ThrowIfDelayOutOfRange(
             TimeSpan delay,
             [CallerArgumentExpression(nameof(delay))] string? paramName = null)
         {

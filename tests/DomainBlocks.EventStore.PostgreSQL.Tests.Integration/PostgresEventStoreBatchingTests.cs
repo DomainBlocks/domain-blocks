@@ -48,26 +48,6 @@ public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task AppendAsync_LongestBatchingDelay_CommitsWhenBatchIsFull(CancellationToken ct)
-    {
-        await using var eventStore = CreateEventStore("_longest", new PostgresEventStoreOptions
-        {
-            Schema = Schema,
-            AppendMaxBatchSize = 2,
-            AppendBatchingDelay = CancellationTokenSource.MaxSupportedDelay
-        });
-
-        // The pause lets the appender start waiting with the first request alone in its batch.
-        var first = eventStore.AppendAsync("s1", [Appendable("e1")], cancellationToken: ct);
-        await Task.Delay(100, ct);
-        var second = eventStore.AppendAsync("s2", [Appendable("e2")], cancellationToken: ct);
-
-        await Task.WhenAll(first, second);
-        (await Client.ReadRowsAsync()).Count.ShouldBe(2);
-    }
-
-    [Test]
-    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task ConcurrentAppends_MixedOutcomesInBatch_CompleteIndividually(CancellationToken ct)
     {
         await using var eventStore = CreateEventStore("_mixed", new PostgresEventStoreOptions

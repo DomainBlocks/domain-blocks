@@ -7,24 +7,24 @@ using Npgsql.Replication.PgOutput;
 namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 
 /// <summary>
-/// Checks the options for a <see cref="ReplicationEventLogSessionFactory{TEvent}"/>.
+/// Validates options for a <see cref="ReplicationEventLogSessionFactory{TEvent}"/>.
 /// </summary>
 internal static class ReplicationEventLogSessionFactory
 {
     /// <summary>
-    /// Throws if the timers that the options' intervals reach do not accept them.
+    /// Throws if a factory and the sessions it opens cannot use the options.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// An interval is outside the range of the timer that it reaches.
+    /// An option is outside the range that a factory or its sessions support.
     /// </exception>
-    public static void ThrowIfUnsupported(PostgresReplicationOptions options)
+    public static void ValidateOptions(PostgresReplicationOptions options)
     {
         // The scavenger and each session drive a PeriodicTimer with these.
-        PeriodicTimer.ThrowIfOutOfRange(options.InactiveSlotTimeout);
-        PeriodicTimer.ThrowIfOutOfRange(options.WalReceiverStatusInterval);
+        PeriodicTimer.ThrowIfPeriodOutOfRange(options.InactiveSlotTimeout);
+        PeriodicTimer.ThrowIfPeriodOutOfRange(options.WalReceiverStatusInterval);
 
         // Npgsql passes the receiver timeout to CancelAfter, and half of it to a Timer, without checking it.
-        CancellationTokenSource.ThrowIfOutOfRange(options.WalReceiverTimeout);
+        CancellationTokenSource.ThrowIfDelayOutOfRange(options.WalReceiverTimeout);
     }
 }
 
