@@ -5,39 +5,72 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Unit;
 
 public class TimerDurationsTests
 {
-    private static readonly TimeSpan[] SupportedDurations = [TimeSpan.Zero, TimeSpan.FromDays(1)];
+    private static readonly TimeSpan OneTick = TimeSpan.FromTicks(1);
 
-    private static readonly TimeSpan[] SupportedPeriods = [TimeSpan.FromMilliseconds(1), TimeSpan.FromDays(1)];
+    private static readonly TimeSpan[] UnsupportedPeriods =
+        [TimerDurations.MinPeriod - OneTick, TimerDurations.MaxDuration + OneTick];
 
-    private static readonly TimeSpan[] ExtremePeriods = [TimeSpan.FromTicks(1), TimeSpan.MaxValue];
+    private static readonly TimeSpan[] BoundaryPeriods = [TimerDurations.MinPeriod, TimerDurations.MaxDuration];
 
     [Test]
-    public void Clamp_LongestDuration_IsAcceptedByTimers()
+    public void MaxDuration_AsDuration_IsAcceptedByTimers()
     {
-        var duration = TimerDurations.Clamp(TimeSpan.MaxValue);
+        var duration = TimerDurations.MaxDuration;
 
         using var cancellationTokenSource = new CancellationTokenSource();
         Should.NotThrow(() => cancellationTokenSource.CancelAfter(duration));
         Should.NotThrow(() => new Timer(_ => { }, null, duration, Timeout.InfiniteTimeSpan).Dispose());
     }
 
-    [TestCaseSource(nameof(SupportedDurations))]
-    public void Clamp_SupportedDuration_IsUnchanged(TimeSpan duration)
+    [Test]
+    public void MaxDuration_OneTickLonger_IsRejectedByTimers()
     {
-        TimerDurations.Clamp(duration).ShouldBe(duration);
+        var duration = TimerDurations.MaxDuration + OneTick;
+
+        using var cancellationTokenSource = new CancellationTokenSource();
+        Should.Throw<ArgumentOutOfRangeException>(() => cancellationTokenSource.CancelAfter(duration));
+        Should.Throw<ArgumentOutOfRangeException>(() => new Timer(_ => { }, null, duration, Timeout.InfiniteTimeSpan));
     }
 
-    [TestCaseSource(nameof(ExtremePeriods))]
-    public void ClampPeriod_ExtremePeriod_IsAcceptedByPeriodicTimer(TimeSpan period)
+    [TestCaseSource(nameof(BoundaryPeriods))]
+    public void PeriodicTimer_BoundaryPeriod_IsAccepted(TimeSpan period)
     {
-        var clamped = TimerDurations.ClampPeriod(period);
-
-        Should.NotThrow(() => new PeriodicTimer(clamped).Dispose());
+        Should.NotThrow(() => new PeriodicTimer(period).Dispose());
     }
 
-    [TestCaseSource(nameof(SupportedPeriods))]
-    public void ClampPeriod_SupportedPeriod_IsUnchanged(TimeSpan period)
+    [TestCaseSource(nameof(UnsupportedPeriods))]
+    public void PeriodicTimer_UnsupportedPeriod_IsRejected(TimeSpan period)
     {
-        TimerDurations.ClampPeriod(period).ShouldBe(period);
+        Should.Throw<ArgumentOutOfRangeException>(() => new PeriodicTimer(period));
+    }
+
+    [Test]
+    public void ThrowIfUnsupportedDuration_MaxDuration_DoesNotThrow()
+    {
+        Should.NotThrow(() => TimerDurations.ThrowIfUnsupportedDuration(TimerDurations.MaxDuration));
+    }
+
+    [Test]
+    public void ThrowIfUnsupportedDuration_LongerDuration_ThrowsNamingArgument()
+    {
+        var delay = TimerDurations.MaxDuration + OneTick;
+
+        var ex = Should.Throw<ArgumentOutOfRangeException>(() => TimerDurations.ThrowIfUnsupportedDuration(delay));
+
+        ex.ParamName.ShouldBe(nameof(delay));
+    }
+
+    [TestCaseSource(nameof(BoundaryPeriods))]
+    public void ThrowIfUnsupportedPeriod_BoundaryPeriod_DoesNotThrow(TimeSpan period)
+    {
+        Should.NotThrow(() => TimerDurations.ThrowIfUnsupportedPeriod(period));
+    }
+
+    [TestCaseSource(nameof(UnsupportedPeriods))]
+    public void ThrowIfUnsupportedPeriod_UnsupportedPeriod_ThrowsNamingArgument(TimeSpan period)
+    {
+        var ex = Should.Throw<ArgumentOutOfRangeException>(() => TimerDurations.ThrowIfUnsupportedPeriod(period));
+
+        ex.ParamName.ShouldBe(nameof(period));
     }
 }

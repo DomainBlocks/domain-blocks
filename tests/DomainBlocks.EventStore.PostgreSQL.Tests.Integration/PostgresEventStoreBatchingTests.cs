@@ -69,7 +69,7 @@ public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
         {
             Schema = Schema,
             AppendMaxBatchSize = 2,
-            AppendBatchingDelay = TimeSpan.MaxValue
+            AppendBatchingDelay = TimerDurations.MaxDuration
         });
 
         // The pause lets the appender start waiting with the first request alone in its batch.

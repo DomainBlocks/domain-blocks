@@ -25,6 +25,9 @@ public static class PostgresEventStore
         where TEvent : notnull
     {
         var names = new SchemaObjectNames(options.Schema);
+
+        // The feed's checks run first, since the appender starts a loop that would keep running if they then threw.
+        var feed = CreateFeed(dataSource, names, options, eventCodec, logger, replicationConnectionStringFallback);
         var appender = new BatchingAppender(dataSource, names, options, logger);
 
         var reader = new EventLogReader<TEvent>(
@@ -32,8 +35,6 @@ public static class PostgresEventStore
             new EventLogSql(names),
             options.ReadPageSize,
             eventCodec);
-
-        var feed = CreateFeed(dataSource, names, options, eventCodec, logger, replicationConnectionStringFallback);
 
         return new PostgresEventStore<TEvent>(
             dataSource,
@@ -69,6 +70,10 @@ public static class PostgresEventStore
             MaxRetryDelay = replicationOptions.MaxRetryDelay,
             MaxRetryAttempts = replicationOptions.MaxRetryAttempts
         };
+
+        // The feed is created for the first live subscription, so the store checks its limits now, when it is built.
+        ReplicationEventLogSessionFactory<TEvent>.ThrowIfUnsupported(replicationOptions);
+        EventLogFeed<EventLogRow<TEvent>>.ThrowIfUnsupported(feedOptions);
 
         return new RefCountedEventLogFeed<EventLogRow<TEvent>>(() =>
             new EventLogFeed<EventLogRow<TEvent>>(

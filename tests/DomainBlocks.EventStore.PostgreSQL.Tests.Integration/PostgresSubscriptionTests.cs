@@ -225,11 +225,11 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
     {
         var replication = new PostgresReplicationOptions
         {
-            InactiveSlotTimeout = TimeSpan.MaxValue,
-            WalReceiverTimeout = TimeSpan.MaxValue,
-            WalReceiverStatusInterval = TimeSpan.MaxValue,
-            RetryDelay = TimeSpan.MaxValue,
-            MaxRetryDelay = TimeSpan.MaxValue
+            InactiveSlotTimeout = TimerDurations.MaxDuration,
+            WalReceiverTimeout = TimerDurations.MaxDuration,
+            WalReceiverStatusInterval = TimerDurations.MaxDuration,
+            RetryDelay = TimeSpan.FromDays(1),
+            MaxRetryDelay = TimeSpan.FromDays(1)
         };
 
         await ShouldDeliverLiveEventAndDropSlotAsync(replication, ct);
@@ -239,7 +239,7 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task SubscribeToAll_ShortestStatusInterval_DeliversLiveEventsAndDropsSlot(CancellationToken ct)
     {
-        var replication = new PostgresReplicationOptions { WalReceiverStatusInterval = TimeSpan.FromTicks(1) };
+        var replication = new PostgresReplicationOptions { WalReceiverStatusInterval = TimerDurations.MinPeriod };
 
         await ShouldDeliverLiveEventAndDropSlotAsync(replication, ct);
     }

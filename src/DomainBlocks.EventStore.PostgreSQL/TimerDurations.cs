@@ -1,25 +1,46 @@
+using System.Runtime.CompilerServices;
+
 namespace DomainBlocks.EventStore.PostgreSQL;
 
 /// <summary>
-/// Clamps the durations that the options accept to the ranges that .NET's timers support.
+/// Checks durations against the ranges that .NET's timers support.
 /// </summary>
 internal static class TimerDurations
 {
-    // Timer, PeriodicTimer, and CancellationTokenSource.CancelAfter reject durations of uint.MaxValue milliseconds or
-    // longer.
-    private static readonly TimeSpan MaxDuration = TimeSpan.FromMilliseconds(uint.MaxValue - 1);
-
-    // PeriodicTimer also rejects periods shorter than 1 millisecond.
-    private static readonly TimeSpan MinPeriod = TimeSpan.FromMilliseconds(1);
+    /// <summary>
+    /// The longest duration that <see cref="Timer"/>, <see cref="PeriodicTimer"/>, and
+    /// <see cref="CancellationTokenSource.CancelAfter(TimeSpan)"/> accept, which is 1 tick less than
+    /// <see cref="uint.MaxValue"/> milliseconds.
+    /// </summary>
+    public static readonly TimeSpan MaxDuration = TimeSpan.FromMilliseconds(uint.MaxValue) - TimeSpan.FromTicks(1);
 
     /// <summary>
-    /// Returns the duration, or the longest one that timers support if it is longer.
+    /// The shortest period that <see cref="PeriodicTimer"/> accepts, which is 1 millisecond.
     /// </summary>
-    public static TimeSpan Clamp(TimeSpan duration) => TimeSpan.FromTicks(Math.Min(duration.Ticks, MaxDuration.Ticks));
+    public static readonly TimeSpan MinPeriod = TimeSpan.FromMilliseconds(1);
 
     /// <summary>
-    /// Returns the period, clamped to the range that <see cref="PeriodicTimer"/> supports.
+    /// Throws if the duration is longer than timers support.
     /// </summary>
-    public static TimeSpan ClampPeriod(TimeSpan period) =>
-        TimeSpan.FromTicks(Math.Clamp(period.Ticks, MinPeriod.Ticks, MaxDuration.Ticks));
+    /// <exception cref="ArgumentOutOfRangeException">The duration is longer than <see cref="MaxDuration"/>.</exception>
+    public static void ThrowIfUnsupportedDuration(
+        TimeSpan duration,
+        [CallerArgumentExpression(nameof(duration))] string? paramName = null)
+    {
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(duration, MaxDuration, paramName);
+    }
+
+    /// <summary>
+    /// Throws if <see cref="PeriodicTimer"/> does not support the period.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The period is shorter than <see cref="MinPeriod"/> or longer than <see cref="MaxDuration"/>.
+    /// </exception>
+    public static void ThrowIfUnsupportedPeriod(
+        TimeSpan period,
+        [CallerArgumentExpression(nameof(period))] string? paramName = null)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(period, MinPeriod, paramName);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(period, MaxDuration, paramName);
+    }
 }

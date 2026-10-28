@@ -27,9 +27,12 @@ internal sealed class BatchingAppender : IAppender
         PostgresEventStoreOptions options,
         ILogger? logger)
     {
+        // The batching delay is passed to CancelAfter.
+        TimerDurations.ThrowIfUnsupportedDuration(options.AppendBatchingDelay);
+
         _command = new AppendBatchCommand(dataSource, names);
         _maxBatchSize = options.AppendMaxBatchSize;
-        _batchingDelay = TimerDurations.Clamp(options.AppendBatchingDelay);
+        _batchingDelay = options.AppendBatchingDelay;
         _batchingDelayMinCount = options.AppendBatchingDelayMinCount;
         _logger = logger;
 

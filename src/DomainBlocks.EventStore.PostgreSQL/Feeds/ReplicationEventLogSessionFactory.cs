@@ -51,6 +51,24 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent>(
     private FeedReplicationSlot? _slot;
     private bool _hasOpenedSessionOnSlot;
 
+    /// <summary>
+    /// Throws if the timers that the options' intervals drive do not support them.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <see cref="PostgresReplicationOptions.InactiveSlotTimeout"/> or
+    /// <see cref="PostgresReplicationOptions.WalReceiverStatusInterval"/> is shorter than
+    /// <see cref="TimerDurations.MinPeriod"/>, or an interval is longer than <see cref="TimerDurations.MaxDuration"/>.
+    /// </exception>
+    public static void ThrowIfUnsupported(PostgresReplicationOptions options)
+    {
+        // The scavenger and each session pace their work with a PeriodicTimer.
+        TimerDurations.ThrowIfUnsupportedPeriod(options.InactiveSlotTimeout);
+        TimerDurations.ThrowIfUnsupportedPeriod(options.WalReceiverStatusInterval);
+
+        // Npgsql passes the receiver timeout to timers without checking it.
+        TimerDurations.ThrowIfUnsupportedDuration(options.WalReceiverTimeout);
+    }
+
     public async Task<IEventLogSession<EventLogRow<TEvent>>> OpenAsync(CancellationToken cancellationToken)
     {
         ThrowIfMultipleHosts();
@@ -80,11 +98,10 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent>(
             _hasOpenedSessionOnSlot = false;
         }
 
-        // Npgsql passes both values to timers without checking them.
         var connection = new LogicalReplicationConnection(connectionString)
         {
-            WalReceiverTimeout = TimerDurations.Clamp(options.WalReceiverTimeout),
-            WalReceiverStatusInterval = TimerDurations.Clamp(options.WalReceiverStatusInterval)
+            WalReceiverTimeout = options.WalReceiverTimeout,
+            WalReceiverStatusInterval = options.WalReceiverStatusInterval
         };
 
         try

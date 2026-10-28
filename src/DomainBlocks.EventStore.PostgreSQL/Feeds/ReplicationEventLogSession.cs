@@ -44,7 +44,7 @@ internal sealed class ReplicationEventLogSession<TEvent>(
             .StartReplication(pgOutputSlot, pgOutputOptions, cancellationToken, slot.ResumeLsn)
             .GetAsyncEnumerator(cancellationToken);
 
-        using var statusTimer = new PeriodicTimer(TimerDurations.ClampPeriod(connection.WalReceiverStatusInterval));
+        using var statusTimer = new PeriodicTimer(connection.WalReceiverStatusInterval);
 
         await using (messages.ConfigureAwait(false))
         {

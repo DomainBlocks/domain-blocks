@@ -8,7 +8,7 @@ using Shouldly;
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
 /// <summary>
-/// Tests that the scavenger works with the shortest and longest timeouts that the options accept.
+/// Tests that the scavenger works with the shortest and longest timeouts that the store accepts.
 /// </summary>
 [TestFixture]
 public class InactiveSlotScavengerTests : PostgresIntegrationTest
@@ -24,7 +24,7 @@ public class InactiveSlotScavengerTests : PostgresIntegrationTest
         try
         {
             await CreateSlotAsync(leftover, ct);
-            await using var scavenger = CreateScavenger(TimeSpan.FromTicks(1));
+            await using var scavenger = CreateScavenger(TimerDurations.MinPeriod);
 
             scavenger.EnsureStarted();
 
@@ -46,7 +46,7 @@ public class InactiveSlotScavengerTests : PostgresIntegrationTest
         try
         {
             await CreateSlotAsync(leftover, ct);
-            await using var scavenger = CreateScavenger(TimeSpan.MaxValue);
+            await using var scavenger = CreateScavenger(TimerDurations.MaxDuration);
 
             scavenger.EnsureStarted();
             await scavenger.DropInactiveSlotsAsync(ct);

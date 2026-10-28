@@ -51,6 +51,16 @@ internal sealed class EventLogFeed<T> : IEventLogFeed<T>
         _connectionState = new ConnectionState(logger, _feedId);
     }
 
+    /// <summary>
+    /// Throws if Polly cannot take the options' retry delays.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">A retry delay is longer than 1 day.</exception>
+    public static void ThrowIfUnsupported(EventLogFeedOptions options)
+    {
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(options.RetryDelay, PollyMaxDelay);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(options.MaxRetryDelay, PollyMaxDelay);
+    }
+
     public IDisposable Attach(IEventLogObserver<T> observer, string correlationId = "unknown")
     {
         return _connectionState.Attach(observer, correlationId);
@@ -98,8 +108,8 @@ internal sealed class EventLogFeed<T> : IEventLogFeed<T>
                 MaxRetryAttempts = options.MaxRetryAttempts,
                 BackoffType = DelayBackoffType.Exponential,
                 UseJitter = true,
-                Delay = TimeSpan.FromTicks(Math.Min(options.RetryDelay.Ticks, PollyMaxDelay.Ticks)),
-                MaxDelay = TimeSpan.FromTicks(Math.Min(options.MaxRetryDelay.Ticks, PollyMaxDelay.Ticks)),
+                Delay = options.RetryDelay,
+                MaxDelay = options.MaxRetryDelay,
                 ShouldHandle = args =>
                 {
                     var shouldHandle = args.Outcome.Exception is { } ex &&
