@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Filtering;
+using DomainBlocks.EventStore.Internal.Feeds;
 using DomainBlocks.EventStore.PostgreSQL.Feeds;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -48,7 +49,7 @@ public static class PostgresEventStore
             logger);
     }
 
-    private static RefCountedEventLogFeed<EventLogRow<TEvent>> CreateFeed<TEvent>(
+    private static RefCountedFeed<EventLogRow<TEvent>, long?> CreateFeed<TEvent>(
         NpgsqlDataSource dataSource,
         SchemaObjectNames names,
         PostgresEventStoreOptions options,
@@ -74,7 +75,7 @@ public static class PostgresEventStore
         ReplicationEventLogSessionFactory.ValidateOptions(replicationOptions);
         EventLogFeed.ValidateOptions(feedOptions);
 
-        return new RefCountedEventLogFeed<EventLogRow<TEvent>>(() =>
+        return new RefCountedFeed<EventLogRow<TEvent>, long?>(() =>
             new EventLogFeed<EventLogRow<TEvent>>(
                 new ReplicationEventLogSessionFactory<TEvent>(
                     connectionString,
@@ -105,7 +106,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
     private readonly PostgresEventStoreAdminOptions _adminOptions;
     private readonly IAppender _appender;
     private readonly EventLogReader<TEvent> _reader;
-    private readonly RefCountedEventLogFeed<EventLogRow<TEvent>> _feed;
+    private readonly RefCountedFeed<EventLogRow<TEvent>, long?> _feed;
     private readonly IEventCodec<TEvent, PostgresEventData, string> _eventCodec;
     private readonly ILogger? _logger;
 
@@ -116,7 +117,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         PostgresEventStoreAdminOptions adminOptions,
         IAppender appender,
         EventLogReader<TEvent> reader,
-        RefCountedEventLogFeed<EventLogRow<TEvent>> feed,
+        RefCountedFeed<EventLogRow<TEvent>, long?> feed,
         IEventCodec<TEvent, PostgresEventData, string> eventCodec,
         ILogger? logger)
     {

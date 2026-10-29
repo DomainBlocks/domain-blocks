@@ -149,7 +149,7 @@ public class ChangeStreamSubjectTests
         await using var connection = await subject.ConnectAsync(ct);
 
         _helloCount.ShouldBe(0);
-        connection.OpTimeHighWaterMark.ShouldBe(new BsonTimestamp(5, 2));
+        connection.HighWaterMark.ShouldBe(new BsonTimestamp(5, 2));
         _watchOptions.ShouldHaveSingleItem().ShouldNotBeNull().StartAtOperationTime.ShouldBe(startAt);
     }
 
@@ -171,7 +171,7 @@ public class ChangeStreamSubjectTests
 
         await using var connection = await subject.ConnectAsync(ct);
 
-        connection.OpTimeHighWaterMark.ShouldBe(CreateOperationTime(1));
+        connection.HighWaterMark.ShouldBe(CreateOperationTime(1));
         var watchOptions = _watchOptions.ShouldHaveSingleItem().ShouldNotBeNull();
         watchOptions.ResumeAfter.ShouldBe(resumeAfter);
         watchOptions.StartAtOperationTime.ShouldBeNull();
@@ -586,7 +586,7 @@ public class ChangeStreamSubjectTests
         private readonly TaskCompletionSource<bool> _wasCompletedWhenNotified =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public IChangeStreamConnection? Connection { get; set; }
+        public IFeedConnection<BsonTimestamp>? Connection { get; set; }
 
         public Task<bool> WasCompletedWhenNotified => _wasCompletedWhenNotified.Task;
 
@@ -610,7 +610,7 @@ public class ChangeStreamSubjectTests
         private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly Channel<BsonTimestamp> _marks = Channel.CreateUnbounded<BsonTimestamp>();
 
-        public IChangeStreamConnection? Connection { get; set; }
+        public IFeedConnection<BsonTimestamp>? Connection { get; set; }
 
         public IAsyncEnumerable<BsonTimestamp> ReadMarksAsync(CancellationToken ct) => _marks.Reader.ReadAllAsync(ct);
 
@@ -621,7 +621,7 @@ public class ChangeStreamSubjectTests
             CancellationToken cancellationToken)
         {
             await _released.Task;
-            _marks.Writer.TryWrite(Connection!.OpTimeHighWaterMark);
+            _marks.Writer.TryWrite(Connection!.HighWaterMark);
         }
 
         public ValueTask OnResetAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;

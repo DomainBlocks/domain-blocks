@@ -31,7 +31,7 @@ internal static class ChangeStreamSubject
     }
 }
 
-internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChangeStreamSubject<TResult>
+internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<TResult, BsonTimestamp>
 {
     private readonly IMongoClient _mongoClient;
     private readonly ChangeStreamCursorFactory<TDocument, TChange> _cursorFactory;
@@ -79,7 +79,7 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
     public IDisposable Attach(IFeedObserver<TResult> observer, string correlationId = "unknown") =>
         _observers.Attach(observer, correlationId);
 
-    public async Task<IChangeStreamConnection> ConnectAsync(CancellationToken cancellationToken = default)
+    public async Task<IFeedConnection<BsonTimestamp>> ConnectAsync(CancellationToken cancellationToken = default)
     {
         var connection = Interlocked.Exchange(ref _connected, 1) == 0
             ? new Connection(this)
@@ -145,7 +145,7 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
             .ConfigureAwait(false);
     }
 
-    private sealed class Connection : IChangeStreamConnection
+    private sealed class Connection : IFeedConnection<BsonTimestamp>
     {
         private readonly ChangeStreamSubject<TDocument, TChange, TResult> _subject;
         private readonly Func<TChange, BsonDocument> _resumeTokenSelector;
@@ -175,7 +175,13 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IChange
 
         public Task Completion => _completionTcs.Task;
 
-        public BsonTimestamp OpTimeHighWaterMark =>
+        /// <summary>
+        /// An optime at or after every change that the stream has delivered or won't deliver. It starts just before
+        /// the stream's start, or at the primary's last write when a resume token sets the start, and moves forwards
+        /// with each change delivered. A majority read that waits for it sees every such change, even on a node whose
+        /// commit point lagged after a failover.
+        /// </summary>
+        public BsonTimestamp HighWaterMark =>
             Volatile.Read(ref _opTimeHighWaterMark) ??
             throw new InvalidOperationException("The change stream connection is not connected.");
 

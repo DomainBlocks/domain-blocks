@@ -4,6 +4,7 @@ using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.Filtering.Nodes;
 using DomainBlocks.EventStore.Internal;
+using DomainBlocks.EventStore.Internal.Feeds;
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using DomainBlocks.MongoDB.Sequencing;
 using Microsoft.Extensions.Logging;
@@ -77,7 +78,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
     private readonly IEventCodec<TEvent, BsonValue, BsonValue> _eventCodec;
     private readonly ILogger? _logger;
     private readonly EventLogReader<TEvent> _reader;
-    private readonly RefCountedChangeStreamSubject<EventLogDocument<TEvent>> _allEventsSubject;
+    private readonly RefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp> _allEventsSubject;
     private readonly EventLogDocument<TEvent> _liveDocument;
 
     internal MongoEventStore(
@@ -320,9 +321,9 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
     }
 
     // The subject sets the store's one live document to each inserted document and then hands it to every subscription.
-    // Because the document is shared, the subject replaces a connection only after that connection has handed out its
-    // last change.
-    private RefCountedChangeStreamSubject<EventLogDocument<TEvent>> CreateAllEventsSubject(
+    // Because the document is shared, the feed replaces a connection only after that connection has handed out its last
+    // change.
+    private RefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp> CreateAllEventsSubject(
         IMongoCollection<BsonDocument> eventLog,
         ILogger? logger)
     {
@@ -330,10 +331,12 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
             x => x.OperationType,
             ChangeStreamOperationType.Insert);
 
-        return RefCountedChangeStreamSubject.Create(
+        var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(insertsOnly);
+
+        return new RefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp>(() => ChangeStreamSubject.Create(
             eventLog.Database.Client,
             eventLog.WatchAsync,
-            new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(insertsOnly),
+            pipeline,
             static change => change.ResumeToken,
             static change => change.ClusterTime,
             change =>
@@ -341,7 +344,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
                 _liveDocument.Set(change.FullDocument);
                 return _liveDocument;
             },
-            logger: logger);
+            logger: logger));
     }
 
     private static ReadQuery GetReadQuery<TPos>(

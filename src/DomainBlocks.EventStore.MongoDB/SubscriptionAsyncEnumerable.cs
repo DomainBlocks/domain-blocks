@@ -20,7 +20,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     where TPos : struct, IPosition<TPos>
 {
     private readonly EventLogReader<TEvent> _reader;
-    private readonly IRefCountedChangeStreamSubject<EventLogDocument<TEvent>> _changeStreamSubject;
+    private readonly IRefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp> _changeStreamSubject;
     private readonly CatchUpReader _catchUpReader;
     private readonly EndPositionReader _endPositionReader;
     private readonly EventFilter _liveFilter;
@@ -33,7 +33,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
     public SubscriptionAsyncEnumerable(
         EventLogReader<TEvent> reader,
-        IRefCountedChangeStreamSubject<EventLogDocument<TEvent>> changeStreamSubject,
+        IRefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp> changeStreamSubject,
         CatchUpReader catchUpReader,
         EndPositionReader endPositionReader,
         EventFilter liveFilter,
@@ -101,7 +101,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                 var enumerator = ReadAllAsync(
                         resumePosition,
                         observer,
-                        attachment.OpTimeHighWaterMark,
+                        attachment.HighWaterMark,
                         cancellationToken)
                     .GetAsyncEnumerator(cancellationToken);
 
@@ -190,7 +190,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         }
     }
 
-    private async Task<IChangeStreamAttachment> AttachObserverAsync(
+    private async Task<IFeedAttachment<BsonTimestamp>> AttachObserverAsync(
         Observer observer,
         CancellationToken cancellationToken)
     {

@@ -1,5 +1,6 @@
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Filtering;
+using DomainBlocks.EventStore.Internal.Feeds;
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.MongoDB.Bson;
@@ -20,7 +21,7 @@ internal sealed class CatchUpScenario : IAsyncDisposable
     private readonly MongoEventStoreOptions _options;
     private readonly IEventStore<object, string, StreamPosition, LogPosition> _eventStore;
     private readonly EventLogReader<object> _reader;
-    private readonly RefCountedChangeStreamSubject<EventLogDocument<object>> _subject;
+    private readonly RefCountedFeed<EventLogDocument<object>, BsonTimestamp> _subject;
     private readonly CatchUpRecorder _catchUpRecorder = new();
     private readonly List<BsonTimestamp> _catchUpOpTimes = [];
     private readonly CancellationToken _cancellationToken;
@@ -60,10 +61,12 @@ internal sealed class CatchUpScenario : IAsyncDisposable
         _reader = new EventLogReader<object>(eventLog, codec);
         ChangeStreamProbe = new ChangeStreamProbe(eventLog);
 
-        _subject = RefCountedChangeStreamSubject.Create(
+        var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(insertsOnly);
+
+        _subject = new RefCountedFeed<EventLogDocument<object>, BsonTimestamp>(() => ChangeStreamSubject.Create(
             eventLog.Database.Client,
             ChangeStreamProbe.WatchAsync,
-            new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(insertsOnly),
+            pipeline,
             static change => change.ResumeToken,
             static change => change.ClusterTime,
             change =>
@@ -71,7 +74,7 @@ internal sealed class CatchUpScenario : IAsyncDisposable
                 liveDocument.Set(change.FullDocument);
                 return liveDocument;
             },
-            logger: MongoTestEnvironment.LoggerFactory.CreateLogger("ChangeStreamSubject"));
+            logger: MongoTestEnvironment.LoggerFactory.CreateLogger("ChangeStreamSubject")));
     }
 
     public ChangeStreamProbe ChangeStreamProbe { get; }

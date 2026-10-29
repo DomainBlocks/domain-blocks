@@ -33,7 +33,7 @@ internal static class EventLogFeed
 /// <see cref="IFeedObserver{T}.OnResetAsync"/> first and recover missed rows by re-reading from their last
 /// position.
 /// </remarks>
-internal sealed class EventLogFeed<T> : IEventLogFeed<T>
+internal sealed class EventLogFeed<T> : IFeed<T, long?>
 {
     private readonly IEventLogSessionFactory<T> _sessionFactory;
     private readonly Func<CancellationToken, Task<IEventLogSession<T>>> _openSession;
@@ -72,7 +72,7 @@ internal sealed class EventLogFeed<T> : IEventLogFeed<T>
         return _observers.Attach(observer, correlationId);
     }
 
-    public async Task<IEventLogFeedConnection> ConnectAsync(CancellationToken cancellationToken = default)
+    public async Task<IFeedConnection<long?>> ConnectAsync(CancellationToken cancellationToken = default)
     {
         var connection = Interlocked.Exchange(ref _connected, 1) == 0
             ? new Connection(this)
@@ -143,7 +143,7 @@ internal sealed class EventLogFeed<T> : IEventLogFeed<T>
             .ConfigureAwait(false);
     }
 
-    private sealed class Connection : IEventLogFeedConnection
+    private sealed class Connection : IFeedConnection<long?>
     {
         private readonly EventLogFeed<T> _feed;
         private readonly FeedObservers<T> _observers;
@@ -167,7 +167,10 @@ internal sealed class EventLogFeed<T> : IEventLogFeed<T>
 
         public Task Completion => _completionTcs.Task;
 
-        public long? PositionHighWaterMark =>
+        /// <summary>
+        /// The position of the last row the feed delivered, or <see langword="null"/> if it has delivered none.
+        /// </summary>
+        public long? HighWaterMark =>
             Volatile.Read(ref _positionHighWaterMark) is var position and >= 0 ? position : null;
 
         public async ValueTask DisposeAsync()

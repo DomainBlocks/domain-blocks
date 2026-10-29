@@ -332,7 +332,7 @@ public class EventLogFeedTests
         private readonly TaskCompletionSource<long?> _highWaterMarkOnNext =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public IEventLogFeedConnection? Connection { get; set; }
+        public IFeedConnection<long?>? Connection { get; set; }
 
         public Task<long?> HighWaterMarkOnNext => _highWaterMarkOnNext.Task;
 
@@ -341,7 +341,7 @@ public class EventLogFeedTests
         public async ValueTask OnNextAsync(long position, CancellationToken cancellationToken)
         {
             await _onNextReleased.Task;
-            _highWaterMarkOnNext.TrySetResult(Connection!.PositionHighWaterMark);
+            _highWaterMarkOnNext.TrySetResult(Connection!.HighWaterMark);
         }
 
         public ValueTask OnResetAsync(CancellationToken cancellationToken) => default;
