@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Time.Testing;
 using NUnit.Framework;
 using Polly;
 using Shouldly;
@@ -16,7 +17,7 @@ public class RetryPipelineTests
     public async Task ExecuteAsync_TransientErrors_RetriesUntilSuccess(CancellationToken ct)
     {
         var retries = new List<int>();
-        var pipeline = CreatePipeline(RetryTimeout, new ManualTimeProvider(), retries);
+        var pipeline = CreatePipeline(RetryTimeout, new FakeTimeProvider(), retries);
         var attempts = 0;
 
         var result = await pipeline.ExecuteAsync(ReadAsync, ct);
@@ -33,7 +34,7 @@ public class RetryPipelineTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task ExecuteAsync_OtherError_ThrowsWithoutRetry(CancellationToken ct)
     {
-        var pipeline = CreatePipeline(RetryTimeout, new ManualTimeProvider(), []);
+        var pipeline = CreatePipeline(RetryTimeout, new FakeTimeProvider(), []);
         var attempts = 0;
 
         await Should.ThrowAsync<InvalidOperationException>(pipeline.ExecuteAsync(ReadAsync, ct).AsTask());
@@ -51,7 +52,7 @@ public class RetryPipelineTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task ExecuteAsync_TimeoutBeforeMaxRetryAttempts_ThrowsLastError(CancellationToken ct)
     {
-        var timeProvider = new ManualTimeProvider();
+        var timeProvider = new FakeTimeProvider();
         var pipeline = CreatePipeline(RetryTimeout, timeProvider, [], maxRetryAttempts: 5);
         TimeSpan[] advances = [TimeSpan.Zero, RetryTimeout - TimeSpan.FromTicks(1), TimeSpan.FromTicks(1)];
         var attempts = 0;
@@ -73,7 +74,7 @@ public class RetryPipelineTests
     public async Task ExecuteAsync_MaxRetryAttemptsBeforeTimeout_ThrowsLastError(CancellationToken ct)
     {
         var retries = new List<int>();
-        var pipeline = CreatePipeline(RetryTimeout, new ManualTimeProvider(), retries, maxRetryAttempts: 2);
+        var pipeline = CreatePipeline(RetryTimeout, new FakeTimeProvider(), retries, maxRetryAttempts: 2);
         var attempts = 0;
 
         var ex = await Should.ThrowAsync<TransientException>(pipeline.ExecuteAsync(ReadAsync, ct).AsTask());
@@ -91,7 +92,7 @@ public class RetryPipelineTests
     public async Task ExecuteAsync_ZeroMaxRetryAttempts_ThrowsWithoutRetry(CancellationToken ct)
     {
         var retries = new List<int>();
-        var pipeline = CreatePipeline(RetryTimeout, new ManualTimeProvider(), retries, maxRetryAttempts: 0);
+        var pipeline = CreatePipeline(RetryTimeout, new FakeTimeProvider(), retries, maxRetryAttempts: 0);
         var attempts = 0;
 
         await Should.ThrowAsync<TransientException>(pipeline.ExecuteAsync(ReadAsync, ct).AsTask());
@@ -107,7 +108,7 @@ public class RetryPipelineTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task ExecuteAsync_InfiniteTimeout_KeepsRetrying(CancellationToken ct)
     {
-        var timeProvider = new ManualTimeProvider();
+        var timeProvider = new FakeTimeProvider();
         var pipeline = CreatePipeline(Timeout.InfiniteTimeSpan, timeProvider, []);
         var attempts = 0;
 
@@ -130,7 +131,7 @@ public class RetryPipelineTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task ExecuteAsync_NewExecutionAfterTimeout_StartsNewTimeout(CancellationToken ct)
     {
-        var timeProvider = new ManualTimeProvider();
+        var timeProvider = new FakeTimeProvider();
         var pipeline = CreatePipeline(RetryTimeout, timeProvider, []);
         var step = 0;
 
@@ -161,7 +162,7 @@ public class RetryPipelineTests
     [Test]
     public async Task ExecuteAsync_CallerCanceled_ThrowsWithoutRetry()
     {
-        var pipeline = CreatePipeline(RetryTimeout, new ManualTimeProvider(), []);
+        var pipeline = CreatePipeline(RetryTimeout, new FakeTimeProvider(), []);
         using var cancellationTokenSource = new CancellationTokenSource();
         var attempts = 0;
 
@@ -175,6 +176,7 @@ public class RetryPipelineTests
             if (++attempts == MaxAttempts)
                 return ValueTask.FromResult(0);
 
+            // ReSharper disable once AccessToDisposedClosure - only called during the execution
             cancellationTokenSource.Cancel();
             throw new TransientException(attempts);
         }
@@ -192,25 +194,13 @@ public class RetryPipelineTests
             maxRetryAttempts,
             timeout,
             (_, attempt, _) => retries.Add(attempt),
-            TimeSpan.Zero,
-            TimeSpan.Zero,
-            timeProvider);
+            delay: TimeSpan.Zero,
+            maxDelay: TimeSpan.Zero,
+            timeProvider: timeProvider);
     }
 
     private sealed class TransientException(int attempt) : Exception($"Attempt {attempt} failed.")
     {
         public int Attempt { get; } = attempt;
-    }
-
-    // A clock that moves only when the test moves it.
-    private sealed class ManualTimeProvider : TimeProvider
-    {
-        private long _timestamp;
-
-        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
-
-        public override long GetTimestamp() => _timestamp;
-
-        public void Advance(TimeSpan duration) => _timestamp += duration.Ticks;
     }
 }

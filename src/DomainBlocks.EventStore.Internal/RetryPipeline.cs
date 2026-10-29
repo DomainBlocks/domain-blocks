@@ -9,21 +9,12 @@ namespace DomainBlocks.EventStore.Internal;
 /// </summary>
 internal static class RetryPipeline
 {
-    /// <summary>
-    /// The delay before the first retry. It doubles, with jitter, for each later retry.
-    /// </summary>
-    public static readonly TimeSpan DefaultDelay = TimeSpan.FromSeconds(1);
-
-    /// <summary>
-    /// The longest delay between retries.
-    /// </summary>
-    public static readonly TimeSpan DefaultMaxDelay = TimeSpan.FromMinutes(1);
-
+    private static readonly TimeSpan DefaultDelay = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan DefaultMaxDelay = TimeSpan.FromMinutes(1);
     private static readonly ResiliencePropertyKey<long> FailingSinceKey = new("DomainBlocks.FailingSince");
 
     /// <summary>
-    /// Creates a pipeline that retries transient errors, after 1 second at first, doubling the delay with jitter up to
-    /// 1 minute.
+    /// Creates a pipeline that retries transient errors, doubling the delay with jitter after each retry.
     /// </summary>
     /// <param name="isTransient">
     /// Whether to retry an error. No error is retried once the caller has asked to cancel.
@@ -37,53 +28,41 @@ internal static class RetryPipeline
     /// <see cref="Timeout.InfiniteTimeSpan"/> to retry without a limit.
     /// </param>
     /// <param name="onRetry">Called before each delay with the error, the retry's number from 1, and the delay.</param>
-    public static ResiliencePipeline Create(
-        Func<Exception, bool> isTransient,
-        int maxRetryAttempts,
-        TimeSpan timeout,
-        Action<Exception, int, TimeSpan> onRetry)
-    {
-        return Create(
-            isTransient,
-            maxRetryAttempts,
-            timeout,
-            onRetry,
-            DefaultDelay,
-            DefaultMaxDelay,
-            TimeProvider.System);
-    }
-
-    /// <summary>
-    /// Creates a pipeline that retries transient errors with the given delays, timed by the given clock.
-    /// </summary>
+    /// <param name="delay">The delay before the first retry, or <see langword="null"/> for 1 second.</param>
+    /// <param name="maxDelay">The longest delay between retries, or <see langword="null"/> for 1 minute.</param>
+    /// <param name="timeProvider">
+    /// The clock that times the delays and the timeout, or <see langword="null"/> for the system clock.
+    /// </param>
     public static ResiliencePipeline Create(
         Func<Exception, bool> isTransient,
         int maxRetryAttempts,
         TimeSpan timeout,
         Action<Exception, int, TimeSpan> onRetry,
-        TimeSpan delay,
-        TimeSpan maxDelay,
-        TimeProvider timeProvider)
+        TimeSpan? delay = null,
+        TimeSpan? maxDelay = null,
+        TimeProvider? timeProvider = null)
     {
         // Polly requires at least one retry.
         if (maxRetryAttempts == 0)
             return ResiliencePipeline.Empty;
 
-        return new ResiliencePipelineBuilder { TimeProvider = timeProvider }
+        var clock = timeProvider ?? TimeProvider.System;
+
+        return new ResiliencePipelineBuilder { TimeProvider = clock }
             .AddRetry(new RetryStrategyOptions
             {
                 MaxRetryAttempts = maxRetryAttempts,
                 BackoffType = DelayBackoffType.Exponential,
                 UseJitter = true,
-                Delay = delay,
-                MaxDelay = maxDelay,
+                Delay = delay ?? DefaultDelay,
+                MaxDelay = maxDelay ?? DefaultMaxDelay,
                 ShouldHandle = args =>
                 {
                     if (args.Outcome.Exception is not { } ex || !isTransient(ex))
                         return PredicateResult.False();
 
                     // Each execution has a context of its own, so the first failure recorded in it is the execution's.
-                    var now = timeProvider.GetTimestamp();
+                    var now = clock.GetTimestamp();
 
                     if (!args.Context.Properties.TryGetValue(FailingSinceKey, out var failingSince))
                     {
@@ -92,7 +71,7 @@ internal static class RetryPipeline
                     }
 
                     var isWithinTimeout = timeout == Timeout.InfiniteTimeSpan ||
-                                          timeProvider.GetElapsedTime(failingSince, now) < timeout;
+                                          clock.GetElapsedTime(failingSince, now) < timeout;
 
                     return new ValueTask<bool>(isWithinTimeout);
                 },
