@@ -348,6 +348,15 @@ public class SessionFeedTests
     }
 
     [Test]
+    public void Constructor_StructMark_Throws()
+    {
+        var exception = Should.Throw<TypeInitializationException>(() =>
+            new SessionFeed<long, TwoPartMark>(new UnopenedSessionFactory()));
+
+        exception.InnerException.ShouldBeOfType<NotSupportedException>();
+    }
+
+    [Test]
     [CancelAfter(TestTimeoutMillis)]
     public async Task ConnectAsync_CalledTwice_Throws(CancellationToken ct)
     {
@@ -419,5 +428,21 @@ public class SessionFeedTests
         public ValueTask OnResetAsync(CancellationToken cancellationToken) => default;
 
         public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken) => default;
+    }
+
+    // The runtime may copy a struct with two fields as two writes, so a read could see half of one.
+    private readonly record struct TwoPartMark(int High, int Low) : IComparable<TwoPartMark>
+    {
+        public int CompareTo(TwoPartMark other) => (High, Low).CompareTo((other.High, other.Low));
+    }
+
+    private sealed class UnopenedSessionFactory : IFeedSessionFactory<long, TwoPartMark>
+    {
+        public Task<IFeedSession<long, TwoPartMark>> OpenAsync(CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public bool IsTransient(Exception exception) => false;
+
+        public ValueTask DisposeAsync() => default;
     }
 }

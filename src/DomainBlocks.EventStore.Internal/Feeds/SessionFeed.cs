@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 using Polly;
 using Polly.Retry;
@@ -42,6 +43,27 @@ internal sealed class SessionFeed<T, THighWaterMark> : IFeed<T, THighWaterMark>
     private readonly string _feedId = CorrelationId.ReserveGenerated();
     private readonly TaskCompletionSource _connectedTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _connected;
+
+    // The connection reads the mark without a lock or an interlocked operation, so the mark must be a type whose reads
+    // and writes are whole: a reference, or a primitive or enum no wider than a pointer.
+    static SessionFeed()
+    {
+        var type = typeof(THighWaterMark);
+
+        if (type is { IsValueType: true, IsPrimitive: false, IsEnum: false })
+        {
+            throw new NotSupportedException(
+                $"A high-water mark must be a reference type, a primitive, or an enum, but {type} is a struct, which " +
+                "can be copied in parts.");
+        }
+
+        if (type.IsValueType && Unsafe.SizeOf<THighWaterMark>() > IntPtr.Size)
+        {
+            throw new NotSupportedException(
+                $"A {type} high-water mark can be read while half written in a {IntPtr.Size * 8}-bit process. Live " +
+                "subscriptions require a 64-bit process.");
+        }
+    }
 
     /// <remarks>
     /// The feed owns <paramref name="sessionFactory"/>, and disposes it once it has stopped.
@@ -160,8 +182,18 @@ internal sealed class SessionFeed<T, THighWaterMark> : IFeed<T, THighWaterMark>
 
         public Task Completion => _completionTcs.Task;
 
-        // Volatile.Read takes only reference types, so the mark is read with a compare-exchange that never changes it.
-        public THighWaterMark HighWaterMark => Interlocked.CompareExchange(ref _highWaterMark, default!, default!);
+        // An observer reads the mark just after it attaches, and the attach ends with a compare-exchange on the
+        // observer list, a full fence that orders the attach before this read. So the read needs no fence before it,
+        // only to be whole, which the static constructor checks. The barrier keeps later reads after it.
+        public THighWaterMark HighWaterMark
+        {
+            get
+            {
+                var highWaterMark = _highWaterMark;
+                Volatile.ReadBarrier();
+                return highWaterMark;
+            }
+        }
 
         public async ValueTask DisposeAsync()
         {
