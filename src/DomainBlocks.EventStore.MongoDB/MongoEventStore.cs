@@ -338,7 +338,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         {
             var liveDocument = new EventLogDocument<TEvent>(_eventCodec);
 
-            return ChangeStreamSubject.Create(
+            var sessionFactory = ChangeStreamSessionFactory.Create(
                 eventLog.Database.Client,
                 eventLog.WatchAsync,
                 pipeline,
@@ -349,7 +349,9 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
                     liveDocument.Set(change.FullDocument);
                     return liveDocument;
                 },
-                logger: logger);
+                logger);
+
+            return new SessionFeed<EventLogDocument<TEvent>, BsonTimestamp>(sessionFactory, logger: logger);
         });
     }
 

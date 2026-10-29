@@ -4,8 +4,8 @@ using MongoDB.Driver;
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
 /// <summary>
-/// Opens change streams on the event log for a change stream subject, counting them, telling when they have handed out
-/// changes, and failing them on request.
+/// Opens change streams on the event log for a feed, counting them, telling when they have handed out changes, and
+/// failing them on request.
 /// </summary>
 internal sealed class ChangeStreamProbe(IMongoCollection<BsonDocument> eventLog)
 {
@@ -17,7 +17,7 @@ internal sealed class ChangeStreamProbe(IMongoCollection<BsonDocument> eventLog)
     private ChangeStreamDisconnect? _disconnect;
 
     /// <summary>
-    /// The number of change streams opened without a resume token, which is one for each connection of the subject.
+    /// The number of change streams opened without a resume token, which is one for each connection of the feed.
     /// </summary>
     public int InitialOpenCount => Volatile.Read(ref _initialOpenCount);
 
@@ -110,7 +110,7 @@ internal sealed class ChangeStreamProbe(IMongoCollection<BsonDocument> eventLog)
 
     private Exception? TakeDisconnectError() => Volatile.Read(ref _disconnect)?.TakeDisconnectError();
 
-    // The subject's producer hands every change in a batch to every observer before it asks for the next batch, so a
+    // The feed hands every change in a batch to every observer before its session asks for the next batch, so a
     // batch has been delivered once the next one is asked for.
     private sealed class Cursor(
         IChangeStreamCursor<ChangeStreamDocument<BsonDocument>> inner,

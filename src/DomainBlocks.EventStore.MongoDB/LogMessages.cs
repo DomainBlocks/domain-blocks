@@ -56,38 +56,6 @@ internal static partial class LogMessages
     [LoggerMessage(LogLevel.Information, "[sub: {SubscriptionId}] stopped")]
     internal static partial void SubscriptionStopped(this ILogger logger, string subscriptionId);
 
-    [LoggerMessage(LogLevel.Debug, "[feed: {FeedId}] started")]
-    internal static partial void ChangeStreamStarted(this ILogger logger, string feedId);
-
-    [LoggerMessage(LogLevel.Debug, "[feed: {FeedId}] connected")]
-    internal static partial void ChangeStreamConnected(this ILogger logger, string feedId);
-
-    [LoggerMessage(LogLevel.Debug, "[feed: {FeedId}] stopping")]
-    internal static partial void ChangeStreamStopping(this ILogger logger, string feedId);
-
-    [LoggerMessage(LogLevel.Trace, "[feed: {FeedId}] processed batch of {Count}")]
-    internal static partial void ChangeStreamBatchProcessed(this ILogger logger, string feedId, int count);
-
-    [LoggerMessage(LogLevel.Warning, "[feed: {FeedId}] cursor ended; reconnecting")]
-    internal static partial void ChangeStreamCursorEnded(this ILogger logger, string feedId);
-
-    [LoggerMessage(LogLevel.Warning, "[feed: {FeedId}] connection lost; reconnecting")]
-    internal static partial void ChangeStreamConnectionLost(this ILogger logger, Exception exception, string feedId);
-
-    [LoggerMessage(LogLevel.Warning, "[feed: {FeedId}, attempt: {Attempt}] failed to connect; retrying in {Delay}")]
-    internal static partial void ChangeStreamRetrying(
-        this ILogger logger,
-        Exception exception,
-        string feedId,
-        int attempt,
-        TimeSpan delay);
-
-    [LoggerMessage(LogLevel.Debug, "[feed: {FeedId}] canceled")]
-    internal static partial void ChangeStreamCanceled(this ILogger logger, string feedId);
-
-    [LoggerMessage(LogLevel.Error, "[feed: {FeedId}] failed")]
-    internal static partial void ChangeStreamFailed(this ILogger logger, Exception exception, string feedId);
-
-    [LoggerMessage(LogLevel.Debug, "[feed: {FeedId}] stopped")]
-    internal static partial void ChangeStreamStopped(this ILogger logger, string feedId);
+    [LoggerMessage(LogLevel.Trace, "[change stream] processed batch of {Count}")]
+    internal static partial void ChangeStreamBatchProcessed(this ILogger logger, int count);
 }
