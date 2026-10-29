@@ -87,7 +87,6 @@ internal sealed class RefCountedEventLogFeed<T>(Func<IEventLogFeed<T>> feedFacto
     private async Task DetachAsync(IDisposable attachment, FeedConnection feedConnection)
     {
         attachment.Dispose();
-        IEventLogFeedConnection? connectionToDispose = null;
 
         await _gate.WaitAsync().ConfigureAwait(false);
 
@@ -95,23 +94,22 @@ internal sealed class RefCountedEventLogFeed<T>(Func<IEventLogFeed<T>> feedFacto
         {
             feedConnection.RefCount--;
 
-            if (feedConnection.RefCount == 0 && !feedConnection.IsDisposed)
-            {
-                feedConnection.IsDisposed = true;
+            if (feedConnection.RefCount > 0 || feedConnection.IsDisposed)
+                return;
 
-                if (ReferenceEquals(_current, feedConnection))
-                    _current = null;
+            feedConnection.IsDisposed = true;
 
-                connectionToDispose = feedConnection.Connection;
-            }
+            if (ReferenceEquals(_current, feedConnection))
+                _current = null;
+
+            // This runs within the gate, so the next connection is not made until this one has handed out its last
+            // row and released what it holds, such as its replication slot.
+            await feedConnection.Connection.DisposeAsync().ConfigureAwait(false);
         }
         finally
         {
             _gate.Release();
         }
-
-        if (connectionToDispose is not null)
-            await connectionToDispose.DisposeAsync().ConfigureAwait(false);
     }
 
     private sealed class FeedConnection(IEventLogFeed<T> feed, IEventLogFeedConnection connection)

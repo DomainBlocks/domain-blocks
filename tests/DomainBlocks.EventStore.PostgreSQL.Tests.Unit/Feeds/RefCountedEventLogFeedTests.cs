@@ -6,6 +6,8 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Unit.Feeds;
 
 public class RefCountedEventLogFeedTests
 {
+    private const int TestTimeoutMillis = 5 * 1000;
+
     [Test]
     public async Task Attach_FirstObserver_ConnectsFeed()
     {
@@ -122,6 +124,37 @@ public class RefCountedEventLogFeedTests
     }
 
     [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task AttachAsync_WhileLastConnectionIsStillStopping_WaitsForItBeforeConnectingAgain()
+    {
+        var feeds = new List<TestFeed>();
+
+        var refCountedFeed = new RefCountedEventLogFeed<long>(() =>
+        {
+            var feed = new TestFeed();
+            feeds.Add(feed);
+            return feed;
+        });
+
+        var first = await refCountedFeed.AttachAsync(new TestObserver());
+        var connection = feeds[0].Connection!;
+        connection.HoldDispose();
+
+        var detaching = first.DisposeAsync().AsTask();
+        await connection.Disposing;
+
+        var attaching = refCountedFeed.AttachAsync(new TestObserver());
+        feeds.Count.ShouldBe(1);
+
+        connection.ReleaseDispose();
+        await detaching;
+        var second = await attaching;
+
+        feeds.Count.ShouldBe(2);
+        await second.DisposeAsync();
+    }
+
+    [Test]
     public async Task DisposeAsync_DisposesConnectionAndRejectsFurtherAttachments()
     {
         var feed = new TestFeed();
@@ -173,8 +206,12 @@ public class RefCountedEventLogFeedTests
     private sealed class TestConnection : IEventLogFeedConnection
     {
         private readonly TaskCompletionSource _completionTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _disposingTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private TaskCompletionSource? _disposeGate;
 
         public Task Completion => _completionTcs.Task;
+
+        public Task Disposing => _disposingTcs.Task;
 
         public long? PositionHighWaterMark => null;
 
@@ -182,11 +219,21 @@ public class RefCountedEventLogFeedTests
 
         public void Fault(Exception exception) => _completionTcs.TrySetException(exception);
 
-        public ValueTask DisposeAsync()
+        // Holds disposal until it is released, as a connection that is still handing out a row would.
+        public void HoldDispose() =>
+            _disposeGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public void ReleaseDispose() => _disposeGate!.SetResult();
+
+        public async ValueTask DisposeAsync()
         {
             DisposeCount++;
+            _disposingTcs.TrySetResult();
+
+            if (_disposeGate is { } gate)
+                await gate.Task;
+
             _completionTcs.TrySetResult();
-            return ValueTask.CompletedTask;
         }
     }
 
