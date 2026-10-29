@@ -30,7 +30,8 @@ public sealed class SubscriptionOptions
     /// </summary>
     /// <remarks>
     /// Transient errors include a dropped connection and a failover. A read makes progress when it returns an event or
-    /// completes, and the time runs from the first failure after the last progress.
+    /// completes, and the time runs from the first failure after the last progress. The reads stop retrying at this
+    /// timeout or at <see cref="MaxRetryAttempts"/>, whichever they reach first.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">
     /// The value is zero, or negative and not <see cref="System.Threading.Timeout.InfiniteTimeSpan"/>.
@@ -46,6 +47,26 @@ public sealed class SubscriptionOptions
             field = value;
         }
     } = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Gets how many times in a row to retry the reads that start a subscription and catch it up, when they fail with
+    /// transient errors and make no progress, before failing the subscription with the last error. The default is
+    /// <see cref="int.MaxValue"/>, which retries without a limit.
+    /// </summary>
+    /// <remarks>
+    /// A read makes progress when it returns an event or completes, and the count starts again after progress. The
+    /// reads stop retrying at this count or at <see cref="RetryTimeout"/>, whichever they reach first.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
+    public int MaxRetryAttempts
+    {
+        get;
+        init
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(value);
+            field = value;
+        }
+    } = int.MaxValue;
 
     /// <summary>
     /// Gets the filter that selects the events to deliver. The default is <see cref="EventFilter.All"/>.

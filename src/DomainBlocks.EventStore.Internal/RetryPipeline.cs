@@ -4,7 +4,8 @@ using Polly.Retry;
 namespace DomainBlocks.EventStore.Internal;
 
 /// <summary>
-/// Creates resilience pipelines that retry transient errors until an execution has been failing for a timeout.
+/// Creates resilience pipelines that retry transient errors until an execution has retried a number of times or has
+/// been failing for a timeout, whichever comes first.
 /// </summary>
 internal static class RetryPipeline
 {
@@ -27,6 +28,10 @@ internal static class RetryPipeline
     /// <param name="isTransient">
     /// Whether to retry an error. No error is retried once the caller has asked to cancel.
     /// </param>
+    /// <param name="maxRetryAttempts">
+    /// How many times an execution retries before it throws its last error, or <see cref="int.MaxValue"/> to retry
+    /// without a limit.
+    /// </param>
     /// <param name="timeout">
     /// How long after its first failure an execution stops retrying and throws its last error, or
     /// <see cref="Timeout.InfiniteTimeSpan"/> to retry without a limit.
@@ -34,10 +39,18 @@ internal static class RetryPipeline
     /// <param name="onRetry">Called before each delay with the error, the retry's number from 1, and the delay.</param>
     public static ResiliencePipeline Create(
         Func<Exception, bool> isTransient,
+        int maxRetryAttempts,
         TimeSpan timeout,
         Action<Exception, int, TimeSpan> onRetry)
     {
-        return Create(isTransient, timeout, onRetry, DefaultDelay, DefaultMaxDelay, TimeProvider.System);
+        return Create(
+            isTransient,
+            maxRetryAttempts,
+            timeout,
+            onRetry,
+            DefaultDelay,
+            DefaultMaxDelay,
+            TimeProvider.System);
     }
 
     /// <summary>
@@ -45,16 +58,21 @@ internal static class RetryPipeline
     /// </summary>
     public static ResiliencePipeline Create(
         Func<Exception, bool> isTransient,
+        int maxRetryAttempts,
         TimeSpan timeout,
         Action<Exception, int, TimeSpan> onRetry,
         TimeSpan delay,
         TimeSpan maxDelay,
         TimeProvider timeProvider)
     {
+        // Polly requires at least one retry.
+        if (maxRetryAttempts == 0)
+            return ResiliencePipeline.Empty;
+
         return new ResiliencePipelineBuilder { TimeProvider = timeProvider }
             .AddRetry(new RetryStrategyOptions
             {
-                MaxRetryAttempts = int.MaxValue,
+                MaxRetryAttempts = maxRetryAttempts,
                 BackoffType = DelayBackoffType.Exponential,
                 UseJitter = true,
                 Delay = delay,

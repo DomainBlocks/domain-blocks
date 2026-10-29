@@ -59,9 +59,10 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
             : CorrelationId.ReserveGenerated();
 
         // Each read, and each recovery of the replay, is one execution that ends when the read makes progress, so the
-        // timeout runs from the first failure after the last progress.
+        // retry count and the timeout run from the first failure after the last progress.
         _retryPipeline = RetryPipeline.Create(
             PostgresTransientErrors.IsTransient,
+            _options.MaxRetryAttempts,
             _options.RetryTimeout,
             (ex, attempt, delay) => _logger?.CatchUpRetrying(ex, _correlationId, attempt, delay));
     }

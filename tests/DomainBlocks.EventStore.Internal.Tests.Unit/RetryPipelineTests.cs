@@ -49,10 +49,10 @@ public class RetryPipelineTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task ExecuteAsync_FailingForTimeout_ThrowsLastError(CancellationToken ct)
+    public async Task ExecuteAsync_TimeoutBeforeMaxRetryAttempts_ThrowsLastError(CancellationToken ct)
     {
         var timeProvider = new ManualTimeProvider();
-        var pipeline = CreatePipeline(RetryTimeout, timeProvider, []);
+        var pipeline = CreatePipeline(RetryTimeout, timeProvider, [], maxRetryAttempts: 5);
         TimeSpan[] advances = [TimeSpan.Zero, RetryTimeout - TimeSpan.FromTicks(1), TimeSpan.FromTicks(1)];
         var attempts = 0;
 
@@ -63,12 +63,44 @@ public class RetryPipelineTests
 
         ValueTask<int> ReadAsync(CancellationToken _)
         {
-            if (attempts == MaxAttempts)
-                return ValueTask.FromResult(0);
-
             timeProvider.Advance(attempts < advances.Length ? advances[attempts] : TimeSpan.Zero);
             throw new TransientException(++attempts);
         }
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task ExecuteAsync_MaxRetryAttemptsBeforeTimeout_ThrowsLastError(CancellationToken ct)
+    {
+        var retries = new List<int>();
+        var pipeline = CreatePipeline(RetryTimeout, new ManualTimeProvider(), retries, maxRetryAttempts: 2);
+        var attempts = 0;
+
+        var ex = await Should.ThrowAsync<TransientException>(pipeline.ExecuteAsync(ReadAsync, ct).AsTask());
+
+        // The clock never moves, so the timeout isn't reached.
+        ex.Attempt.ShouldBe(3);
+        retries.ShouldBe([1, 2]);
+
+        ValueTask<int> ReadAsync(CancellationToken _) =>
+            ++attempts == MaxAttempts ? ValueTask.FromResult(0) : throw new TransientException(attempts);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task ExecuteAsync_ZeroMaxRetryAttempts_ThrowsWithoutRetry(CancellationToken ct)
+    {
+        var retries = new List<int>();
+        var pipeline = CreatePipeline(RetryTimeout, new ManualTimeProvider(), retries, maxRetryAttempts: 0);
+        var attempts = 0;
+
+        await Should.ThrowAsync<TransientException>(pipeline.ExecuteAsync(ReadAsync, ct).AsTask());
+
+        attempts.ShouldBe(1);
+        retries.ShouldBeEmpty();
+
+        ValueTask<int> ReadAsync(CancellationToken _) =>
+            ++attempts == MaxAttempts ? ValueTask.FromResult(0) : throw new TransientException(attempts);
     }
 
     [Test]
@@ -149,10 +181,15 @@ public class RetryPipelineTests
     }
 
     // Retries at once, and records each retry's number.
-    private static ResiliencePipeline CreatePipeline(TimeSpan timeout, TimeProvider timeProvider, List<int> retries)
+    private static ResiliencePipeline CreatePipeline(
+        TimeSpan timeout,
+        TimeProvider timeProvider,
+        List<int> retries,
+        int maxRetryAttempts = int.MaxValue)
     {
         return RetryPipeline.Create(
             static ex => ex is TransientException,
+            maxRetryAttempts,
             timeout,
             (_, attempt, _) => retries.Add(attempt),
             TimeSpan.Zero,

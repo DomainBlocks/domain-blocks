@@ -24,4 +24,20 @@ public class SubscriptionOptionsTests
 
         options.RetryTimeout.ShouldBe(retryTimeout);
     }
+
+    [TestCase(-1)]
+    [TestCase(int.MinValue)]
+    public void MaxRetryAttempts_Negative_Throws(int attempts)
+    {
+        Should.Throw<ArgumentOutOfRangeException>(() => new SubscriptionOptions { MaxRetryAttempts = attempts });
+    }
+
+    [TestCase(0)]
+    [TestCase(int.MaxValue)]
+    public void MaxRetryAttempts_Boundary_IsSet(int attempts)
+    {
+        var options = new SubscriptionOptions { MaxRetryAttempts = attempts };
+
+        options.MaxRetryAttempts.ShouldBe(attempts);
+    }
 }
