@@ -195,7 +195,7 @@ public class MongoSubscriptionCatchUpTests
         var existing = await scenario.AppendAsync("existing", 150);
         var hold = scenario.HoldCatchUp(0);
 
-        await using var subscription = scenario.SubscribeToAll(new SubscriptionOptions { MaxRetryAttempts = 0 });
+        await using var subscription = scenario.SubscribeToAll(new SubscriptionOptions { CatchUpMaxRetryAttempts = 0 });
 
         (await subscription.NextEventAsync()).ShouldBe(existing[0]);
         var pending = subscription.NextAsync();

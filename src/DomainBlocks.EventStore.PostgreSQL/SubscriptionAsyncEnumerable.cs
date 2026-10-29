@@ -60,8 +60,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
         _retryPipeline = RetryPipeline.Create(
             PostgresTransientErrors.IsTransient,
-            _options.MaxRetryAttempts,
-            _options.RetryTimeout,
+            _options.CatchUpMaxRetryAttempts,
+            _options.CatchUpRetryTimeout,
             (ex, attempt, delay) => _logger?.CatchUpRetrying(ex, _correlationId, attempt, delay));
     }
 

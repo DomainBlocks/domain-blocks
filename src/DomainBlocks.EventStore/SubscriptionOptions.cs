@@ -31,12 +31,12 @@ public sealed class SubscriptionOptions
     /// <remarks>
     /// Transient errors include a dropped connection and a failover. A read makes progress when it returns an event or
     /// completes, and the time runs from the first failure after the last progress. The reads stop retrying at this
-    /// timeout or at <see cref="MaxRetryAttempts"/>, whichever they reach first.
+    /// timeout or at <see cref="CatchUpMaxRetryAttempts"/>, whichever they reach first.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">
     /// The value is zero, or negative and not <see cref="System.Threading.Timeout.InfiniteTimeSpan"/>.
     /// </exception>
-    public TimeSpan RetryTimeout
+    public TimeSpan CatchUpRetryTimeout
     {
         get;
         init
@@ -55,10 +55,10 @@ public sealed class SubscriptionOptions
     /// </summary>
     /// <remarks>
     /// A read makes progress when it returns an event or completes, and the count starts again after progress. The
-    /// reads stop retrying at this count or at <see cref="RetryTimeout"/>, whichever they reach first.
+    /// reads stop retrying at this count or at <see cref="CatchUpRetryTimeout"/>, whichever they reach first.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
-    public int MaxRetryAttempts
+    public int CatchUpMaxRetryAttempts
     {
         get;
         init
