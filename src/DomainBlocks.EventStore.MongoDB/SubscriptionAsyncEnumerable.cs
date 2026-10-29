@@ -3,7 +3,6 @@ using System.Threading.Channels;
 using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.Internal;
 using DomainBlocks.EventStore.Internal.Feeds;
-using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
