@@ -1,7 +1,10 @@
+extern alias pg;
+
 using System.Runtime.CompilerServices;
 using BenchmarkDotNet.Attributes;
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Filtering;
+using pg::DomainBlocks.EventStore.Internal.Feeds;
 using DomainBlocks.EventStore.PostgreSQL;
 using DomainBlocks.EventStore.PostgreSQL.Feeds;
 using DomainBlocks.EventStore.TypeMapping;
@@ -153,7 +156,7 @@ public class PostgresLiveFanOutBenchmarks
     /// thread, so that a run does the same work every time.
     /// </summary>
     private sealed class Subscriber(int expectedCount, EventFilter filter) :
-        IEventLogObserver<EventLogRow<IDomainEvent>>,
+        IFeedObserver<EventLogRow<IDomainEvent>>,
         IDisposable
     {
         private readonly SubscriptionObserver _observer = new(SubscriptionOptions.Default.QueueCapacity, filter);

@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.Internal;
-using DomainBlocks.EventStore.PostgreSQL.Feeds;
+using DomainBlocks.EventStore.Internal.Feeds;
 using Microsoft.Extensions.Logging;
 using Polly;
 
@@ -22,7 +22,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     private static readonly TimeSpan VisibilityWaitWarningInterval = TimeSpan.FromSeconds(10);
 
     private readonly EventLogReader<TEvent> _reader;
-    private readonly IRefCountedEventLogFeed<EventLogRow<TEvent>> _feed;
+    private readonly IRefCountedFeed<EventLogRow<TEvent>, long?> _feed;
     private readonly CatchUpReader _catchUpReader;
     private readonly EndPositionReader _endPositionReader;
     private readonly EventFilter _liveFilter;
@@ -35,7 +35,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
     public SubscriptionAsyncEnumerable(
         EventLogReader<TEvent> reader,
-        IRefCountedEventLogFeed<EventLogRow<TEvent>> feed,
+        IRefCountedFeed<EventLogRow<TEvent>, long?> feed,
         CatchUpReader catchUpReader,
         EndPositionReader endPositionReader,
         EventFilter liveFilter,
@@ -69,7 +69,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         CancellationToken cancellationToken = default)
     {
         Observer? observer = null;
-        IEventLogFeedAttachment? attachment = null;
+        IFeedAttachment<long?>? attachment = null;
 
         try
         {
@@ -111,7 +111,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                 var enumerator = ReadAllAsync(
                         resumePosition,
                         observer,
-                        attachment.PositionHighWaterMark,
+                        attachment.HighWaterMark,
                         cancellationToken)
                     .GetAsyncEnumerator(cancellationToken);
 
@@ -205,7 +205,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         }
     }
 
-    private async Task<IEventLogFeedAttachment> AttachObserverAsync(
+    private async Task<IFeedAttachment<long?>> AttachObserverAsync(
         Observer observer,
         CancellationToken cancellationToken)
     {
@@ -380,7 +380,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         EventFilter liveFilter,
         ILogger? logger = null,
         string subscriptionId = "") :
-        IEventLogObserver<EventLogRow<TEvent>>,
+        IFeedObserver<EventLogRow<TEvent>>,
         IDisposable
     {
         private readonly Channel<ReadEvent<TEvent, string, StreamPosition, LogPosition>> _channel =

@@ -11,9 +11,9 @@ namespace DomainBlocks.EventStore.MongoDB;
 /// subscription selects is never decoded.
 /// </summary>
 /// <remarks>
-/// The store reuses one document for every change, so a document is valid only until the next change is delivered. The
-/// payload and metadata are decoded together, once, on the first request for either. The context is read once, on
-/// first request.
+/// A feed connection reuses one document for every change, so a document is valid only until the next change is
+/// delivered. The payload and metadata are decoded together, once, on the first request for either. The context is read
+/// once, on first request.
 /// </remarks>
 internal sealed class EventLogDocument<TEvent>(IEventDecoder<TEvent, BsonValue, BsonValue> decoder) :
     IFilterableEvent,

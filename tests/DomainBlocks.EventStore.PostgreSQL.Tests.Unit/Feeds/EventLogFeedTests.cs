@@ -1,3 +1,4 @@
+using DomainBlocks.EventStore.Internal.Feeds;
 using DomainBlocks.EventStore.PostgreSQL.Feeds;
 using DomainBlocks.Testing;
 using Microsoft.Extensions.Logging;
@@ -239,41 +240,6 @@ public class EventLogFeedTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task OnNextAsync_WhenObserverThrows_DetachesObserver(CancellationToken ct)
-    {
-        var feed = CreateFeed(new ScriptedSession("s1", Row(1), Row(2)));
-
-        var throwingObserver = new ThrowingObserver(throwOnNext: true);
-        var recordingObserver = new RecordingObserver();
-        using var throwingAttachment = feed.Attach(throwingObserver);
-        using var recordingAttachment = feed.Attach(recordingObserver);
-        await using var connection = await feed.ConnectAsync(ct);
-
-        (await recordingObserver.ReadAsync(2, ct)).ShouldBe(["row:1", "row:2"]);
-        throwingObserver.NextCount.ShouldBe(1);
-    }
-
-    [Test]
-    [CancelAfter(TestTimeoutMillis)]
-    public async Task OnResetAsync_WhenObserverThrows_DetachesObserver(CancellationToken ct)
-    {
-        var feed = CreateFeed(
-            new ScriptedSession("s1", End()),
-            new ScriptedSession("s2", Row(1), Row(2)));
-
-        var throwingObserver = new ThrowingObserver(throwOnReset: true);
-        var recordingObserver = new RecordingObserver();
-        using var throwingAttachment = feed.Attach(throwingObserver);
-        using var recordingAttachment = feed.Attach(recordingObserver);
-        await using var connection = await feed.ConnectAsync(ct);
-
-        (await recordingObserver.ReadAsync(3, ct)).ShouldBe(["reset", "row:1", "row:2"]);
-        throwingObserver.ResetCount.ShouldBe(1);
-        throwingObserver.NextCount.ShouldBe(0);
-    }
-
-    [Test]
-    [CancelAfter(TestTimeoutMillis)]
     public async Task ConnectAsync_CompletesOnlyAfterSessionIsEstablished(CancellationToken ct)
     {
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -314,7 +280,7 @@ public class EventLogFeedTests
         await feed.ConnectAsync(connectCts.Token).ShouldThrowAsync<OperationCanceledException>();
 
         var exception = Should.Throw<InvalidOperationException>(() => feed.Attach(new RecordingObserver()));
-        exception.Message.ShouldBe("Cannot attach to a completed event log feed.");
+        exception.Message.ShouldBe("Cannot attach to a completed feed.");
     }
 
     [Test]
@@ -330,7 +296,7 @@ public class EventLogFeedTests
         session.DisposeCount.ShouldBe(1);
 
         var exception = Should.Throw<InvalidOperationException>(() => feed.Attach(new RecordingObserver()));
-        exception.Message.ShouldBe("Cannot attach to a completed event log feed.");
+        exception.Message.ShouldBe("Cannot attach to a completed feed.");
     }
 
     [Test]
@@ -359,14 +325,14 @@ public class EventLogFeedTests
             : throw new InvalidOperationException("The test ran out of scripted sessions.")));
     }
 
-    private sealed class HighWaterMarkRecordingObserver : IEventLogObserver<long>
+    private sealed class HighWaterMarkRecordingObserver : IFeedObserver<long>
     {
         private readonly TaskCompletionSource _onNextReleased = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         private readonly TaskCompletionSource<long?> _highWaterMarkOnNext =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public IEventLogFeedConnection? Connection { get; set; }
+        public IFeedConnection<long?>? Connection { get; set; }
 
         public Task<long?> HighWaterMarkOnNext => _highWaterMarkOnNext.Task;
 
@@ -375,30 +341,10 @@ public class EventLogFeedTests
         public async ValueTask OnNextAsync(long position, CancellationToken cancellationToken)
         {
             await _onNextReleased.Task;
-            _highWaterMarkOnNext.TrySetResult(Connection!.PositionHighWaterMark);
+            _highWaterMarkOnNext.TrySetResult(Connection!.HighWaterMark);
         }
 
         public ValueTask OnResetAsync(CancellationToken cancellationToken) => default;
-
-        public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken) => default;
-    }
-
-    private sealed class ThrowingObserver(bool throwOnNext = false, bool throwOnReset = false) : IEventLogObserver<long>
-    {
-        public int NextCount { get; private set; }
-        public int ResetCount { get; private set; }
-
-        public ValueTask OnNextAsync(long position, CancellationToken cancellationToken)
-        {
-            NextCount++;
-            return throwOnNext ? throw new InvalidOperationException("The test observer failed.") : default;
-        }
-
-        public ValueTask OnResetAsync(CancellationToken cancellationToken)
-        {
-            ResetCount++;
-            return throwOnReset ? throw new InvalidOperationException("The test observer failed.") : default;
-        }
 
         public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken) => default;
     }

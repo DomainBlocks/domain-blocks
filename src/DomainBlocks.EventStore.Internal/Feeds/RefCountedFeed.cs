@@ -1,19 +1,19 @@
-namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
+namespace DomainBlocks.EventStore.Internal.Feeds;
 
 /// <summary>
 /// Connects the feed on the first attach and disconnects it on the last detach. A completed or faulted feed is replaced
 /// on the next attach.
 /// </summary>
-internal sealed class RefCountedEventLogFeed<T>(Func<IEventLogFeed<T>> feedFactory) :
-    IRefCountedEventLogFeed<T>,
+internal sealed class RefCountedFeed<T, THighWaterMark>(Func<IFeed<T, THighWaterMark>> feedFactory) :
+    IRefCountedFeed<T, THighWaterMark>,
     IAsyncDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private FeedConnection? _current;
     private bool _disposed;
 
-    public async Task<IEventLogFeedAttachment> AttachAsync(
-        IEventLogObserver<T> observer,
+    public async Task<IFeedAttachment<THighWaterMark>> AttachAsync(
+        IFeedObserver<T> observer,
         string correlationId = "unknown",
         CancellationToken cancellationToken = default)
     {
@@ -45,7 +45,7 @@ internal sealed class RefCountedEventLogFeed<T>(Func<IEventLogFeed<T>> feedFacto
             feedConnection.RefCount++;
 
             return new Attachment(
-                feedConnection.Connection.PositionHighWaterMark,
+                feedConnection.Connection.HighWaterMark,
                 () => DetachAsync(attachment, feedConnection));
         }
         finally
@@ -59,7 +59,7 @@ internal sealed class RefCountedEventLogFeed<T>(Func<IEventLogFeed<T>> feedFacto
     /// </summary>
     public async ValueTask DisposeAsync()
     {
-        IEventLogFeedConnection? connectionToDispose;
+        IFeedConnection<THighWaterMark>? connectionToDispose;
 
         await _gate.WaitAsync().ConfigureAwait(false);
 
@@ -87,7 +87,6 @@ internal sealed class RefCountedEventLogFeed<T>(Func<IEventLogFeed<T>> feedFacto
     private async Task DetachAsync(IDisposable attachment, FeedConnection feedConnection)
     {
         attachment.Dispose();
-        IEventLogFeedConnection? connectionToDispose = null;
 
         await _gate.WaitAsync().ConfigureAwait(false);
 
@@ -95,38 +94,39 @@ internal sealed class RefCountedEventLogFeed<T>(Func<IEventLogFeed<T>> feedFacto
         {
             feedConnection.RefCount--;
 
-            if (feedConnection.RefCount == 0 && !feedConnection.IsDisposed)
-            {
-                feedConnection.IsDisposed = true;
+            if (feedConnection.RefCount > 0 || feedConnection.IsDisposed)
+                return;
 
-                if (ReferenceEquals(_current, feedConnection))
-                    _current = null;
+            feedConnection.IsDisposed = true;
 
-                connectionToDispose = feedConnection.Connection;
-            }
+            if (ReferenceEquals(_current, feedConnection))
+                _current = null;
+
+            // This runs within the gate, so the next connection is not made until this one has stopped and released
+            // what it holds on the server. On PostgreSQL that is a replication slot and a walsender, so two
+            // connections at once would hold two of each, counted against max_replication_slots and max_wal_senders.
+            await feedConnection.Connection.DisposeAsync().ConfigureAwait(false);
         }
         finally
         {
             _gate.Release();
         }
-
-        if (connectionToDispose is not null)
-            await connectionToDispose.DisposeAsync().ConfigureAwait(false);
     }
 
-    private sealed class FeedConnection(IEventLogFeed<T> feed, IEventLogFeedConnection connection)
+    private sealed class FeedConnection(IFeed<T, THighWaterMark> feed, IFeedConnection<THighWaterMark> connection)
     {
-        public IEventLogFeed<T> Feed { get; } = feed;
-        public IEventLogFeedConnection Connection { get; } = connection;
+        public IFeed<T, THighWaterMark> Feed { get; } = feed;
+        public IFeedConnection<THighWaterMark> Connection { get; } = connection;
         public int RefCount { get; set; }
         public bool IsDisposed { get; set; }
     }
 
-    private sealed class Attachment(long? positionHighWaterMark, Func<Task> onDispose) : IEventLogFeedAttachment
+    private sealed class Attachment(THighWaterMark highWaterMark, Func<Task> onDispose) :
+        IFeedAttachment<THighWaterMark>
     {
         private int _disposed;
 
-        public long? PositionHighWaterMark { get; } = positionHighWaterMark;
+        public THighWaterMark HighWaterMark { get; } = highWaterMark;
 
         public async ValueTask DisposeAsync()
         {

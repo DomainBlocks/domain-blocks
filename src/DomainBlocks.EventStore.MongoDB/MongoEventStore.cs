@@ -4,6 +4,7 @@ using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.Filtering.Nodes;
 using DomainBlocks.EventStore.Internal;
+using DomainBlocks.EventStore.Internal.Feeds;
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using DomainBlocks.MongoDB.Sequencing;
 using Microsoft.Extensions.Logging;
@@ -77,8 +78,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
     private readonly IEventCodec<TEvent, BsonValue, BsonValue> _eventCodec;
     private readonly ILogger? _logger;
     private readonly EventLogReader<TEvent> _reader;
-    private readonly RefCountedChangeStreamSubject<EventLogDocument<TEvent>> _allEventsSubject;
-    private readonly EventLogDocument<TEvent> _liveDocument;
+    private readonly RefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp> _feed;
 
     internal MongoEventStore(
         IMongoClient client,
@@ -101,8 +101,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
             .WithReadPreference(ReadPreference.Primary);
 
         _reader = new EventLogReader<TEvent>(_eventLog, eventCodec);
-        _liveDocument = new EventLogDocument<TEvent>(eventCodec);
-        _allEventsSubject = CreateAllEventsSubject(_eventLog, logger);
+        _feed = CreateFeed(_eventLog, logger);
     }
 
     /// <summary>
@@ -260,7 +259,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
 
         return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
             _reader,
-            _allEventsSubject,
+            _feed,
             (reader, session, start, end, ct) =>
                 reader.ReadCatchUpAsync(session, catchUpFilter, FieldNames.Position, start, end, ct),
             static async (reader, session, ct) =>
@@ -289,7 +288,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
 
         return new SubscriptionAsyncEnumerable<TEvent, StreamPosition>(
             _reader,
-            _allEventsSubject,
+            _feed,
             (reader, session, start, end, ct) =>
                 reader.ReadCatchUpAsync(session, catchUpFilter, FieldNames.StreamPosition, start, end, ct),
             async (reader, session, ct) =>
@@ -319,10 +318,9 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         _ownedClient?.Dispose();
     }
 
-    // The subject sets the store's one live document to each inserted document and then hands it to every subscription.
-    // Because the document is shared, the subject replaces a connection only after that connection has handed out its
-    // last change.
-    private RefCountedChangeStreamSubject<EventLogDocument<TEvent>> CreateAllEventsSubject(
+    // Each connection has its own live document, which its subject sets to each inserted document and hands to every
+    // subscription.
+    private RefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp> CreateFeed(
         IMongoCollection<BsonDocument> eventLog,
         ILogger? logger)
     {
@@ -330,18 +328,25 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
             x => x.OperationType,
             ChangeStreamOperationType.Insert);
 
-        return RefCountedChangeStreamSubject.Create(
-            eventLog.Database.Client,
-            eventLog.WatchAsync,
-            new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(insertsOnly),
-            static change => change.ResumeToken,
-            static change => change.ClusterTime,
-            change =>
-            {
-                _liveDocument.Set(change.FullDocument);
-                return _liveDocument;
-            },
-            logger: logger);
+        var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(insertsOnly);
+
+        return new RefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp>(() =>
+        {
+            var liveDocument = new EventLogDocument<TEvent>(_eventCodec);
+
+            return ChangeStreamSubject.Create(
+                eventLog.Database.Client,
+                eventLog.WatchAsync,
+                pipeline,
+                static change => change.ResumeToken,
+                static change => change.ClusterTime,
+                change =>
+                {
+                    liveDocument.Set(change.FullDocument);
+                    return liveDocument;
+                },
+                logger: logger);
+        });
     }
 
     private static ReadQuery GetReadQuery<TPos>(

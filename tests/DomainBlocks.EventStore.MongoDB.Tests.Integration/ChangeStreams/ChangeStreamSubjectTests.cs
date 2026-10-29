@@ -1,3 +1,4 @@
+using DomainBlocks.EventStore.Internal.Feeds;
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using DomainBlocks.Testing.Integration.EventStore;
 using DomainBlocks.Testing.Integration.EventStore.MongoDB;
@@ -67,7 +68,7 @@ public class ChangeStreamSubjectTests
     }
 
     private sealed class TestChangeStreamObserver(int expectedCount) :
-        IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>
+        IFeedObserver<ChangeStreamDocument<BsonDocument>>
     {
         private readonly TaskCompletionSource _tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -86,6 +87,8 @@ public class ChangeStreamSubjectTests
 
             return ValueTask.CompletedTask;
         }
+
+        public ValueTask OnResetAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
 
         public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken) =>
             ValueTask.CompletedTask;
