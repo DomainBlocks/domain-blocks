@@ -38,6 +38,11 @@ internal static class ResumableAsyncEnumerable
 /// sequence after the last item that reached it. Every enumeration shares the state, so a second one resumes where the
 /// first stopped.
 /// </para>
+/// <para>
+/// An attempt opens the sequence with the token that the pipeline gives it, and the sequence keeps that token after
+/// the attempt ends. The pipeline must therefore give each attempt the caller's token, as a retry strategy does, and
+/// not one of its own, as a timeout strategy does.
+/// </para>
 /// </remarks>
 internal sealed class ResumableAsyncEnumerable<T, TState>(
     TState state,
@@ -47,7 +52,7 @@ internal sealed class ResumableAsyncEnumerable<T, TState>(
 {
     public async IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
-        var recovery = new Recovery(state, open, cancellationToken);
+        var recovery = new Recovery(state, open);
         IAsyncEnumerator<T>? items = null;
 
         try
@@ -59,7 +64,7 @@ internal sealed class ResumableAsyncEnumerable<T, TState>(
                 if (items is null)
                 {
                     (items, hasNext) = await pipeline
-                        .ExecuteAsync(static (r, _) => r.OpenAsync(), recovery, cancellationToken)
+                        .ExecuteAsync(static (r, ct) => r.OpenAsync(ct), recovery, cancellationToken)
                         .ConfigureAwait(false);
                 }
                 else
@@ -97,17 +102,14 @@ internal sealed class ResumableAsyncEnumerable<T, TState>(
     }
 
     // The attempts' state, so their callback can be static.
-    private sealed class Recovery(
-        TState state,
-        Func<TState, CancellationToken, IAsyncEnumerable<T>> open,
-        CancellationToken cancellationToken)
+    private sealed class Recovery(TState state, Func<TState, CancellationToken, IAsyncEnumerable<T>> open)
     {
         /// <summary>
         /// Gets or sets the error that the next attempt throws, which is the one that started the recovery.
         /// </summary>
         public Exception? Error { get; set; }
 
-        public async ValueTask<(IAsyncEnumerator<T> Items, bool HasNext)> OpenAsync()
+        public async ValueTask<(IAsyncEnumerator<T> Items, bool HasNext)> OpenAsync(CancellationToken cancellationToken)
         {
             if (Error is { } error)
             {
@@ -115,7 +117,6 @@ internal sealed class ResumableAsyncEnumerable<T, TState>(
                 ExceptionDispatchInfo.Throw(error);
             }
 
-            // The sequence outlives the attempt, so it takes the enumeration's token rather than the attempt's.
             var items = open(state, cancellationToken).GetAsyncEnumerator(cancellationToken);
 
             try
