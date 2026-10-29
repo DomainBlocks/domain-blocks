@@ -1,12 +1,12 @@
 using System.Threading.Channels;
-using DomainBlocks.EventStore.PostgreSQL.Feeds;
+using DomainBlocks.EventStore.Internal.Feeds;
 
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Unit.Feeds;
 
 /// <summary>
 /// Records what the feed delivers, in order, as readable strings: "row:{position}", "reset", or "error".
 /// </summary>
-internal sealed class RecordingObserver : IEventLogObserver<long>
+internal sealed class RecordingObserver : IFeedObserver<long>
 {
     private readonly Channel<string> _channel = Channel.CreateUnbounded<string>();
 

@@ -1,3 +1,4 @@
+using DomainBlocks.EventStore.Internal.Feeds;
 using DomainBlocks.EventStore.PostgreSQL.Feeds;
 using NUnit.Framework;
 using Shouldly;
@@ -180,7 +181,7 @@ public class RefCountedEventLogFeedTests
         public int ConnectCount { get; private set; }
         public TestConnection? Connection { get; private set; }
 
-        public IDisposable Attach(IEventLogObserver<long> observer, string correlationId = "unknown")
+        public IDisposable Attach(IFeedObserver<long> observer, string correlationId = "unknown")
         {
             AttachCount++;
 
@@ -248,7 +249,7 @@ public class RefCountedEventLogFeedTests
         }
     }
 
-    private sealed class TestObserver : IEventLogObserver<long>
+    private sealed class TestObserver : IFeedObserver<long>
     {
         public ValueTask OnNextAsync(long position, CancellationToken cancellationToken) => default;
 

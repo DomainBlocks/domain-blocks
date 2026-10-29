@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.Internal;
+using DomainBlocks.EventStore.Internal.Feeds;
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
@@ -122,7 +123,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                         _logger?.SubscriptionFellBehind(_correlationId);
                         break;
 
-                    case StopReason.QueueOverflow or StopReason.ChangeStreamHistoryLost:
+                    case StopReason.QueueOverflow or StopReason.FeedReset or StopReason.ChangeStreamHistoryLost:
                         break;
 
                     default:
@@ -339,21 +340,22 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     {
         None,
         QueueOverflow,
+        FeedReset,
         ChangeStreamHistoryLost,
         Disposed
     }
 
     /// <summary>
     /// Buffers the live events that a subscription selects, for one cycle. It never blocks the change stream. On a
-    /// queue overflow or when the change stream's history is lost, it records the reason and completes its queue, and
-    /// the cycle restarts once the queue is drained, which can be much later.
+    /// queue overflow, a feed reset, or when the change stream's history is lost, it records the reason and completes
+    /// its queue, and the cycle restarts once the queue is drained, which can be much later.
     /// </summary>
     internal sealed class Observer(
         int queueCapacity,
         EventFilter liveFilter,
         ILogger? logger = null,
         string subscriptionId = "") :
-        IChangeStreamObserver<EventLogDocument<TEvent>>,
+        IFeedObserver<EventLogDocument<TEvent>>,
         IDisposable
     {
         private readonly Channel<ReadEvent<TEvent, string, StreamPosition, LogPosition>> _channel =
@@ -397,6 +399,14 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
             if (!_channel.Writer.TryWrite(e) && Stop(StopReason.QueueOverflow))
                 logger?.SubscriptionQueueOverflowed(subscriptionId, queueCapacity);
+
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask OnResetAsync(CancellationToken cancellationToken)
+        {
+            if (Stop(StopReason.FeedReset))
+                logger?.SubscriptionFeedReset(subscriptionId);
 
             return ValueTask.CompletedTask;
         }

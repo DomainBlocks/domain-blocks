@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.Internal;
+using DomainBlocks.EventStore.Internal.Feeds;
 using DomainBlocks.EventStore.PostgreSQL.Feeds;
 using Microsoft.Extensions.Logging;
 using Polly;
@@ -380,7 +381,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         EventFilter liveFilter,
         ILogger? logger = null,
         string subscriptionId = "") :
-        IEventLogObserver<EventLogRow<TEvent>>,
+        IFeedObserver<EventLogRow<TEvent>>,
         IDisposable
     {
         private readonly Channel<ReadEvent<TEvent, string, StreamPosition, LogPosition>> _channel =

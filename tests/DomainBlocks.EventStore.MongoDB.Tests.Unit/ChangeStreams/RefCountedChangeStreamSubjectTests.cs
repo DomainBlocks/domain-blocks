@@ -1,3 +1,4 @@
+using DomainBlocks.EventStore.Internal.Feeds;
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using MongoDB.Bson;
 using NUnit.Framework;
@@ -193,7 +194,7 @@ public class RefCountedChangeStreamSubjectTests
         public int ConnectCount { get; private set; }
         public TestConnection? Connection { get; private set; }
 
-        public IDisposable Attach(IChangeStreamObserver<int> observer, string correlationId = "unknown")
+        public IDisposable Attach(IFeedObserver<int> observer, string correlationId = "unknown")
         {
             AttachCount++;
 
@@ -265,9 +266,11 @@ public class RefCountedChangeStreamSubjectTests
         }
     }
 
-    private sealed class TestObserver : IChangeStreamObserver<int>
+    private sealed class TestObserver : IFeedObserver<int>
     {
         public ValueTask OnNextAsync(int change, CancellationToken cancellationToken) => ValueTask.CompletedTask;
+
+        public ValueTask OnResetAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
 
         public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken) =>
             ValueTask.CompletedTask;

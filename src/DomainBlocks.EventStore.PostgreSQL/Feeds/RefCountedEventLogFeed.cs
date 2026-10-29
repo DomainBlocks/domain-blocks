@@ -1,3 +1,5 @@
+using DomainBlocks.EventStore.Internal.Feeds;
+
 namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 
 /// <summary>
@@ -13,7 +15,7 @@ internal sealed class RefCountedEventLogFeed<T>(Func<IEventLogFeed<T>> feedFacto
     private bool _disposed;
 
     public async Task<IEventLogFeedAttachment> AttachAsync(
-        IEventLogObserver<T> observer,
+        IFeedObserver<T> observer,
         string correlationId = "unknown",
         CancellationToken cancellationToken = default)
     {

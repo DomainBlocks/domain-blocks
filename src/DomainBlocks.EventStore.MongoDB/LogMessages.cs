@@ -34,6 +34,9 @@ internal static partial class LogMessages
         string subscriptionId,
         int queueCapacity);
 
+    [LoggerMessage(LogLevel.Warning, "[sub: {SubscriptionId}] feed was reset; restart pending")]
+    internal static partial void SubscriptionFeedReset(this ILogger logger, string subscriptionId);
+
     [LoggerMessage(LogLevel.Warning, "[sub: {SubscriptionId}] change stream history was lost; restart pending")]
     internal static partial void SubscriptionChangeHistoryLost(this ILogger logger, string subscriptionId);
 
@@ -53,66 +56,38 @@ internal static partial class LogMessages
     [LoggerMessage(LogLevel.Information, "[sub: {SubscriptionId}] stopped")]
     internal static partial void SubscriptionStopped(this ILogger logger, string subscriptionId);
 
-    [LoggerMessage(LogLevel.Debug, "[chg: {SubjectId}, obs: {ObserverId}, count: {ObserverCount}] attached")]
-    internal static partial void ObserverAttached(
-        this ILogger logger,
-        string subjectId,
-        string observerId,
-        int observerCount);
+    [LoggerMessage(LogLevel.Debug, "[feed: {FeedId}] started")]
+    internal static partial void ChangeStreamStarted(this ILogger logger, string feedId);
 
-    [LoggerMessage(LogLevel.Debug, "[chg: {SubjectId}, obs: {ObserverId}, count: {ObserverCount}] detached")]
-    internal static partial void ObserverDetached(
-        this ILogger logger,
-        string subjectId,
-        string observerId,
-        int observerCount);
+    [LoggerMessage(LogLevel.Debug, "[feed: {FeedId}] connected")]
+    internal static partial void ChangeStreamConnected(this ILogger logger, string feedId);
 
-    [LoggerMessage(LogLevel.Debug, "[chg: {SubjectId}] started")]
-    internal static partial void ChangeStreamStarted(this ILogger logger, string subjectId);
+    [LoggerMessage(LogLevel.Debug, "[feed: {FeedId}] stopping")]
+    internal static partial void ChangeStreamStopping(this ILogger logger, string feedId);
 
-    [LoggerMessage(LogLevel.Debug, "[chg: {SubjectId}] connected")]
-    internal static partial void ChangeStreamConnected(this ILogger logger, string subjectId);
+    [LoggerMessage(LogLevel.Trace, "[feed: {FeedId}] processed batch of {Count}")]
+    internal static partial void ChangeStreamBatchProcessed(this ILogger logger, string feedId, int count);
 
-    [LoggerMessage(LogLevel.Debug, "[chg: {SubjectId}] stopping")]
-    internal static partial void ChangeStreamStopping(this ILogger logger, string subjectId);
+    [LoggerMessage(LogLevel.Warning, "[feed: {FeedId}] cursor ended; reconnecting")]
+    internal static partial void ChangeStreamCursorEnded(this ILogger logger, string feedId);
 
-    [LoggerMessage(LogLevel.Trace, "[chg: {SubjectId}] processed batch of {Count}")]
-    internal static partial void ChangeStreamBatchProcessed(this ILogger logger, string subjectId, int count);
+    [LoggerMessage(LogLevel.Warning, "[feed: {FeedId}] connection lost; reconnecting")]
+    internal static partial void ChangeStreamConnectionLost(this ILogger logger, Exception exception, string feedId);
 
-    [LoggerMessage(LogLevel.Warning, "[chg: {SubjectId}] cursor ended; reconnecting")]
-    internal static partial void ChangeStreamCursorEnded(this ILogger logger, string subjectId);
-
-    [LoggerMessage(LogLevel.Warning, "[chg: {SubjectId}] connection lost; reconnecting")]
-    internal static partial void ChangeStreamConnectionLost(this ILogger logger, Exception exception, string subjectId);
-
-    [LoggerMessage(LogLevel.Warning, "[chg: {SubjectId}, attempt: {Attempt}] failed to connect; retrying in {Delay}")]
+    [LoggerMessage(LogLevel.Warning, "[feed: {FeedId}, attempt: {Attempt}] failed to connect; retrying in {Delay}")]
     internal static partial void ChangeStreamRetrying(
         this ILogger logger,
         Exception exception,
-        string subjectId,
+        string feedId,
         int attempt,
         TimeSpan delay);
 
-    [LoggerMessage(LogLevel.Debug, "[chg: {SubjectId}] canceled")]
-    internal static partial void ChangeStreamCanceled(this ILogger logger, string subjectId);
+    [LoggerMessage(LogLevel.Debug, "[feed: {FeedId}] canceled")]
+    internal static partial void ChangeStreamCanceled(this ILogger logger, string feedId);
 
-    [LoggerMessage(LogLevel.Error, "[chg: {SubjectId}] failed")]
-    internal static partial void ChangeStreamFailed(this ILogger logger, Exception exception, string subjectId);
+    [LoggerMessage(LogLevel.Error, "[feed: {FeedId}] failed")]
+    internal static partial void ChangeStreamFailed(this ILogger logger, Exception exception, string feedId);
 
-    [LoggerMessage(LogLevel.Debug, "[chg: {SubjectId}] stopped")]
-    internal static partial void ChangeStreamStopped(this ILogger logger, string subjectId);
-
-    [LoggerMessage(LogLevel.Error, "[chg: {SubjectId}, obs: {ObserverId}] failed while receiving a change; detaching")]
-    internal static partial void ObserverOnNextFailed(
-        this ILogger logger,
-        Exception exception,
-        string subjectId,
-        string observerId);
-
-    [LoggerMessage(LogLevel.Error, "[chg: {SubjectId}, obs: {ObserverId}] failed while receiving an error")]
-    internal static partial void ObserverOnErrorFailed(
-        this ILogger logger,
-        Exception exception,
-        string subjectId,
-        string observerId);
+    [LoggerMessage(LogLevel.Debug, "[feed: {FeedId}] stopped")]
+    internal static partial void ChangeStreamStopped(this ILogger logger, string feedId);
 }

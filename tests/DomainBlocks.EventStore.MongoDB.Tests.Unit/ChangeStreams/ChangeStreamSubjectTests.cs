@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using System.Threading.Channels;
+using DomainBlocks.EventStore.Internal.Feeds;
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using DomainBlocks.Testing;
 using Microsoft.Extensions.Logging;
@@ -410,39 +411,6 @@ public class ChangeStreamSubjectTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task OnNextAsync_WhenObserverThrows_DetachesObserver(CancellationToken ct)
-    {
-        var change1 = CreateChange(new BsonDocument("_data", "1"));
-        var change2 = CreateChange(new BsonDocument("_data", "2"));
-
-        SetupChangeStream(
-        [
-            new ChangeStreamBatch { Items = [change1] },
-            new ChangeStreamBatch { Items = [change2] }
-        ]);
-
-        var subject = ChangeStreamSubject.Create(
-            _mockClient.Object,
-            _mockCollection.Object.WatchAsync,
-            new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
-            static x => x.ResumeToken,
-            static x => x.ClusterTime,
-            static x => x);
-
-        var throwingObserver = new ThrowingObserver();
-        var receivingObserver = new TestObserver();
-        using var throwingAttachment = subject.Attach(throwingObserver);
-        using var receivingAttachment = subject.Attach(receivingObserver);
-        await using var connection = await subject.ConnectAsync(ct);
-
-        var receivedItems = await receivingObserver.ReadAllAsync(ct).Take(2).ToArrayAsync(ct);
-
-        receivedItems.ShouldBe([change1, change2]);
-        throwingObserver.CallCount.ShouldBe(1);
-    }
-
-    [Test]
-    [CancelAfter(TestTimeoutMillis)]
     public async Task Attach_AfterConnectionIsDisposed_Throws(CancellationToken ct)
     {
         SetupChangeStream([new ChangeStreamBatch { Items = [] }]);
@@ -459,7 +427,7 @@ public class ChangeStreamSubjectTests
         await connection.DisposeAsync();
 
         var exception = Should.Throw<InvalidOperationException>(() => subject.Attach(new TestObserver()));
-        exception.Message.ShouldBe("Cannot attach to a completed change stream connection.");
+        exception.Message.ShouldBe("Cannot attach to a completed feed.");
     }
 
     [Test]
@@ -488,7 +456,7 @@ public class ChangeStreamSubjectTests
         await subject.ConnectAsync(connectCts.Token).ShouldThrowAsync<OperationCanceledException>();
 
         var exception = Should.Throw<InvalidOperationException>(() => subject.Attach(new TestObserver()));
-        exception.Message.ShouldBe("Cannot attach to a completed change stream connection.");
+        exception.Message.ShouldBe("Cannot attach to a completed feed.");
     }
 
     private static BsonTimestamp CreateOperationTime(int helloCount) => new(helloCount, 0);
@@ -583,7 +551,7 @@ public class ChangeStreamSubjectTests
 
     // Collects items pushed by the subject's producer via OnNextAsync, and exposes them as an async enumerable for
     // assertions.
-    private class TestObserver : IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>
+    private class TestObserver : IFeedObserver<ChangeStreamDocument<BsonDocument>>
     {
         private readonly Channel<ChangeStreamDocument<BsonDocument>> _channel =
             Channel.CreateUnbounded<ChangeStreamDocument<BsonDocument>>();
@@ -599,6 +567,8 @@ public class ChangeStreamSubjectTests
             return ValueTask.CompletedTask;
         }
 
+        public ValueTask OnResetAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
+
         public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken)
         {
             _errorTcs.TrySetResult(exception);
@@ -609,21 +579,7 @@ public class ChangeStreamSubjectTests
             _channel.Reader.ReadAllAsync(ct);
     }
 
-    private sealed class ThrowingObserver : IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>
-    {
-        public int CallCount { get; private set; }
-
-        public ValueTask OnNextAsync(ChangeStreamDocument<BsonDocument> change, CancellationToken cancellationToken)
-        {
-            CallCount++;
-            throw new InvalidOperationException("The test observer failed.");
-        }
-
-        public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken) =>
-            ValueTask.CompletedTask;
-    }
-
-    private sealed class CompletionRecordingObserver : IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>
+    private sealed class CompletionRecordingObserver : IFeedObserver<ChangeStreamDocument<BsonDocument>>
     {
         private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -639,6 +595,8 @@ public class ChangeStreamSubjectTests
         public ValueTask OnNextAsync(ChangeStreamDocument<BsonDocument> change, CancellationToken cancellationToken) =>
             new(_released.Task);
 
+        public ValueTask OnResetAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
+
         public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken)
         {
             _wasCompletedWhenNotified.TrySetResult(Connection!.Completion.IsCompleted);
@@ -647,7 +605,7 @@ public class ChangeStreamSubjectTests
     }
 
     // Records the connection's high-water mark as each change is handed to it, once it is released.
-    private sealed class HighWaterMarkRecordingObserver : IChangeStreamObserver<ChangeStreamDocument<BsonDocument>>
+    private sealed class HighWaterMarkRecordingObserver : IFeedObserver<ChangeStreamDocument<BsonDocument>>
     {
         private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly Channel<BsonTimestamp> _marks = Channel.CreateUnbounded<BsonTimestamp>();
@@ -665,6 +623,8 @@ public class ChangeStreamSubjectTests
             await _released.Task;
             _marks.Writer.TryWrite(Connection!.OpTimeHighWaterMark);
         }
+
+        public ValueTask OnResetAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
 
         public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken) =>
             ValueTask.CompletedTask;

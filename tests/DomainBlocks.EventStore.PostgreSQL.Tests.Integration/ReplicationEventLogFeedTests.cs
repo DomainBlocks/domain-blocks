@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using DomainBlocks.EventStore.Codecs;
+using DomainBlocks.EventStore.Internal.Feeds;
 using DomainBlocks.EventStore.PostgreSQL.Feeds;
 using DomainBlocks.Testing.Integration.EventStore;
 using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
@@ -526,7 +527,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
         }
     }
 
-    private sealed class CollectingObserver : IEventLogObserver<EventLogRow<RawEvent>>
+    private sealed class CollectingObserver : IFeedObserver<EventLogRow<RawEvent>>
     {
         private readonly Channel<RawReadEvent> _channel = Channel.CreateUnbounded<RawReadEvent>();
 

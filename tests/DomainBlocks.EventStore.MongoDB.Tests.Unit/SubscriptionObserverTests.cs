@@ -150,6 +150,43 @@ public class SubscriptionObserverTests
     }
 
     [Test]
+    public async Task OnResetAsync_WhenNotYetStopped_SignalsRestart()
+    {
+        using var observer = new Observer(queueCapacity: 10, EventFilter.All);
+        await OfferAsync(observer, 0, "order-1");
+
+        await observer.OnResetAsync(CancellationToken.None);
+
+        observer.StopReason.ShouldBe(StopReason.FeedReset);
+        observer.Reader.TryRead(out _).ShouldBeTrue();
+        (await observer.Reader.WaitToReadAsync()).ShouldBeFalse();
+    }
+
+    [Test]
+    public async Task OnResetAsync_WhenNotYetStopped_LogsFeedResetAsWarningOnce()
+    {
+        var logger = new RecordingLogger();
+        using var observer = new Observer(queueCapacity: 1, EventFilter.All, logger, "sub-1");
+
+        await observer.OnResetAsync(CancellationToken.None);
+        await observer.OnResetAsync(CancellationToken.None);
+
+        logger.Messages.ShouldBe([(LogLevel.Warning, "[sub: sub-1] feed was reset; restart pending")]);
+    }
+
+    [Test]
+    public async Task OnResetAsync_WhenAlreadyStoppedByQueueOverflow_KeepsFirstReason()
+    {
+        using var observer = new Observer(queueCapacity: 1, EventFilter.All);
+        await OfferAsync(observer, 0, "order-1");
+        await OfferAsync(observer, 1, "order-1");
+
+        await observer.OnResetAsync(CancellationToken.None);
+
+        observer.StopReason.ShouldBe(StopReason.QueueOverflow);
+    }
+
+    [Test]
     public async Task OnErrorAsync_WhenHistoryLost_SignalsRestart()
     {
         using var observer = new Observer(queueCapacity: 10, EventFilter.All);

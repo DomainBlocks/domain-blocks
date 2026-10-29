@@ -1,3 +1,4 @@
+using DomainBlocks.EventStore.Internal.Feeds;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -39,7 +40,7 @@ internal sealed class RefCountedChangeStreamSubject<TResult>(
     private SubjectConnection? _currentSubjectConnection;
 
     public async Task<IChangeStreamAttachment> AttachAsync(
-        IChangeStreamObserver<TResult> observer,
+        IFeedObserver<TResult> observer,
         string correlationId = "unknown",
         CancellationToken cancellationToken = default)
     {

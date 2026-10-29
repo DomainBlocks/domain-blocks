@@ -20,7 +20,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj"/>
     <ProjectReference Include="..\..\src\DomainBlocks.EventStore.MongoDB\DomainBlocks.EventStore.MongoDB.csproj"/>
-    <ProjectReference Include="..\..\src\DomainBlocks.EventStore.PostgreSQL\DomainBlocks.EventStore.PostgreSQL.csproj"/>
+    <!-- Both stores compile the same internal types, so code that names one picks the store through its alias. -->
+    <ProjectReference Include="..\..\src\DomainBlocks.EventStore.PostgreSQL\DomainBlocks.EventStore.PostgreSQL.csproj">
+      <Aliases>global,pg</Aliases>
+    </ProjectReference>
     <ProjectReference Include="..\..\src\DomainBlocks.Serialization.Google.Protobuf\DomainBlocks.Serialization.Google.Protobuf.csproj" />
     <ProjectReference Include="..\..\src\DomainBlocks.Serialization.MongoDB.Bson\DomainBlocks.Serialization.MongoDB.Bson.csproj" />
     <ProjectReference Include="..\..\src\DomainBlocks.Serialization.SystemTextJson\DomainBlocks.Serialization.SystemTextJson.csproj"/>

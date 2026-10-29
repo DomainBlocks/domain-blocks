@@ -1,3 +1,5 @@
+using DomainBlocks.EventStore.Internal.Feeds;
+
 namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 
 /// <summary>
@@ -5,7 +7,7 @@ namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 /// </summary>
 internal interface IEventLogFeed<out T>
 {
-    IDisposable Attach(IEventLogObserver<T> observer, string correlationId = "unknown");
+    IDisposable Attach(IFeedObserver<T> observer, string correlationId = "unknown");
 
     Task<IEventLogFeedConnection> ConnectAsync(CancellationToken cancellationToken = default);
 }
