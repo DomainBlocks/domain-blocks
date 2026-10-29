@@ -65,7 +65,8 @@ public static class MongoEventStore
 /// Represents an event store backed by MongoDB. Create one with <see cref="MongoEventStoreBuilder{TEvent}"/>.
 /// </summary>
 /// <remarks>
-/// Disposing the store disposes its client only if the builder created it.
+/// Disposing the store disposes its client only if the builder created it. A subscription that is live when the store
+/// is disposed throws <see cref="ObjectDisposedException"/>.
 /// </remarks>
 public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, StreamPosition, LogPosition>
     where TEvent : notnull
@@ -315,6 +316,9 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
     public async ValueTask DisposeAsync()
     {
         await _sequencedAppender.DisposeAsync().ConfigureAwait(false);
+
+        // The feed's change stream runs on the client, so the feed stops before the client is disposed.
+        await _feed.DisposeAsync().ConfigureAwait(false);
         _ownedClient?.Dispose();
     }
 

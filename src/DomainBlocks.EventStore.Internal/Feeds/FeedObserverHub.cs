@@ -72,19 +72,34 @@ internal sealed class FeedObserverHub<T>(ILogger? logger, string feedId)
         }
     }
 
-    public async ValueTask NotifyErrorAsync(Exception error, CancellationToken cancellationToken)
+    public ValueTask NotifyErrorAsync(Exception error, CancellationToken cancellationToken)
+    {
+        return CompleteAsync(new Completion(error), error, cancellationToken);
+    }
+
+    /// <summary>
+    /// Completes the feed and passes an <see cref="ObjectDisposedException"/> to each observer still attached, so that
+    /// none waits for items that will never come. It takes no token, as it runs after the feed has stopped.
+    /// </summary>
+    public ValueTask NotifyDisposedAsync()
+    {
+        var error = new ObjectDisposedException(null, "The feed was disposed.");
+        return CompleteAsync(new Completion(), error, CancellationToken.None);
+    }
+
+    private async ValueTask CompleteAsync(Completion completion, Exception error, CancellationToken cancellationToken)
     {
         if (!TryUpdate(
-                static (current, error) => current.Completion is null
-                    ? new State(current.Attachments, new Completion(error))
+                static (current, completion) => current.Completion is null
+                    ? new State(current.Attachments, completion)
                     : null,
-                error,
-                out var faulted))
+                completion,
+                out var completed))
         {
             return;
         }
 
-        foreach (var attachment in faulted.Attachments)
+        foreach (var attachment in completed.Attachments)
         {
             try
             {
@@ -99,16 +114,6 @@ internal sealed class FeedObserverHub<T>(ILogger? logger, string feedId)
                 logger?.ObserverOnErrorFailed(observerException, feedId, attachment.ObserverId);
             }
         }
-    }
-
-    public void SetComplete()
-    {
-        TryUpdate(
-            static (current, completion) => current.Completion is null
-                ? new State(current.Attachments, completion)
-                : null,
-            new Completion(),
-            out _);
     }
 
     private void Detach(Attachment attachment)

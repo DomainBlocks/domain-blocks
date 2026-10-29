@@ -55,7 +55,8 @@ internal sealed class RefCountedFeed<T, THighWaterMark>(Func<IFeed<T, THighWater
     }
 
     /// <summary>
-    /// Disconnects the feed and rejects further attachments. Observers still attached are not notified.
+    /// Disconnects the feed and rejects further attachments. Observers still attached receive an
+    /// <see cref="ObjectDisposedException"/> from the feed.
     /// </summary>
     public async ValueTask DisposeAsync()
     {

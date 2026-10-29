@@ -1,5 +1,9 @@
 namespace DomainBlocks.EventStore.Internal.Feeds;
 
+/// <summary>
+/// A feed's running connection. Disposing it stops the feed, and observers still attached receive an
+/// <see cref="ObjectDisposedException"/>.
+/// </summary>
 internal interface IFeedConnection<out THighWaterMark> : IAsyncDisposable
 {
     /// <summary>

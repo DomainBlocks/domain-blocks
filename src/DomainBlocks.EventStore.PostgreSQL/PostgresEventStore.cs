@@ -95,7 +95,8 @@ public static class PostgresEventStore
 /// Represents an event store backed by PostgreSQL. Create one with <see cref="PostgresEventStoreBuilder{TEvent}"/>.
 /// </summary>
 /// <remarks>
-/// Disposing the store disposes its data source only if the builder created it.
+/// Disposing the store disposes its data source only if the builder created it. A subscription that is live when the
+/// store is disposed throws <see cref="ObjectDisposedException"/>.
 /// </remarks>
 public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, StreamPosition, LogPosition>
     where TEvent : notnull
