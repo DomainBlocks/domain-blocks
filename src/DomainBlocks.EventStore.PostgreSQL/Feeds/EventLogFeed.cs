@@ -40,7 +40,7 @@ internal sealed class EventLogFeed<T> : IFeed<T, long?>
     private readonly Func<T, long> _positionSelector;
     private readonly EventLogFeedOptions _options;
     private readonly ILogger? _logger;
-    private readonly FeedObservers<T> _observers;
+    private readonly FeedObserverHub<T> _observerHub;
     private readonly string _feedId = CorrelationId.ReserveGenerated();
     private readonly TaskCompletionSource _connectedTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _connected;
@@ -64,12 +64,12 @@ internal sealed class EventLogFeed<T> : IFeed<T, long?>
         _positionSelector = positionSelector;
         _options = options;
         _logger = logger;
-        _observers = new FeedObservers<T>(logger, _feedId);
+        _observerHub = new FeedObserverHub<T>(logger, _feedId);
     }
 
     public IDisposable Attach(IFeedObserver<T> observer, string correlationId = "unknown")
     {
-        return _observers.Attach(observer, correlationId);
+        return _observerHub.Attach(observer, correlationId);
     }
 
     public async Task<IFeedConnection<long?>> ConnectAsync(CancellationToken cancellationToken = default)
@@ -146,7 +146,7 @@ internal sealed class EventLogFeed<T> : IFeed<T, long?>
     private sealed class Connection : IFeedConnection<long?>
     {
         private readonly EventLogFeed<T> _feed;
-        private readonly FeedObservers<T> _observers;
+        private readonly FeedObserverHub<T> _observerHub;
         private readonly ILogger? _logger;
         private readonly string _feedId;
         private readonly Task _producerTask;
@@ -158,7 +158,7 @@ internal sealed class EventLogFeed<T> : IFeed<T, long?>
         public Connection(EventLogFeed<T> feed)
         {
             _feed = feed;
-            _observers = feed._observers;
+            _observerHub = feed._observerHub;
             _logger = feed._logger;
             _feedId = feed._feedId;
 
@@ -212,7 +212,7 @@ internal sealed class EventLogFeed<T> : IFeed<T, long?>
                         // Unless the session resumes the previous one, rows committed in between were missed. Reset
                         // observers before pumping the new session, so no row advances a position past the gap.
                         if (hasConnectedBefore && !session.IsResumed)
-                            await _observers.NotifyResetAsync(_stopCts.Token).ConfigureAwait(false);
+                            await _observerHub.NotifyResetAsync(_stopCts.Token).ConfigureAwait(false);
 
                         hasConnectedBefore = true;
                         _feed._connectedTcs.TrySetResult();
@@ -226,7 +226,7 @@ internal sealed class EventLogFeed<T> : IFeed<T, long?>
                                 // reads a mark that covers it.
                                 Interlocked.Exchange(ref _positionHighWaterMark, _feed._positionSelector(item));
 
-                                await _observers.NotifyNextAsync(item, _stopCts.Token).ConfigureAwait(false);
+                                await _observerHub.NotifyNextAsync(item, _stopCts.Token).ConfigureAwait(false);
                             }
 
                             // A live session should never end, so reconnect.
@@ -242,7 +242,7 @@ internal sealed class EventLogFeed<T> : IFeed<T, long?>
             catch (OperationCanceledException) when (_stopCts.IsCancellationRequested)
             {
                 _logger?.FeedCanceled(_feedId);
-                _observers.SetComplete();
+                _observerHub.SetComplete();
                 _completionTcs.TrySetResult();
             }
             catch (Exception ex)
@@ -251,7 +251,7 @@ internal sealed class EventLogFeed<T> : IFeed<T, long?>
 
                 try
                 {
-                    await _observers.NotifyErrorAsync(ex, _stopCts.Token).ConfigureAwait(false);
+                    await _observerHub.NotifyErrorAsync(ex, _stopCts.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (_stopCts.IsCancellationRequested)
                 {

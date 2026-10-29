@@ -7,7 +7,7 @@ namespace DomainBlocks.EventStore.Internal.Feeds;
 /// Holds a feed's observers and notifies them in turn. An observer that throws while receiving an item or a reset is
 /// detached. Once the feed completes or faults, no observer can attach.
 /// </summary>
-internal sealed class FeedObservers<T>(ILogger? logger, string feedId)
+internal sealed class FeedObserverHub<T>(ILogger? logger, string feedId)
 {
     private State _state = new([]);
 

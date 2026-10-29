@@ -41,7 +41,7 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<T
     private readonly Func<TChange, TResult> _resultSelector;
     private readonly ChangeStreamSubjectOptions _options;
     private readonly ILogger? _logger;
-    private readonly FeedObservers<TResult> _observers;
+    private readonly FeedObserverHub<TResult> _observerHub;
     private readonly string _subjectId = CorrelationId.ReserveGenerated();
     private readonly TaskCompletionSource _connectedTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _connected;
@@ -73,11 +73,11 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<T
         _resultSelector = resultSelector;
         _options = options;
         _logger = logger;
-        _observers = new FeedObservers<TResult>(logger, _subjectId);
+        _observerHub = new FeedObserverHub<TResult>(logger, _subjectId);
     }
 
     public IDisposable Attach(IFeedObserver<TResult> observer, string correlationId = "unknown") =>
-        _observers.Attach(observer, correlationId);
+        _observerHub.Attach(observer, correlationId);
 
     public async Task<IFeedConnection<BsonTimestamp>> ConnectAsync(CancellationToken cancellationToken = default)
     {
@@ -151,7 +151,7 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<T
         private readonly Func<TChange, BsonDocument> _resumeTokenSelector;
         private readonly Func<TChange, BsonTimestamp> _clusterTimeSelector;
         private readonly Func<TChange, TResult> _resultSelector;
-        private readonly FeedObservers<TResult> _observers;
+        private readonly FeedObserverHub<TResult> _observerHub;
         private readonly ILogger? _logger;
         private readonly string _subjectId;
         private readonly Task _producerTask;
@@ -166,7 +166,7 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<T
             _resumeTokenSelector = subject._resumeTokenSelector;
             _clusterTimeSelector = subject._clusterTimeSelector;
             _resultSelector = subject._resultSelector;
-            _observers = subject._observers;
+            _observerHub = subject._observerHub;
             _logger = subject._logger;
             _subjectId = subject._subjectId;
 
@@ -249,7 +249,7 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<T
                                 if (clusterTime.CompareTo(_opTimeHighWaterMark) > 0)
                                     Interlocked.Exchange(ref _opTimeHighWaterMark, clusterTime);
 
-                                await _observers.NotifyNextAsync(result, _stopCts.Token).ConfigureAwait(false);
+                                await _observerHub.NotifyNextAsync(result, _stopCts.Token).ConfigureAwait(false);
                                 resumeToken = _resumeTokenSelector(change);
                                 batchCount++;
                             }
@@ -273,7 +273,7 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<T
             catch (OperationCanceledException) when (_stopCts.IsCancellationRequested)
             {
                 _logger?.ChangeStreamCanceled(_subjectId);
-                _observers.SetComplete();
+                _observerHub.SetComplete();
                 _completionTcs.TrySetResult();
             }
             catch (Exception ex)
@@ -286,7 +286,7 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<T
 
                 try
                 {
-                    await _observers.NotifyErrorAsync(ex, _stopCts.Token).ConfigureAwait(false);
+                    await _observerHub.NotifyErrorAsync(ex, _stopCts.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (_stopCts.IsCancellationRequested)
                 {
