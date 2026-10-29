@@ -49,7 +49,7 @@ public static class PostgresEventStore
             logger);
     }
 
-    private static RefCountedFeed<EventLogRow<TEvent>, long?> CreateFeed<TEvent>(
+    private static RefCountedFeed<EventLogRow<TEvent>, long> CreateFeed<TEvent>(
         NpgsqlDataSource dataSource,
         SchemaObjectNames names,
         PostgresEventStoreOptions options,
@@ -75,7 +75,7 @@ public static class PostgresEventStore
         ReplicationEventLogSessionFactory.ValidateOptions(replicationOptions);
         EventLogFeed.ValidateOptions(feedOptions);
 
-        return new RefCountedFeed<EventLogRow<TEvent>, long?>(() =>
+        return new RefCountedFeed<EventLogRow<TEvent>, long>(() =>
             new EventLogFeed<EventLogRow<TEvent>>(
                 new ReplicationEventLogSessionFactory<TEvent>(
                     connectionString,
@@ -85,7 +85,6 @@ public static class PostgresEventStore
                     replicationOptions,
                     decoder,
                     logger),
-                static row => row.Position,
                 feedOptions,
                 logger));
     }
@@ -107,7 +106,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
     private readonly PostgresEventStoreAdminOptions _adminOptions;
     private readonly IAppender _appender;
     private readonly EventLogReader<TEvent> _reader;
-    private readonly RefCountedFeed<EventLogRow<TEvent>, long?> _feed;
+    private readonly RefCountedFeed<EventLogRow<TEvent>, long> _feed;
     private readonly IEventCodec<TEvent, PostgresEventData, string> _eventCodec;
     private readonly ILogger? _logger;
 
@@ -118,7 +117,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         PostgresEventStoreAdminOptions adminOptions,
         IAppender appender,
         EventLogReader<TEvent> reader,
-        RefCountedFeed<EventLogRow<TEvent>, long?> feed,
+        RefCountedFeed<EventLogRow<TEvent>, long> feed,
         IEventCodec<TEvent, PostgresEventData, string> eventCodec,
         ILogger? logger)
     {

@@ -72,6 +72,34 @@ public class EventLogFeedTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
+    public async Task ConnectAsync_SessionStartsWithMark_PublishesMark(CancellationToken ct)
+    {
+        var feed = CreateFeed(new ScriptedSession("s1") { HighWaterMark = 3 });
+
+        await using var connection = await feed.ConnectAsync(ct);
+
+        connection.HighWaterMark.ShouldBe(3);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task Connect_LaterSessionWithoutRows_KeepsHighWaterMark(CancellationToken ct)
+    {
+        var feed = CreateFeed(
+            new ScriptedSession("s1", Row(5), Throw(new IOException("lost"))),
+            new ScriptedSession("s2"));
+
+        var observer = new RecordingObserver();
+        using var attachment = feed.Attach(observer);
+        await using var connection = await feed.ConnectAsync(ct);
+
+        // The feed takes the second session's mark before it resets observers.
+        (await observer.ReadAsync(2, ct)).ShouldBe(["row:5", "reset"]);
+        connection.HighWaterMark.ShouldBe(5);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
     public async Task Connect_WhenSessionFailsTransiently_ReconnectsAndResetsBeforeNewRows(CancellationToken ct)
     {
         var feed = CreateFeed(
@@ -163,7 +191,6 @@ public class EventLogFeedTests
                     ? throw new IOException("not yet")
                     : Task.FromResult<IEventLogSession<long>>(new ScriptedSession("s1", Row(1)));
             }),
-            static x => x,
             FastRetryOptions,
             _logger);
 
@@ -188,7 +215,6 @@ public class EventLogFeedTests
                 attempts++;
                 throw exception;
             }),
-            static x => x,
             new EventLogFeedOptions { MaxRetryAttempts = 0 },
             _logger);
 
@@ -208,7 +234,6 @@ public class EventLogFeedTests
 
         var feed = new EventLogFeed<long>(
             new DelegateSessionFactory<long>(_ => throw exception),
-            static x => x,
             new EventLogFeedOptions
             {
                 MaxRetryAttempts = 2,
@@ -250,7 +275,6 @@ public class EventLogFeedTests
                 await release.Task;
                 return new ScriptedSession("s1", Row(1));
             }),
-            static x => x,
             FastRetryOptions,
             _logger);
 
@@ -270,7 +294,6 @@ public class EventLogFeedTests
     {
         var feed = new EventLogFeed<long>(
             new DelegateSessionFactory<long>(_ => throw new IOException("down")),
-            static x => x,
             new EventLogFeedOptions { RetryDelay = TimeSpan.FromMinutes(1), MaxRetryDelay = TimeSpan.FromMinutes(1) },
             _logger);
 
@@ -314,7 +337,7 @@ public class EventLogFeedTests
         CreateFeed(CreateSessionFactory(sessions));
 
     private EventLogFeed<long> CreateFeed(IEventLogSessionFactory<long> sessionFactory) =>
-        new(sessionFactory, static x => x, FastRetryOptions, _logger);
+        new(sessionFactory, FastRetryOptions, _logger);
 
     private static DelegateSessionFactory<long> CreateSessionFactory(params IEventLogSession<long>[] sessions)
     {
@@ -329,12 +352,12 @@ public class EventLogFeedTests
     {
         private readonly TaskCompletionSource _onNextReleased = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        private readonly TaskCompletionSource<long?> _highWaterMarkOnNext =
+        private readonly TaskCompletionSource<long> _highWaterMarkOnNext =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public IFeedConnection<long?>? Connection { get; set; }
+        public IFeedConnection<long>? Connection { get; set; }
 
-        public Task<long?> HighWaterMarkOnNext => _highWaterMarkOnNext.Task;
+        public Task<long> HighWaterMarkOnNext => _highWaterMarkOnNext.Task;
 
         public void ReleaseOnNext() => _onNextReleased.TrySetResult();
 

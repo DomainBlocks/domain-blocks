@@ -33,11 +33,10 @@ internal static class EventLogFeed
 /// <see cref="IFeedObserver{T}.OnResetAsync"/> first and recover missed rows by re-reading from their last
 /// position.
 /// </remarks>
-internal sealed class EventLogFeed<T> : IFeed<T, long?>
+internal sealed class EventLogFeed<T> : IFeed<T, long>
 {
     private readonly IEventLogSessionFactory<T> _sessionFactory;
     private readonly Func<CancellationToken, Task<IEventLogSession<T>>> _openSession;
-    private readonly Func<T, long> _positionSelector;
     private readonly EventLogFeedOptions _options;
     private readonly ILogger? _logger;
     private readonly FeedObserverHub<T> _observerHub;
@@ -50,18 +49,15 @@ internal sealed class EventLogFeed<T> : IFeed<T, long?>
     /// </remarks>
     public EventLogFeed(
         IEventLogSessionFactory<T> sessionFactory,
-        Func<T, long> positionSelector,
         EventLogFeedOptions? options = null,
         ILogger? logger = null)
     {
         ArgumentNullException.ThrowIfNull(sessionFactory);
-        ArgumentNullException.ThrowIfNull(positionSelector);
 
         options ??= EventLogFeedOptions.Default;
 
         _sessionFactory = sessionFactory;
         _openSession = AddResilience(sessionFactory.OpenAsync, options, logger, _feedId);
-        _positionSelector = positionSelector;
         _options = options;
         _logger = logger;
         _observerHub = new FeedObserverHub<T>(logger, _feedId);
@@ -72,7 +68,7 @@ internal sealed class EventLogFeed<T> : IFeed<T, long?>
         return _observerHub.Attach(observer, correlationId);
     }
 
-    public async Task<IFeedConnection<long?>> ConnectAsync(CancellationToken cancellationToken = default)
+    public async Task<IFeedConnection<long>> ConnectAsync(CancellationToken cancellationToken = default)
     {
         var connection = Interlocked.Exchange(ref _connected, 1) == 0
             ? new Connection(this)
@@ -143,7 +139,7 @@ internal sealed class EventLogFeed<T> : IFeed<T, long?>
             .ConfigureAwait(false);
     }
 
-    private sealed class Connection : IFeedConnection<long?>
+    private sealed class Connection : IFeedConnection<long>
     {
         private readonly EventLogFeed<T> _feed;
         private readonly FeedObserverHub<T> _observerHub;
@@ -168,10 +164,9 @@ internal sealed class EventLogFeed<T> : IFeed<T, long?>
         public Task Completion => _completionTcs.Task;
 
         /// <summary>
-        /// Gets the position of the last row the feed delivered, or <see langword="null"/> if it has delivered none.
+        /// Gets a position at or after every row that the feed has delivered, or -1 while there is nothing to cover.
         /// </summary>
-        public long? HighWaterMark =>
-            Volatile.Read(ref _positionHighWaterMark) is var position and >= 0 ? position : null;
+        public long HighWaterMark => Volatile.Read(ref _positionHighWaterMark);
 
         public async ValueTask DisposeAsync()
         {
@@ -209,6 +204,10 @@ internal sealed class EventLogFeed<T> : IFeed<T, long?>
                     {
                         _logger?.FeedConnected(_feedId, session.Description);
 
+                        // A session can start with a mark, such as one that covers rows it won't deliver, and
+                        // observers read the mark as soon as the feed connects.
+                        RaiseHighWaterMark(session.HighWaterMark);
+
                         // Unless the session resumes the previous one, rows committed in between were missed. Reset
                         // observers before pumping the new session, so no row advances a position past the gap.
                         if (hasConnectedBefore && !session.IsResumed)
@@ -221,10 +220,9 @@ internal sealed class EventLogFeed<T> : IFeed<T, long?>
                         {
                             await foreach (var item in session.ReadAsync(_stopCts.Token).ConfigureAwait(false))
                             {
-                                // Rows arrive in position order. The mark is raised before observers are notified,
-                                // and the exchange is a full fence, so an observer that attaches too late for a row
-                                // reads a mark that covers it.
-                                Interlocked.Exchange(ref _positionHighWaterMark, _feed._positionSelector(item));
+                                // The mark is raised before observers are notified, and the exchange is a full
+                                // fence, so an observer that attaches too late for a row reads a mark that covers it.
+                                RaiseHighWaterMark(session.HighWaterMark);
 
                                 await _observerHub.NotifyNextAsync(item, _stopCts.Token).ConfigureAwait(false);
                             }
@@ -265,6 +263,14 @@ internal sealed class EventLogFeed<T> : IFeed<T, long?>
                 await _feed._sessionFactory.DisposeAsync().ConfigureAwait(false);
                 _logger?.FeedStopped(_feedId);
             }
+        }
+
+        // Only the producer writes the mark. A session reports -1 until its first row, so the mark only moves
+        // forwards, keeping the rows that earlier sessions delivered.
+        private void RaiseHighWaterMark(long position)
+        {
+            if (position > _positionHighWaterMark)
+                Interlocked.Exchange(ref _positionHighWaterMark, position);
         }
     }
 }

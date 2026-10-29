@@ -35,6 +35,8 @@ internal sealed class ReplicationEventLogSession<TEvent>(
 
     public bool IsResumed { get; } = isResumed;
 
+    public long HighWaterMark { get; private set; } = -1;
+
     public async IAsyncEnumerable<EventLogRow<TEvent>> ReadAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
@@ -81,6 +83,7 @@ internal sealed class ReplicationEventLogSession<TEvent>(
                         if (row.Position <= slot.LastDeliveredPosition)
                             break;
 
+                        HighWaterMark = row.Position;
                         yield return row;
 
                         // The feed has handed the row to its observers.

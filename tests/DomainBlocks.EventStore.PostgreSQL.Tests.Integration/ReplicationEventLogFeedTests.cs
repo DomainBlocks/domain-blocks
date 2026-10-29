@@ -339,7 +339,6 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
 
         var feed = new EventLogFeed<EventLogRow<RawEvent>>(
             CreateSessionFactory(_slotNameGenerator, new SchemaObjectNames(options.Schema), Options.Replication),
-            static row => row.Position,
             new EventLogFeedOptions { RetryDelay = TimeSpan.FromMilliseconds(10), MaxRetryAttempts = 1 },
             LoggerFactory.CreateLogger("EventLogFeed"));
 
@@ -364,7 +363,6 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
     {
         return new EventLogFeed<EventLogRow<RawEvent>>(
             CreateSessionFactory(slotNameGenerator, Names, replicationOptions),
-            static row => row.Position,
             new EventLogFeedOptions { RetryDelay = TimeSpan.FromMilliseconds(100) },
             LoggerFactory.CreateLogger("EventLogFeed"));
     }

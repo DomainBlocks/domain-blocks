@@ -70,9 +70,7 @@ public class PostgresLiveFanOutBenchmarks
     [Benchmark]
     public async Task<int> FanOut_NoIO()
     {
-        var feed = new EventLogFeed<EventLogRow<IDomainEvent>>(
-            new SessionFactory(_decoder, _rows, _streamIds),
-            static row => row.Position);
+        var feed = new EventLogFeed<EventLogRow<IDomainEvent>>(new SessionFactory(_decoder, _rows, _streamIds));
 
         var subscribers = new Subscriber[SubscriberCount];
         var attachments = new IDisposable[SubscriberCount];
@@ -130,6 +128,8 @@ public class PostgresLiveFanOutBenchmarks
 
         public bool IsResumed => false;
 
+        public long HighWaterMark { get; private set; } = -1;
+
         public async IAsyncEnumerable<EventLogRow<IDomainEvent>> ReadAsync(
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
@@ -141,6 +141,7 @@ public class PostgresLiveFanOutBenchmarks
 
                 _row.Set(i, streamId, i, eventName, eventData, metadata, NoIOEventStore.CreatedAt);
 
+                HighWaterMark = i;
                 yield return _row;
             }
 

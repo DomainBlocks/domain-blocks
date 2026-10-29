@@ -25,5 +25,13 @@ internal interface IEventLogSession<out T> : IAsyncDisposable
     /// </remarks>
     bool IsResumed { get; }
 
+    /// <summary>
+    /// Gets a position at or after every row that the session has yielded, or -1 while there is nothing to cover.
+    /// </summary>
+    /// <remarks>
+    /// The feed reads it once the session is open and after each row, before observers receive the row.
+    /// </remarks>
+    long HighWaterMark { get; }
+
     IAsyncEnumerable<T> ReadAsync(CancellationToken cancellationToken);
 }

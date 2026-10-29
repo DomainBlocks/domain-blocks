@@ -23,7 +23,7 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
 {
     private readonly List<Replay> _replays = [];
     private IEventStore<object, string, StreamPosition, LogPosition> _eventStore = null!;
-    private RefCountedFeed<EventLogRow<object>, long?> _feed = null!;
+    private RefCountedFeed<EventLogRow<object>, long> _feed = null!;
     private EventLogReader<object> _reader = null!;
     private int _heldReplayIndex;
     private TaskCompletionSource? _releaseHeldReplay;
@@ -47,7 +47,7 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
 
         var slotNameGenerator = new SlotNameGenerator(names);
 
-        _feed = new RefCountedFeed<EventLogRow<object>, long?>(() =>
+        _feed = new RefCountedFeed<EventLogRow<object>, long>(() =>
             new EventLogFeed<EventLogRow<object>>(
                 new ReplicationEventLogSessionFactory<object>(
                     PostgresTestEnvironment.ConnectionString,
@@ -56,8 +56,7 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
                     names,
                     Options.Replication,
                     codec,
-                    LoggerFactory.CreateLogger("ReplicationEventLogSession")),
-                static row => row.Position));
+                    LoggerFactory.CreateLogger("ReplicationEventLogSession"))));
     }
 
     [TearDown]
