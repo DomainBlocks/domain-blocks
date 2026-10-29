@@ -148,6 +148,18 @@ public class ResumableAsyncEnumerableTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
+    public async Task GetAsyncEnumerator_EmptySequence_DisposesItAndYieldsNothing(CancellationToken ct)
+    {
+        var sequence = new Sequence(0, static (_, _) => null);
+
+        var items = await CreateResumable(sequence, CreatePipeline()).ToListAsync(ct);
+
+        items.ShouldBeEmpty();
+        sequence.Events.ShouldBe(["create 0", "dispose 0"]);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
     public async Task GetAsyncEnumerator_SecondEnumeration_StartsAtInitialPosition(CancellationToken ct)
     {
         var sequence = new Sequence(3, static (_, _) => null);

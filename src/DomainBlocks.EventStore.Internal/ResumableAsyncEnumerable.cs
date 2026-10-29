@@ -43,7 +43,7 @@ internal sealed class ResumableAsyncEnumerable<T, TState, TPosition>(
 {
     public async IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
-        CreatedSequence? sequence = null;
+        Sequence? sequence = null;
         var position = initialPosition;
 
         // The error that the next attempt throws. Each enumeration has its own, because the error stays here if the
@@ -54,16 +54,17 @@ internal sealed class ResumableAsyncEnumerable<T, TState, TPosition>(
         {
             while (true)
             {
-                bool hasNext;
-
                 if (sequence is null)
                 {
-                    (sequence, hasNext) = await pipeline
+                    sequence = await pipeline
                         .ExecuteAsync(
                             static (s, ct) => s.Self.CreateAsync(s.Position, s.Error, s.CancellationToken, ct),
                             (Self: this, Position: position, Error: error, CancellationToken: cancellationToken),
                             cancellationToken)
                         .ConfigureAwait(false);
+
+                    if (sequence is null)
+                        yield break;
                 }
                 else
                 {
@@ -71,7 +72,8 @@ internal sealed class ResumableAsyncEnumerable<T, TState, TPosition>(
                     // with its own OperationCanceledException.
                     try
                     {
-                        hasNext = await sequence.Items.MoveNextAsync().ConfigureAwait(false);
+                        if (!await sequence.Items.MoveNextAsync().ConfigureAwait(false))
+                            yield break;
                     }
                     catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
                     {
@@ -82,9 +84,6 @@ internal sealed class ResumableAsyncEnumerable<T, TState, TPosition>(
                         continue;
                     }
                 }
-
-                if (!hasNext)
-                    yield break;
 
                 var item = sequence.Items.Current;
                 yield return item;
@@ -100,8 +99,8 @@ internal sealed class ResumableAsyncEnumerable<T, TState, TPosition>(
     }
 
     // Each attempt of a recovery creates the sequence from the position and reads its first item, except the first,
-    // which throws the error again.
-    private async ValueTask<(CreatedSequence Sequence, bool HasNext)> CreateAsync(
+    // which throws the error again. A sequence with no item is disposed, and the attempt returns null.
+    private async ValueTask<Sequence?> CreateAsync(
         TPosition position,
         StrongBox<Exception?> error,
         CancellationToken cancellationToken,
@@ -116,12 +115,12 @@ internal sealed class ResumableAsyncEnumerable<T, TState, TPosition>(
         // The sequence outlives the attempt, so it takes a token linked to the caller's, which the attempt's token
         // cancels only while the attempt runs.
         var tokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        CreatedSequence? sequence = null;
+        Sequence? sequence = null;
 
         try
         {
             var items = factory(state, position, tokenSource.Token).GetAsyncEnumerator(tokenSource.Token);
-            sequence = new CreatedSequence(items, tokenSource);
+            sequence = new Sequence(items, tokenSource);
 
             bool hasNext;
             var registration = attemptToken.Register(static s => ((CancellationTokenSource)s!).Cancel(), tokenSource);
@@ -129,7 +128,11 @@ internal sealed class ResumableAsyncEnumerable<T, TState, TPosition>(
             await using (registration.ConfigureAwait(false))
                 hasNext = await items.MoveNextAsync().ConfigureAwait(false);
 
-            return (sequence, hasNext);
+            if (hasNext)
+                return sequence;
+
+            await sequence.DisposeAsync().ConfigureAwait(false);
+            return null;
         }
         catch
         {
@@ -142,9 +145,9 @@ internal sealed class ResumableAsyncEnumerable<T, TState, TPosition>(
         }
     }
 
-    // A created sequence and the token source it was created with, which it disposes after the sequence.
-    private sealed record CreatedSequence(IAsyncEnumerator<T> Items, CancellationTokenSource TokenSource) :
-        IAsyncDisposable
+    // A sequence that the factory created, and the token source it was created with, which it disposes after the
+    // sequence.
+    private sealed record Sequence(IAsyncEnumerator<T> Items, CancellationTokenSource TokenSource) : IAsyncDisposable
     {
         public async ValueTask DisposeAsync()
         {
