@@ -116,9 +116,7 @@ internal sealed class SessionFeed<T, THighWaterMark> : IFeed<T, THighWaterMark>
                 MaxDelay = options.MaxRetryDelay,
                 ShouldHandle = args =>
                 {
-                    var shouldHandle = args.Outcome.Exception is { } ex &&
-                                       ex is not OperationCanceledException &&
-                                       sessionFactory.IsTransient(ex);
+                    var shouldHandle = args.Outcome.Exception is { } ex && sessionFactory.IsTransient(ex);
 
                     return ValueTask.FromResult(shouldHandle);
                 },

@@ -193,6 +193,29 @@ public class SessionFeedTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
+    public async Task ConnectAsync_TransientCancellationAtOpen_RetriesThenConnects(CancellationToken ct)
+    {
+        var attempts = 0;
+
+        // A driver can report a timeout as a cancellation that the caller didn't ask for.
+        var feed = new SessionFeed<long, long>(
+            new DelegateSessionFactory<long>(
+                _ => ++attempts < 2
+                    ? throw new OperationCanceledException("Timed out.")
+                    : Task.FromResult<IFeedSession<long, long>>(new ScriptedSession("s1", Row(1))),
+                static ex => ex is OperationCanceledException),
+            FastRetryOptions);
+
+        var observer = new RecordingObserver();
+        using var attachment = feed.Attach(observer);
+        await using var connection = await feed.ConnectAsync(ct);
+
+        (await observer.ReadAsync(1, ct)).ShouldBe(["row:1"]);
+        attempts.ShouldBe(2);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
     public async Task Connect_NoRetries_FaultsOnFirstFailure(CancellationToken ct)
     {
         var attempts = 0;
