@@ -250,10 +250,10 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
             // After a transient error, the replay reads again after the last event that the subscriber took.
             var events = ResumableAsyncEnumerable.Create(
-                (Subscription: this, End: end),
+                static (s, after, ct) => s.Self.ReadCatchUpAsync(after, s.End, ct),
+                static (s, e) => s.Self._positionSelector(e.Context),
+                (Self: this, End: end),
                 resumePosition.After,
-                static (s, after, ct) => s.Subscription.ReadCatchUpAsync(after, s.End, ct),
-                static (s, e) => s.Subscription._positionSelector(e.Context),
                 _retryPipeline);
 
             await foreach (var e in events.WithCancellation(cancellationToken).ConfigureAwait(false))

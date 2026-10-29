@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using NUnit.Framework;
 using Polly;
 using Polly.Retry;
+using Polly.Timeout;
 using Shouldly;
 
 namespace DomainBlocks.EventStore.Internal.Tests.Unit;
@@ -42,10 +43,10 @@ public class ResumableAsyncEnumerableTests
         var opens = 0;
 
         var resumable = ResumableAsyncEnumerable.Create(
-            sequence,
-            -1,
             (s, after, token) => ++opens == 1 ? throw new TransientException() : s.OpenAsync(after, token),
             static (_, item) => item,
+            sequence,
+            -1,
             CreatePipeline());
 
         var items = await resumable.ToListAsync(ct);
@@ -153,6 +154,39 @@ public class ResumableAsyncEnumerableTests
         sequence.Starts.ShouldBe([-1, -1]);
     }
 
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task GetAsyncEnumerator_FirstReadOutlastsAttemptTimeout_OpensAgain(CancellationToken ct)
+    {
+        var sequence = new Sequence(3, static (_, _) => null, static (open, item) => open == 0 && item == 0);
+
+        var items = await Resume(sequence, CreateTimedPipeline(TimeSpan.FromMilliseconds(50))).ToListAsync(ct);
+
+        items.ShouldBe([0, 1, 2]);
+        sequence.Starts.ShouldBe([-1, -1]);
+    }
+
+    [Test]
+    public async Task GetAsyncEnumerator_CallerCancelsAfterTimedOpen_CancelsSequence()
+    {
+        using var cancellationTokenSource = new CancellationTokenSource();
+        var sequence = new Sequence(3, static (_, _) => null, static (_, item) => item == 1);
+        var resumable = Resume(sequence, CreateTimedPipeline(TimeSpan.FromMinutes(1)));
+        var items = resumable.GetAsyncEnumerator(cancellationTokenSource.Token);
+
+        await using (items)
+        {
+            (await items.MoveNextAsync()).ShouldBeTrue();
+            var next = items.MoveNextAsync().AsTask();
+
+            await cancellationTokenSource.CancelAsync();
+
+            // A sequence that kept the attempt's token wouldn't see the cancel, so the wait would time out.
+            await Should.ThrowAsync<OperationCanceledException>(
+                next.WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None));
+        }
+    }
+
     // Retries transient errors at once, and records the number of each retry's attempt, from 0.
     private static ResiliencePipeline CreatePipeline(int maxRetryAttempts = 3, List<int>? retries = null)
     {
@@ -171,14 +205,27 @@ public class ResumableAsyncEnumerableTests
             .Build();
     }
 
+    // Gives each attempt the timeout, and retries an attempt that times out at once.
+    private static ResiliencePipeline CreateTimedPipeline(TimeSpan attemptTimeout)
+    {
+        return new ResiliencePipelineBuilder()
+            .AddRetry(new RetryStrategyOptions
+            {
+                ShouldHandle = static args => new ValueTask<bool>(args.Outcome.Exception is TimeoutRejectedException),
+                Delay = TimeSpan.Zero
+            })
+            .AddTimeout(attemptTimeout)
+            .Build();
+    }
+
     // Reads the sequence from its start, opening it again after the last item taken. Each item is its own position.
     private static ResumableAsyncEnumerable<int, Sequence, int> Resume(Sequence sequence, ResiliencePipeline pipeline)
     {
         return ResumableAsyncEnumerable.Create(
-            sequence,
-            -1,
             static (s, after, ct) => s.OpenAsync(after, ct),
             static (_, item) => item,
+            sequence,
+            -1,
             pipeline);
     }
 
@@ -186,8 +233,11 @@ public class ResumableAsyncEnumerableTests
 
     // The integers from 0 to count - 1. It records where each open starts, and when each open starts and the caller
     // disposes it. Before each item it throws the error that errorBefore returns for the open's index and the item, if
-    // any.
-    private sealed class Sequence(int count, Func<int, int, Exception?> errorBefore)
+    // any, and it waits until it's canceled if waitBefore returns true for them.
+    private sealed class Sequence(
+        int count,
+        Func<int, int, Exception?> errorBefore,
+        Func<int, int, bool>? waitBefore = null)
     {
         public List<int> Starts { get; } = [];
 
@@ -216,6 +266,9 @@ public class ResumableAsyncEnumerableTests
 
                 if (errorBefore(open, item) is { } error)
                     throw error;
+
+                if (waitBefore?.Invoke(open, item) == true)
+                    await Task.Delay(Timeout.Infinite, cancellationToken);
 
                 yield return item;
             }
