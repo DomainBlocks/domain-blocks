@@ -120,6 +120,7 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<T
                 MaxRetryAttempts = maxRetryAttempts,
                 BackoffType = DelayBackoffType.Exponential,
                 UseJitter = true,
+                Delay = TimeSpan.FromSeconds(1),
                 MaxDelay = maxRetryDelay,
                 ShouldHandle = args =>
                 {
