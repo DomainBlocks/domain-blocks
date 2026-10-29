@@ -40,6 +40,7 @@ public class ChangeStreamSubjectTests
     private List<ChangeStreamOptions?> _watchOptions = null!;
     private BsonDocument? _initialResumeToken;
     private int _helloCount;
+    private Exception? _helloError;
 
     [SetUp]
     public void SetUp()
@@ -47,20 +48,24 @@ public class ChangeStreamSubjectTests
         _mockCollection = new Mock<IMongoCollection<BsonDocument>>();
         _watchOptions = [];
         _helloCount = 0;
+        _helloError = null;
 
         // The server reports a resume token in the initial response.
         _initialResumeToken = new BsonDocument("_data", "0");
 
-        // Each hello reports a later last applied optime, as if answered at a later point.
+        // Each hello reports a later last applied optime, as if answered at a later point, unless a test has set an
+        // error for the next one to throw.
         var mockAdminDb = new Mock<IMongoDatabase>();
         mockAdminDb
             .Setup(x => x.RunCommandAsync(
                 It.IsAny<Command<BsonDocument>>(),
                 It.IsAny<ReadPreference>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => new BsonDocument(
-                "lastWrite",
-                new BsonDocument("opTime", new BsonDocument("ts", CreateOperationTime(++_helloCount)))));
+            .ReturnsAsync(() => Interlocked.Exchange(ref _helloError, null) is { } error
+                ? throw error
+                : new BsonDocument(
+                    "lastWrite",
+                    new BsonDocument("opTime", new BsonDocument("ts", CreateOperationTime(++_helloCount)))));
 
         _mockClient = new Mock<IMongoClient>();
         _mockClient
@@ -98,6 +103,28 @@ public class ChangeStreamSubjectTests
         _helloCount.ShouldBe(1);
         // The stream starts one tick after the operation time.
         _watchOptions.Select(x => x?.StartAtOperationTime).ShouldBe([new BsonTimestamp(1, 1), null]);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task Connect_HelloFailsTransiently_RetriesThenConnects(CancellationToken ct)
+    {
+        SetupChangeStream([new ChangeStreamBatch { Items = [] }]);
+        _helloError = new TimeoutException();
+
+        var subject = ChangeStreamSubject.Create(
+            _mockClient.Object,
+            _mockCollection.Object.WatchAsync,
+            new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
+            static x => x.ResumeToken,
+            static x => x.ClusterTime,
+            static x => x,
+            new ChangeStreamSubjectOptions { MaxRetryDelay = TimeSpan.FromMilliseconds(10) });
+
+        await using var connection = await subject.ConnectAsync(ct);
+
+        connection.HighWaterMark.ShouldBe(CreateOperationTime(1));
+        _watchOptions.ShouldHaveSingleItem().ShouldNotBeNull().StartAtOperationTime.ShouldBe(new BsonTimestamp(1, 1));
     }
 
     [Test]

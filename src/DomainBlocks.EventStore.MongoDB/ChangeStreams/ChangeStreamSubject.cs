@@ -36,6 +36,7 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<T
 {
     private readonly IMongoClient _mongoClient;
     private readonly ChangeStreamCursorFactory<TDocument, TChange> _cursorFactory;
+    private readonly ResiliencePipeline _resiliencePipeline;
     private readonly PipelineDefinition<ChangeStreamDocument<TDocument>, TChange> _pipeline;
     private readonly Func<TChange, BsonDocument> _resumeTokenSelector;
     private readonly Func<TChange, BsonTimestamp> _clusterTimeSelector;
@@ -58,8 +59,7 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<T
     {
         options ??= ChangeStreamSubjectOptions.Default;
 
-        cursorFactory = AddResilience(
-            cursorFactory,
+        _resiliencePipeline = CreateResiliencePipeline(
             options.MaxRetryAttempts,
             options.MaxRetryDelay,
             logger,
@@ -108,14 +108,13 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<T
         throw new InvalidOperationException("The change stream connection completed before it connected.");
     }
 
-    private static ChangeStreamCursorFactory<TDocument, TChange> AddResilience(
-        ChangeStreamCursorFactory<TDocument, TChange> cursorFactory,
+    private static ResiliencePipeline CreateResiliencePipeline(
         int maxRetryAttempts,
         TimeSpan maxRetryDelay,
         ILogger? logger,
         string changeStreamId)
     {
-        var resiliencePipeline = new ResiliencePipelineBuilder()
+        return new ResiliencePipelineBuilder()
             .AddRetry(new RetryStrategyOptions
             {
                 MaxRetryAttempts = maxRetryAttempts,
@@ -136,12 +135,6 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<T
                 }
             })
             .Build();
-
-        return async (pipeline, options, ct) => await resiliencePipeline
-            .ExecuteAsync(
-                async innerCt => await cursorFactory(pipeline, options, innerCt).ConfigureAwait(false),
-                ct)
-            .ConfigureAwait(false);
     }
 
     private sealed class Connection : IFeedConnection<BsonTimestamp>
@@ -207,15 +200,13 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<T
 
             try
             {
-                var initialOptions = await GetInitialOptionsAsync().ConfigureAwait(false);
                 BsonDocument? resumeToken = null;
 
                 while (true)
                 {
                     _stopCts.Token.ThrowIfCancellationRequested();
 
-                    using var cursor = await GetChangeStreamCursorAsync(initialOptions, resumeToken)
-                        .ConfigureAwait(false);
+                    using var cursor = await OpenCursorAsync(resumeToken).ConfigureAwait(false);
 
                     // The resume token is seeded when the cursor opens, so a cursor that fails before its first batch
                     // resumes rather than restarting later. The driver exposes the token when the first batch is empty,
@@ -295,9 +286,29 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<T
             }
         }
 
+        // Opens a cursor through the retry. Without a resume token, the open also reads the primary's last write, so a
+        // failure there is retried as a failure to open the cursor is.
+        private async Task<IChangeStreamCursor<TChange>> OpenCursorAsync(BsonDocument? resumeToken)
+        {
+            return await _subject._resiliencePipeline
+                .ExecuteAsync(
+                    static async (s, ct) =>
+                    {
+                        var options = s.ResumeToken is not null
+                            ? new ChangeStreamOptions { ResumeAfter = s.ResumeToken }
+                            : await s.Self.GetInitialOptionsAsync(ct).ConfigureAwait(false);
+
+                        return await s.Self._subject._cursorFactory(s.Self._subject._pipeline, options, ct)
+                            .ConfigureAwait(false);
+                    },
+                    (Self: this, ResumeToken: resumeToken),
+                    _stopCts.Token)
+                .ConfigureAwait(false);
+        }
+
         // Returns the options for the first open, and starts the high-water mark at or after every change that the
         // stream won't deliver.
-        private async Task<ChangeStreamOptions> GetInitialOptionsAsync()
+        private async Task<ChangeStreamOptions> GetInitialOptionsAsync(CancellationToken cancellationToken)
         {
             // The stream starts one tick after the primary's last write. The mark must be an oplog optime rather than
             // the current cluster time, because a catch-up reads only once the oplog reaches the mark. After a
@@ -307,14 +318,14 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<T
             // https://github.com/mongodb/mongo/blob/r7.0.16/src/mongo/db/read_concern_mongod.cpp#L146-L153
             // The server would start the stream at the same point by default, but the mark would be unknown:
             // https://github.com/mongodb/mongo/blob/r7.0.16/src/mongo/db/pipeline/document_source_change_stream.cpp#L238-L253
-            var lastApplied = await GetLastAppliedOpTimeAsync().ConfigureAwait(false);
+            var lastApplied = await GetLastAppliedOpTimeAsync(cancellationToken).ConfigureAwait(false);
 
             // The start is inclusive, so the stream won't deliver the changes up to the last write.
             Volatile.Write(ref _opTimeHighWaterMark, lastApplied);
             return new ChangeStreamOptions { StartAtOperationTime = new BsonTimestamp(lastApplied.Value + 1) };
         }
 
-        private async Task<BsonTimestamp> GetLastAppliedOpTimeAsync()
+        private async Task<BsonTimestamp> GetLastAppliedOpTimeAsync(CancellationToken cancellationToken)
         {
             // hello.lastWrite.opTime is the optime of the last write applied on the node that answers. After a
             // failover, only the primary is sure to have applied every majority-committed write.
@@ -325,7 +336,7 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<T
             // https://github.com/mongodb/mongo/blob/r4.4.2/src/mongo/db/repl/replication_info.cpp#L304
             var hello = await _subject._mongoClient
                 .GetDatabase("admin")
-                .RunCommandAsync<BsonDocument>(new BsonDocument("hello", 1), ReadPreference.Primary, _stopCts.Token)
+                .RunCommandAsync<BsonDocument>(new BsonDocument("hello", 1), ReadPreference.Primary, cancellationToken)
                 .ConfigureAwait(false);
 
             if (!hello.TryGetValue("lastWrite", out var lastWrite))
@@ -335,15 +346,6 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<T
             }
 
             return lastWrite["opTime"]["ts"].AsBsonTimestamp;
-        }
-
-        private async Task<IChangeStreamCursor<TChange>> GetChangeStreamCursorAsync(
-            ChangeStreamOptions initialOptions,
-            BsonDocument? resumeToken)
-        {
-            var options = resumeToken is null ? initialOptions : new ChangeStreamOptions { ResumeAfter = resumeToken };
-
-            return await _subject._cursorFactory(_subject._pipeline, options, _stopCts.Token).ConfigureAwait(false);
         }
     }
 }
