@@ -244,9 +244,10 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
                 // After a transient error, the replay reads again after the last event that the subscriber took.
                 var events = ResumableAsyncEnumerable.Create(
-                    (Subscription: this, Session: session, ResumePosition: resumePosition, End: end),
-                    static (s, ct) => s.Subscription.ReadCatchUpAsync(s.Session, s.ResumePosition, s.End, ct),
-                    static (s, e) => s.ResumePosition.AdvanceTo(s.Subscription._positionSelector(e.Context)),
+                    (Subscription: this, Session: session, End: end),
+                    resumePosition.After,
+                    static (s, after, ct) => s.Subscription.ReadCatchUpAsync(s.Session, after, s.End, ct),
+                    static (s, e) => s.Subscription._positionSelector(e.Context),
                     _retryPipeline);
 
                 await foreach (var e in events.WithCancellation(cancellationToken).ConfigureAwait(false))
@@ -288,13 +289,15 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         return new ValueTask<TPos?>(_endPositionReader(_reader, session, cancellationToken));
     }
 
+    // Reads after the given position, or from the start if there is none.
     private IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCatchUpAsync(
         IClientSessionHandle session,
-        ResumePosition resumePosition,
+        TPos? after,
         long endInclusive,
         CancellationToken cancellationToken)
     {
-        return _catchUpReader(_reader, session, resumePosition.StartExclusive, endInclusive, cancellationToken);
+        var startExclusive = after is { } position ? checked((long)position.Value) : -1;
+        return _catchUpReader(_reader, session, startExclusive, endInclusive, cancellationToken);
     }
 
     /// <summary>
@@ -324,11 +327,6 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         /// The position to resume after, or <see langword="null"/> to resume from the start.
         /// </summary>
         public TPos? After { get; private set; } = after;
-
-        /// <summary>
-        /// Gets the position that a read starts after, which is -1 to read from the start.
-        /// </summary>
-        public long StartExclusive => After is { } after ? checked((long)after.Value) : -1;
 
         public bool Covers(TPos position) => After is { } after && position.Value <= after.Value;
 

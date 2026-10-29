@@ -43,8 +43,9 @@ public class ResumableAsyncEnumerableTests
 
         var resumable = ResumableAsyncEnumerable.Create(
             sequence,
-            (s, token) => ++opens == 1 ? throw new TransientException() : s.OpenAsync(s.LastTaken, token),
-            static (s, item) => s.LastTaken = item,
+            -1,
+            (s, after, token) => ++opens == 1 ? throw new TransientException() : s.OpenAsync(after, token),
+            static (_, item) => item,
             CreatePipeline());
 
         var items = await resumable.ToListAsync(ct);
@@ -141,19 +142,15 @@ public class ResumableAsyncEnumerableTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task GetAsyncEnumerator_ItemYielded_ReachesOnTakenOnNextRequest(CancellationToken ct)
+    public async Task GetAsyncEnumerator_SecondEnumeration_StartsAtInitialPosition(CancellationToken ct)
     {
-        var sequence = new Sequence(2, static (_, _) => null);
-        var items = Resume(sequence, CreatePipeline()).GetAsyncEnumerator(ct);
+        var sequence = new Sequence(3, static (_, _) => null);
+        var resumable = Resume(sequence, CreatePipeline());
 
-        await using (items)
-        {
-            (await items.MoveNextAsync()).ShouldBeTrue();
-            sequence.LastTaken.ShouldBe(-1);
+        (await resumable.ToListAsync(ct)).ShouldBe([0, 1, 2]);
+        (await resumable.ToListAsync(ct)).ShouldBe([0, 1, 2]);
 
-            (await items.MoveNextAsync()).ShouldBeTrue();
-            sequence.LastTaken.ShouldBe(0);
-        }
+        sequence.Starts.ShouldBe([-1, -1]);
     }
 
     // Retries transient errors at once, and records the number of each retry's attempt, from 0.
@@ -174,13 +171,14 @@ public class ResumableAsyncEnumerableTests
             .Build();
     }
 
-    // Reads the sequence from its start, opening it again after the last item taken.
-    private static ResumableAsyncEnumerable<int, Sequence> Resume(Sequence sequence, ResiliencePipeline pipeline)
+    // Reads the sequence from its start, opening it again after the last item taken. Each item is its own position.
+    private static ResumableAsyncEnumerable<int, Sequence, int> Resume(Sequence sequence, ResiliencePipeline pipeline)
     {
         return ResumableAsyncEnumerable.Create(
             sequence,
-            static (s, ct) => s.OpenAsync(s.LastTaken, ct),
-            static (s, item) => s.LastTaken = item,
+            -1,
+            static (s, after, ct) => s.OpenAsync(after, ct),
+            static (_, item) => item,
             pipeline);
     }
 
@@ -191,8 +189,6 @@ public class ResumableAsyncEnumerableTests
     // any.
     private sealed class Sequence(int count, Func<int, int, Exception?> errorBefore)
     {
-        public int LastTaken { get; set; } = -1;
-
         public List<int> Starts { get; } = [];
 
         public List<string> Events { get; } = [];

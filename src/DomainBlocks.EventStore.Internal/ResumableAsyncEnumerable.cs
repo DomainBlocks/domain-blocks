@@ -5,26 +5,33 @@ using Polly;
 namespace DomainBlocks.EventStore.Internal;
 
 /// <summary>
-/// Provides methods for creating <see cref="ResumableAsyncEnumerable{T,TState}"/> sequences.
+/// Provides methods for creating <see cref="ResumableAsyncEnumerable{T,TState,TPosition}"/> sequences.
 /// </summary>
 internal static class ResumableAsyncEnumerable
 {
     /// <summary>
-    /// Creates a sequence that opens again after errors, starting after the last item taken.
+    /// Creates a sequence that opens again after errors, from the position of the last item taken.
     /// </summary>
-    public static ResumableAsyncEnumerable<T, TState> Create<T, TState>(
+    public static ResumableAsyncEnumerable<T, TState, TPosition> Create<T, TState, TPosition>(
         TState state,
-        Func<TState, CancellationToken, IAsyncEnumerable<T>> open,
-        Action<TState, T> onTaken,
+        TPosition initialPosition,
+        Func<TState, TPosition, CancellationToken, IAsyncEnumerable<T>> factory,
+        Func<TState, T, TPosition> positionSelector,
         ResiliencePipeline pipeline)
     {
-        return new ResumableAsyncEnumerable<T, TState>(state, open, onTaken, pipeline);
+        return new ResumableAsyncEnumerable<T, TState, TPosition>(
+            state,
+            initialPosition,
+            factory,
+            positionSelector,
+            pipeline);
     }
 }
 
 /// <summary>
-/// A sequence that opens again after an error, starting after the last item taken, so the caller receives each item
-/// once. A resilience pipeline decides which errors to retry, how long to wait, and when to stop.
+/// A sequence that opens again after an error, from the position of the last item taken. If the factory opens the
+/// sequence after the position it gets, the caller receives each item once. A resilience pipeline decides which errors
+/// to retry, how long to wait, and when to stop.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -35,9 +42,8 @@ internal static class ResumableAsyncEnumerable
 /// execution. The first open is an execution too, with no error to throw.
 /// </para>
 /// <para>
-/// An item reaches <c>onTaken</c> once the caller has taken it and asked for the next one, and <c>open</c> starts the
-/// sequence after the last item that reached it. Every enumeration shares the state, so a second one resumes where the
-/// first stopped.
+/// The factory gets the initial position for the first open, and for each later open the position of the last item
+/// taken, or the initial position if the caller has taken none. Each enumeration starts from the initial position.
 /// </para>
 /// <para>
 /// An attempt opens the sequence with the token that the pipeline gives it, and the sequence keeps that token after
@@ -45,15 +51,17 @@ internal static class ResumableAsyncEnumerable
 /// not one of its own, as a timeout strategy does.
 /// </para>
 /// </remarks>
-internal sealed class ResumableAsyncEnumerable<T, TState>(
+internal sealed class ResumableAsyncEnumerable<T, TState, TPosition>(
     TState state,
-    Func<TState, CancellationToken, IAsyncEnumerable<T>> open,
-    Action<TState, T> onTaken,
+    TPosition initialPosition,
+    Func<TState, TPosition, CancellationToken, IAsyncEnumerable<T>> factory,
+    Func<TState, T, TPosition> positionSelector,
     ResiliencePipeline pipeline) : IAsyncEnumerable<T>
 {
     public async IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
         IAsyncEnumerator<T>? items = null;
+        var position = initialPosition;
 
         // The error that the next attempt throws. Each enumeration has its own, because the error stays here if the
         // caller cancels before the pipeline's first attempt.
@@ -69,8 +77,8 @@ internal sealed class ResumableAsyncEnumerable<T, TState>(
                 {
                     (items, hasNext) = await pipeline
                         .ExecuteAsync(
-                            static (s, ct) => s.Source.OpenAsync(s.Error, ct),
-                            (Source: this, Error: error),
+                            static (s, ct) => s.Source.OpenAsync(s.Position, s.Error, ct),
+                            (Source: this, Position: position, Error: error),
                             cancellationToken)
                         .ConfigureAwait(false);
                 }
@@ -98,7 +106,7 @@ internal sealed class ResumableAsyncEnumerable<T, TState>(
                 var item = items.Current;
                 yield return item;
 
-                onTaken(state, item);
+                position = positionSelector(state, item);
             }
         }
         finally
@@ -108,9 +116,10 @@ internal sealed class ResumableAsyncEnumerable<T, TState>(
         }
     }
 
-    // Each attempt of a recovery opens the sequence and reads its first item, except the first, which throws the error
-    // again.
+    // Each attempt of a recovery opens the sequence from the position and reads its first item, except the first,
+    // which throws the error again.
     private async ValueTask<(IAsyncEnumerator<T> Items, bool HasNext)> OpenAsync(
+        TPosition position,
         StrongBox<Exception?> error,
         CancellationToken cancellationToken)
     {
@@ -120,7 +129,7 @@ internal sealed class ResumableAsyncEnumerable<T, TState>(
             ExceptionDispatchInfo.Throw(ex);
         }
 
-        var items = open(state, cancellationToken).GetAsyncEnumerator(cancellationToken);
+        var items = factory(state, position, cancellationToken).GetAsyncEnumerator(cancellationToken);
 
         try
         {
