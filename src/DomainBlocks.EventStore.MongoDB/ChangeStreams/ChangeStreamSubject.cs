@@ -1,4 +1,5 @@
-﻿using DomainBlocks.EventStore.Internal.Feeds;
+﻿using DomainBlocks.EventStore.Internal;
+using DomainBlocks.EventStore.Internal.Feeds;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;

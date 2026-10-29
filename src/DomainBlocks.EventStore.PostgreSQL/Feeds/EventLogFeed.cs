@@ -1,3 +1,4 @@
+using DomainBlocks.EventStore.Internal;
 using DomainBlocks.EventStore.Internal.Feeds;
 using Microsoft.Extensions.Logging;
 using Polly;

@@ -1,7 +1,7 @@
 using NUnit.Framework;
 using Shouldly;
 
-namespace DomainBlocks.EventStore.MongoDB.Tests.Unit;
+namespace DomainBlocks.EventStore.Internal.Tests.Unit;
 
 public class CorrelationIdTests
 {
@@ -12,6 +12,7 @@ public class CorrelationIdTests
         CorrelationId.TryReserve("orders").ShouldBeFalse();
         CorrelationId.Release("orders");
         CorrelationId.TryReserve("orders").ShouldBeTrue();
+        CorrelationId.Release("orders");
     }
 
     [Test]
@@ -21,5 +22,6 @@ public class CorrelationIdTests
 
         id.Length.ShouldBe(CorrelationId.IdLength);
         CorrelationId.TryReserve(id).ShouldBeFalse();
+        CorrelationId.Release(id);
     }
 }
