@@ -214,17 +214,48 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
 
         // The server ends the store's connections while the replay waits for the subscriber, so the replay's next page
         // fails to read.
-        await using (var command = DataSource.CreateCommand(
-                         "SELECT pg_terminate_backend(pid, 5000) FROM pg_stat_activity " +
-                         "WHERE application_name = $1 AND backend_type = 'client backend'"))
-        {
-            command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = applicationName });
-            await command.ExecuteNonQueryAsync(ct);
-        }
+        await EndConnectionsAsync(applicationName, ct);
 
         (await NextEventAsync(subscription)).Payload.ShouldBe(events[1]);
         (await NextEventAsync(subscription)).Payload.ShouldBe(events[2]);
         await ShouldBeCaughtUpAsync(subscription);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_ConnectionsEndedMidReplayWithoutRetries_Throws(CancellationToken ct)
+    {
+        // Each page of the replay holds one event, so the replay takes a connection from the pool for each event.
+        const string applicationName = "replay-without-retries";
+        var options = new PostgresEventStoreOptions { Schema = Schema, ReadPageSize = 1 };
+
+        await using var dataSource = PostgresTestEnvironment.CreateDataSource(x =>
+        {
+            x.ConnectionStringBuilder.ApplicationName = applicationName;
+            x.UsePostgresEventStore(options);
+        });
+
+        await using var eventStore = new PostgresEventStoreBuilder<object>()
+            .UseDataSource(dataSource)
+            .UseOptions(options)
+            .ConfigureCodec(x => x.UseEventTypeMap(DefaultEventTypeMap))
+            .UseLogger(LoggerFactory.CreateLogger(nameof(PostgresSubscriptionTests)))
+            .Build();
+
+        TestEvent[] events = [new() { Value = "e0" }, new() { Value = "e1" }];
+
+        foreach (var e in events)
+            await eventStore.AppendAsync("s1", [Appendable(e)], cancellationToken: ct);
+
+        await using var subscription = eventStore
+            .SubscribeToAll(SubscriptionOrigin.Start, new SubscriptionOptions { MaxRetryAttempts = 0 })
+            .GetAsyncEnumerator(ct);
+
+        (await NextEventAsync(subscription)).Payload.ShouldBe(events[0]);
+
+        await EndConnectionsAsync(applicationName, ct);
+
+        await Should.ThrowAsync<NpgsqlException>(subscription.MoveNextAsync().AsTask());
     }
 
     [Test]
@@ -278,6 +309,16 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
         var builder = new NpgsqlConnectionStringBuilder(connectionString) { TargetSessionAttributes = "primary" };
         builder.Host = $"{builder.Host}:{builder.Port},standby.invalid:5432";
         return builder.ConnectionString;
+    }
+
+    private async Task EndConnectionsAsync(string applicationName, CancellationToken ct)
+    {
+        await using var command = DataSource.CreateCommand(
+            "SELECT pg_terminate_backend(pid, 5000) FROM pg_stat_activity " +
+            "WHERE application_name = $1 AND backend_type = 'client backend'");
+
+        command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = applicationName });
+        await command.ExecuteNonQueryAsync(ct);
     }
 
     private async Task<string> GetWalPositionAsync(CancellationToken ct)
