@@ -1,7 +1,7 @@
 using NUnit.Framework;
 using Shouldly;
 
-namespace DomainBlocks.EventStore.PostgreSQL.Tests.Unit;
+namespace DomainBlocks.EventStore.Internal.Tests.Unit;
 
 public class CancellationTokenSourceExtensionsTests
 {

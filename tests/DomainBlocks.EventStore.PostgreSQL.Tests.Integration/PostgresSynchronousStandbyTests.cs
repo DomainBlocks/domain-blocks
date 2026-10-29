@@ -213,7 +213,7 @@ public class PostgresSynchronousStandbyTests
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task SubscribeToAll_BarrierWaitCanceled_Fails(CancellationToken ct)
+    public async Task SubscribeToAll_BarrierWaitCanceled_ReplaysEventOnceOnStandby(CancellationToken ct)
     {
         await using var dataSource = CreateDataSource();
         await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
@@ -225,10 +225,16 @@ public class PostgresSynchronousStandbyTests
         await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).Probe(ct);
         var next = subscription.NextAsync();
 
-        // The barrier's commit completes as the append's did, without the standby.
+        // The barrier's commit completes as the append's did, without the standby, so the catch-up reads the end again,
+        // and its next barrier waits for the standby.
         await CancelBackendAsync(dataSource, await WaitForSyncRepAsync(ct), ct);
 
-        await Should.ThrowAsync<ReplicationBarrierException>(next);
+        await Task.Delay(HoldDuration, ct);
+        next.IsCompleted.ShouldBeFalse();
+
+        await _server.ReconnectStandbyAsync();
+
+        (await next).Event.ShouldNotBeNull().Payload.ShouldBe(new TestEvent { Value = "e" });
     }
 
     [Test]
@@ -354,6 +360,68 @@ public class PostgresSynchronousStandbyTests
             cancellationToken: ct);
 
         (await subscription.NextEventAsync()).ShouldBe(new TestEvent { Value = "e" });
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_FromEndThroughStandby_PinsEndOnceEndpointReachesPrimary(CancellationToken ct)
+    {
+        var primary = new NpgsqlConnectionStringBuilder(_server.PrimaryConnectionString);
+        var standby = new NpgsqlConnectionStringBuilder(_server.StandbyConnectionString);
+
+        await using var dataSource = CreateDataSource();
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
+        await using var appender = CreateEventStore(dataSource);
+
+        // The barrier after a read of the end runs only when the log has events and synchronous standbys are listed. A
+        // standby then fails it, since a server in recovery can't write WAL.
+        await appender.AppendAsync(
+            "s1",
+            [AppendableEvent.Create<object>(new TestEvent { Value = "before" })],
+            cancellationToken: ct);
+
+        await _server.SetSynchronousStandbyNamesOnStandbyAsync();
+        await using var standbyDataSource = NpgsqlDataSource.Create(_server.StandbyConnectionString);
+
+        while (await CountEventsAsync(standbyDataSource, ct) == 0)
+            await Task.Delay(20, ct);
+
+        // The proxy stands in for an endpoint that still reaches a standby, as one can for a while after a failover.
+        await using var proxy = new TcpProxy(new DnsEndPoint(standby.Host.ShouldNotBeNull(), standby.Port));
+
+        await using var proxiedDataSource = CreateDataSource(x =>
+        {
+            x.Host = IPAddress.Loopback.ToString();
+            x.Port = proxy.Port;
+        });
+
+        await using var eventStore = CreateEventStore(proxiedDataSource, new PostgresEventStoreOptions
+        {
+            Schema = _options.Schema,
+            Replication =
+            {
+                RetryDelay = TimeSpan.FromMilliseconds(100),
+                MaxRetryDelay = TimeSpan.FromMilliseconds(500)
+            }
+        });
+
+        // The subscription first reads the end, which fails on the standby until the endpoint reaches the primary.
+        await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.End).Probe(ct);
+        var next = subscription.NextAsync();
+
+        await Task.Delay(HoldDuration, ct);
+        next.IsCompleted.ShouldBeFalse();
+
+        proxy.MoveTo(new DnsEndPoint(primary.Host.ShouldNotBeNull(), primary.Port));
+
+        (await next).IsCaughtUp.ShouldBeTrue();
+
+        await appender.AppendAsync(
+            "s1",
+            [AppendableEvent.Create<object>(new TestEvent { Value = "after" })],
+            cancellationToken: ct);
+
+        (await subscription.NextEventAsync()).ShouldBe(new TestEvent { Value = "after" });
     }
 
     [Test]

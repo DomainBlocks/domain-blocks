@@ -2,8 +2,10 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using DomainBlocks.EventStore.Filtering;
+using DomainBlocks.EventStore.Internal;
 using DomainBlocks.EventStore.PostgreSQL.Feeds;
 using Microsoft.Extensions.Logging;
+using Polly;
 
 namespace DomainBlocks.EventStore.PostgreSQL;
 
@@ -29,6 +31,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     private readonly SubscriptionOptions _options;
     private readonly ILogger? _logger;
     private readonly string _correlationId;
+    private readonly ResiliencePipeline _retryPipeline;
 
     public SubscriptionAsyncEnumerable(
         EventLogReader<TEvent> reader,
@@ -54,6 +57,12 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         _correlationId = _options.CorrelationId is { } id
             ? CorrelationId.Reserve(id)
             : CorrelationId.ReserveGenerated();
+
+        _retryPipeline = RetryPipeline.Create(
+            PostgresTransientErrors.IsTransient,
+            _options.CatchUpMaxRetryAttempts,
+            _options.CatchUpRetryTimeout,
+            (ex, attempt, delay) => _logger?.CatchUpRetrying(ex, _correlationId, attempt, delay));
     }
 
     public async IAsyncEnumerator<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> GetAsyncEnumerator(
@@ -177,7 +186,12 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     {
         try
         {
-            return await _endPositionReader(_reader, cancellationToken).ConfigureAwait(false);
+            return await _retryPipeline
+                .ExecuteAsync(
+                    static (s, ct) => s.ReadEndAsync(null, ct),
+                    this,
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -219,24 +233,28 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         long? positionHighWaterMark,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        if (positionHighWaterMark.HasValue)
-            await WaitUntilVisibleAsync(positionHighWaterMark.Value, cancellationToken).ConfigureAwait(false);
-
-        var endInclusive = await _endPositionReader(_reader, cancellationToken).ConfigureAwait(false);
+        var endInclusive = await _retryPipeline
+            .ExecuteAsync(
+                static (s, ct) => s.Self.ReadEndAsync(s.PositionHighWaterMark, ct),
+                (Self: this, PositionHighWaterMark: positionHighWaterMark),
+                cancellationToken)
+            .ConfigureAwait(false);
 
         _logger?.CatchUpBoundary(_correlationId, endInclusive?.Value);
 
         if (endInclusive.HasValue)
         {
-            var startExclusive = resumePosition.After is { } after ? checked((long)after.Value) : -1;
+            var end = checked((long)endInclusive.Value.Value);
 
-            var events = _catchUpReader(
-                _reader,
-                startExclusive,
-                checked((long)endInclusive.Value.Value),
-                cancellationToken);
+            // After a transient error, the replay reads again after the last event that the subscriber took.
+            var events = ResumableAsyncEnumerable.Create(
+                static (s, after, ct) => s.Self.ReadCatchUpAsync(after, s.End, ct),
+                static (s, e) => s.Self._positionSelector(e.Context),
+                (Self: this, End: end),
+                resumePosition.After,
+                _retryPipeline);
 
-            await foreach (var e in events.ConfigureAwait(false))
+            await foreach (var e in events.WithCancellation(cancellationToken).ConfigureAwait(false))
                 yield return SubscriptionMessage.Event(e);
 
             // The replay has covered the sequence up to the mark, even if the filter selected none of its events.
@@ -267,6 +285,24 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
             // The subscriber has taken the event and come back for more.
             resumePosition.AdvanceTo(position);
         }
+    }
+
+    private async ValueTask<TPos?> ReadEndAsync(long? positionHighWaterMark, CancellationToken cancellationToken)
+    {
+        if (positionHighWaterMark.HasValue)
+            await WaitUntilVisibleAsync(positionHighWaterMark.Value, cancellationToken).ConfigureAwait(false);
+
+        return await _endPositionReader(_reader, cancellationToken).ConfigureAwait(false);
+    }
+
+    // Reads after the given position, or from the start if there is none.
+    private IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCatchUpAsync(
+        TPos? after,
+        long endInclusive,
+        CancellationToken cancellationToken)
+    {
+        var startExclusive = after is { } position ? checked((long)position.Value) : -1;
+        return _catchUpReader(_reader, startExclusive, endInclusive, cancellationToken);
     }
 
     // The feed can deliver a row before queries can see it: the walsender sends a commit once it is flushed, and the

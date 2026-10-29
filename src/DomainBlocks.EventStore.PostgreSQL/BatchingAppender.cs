@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Threading.Channels;
+using DomainBlocks.EventStore.Internal;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 

@@ -1,4 +1,5 @@
 using DomainBlocks.EventStore.Codecs;
+using DomainBlocks.EventStore.Internal;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Npgsql.Replication;
@@ -189,7 +190,7 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent>(
         // it. An endpoint can reach one for a while during a failover, or while its name still resolves to the old
         // primary.
         if (reader.GetBoolean(0))
-            throw new ReplicationServerInRecoveryException(connection.Host);
+            throw new ServerInRecoveryException(connection.Host);
 
         // With synchronous standbys, an append is acknowledged once they have it, so a failover keeps it. Unless the
         // slot waits for them too, the feed can deliver an event before they have it, and a failover then loses it.

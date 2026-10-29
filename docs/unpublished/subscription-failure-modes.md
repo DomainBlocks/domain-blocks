@@ -28,6 +28,10 @@ They also fix failures found since:
 - **An idle store's slot held WAL in a busy database** (#169). The session now reports its position while idle.
 - **A feed failed its subscriptions when its endpoint reached a standby** (#170), as an endpoint can during a failover.
   It now retries until it reaches the primary.
+- **A transient error while a subscription started or caught up failed it**, in both stores: a dropped connection, a
+  failover, a lost cursor, or in PostgreSQL an unconfirmed barrier or a barrier on a standby. The reads now retry, and
+  a replay resumes after the last event delivered, until they reach `SubscriptionOptions.CatchUpMaxRetryAttempts` or
+  `CatchUpRetryTimeout` without progress.
 
 [PostgreSQL replication concepts](postgresql-replication-concepts.md) describes the PostgreSQL design as built.
 

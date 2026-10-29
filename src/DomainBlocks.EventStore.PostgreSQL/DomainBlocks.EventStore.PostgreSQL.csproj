@@ -17,6 +17,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\DomainBlocks.EventStore.Internal\**\*.cs" LinkBase="DomainBlocks.EventStore.Internal" />
+  </ItemGroup>
+
+  <ItemGroup>
     <EmbeddedResource Include="Sql\*.sql" />
   </ItemGroup>
 

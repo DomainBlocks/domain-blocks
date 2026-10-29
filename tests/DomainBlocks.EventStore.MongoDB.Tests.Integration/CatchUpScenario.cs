@@ -176,6 +176,41 @@ internal sealed class CatchUpScenario : IAsyncDisposable
     /// </summary>
     public CatchUpHold HoldCatchUp(int index) => _catchUpRecorder.Hold(index);
 
+    /// <summary>
+    /// Kills the cursors of the finds on the event log that wait for a getMore, as a primary that restarts loses them,
+    /// so a replay that reads its next batch from one fails.
+    /// </summary>
+    public async Task KillReplayCursorsAsync()
+    {
+        var idleFindCursors = PipelineDefinition<NoPipelineInput, BsonDocument>.Create(
+            new BsonDocument("$currentOp", new BsonDocument("idleCursors", true)),
+            new BsonDocument("$match", new BsonDocument
+            {
+                { "type", "idleCursor" },
+                { "ns", $"{_options.DatabaseName}.{_options.EventLogCollectionName}" },
+                { "cursor.originatingCommand.find", _options.EventLogCollectionName }
+            }));
+
+        using var found = await MongoTestEnvironment.MongoClient
+            .GetDatabase("admin")
+            .AggregateAsync(idleFindCursors, cancellationToken: _cancellationToken);
+
+        var cursors = await found.ToListAsync(_cancellationToken);
+        var cursorIds = new BsonArray(cursors.Select(x => x["cursor"]["cursorId"]));
+
+        if (cursorIds.Count == 0)
+            throw new InvalidOperationException("No replay cursor was waiting for a getMore.");
+
+        var result = await MongoTestEnvironment.MongoClient
+            .GetDatabase(_options.DatabaseName)
+            .RunCommandAsync<BsonDocument>(
+                new BsonDocument { { "killCursors", _options.EventLogCollectionName }, { "cursors", cursorIds } },
+                cancellationToken: _cancellationToken);
+
+        if (result["cursorsKilled"].AsBsonArray.Count != cursorIds.Count)
+            throw new InvalidOperationException($"Not every replay cursor was killed: {result}");
+    }
+
     public async ValueTask DisposeAsync()
     {
         await _eventStore.DisposeAsync();

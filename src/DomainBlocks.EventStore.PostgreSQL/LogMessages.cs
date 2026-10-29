@@ -35,6 +35,16 @@ internal static partial class LogMessages
 
     [LoggerMessage(
         LogLevel.Warning,
+        "[sub: {SubscriptionId}, attempt: {Attempt}] catch-up read failed; retrying in {Delay}")]
+    internal static partial void CatchUpRetrying(
+        this ILogger logger,
+        Exception exception,
+        string subscriptionId,
+        int attempt,
+        TimeSpan delay);
+
+    [LoggerMessage(
+        LogLevel.Warning,
         "[sub: {SubscriptionId}] catch-up still waiting after {Elapsed} for queries to see position {Position}")]
     internal static partial void CatchUpWaitingForVisibility(
         this ILogger logger,
