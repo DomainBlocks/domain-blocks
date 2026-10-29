@@ -18,7 +18,7 @@ public class ResumableAsyncEnumerableTests
         var sequence = new Sequence(5, (instance, item) =>
             instance == 0 && item == 2 ? new TransientException() : null);
 
-        var items = await Resume(sequence, CreatePipeline()).ToListAsync(ct);
+        var items = await CreateResumable(sequence, CreatePipeline()).ToListAsync(ct);
 
         items.ShouldBe([0, 1, 2, 3, 4]);
         sequence.Starts.ShouldBe([-1, 1]);
@@ -26,12 +26,12 @@ public class ResumableAsyncEnumerableTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task GetAsyncEnumerator_TransientErrorBeforeFirstItem_CreatesAgain(CancellationToken ct)
+    public async Task GetAsyncEnumerator_TransientErrorBeforeFirstItem_ResumesSequence(CancellationToken ct)
     {
         var sequence = new Sequence(3, (instance, item) =>
             instance == 0 && item == 0 ? new TransientException() : null);
 
-        var items = await Resume(sequence, CreatePipeline()).ToListAsync(ct);
+        var items = await CreateResumable(sequence, CreatePipeline()).ToListAsync(ct);
 
         items.ShouldBe([0, 1, 2]);
         sequence.Starts.ShouldBe([-1, -1]);
@@ -39,7 +39,7 @@ public class ResumableAsyncEnumerableTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task GetAsyncEnumerator_FactoryThrowsTransientError_CreatesAgain(CancellationToken ct)
+    public async Task GetAsyncEnumerator_FactoryThrowsTransientError_ResumesSequence(CancellationToken ct)
     {
         var sequence = new Sequence(3, static (_, _) => null);
         var creations = 0;
@@ -67,7 +67,7 @@ public class ResumableAsyncEnumerableTests
 
         await Should.ThrowAsync<TransientException>(async () =>
         {
-            await foreach (var item in Resume(sequence, CreatePipeline(3, retries)).WithCancellation(ct))
+            await foreach (var item in CreateResumable(sequence, CreatePipeline(3, retries)).WithCancellation(ct))
                 items.Add(item);
         });
 
@@ -85,7 +85,7 @@ public class ResumableAsyncEnumerableTests
         var sequence = new Sequence(10, (instance, item) => item == instance + 1 ? new TransientException() : null);
         var retries = new List<int>();
 
-        var items = await Resume(sequence, CreatePipeline(1, retries)).ToListAsync(ct);
+        var items = await CreateResumable(sequence, CreatePipeline(1, retries)).ToListAsync(ct);
 
         items.ShouldBe(Enumerable.Range(0, 10));
         retries.ShouldBe(Enumerable.Repeat(0, 9));
@@ -102,7 +102,7 @@ public class ResumableAsyncEnumerableTests
 
         var ex = await Should.ThrowAsync<InvalidOperationException>(async () =>
         {
-            await foreach (var item in Resume(sequence, CreatePipeline(3, retries)).WithCancellation(ct))
+            await foreach (var item in CreateResumable(sequence, CreatePipeline(3, retries)).WithCancellation(ct))
                 items.Add(item);
         });
 
@@ -122,12 +122,13 @@ public class ResumableAsyncEnumerableTests
             if (item != 2)
                 return null;
 
+            // ReSharper disable once AccessToDisposedClosure - only called during the enumeration
             cancellationTokenSource.Cancel();
             return new TransientException();
         });
 
         await Should.ThrowAsync<TransientException>(async () =>
-            await Resume(sequence, CreatePipeline()).ToListAsync(cancellationTokenSource.Token));
+            await CreateResumable(sequence, CreatePipeline()).ToListAsync(cancellationTokenSource.Token));
 
         sequence.Starts.ShouldBe([-1]);
     }
@@ -140,7 +141,7 @@ public class ResumableAsyncEnumerableTests
         var sequence = new Sequence(3, (instance, item) =>
             instance == 0 && item == 1 ? new TransientException() : null);
 
-        await Resume(sequence, CreatePipeline()).ToListAsync(ct);
+        await CreateResumable(sequence, CreatePipeline()).ToListAsync(ct);
 
         sequence.Events.ShouldBe(["create 0", "dispose 0", "create 1", "dispose 1"]);
     }
@@ -150,7 +151,7 @@ public class ResumableAsyncEnumerableTests
     public async Task GetAsyncEnumerator_SecondEnumeration_StartsAtInitialPosition(CancellationToken ct)
     {
         var sequence = new Sequence(3, static (_, _) => null);
-        var resumable = Resume(sequence, CreatePipeline());
+        var resumable = CreateResumable(sequence, CreatePipeline());
 
         (await resumable.ToListAsync(ct)).ShouldBe([0, 1, 2]);
         (await resumable.ToListAsync(ct)).ShouldBe([0, 1, 2]);
@@ -160,11 +161,12 @@ public class ResumableAsyncEnumerableTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task GetAsyncEnumerator_FirstReadOutlastsAttemptTimeout_CreatesAgain(CancellationToken ct)
+    public async Task GetAsyncEnumerator_FirstReadOutlastsAttemptTimeout_ResumesSequence(CancellationToken ct)
     {
         var sequence = new Sequence(3, static (_, _) => null, static (instance, item) => instance == 0 && item == 0);
 
-        var items = await Resume(sequence, CreateTimedPipeline(TimeSpan.FromMilliseconds(50))).ToListAsync(ct);
+        var resumable = CreateResumable(sequence, CreateTimedPipeline(TimeSpan.FromMilliseconds(50)));
+        var items = await resumable.ToListAsync(ct);
 
         items.ShouldBe([0, 1, 2]);
         sequence.Starts.ShouldBe([-1, -1]);
@@ -175,7 +177,7 @@ public class ResumableAsyncEnumerableTests
     {
         using var cancellationTokenSource = new CancellationTokenSource();
         var sequence = new Sequence(3, static (_, _) => null, static (_, item) => item == 1);
-        var resumable = Resume(sequence, CreateTimedPipeline(TimeSpan.FromMinutes(1)));
+        var resumable = CreateResumable(sequence, CreateTimedPipeline(TimeSpan.FromMinutes(1)));
         var items = resumable.GetAsyncEnumerator(cancellationTokenSource.Token);
 
         await using (items)
@@ -222,8 +224,10 @@ public class ResumableAsyncEnumerableTests
             .Build();
     }
 
-    // Reads the sequence from its start, creating it again after the last item taken. Each item is its own position.
-    private static ResumableAsyncEnumerable<int, Sequence, int> Resume(Sequence sequence, ResiliencePipeline pipeline)
+    // Reads the sequence from its start, resuming after the last item taken. Each item is its own position.
+    private static ResumableAsyncEnumerable<int, Sequence, int> CreateResumable(
+        Sequence sequence,
+        ResiliencePipeline pipeline)
     {
         return ResumableAsyncEnumerable.Create(
             static (s, after, ct) => s.CreateAsync(after, ct),
