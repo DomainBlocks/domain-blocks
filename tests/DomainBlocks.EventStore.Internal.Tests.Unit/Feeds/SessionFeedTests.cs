@@ -169,6 +169,23 @@ public class SessionFeedTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
+    public async Task Connect_SessionFailsNonTransiently_CompletesBeforeNotifying(CancellationToken ct)
+    {
+        var feed = CreateFeed(new ScriptedSession("s1", Row(1), Throw(new InvalidOperationException("misconfigured"))));
+
+        var observer = new CompletionRecordingObserver();
+        using var attachment = feed.Attach(observer);
+        await using var connection = await feed.ConnectAsync(ct);
+
+        // The observer holds the row until it knows the connection.
+        observer.Connection = connection;
+        observer.ReleaseOnNext();
+
+        (await observer.WasCompletedOnError.WaitAsync(ct)).ShouldBeTrue();
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
     public async Task Connect_WhenSessionCreationFailsTransiently_RetriesThenConnects(CancellationToken ct)
     {
         var attempts = 0;
@@ -354,6 +371,30 @@ public class SessionFeedTests
         return new DelegateSessionFactory<long>(_ => Task.FromResult(queue.Count > 0
             ? queue.Dequeue()
             : throw new InvalidOperationException("The test ran out of scripted sessions.")));
+    }
+
+    private sealed class CompletionRecordingObserver : IFeedObserver<long>
+    {
+        private readonly TaskCompletionSource _onNextReleased = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private readonly TaskCompletionSource<bool> _wasCompletedOnError =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public IFeedConnection<long>? Connection { get; set; }
+
+        public Task<bool> WasCompletedOnError => _wasCompletedOnError.Task;
+
+        public void ReleaseOnNext() => _onNextReleased.TrySetResult();
+
+        public ValueTask OnNextAsync(long position, CancellationToken cancellationToken) => new(_onNextReleased.Task);
+
+        public ValueTask OnResetAsync(CancellationToken cancellationToken) => default;
+
+        public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken)
+        {
+            _wasCompletedOnError.TrySetResult(Connection.ShouldNotBeNull().Completion.IsCompleted);
+            return default;
+        }
     }
 
     private sealed class HighWaterMarkRecordingObserver : IFeedObserver<long>

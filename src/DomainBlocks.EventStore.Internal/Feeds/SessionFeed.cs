@@ -243,6 +243,10 @@ internal sealed class SessionFeed<T, THighWaterMark> : IFeed<T, THighWaterMark>
             {
                 _logger?.FeedFailed(ex, _feedId);
 
+                // An observer told of the error may attach again straight away. Completing first means it sees that
+                // this connection has finished and gets a new one, rather than failing to attach to this one.
+                _completionTcs.TrySetException(ex);
+
                 try
                 {
                     await _observerHub.NotifyErrorAsync(ex, _stopCts.Token).ConfigureAwait(false);
@@ -251,8 +255,6 @@ internal sealed class SessionFeed<T, THighWaterMark> : IFeed<T, THighWaterMark>
                 {
                     _logger?.FeedCanceled(_feedId);
                 }
-
-                _completionTcs.TrySetException(ex);
             }
             finally
             {
