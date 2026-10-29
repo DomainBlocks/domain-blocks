@@ -19,7 +19,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     where TPos : struct, IPosition<TPos>
 {
     private readonly EventLogReader<TEvent> _reader;
-    private readonly IRefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp> _changeStreamSubject;
+    private readonly IRefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp> _feed;
     private readonly CatchUpReader _catchUpReader;
     private readonly EndPositionReader _endPositionReader;
     private readonly EventFilter _liveFilter;
@@ -32,7 +32,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
     public SubscriptionAsyncEnumerable(
         EventLogReader<TEvent> reader,
-        IRefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp> changeStreamSubject,
+        IRefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp> feed,
         CatchUpReader catchUpReader,
         EndPositionReader endPositionReader,
         EventFilter liveFilter,
@@ -48,7 +48,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         _liveFilter = liveFilter;
         _positionSelector = positionSelector;
         _reader = reader;
-        _changeStreamSubject = changeStreamSubject;
+        _feed = feed;
         _logger = logger;
 
         _correlationId = _options.CorrelationId is { } id
@@ -195,9 +195,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     {
         try
         {
-            return await _changeStreamSubject
-                .AttachAsync(observer, _correlationId, cancellationToken)
-                .ConfigureAwait(false);
+            return await _feed.AttachAsync(observer, _correlationId, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -389,7 +387,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
             catch (Exception ex)
             {
                 // An event that cannot be decoded fails this subscription, as it would fail a read. If the exception
-                // reached the change stream, the subject would detach the observer without telling the subscriber.
+                // reached the feed, it would detach the observer without telling the subscriber.
                 _isStopped = true;
                 _channel.Writer.TryComplete(ex);
 

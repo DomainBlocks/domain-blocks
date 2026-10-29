@@ -78,7 +78,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
     private readonly IEventCodec<TEvent, BsonValue, BsonValue> _eventCodec;
     private readonly ILogger? _logger;
     private readonly EventLogReader<TEvent> _reader;
-    private readonly RefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp> _allEventsSubject;
+    private readonly RefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp> _feed;
     private readonly EventLogDocument<TEvent> _liveDocument;
 
     internal MongoEventStore(
@@ -103,7 +103,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
 
         _reader = new EventLogReader<TEvent>(_eventLog, eventCodec);
         _liveDocument = new EventLogDocument<TEvent>(eventCodec);
-        _allEventsSubject = CreateAllEventsSubject(_eventLog, logger);
+        _feed = CreateFeed(_eventLog, logger);
     }
 
     /// <summary>
@@ -261,7 +261,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
 
         return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
             _reader,
-            _allEventsSubject,
+            _feed,
             (reader, session, start, end, ct) =>
                 reader.ReadCatchUpAsync(session, catchUpFilter, FieldNames.Position, start, end, ct),
             static async (reader, session, ct) =>
@@ -290,7 +290,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
 
         return new SubscriptionAsyncEnumerable<TEvent, StreamPosition>(
             _reader,
-            _allEventsSubject,
+            _feed,
             (reader, session, start, end, ct) =>
                 reader.ReadCatchUpAsync(session, catchUpFilter, FieldNames.StreamPosition, start, end, ct),
             async (reader, session, ct) =>
@@ -323,7 +323,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
     // The subject sets the store's one live document to each inserted document and then hands it to every subscription.
     // Because the document is shared, the feed replaces a connection only after that connection has handed out its last
     // change.
-    private RefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp> CreateAllEventsSubject(
+    private RefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp> CreateFeed(
         IMongoCollection<BsonDocument> eventLog,
         ILogger? logger)
     {
