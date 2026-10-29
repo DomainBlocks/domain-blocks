@@ -1,5 +1,6 @@
 using DomainBlocks.EventStore.Filtering;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Testing;
 using NUnit.Framework;
 using Shouldly;
 
@@ -69,29 +70,30 @@ public class SubscriptionObserverTests
     [Test]
     public async Task OnNextAsync_WhenQueueIsFull_LogsOverflowAsWarningOnceWhenItHappens()
     {
-        var logger = new RecordingLogger();
+        var logger = new FakeLogger();
         using var observer = new Observer(queueCapacity: 1, EventFilter.All, logger, "sub-1");
 
         await OfferAsync(observer, 0, "order-1");
-        logger.Messages.ShouldBeEmpty();
+        logger.Collector.GetSnapshot().ShouldBeEmpty();
 
         await OfferAsync(observer, 1, "order-1");
         await OfferAsync(observer, 2, "order-1");
 
-        logger.Messages.ShouldBe(
+        logger.Collector.GetSnapshot().Select(record => (record.Level, record.Message)).ShouldBe(
             [(LogLevel.Warning, "[sub: sub-1] queue overflowed (capacity 1); restart pending")]);
     }
 
     [Test]
     public async Task OnResetAsync_WhenNotYetStopped_LogsFeedResetAsWarningOnce()
     {
-        var logger = new RecordingLogger();
+        var logger = new FakeLogger();
         using var observer = new Observer(queueCapacity: 1, EventFilter.All, logger, "sub-1");
 
         await observer.OnResetAsync(CancellationToken.None);
         await observer.OnResetAsync(CancellationToken.None);
 
-        logger.Messages.ShouldBe([(LogLevel.Warning, "[sub: sub-1] feed was reset; restart pending")]);
+        logger.Collector.GetSnapshot().Select(record => (record.Level, record.Message)).ShouldBe(
+            [(LogLevel.Warning, "[sub: sub-1] feed was reset; restart pending")]);
     }
 
     [Test]
@@ -157,24 +159,5 @@ public class SubscriptionObserverTests
         _row.Set(position, streamId, position, "OrderPlaced", PostgresEventData.FromJson("{}"), null, CreatedAt);
 
         return observer.OnNextAsync(_row, CancellationToken.None);
-    }
-
-    private sealed class RecordingLogger : ILogger
-    {
-        public List<(LogLevel Level, string Message)> Messages { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter)
-        {
-            Messages.Add((logLevel, formatter(state, exception)));
-        }
     }
 }
