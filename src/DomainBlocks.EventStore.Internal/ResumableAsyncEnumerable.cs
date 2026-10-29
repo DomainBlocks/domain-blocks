@@ -10,26 +10,26 @@ namespace DomainBlocks.EventStore.Internal;
 internal static class ResumableAsyncEnumerable
 {
     /// <summary>
-    /// Creates a sequence that resumes after errors, from the position of the last yielded item.
+    /// Creates an async sequence that resumes after errors, from the position of the last yielded item.
     /// </summary>
     public static ResumableAsyncEnumerable<T, TState, TPosition> Create<T, TState, TPosition>(
         Func<TState, TPosition, CancellationToken, IAsyncEnumerable<T>> factory,
         Func<TState, T, TPosition> positionSelector,
         TState state,
-        TPosition initialPosition,
+        TPosition startPosition,
         ResiliencePipeline pipeline)
     {
         return new ResumableAsyncEnumerable<T, TState, TPosition>(
             factory,
             positionSelector,
             state,
-            initialPosition,
+            startPosition,
             pipeline);
     }
 }
 
 /// <summary>
-/// Represents a sequence that resumes after an error, from the position of the last yielded item. If the factory
+/// Represents an async sequence that resumes after an error, from the position of the last yielded item. If the factory
 /// creates the sequence from after the position it gets, the caller receives each item once. A resilience pipeline
 /// decides which errors to retry, how long to wait, and when to stop.
 /// </summary>
@@ -37,14 +37,14 @@ internal sealed class ResumableAsyncEnumerable<T, TState, TPosition>(
     Func<TState, TPosition, CancellationToken, IAsyncEnumerable<T>> factory,
     Func<TState, T, TPosition> positionSelector,
     TState state,
-    TPosition initialPosition,
+    TPosition startPosition,
     ResiliencePipeline pipeline) :
     IAsyncEnumerable<T>
 {
     public async IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
-        Sequence? sequence = null;
-        var position = initialPosition;
+        IAsyncEnumerator<T>? enumerator = null;
+        var position = startPosition;
 
         // The error that the next attempt throws. Each enumeration has its own, because the error stays here if the
         // caller cancels before the pipeline's first attempt.
@@ -54,16 +54,16 @@ internal sealed class ResumableAsyncEnumerable<T, TState, TPosition>(
         {
             while (true)
             {
-                if (sequence is null)
+                if (enumerator is null)
                 {
-                    sequence = await pipeline
+                    enumerator = await pipeline
                         .ExecuteAsync(
-                            static (s, ct) => s.Self.CreateAsync(s.Position, s.Error, s.CancellationToken, ct),
-                            (Self: this, Position: position, Error: error, CancellationToken: cancellationToken),
+                            static (s, ct) => s.Self.CreateAsync(s.Position, s.Error, s.CallerToken, ct),
+                            (Self: this, Position: position, Error: error, CallerToken: cancellationToken),
                             cancellationToken)
                         .ConfigureAwait(false);
 
-                    if (sequence is null)
+                    if (enumerator is null)
                         yield break;
                 }
                 else
@@ -72,20 +72,20 @@ internal sealed class ResumableAsyncEnumerable<T, TState, TPosition>(
                     // with its own OperationCanceledException.
                     try
                     {
-                        if (!await sequence.Items.MoveNextAsync().ConfigureAwait(false))
+                        if (!await enumerator.MoveNextAsync().ConfigureAwait(false))
                             yield break;
                     }
                     catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
                     {
                         // The failed sequence is disposed before the pipeline waits, so it doesn't hold a connection.
-                        await sequence.DisposeAsync().ConfigureAwait(false);
-                        sequence = null;
+                        await enumerator.DisposeAsync().ConfigureAwait(false);
+                        enumerator = null;
                         error.Value = ex;
                         continue;
                     }
                 }
 
-                var item = sequence.Items.Current;
+                var item = enumerator.Current;
                 yield return item;
 
                 position = positionSelector(state, item);
@@ -93,17 +93,17 @@ internal sealed class ResumableAsyncEnumerable<T, TState, TPosition>(
         }
         finally
         {
-            if (sequence is not null)
-                await sequence.DisposeAsync().ConfigureAwait(false);
+            if (enumerator is not null)
+                await enumerator.DisposeAsync().ConfigureAwait(false);
         }
     }
 
     // Each attempt of a recovery creates the sequence from the position and reads its first item, except the first,
     // which throws the error again. A sequence with no item is disposed, and the attempt returns null.
-    private async ValueTask<Sequence?> CreateAsync(
+    private async ValueTask<IAsyncEnumerator<T>?> CreateAsync(
         TPosition position,
         StrongBox<Exception?> error,
-        CancellationToken cancellationToken,
+        CancellationToken callerToken,
         CancellationToken attemptToken)
     {
         if (error.Value is { } ex)
@@ -114,50 +114,53 @@ internal sealed class ResumableAsyncEnumerable<T, TState, TPosition>(
 
         // The sequence outlives the attempt, so it takes a token linked to the caller's, which the attempt's token
         // cancels only while the attempt runs.
-        var tokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        Sequence? sequence = null;
+        var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(callerToken);
+        IAsyncEnumerator<T>? enumerator = null;
 
         try
         {
-            var items = factory(state, position, tokenSource.Token).GetAsyncEnumerator(tokenSource.Token);
-            sequence = new Sequence(items, tokenSource);
-
+            var registration = attemptToken.Register(static s => ((CancellationTokenSource)s!).Cancel(), linkedCts);
             bool hasNext;
-            var registration = attemptToken.Register(static s => ((CancellationTokenSource)s!).Cancel(), tokenSource);
 
             await using (registration.ConfigureAwait(false))
-                hasNext = await items.MoveNextAsync().ConfigureAwait(false);
+            {
+                var items = factory(state, position, linkedCts.Token).GetAsyncEnumerator(linkedCts.Token);
+                enumerator = new AsyncEnumeratorWrapper(items, linkedCts);
+                hasNext = await enumerator.MoveNextAsync().ConfigureAwait(false);
+            }
 
             if (hasNext)
-                return sequence;
+                return enumerator;
 
-            await sequence.DisposeAsync().ConfigureAwait(false);
+            await enumerator.DisposeAsync().ConfigureAwait(false);
             return null;
         }
         catch
         {
-            if (sequence is not null)
-                await sequence.DisposeAsync().ConfigureAwait(false);
+            if (enumerator is not null)
+                await enumerator.DisposeAsync().ConfigureAwait(false);
             else
-                tokenSource.Dispose();
+                linkedCts.Dispose();
 
             throw;
         }
     }
 
-    // A sequence that the factory created, and the token source it was created with, which it disposes after the
-    // sequence.
-    private sealed record Sequence(IAsyncEnumerator<T> Items, CancellationTokenSource TokenSource) : IAsyncDisposable
+    private sealed class AsyncEnumeratorWrapper(IAsyncEnumerator<T> inner, IDisposable resource) : IAsyncEnumerator<T>
     {
+        public T Current => inner.Current;
+
+        public ValueTask<bool> MoveNextAsync() => inner.MoveNextAsync();
+
         public async ValueTask DisposeAsync()
         {
             try
             {
-                await Items.DisposeAsync().ConfigureAwait(false);
+                await inner.DisposeAsync().ConfigureAwait(false);
             }
             finally
             {
-                TokenSource.Dispose();
+                resource.Dispose();
             }
         }
     }

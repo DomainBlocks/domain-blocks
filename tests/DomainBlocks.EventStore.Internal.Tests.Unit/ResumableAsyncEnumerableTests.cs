@@ -160,7 +160,7 @@ public class ResumableAsyncEnumerableTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task GetAsyncEnumerator_SecondEnumeration_StartsAtInitialPosition(CancellationToken ct)
+    public async Task GetAsyncEnumerator_SecondEnumeration_StartsAtStartPosition(CancellationToken ct)
     {
         var sequence = new Sequence(3, static (_, _) => null);
         var resumable = CreateResumable(sequence, CreatePipeline());
