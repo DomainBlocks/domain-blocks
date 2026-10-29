@@ -176,10 +176,10 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<T
         public Task Completion => _completionTcs.Task;
 
         /// <summary>
-        /// An optime at or after every change that the stream has delivered or won't deliver. It starts just before
-        /// the stream's start, or at the primary's last write when a resume token sets the start, and moves forwards
-        /// with each change delivered. A majority read that waits for it sees every such change, even on a node whose
-        /// commit point lagged after a failover.
+        /// Gets an optime at or after every change that the stream has delivered or won't deliver. It starts just
+        /// before the stream's start, or at the primary's last write when a resume token sets the start, and moves
+        /// forwards with each change delivered. A majority read that waits for it sees every such change, even on a
+        /// node whose commit point lagged after a failover.
         /// </summary>
         public BsonTimestamp HighWaterMark =>
             Volatile.Read(ref _opTimeHighWaterMark) ??

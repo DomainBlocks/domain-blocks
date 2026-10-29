@@ -102,9 +102,10 @@ internal sealed class RefCountedFeed<T, THighWaterMark>(Func<IFeed<T, THighWater
             if (ReferenceEquals(_current, feedConnection))
                 _current = null;
 
-            // This runs within the gate, so the next connection is not made until this one has handed out its last
-            // item and released what it holds. Observers may share what a feed makes of an item, and two connections
-            // at once would corrupt it.
+            // This runs within the gate, so the next connection is not made until this one has handed its last item
+            // to observers and released what it holds, such as PostgreSQL's replication slot. MongoDB's store reuses
+            // one document for every item its feed delivers, so a second connection would overwrite an item that the
+            // first one's observers are still reading.
             await feedConnection.Connection.DisposeAsync().ConfigureAwait(false);
         }
         finally

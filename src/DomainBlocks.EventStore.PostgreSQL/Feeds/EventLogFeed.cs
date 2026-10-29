@@ -168,7 +168,7 @@ internal sealed class EventLogFeed<T> : IFeed<T, long?>
         public Task Completion => _completionTcs.Task;
 
         /// <summary>
-        /// The position of the last row the feed delivered, or <see langword="null"/> if it has delivered none.
+        /// Gets the position of the last row the feed delivered, or <see langword="null"/> if it has delivered none.
         /// </summary>
         public long? HighWaterMark =>
             Volatile.Read(ref _positionHighWaterMark) is var position and >= 0 ? position : null;

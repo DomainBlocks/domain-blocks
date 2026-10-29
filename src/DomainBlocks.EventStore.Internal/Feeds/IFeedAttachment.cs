@@ -6,8 +6,8 @@ namespace DomainBlocks.EventStore.Internal.Feeds;
 internal interface IFeedAttachment<out THighWaterMark> : IAsyncDisposable
 {
     /// <summary>
-    /// The connection's <see cref="IFeedConnection{THighWaterMark}.HighWaterMark"/>, read once the observer was
-    /// attached, so it covers every item delivered before the observer could receive it.
+    /// Gets the connection's high-water mark, read once the observer was attached, so it covers every item delivered
+    /// before the observer could receive it.
     /// </summary>
     THighWaterMark HighWaterMark { get; }
 }

@@ -139,8 +139,8 @@ public class RefCountedFeedTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task AttachAsync_WhileLastConnectionIsStillStopping_WaitsForItBeforeConnectingAgain()
     {
-        // A connection that is stopping may still be handing an item to its observers. Observers may share what they
-        // make of an item, so two connections must never hand out items at once.
+        // A connection that is stopping may still be handing an item to its observers. A store may reuse one object
+        // for every item, as MongoDB's does, so two connections must never hand out items at once.
         var feeds = new List<TestFeed>();
 
         var refCountedFeed = new RefCountedFeed<int, long>(() =>
