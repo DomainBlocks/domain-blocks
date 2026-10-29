@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using Polly;
 
@@ -52,8 +53,11 @@ internal sealed class ResumableAsyncEnumerable<T, TState>(
 {
     public async IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
-        var recovery = new Recovery(state, open);
         IAsyncEnumerator<T>? items = null;
+
+        // The error that the next attempt throws. Each enumeration has its own, because the error stays here if the
+        // caller cancels before the pipeline's first attempt.
+        var error = new StrongBox<Exception?>();
 
         try
         {
@@ -64,7 +68,10 @@ internal sealed class ResumableAsyncEnumerable<T, TState>(
                 if (items is null)
                 {
                     (items, hasNext) = await pipeline
-                        .ExecuteAsync(static (r, ct) => r.OpenAsync(ct), recovery, cancellationToken)
+                        .ExecuteAsync(
+                            static (s, ct) => s.Source.OpenAsync(s.Error, ct),
+                            (Source: this, Error: error),
+                            cancellationToken)
                         .ConfigureAwait(false);
                 }
                 else
@@ -80,7 +87,7 @@ internal sealed class ResumableAsyncEnumerable<T, TState>(
                         // The failed sequence is disposed before the pipeline waits, so it doesn't hold a connection.
                         await items.DisposeAsync().ConfigureAwait(false);
                         items = null;
-                        recovery.Error = ex;
+                        error.Value = ex;
                         continue;
                     }
                 }
@@ -101,33 +108,28 @@ internal sealed class ResumableAsyncEnumerable<T, TState>(
         }
     }
 
-    // The attempts' state, so their callback can be static.
-    private sealed class Recovery(TState state, Func<TState, CancellationToken, IAsyncEnumerable<T>> open)
+    // Each attempt of a recovery opens the sequence and reads its first item, except the first, which throws the error
+    // again.
+    private async ValueTask<(IAsyncEnumerator<T> Items, bool HasNext)> OpenAsync(
+        StrongBox<Exception?> error,
+        CancellationToken cancellationToken)
     {
-        /// <summary>
-        /// Gets or sets the error that the next attempt throws, which is the one that started the recovery.
-        /// </summary>
-        public Exception? Error { get; set; }
-
-        public async ValueTask<(IAsyncEnumerator<T> Items, bool HasNext)> OpenAsync(CancellationToken cancellationToken)
+        if (error.Value is { } ex)
         {
-            if (Error is { } error)
-            {
-                Error = null;
-                ExceptionDispatchInfo.Throw(error);
-            }
+            error.Value = null;
+            ExceptionDispatchInfo.Throw(ex);
+        }
 
-            var items = open(state, cancellationToken).GetAsyncEnumerator(cancellationToken);
+        var items = open(state, cancellationToken).GetAsyncEnumerator(cancellationToken);
 
-            try
-            {
-                return (items, await items.MoveNextAsync().ConfigureAwait(false));
-            }
-            catch
-            {
-                await items.DisposeAsync().ConfigureAwait(false);
-                throw;
-            }
+        try
+        {
+            return (items, await items.MoveNextAsync().ConfigureAwait(false));
+        }
+        catch
+        {
+            await items.DisposeAsync().ConfigureAwait(false);
+            throw;
         }
     }
 }
