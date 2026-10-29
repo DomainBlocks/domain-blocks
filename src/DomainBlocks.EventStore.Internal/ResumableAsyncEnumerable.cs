@@ -10,7 +10,7 @@ namespace DomainBlocks.EventStore.Internal;
 internal static class ResumableAsyncEnumerable
 {
     /// <summary>
-    /// Creates a sequence that opens again after errors, from the position of the last item taken.
+    /// Creates a sequence that resumes after errors, from the position of the last yielded item.
     /// </summary>
     public static ResumableAsyncEnumerable<T, TState, TPosition> Create<T, TState, TPosition>(
         Func<TState, TPosition, CancellationToken, IAsyncEnumerable<T>> factory,
@@ -60,7 +60,7 @@ internal sealed class ResumableAsyncEnumerable<T, TState, TPosition>(
                 {
                     (items, itemsCancellation, hasNext) = await pipeline
                         .ExecuteAsync(
-                            static (s, ct) => s.Self.OpenAsync(s.Position, s.Error, s.CancellationToken, ct),
+                            static (s, ct) => s.Self.CreateAsync(s.Position, s.Error, s.CancellationToken, ct),
                             (Self: this, Position: position, Error: error, CancellationToken: cancellationToken),
                             cancellationToken)
                         .ConfigureAwait(false);
@@ -103,9 +103,9 @@ internal sealed class ResumableAsyncEnumerable<T, TState, TPosition>(
         }
     }
 
-    // Each attempt of a recovery opens the sequence from the position and reads its first item, except the first,
+    // Each attempt of a recovery creates the sequence from the position and reads its first item, except the first,
     // which throws the error again.
-    private async ValueTask<(IAsyncEnumerator<T> Items, CancellationTokenSource Cancellation, bool HasNext)> OpenAsync(
+    private async ValueTask<(IAsyncEnumerator<T> Items, CancellationTokenSource TokenSource, bool HasNext)> CreateAsync(
         TPosition position,
         StrongBox<Exception?> error,
         CancellationToken cancellationToken,
