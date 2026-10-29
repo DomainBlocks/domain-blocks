@@ -37,7 +37,6 @@ internal sealed class EventLogFeed<T> : IFeed<T, long>
 {
     private readonly IEventLogSessionFactory<T> _sessionFactory;
     private readonly Func<CancellationToken, Task<IEventLogSession<T>>> _openSession;
-    private readonly EventLogFeedOptions _options;
     private readonly ILogger? _logger;
     private readonly FeedObserverHub<T> _observerHub;
     private readonly string _feedId = CorrelationId.ReserveGenerated();
@@ -57,8 +56,7 @@ internal sealed class EventLogFeed<T> : IFeed<T, long>
         options ??= EventLogFeedOptions.Default;
 
         _sessionFactory = sessionFactory;
-        _openSession = AddResilience(sessionFactory.OpenAsync, options, logger, _feedId);
-        _options = options;
+        _openSession = AddResilience(sessionFactory, options, logger, _feedId);
         _logger = logger;
         _observerHub = new FeedObserverHub<T>(logger, _feedId);
     }
@@ -99,14 +97,14 @@ internal sealed class EventLogFeed<T> : IFeed<T, long>
     }
 
     private static Func<CancellationToken, Task<IEventLogSession<T>>> AddResilience(
-        Func<CancellationToken, Task<IEventLogSession<T>>> sessionFactory,
+        IEventLogSessionFactory<T> sessionFactory,
         EventLogFeedOptions options,
         ILogger? logger,
         string feedId)
     {
         // Polly requires at least one retry.
         if (options.MaxRetryAttempts == 0)
-            return sessionFactory;
+            return sessionFactory.OpenAsync;
 
         var resiliencePipeline = new ResiliencePipelineBuilder()
             .AddRetry(new RetryStrategyOptions
@@ -120,7 +118,7 @@ internal sealed class EventLogFeed<T> : IFeed<T, long>
                 {
                     var shouldHandle = args.Outcome.Exception is { } ex &&
                                        ex is not OperationCanceledException &&
-                                       options.IsTransient(ex);
+                                       sessionFactory.IsTransient(ex);
 
                     return ValueTask.FromResult(shouldHandle);
                 },
@@ -135,7 +133,7 @@ internal sealed class EventLogFeed<T> : IFeed<T, long>
             .Build();
 
         return async ct => await resiliencePipeline
-            .ExecuteAsync(async innerCt => await sessionFactory(innerCt).ConfigureAwait(false), ct)
+            .ExecuteAsync(async innerCt => await sessionFactory.OpenAsync(innerCt).ConfigureAwait(false), ct)
             .ConfigureAwait(false);
     }
 
@@ -230,7 +228,8 @@ internal sealed class EventLogFeed<T> : IFeed<T, long>
                             // A live session should never end, so reconnect.
                             _logger?.FeedEnded(_feedId);
                         }
-                        catch (Exception ex) when (!_stopCts.IsCancellationRequested && _feed._options.IsTransient(ex))
+                        catch (Exception ex) when (!_stopCts.IsCancellationRequested &&
+                                                   _feed._sessionFactory.IsTransient(ex))
                         {
                             _logger?.FeedConnectionLost(ex, _feedId);
                         }

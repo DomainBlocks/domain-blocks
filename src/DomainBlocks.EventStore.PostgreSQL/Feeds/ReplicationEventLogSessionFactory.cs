@@ -126,6 +126,8 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent>(
         return new ReplicationEventLogSession<TEvent>(connection, _slot, isResumed, _pgOutputOptions, names, decoder);
     }
 
+    public bool IsTransient(Exception exception) => EventLogFeedResumePolicy.IsTransient(exception);
+
     public async ValueTask DisposeAsync()
     {
         await _scavenger.DisposeAsync().ConfigureAwait(false);

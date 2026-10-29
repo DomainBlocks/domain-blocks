@@ -16,9 +16,4 @@ internal sealed class EventLogFeedOptions
     public TimeSpan RetryDelay { get; set; } = TimeSpan.FromSeconds(1);
 
     public TimeSpan MaxRetryDelay { get; set; } = TimeSpan.FromMinutes(1);
-
-    /// <summary>
-    /// Decides whether a failure to establish or read a session is worth retrying.
-    /// </summary>
-    public Func<Exception, bool> IsTransient { get; set; } = EventLogFeedResumePolicy.IsTransient;
 }

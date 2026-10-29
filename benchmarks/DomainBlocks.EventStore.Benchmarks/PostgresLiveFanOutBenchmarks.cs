@@ -110,6 +110,8 @@ public class PostgresLiveFanOutBenchmarks
         public Task<IEventLogSession<EventLogRow<IDomainEvent>>> OpenAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IEventLogSession<EventLogRow<IDomainEvent>>>(new Session(decoder, rows, streamIds));
 
+        public bool IsTransient(Exception exception) => false;
+
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
