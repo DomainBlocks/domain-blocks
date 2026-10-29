@@ -17,7 +17,8 @@ internal sealed class ChangeStreamProbe(IMongoCollection<BsonDocument> eventLog)
     private ChangeStreamDisconnect? _disconnect;
 
     /// <summary>
-    /// The number of change streams opened without a resume token, which is one for each connection of the feed.
+    /// The number of change streams opened without a resume token: one when the feed connects, and one each time the
+    /// oplog no longer holds the change that the feed would resume after.
     /// </summary>
     public int InitialOpenCount => Volatile.Read(ref _initialOpenCount);
 

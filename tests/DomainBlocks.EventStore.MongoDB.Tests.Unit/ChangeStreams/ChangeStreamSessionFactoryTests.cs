@@ -38,6 +38,7 @@ public class ChangeStreamSessionFactoryTests
     private BsonDocument? _initialResumeToken;
     private int _helloCount;
     private Exception? _helloError;
+    private Exception? _resumeError;
 
     [SetUp]
     public void SetUp()
@@ -46,6 +47,7 @@ public class ChangeStreamSessionFactoryTests
         _watchOptions = [];
         _helloCount = 0;
         _helloError = null;
+        _resumeError = null;
 
         // The server reports a resume token in the initial response.
         _initialResumeToken = new BsonDocument("_data", "0");
@@ -181,6 +183,27 @@ public class ChangeStreamSessionFactoryTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
+    public async Task OpenAsync_ResumeTokenLost_StartsNewChangeStream(CancellationToken ct)
+    {
+        SetupChangeStream([new ChangeStreamBatch { Exception = new TimeoutException() }]);
+        var sessionFactory = CreateSessionFactory();
+
+        await using (var session = await sessionFactory.OpenAsync(ct))
+            await session.ReadAsync(ct).ToArrayAsync(ct).AsTask().ShouldThrowAsync<TimeoutException>();
+
+        // The oplog no longer holds the change that the resume token names.
+        _resumeError = CreateCommandException(MongoErrorCodes.ChangeStreamHistoryLost);
+
+        await using var newSession = await sessionFactory.OpenAsync(ct);
+
+        newSession.IsResumed.ShouldBeFalse();
+        newSession.HighWaterMark.ShouldBe(CreateOperationTime(2));
+        _watchOptions.Select(x => x?.ResumeAfter is not null).ShouldBe([false, true, false]);
+        _watchOptions.Last().ShouldNotBeNull().StartAtOperationTime.ShouldBe(new BsonTimestamp(2, 1));
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
     public async Task ReadAsync_Change_ReportsClusterTime(CancellationToken ct)
     {
         var clusterTime = new BsonTimestamp(5, 1);
@@ -208,6 +231,14 @@ public class ChangeStreamSessionFactoryTests
     }
 
     [Test]
+    public void IsTransient_HistoryLost_ReturnsTrue()
+    {
+        var exception = CreateCommandException(MongoErrorCodes.ChangeStreamHistoryLost);
+
+        CreateSessionFactory().IsTransient(exception).ShouldBeTrue();
+    }
+
+    [Test]
     [CancelAfter(TestTimeoutMillis)]
     public async Task ConnectAsync_HelloFailsTransiently_RetriesThenConnects(CancellationToken ct)
     {
@@ -231,6 +262,15 @@ public class ChangeStreamSessionFactoryTests
         var exception = new MongoException("Resumable error");
         exception.AddErrorLabel(MongoErrorLabels.ResumableChangeStreamError);
         return exception;
+    }
+
+    private static MongoCommandException CreateCommandException(int code)
+    {
+        return new MongoCommandException(
+            CreateConnectionId(),
+            "The command failed.",
+            new BsonDocument("aggregate", 1),
+            new BsonDocument { { "ok", 0 }, { "code", code } });
     }
 
     private static ConnectionId CreateConnectionId()
@@ -274,7 +314,13 @@ public class ChangeStreamSessionFactoryTests
                     ChangeStreamOptions? options,
                     CancellationToken _) =>
                 _watchOptions.Add(options))
-            .ReturnsAsync(testCursor);
+            .Returns((
+                    PipelineDefinition<ChangeStreamDocument<BsonDocument>, ChangeStreamDocument<BsonDocument>> _,
+                    ChangeStreamOptions? options,
+                    CancellationToken _) =>
+                options?.ResumeAfter is not null && Interlocked.Exchange(ref _resumeError, null) is { } error
+                    ? Task.FromException<IChangeStreamCursor<ChangeStreamDocument<BsonDocument>>>(error)
+                    : Task.FromResult<IChangeStreamCursor<ChangeStreamDocument<BsonDocument>>>(testCursor));
     }
 
     private class ChangeStreamBatch<TDocument>

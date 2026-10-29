@@ -37,9 +37,6 @@ internal static partial class LogMessages
     [LoggerMessage(LogLevel.Warning, "[sub: {SubscriptionId}] feed was reset; restart pending")]
     internal static partial void SubscriptionFeedReset(this ILogger logger, string subscriptionId);
 
-    [LoggerMessage(LogLevel.Warning, "[sub: {SubscriptionId}] change stream history was lost; restart pending")]
-    internal static partial void SubscriptionChangeHistoryLost(this ILogger logger, string subscriptionId);
-
     [LoggerMessage(LogLevel.Information, "[sub: {SubscriptionId}] restarting from start")]
     internal static partial void SubscriptionRestartingFromStart(this ILogger logger, string subscriptionId);
 
@@ -58,4 +55,7 @@ internal static partial class LogMessages
 
     [LoggerMessage(LogLevel.Trace, "[change stream] processed batch of {Count}")]
     internal static partial void ChangeStreamBatchProcessed(this ILogger logger, int count);
+
+    [LoggerMessage(LogLevel.Warning, "[change stream] history lost; starting a new change stream")]
+    internal static partial void ChangeStreamHistoryLost(this ILogger logger, Exception exception);
 }

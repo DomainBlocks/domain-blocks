@@ -122,7 +122,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                         _logger?.SubscriptionFellBehind(_correlationId);
                         break;
 
-                    case StopReason.QueueOverflow or StopReason.FeedReset or StopReason.ChangeStreamHistoryLost:
+                    case StopReason.QueueOverflow or StopReason.FeedReset:
                         break;
 
                     default:
@@ -338,14 +338,13 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         None,
         QueueOverflow,
         FeedReset,
-        ChangeStreamHistoryLost,
         Disposed
     }
 
     /// <summary>
     /// Buffers the live events that a subscription selects, for one cycle. It never blocks the change stream. On a
-    /// queue overflow, a feed reset, or when the change stream's history is lost, it records the reason and completes
-    /// its queue, and the cycle restarts once the queue is drained, which can be much later.
+    /// queue overflow or a feed reset, it records the reason and completes its queue, and the cycle restarts once the
+    /// queue is drained, which can be much later.
     /// </summary>
     internal sealed class Observer(
         int queueCapacity,
@@ -410,13 +409,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
         public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken)
         {
-            // The events are still in the log, so a new cycle recovers them with a new change stream. Restarting on any
-            // other error could repeat forever without the subscriber ever seeing it.
-            if (exception is not MongoCommandException { Code: MongoErrorCodes.ChangeStreamHistoryLost })
-                _channel.Writer.TryComplete(exception);
-            else if (Stop(StopReason.ChangeStreamHistoryLost))
-                logger?.SubscriptionChangeHistoryLost(subscriptionId);
-
+            _channel.Writer.TryComplete(exception);
             return ValueTask.CompletedTask;
         }
 

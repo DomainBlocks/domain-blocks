@@ -32,7 +32,8 @@ internal static class ChangeStreamSessionFactory
 
 /// <summary>
 /// Opens one feed's change streams. The first starts one tick after the primary's last write, and each later one
-/// resumes after the last change that the feed delivered, so a lost connection costs no reset.
+/// resumes after the last change that the feed delivered, so a lost connection costs no reset. When the oplog no longer
+/// holds that change, the next change stream starts afresh, as the first does, and the feed resets.
 /// </summary>
 internal sealed class ChangeStreamSessionFactory<TDocument, TChange, TResult>(
     IMongoClient mongoClient,
@@ -44,16 +45,26 @@ internal sealed class ChangeStreamSessionFactory<TDocument, TChange, TResult>(
     ILogger? logger = null) :
     IFeedSessionFactory<TResult, BsonTimestamp>
 {
-    private readonly ChangeStreamResumePoint _resumePoint = new();
+    private ChangeStreamResumePoint _resumePoint = new();
 
     public async Task<IFeedSession<TResult, BsonTimestamp>> OpenAsync(CancellationToken cancellationToken)
     {
         if (_resumePoint.ResumeToken is { } resumeToken)
         {
             var resumeOptions = new ChangeStreamOptions { ResumeAfter = resumeToken };
-            var resumedCursor = await cursorFactory(pipeline, resumeOptions, cancellationToken).ConfigureAwait(false);
 
-            return CreateSession(resumedCursor, "resumed change stream", isResumed: true, highWaterMark: null);
+            try
+            {
+                var resumedCursor = await cursorFactory(pipeline, resumeOptions, cancellationToken)
+                    .ConfigureAwait(false);
+
+                return CreateSession(resumedCursor, "resumed change stream", isResumed: true, highWaterMark: null);
+            }
+            catch (MongoCommandException ex) when (IsHistoryLost(ex))
+            {
+                logger?.ChangeStreamHistoryLost(ex);
+                _resumePoint = new ChangeStreamResumePoint();
+            }
         }
 
         // The stream starts one tick after the primary's last write. The mark must be an oplog optime rather than the
@@ -82,10 +93,16 @@ internal sealed class ChangeStreamSessionFactory<TDocument, TChange, TResult>(
         return CreateSession(cursor, $"change stream from {startAt}", isResumed: false, highWaterMark: lastApplied);
     }
 
-    public bool IsTransient(Exception exception) => ChangeStreamResumePolicy.CanResume(exception);
+    // Lost history can't be resumed from, but it can be recovered from: the next session finds the resume token gone
+    // and starts a new change stream.
+    public bool IsTransient(Exception exception) =>
+        ChangeStreamResumePolicy.CanResume(exception) || exception is MongoCommandException ex && IsHistoryLost(ex);
 
     // A change stream holds nothing on the server once its cursor is closed, which its session does.
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
+    private static bool IsHistoryLost(MongoCommandException exception) =>
+        exception.Code == MongoErrorCodes.ChangeStreamHistoryLost;
 
     private ChangeStreamSession<TChange, TResult> CreateSession(
         IChangeStreamCursor<TChange> cursor,
