@@ -55,8 +55,6 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
             ? CorrelationId.Reserve(id)
             : CorrelationId.ReserveGenerated();
 
-        // Each read, and each recovery of the replay, is one execution that ends when the read makes progress, so the
-        // retry count and the timeout run from the first failure after the last progress.
         _retryPipeline = RetryPipeline.Create(
             MongoTransientErrors.IsTransient,
             _options.MaxRetryAttempts,
@@ -231,8 +229,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         {
             var endInclusive = await _retryPipeline
                 .ExecuteAsync(
-                    static (s, ct) => s.Subscription.ReadEndAsync(s.Session, ct),
-                    (Subscription: this, Session: session),
+                    static (s, ct) => s.Self.ReadEndAsync(s.Session, ct),
+                    (Self: this, Session: session),
                     cancellationToken)
                 .ConfigureAwait(false);
 

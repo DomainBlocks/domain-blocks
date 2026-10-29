@@ -58,8 +58,6 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
             ? CorrelationId.Reserve(id)
             : CorrelationId.ReserveGenerated();
 
-        // Each read, and each recovery of the replay, is one execution that ends when the read makes progress, so the
-        // retry count and the timeout run from the first failure after the last progress.
         _retryPipeline = RetryPipeline.Create(
             PostgresTransientErrors.IsTransient,
             _options.MaxRetryAttempts,
@@ -237,8 +235,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     {
         var endInclusive = await _retryPipeline
             .ExecuteAsync(
-                static (s, ct) => s.Subscription.ReadEndAsync(s.PositionHighWaterMark, ct),
-                (Subscription: this, PositionHighWaterMark: positionHighWaterMark),
+                static (s, ct) => s.Self.ReadEndAsync(s.PositionHighWaterMark, ct),
+                (Self: this, PositionHighWaterMark: positionHighWaterMark),
                 cancellationToken)
             .ConfigureAwait(false);
 
