@@ -5,6 +5,7 @@ using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.Internal;
 using DomainBlocks.EventStore.PostgreSQL.Feeds;
 using Microsoft.Extensions.Logging;
+using Polly;
 
 namespace DomainBlocks.EventStore.PostgreSQL;
 
@@ -30,6 +31,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     private readonly SubscriptionOptions _options;
     private readonly ILogger? _logger;
     private readonly string _correlationId;
+    private readonly ResiliencePipeline _retryPipeline;
 
     public SubscriptionAsyncEnumerable(
         EventLogReader<TEvent> reader,
@@ -55,6 +57,13 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         _correlationId = _options.CorrelationId is { } id
             ? CorrelationId.Reserve(id)
             : CorrelationId.ReserveGenerated();
+
+        // Each read, and each recovery of the replay, is one execution that ends when the read makes progress, so the
+        // timeout runs from the first failure after the last progress.
+        _retryPipeline = RetryPipeline.Create(
+            PostgresTransientErrors.IsTransient,
+            _options.RetryTimeout,
+            (ex, attempt, delay) => _logger?.CatchUpRetrying(ex, _correlationId, attempt, delay));
     }
 
     public async IAsyncEnumerator<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> GetAsyncEnumerator(
@@ -67,16 +76,10 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         {
             _logger?.SubscriptionStarted(_correlationId);
 
-            // The subscription's reads share one retry, so progress in any of them resets the backoff.
-            var retry = new CatchUpRetry(
-                PostgresTransientErrors.IsTransient,
-                new RetryBackoff(_options.RetryTimeout),
-                (ex, delay) => _logger?.CatchUpRetrying(ex, _correlationId, delay));
-
             var resumePosition = new ResumePosition(_origin switch
             {
                 SubscriptionOrigin<TPos>.After after => after.Position,
-                SubscriptionOrigin<TPos>.End => await PinEndAsync(retry, cancellationToken).ConfigureAwait(false),
+                SubscriptionOrigin<TPos>.End => await PinEndAsync(cancellationToken).ConfigureAwait(false),
                 _ => null
             });
 
@@ -110,7 +113,6 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                         resumePosition,
                         observer,
                         attachment.PositionHighWaterMark,
-                        retry,
                         cancellationToken)
                     .GetAsyncEnumerator(cancellationToken);
 
@@ -181,12 +183,15 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     // The end is pinned when the subscription starts. Otherwise, a restart before the first event is delivered would
     // resume from a later end and skip the events appended in between. If the sequence is empty, the subscription
     // resumes from the start.
-    private async Task<TPos?> PinEndAsync(CatchUpRetry retry, CancellationToken cancellationToken)
+    private async Task<TPos?> PinEndAsync(CancellationToken cancellationToken)
     {
         try
         {
-            return await retry
-                .ReadAsync(ct => _endPositionReader(_reader, ct), cancellationToken)
+            return await _retryPipeline
+                .ExecuteAsync(
+                    static (s, ct) => s.ReadEndAsync(null, ct),
+                    this,
+                    cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -227,11 +232,13 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         ResumePosition resumePosition,
         Observer observer,
         long? positionHighWaterMark,
-        CatchUpRetry retry,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var endInclusive = await retry
-            .ReadAsync(ct => ReadEndAsync(positionHighWaterMark, ct), cancellationToken)
+        var endInclusive = await _retryPipeline
+            .ExecuteAsync(
+                static (s, ct) => s.Subscription.ReadEndAsync(s.PositionHighWaterMark, ct),
+                (Subscription: this, PositionHighWaterMark: positionHighWaterMark),
+                cancellationToken)
             .ConfigureAwait(false);
 
         _logger?.CatchUpBoundary(_correlationId, endInclusive?.Value);
@@ -241,12 +248,13 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
             var end = checked((long)endInclusive.Value.Value);
 
             // After a transient error, the replay reads again after the last event that the subscriber took.
-            var events = retry.ReplayAsync(
-                ct => _catchUpReader(_reader, resumePosition.StartExclusive, end, ct),
-                e => resumePosition.AdvanceTo(_positionSelector(e.Context)),
-                cancellationToken);
+            var events = ResumableAsyncEnumerable.Create(
+                (Subscription: this, ResumePosition: resumePosition, End: end),
+                static (s, ct) => s.Subscription.ReadCatchUpAsync(s.ResumePosition, s.End, ct),
+                static (s, e) => s.ResumePosition.AdvanceTo(s.Subscription._positionSelector(e.Context)),
+                _retryPipeline);
 
-            await foreach (var e in events.ConfigureAwait(false))
+            await foreach (var e in events.WithCancellation(cancellationToken).ConfigureAwait(false))
                 yield return SubscriptionMessage.Event(e);
 
             // The replay has covered the sequence up to the mark, even if the filter selected none of its events.
@@ -279,12 +287,20 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         }
     }
 
-    private async Task<TPos?> ReadEndAsync(long? positionHighWaterMark, CancellationToken cancellationToken)
+    private async ValueTask<TPos?> ReadEndAsync(long? positionHighWaterMark, CancellationToken cancellationToken)
     {
         if (positionHighWaterMark.HasValue)
             await WaitUntilVisibleAsync(positionHighWaterMark.Value, cancellationToken).ConfigureAwait(false);
 
         return await _endPositionReader(_reader, cancellationToken).ConfigureAwait(false);
+    }
+
+    private IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCatchUpAsync(
+        ResumePosition resumePosition,
+        long endInclusive,
+        CancellationToken cancellationToken)
+    {
+        return _catchUpReader(_reader, resumePosition.StartExclusive, endInclusive, cancellationToken);
     }
 
     // The feed can deliver a row before queries can see it: the walsender sends a commit once it is flushed, and the

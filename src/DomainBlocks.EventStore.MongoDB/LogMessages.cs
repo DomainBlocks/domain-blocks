@@ -10,11 +10,14 @@ internal static partial class LogMessages
     [LoggerMessage(LogLevel.Debug, "[sub: {SubscriptionId}] catch-up boundary is {EndPos}")]
     internal static partial void CatchUpBoundary(this ILogger logger, string subscriptionId, ulong? endPos);
 
-    [LoggerMessage(LogLevel.Warning, "[sub: {SubscriptionId}] catch-up read failed; retrying in {Delay}")]
+    [LoggerMessage(
+        LogLevel.Warning,
+        "[sub: {SubscriptionId}, attempt: {Attempt}] catch-up read failed; retrying in {Delay}")]
     internal static partial void CatchUpRetrying(
         this ILogger logger,
         Exception exception,
         string subscriptionId,
+        int attempt,
         TimeSpan delay);
 
     [LoggerMessage(LogLevel.Information, "[sub: {SubscriptionId}] caught up")]
