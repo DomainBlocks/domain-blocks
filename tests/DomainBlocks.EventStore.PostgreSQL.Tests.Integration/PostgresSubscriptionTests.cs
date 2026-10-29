@@ -206,8 +206,7 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
 
         TestEvent[] events = [new() { Value = "e0" }, new() { Value = "e1" }, new() { Value = "e2" }];
 
-        foreach (var e in events)
-            await eventStore.AppendAsync("s1", [Appendable(e)], cancellationToken: ct);
+        await eventStore.AppendAsync("s1", [.. events.Select(Appendable)], cancellationToken: ct);
 
         await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.Start).GetAsyncEnumerator(ct);
         (await NextEventAsync(subscription)).Payload.ShouldBe(events[0]);
@@ -244,8 +243,7 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
 
         TestEvent[] events = [new() { Value = "e0" }, new() { Value = "e1" }];
 
-        foreach (var e in events)
-            await eventStore.AppendAsync("s1", [Appendable(e)], cancellationToken: ct);
+        await eventStore.AppendAsync("s1", [.. events.Select(Appendable)], cancellationToken: ct);
 
         await using var subscription = eventStore
             .SubscribeToAll(SubscriptionOrigin.Start, new SubscriptionOptions { CatchUpMaxRetryAttempts = 0 })

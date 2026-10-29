@@ -179,6 +179,7 @@ public class MongoSubscriptionCatchUpTests
         resumedRead.EndInclusive.ShouldBe(149);
         resumedRead.IsCompleted.ShouldBeTrue();
 
+        // The first event was taken before the cursor was killed, so the messages read after start with the second.
         messages
             .Where(x => x.Event is not null)
             .Select(x => x.Event.ShouldNotBeNull().Payload)
