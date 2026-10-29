@@ -242,7 +242,7 @@ internal sealed class EventLogFeed<T> : IFeed<T, long?>
             catch (OperationCanceledException) when (_stopCts.IsCancellationRequested)
             {
                 _logger?.FeedCanceled(_feedId);
-                _observerHub.SetComplete();
+                await _observerHub.NotifyDisposedAsync().ConfigureAwait(false);
                 _completionTcs.TrySetResult();
             }
             catch (Exception ex)

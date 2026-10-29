@@ -431,6 +431,20 @@ public abstract class EventStoreSubscriptionTests<TStreamPos, TLogPos>(
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_StoreDisposedWhileWaitingForLiveEvent_ThrowsObjectDisposed(
+        CancellationToken cancellationToken)
+    {
+        await using var enumerator = EventStore.SubscribeToAll().GetAsyncEnumerator(cancellationToken);
+        await ShouldBeCaughtUpAsync(enumerator);
+        var moveNext = enumerator.MoveNextAsync().AsTask();
+
+        await EventStore.DisposeAsync();
+
+        await moveNext.ShouldThrowAsync<ObjectDisposedException>();
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task SubscribeToAll_TwoSubscribers_ObserveTheSameLiveEvents(CancellationToken cancellationToken)
     {
         await using var first = EventStore

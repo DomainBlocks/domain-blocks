@@ -273,7 +273,7 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<T
             catch (OperationCanceledException) when (_stopCts.IsCancellationRequested)
             {
                 _logger?.ChangeStreamCanceled(_subjectId);
-                _observerHub.SetComplete();
+                await _observerHub.NotifyDisposedAsync().ConfigureAwait(false);
                 _completionTcs.TrySetResult();
             }
             catch (Exception ex)

@@ -111,16 +111,31 @@ public class FeedObserverHubTests
     }
 
     [Test]
-    public async Task NotifyErrorAsync_AfterComplete_DoesNotNotify()
+    public async Task NotifyDisposedAsync_TwoObservers_NotifiesBothWithObjectDisposed()
+    {
+        var observerHub = new FeedObserverHub<int>(null, "feed");
+        var first = new TestObserver();
+        var second = new TestObserver();
+        using var firstAttachment = observerHub.Attach(first, "first");
+        using var secondAttachment = observerHub.Attach(second, "second");
+
+        await observerHub.NotifyDisposedAsync();
+
+        first.Errors.ShouldHaveSingleItem().ShouldBeOfType<ObjectDisposedException>();
+        second.Errors.ShouldHaveSingleItem().ShouldBeOfType<ObjectDisposedException>();
+    }
+
+    [Test]
+    public async Task NotifyErrorAsync_AfterDisposal_DoesNotNotify()
     {
         var observerHub = new FeedObserverHub<int>(null, "feed");
         var observer = new TestObserver();
         using var attachment = observerHub.Attach(observer, "observer");
 
-        observerHub.SetComplete();
+        await observerHub.NotifyDisposedAsync();
         await observerHub.NotifyErrorAsync(new InvalidOperationException("failed"), CancellationToken.None);
 
-        observer.Received.ShouldBeEmpty();
+        observer.Errors.ShouldHaveSingleItem().ShouldBeOfType<ObjectDisposedException>();
     }
 
     [Test]
@@ -137,10 +152,10 @@ public class FeedObserverHubTests
     }
 
     [Test]
-    public void Attach_AfterComplete_Throws()
+    public async Task Attach_AfterDisposal_Throws()
     {
         var observerHub = new FeedObserverHub<int>(null, "feed");
-        observerHub.SetComplete();
+        await observerHub.NotifyDisposedAsync();
 
         var exception = Should.Throw<InvalidOperationException>(() => observerHub.Attach(new TestObserver(), "late"));
 
@@ -213,6 +228,8 @@ public class FeedObserverHubTests
     {
         public List<string> Received { get; } = [];
 
+        public List<Exception> Errors { get; } = [];
+
         public ValueTask OnNextAsync(int item, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -229,6 +246,7 @@ public class FeedObserverHubTests
         public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken)
         {
             Received.Add($"error:{exception.Message}");
+            Errors.Add(exception);
             return throwOnError ? throw new InvalidOperationException("The test observer failed.") : default;
         }
     }
