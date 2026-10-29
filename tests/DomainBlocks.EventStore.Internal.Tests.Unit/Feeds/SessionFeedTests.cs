@@ -1,41 +1,19 @@
 using DomainBlocks.EventStore.Internal.Feeds;
-using DomainBlocks.EventStore.PostgreSQL.Feeds;
-using DomainBlocks.Testing;
-using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using Shouldly;
-using static DomainBlocks.EventStore.PostgreSQL.Tests.Unit.Feeds.ScriptedSession;
+using static DomainBlocks.EventStore.Internal.Tests.Unit.Feeds.ScriptedSession;
 
-namespace DomainBlocks.EventStore.PostgreSQL.Tests.Unit.Feeds;
+namespace DomainBlocks.EventStore.Internal.Tests.Unit.Feeds;
 
-public class EventLogFeedTests
+public class SessionFeedTests
 {
     private const int TestTimeoutMillis = 5 * 1000;
 
-    private static readonly EventLogFeedOptions FastRetryOptions = new()
+    private static readonly SessionFeedOptions FastRetryOptions = new()
     {
         RetryDelay = TimeSpan.FromMilliseconds(10),
         MaxRetryDelay = TimeSpan.FromMilliseconds(50)
     };
-
-    private ILoggerFactory _loggerFactory = null!;
-    private ILogger _logger = null!;
-
-    [SetUp]
-    public void SetUp()
-    {
-        _loggerFactory = LoggerFactory.Create(x => x
-            .AddProvider(new NUnitLoggerProvider())
-            .SetMinimumLevel(LogLevel.Debug));
-
-        _logger = _loggerFactory.CreateLogger<EventLogFeedTests>();
-    }
-
-    [TearDown]
-    public void TearDown()
-    {
-        _loggerFactory.Dispose();
-    }
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
@@ -79,6 +57,18 @@ public class EventLogFeedTests
         await using var connection = await feed.ConnectAsync(ct);
 
         connection.HighWaterMark.ShouldBe(3);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task ConnectAsync_SessionWithoutRows_PublishesSessionMark(CancellationToken ct)
+    {
+        // The session's -1 is below a long's default, so the feed must take the first session's mark as it is.
+        var feed = CreateFeed(new ScriptedSession("s1"));
+
+        await using var connection = await feed.ConnectAsync(ct);
+
+        connection.HighWaterMark.ShouldBe(-1);
     }
 
     [Test]
@@ -183,16 +173,15 @@ public class EventLogFeedTests
     {
         var attempts = 0;
 
-        var feed = new EventLogFeed<long>(
+        var feed = new SessionFeed<long, long>(
             new DelegateSessionFactory<long>(_ =>
             {
                 attempts++;
                 return attempts < 3
                     ? throw new IOException("not yet")
-                    : Task.FromResult<IEventLogSession<long>>(new ScriptedSession("s1", Row(1)));
+                    : Task.FromResult<IFeedSession<long, long>>(new ScriptedSession("s1", Row(1)));
             }),
-            FastRetryOptions,
-            _logger);
+            FastRetryOptions);
 
         var observer = new RecordingObserver();
         using var attachment = feed.Attach(observer);
@@ -209,14 +198,13 @@ public class EventLogFeedTests
         var attempts = 0;
         var exception = new IOException("down");
 
-        var feed = new EventLogFeed<long>(
+        var feed = new SessionFeed<long, long>(
             new DelegateSessionFactory<long>(_ =>
             {
                 attempts++;
                 throw exception;
             }),
-            new EventLogFeedOptions { MaxRetryAttempts = 0 },
-            _logger);
+            new SessionFeedOptions { MaxRetryAttempts = 0 });
 
         var observer = new RecordingObserver();
         using var attachment = feed.Attach(observer);
@@ -232,15 +220,14 @@ public class EventLogFeedTests
     {
         var exception = new IOException("still down");
 
-        var feed = new EventLogFeed<long>(
+        var feed = new SessionFeed<long, long>(
             new DelegateSessionFactory<long>(_ => throw exception),
-            new EventLogFeedOptions
+            new SessionFeedOptions
             {
                 MaxRetryAttempts = 2,
                 RetryDelay = TimeSpan.FromMilliseconds(1),
                 MaxRetryDelay = TimeSpan.FromMilliseconds(1)
-            },
-            _logger);
+            });
 
         var observer = new RecordingObserver();
         using var attachment = feed.Attach(observer);
@@ -269,14 +256,13 @@ public class EventLogFeedTests
     {
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        var feed = new EventLogFeed<long>(
+        var feed = new SessionFeed<long, long>(
             new DelegateSessionFactory<long>(async _ =>
             {
                 await release.Task;
                 return new ScriptedSession("s1", Row(1));
             }),
-            FastRetryOptions,
-            _logger);
+            FastRetryOptions);
 
         var connectTask = feed.ConnectAsync(ct);
 
@@ -292,10 +278,9 @@ public class EventLogFeedTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task ConnectAsync_WhenCancelledDuringRetryBackoff_StopsTheFeed(CancellationToken ct)
     {
-        var feed = new EventLogFeed<long>(
+        var feed = new SessionFeed<long, long>(
             new DelegateSessionFactory<long>(_ => throw new IOException("down")),
-            new EventLogFeedOptions { RetryDelay = TimeSpan.FromMinutes(1), MaxRetryDelay = TimeSpan.FromMinutes(1) },
-            _logger);
+            new SessionFeedOptions { RetryDelay = TimeSpan.FromMinutes(1), MaxRetryDelay = TimeSpan.FromMinutes(1) });
 
         using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         connectCts.CancelAfter(100);
@@ -333,15 +318,15 @@ public class EventLogFeedTests
         await feed.ConnectAsync(ct).ShouldThrowAsync<InvalidOperationException>();
     }
 
-    private EventLogFeed<long> CreateFeed(params IEventLogSession<long>[] sessions) =>
+    private static SessionFeed<long, long> CreateFeed(params IFeedSession<long, long>[] sessions) =>
         CreateFeed(CreateSessionFactory(sessions));
 
-    private EventLogFeed<long> CreateFeed(IEventLogSessionFactory<long> sessionFactory) =>
-        new(sessionFactory, FastRetryOptions, _logger);
+    private static SessionFeed<long, long> CreateFeed(IFeedSessionFactory<long, long> sessionFactory) =>
+        new(sessionFactory, FastRetryOptions);
 
-    private static DelegateSessionFactory<long> CreateSessionFactory(params IEventLogSession<long>[] sessions)
+    private static DelegateSessionFactory<long> CreateSessionFactory(params IFeedSession<long, long>[] sessions)
     {
-        var queue = new Queue<IEventLogSession<long>>(sessions);
+        var queue = new Queue<IFeedSession<long, long>>(sessions);
 
         return new DelegateSessionFactory<long>(_ => Task.FromResult(queue.Count > 0
             ? queue.Dequeue()

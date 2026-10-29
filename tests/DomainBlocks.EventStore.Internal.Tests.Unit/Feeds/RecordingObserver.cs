@@ -1,7 +1,7 @@
 using System.Threading.Channels;
 using DomainBlocks.EventStore.Internal.Feeds;
 
-namespace DomainBlocks.EventStore.PostgreSQL.Tests.Unit.Feeds;
+namespace DomainBlocks.EventStore.Internal.Tests.Unit.Feeds;
 
 /// <summary>
 /// Records what the feed delivers, in order, as readable strings: "row:{position}", "reset", or "error".

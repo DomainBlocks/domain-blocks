@@ -1,5 +1,6 @@
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Internal;
+using DomainBlocks.EventStore.Internal.Feeds;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Npgsql.Replication;
@@ -52,7 +53,7 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent>(
     PostgresReplicationOptions options,
     IEventDecoder<TEvent, PostgresEventData, string> decoder,
     ILogger? logger) :
-    IEventLogSessionFactory<EventLogRow<TEvent>>
+    IFeedSessionFactory<EventLogRow<TEvent>, long>
     where TEvent : notnull
 {
     private const string ServerStateSql =
@@ -74,7 +75,7 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent>(
     private FeedReplicationSlot? _slot;
     private bool _hasOpenedSessionOnSlot;
 
-    public async Task<IEventLogSession<EventLogRow<TEvent>>> OpenAsync(CancellationToken cancellationToken)
+    public async Task<IFeedSession<EventLogRow<TEvent>, long>> OpenAsync(CancellationToken cancellationToken)
     {
         ThrowIfMultipleHosts();
         await CheckServerAsync(cancellationToken).ConfigureAwait(false);

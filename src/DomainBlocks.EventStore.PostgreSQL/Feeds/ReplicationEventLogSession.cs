@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Codecs;
+using DomainBlocks.EventStore.Internal.Feeds;
 using Npgsql;
 using Npgsql.Replication;
 using Npgsql.Replication.PgOutput;
@@ -24,7 +25,7 @@ internal sealed class ReplicationEventLogSession<TEvent>(
     PgOutputReplicationOptions pgOutputOptions,
     SchemaObjectNames names,
     IEventDecoder<TEvent, PostgresEventData, string> decoder) :
-    IEventLogSession<EventLogRow<TEvent>>
+    IFeedSession<EventLogRow<TEvent>, long>
     where TEvent : notnull
 {
     private readonly EventLogRow<TEvent> _row = new(decoder);

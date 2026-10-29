@@ -1,12 +1,13 @@
 using System.Runtime.CompilerServices;
-using DomainBlocks.EventStore.PostgreSQL.Feeds;
+using DomainBlocks.EventStore.Internal.Feeds;
 
-namespace DomainBlocks.EventStore.PostgreSQL.Tests.Unit.Feeds;
+namespace DomainBlocks.EventStore.Internal.Tests.Unit.Feeds;
 
 /// <summary>
 /// A fake session that plays a script of row positions, failures, and endings, then blocks like a live session would.
 /// </summary>
-internal sealed class ScriptedSession(string description, params ScriptedSession.Step[] steps) : IEventLogSession<long>
+internal sealed class ScriptedSession(string description, params ScriptedSession.Step[] steps) :
+    IFeedSession<long, long>
 {
     public abstract record Step
     {

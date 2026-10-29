@@ -6,7 +6,6 @@ using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Filtering;
 using pg::DomainBlocks.EventStore.Internal.Feeds;
 using DomainBlocks.EventStore.PostgreSQL;
-using DomainBlocks.EventStore.PostgreSQL.Feeds;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.SystemTextJson;
 
@@ -70,7 +69,7 @@ public class PostgresLiveFanOutBenchmarks
     [Benchmark]
     public async Task<int> FanOut_NoIO()
     {
-        var feed = new EventLogFeed<EventLogRow<IDomainEvent>>(new SessionFactory(_decoder, _rows, _streamIds));
+        var feed = new SessionFeed<EventLogRow<IDomainEvent>, long>(new SessionFactory(_decoder, _rows, _streamIds));
 
         var subscribers = new Subscriber[SubscriberCount];
         var attachments = new IDisposable[SubscriberCount];
@@ -105,10 +104,10 @@ public class PostgresLiveFanOutBenchmarks
         IEventDecoder<IDomainEvent, PostgresEventData, string> decoder,
         EncodedEvent<PostgresEventData, string>[] rows,
         string[] streamIds) :
-        IEventLogSessionFactory<EventLogRow<IDomainEvent>>
+        IFeedSessionFactory<EventLogRow<IDomainEvent>, long>
     {
-        public Task<IEventLogSession<EventLogRow<IDomainEvent>>> OpenAsync(CancellationToken cancellationToken) =>
-            Task.FromResult<IEventLogSession<EventLogRow<IDomainEvent>>>(new Session(decoder, rows, streamIds));
+        public Task<IFeedSession<EventLogRow<IDomainEvent>, long>> OpenAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IFeedSession<EventLogRow<IDomainEvent>, long>>(new Session(decoder, rows, streamIds));
 
         public bool IsTransient(Exception exception) => false;
 
@@ -122,7 +121,7 @@ public class PostgresLiveFanOutBenchmarks
     private sealed class Session(
         IEventDecoder<IDomainEvent, PostgresEventData, string> decoder,
         EncodedEvent<PostgresEventData, string>[] rows,
-        string[] streamIds) : IEventLogSession<EventLogRow<IDomainEvent>>
+        string[] streamIds) : IFeedSession<EventLogRow<IDomainEvent>, long>
     {
         private readonly EventLogRow<IDomainEvent> _row = new(decoder);
 
