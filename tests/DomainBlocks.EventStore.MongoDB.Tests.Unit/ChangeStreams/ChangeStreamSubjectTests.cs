@@ -129,88 +129,6 @@ public class ChangeStreamSubjectTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task Connect_WithStartAtOperationTime_MarksTickBeforeStart(CancellationToken ct)
-    {
-        SetupChangeStream([new ChangeStreamBatch { Items = [] }]);
-        var startAt = new BsonTimestamp(5, 3);
-
-        var subject = ChangeStreamSubject.Create(
-            _mockClient.Object,
-            _mockCollection.Object.WatchAsync,
-            new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
-            static x => x.ResumeToken,
-            static x => x.ClusterTime,
-            static x => x,
-            new ChangeStreamSubjectOptions
-            {
-                MongoOptions = new ChangeStreamOptions { StartAtOperationTime = startAt }
-            });
-
-        await using var connection = await subject.ConnectAsync(ct);
-
-        _helloCount.ShouldBe(0);
-        connection.HighWaterMark.ShouldBe(new BsonTimestamp(5, 2));
-        _watchOptions.ShouldHaveSingleItem().ShouldNotBeNull().StartAtOperationTime.ShouldBe(startAt);
-    }
-
-    [Test]
-    [CancelAfter(TestTimeoutMillis)]
-    public async Task Connect_WithResumeToken_ResumesAfterTokenAndMarksLastWrite(CancellationToken ct)
-    {
-        SetupChangeStream([new ChangeStreamBatch { Items = [] }]);
-        var resumeAfter = new BsonDocument("_data", "explicit");
-
-        var subject = ChangeStreamSubject.Create(
-            _mockClient.Object,
-            _mockCollection.Object.WatchAsync,
-            new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
-            static x => x.ResumeToken,
-            static x => x.ClusterTime,
-            static x => x,
-            new ChangeStreamSubjectOptions { MongoOptions = new ChangeStreamOptions { ResumeAfter = resumeAfter } });
-
-        await using var connection = await subject.ConnectAsync(ct);
-
-        connection.HighWaterMark.ShouldBe(CreateOperationTime(1));
-        var watchOptions = _watchOptions.ShouldHaveSingleItem().ShouldNotBeNull();
-        watchOptions.ResumeAfter.ShouldBe(resumeAfter);
-        watchOptions.StartAtOperationTime.ShouldBeNull();
-    }
-
-    [Test]
-    [CancelAfter(TestTimeoutMillis)]
-    public async Task Connect_WithResumeToken_KeepsMarkAboveOlderChanges(CancellationToken ct)
-    {
-        // The token's change, and the one after it, are older than the last write that the mark starts at.
-        var older = CreateChange(new BsonDocument("_data", "1"), new BsonTimestamp(0, 5));
-        var newer = CreateChange(new BsonDocument("_data", "2"), new BsonTimestamp(3, 0));
-        SetupChangeStream([new ChangeStreamBatch { Items = [older, newer] }]);
-
-        var subject = ChangeStreamSubject.Create(
-            _mockClient.Object,
-            _mockCollection.Object.WatchAsync,
-            new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>(),
-            static x => x.ResumeToken,
-            static x => x.ClusterTime,
-            static x => x,
-            new ChangeStreamSubjectOptions
-            {
-                MongoOptions = new ChangeStreamOptions { ResumeAfter = new BsonDocument("_data", "0") }
-            });
-
-        var observer = new HighWaterMarkRecordingObserver();
-        using var attachment = subject.Attach(observer);
-        await using var connection = await subject.ConnectAsync(ct);
-
-        observer.Connection = connection;
-        observer.Release();
-
-        var marks = await observer.ReadMarksAsync(ct).Take(2).ToArrayAsync(ct);
-        marks.ShouldBe([CreateOperationTime(1), new BsonTimestamp(3, 0)]);
-    }
-
-    [Test]
-    [CancelAfter(TestTimeoutMillis)]
     public async Task Connect_WhenCursorFailsBeforeFirstBatch_ResumesFromInitialToken(CancellationToken ct)
     {
         var change = CreateChange(new BsonDocument("_data", "1"));
@@ -314,11 +232,7 @@ public class ChangeStreamSubjectTests
             static x => x.ResumeToken,
             static x => x.ClusterTime,
             static x => x,
-            new ChangeStreamSubjectOptions
-            {
-                MongoOptions = new ChangeStreamOptions { ResumeAfter = new BsonDocument("_data", "0") }
-            },
-            logger);
+            logger: logger);
 
         await using var connection = await subject.ConnectAsync(ct);
 

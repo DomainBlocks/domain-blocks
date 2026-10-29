@@ -40,7 +40,6 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<T
     private readonly Func<TChange, BsonDocument> _resumeTokenSelector;
     private readonly Func<TChange, BsonTimestamp> _clusterTimeSelector;
     private readonly Func<TChange, TResult> _resultSelector;
-    private readonly ChangeStreamSubjectOptions _options;
     private readonly ILogger? _logger;
     private readonly FeedObserverHub<TResult> _observerHub;
     private readonly string _subjectId = CorrelationId.ReserveGenerated();
@@ -72,7 +71,6 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<T
         _resumeTokenSelector = resumeTokenSelector;
         _clusterTimeSelector = clusterTimeSelector;
         _resultSelector = resultSelector;
-        _options = options;
         _logger = logger;
         _observerHub = new FeedObserverHub<TResult>(logger, _subjectId);
     }
@@ -177,10 +175,9 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<T
         public Task Completion => _completionTcs.Task;
 
         /// <summary>
-        /// Gets an optime at or after every change that the stream has delivered or won't deliver. It starts just
-        /// before the stream's start, or at the primary's last write when a resume token sets the start, and moves
-        /// forwards with each change delivered. A majority read that waits for it sees every such change, even on a
-        /// node whose commit point lagged after a failover.
+        /// Gets an optime at or after every change that the stream has delivered or won't deliver. It starts at the
+        /// primary's last write, just before the stream's start, and then follows the changes delivered. A majority
+        /// read that waits for it sees every such change, even on a node whose commit point lagged after a failover.
         /// </summary>
         public BsonTimestamp HighWaterMark =>
             Volatile.Read(ref _opTimeHighWaterMark) ??
@@ -243,12 +240,10 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<T
                                 var clusterTime = _clusterTimeSelector(change);
 
                                 // A change's cluster time is the optime of the oplog entry that committed it, so a read
-                                // can wait for it. The mark only moves forwards, because the first changes after a
-                                // resume token can be older than the last write that the mark started at. It is raised
-                                // before observers are notified, and the exchange is a full fence, so an observer that
-                                // attaches too late for a change reads a mark that covers it.
-                                if (clusterTime.CompareTo(_opTimeHighWaterMark) > 0)
-                                    Interlocked.Exchange(ref _opTimeHighWaterMark, clusterTime);
+                                // can wait for it. The mark is raised before observers are notified, and the exchange
+                                // is a full fence, so an observer that attaches too late for a change reads a mark that
+                                // covers it.
+                                Interlocked.Exchange(ref _opTimeHighWaterMark, clusterTime);
 
                                 await _observerHub.NotifyNextAsync(result, _stopCts.Token).ConfigureAwait(false);
                                 resumeToken = _resumeTokenSelector(change);
@@ -304,35 +299,19 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<T
         // stream won't deliver.
         private async Task<ChangeStreamOptions> GetInitialOptionsAsync()
         {
-            var options = _subject._options.MongoOptions;
+            // The stream starts one tick after the primary's last write. The mark must be an oplog optime rather than
+            // the current cluster time, because a catch-up reads only once the oplog reaches the mark. After a
+            // transaction commits, the logical clock runs one tick ahead of the oplog, so a mark at the current
+            // cluster time would stall a catch-up until the periodic no-op writer runs, every 10 seconds by default.
+            // Only a shard writes a no-op to reach the time at once:
+            // https://github.com/mongodb/mongo/blob/r7.0.16/src/mongo/db/read_concern_mongod.cpp#L146-L153
+            // The server would start the stream at the same point by default, but the mark would be unknown:
+            // https://github.com/mongodb/mongo/blob/r7.0.16/src/mongo/db/pipeline/document_source_change_stream.cpp#L238-L253
+            var lastApplied = await GetLastAppliedOpTimeAsync().ConfigureAwait(false);
 
-            if (options.ResumeAfter is not null || options.StartAfter is not null)
-            {
-                // A resume token's time can't be read, but the token comes from a majority-committed change, which the
-                // primary's last write is at or after.
-                Volatile.Write(ref _opTimeHighWaterMark, await GetLastAppliedOpTimeAsync().ConfigureAwait(false));
-                return options;
-            }
-
-            if (options.StartAtOperationTime is null)
-            {
-                // Without a start, the stream starts one tick after the primary's last write. The mark must be an
-                // oplog optime rather than the current cluster time, because a catch-up reads only once the oplog
-                // reaches the mark. After a transaction commits, the logical clock runs one tick ahead of the oplog,
-                // so a mark at the current cluster time would stall a catch-up until the periodic no-op writer runs,
-                // every 10 seconds by default. Only a shard writes a no-op to reach the time at once:
-                // https://github.com/mongodb/mongo/blob/r7.0.16/src/mongo/db/read_concern_mongod.cpp#L146-L153
-                // The server would start the stream at the same point by default, but the mark would be unknown:
-                // https://github.com/mongodb/mongo/blob/r7.0.16/src/mongo/db/pipeline/document_source_change_stream.cpp#L238-L253
-                var lastApplied = await GetLastAppliedOpTimeAsync().ConfigureAwait(false);
-
-                options = options.Copy();
-                options.StartAtOperationTime = new BsonTimestamp(lastApplied.Value + 1);
-            }
-
-            // The start is inclusive, so the stream won't deliver the changes up to the tick before it.
-            Volatile.Write(ref _opTimeHighWaterMark, new BsonTimestamp(options.StartAtOperationTime.Value - 1));
-            return options;
+            // The start is inclusive, so the stream won't deliver the changes up to the last write.
+            Volatile.Write(ref _opTimeHighWaterMark, lastApplied);
+            return new ChangeStreamOptions { StartAtOperationTime = new BsonTimestamp(lastApplied.Value + 1) };
         }
 
         private async Task<BsonTimestamp> GetLastAppliedOpTimeAsync()
@@ -362,15 +341,7 @@ internal sealed class ChangeStreamSubject<TDocument, TChange, TResult> : IFeed<T
             ChangeStreamOptions initialOptions,
             BsonDocument? resumeToken)
         {
-            var options = initialOptions;
-
-            if (resumeToken is not null)
-            {
-                options = options.Copy();
-                options.ResumeAfter = resumeToken;
-                options.StartAfter = null;
-                options.StartAtOperationTime = null;
-            }
+            var options = resumeToken is null ? initialOptions : new ChangeStreamOptions { ResumeAfter = resumeToken };
 
             return await _subject._cursorFactory(_subject._pipeline, options, _stopCts.Token).ConfigureAwait(false);
         }
