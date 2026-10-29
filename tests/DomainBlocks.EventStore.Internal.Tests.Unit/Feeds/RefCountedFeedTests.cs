@@ -176,7 +176,7 @@ public class RefCountedFeedTests
 
         var refCountedFeed = new RefCountedFeed<int, long>(() =>
         {
-            var feed = new TestFeed(neverConnects: feeds.Count == 0);
+            var feed = new TestFeed(canConnect: feeds.Count > 0);
             feeds.Add(feed);
             return feed;
         });
@@ -212,7 +212,7 @@ public class RefCountedFeedTests
         feed.Connection.DisposeCount.ShouldBe(1);
     }
 
-    private sealed class TestFeed(bool neverConnects = false, bool advanceMarkOnAttach = false) : IFeed<int, long>
+    private sealed class TestFeed(bool canConnect = true, bool advanceMarkOnAttach = false) : IFeed<int, long>
     {
         private Exception? _attachException;
 
@@ -241,7 +241,7 @@ public class RefCountedFeedTests
         {
             ConnectCount++;
 
-            if (neverConnects)
+            if (!canConnect)
                 await Task.Delay(Timeout.Infinite, cancellationToken);
 
             Connection = new TestConnection();
