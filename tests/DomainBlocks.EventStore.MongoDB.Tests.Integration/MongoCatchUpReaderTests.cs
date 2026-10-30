@@ -28,9 +28,9 @@ public class MongoCatchUpReaderTests
         await scenario.AppendAsync("existing", 2);
         var reader = scenario.CreateCatchUpReader(Builders<BsonDocument>.Filter.Empty);
 
-        var snapshot = await reader.ReadSnapshotAsync(EarliestMark, "sub-1", ct);
+        var snapshot = await reader.ReadSnapshotAsync(EarliestMark, SubscriptionOrigin.Start, "sub-1", ct);
 
-        snapshot.GetResumePosition(SubscriptionOrigin.Start).ShouldBe(LogPosition.FromInt64(1));
+        snapshot.Position.ShouldBe(LogPosition.FromInt64(1));
     }
 
     [Test]
@@ -42,9 +42,9 @@ public class MongoCatchUpReaderTests
         var noEvents = Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, "no-such-stream");
         var reader = scenario.CreateCatchUpReader(noEvents);
 
-        var snapshot = await reader.ReadSnapshotAsync(EarliestMark, "sub-1", ct);
+        var snapshot = await reader.ReadSnapshotAsync(EarliestMark, SubscriptionOrigin.Start, "sub-1", ct);
 
-        snapshot.GetResumePosition(SubscriptionOrigin.Start).ShouldBeNull();
+        snapshot.Position.ShouldBeNull();
     }
 
     [Test]
@@ -55,7 +55,7 @@ public class MongoCatchUpReaderTests
         var reader = scenario.CreateCatchUpReader(Builders<BsonDocument>.Filter.Empty);
 
         var exception = await Should.ThrowAsync<MongoCommandException>(async () =>
-            await reader.ReadSnapshotAsync(MarkAheadOfCluster, "sub-1", ct));
+            await reader.ReadSnapshotAsync(MarkAheadOfCluster, SubscriptionOrigin.Start, "sub-1", ct));
 
         exception.Code.ShouldBe(InvalidOptionsCode);
     }
@@ -79,9 +79,9 @@ public class MongoCatchUpReaderTests
         using var client = new MongoClient(settings);
         var reader = scenario.CreateCatchUpReader(Builders<BsonDocument>.Filter.Empty, client);
 
-        var snapshot = await reader.ReadSnapshotAsync(EarliestMark, "sub-1", ct);
+        var snapshot = await reader.ReadSnapshotAsync(EarliestMark, SubscriptionOrigin.Start, "sub-1", ct);
 
-        await foreach (var _ in snapshot.ReadAsync(SubscriptionOrigin.Start, ct))
+        await foreach (var _ in snapshot.ReadAsync(after: null, ct))
         {
         }
 

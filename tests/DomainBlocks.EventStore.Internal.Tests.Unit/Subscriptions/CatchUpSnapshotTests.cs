@@ -11,81 +11,97 @@ public class CatchUpSnapshotTests
     [Test]
     public async Task ReadAsync_FromStart_ReadsUpToEnd()
     {
-        (await ReadAsync(end: 7, FromStart)).ShouldBe(["read from -1 to 7"]);
+        (await ReadAsync(FromStart, end: 7)).ShouldBe(["read from -1 to 7"]);
     }
 
     [Test]
     public async Task ReadAsync_FromEnd_ReadsNothing()
     {
-        (await ReadAsync(end: 7, FromEnd)).ShouldBeEmpty();
+        (await ReadAsync(FromEnd, end: 7)).ShouldBeEmpty();
     }
 
     [Test]
     public async Task ReadAsync_AfterPositionBeforeEnd_ReadsFromPositionToEnd()
     {
-        (await ReadAsync(end: 7, After(3))).ShouldBe(["read from 3 to 7"]);
+        (await ReadAsync(After(3), end: 7)).ShouldBe(["read from 3 to 7"]);
     }
 
     [TestCase(7)]
     [TestCase(9)]
     public async Task ReadAsync_AfterPositionAtOrPastEnd_ReadsNothing(long position)
     {
-        (await ReadAsync(end: 7, After(position))).ShouldBeEmpty();
+        (await ReadAsync(After(position), end: 7)).ShouldBeEmpty();
     }
 
     [Test]
     public async Task ReadAsync_EmptySequence_ReadsNothing()
     {
-        (await ReadAsync(end: null, FromStart)).ShouldBeEmpty();
+        (await ReadAsync(FromStart, end: null)).ShouldBeEmpty();
     }
 
     [Test]
-    public void GetResumePosition_FromStart_ReturnsEnd()
+    public async Task ReadAsync_ResumedBeforeEnd_ReadsFromResumePositionToEnd()
     {
-        CreateSnapshot(end: 7).GetResumePosition(FromStart).ShouldBe(LogPosition.FromInt64(7));
+        (await ReadAsync(FromStart, end: 7, after: LogPosition.FromInt64(3))).ShouldBe(["read from 3 to 7"]);
     }
 
     [Test]
-    public void GetResumePosition_FromEnd_ReturnsEnd()
+    public async Task ReadAsync_ResumedAtEnd_ReadsNothing()
     {
-        CreateSnapshot(end: 7).GetResumePosition(FromEnd).ShouldBe(LogPosition.FromInt64(7));
+        (await ReadAsync(FromStart, end: 7, after: LogPosition.FromInt64(7))).ShouldBeEmpty();
     }
 
     [Test]
-    public void GetResumePosition_AfterPositionBeforeEnd_ReturnsEnd()
+    public void Position_FromStart_IsEnd()
     {
-        CreateSnapshot(end: 7).GetResumePosition(After(3)).ShouldBe(LogPosition.FromInt64(7));
+        CreateSnapshot(FromStart, end: 7).Position.ShouldBe(LogPosition.FromInt64(7));
     }
 
     [Test]
-    public void GetResumePosition_AfterPositionPastEnd_ReturnsPosition()
+    public void Position_FromEnd_IsEnd()
     {
-        CreateSnapshot(end: 7).GetResumePosition(After(9)).ShouldBe(LogPosition.FromInt64(9));
+        CreateSnapshot(FromEnd, end: 7).Position.ShouldBe(LogPosition.FromInt64(7));
     }
 
     [Test]
-    public void GetResumePosition_EmptySequenceFromStartOrEnd_ReturnsNull()
+    public void Position_AfterPositionBeforeEnd_IsEnd()
     {
-        CreateSnapshot(end: null).GetResumePosition(FromStart).ShouldBeNull();
-        CreateSnapshot(end: null).GetResumePosition(FromEnd).ShouldBeNull();
+        CreateSnapshot(After(3), end: 7).Position.ShouldBe(LogPosition.FromInt64(7));
     }
 
     [Test]
-    public void GetResumePosition_EmptySequenceAfterPosition_ReturnsPosition()
+    public void Position_AfterPositionPastEnd_IsPosition()
     {
-        CreateSnapshot(end: null).GetResumePosition(After(3)).ShouldBe(LogPosition.FromInt64(3));
+        CreateSnapshot(After(9), end: 7).Position.ShouldBe(LogPosition.FromInt64(9));
+    }
+
+    [Test]
+    public void Position_EmptySequenceFromStartOrEnd_IsNull()
+    {
+        CreateSnapshot(FromStart, end: null).Position.ShouldBeNull();
+        CreateSnapshot(FromEnd, end: null).Position.ShouldBeNull();
+    }
+
+    [Test]
+    public void Position_EmptySequenceAfterPosition_IsPosition()
+    {
+        CreateSnapshot(After(3), end: null).Position.ShouldBe(LogPosition.FromInt64(3));
     }
 
     private static SubscriptionOrigin<LogPosition> After(long position) =>
         SubscriptionOrigin.After(LogPosition.FromInt64(position));
 
-    private static TestCatchUpSnapshot CreateSnapshot(long? end) => new(end, []);
+    private static TestCatchUpSnapshot CreateSnapshot(SubscriptionOrigin<LogPosition> origin, long? end) =>
+        new(origin, end, []);
 
-    private static async Task<List<string>> ReadAsync(long? end, SubscriptionOrigin<LogPosition> origin)
+    private static async Task<List<string>> ReadAsync(
+        SubscriptionOrigin<LogPosition> origin,
+        long? end,
+        LogPosition? after = null)
     {
         var calls = new List<string>();
 
-        await foreach (var _ in new TestCatchUpSnapshot(end, calls).ReadAsync(origin, CancellationToken.None))
+        await foreach (var _ in new TestCatchUpSnapshot(origin, end, calls).ReadAsync(after, CancellationToken.None))
         {
         }
 

@@ -27,6 +27,7 @@ internal sealed class PostgresCatchUpReader<TEvent, TPos>(
 {
     public async ValueTask<CatchUpSnapshot<TEvent, TPos>> ReadSnapshotAsync(
         long highWaterMark,
+        SubscriptionOrigin<TPos> origin,
         string correlationId,
         CancellationToken cancellationToken)
     {
@@ -40,7 +41,7 @@ internal sealed class PostgresCatchUpReader<TEvent, TPos>(
             ? await reader.ReadMaxPositionWithBarrierAsync(cancellationToken).ConfigureAwait(false)
             : await reader.ReadMaxStreamPositionWithBarrierAsync(streamId, cancellationToken).ConfigureAwait(false);
 
-        return new Snapshot(this, end);
+        return new Snapshot(this, origin, end);
     }
 
     private IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAsync(
@@ -79,8 +80,11 @@ internal sealed class PostgresCatchUpReader<TEvent, TPos>(
     /// <summary>
     /// Represents the sequence up to the end. The end bounds each read, since queries could already see it.
     /// </summary>
-    private sealed class Snapshot(PostgresCatchUpReader<TEvent, TPos> owner, long? end) :
-        CatchUpSnapshot<TEvent, TPos>(end)
+    private sealed class Snapshot(
+        PostgresCatchUpReader<TEvent, TPos> owner,
+        SubscriptionOrigin<TPos> origin,
+        long? end) :
+        CatchUpSnapshot<TEvent, TPos>(origin, end)
     {
         protected override IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCoreAsync(
             long startExclusive,

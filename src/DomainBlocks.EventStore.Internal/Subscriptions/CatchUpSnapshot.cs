@@ -1,35 +1,39 @@
 namespace DomainBlocks.EventStore.Internal.Subscriptions;
 
 /// <summary>
-/// Represents a followed sequence up to the end that was read, which every read of the snapshot sees the same way. It
-/// is not a snapshot in the database's sense: the log is append-only and the reads stop at the end, so what they return
-/// can't change.
+/// Represents a followed sequence from an origin up to the end that was read, which every read of the snapshot sees the
+/// same way. It is not a snapshot in the database's sense: the log is append-only and the reads stop at the end, so
+/// what they return can't change.
 /// </summary>
 /// <remarks>
 /// A store derives from this class to supply its read of the sequence. The rules for what each origin reads are here.
 /// </remarks>
-internal abstract class CatchUpSnapshot<TEvent, TPos>(long? end)
+internal abstract class CatchUpSnapshot<TEvent, TPos>
     where TEvent : notnull
     where TPos : struct, IPosition<TPos>
 {
-    /// <summary>
-    /// Reads the events after the origin, up to the end. The sequence is empty if the origin is at or after the end.
-    /// </summary>
-    public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAsync(
-        SubscriptionOrigin<TPos> origin,
-        CancellationToken cancellationToken)
+    private readonly long _start;
+    private readonly long _end;
+
+    protected CatchUpSnapshot(SubscriptionOrigin<TPos> origin, long? end)
     {
-        var startExclusive = origin is SubscriptionOrigin<TPos>.After after ? after.Position.ToInt64() : -1;
+        // -1 is the position before the first event, where an empty sequence ends.
+        _end = end ?? -1;
 
-        if (end is { } endInclusive && origin is not SubscriptionOrigin<TPos>.End && startExclusive < endInclusive)
-            return ReadCoreAsync(startExclusive, endInclusive, cancellationToken);
+        _start = origin switch
+        {
+            SubscriptionOrigin<TPos>.After after => after.Position.ToInt64(),
+            SubscriptionOrigin<TPos>.End => _end,
+            _ => -1
+        };
 
-        return AsyncEnumerable.Empty<ReadEvent<TEvent, string, StreamPosition, LogPosition>>();
+        var position = Math.Max(_start, _end);
+        Position = position < 0 ? null : TPos.FromInt64(position);
     }
 
     /// <summary>
-    /// Gets the position to resume after once the events after the origin have been read, or <see langword="null"/> to
-    /// resume from the start.
+    /// Gets the position that a subscription has reached once it has read the snapshot, or <see langword="null"/> if it
+    /// is still before the first event.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -38,18 +42,24 @@ internal abstract class CatchUpSnapshot<TEvent, TPos>(long? end)
     /// </para>
     /// <para>
     /// For a subscription from the end, this pins the end. Otherwise, a restart before the first event is delivered
-    /// would resume from a later end and skip the events appended in between. If the sequence is empty, the
-    /// subscription resumes from the start.
+    /// would resume from a later end and skip the events appended in between.
     /// </para>
     /// </remarks>
-    public TPos? GetResumePosition(SubscriptionOrigin<TPos> origin)
+    public TPos? Position { get; }
+
+    /// <summary>
+    /// Reads the events up to the end, from the origin, or after the given position to resume a read that failed. The
+    /// sequence is empty if there are no events to read.
+    /// </summary>
+    public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAsync(
+        TPos? after,
+        CancellationToken cancellationToken)
     {
-        var after = origin is SubscriptionOrigin<TPos>.After a ? a.Position : (TPos?)null;
+        var start = after?.ToInt64() ?? _start;
 
-        if (end is not { } endInclusive)
-            return after;
-
-        return after is { } pos && pos.ToInt64() >= endInclusive ? pos : TPos.FromInt64(endInclusive);
+        return start < _end
+            ? ReadCoreAsync(start, _end, cancellationToken)
+            : AsyncEnumerable.Empty<ReadEvent<TEvent, string, StreamPosition, LogPosition>>();
     }
 
     /// <summary>
