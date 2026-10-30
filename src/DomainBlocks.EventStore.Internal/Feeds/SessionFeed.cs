@@ -45,16 +45,16 @@ internal sealed class SessionFeed<T, THighWaterMark> : IFeed<T, THighWaterMark>
     private int _connected;
 
     // The connection reads the mark without a lock or an interlocked operation, so the mark must be a type whose reads
-    // and writes are whole: a reference, or a primitive or enum no wider than a pointer.
+    // and writes are whole: a reference, or a primitive no wider than a pointer.
     static SessionFeed()
     {
         var type = typeof(THighWaterMark);
 
-        if (type is { IsValueType: true, IsPrimitive: false, IsEnum: false })
+        if (type is { IsValueType: true, IsPrimitive: false })
         {
             throw new NotSupportedException(
-                $"A high-water mark must be a reference type, a primitive, or an enum, but {type} is a struct, which " +
-                "can be copied in parts.");
+                $"A high-water mark must be a reference type or a primitive, but {type} is a struct, which can be " +
+                "copied in parts.");
         }
 
         if (type.IsValueType && Unsafe.SizeOf<THighWaterMark>() > IntPtr.Size)

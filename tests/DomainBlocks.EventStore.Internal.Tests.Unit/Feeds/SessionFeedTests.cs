@@ -181,7 +181,7 @@ public class SessionFeedTests
         observer.Connection = connection;
         observer.ReleaseOnNext();
 
-        (await observer.WasCompletedOnError.WaitAsync(ct)).ShouldBeTrue();
+        (await observer.IsCompletedOnError.WaitAsync(ct)).ShouldBeTrue();
     }
 
     [Test]
@@ -348,7 +348,7 @@ public class SessionFeedTests
     }
 
     [Test]
-    public void Constructor_StructMark_Throws()
+    public void Constructor_NonPrimitiveStructMark_Throws()
     {
         var exception = Should.Throw<TypeInitializationException>(() =>
             new SessionFeed<long, TwoPartMark>(new UnusedSessionFactory()));
@@ -386,12 +386,12 @@ public class SessionFeedTests
     {
         private readonly TaskCompletionSource _onNextReleased = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        private readonly TaskCompletionSource<bool> _wasCompletedOnError =
+        private readonly TaskCompletionSource<bool> _isCompletedOnError =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public IFeedConnection<long>? Connection { get; set; }
 
-        public Task<bool> WasCompletedOnError => _wasCompletedOnError.Task;
+        public Task<bool> IsCompletedOnError => _isCompletedOnError.Task;
 
         public void ReleaseOnNext() => _onNextReleased.TrySetResult();
 
@@ -401,7 +401,7 @@ public class SessionFeedTests
 
         public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken)
         {
-            _wasCompletedOnError.TrySetResult(Connection.ShouldNotBeNull().Completion.IsCompleted);
+            _isCompletedOnError.TrySetResult(Connection.ShouldNotBeNull().Completion.IsCompleted);
             return default;
         }
     }

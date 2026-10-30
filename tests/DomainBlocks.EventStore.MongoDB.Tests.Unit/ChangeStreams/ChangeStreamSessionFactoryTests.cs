@@ -55,6 +55,7 @@ public class ChangeStreamSessionFactoryTests
         // Each hello reports a later last applied optime, as if answered at a later point, unless a test has set an
         // error for the next one to throw.
         var mockAdminDb = new Mock<IMongoDatabase>();
+
         mockAdminDb
             .Setup(x => x.RunCommandAsync(
                 It.IsAny<Command<BsonDocument>>(),
@@ -67,6 +68,7 @@ public class ChangeStreamSessionFactoryTests
                     new BsonDocument("opTime", new BsonDocument("ts", CreateOperationTime(++_helloCount)))));
 
         _mockClient = new Mock<IMongoClient>();
+
         _mockClient
             .Setup(x => x.GetDatabase("admin", It.IsAny<MongoDatabaseSettings>()))
             .Returns(mockAdminDb.Object);
