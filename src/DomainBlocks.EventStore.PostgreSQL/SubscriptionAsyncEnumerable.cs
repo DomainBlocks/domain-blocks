@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using System.Threading.Channels;
 using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.Internal;
 using DomainBlocks.EventStore.Internal.Feeds;
+using DomainBlocks.EventStore.Internal.Subscriptions;
 using Microsoft.Extensions.Logging;
 using Polly;
 
@@ -68,7 +68,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     public async IAsyncEnumerator<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> GetAsyncEnumerator(
         CancellationToken cancellationToken = default)
     {
-        Observer? observer = null;
+        SubscriptionObserver<TEvent, EventLogRow<TEvent>>? observer = null;
         IFeedAttachment<long>? attachment = null;
 
         try
@@ -98,7 +98,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
                 // The new observer is attached before the old one is detached, so the ref count never drops to zero and
                 // the replication session stays open.
-                var nextObserver = new Observer(_options.QueueCapacity, _liveFilter, _logger, _correlationId);
+                var nextObserver = new SubscriptionObserver<TEvent, EventLogRow<TEvent>>(_options.QueueCapacity, _liveFilter, _logger, _correlationId);
                 var nextAttachment = await AttachObserverAsync(nextObserver, cancellationToken).ConfigureAwait(false);
 
                 if (attachment is not null)
@@ -129,11 +129,11 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
                 switch (observer.StopReason)
                 {
-                    case StopReason.QueueOverflow when isCaughtUp:
+                    case SubscriptionStopReason.QueueOverflow when isCaughtUp:
                         _logger?.SubscriptionFellBehind(_correlationId);
                         break;
 
-                    case StopReason.QueueOverflow or StopReason.FeedReset:
+                    case SubscriptionStopReason.QueueOverflow or SubscriptionStopReason.FeedReset:
                         break;
 
                     default:
@@ -206,7 +206,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     }
 
     private async Task<IFeedAttachment<long>> AttachObserverAsync(
-        Observer observer,
+        SubscriptionObserver<TEvent, EventLogRow<TEvent>> observer,
         CancellationToken cancellationToken)
     {
         try
@@ -229,7 +229,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
     private async IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> ReadAllAsync(
         ResumePosition resumePosition,
-        Observer observer,
+        SubscriptionObserver<TEvent, EventLogRow<TEvent>> observer,
         long positionHighWaterMark,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
@@ -264,7 +264,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
         // A restart signaled during the replay takes effect only now. Cancelling the replay would discard what it read,
         // and a replay slower than the queue's overflow would never finish.
-        if (observer.StopReason != StopReason.None)
+        if (observer.StopReason != SubscriptionStopReason.None)
             yield break;
 
         _logger?.SubscriptionCaughtUp(_correlationId);
@@ -360,105 +360,6 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         {
             if (!Covers(position))
                 After = position;
-        }
-    }
-
-    internal enum StopReason
-    {
-        None,
-        QueueOverflow,
-        FeedReset,
-        Disposed
-    }
-
-    /// <summary>
-    /// Buffers the live events that a subscription selects, for one cycle. It never blocks the feed. On a queue
-    /// overflow or a feed reset, it records the reason and completes its queue, and the cycle restarts once the queue
-    /// is drained, which can be much later.
-    /// </summary>
-    internal sealed class Observer(
-        int queueCapacity,
-        EventFilter liveFilter,
-        ILogger? logger = null,
-        string subscriptionId = "") :
-        IFeedObserver<EventLogRow<TEvent>>,
-        IDisposable
-    {
-        private readonly Channel<ReadEvent<TEvent, string, StreamPosition, LogPosition>> _channel =
-            Channel.CreateBounded<ReadEvent<TEvent, string, StreamPosition, LogPosition>>(
-                new BoundedChannelOptions(queueCapacity)
-                {
-                    SingleWriter = true,
-                    SingleReader = true
-                });
-
-        private int _stopReason;
-        private bool _isStopped;
-
-        public ChannelReader<ReadEvent<TEvent, string, StreamPosition, LogPosition>> Reader => _channel.Reader;
-
-        public StopReason StopReason => (StopReason)Volatile.Read(ref _stopReason);
-
-        public ValueTask OnNextAsync(EventLogRow<TEvent> row, CancellationToken cancellationToken)
-        {
-            // A stopped observer stays attached until the subscription replaces it, so it skips rows instead of
-            // decoding events that would be dropped.
-            if (_isStopped || !liveFilter.Matches(row))
-                return ValueTask.CompletedTask;
-
-            ReadEvent<TEvent, string, StreamPosition, LogPosition> e;
-
-            try
-            {
-                // The row is only valid during this call.
-                e = ReadEvent.Create(row.Payload, row.Metadata, row.Context);
-            }
-            catch (Exception ex)
-            {
-                // An event that cannot be decoded fails this subscription, as it would fail a read. If the exception
-                // reached the feed, the feed would detach the observer without telling the subscriber.
-                _isStopped = true;
-                _channel.Writer.TryComplete(ex);
-
-                return ValueTask.CompletedTask;
-            }
-
-            if (!_channel.Writer.TryWrite(e) && Stop(StopReason.QueueOverflow))
-                logger?.SubscriptionQueueOverflowed(subscriptionId, queueCapacity);
-
-            return ValueTask.CompletedTask;
-        }
-
-        public ValueTask OnResetAsync(CancellationToken cancellationToken)
-        {
-            if (Stop(StopReason.FeedReset))
-                logger?.SubscriptionFeedReset(subscriptionId);
-
-            return ValueTask.CompletedTask;
-        }
-
-        public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken)
-        {
-            _channel.Writer.TryComplete(exception);
-            return ValueTask.CompletedTask;
-        }
-
-        public void Dispose() => Stop(StopReason.Disposed);
-
-        // Only the first reason is kept, and the result says whether this call set it. The reason is recorded before
-        // the queue completes, so it can be read once the queue ends.
-        private bool Stop(StopReason reason)
-        {
-            _isStopped = true;
-
-            var previous = Interlocked.CompareExchange(ref _stopReason, (int)reason, (int)StopReason.None);
-
-            if (previous != (int)StopReason.None)
-                return false;
-
-            _channel.Writer.TryComplete();
-
-            return true;
         }
     }
 }

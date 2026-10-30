@@ -11,7 +11,9 @@ using DomainBlocks.Serialization.SystemTextJson;
 
 namespace DomainBlocks.EventStore.Benchmarks;
 
-using SubscriptionObserver = SubscriptionAsyncEnumerable<IDomainEvent, LogPosition>.Observer;
+using SubscriptionObserver = pg::DomainBlocks.EventStore.Internal.Subscriptions.SubscriptionObserver<
+    IDomainEvent,
+    EventLogRow<IDomainEvent>>;
 
 /// <summary>
 /// Measures the PostgreSQL live path without I/O: a session hands <see cref="EventCount"/> rows to the feed, which fans
