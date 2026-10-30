@@ -24,7 +24,7 @@ public class ChangeStreamFeedTests
     private SemaphoreSlim _changeStreamOpened = null!;
     private BsonDocument? _initialResumeToken;
     private int _helloCount;
-    private Exception? _helloError;
+    private Queue<Exception?> _helloErrors = null!;
     private Exception? _resumeError;
 
     [SetUp]
@@ -34,14 +34,14 @@ public class ChangeStreamFeedTests
         _watchOptions = [];
         _changeStreamOpened = new SemaphoreSlim(0);
         _helloCount = 0;
-        _helloError = null;
+        _helloErrors = new Queue<Exception?>();
         _resumeError = null;
 
         // The server reports a resume token in the initial response.
         _initialResumeToken = new BsonDocument("_data", "0");
 
-        // Each hello reports a later last applied optime, as if answered at a later point, unless a test has set an
-        // error for the next one to throw.
+        // Each hello reports a later last applied optime, as if answered at a later point, unless a test has queued an
+        // error for it to throw.
         var mockAdminDb = new Mock<IMongoDatabase>();
 
         mockAdminDb
@@ -49,7 +49,7 @@ public class ChangeStreamFeedTests
                 It.IsAny<Command<BsonDocument>>(),
                 It.IsAny<ReadPreference>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => Interlocked.Exchange(ref _helloError, null) is { } error
+            .ReturnsAsync(() => _helloErrors.TryDequeue(out var error) && error is not null
                 ? throw error
                 : new BsonDocument(
                     "lastWrite",
@@ -192,6 +192,29 @@ public class ChangeStreamFeedTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
+    public async Task ConnectAsync_HelloFailsAfterHistoryLost_DoesNotResumeAgain(CancellationToken ct)
+    {
+        SetupChangeStream([new ChangeStreamBatch { Exception = new TimeoutException() }]);
+
+        // The oplog no longer holds the change that the resume token names, so every resume with it fails.
+        _resumeError = CreateCommandException(MongoErrorCodes.ChangeStreamHistoryLost);
+
+        // The first hello starts the feed. The second comes after the failed resume, and the feed retries it.
+        _helloErrors.Enqueue(null);
+        _helloErrors.Enqueue(new TimeoutException());
+
+        await using var feed = CreateFeed();
+        var observer = new RecordingObserver();
+        using var attachment = feed.Attach(observer);
+
+        await feed.ConnectAsync(ct);
+
+        (await observer.ReadAsync(1, ct)).ShouldBe(["reset"]);
+        _watchOptions.Select(x => x?.ResumeAfter is not null).ShouldBe([false, true, false]);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
     public async Task ConnectAsync_ChangeDelivered_RaisesMarkToClusterTime(CancellationToken ct)
     {
         var clusterTime = new BsonTimestamp(5, 1);
@@ -213,7 +236,7 @@ public class ChangeStreamFeedTests
     public async Task ConnectAsync_HelloFailsTransiently_RetriesThenConnects(CancellationToken ct)
     {
         SetupChangeStream([]);
-        _helloError = new TimeoutException();
+        _helloErrors.Enqueue(new TimeoutException());
 
         await using var feed = CreateFeed();
 
@@ -292,7 +315,7 @@ public class ChangeStreamFeedTests
                     PipelineDefinition<ChangeStreamDocument<BsonDocument>, ChangeStreamDocument<BsonDocument>> _,
                     ChangeStreamOptions? options,
                     CancellationToken _) =>
-                options?.ResumeAfter is not null && Interlocked.Exchange(ref _resumeError, null) is { } error
+                options?.ResumeAfter is not null && _resumeError is { } error
                     ? Task.FromException<IChangeStreamCursor<ChangeStreamDocument<BsonDocument>>>(error)
                     : Task.FromResult<IChangeStreamCursor<ChangeStreamDocument<BsonDocument>>>(testCursor));
     }
