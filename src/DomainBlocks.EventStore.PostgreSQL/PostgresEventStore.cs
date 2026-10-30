@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.Internal.Feeds;
+using DomainBlocks.EventStore.Internal.Subscriptions;
 using DomainBlocks.EventStore.PostgreSQL.Feeds;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -260,18 +261,14 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
     {
         var filter = options?.Filter ?? EventFilter.All;
 
-        return new PostgresSubscription<TEvent, LogPosition>(
-            _reader,
+        return new SubscriptionAsyncEnumerable<TEvent, EventLogRow<TEvent>, long, LogPosition>(
             _feed,
-            (reader, from, to, ct) => reader.ReadCatchUpAllAsync(from, to, filter, ct),
-            static async (reader, ct) =>
-                await reader.ReadMaxPositionWithBarrierAsync(ct).ConfigureAwait(false) is { } pos
-                    ? LogPosition.FromInt64(pos)
-                    : null,
+            new PostgresCatchUpSource<TEvent>(_reader, streamId: null, filter, _logger),
             filter,
             static ctx => ctx.LogPosition,
             origin,
             options,
+            PostgresTransientErrors.IsTransient,
             _logger);
     }
 
@@ -284,18 +281,14 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
 
         var filter = options?.Filter ?? EventFilter.All;
 
-        return new PostgresSubscription<TEvent, StreamPosition>(
-            _reader,
+        return new SubscriptionAsyncEnumerable<TEvent, EventLogRow<TEvent>, long, StreamPosition>(
             _feed,
-            (reader, from, to, ct) => reader.ReadCatchUpStreamAsync(streamId, from, to, filter, ct),
-            async (reader, ct) =>
-                await reader.ReadMaxStreamPositionWithBarrierAsync(streamId, ct).ConfigureAwait(false) is { } pos
-                    ? StreamPosition.FromInt64(pos)
-                    : null,
+            new PostgresCatchUpSource<TEvent>(_reader, streamId, filter, _logger),
             EventFilter.StreamIds(streamId) & filter,
             static ctx => ctx.StreamPosition,
             origin,
             options,
+            PostgresTransientErrors.IsTransient,
             _logger);
     }
 
