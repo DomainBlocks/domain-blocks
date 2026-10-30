@@ -8,23 +8,32 @@ namespace DomainBlocks.EventStore.Internal.Feeds;
 /// one is lost.
 /// </summary>
 /// <remarks>
+/// <para>
 /// A session that doesn't resume the previous one sees only items committed after it is created, so observers get
-/// <see cref="IFeedObserver{T}.OnResetAsync"/> first and recover missed items by re-reading from their last
-/// position.
+/// <see cref="IFeedObserver{T}.OnResetAsync"/> first and recover missed items by re-reading from their last position.
+/// </para>
+/// <para>
+/// A store derives from this class to supply its sessions. If it holds anything across sessions, such as a replication
+/// slot, it overrides <see cref="DisposeAsyncCore"/>, and calls the base method first, which stops the feed.
+/// </para>
 /// </remarks>
-internal sealed class EventLogFeed<T, THighWaterMark> : IEventLogFeed<T, THighWaterMark>
+internal abstract class EventLogFeed<T, THighWaterMark> : IEventLogFeed<T, THighWaterMark>
     where THighWaterMark : IComparable<THighWaterMark>
 {
-    private readonly IFeedSessionFactory<T, THighWaterMark> _sessionFactory;
     private readonly FeedResumePolicy _resumePolicy;
-    private readonly ILogger? _logger;
     private readonly FeedObserverHub<T> _observerHub;
     private readonly string _feedId = CorrelationId.ReserveGenerated();
+    private readonly CancellationTokenSource _stopCts = new();
     private readonly TaskCompletionSource _connectedTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private int _connected;
+    private readonly TaskCompletionSource _completionTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private Task? _producerTask;
+    private THighWaterMark _highWaterMark = default!;
+    private bool _hasHighWaterMark;
+    private int _hasStarted;
+    private int _isDisposed;
 
-    // The connection reads the mark without a lock or an interlocked operation, so the mark must be a type whose reads
-    // and writes are whole: a reference, or a primitive no wider than a pointer.
+    // The feed reads the mark without a lock or an interlocked operation, so the mark must be a type whose reads and
+    // writes are whole: a reference, or a primitive no wider than a pointer.
     static EventLogFeed()
     {
         var type = typeof(THighWaterMark);
@@ -44,206 +53,209 @@ internal sealed class EventLogFeed<T, THighWaterMark> : IEventLogFeed<T, THighWa
         }
     }
 
-    /// <remarks>
-    /// The caller owns <paramref name="sessionFactory"/>, and disposes it once the feed's connection has stopped.
-    /// </remarks>
-    public EventLogFeed(
-        IFeedSessionFactory<T, THighWaterMark> sessionFactory,
-        FeedResumePolicy resumePolicy,
-        ILogger? logger = null)
+    protected EventLogFeed(FeedResumePolicy resumePolicy, ILogger? logger = null)
     {
-        ArgumentNullException.ThrowIfNull(sessionFactory);
         ArgumentNullException.ThrowIfNull(resumePolicy);
 
-        _sessionFactory = sessionFactory;
         _resumePolicy = resumePolicy;
-        _logger = logger;
         _observerHub = new FeedObserverHub<T>(logger, _feedId);
+        Logger = logger;
     }
+
+    public Task Completion => _completionTcs.Task;
+
+    // An observer reads the mark just after it attaches, and the attach ends with a compare-exchange on the observer
+    // list, a full fence that orders the attach before this read. So the read needs no fence before it, only to be
+    // whole, which the static constructor checks. The barrier keeps later reads after it.
+    public THighWaterMark HighWaterMark
+    {
+        get
+        {
+            var highWaterMark = _highWaterMark;
+            Volatile.ReadBarrier();
+            return highWaterMark;
+        }
+    }
+
+    protected ILogger? Logger { get; }
 
     public IDisposable Attach(IFeedObserver<T> observer, string correlationId = "unknown")
     {
         return _observerHub.Attach(observer, correlationId);
     }
 
-    public async Task<IFeedConnection<THighWaterMark>> ConnectAsync(CancellationToken cancellationToken = default)
+    public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
-        var connection = Interlocked.Exchange(ref _connected, 1) == 0
-            ? new Connection(this)
-            : throw new InvalidOperationException("Connect may only be called once.");
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _isDisposed) != 0, this);
+
+        if (Interlocked.Exchange(ref _hasStarted, 1) != 0)
+            throw new InvalidOperationException("Connect may only be called once.");
+
+        _producerTask = RunProducerAsync();
 
         Task task;
 
         try
         {
             task = await Task
-                .WhenAny(_connectedTcs.Task, connection.Completion)
+                .WhenAny(_connectedTcs.Task, Completion)
                 .WaitAsync(cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            // Nobody will own this connection, so stop the producer rather than leak it.
-            await connection.DisposeAsync().ConfigureAwait(false);
+            // The feed won't connect now, so it shouldn't keep trying until its owner disposes it.
+            await StopAsync().ConfigureAwait(false);
             throw;
         }
 
         if (task == _connectedTcs.Task)
-            return connection;
+            return;
 
-        await connection.DisposeAsync().ConfigureAwait(false);
-        await connection.Completion.ConfigureAwait(false);
+        await StopAsync().ConfigureAwait(false);
+        await Completion.ConfigureAwait(false);
         throw new InvalidOperationException("The feed completed before it connected.");
     }
 
-    private sealed class Connection : IFeedConnection<THighWaterMark>
+    public async ValueTask DisposeAsync()
     {
-        private readonly EventLogFeed<T, THighWaterMark> _feed;
-        private readonly FeedObserverHub<T> _observerHub;
-        private readonly ILogger? _logger;
-        private readonly string _feedId;
-        private readonly Task _producerTask;
-        private readonly CancellationTokenSource _stopCts = new();
-        private readonly TaskCompletionSource _completionTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private THighWaterMark _highWaterMark = default!;
-        private bool _hasHighWaterMark;
-        private int _disposed;
+        if (Interlocked.Exchange(ref _isDisposed, 1) != 0)
+            return;
 
-        public Connection(EventLogFeed<T, THighWaterMark> feed)
+        await DisposeAsyncCore().ConfigureAwait(false);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Creates the next session, which continues where the previous one stopped if it can.
+    /// </summary>
+    /// <remarks>
+    /// The feed creates a session only after it has disposed the previous one, so sessions never run at the same time.
+    /// </remarks>
+    protected internal abstract Task<IFeedSession<T, THighWaterMark>> CreateSessionAsync(
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Stops the feed. Observers still attached receive an <see cref="ObjectDisposedException"/>.
+    /// </summary>
+    protected virtual async ValueTask DisposeAsyncCore()
+    {
+        await StopAsync().ConfigureAwait(false);
+
+        _stopCts.Dispose();
+        CorrelationId.Release(_feedId);
+    }
+
+    private async Task StopAsync()
+    {
+        // A feed that never started has no producer to complete it or to tell its observers.
+        if (Interlocked.Exchange(ref _hasStarted, 1) == 0)
         {
-            _feed = feed;
-            _observerHub = feed._observerHub;
-            _logger = feed._logger;
-            _feedId = feed._feedId;
-
-            _producerTask = RunProducerAsync();
+            await _observerHub.NotifyDisposedAsync().ConfigureAwait(false);
+            _completionTcs.TrySetResult();
+            return;
         }
 
-        public Task Completion => _completionTcs.Task;
-
-        // An observer reads the mark just after it attaches, and the attach ends with a compare-exchange on the
-        // observer list, a full fence that orders the attach before this read. So the read needs no fence before it,
-        // only to be whole, which the static constructor checks. The barrier keeps later reads after it.
-        public THighWaterMark HighWaterMark
+        if (!_stopCts.IsCancellationRequested)
         {
-            get
-            {
-                var highWaterMark = _highWaterMark;
-                Volatile.ReadBarrier();
-                return highWaterMark;
-            }
+            Logger?.FeedStopping(_feedId);
+            await _stopCts.CancelAsync().ConfigureAwait(false);
         }
 
-        public async ValueTask DisposeAsync()
+        if (_producerTask is not null)
+            await _producerTask.ConfigureAwait(false);
+    }
+
+    private async Task RunProducerAsync()
+    {
+        Logger?.FeedStarted(_feedId);
+
+        try
         {
-            if (Interlocked.Exchange(ref _disposed, 1) != 0)
-                return;
+            var hasConnectedBefore = false;
 
-            _logger?.FeedStopping(_feedId);
-
-            using (_stopCts)
+            while (true)
             {
-                if (!_stopCts.IsCancellationRequested)
-                    await _stopCts.CancelAsync().ConfigureAwait(false);
+                _stopCts.Token.ThrowIfCancellationRequested();
 
-                await _producerTask.ConfigureAwait(false);
-            }
+                var session = await _resumePolicy
+                    .ExecuteAsync(CreateSessionAsync, _feedId, _stopCts.Token)
+                    .ConfigureAwait(false);
 
-            CorrelationId.Release(_feedId);
-        }
-
-        private async Task RunProducerAsync()
-        {
-            _logger?.FeedStarted(_feedId);
-
-            try
-            {
-                var hasConnectedBefore = false;
-
-                while (true)
+                await using (session.ConfigureAwait(false))
                 {
-                    _stopCts.Token.ThrowIfCancellationRequested();
+                    Logger?.FeedConnected(_feedId, session.Description);
 
-                    var session = await _feed._resumePolicy
-                        .ExecuteAsync(_feed._sessionFactory.CreateAsync, _feedId, _stopCts.Token)
-                        .ConfigureAwait(false);
+                    // A session can start with a mark, such as one that covers items it won't deliver, and observers
+                    // read the mark as soon as the feed connects.
+                    RaiseHighWaterMark(session.InitialMark);
 
-                    await using (session.ConfigureAwait(false))
+                    // Unless the session resumes the previous one, items committed in between were missed. Reset
+                    // observers before pumping the new session, so no item advances a position past the gap.
+                    if (hasConnectedBefore && !session.IsResumed)
+                        await _observerHub.NotifyResetAsync(_stopCts.Token).ConfigureAwait(false);
+
+                    hasConnectedBefore = true;
+                    _connectedTcs.TrySetResult();
+
+                    try
                     {
-                        _logger?.FeedConnected(_feedId, session.Description);
-
-                        // A session can start with a mark, such as one that covers items it won't deliver, and
-                        // observers read the mark as soon as the feed connects.
-                        RaiseHighWaterMark(session.InitialMark);
-
-                        // Unless the session resumes the previous one, items committed in between were missed. Reset
-                        // observers before pumping the new session, so no item advances a position past the gap.
-                        if (hasConnectedBefore && !session.IsResumed)
-                            await _observerHub.NotifyResetAsync(_stopCts.Token).ConfigureAwait(false);
-
-                        hasConnectedBefore = true;
-                        _feed._connectedTcs.TrySetResult();
-
-                        try
+                        await foreach (var (item, mark) in session.ReadAsync(_stopCts.Token).ConfigureAwait(false))
                         {
-                            await foreach (var (item, mark) in session.ReadAsync(_stopCts.Token).ConfigureAwait(false))
-                            {
-                                // The mark is raised before observers are notified, and the exchange is a full
-                                // fence, so an observer that attaches too late for an item reads a mark that covers it.
-                                RaiseHighWaterMark(mark);
+                            // The mark is raised before observers are notified, and the exchange is a full fence, so an
+                            // observer that attaches too late for an item reads a mark that covers it.
+                            RaiseHighWaterMark(mark);
 
-                                await _observerHub.NotifyNextAsync(item, _stopCts.Token).ConfigureAwait(false);
-                            }
+                            await _observerHub.NotifyNextAsync(item, _stopCts.Token).ConfigureAwait(false);
+                        }
 
-                            // A live session should never end, so reconnect.
-                            _logger?.FeedEnded(_feedId);
-                        }
-                        catch (Exception ex) when (!_stopCts.IsCancellationRequested &&
-                                                   _feed._resumePolicy.IsTransient(ex))
-                        {
-                            _logger?.FeedConnectionLost(ex, _feedId);
-                        }
+                        // A live session should never end, so reconnect.
+                        Logger?.FeedEnded(_feedId);
+                    }
+                    catch (Exception ex) when (!_stopCts.IsCancellationRequested && _resumePolicy.IsTransient(ex))
+                    {
+                        Logger?.FeedConnectionLost(ex, _feedId);
                     }
                 }
             }
+        }
+        catch (OperationCanceledException) when (_stopCts.IsCancellationRequested)
+        {
+            Logger?.FeedCanceled(_feedId);
+            await _observerHub.NotifyDisposedAsync().ConfigureAwait(false);
+            _completionTcs.TrySetResult();
+        }
+        catch (Exception ex)
+        {
+            Logger?.FeedFailed(ex, _feedId);
+
+            // An observer told of the error may attach again straight away. Completing first means it sees that this
+            // feed has finished and gets a new one, rather than failing to attach to this one.
+            _completionTcs.TrySetException(ex);
+
+            try
+            {
+                await _observerHub.NotifyErrorAsync(ex, _stopCts.Token).ConfigureAwait(false);
+            }
             catch (OperationCanceledException) when (_stopCts.IsCancellationRequested)
             {
-                _logger?.FeedCanceled(_feedId);
-                await _observerHub.NotifyDisposedAsync().ConfigureAwait(false);
-                _completionTcs.TrySetResult();
-            }
-            catch (Exception ex)
-            {
-                _logger?.FeedFailed(ex, _feedId);
-
-                // An observer told of the error may attach again straight away. Completing first means it sees that
-                // this connection has finished and gets a new one, rather than failing to attach to this one.
-                _completionTcs.TrySetException(ex);
-
-                try
-                {
-                    await _observerHub.NotifyErrorAsync(ex, _stopCts.Token).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (_stopCts.IsCancellationRequested)
-                {
-                    _logger?.FeedCanceled(_feedId);
-                }
-            }
-            finally
-            {
-                _logger?.FeedStopped(_feedId);
+                Logger?.FeedCanceled(_feedId);
             }
         }
-
-        // Only the producer writes the mark, and it publishes the first session's mark as it is. After that, the mark
-        // only moves forwards, so a session with nothing to cover yet leaves it as it is.
-        private void RaiseHighWaterMark(THighWaterMark? mark)
+        finally
         {
-            if (mark is null || _hasHighWaterMark && mark.CompareTo(_highWaterMark) <= 0)
-                return;
-
-            Interlocked.Exchange(ref _highWaterMark, mark);
-            _hasHighWaterMark = true;
+            Logger?.FeedStopped(_feedId);
         }
+    }
+
+    // Only the producer writes the mark, and it publishes the first session's mark as it is. After that, the mark only
+    // moves forwards, so a session with nothing to cover yet leaves it as it is.
+    private void RaiseHighWaterMark(THighWaterMark? mark)
+    {
+        if (mark is null || _hasHighWaterMark && mark.CompareTo(_highWaterMark) <= 0)
+            return;
+
+        Interlocked.Exchange(ref _highWaterMark, mark);
+        _hasHighWaterMark = true;
     }
 }

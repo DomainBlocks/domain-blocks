@@ -71,8 +71,7 @@ public class PostgresLiveFanOutBenchmarks
     [Benchmark]
     public async Task<int> FanOut_NoIO()
     {
-        await using var sessionFactory = new SessionFactory(_decoder, _rows, _streamIds);
-        var feed = new EventLogFeed<EventLogRow<IDomainEvent>, long>(sessionFactory, ResumePolicy);
+        var feed = new Feed(_decoder, _rows, _streamIds);
 
         var subscribers = new Subscriber[SubscriberCount];
         var attachments = new IDisposable[SubscriberCount];
@@ -83,10 +82,9 @@ public class PostgresLiveFanOutBenchmarks
             attachments[i] = feed.Attach(subscribers[i]);
         }
 
-        await using (await feed.ConnectAsync())
-        {
-            await Task.WhenAll(subscribers.Select(x => x.Completion));
-        }
+        await feed.ConnectAsync();
+        await Task.WhenAll(subscribers.Select(x => x.Completion));
+        await feed.DisposeAsync();
 
         var deliveredCount = 0;
 
@@ -103,16 +101,15 @@ public class PostgresLiveFanOutBenchmarks
     /// <summary>
     /// Creates a <see cref="Session"/> and holds nothing across sessions.
     /// </summary>
-    private sealed class SessionFactory(
+    private sealed class Feed(
         IEventDecoder<IDomainEvent, PostgresEventData, string> decoder,
         EncodedEvent<PostgresEventData, string>[] rows,
         string[] streamIds) :
-        IFeedSessionFactory<EventLogRow<IDomainEvent>, long>
+        EventLogFeed<EventLogRow<IDomainEvent>, long>(ResumePolicy)
     {
-        public Task<IFeedSession<EventLogRow<IDomainEvent>, long>> CreateAsync(CancellationToken cancellationToken) =>
+        protected internal override Task<IFeedSession<EventLogRow<IDomainEvent>, long>> CreateSessionAsync(
+            CancellationToken cancellationToken) =>
             Task.FromResult<IFeedSession<EventLogRow<IDomainEvent>, long>>(new Session(decoder, rows, streamIds));
-
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     /// <summary>

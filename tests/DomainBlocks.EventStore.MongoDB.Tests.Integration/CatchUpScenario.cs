@@ -64,26 +64,24 @@ internal sealed class CatchUpScenario : IAsyncDisposable
 
         var logger = MongoTestEnvironment.LoggerFactory.CreateLogger("EventLogFeed");
 
-        _feed = new RefCountedFeed<EventLogDocument<object>, BsonTimestamp>(
-            () =>
-            {
-                var liveDocument = new EventLogDocument<object>(codec);
+        _feed = new RefCountedFeed<EventLogDocument<object>, BsonTimestamp>(() =>
+        {
+            var liveDocument = new EventLogDocument<object>(codec);
 
-                return ChangeStreamSessionFactory.Create(
-                    eventLog.Database.Client,
-                    ChangeStreamProbe.WatchAsync,
-                    pipeline,
-                    static change => change.ResumeToken,
-                    static change => change.ClusterTime,
-                    change =>
-                    {
-                        liveDocument.Set(change.FullDocument);
-                        return liveDocument;
-                    },
-                    logger);
-            },
-            sessionFactory =>
-                new EventLogFeed<EventLogDocument<object>, BsonTimestamp>(sessionFactory, resumePolicy, logger));
+            return ChangeStreamFeed.Create(
+                eventLog.Database.Client,
+                ChangeStreamProbe.WatchAsync,
+                pipeline,
+                static change => change.ResumeToken,
+                static change => change.ClusterTime,
+                change =>
+                {
+                    liveDocument.Set(change.FullDocument);
+                    return liveDocument;
+                },
+                resumePolicy,
+                logger);
+        });
     }
 
     public ChangeStreamProbe ChangeStreamProbe { get; }

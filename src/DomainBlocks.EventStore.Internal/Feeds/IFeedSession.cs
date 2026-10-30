@@ -5,7 +5,7 @@ namespace DomainBlocks.EventStore.Internal.Feeds;
 /// is the only part of a feed that knows the transport and how an item is decoded.
 /// </summary>
 /// <remarks>
-/// Once the factory has created the session, <see cref="ReadAsync"/> yields every item committed after the session's
+/// Once the feed has created the session, <see cref="ReadAsync"/> yields every item committed after the session's
 /// starting point, in commit order, until the session faults or is disposed. Uncommitted items are never yielded, and
 /// no item is yielded twice, even by a later session.
 /// </remarks>

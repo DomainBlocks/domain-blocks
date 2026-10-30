@@ -322,8 +322,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         _ownedClient?.Dispose();
     }
 
-    // Each feed has its own live document, which its session factory sets to each inserted document and hands to every
-    // subscription.
+    // Each feed has its own live document, which it sets to each inserted document and hands to every subscription.
     private RefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp> CreateFeed(
         IMongoCollection<BsonDocument> eventLog,
         ILogger? logger)
@@ -335,26 +334,24 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(insertsOnly);
         var resumePolicy = new FeedResumePolicy(ChangeStreamTransientErrors.IsTransient, logger: logger);
 
-        return new RefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp>(
-            () =>
-            {
-                var liveDocument = new EventLogDocument<TEvent>(_eventCodec);
+        return new RefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp>(() =>
+        {
+            var liveDocument = new EventLogDocument<TEvent>(_eventCodec);
 
-                return ChangeStreamSessionFactory.Create(
-                    eventLog.Database.Client,
-                    eventLog.WatchAsync,
-                    pipeline,
-                    static change => change.ResumeToken,
-                    static change => change.ClusterTime,
-                    change =>
-                    {
-                        liveDocument.Set(change.FullDocument);
-                        return liveDocument;
-                    },
-                    logger);
-            },
-            sessionFactory =>
-                new EventLogFeed<EventLogDocument<TEvent>, BsonTimestamp>(sessionFactory, resumePolicy, logger));
+            return ChangeStreamFeed.Create(
+                eventLog.Database.Client,
+                eventLog.WatchAsync,
+                pipeline,
+                static change => change.ResumeToken,
+                static change => change.ClusterTime,
+                change =>
+                {
+                    liveDocument.Set(change.FullDocument);
+                    return liveDocument;
+                },
+                resumePolicy,
+                logger);
+        });
     }
 
     private static ReadQuery GetReadQuery<TPos>(

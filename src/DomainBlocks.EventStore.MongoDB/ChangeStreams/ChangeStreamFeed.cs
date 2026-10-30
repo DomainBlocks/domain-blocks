@@ -6,48 +6,52 @@ using MongoDB.Driver;
 namespace DomainBlocks.EventStore.MongoDB.ChangeStreams;
 
 /// <summary>
-/// Creates a <see cref="ChangeStreamSessionFactory{TDocument, TChange, TResult}"/>, inferring its type arguments.
+/// Creates a <see cref="ChangeStreamFeed{TDocument, TChange, TResult}"/>, inferring its type arguments.
 /// </summary>
-internal static class ChangeStreamSessionFactory
+internal static class ChangeStreamFeed
 {
-    public static ChangeStreamSessionFactory<TDocument, TChange, TResult> Create<TDocument, TChange, TResult>(
+    public static ChangeStreamFeed<TDocument, TChange, TResult> Create<TDocument, TChange, TResult>(
         IMongoClient mongoClient,
         ChangeStreamCursorFactory<TDocument, TChange> cursorFactory,
         PipelineDefinition<ChangeStreamDocument<TDocument>, TChange> pipeline,
         Func<TChange, BsonDocument> resumeTokenSelector,
         Func<TChange, BsonTimestamp> clusterTimeSelector,
         Func<TChange, TResult> resultSelector,
+        FeedResumePolicy resumePolicy,
         ILogger? logger = null)
     {
-        return new ChangeStreamSessionFactory<TDocument, TChange, TResult>(
+        return new ChangeStreamFeed<TDocument, TChange, TResult>(
             mongoClient,
             cursorFactory,
             pipeline,
             resumeTokenSelector,
             clusterTimeSelector,
             resultSelector,
+            resumePolicy,
             logger);
     }
 }
 
 /// <summary>
-/// Opens one feed's change streams. The first starts one tick after the primary's last write, and each later one
+/// Represents a feed of change streams. The first starts one tick after the primary's last write, and each later one
 /// resumes after the last change that the feed delivered, so a lost connection costs no reset. When the oplog no longer
 /// holds that change, the next change stream starts afresh, as the first does, and the feed resets.
 /// </summary>
-internal sealed class ChangeStreamSessionFactory<TDocument, TChange, TResult>(
+internal sealed class ChangeStreamFeed<TDocument, TChange, TResult>(
     IMongoClient mongoClient,
     ChangeStreamCursorFactory<TDocument, TChange> cursorFactory,
     PipelineDefinition<ChangeStreamDocument<TDocument>, TChange> pipeline,
     Func<TChange, BsonDocument> resumeTokenSelector,
     Func<TChange, BsonTimestamp> clusterTimeSelector,
     Func<TChange, TResult> resultSelector,
+    FeedResumePolicy resumePolicy,
     ILogger? logger = null) :
-    IFeedSessionFactory<TResult, BsonTimestamp>
+    EventLogFeed<TResult, BsonTimestamp>(resumePolicy, logger)
 {
     private ChangeStreamSession<TChange, TResult>? _lastSession;
 
-    public async Task<IFeedSession<TResult, BsonTimestamp>> CreateAsync(CancellationToken cancellationToken)
+    protected internal override async Task<IFeedSession<TResult, BsonTimestamp>> CreateSessionAsync(
+        CancellationToken cancellationToken)
     {
         if (_lastSession?.ResumeToken is { } resumeToken)
         {
@@ -67,7 +71,7 @@ internal sealed class ChangeStreamSessionFactory<TDocument, TChange, TResult>(
             }
             catch (MongoCommandException ex) when (ChangeStreamTransientErrors.IsHistoryLost(ex))
             {
-                logger?.ChangeStreamHistoryLost(ex);
+                Logger?.ChangeStreamHistoryLost(ex);
                 _lastSession = null;
             }
         }
@@ -101,9 +105,6 @@ internal sealed class ChangeStreamSessionFactory<TDocument, TChange, TResult>(
             lastApplied);
     }
 
-    // A change stream holds nothing on the server once its cursor is closed, which its session does.
-    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-
     private ChangeStreamSession<TChange, TResult> CreateSession(
         IChangeStreamCursor<TChange> cursor,
         BsonDocument? resumeToken,
@@ -120,7 +121,7 @@ internal sealed class ChangeStreamSessionFactory<TDocument, TChange, TResult>(
             resumeTokenSelector,
             clusterTimeSelector,
             resultSelector,
-            logger);
+            Logger);
 
         return _lastSession;
     }

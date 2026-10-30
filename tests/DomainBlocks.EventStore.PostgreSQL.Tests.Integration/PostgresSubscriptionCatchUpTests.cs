@@ -49,16 +49,16 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
 
         var resumePolicy = new FeedResumePolicy(EventLogFeedTransientErrors.IsTransient);
 
-        _feed = new RefCountedFeed<EventLogRow<object>, long>(
-            () => new ReplicationEventLogSessionFactory<object>(
+        _feed = new RefCountedFeed<EventLogRow<object>, long>(() =>
+            new ReplicationEventLogFeed<object>(
                 PostgresTestEnvironment.ConnectionString,
                 DataSource,
                 slotNameGenerator,
                 names,
                 Options.Replication,
                 codec,
-                LoggerFactory.CreateLogger("ReplicationEventLogSession")),
-            sessionFactory => new EventLogFeed<EventLogRow<object>, long>(sessionFactory, resumePolicy));
+                resumePolicy,
+                LoggerFactory.CreateLogger("ReplicationEventLogFeed")));
     }
 
     [TearDown]

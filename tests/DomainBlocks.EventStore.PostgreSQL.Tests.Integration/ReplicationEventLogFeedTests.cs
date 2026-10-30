@@ -33,13 +33,12 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task Connect_WhenRowsAreInserted_NotifiesAttachedObserversInOrder(CancellationToken ct)
     {
-        await using var sessionFactory = CreateSessionFactory();
-        var feed = CreateFeed(sessionFactory);
+        await using var feed = CreateFeed();
         var observer1 = new CollectingObserver();
         var observer2 = new CollectingObserver();
         using var attachment1 = feed.Attach(observer1);
         using var attachment2 = feed.Attach(observer2);
-        await using var connection = await feed.ConnectAsync(ct);
+        await feed.ConnectAsync(ct);
 
         var events = Enumerable.Range(0, 10).Select(i => JsonEvent($"e{i}", $"{{\"i\": {i}}}")).ToArray();
         await Client.AppendAsync([Any("s1", events[..6]), Any("s2", events[6..])], ct);
@@ -68,11 +67,10 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
     {
         await Client.AppendAsync([Any("s1", JsonEvent("before"))], ct);
 
-        await using var sessionFactory = CreateSessionFactory();
-        var feed = CreateFeed(sessionFactory);
+        await using var feed = CreateFeed();
         var observer = new CollectingObserver();
         using var attachment = feed.Attach(observer);
-        await using var connection = await feed.ConnectAsync(ct);
+        await feed.ConnectAsync(ct);
 
         await Client.AppendAsync([Any("s1", JsonEvent("after"))], ct);
 
@@ -85,11 +83,10 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task Connect_DecodesAllColumns(CancellationToken ct)
     {
-        await using var sessionFactory = CreateSessionFactory();
-        var feed = CreateFeed(sessionFactory);
+        await using var feed = CreateFeed();
         var observer = new CollectingObserver();
         using var attachment = feed.Attach(observer);
-        await using var connection = await feed.ConnectAsync(ct);
+        await feed.ConnectAsync(ct);
 
         byte[] bytes = [1, 2, 3, 255];
         var before = DateTimeOffset.UtcNow.AddSeconds(-1);
@@ -126,11 +123,10 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task Connect_WhenWalSenderIsTerminated_ResumesWithoutRepeatingRows(CancellationToken ct)
     {
-        await using var sessionFactory = CreateSessionFactory();
-        var feed = CreateFeed(sessionFactory);
+        await using var feed = CreateFeed();
         var observer = new CollectingObserver();
         using var attachment = feed.Attach(observer);
-        await using var connection = await feed.ConnectAsync(ct);
+        await feed.ConnectAsync(ct);
 
         await Client.AppendAsync([Any("s1", JsonEvent("e0"), JsonEvent("e1"))], ct);
         await Client.AppendAsync([Any("s1", JsonEvent("e2"))], ct);
@@ -148,11 +144,10 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task Connect_WhenWalSenderIsTerminatedMidTransaction_ResumesWithoutRepeatingRows(CancellationToken ct)
     {
-        await using var sessionFactory = CreateSessionFactory();
-        var feed = CreateFeed(sessionFactory);
+        await using var feed = CreateFeed();
         var observer = new CollectingObserver();
         using var attachment = feed.Attach(observer);
-        await using var connection = await feed.ConnectAsync(ct);
+        await feed.ConnectAsync(ct);
 
         // The transaction is far larger than the buffers between the walsender and the feed, so while the observer
         // holds the feed on the first row, the walsender can't send the commit.
@@ -179,11 +174,10 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
     public async Task Connect_WhenIdleAmidOtherWrites_AdvancesSlotPastLastRow(CancellationToken ct)
     {
         var options = new PostgresReplicationOptions { WalReceiverStatusInterval = TimeSpan.FromMilliseconds(100) };
-        await using var sessionFactory = CreateSessionFactory(_slotNameGenerator, options);
-        var feed = CreateFeed(sessionFactory);
+        await using var feed = CreateFeed(_slotNameGenerator, options);
         var observer = new CollectingObserver();
         using var attachment = feed.Attach(observer);
-        await using var connection = await feed.ConnectAsync(ct);
+        await feed.ConnectAsync(ct);
         await CreateOtherTableAsync(ct);
 
         await Client.AppendAsync([Any("s1", JsonEvent("e0"))], ct);
@@ -203,11 +197,10 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
     public async Task Connect_WhenWalSenderIsTerminatedAmidOtherWrites_DeliversEveryRowOnce(CancellationToken ct)
     {
         var options = new PostgresReplicationOptions { WalReceiverStatusInterval = TimeSpan.FromMilliseconds(10) };
-        await using var sessionFactory = CreateSessionFactory(_slotNameGenerator, options);
-        var feed = CreateFeed(sessionFactory);
+        await using var feed = CreateFeed(_slotNameGenerator, options);
         var observer = new CollectingObserver();
         using var attachment = feed.Attach(observer);
-        await using var connection = await feed.ConnectAsync(ct);
+        await feed.ConnectAsync(ct);
         await CreateOtherTableAsync(ct);
 
         // Each reconnect resumes from the slot, which the feed advances while it waits between transactions.
@@ -240,11 +233,10 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task Connect_Streaming_HoldsPermanentSlotUntilDisposed(CancellationToken ct)
     {
-        var sessionFactory = CreateSessionFactory();
-        var feed = CreateFeed(sessionFactory);
+        var feed = CreateFeed();
         var observer = new CollectingObserver();
         using var attachment = feed.Attach(observer);
-        var connection = await feed.ConnectAsync(ct);
+        await feed.ConnectAsync(ct);
 
         // The feed connects before it starts streaming, and the slot is active only once it streams.
         await Client.AppendAsync([Any("s1", JsonEvent("e"))], ct);
@@ -257,11 +249,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
         plugin.ShouldBe("pgoutput");
         name.ShouldStartWith("dbx_test_");
 
-        await connection.DisposeAsync();
-
-        (await GetSlotsAsync(ct)).ShouldHaveSingleItem();
-
-        await sessionFactory.DisposeAsync();
+        await feed.DisposeAsync();
 
         (await GetSlotsAsync(ct)).ShouldBeEmpty();
     }
@@ -283,10 +271,9 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
 
         try
         {
-            await using var runningSessionFactory = CreateSessionFactory(slotNameGenerator, options);
-            var running = CreateFeed(runningSessionFactory);
+            await using var running = CreateFeed(slotNameGenerator, options);
             using var runningAttachment = running.Attach(new CollectingObserver());
-            await using var runningConnection = await running.ConnectAsync(ct);
+            await running.ConnectAsync(ct);
 
             await CreateSlotAsync(orphan, ct);
             await CreateSlotAsync(longerSchema, ct);
@@ -294,10 +281,9 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
             await Task.Delay(options.InactiveSlotTimeout * 2, ct);
             await CreateSlotAsync(recent, ct);
 
-            await using var startingSessionFactory = CreateSessionFactory(slotNameGenerator, options);
-            var starting = CreateFeed(startingSessionFactory);
+            await using var starting = CreateFeed(slotNameGenerator, options);
             using var startingAttachment = starting.Attach(new CollectingObserver());
-            await using var startingConnection = await starting.ConnectAsync(ct);
+            await starting.ConnectAsync(ct);
 
             // Only the orphan is dropped. The running and starting feeds' slots are kept as well.
             var names = await GetSlotNamesAsync(schema, ct);
@@ -325,10 +311,9 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
 
         try
         {
-            await using var sessionFactory = CreateSessionFactory(slotNameGenerator, options);
-            var feed = CreateFeed(sessionFactory);
+            await using var feed = CreateFeed(slotNameGenerator, options);
             using var attachment = feed.Attach(new CollectingObserver());
-            await using var connection = await feed.ConnectAsync(ct);
+            await feed.ConnectAsync(ct);
 
             // The feed has created its slot, so only the timer can drop a slot that another store leaves behind now.
             await CreateSlotAsync(leftover, ct);
@@ -352,63 +337,54 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
         var adminOptions = new PostgresEventStoreAdminOptions { CreatePublication = false };
         await PostgresEventStoreAdmin.EnsureInitializedAsync(DataSource, options, adminOptions, ct);
 
-        await using var sessionFactory = CreateSessionFactory(
+        await using var feed = CreateFeed(
             _slotNameGenerator,
             new SchemaObjectNames(options.Schema),
-            Options.Replication);
-
-        var feed = new EventLogFeed<EventLogRow<RawEvent>, long>(
-            sessionFactory,
-            new FeedResumePolicy(
-                EventLogFeedTransientErrors.IsTransient,
-                new FeedResumeOptions { RetryDelay = TimeSpan.FromMilliseconds(10), MaxRetryAttempts = 1 }),
-            LoggerFactory.CreateLogger("EventLogFeed"));
+            Options.Replication,
+            new FeedResumeOptions { RetryDelay = TimeSpan.FromMilliseconds(10), MaxRetryAttempts = 1 });
 
         var observer = new CollectingObserver();
         using var attachment = feed.Attach(observer);
 
         // The slot is created without error, because pgoutput only resolves publications when it decodes the first
         // change.
-        await using var connection = await feed.ConnectAsync(ct);
+        await feed.ConnectAsync(ct);
         await Client.AppendAsync([Any("s1", JsonEvent("trigger"))], ct);
 
         var ex = await observer.Error.WaitAsync(ct);
         ex.ShouldBeOfType<PostgresException>().SqlState.ShouldBe(PostgresErrorCodes.UndefinedObject);
-        await connection.Completion.WaitAsync(ct).ShouldThrowAsync<PostgresException>();
+        await feed.Completion.WaitAsync(ct).ShouldThrowAsync<PostgresException>();
     }
 
-    private ReplicationEventLogSessionFactory<RawEvent> CreateSessionFactory() =>
-        CreateSessionFactory(_slotNameGenerator, Options.Replication);
+    private ReplicationEventLogFeed<RawEvent> CreateFeed() =>
+        CreateFeed(_slotNameGenerator, Options.Replication);
 
-    private ReplicationEventLogSessionFactory<RawEvent> CreateSessionFactory(
+    private ReplicationEventLogFeed<RawEvent> CreateFeed(
         SlotNameGenerator slotNameGenerator,
-        PostgresReplicationOptions replicationOptions) =>
-        CreateSessionFactory(slotNameGenerator, Names, replicationOptions);
-
-    private static EventLogFeed<EventLogRow<RawEvent>, long> CreateFeed(
-        ReplicationEventLogSessionFactory<RawEvent> sessionFactory)
-    {
-        return new EventLogFeed<EventLogRow<RawEvent>, long>(
-            sessionFactory,
-            new FeedResumePolicy(
-                EventLogFeedTransientErrors.IsTransient,
-                new FeedResumeOptions { RetryDelay = TimeSpan.FromMilliseconds(100) }),
-            LoggerFactory.CreateLogger("EventLogFeed"));
-    }
-
-    private ReplicationEventLogSessionFactory<RawEvent> CreateSessionFactory(
-        SlotNameGenerator slotNameGenerator,
-        SchemaObjectNames names,
         PostgresReplicationOptions replicationOptions)
     {
-        return new ReplicationEventLogSessionFactory<RawEvent>(
+        return CreateFeed(
+            slotNameGenerator,
+            Names,
+            replicationOptions,
+            new FeedResumeOptions { RetryDelay = TimeSpan.FromMilliseconds(100) });
+    }
+
+    private ReplicationEventLogFeed<RawEvent> CreateFeed(
+        SlotNameGenerator slotNameGenerator,
+        SchemaObjectNames names,
+        PostgresReplicationOptions replicationOptions,
+        FeedResumeOptions resumeOptions)
+    {
+        return new ReplicationEventLogFeed<RawEvent>(
             PostgresTestEnvironment.ConnectionString,
             DataSource,
             slotNameGenerator,
             names,
             replicationOptions,
             RawDecoder.Instance,
-            LoggerFactory.CreateLogger("ReplicationEventLogSession"));
+            new FeedResumePolicy(EventLogFeedTransientErrors.IsTransient, resumeOptions),
+            LoggerFactory.CreateLogger("EventLogFeed"));
     }
 
     private static async Task RepeatUntilAsync(

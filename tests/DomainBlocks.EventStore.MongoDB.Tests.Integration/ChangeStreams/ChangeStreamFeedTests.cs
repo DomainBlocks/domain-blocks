@@ -39,17 +39,13 @@ public class ChangeStreamFeedTests
 
         var logger = MongoTestEnvironment.LoggerFactory.CreateLogger<ChangeStreamFeedTests>();
 
-        await using var sessionFactory = ChangeStreamSessionFactory.Create(
+        await using var feed = ChangeStreamFeed.Create(
             MongoTestEnvironment.MongoClient,
             _collection.WatchAsync,
             pipeline,
             static x => x.ResumeToken,
             static x => x.ClusterTime,
             static x => x,
-            logger);
-
-        var feed = new EventLogFeed<ChangeStreamDocument<BsonDocument>, BsonTimestamp>(
-            sessionFactory,
             new FeedResumePolicy(ChangeStreamTransientErrors.IsTransient),
             logger);
 
@@ -57,7 +53,7 @@ public class ChangeStreamFeedTests
         var observer2 = new TestChangeStreamObserver(expectedCount: insertCount);
         using var attachment1 = feed.Attach(observer1);
         using var attachment2 = feed.Attach(observer2);
-        await using var connection = await feed.ConnectAsync(ct);
+        await feed.ConnectAsync(ct);
 
         var insertedDocs = Enumerable
             .Range(1, insertCount)

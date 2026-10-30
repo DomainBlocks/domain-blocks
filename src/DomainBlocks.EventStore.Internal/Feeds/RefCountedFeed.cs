@@ -5,18 +5,14 @@ namespace DomainBlocks.EventStore.Internal.Feeds;
 /// on the next attach.
 /// </summary>
 /// <remarks>
-/// This class owns each session factory that it creates, and disposes it once the feed that uses it has stopped.
+/// This class owns each feed that it creates, and disposes it on the last detach or before it replaces it.
 /// </remarks>
-/// <param name="createSessionFactory">Creates the session factory of a new feed.</param>
-/// <param name="createFeed">Creates a feed over a session factory that it doesn't own.</param>
-internal sealed class RefCountedFeed<T, THighWaterMark>(
-    Func<IFeedSessionFactory<T, THighWaterMark>> createSessionFactory,
-    Func<IFeedSessionFactory<T, THighWaterMark>, IEventLogFeed<T, THighWaterMark>> createFeed) :
+internal sealed class RefCountedFeed<T, THighWaterMark>(Func<IEventLogFeed<T, THighWaterMark>> feedFactory) :
     IRefCountedFeed<T, THighWaterMark>,
     IAsyncDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private FeedConnection? _current;
+    private SharedFeed? _current;
     private bool _disposed;
 
     public async Task<IFeedAttachment<THighWaterMark>> AttachAsync(
@@ -30,35 +26,35 @@ internal sealed class RefCountedFeed<T, THighWaterMark>(
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
-            FeedConnection feedConnection;
+            SharedFeed sharedFeed;
             IDisposable attachment;
 
-            if (_current is null || _current.Connection.Completion.IsCompleted)
+            if (_current is null || _current.Feed.Completion.IsCompleted)
             {
-                // Observers may still be attached to a completed feed, so their detaching can't be left to stop it.
+                // Observers may still be attached to a completed feed, so their detaching can't be left to dispose it.
                 if (_current is { } completed)
                 {
                     _current = null;
                     completed.IsDisposed = true;
-                    await StopAsync(completed).ConfigureAwait(false);
+                    await completed.Feed.DisposeAsync().ConfigureAwait(false);
                 }
 
-                (feedConnection, attachment) = await ConnectAsync(observer, correlationId, cancellationToken)
+                (sharedFeed, attachment) = await ConnectAsync(observer, correlationId, cancellationToken)
                     .ConfigureAwait(false);
 
-                _current = feedConnection;
+                _current = sharedFeed;
             }
             else
             {
-                feedConnection = _current;
-                attachment = feedConnection.Feed.Attach(observer, correlationId);
+                sharedFeed = _current;
+                attachment = sharedFeed.Feed.Attach(observer, correlationId);
             }
 
-            feedConnection.RefCount++;
+            sharedFeed.RefCount++;
 
             return new Attachment(
-                feedConnection.Connection.HighWaterMark,
-                () => DetachAsync(attachment, feedConnection));
+                sharedFeed.Feed.HighWaterMark,
+                () => DetachAsync(attachment, sharedFeed));
         }
         finally
         {
@@ -72,7 +68,7 @@ internal sealed class RefCountedFeed<T, THighWaterMark>(
     /// </summary>
     public async ValueTask DisposeAsync()
     {
-        FeedConnection? feedConnectionToStop;
+        IEventLogFeed<T, THighWaterMark>? feedToDispose;
 
         await _gate.WaitAsync().ConfigureAwait(false);
 
@@ -82,7 +78,7 @@ internal sealed class RefCountedFeed<T, THighWaterMark>(
                 return;
 
             _disposed = true;
-            feedConnectionToStop = _current;
+            feedToDispose = _current?.Feed;
 
             _current?.IsDisposed = true;
 
@@ -93,49 +89,32 @@ internal sealed class RefCountedFeed<T, THighWaterMark>(
             _gate.Release();
         }
 
-        if (feedConnectionToStop is not null)
-            await StopAsync(feedConnectionToStop).ConfigureAwait(false);
+        if (feedToDispose is not null)
+            await feedToDispose.DisposeAsync().ConfigureAwait(false);
     }
 
-    private static async Task StopAsync(FeedConnection feedConnection)
-    {
-        var sessionFactory = feedConnection.SessionFactory;
-
-        await using (sessionFactory.ConfigureAwait(false))
-        {
-            await feedConnection.Connection.DisposeAsync().ConfigureAwait(false);
-        }
-    }
-
-    private async Task<(FeedConnection FeedConnection, IDisposable Attachment)> ConnectAsync(
+    private async Task<(SharedFeed SharedFeed, IDisposable Attachment)> ConnectAsync(
         IFeedObserver<T> observer,
         string correlationId,
         CancellationToken cancellationToken)
     {
-        var sessionFactory = createSessionFactory();
-        IFeedConnection<THighWaterMark>? connection = null;
+        var feed = feedFactory();
 
         try
         {
-            var feed = createFeed(sessionFactory);
-            connection = await feed.ConnectAsync(cancellationToken).ConfigureAwait(false);
+            await feed.ConnectAsync(cancellationToken).ConfigureAwait(false);
             var attachment = feed.Attach(observer, correlationId);
 
-            return (new FeedConnection(feed, connection, sessionFactory), attachment);
+            return (new SharedFeed(feed), attachment);
         }
         catch
         {
-            await using (sessionFactory.ConfigureAwait(false))
-            {
-                if (connection is not null)
-                    await connection.DisposeAsync().ConfigureAwait(false);
-            }
-
+            await feed.DisposeAsync().ConfigureAwait(false);
             throw;
         }
     }
 
-    private async Task DetachAsync(IDisposable attachment, FeedConnection feedConnection)
+    private async Task DetachAsync(IDisposable attachment, SharedFeed sharedFeed)
     {
         attachment.Dispose();
 
@@ -143,20 +122,20 @@ internal sealed class RefCountedFeed<T, THighWaterMark>(
 
         try
         {
-            feedConnection.RefCount--;
+            sharedFeed.RefCount--;
 
-            if (feedConnection.RefCount > 0 || feedConnection.IsDisposed)
+            if (sharedFeed.RefCount > 0 || sharedFeed.IsDisposed)
                 return;
 
-            feedConnection.IsDisposed = true;
+            sharedFeed.IsDisposed = true;
 
-            if (ReferenceEquals(_current, feedConnection))
+            if (ReferenceEquals(_current, sharedFeed))
                 _current = null;
 
-            // This runs within the gate, so the next connection is not made until this one has stopped and released
-            // what it holds on the server. On PostgreSQL that is a replication slot and a walsender, so two
-            // connections at once would hold two of each, counted against max_replication_slots and max_wal_senders.
-            await StopAsync(feedConnection).ConfigureAwait(false);
+            // This runs within the gate, so the next feed does not connect until this one has stopped and released what
+            // it holds on the server. On PostgreSQL that is a replication slot and a walsender, so two feeds at once
+            // would hold two of each, counted against max_replication_slots and max_wal_senders.
+            await sharedFeed.Feed.DisposeAsync().ConfigureAwait(false);
         }
         finally
         {
@@ -164,14 +143,9 @@ internal sealed class RefCountedFeed<T, THighWaterMark>(
         }
     }
 
-    private sealed class FeedConnection(
-        IEventLogFeed<T, THighWaterMark> feed,
-        IFeedConnection<THighWaterMark> connection,
-        IFeedSessionFactory<T, THighWaterMark> sessionFactory)
+    private sealed class SharedFeed(IEventLogFeed<T, THighWaterMark> feed)
     {
         public IEventLogFeed<T, THighWaterMark> Feed { get; } = feed;
-        public IFeedConnection<THighWaterMark> Connection { get; } = connection;
-        public IFeedSessionFactory<T, THighWaterMark> SessionFactory { get; } = sessionFactory;
         public int RefCount { get; set; }
         public bool IsDisposed { get; set; }
     }

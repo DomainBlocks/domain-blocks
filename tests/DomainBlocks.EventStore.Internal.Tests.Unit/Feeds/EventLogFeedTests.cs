@@ -22,13 +22,13 @@ public class EventLogFeedTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task Connect_WhenSessionYieldsRows_NotifiesAllObservers(CancellationToken ct)
     {
-        var feed = CreateFeed(new ScriptedSession("s1", Row(1), Row(2), Row(3)));
+        await using var feed = CreateFeed(new ScriptedSession("s1", Row(1), Row(2), Row(3)));
 
         var observer1 = new RecordingObserver();
         var observer2 = new RecordingObserver();
         using var attachment1 = feed.Attach(observer1);
         using var attachment2 = feed.Attach(observer2);
-        await using var connection = await feed.ConnectAsync(ct);
+        await feed.ConnectAsync(ct);
 
         (await observer1.ReadAsync(3, ct)).ShouldBe(["row:1", "row:2", "row:3"]);
         (await observer2.ReadAsync(3, ct)).ShouldBe(["row:1", "row:2", "row:3"]);
@@ -38,14 +38,14 @@ public class EventLogFeedTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task Connect_WhenDeliveringRow_RaisesHighWaterMarkBeforeNotifying(CancellationToken ct)
     {
-        var feed = CreateFeed(new ScriptedSession("s1", Row(7)));
+        await using var feed = CreateFeed(new ScriptedSession("s1", Row(7)));
 
         var observer = new HighWaterMarkRecordingObserver();
         using var attachment = feed.Attach(observer);
-        await using var connection = await feed.ConnectAsync(ct);
+        await feed.ConnectAsync(ct);
 
-        // The observer holds the row until it knows the connection.
-        observer.Connection = connection;
+        // The observer holds the row until it knows the feed.
+        observer.Feed = feed;
         observer.ReleaseOnNext();
 
         (await observer.HighWaterMarkOnNext.WaitAsync(ct)).ShouldBe(7);
@@ -55,11 +55,11 @@ public class EventLogFeedTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task ConnectAsync_SessionStartsWithMark_PublishesMark(CancellationToken ct)
     {
-        var feed = CreateFeed(new ScriptedSession("s1") { InitialMark = 3 });
+        await using var feed = CreateFeed(new ScriptedSession("s1") { InitialMark = 3 });
 
-        await using var connection = await feed.ConnectAsync(ct);
+        await feed.ConnectAsync(ct);
 
-        connection.HighWaterMark.ShouldBe(3);
+        feed.HighWaterMark.ShouldBe(3);
     }
 
     [Test]
@@ -67,41 +67,41 @@ public class EventLogFeedTests
     public async Task ConnectAsync_SessionWithoutRows_PublishesSessionMark(CancellationToken ct)
     {
         // The session's -1 is below a long's default, so the feed must take the first session's mark as it is.
-        var feed = CreateFeed(new ScriptedSession("s1"));
+        await using var feed = CreateFeed(new ScriptedSession("s1"));
 
-        await using var connection = await feed.ConnectAsync(ct);
+        await feed.ConnectAsync(ct);
 
-        connection.HighWaterMark.ShouldBe(-1);
+        feed.HighWaterMark.ShouldBe(-1);
     }
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
     public async Task Connect_LaterSessionWithoutRows_KeepsHighWaterMark(CancellationToken ct)
     {
-        var feed = CreateFeed(
+        await using var feed = CreateFeed(
             new ScriptedSession("s1", Row(5), Throw(new IOException("lost"))),
             new ScriptedSession("s2"));
 
         var observer = new RecordingObserver();
         using var attachment = feed.Attach(observer);
-        await using var connection = await feed.ConnectAsync(ct);
+        await feed.ConnectAsync(ct);
 
         // The feed takes the second session's mark before it resets observers.
         (await observer.ReadAsync(2, ct)).ShouldBe(["row:5", "reset"]);
-        connection.HighWaterMark.ShouldBe(5);
+        feed.HighWaterMark.ShouldBe(5);
     }
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
     public async Task Connect_WhenSessionFailsTransiently_ReconnectsAndResetsBeforeNewRows(CancellationToken ct)
     {
-        var feed = CreateFeed(
+        await using var feed = CreateFeed(
             new ScriptedSession("s1", Row(1), Row(2), Throw(new IOException("lost"))),
             new ScriptedSession("s2", Row(3), Row(4)));
 
         var observer = new RecordingObserver();
         using var attachment = feed.Attach(observer);
-        await using var connection = await feed.ConnectAsync(ct);
+        await feed.ConnectAsync(ct);
 
         (await observer.ReadAsync(5, ct)).ShouldBe(["row:1", "row:2", "reset", "row:3", "row:4"]);
     }
@@ -110,13 +110,13 @@ public class EventLogFeedTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task Connect_WhenSessionEndsNormally_ReconnectsAndResets(CancellationToken ct)
     {
-        var feed = CreateFeed(
+        await using var feed = CreateFeed(
             new ScriptedSession("s1", Row(1), End()),
             new ScriptedSession("s2", Row(2)));
 
         var observer = new RecordingObserver();
         using var attachment = feed.Attach(observer);
-        await using var connection = await feed.ConnectAsync(ct);
+        await feed.ConnectAsync(ct);
 
         (await observer.ReadAsync(3, ct)).ShouldBe(["row:1", "reset", "row:2"]);
     }
@@ -125,28 +125,71 @@ public class EventLogFeedTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task Connect_WhenSessionResumes_ReconnectsWithoutReset(CancellationToken ct)
     {
-        var feed = CreateFeed(
+        await using var feed = CreateFeed(
             new ScriptedSession("s1", Row(1), Row(2), Throw(new IOException("lost"))),
             new ScriptedSession("s2", Row(3)) { IsResumed = true });
 
         var observer = new RecordingObserver();
         using var attachment = feed.Attach(observer);
-        await using var connection = await feed.ConnectAsync(ct);
+        await feed.ConnectAsync(ct);
 
         (await observer.ReadAsync(3, ct)).ShouldBe(["row:1", "row:2", "row:3"]);
     }
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task Connect_ConnectionDisposed_LeavesSessionFactory(CancellationToken ct)
+    public async Task DisposeAsync_Connected_StopsSessionBeforeDisposeAsyncCoreContinues(CancellationToken ct)
     {
-        var sessionFactory = CreateSessionFactory(new ScriptedSession("s1"));
-        var feed = CreateFeed(sessionFactory);
+        var session = new ScriptedSession("s1");
+        var sessionDisposeCount = -1;
 
-        var connection = await feed.ConnectAsync(ct);
-        await connection.DisposeAsync();
+        var feed = new DelegateFeed(
+            _ => Task.FromResult<IFeedSession<long, long>>(session),
+            FastResumePolicy,
+            onDisposing: () => sessionDisposeCount = session.DisposeCount);
 
-        sessionFactory.DisposeCount.ShouldBe(0);
+        await feed.ConnectAsync(ct);
+        await feed.DisposeAsync();
+
+        sessionDisposeCount.ShouldBe(1);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task DisposeAsync_CalledTwice_RunsDisposeAsyncCoreOnce(CancellationToken ct)
+    {
+        var feed = CreateFeed(new ScriptedSession("s1"));
+
+        await feed.ConnectAsync(ct);
+        await feed.DisposeAsync();
+        await feed.DisposeAsync();
+
+        feed.DisposeCount.ShouldBe(1);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task DisposeAsync_NeverConnected_CompletesAndNotifiesObservers(CancellationToken ct)
+    {
+        var feed = CreateFeed();
+
+        var observer = new RecordingObserver();
+        using var attachment = feed.Attach(observer);
+
+        await feed.DisposeAsync();
+
+        await feed.Completion.WaitAsync(ct);
+        (await observer.Error.WaitAsync(ct)).ShouldBeOfType<ObjectDisposedException>();
+    }
+
+    [Test]
+    public async Task ConnectAsync_AfterDispose_Throws()
+    {
+        var feed = CreateFeed();
+
+        await feed.DisposeAsync();
+
+        await feed.ConnectAsync().ShouldThrowAsync<ObjectDisposedException>();
     }
 
     [Test]
@@ -154,15 +197,15 @@ public class EventLogFeedTests
     public async Task Connect_WhenSessionFailsNonTransiently_FaultsCompletionAndNotifiesObservers(CancellationToken ct)
     {
         var exception = new InvalidOperationException("misconfigured");
-        var feed = CreateFeed(new ScriptedSession("s1", Row(1), Throw(exception)));
+        await using var feed = CreateFeed(new ScriptedSession("s1", Row(1), Throw(exception)));
 
         var observer1 = new RecordingObserver();
         var observer2 = new RecordingObserver();
         using var attachment1 = feed.Attach(observer1);
         using var attachment2 = feed.Attach(observer2);
-        await using var connection = await feed.ConnectAsync(ct);
+        await feed.ConnectAsync(ct);
 
-        var thrown = await connection.Completion.WaitAsync(ct).ShouldThrowAsync<InvalidOperationException>();
+        var thrown = await feed.Completion.WaitAsync(ct).ShouldThrowAsync<InvalidOperationException>();
         thrown.ShouldBeSameAs(exception);
         (await observer1.Error.WaitAsync(ct)).ShouldBeSameAs(exception);
         (await observer2.Error.WaitAsync(ct)).ShouldBeSameAs(exception);
@@ -172,14 +215,15 @@ public class EventLogFeedTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task Connect_SessionFailsNonTransiently_CompletesBeforeNotifying(CancellationToken ct)
     {
-        var feed = CreateFeed(new ScriptedSession("s1", Row(1), Throw(new InvalidOperationException("misconfigured"))));
+        await using var feed = CreateFeed(
+            new ScriptedSession("s1", Row(1), Throw(new InvalidOperationException("misconfigured"))));
 
         var observer = new CompletionRecordingObserver();
         using var attachment = feed.Attach(observer);
-        await using var connection = await feed.ConnectAsync(ct);
+        await feed.ConnectAsync(ct);
 
-        // The observer holds the row until it knows the connection.
-        observer.Connection = connection;
+        // The observer holds the row until it knows the feed.
+        observer.Feed = feed;
         observer.ReleaseOnNext();
 
         (await observer.IsCompletedOnError.WaitAsync(ct)).ShouldBeTrue();
@@ -191,19 +235,19 @@ public class EventLogFeedTests
     {
         var attempts = 0;
 
-        var feed = new EventLogFeed<long, long>(
-            new DelegateSessionFactory<long>(_ =>
+        await using var feed = new DelegateFeed(
+            _ =>
             {
                 attempts++;
                 return attempts < 3
                     ? throw new IOException("not yet")
                     : Task.FromResult<IFeedSession<long, long>>(new ScriptedSession("s1", Row(1)));
-            }),
+            },
             FastResumePolicy);
 
         var observer = new RecordingObserver();
         using var attachment = feed.Attach(observer);
-        await using var connection = await feed.ConnectAsync(ct);
+        await feed.ConnectAsync(ct);
 
         (await observer.ReadAsync(1, ct)).ShouldBe(["row:1"]);
         attempts.ShouldBe(3);
@@ -228,14 +272,14 @@ public class EventLogFeedTests
         {
             var attempts = 0;
 
-            var feed = new EventLogFeed<long, long>(
-                new DelegateSessionFactory<long>(_ => ++attempts < 2
+            await using var feed = new DelegateFeed(
+                _ => ++attempts < 2
                     ? throw new IOException("not yet")
-                    : Task.FromResult<IFeedSession<long, long>>(new ScriptedSession("s1"))),
+                    : Task.FromResult<IFeedSession<long, long>>(new ScriptedSession("s1")),
                 resumePolicy,
                 logger);
 
-            await using var connection = await feed.ConnectAsync(ct);
+            await feed.ConnectAsync(ct);
         }
 
         static string?[] FeedIds(FakeLogger logger, string message) =>
@@ -254,15 +298,15 @@ public class EventLogFeedTests
         var attempts = 0;
 
         // A driver can report a timeout as a cancellation that the caller didn't ask for.
-        var feed = new EventLogFeed<long, long>(
-            new DelegateSessionFactory<long>(_ => ++attempts < 2
+        await using var feed = new DelegateFeed(
+            _ => ++attempts < 2
                 ? throw new OperationCanceledException("Timed out.")
-                : Task.FromResult<IFeedSession<long, long>>(new ScriptedSession("s1", Row(1)))),
+                : Task.FromResult<IFeedSession<long, long>>(new ScriptedSession("s1", Row(1))),
             new FeedResumePolicy(static ex => ex is OperationCanceledException, FastRetryOptions));
 
         var observer = new RecordingObserver();
         using var attachment = feed.Attach(observer);
-        await using var connection = await feed.ConnectAsync(ct);
+        await feed.ConnectAsync(ct);
 
         (await observer.ReadAsync(1, ct)).ShouldBe(["row:1"]);
         attempts.ShouldBe(2);
@@ -275,12 +319,12 @@ public class EventLogFeedTests
         var attempts = 0;
         var exception = new IOException("down");
 
-        var feed = new EventLogFeed<long, long>(
-            new DelegateSessionFactory<long>(_ =>
+        await using var feed = new DelegateFeed(
+            _ =>
             {
                 attempts++;
                 throw exception;
-            }),
+            },
             CreateResumePolicy(new FeedResumeOptions { MaxRetryAttempts = 0 }));
 
         var observer = new RecordingObserver();
@@ -297,8 +341,8 @@ public class EventLogFeedTests
     {
         var exception = new IOException("still down");
 
-        var feed = new EventLogFeed<long, long>(
-            new DelegateSessionFactory<long>(_ => throw exception),
+        await using var feed = new DelegateFeed(
+            _ => throw exception,
             CreateResumePolicy(new FeedResumeOptions
             {
                 MaxRetryAttempts = 2,
@@ -318,10 +362,10 @@ public class EventLogFeedTests
     public async Task Attach_AfterNonTransientFailure_Throws(CancellationToken ct)
     {
         var exception = new InvalidOperationException("misconfigured");
-        var feed = CreateFeed(new ScriptedSession("s1", Throw(exception)));
+        await using var feed = CreateFeed(new ScriptedSession("s1", Throw(exception)));
 
-        await using var connection = await feed.ConnectAsync(ct);
-        await connection.Completion.WaitAsync(ct).ShouldThrowAsync<InvalidOperationException>();
+        await feed.ConnectAsync(ct);
+        await feed.Completion.WaitAsync(ct).ShouldThrowAsync<InvalidOperationException>();
 
         var attachException = Should.Throw<InvalidOperationException>(() => feed.Attach(new RecordingObserver()));
         attachException.InnerException.ShouldBeSameAs(exception);
@@ -333,12 +377,12 @@ public class EventLogFeedTests
     {
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        var feed = new EventLogFeed<long, long>(
-            new DelegateSessionFactory<long>(async _ =>
+        await using var feed = new DelegateFeed(
+            async _ =>
             {
                 await release.Task;
                 return new ScriptedSession("s1", Row(1));
-            }),
+            },
             FastResumePolicy);
 
         var connectTask = feed.ConnectAsync(ct);
@@ -348,15 +392,15 @@ public class EventLogFeedTests
 
         release.SetResult();
 
-        await using var connection = await connectTask;
+        await connectTask;
     }
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
     public async Task ConnectAsync_WhenCancelledDuringRetryBackoff_StopsTheFeed(CancellationToken ct)
     {
-        var feed = new EventLogFeed<long, long>(
-            new DelegateSessionFactory<long>(_ => throw new IOException("down")),
+        await using var feed = new DelegateFeed(
+            _ => throw new IOException("down"),
             CreateResumePolicy(new FeedResumeOptions
             {
                 RetryDelay = TimeSpan.FromMinutes(1),
@@ -367,6 +411,9 @@ public class EventLogFeedTests
         connectCts.CancelAfter(100);
 
         await feed.ConnectAsync(connectCts.Token).ShouldThrowAsync<OperationCanceledException>();
+
+        // Stopping is the feed's own doing, and what it holds across sessions waits for its owner to dispose it.
+        feed.DisposeCount.ShouldBe(0);
 
         var exception = Should.Throw<InvalidOperationException>(() => feed.Attach(new RecordingObserver()));
         exception.Message.ShouldBe("Cannot attach to a completed feed.");
@@ -379,8 +426,8 @@ public class EventLogFeedTests
         var session = new ScriptedSession("s1");
         var feed = CreateFeed(session);
 
-        var connection = await feed.ConnectAsync(ct);
-        await connection.DisposeAsync();
+        await feed.ConnectAsync(ct);
+        await feed.DisposeAsync();
 
         session.DisposeCount.ShouldBe(1);
 
@@ -392,7 +439,7 @@ public class EventLogFeedTests
     public void Constructor_NonPrimitiveStructMark_Throws()
     {
         var exception = Should.Throw<TypeInitializationException>(() =>
-            new EventLogFeed<long, TwoPartMark>(new UnusedSessionFactory(), FastResumePolicy));
+            new UnusedFeed());
 
         exception.InnerException.ShouldBeOfType<NotSupportedException>();
     }
@@ -401,30 +448,26 @@ public class EventLogFeedTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task ConnectAsync_CalledTwice_Throws(CancellationToken ct)
     {
-        var feed = CreateFeed(new ScriptedSession("s1"));
+        await using var feed = CreateFeed(new ScriptedSession("s1"));
 
-        await using var connection = await feed.ConnectAsync(ct);
+        await feed.ConnectAsync(ct);
 
         await feed.ConnectAsync(ct).ShouldThrowAsync<InvalidOperationException>();
     }
 
-    private static EventLogFeed<long, long> CreateFeed(params IFeedSession<long, long>[] sessions) =>
-        CreateFeed(CreateSessionFactory(sessions));
-
-    private static EventLogFeed<long, long> CreateFeed(IFeedSessionFactory<long, long> sessionFactory) =>
-        new(sessionFactory, FastResumePolicy);
-
-    private static FeedResumePolicy CreateResumePolicy(FeedResumeOptions options) =>
-        new(static ex => ex is IOException, options);
-
-    private static DelegateSessionFactory<long> CreateSessionFactory(params IFeedSession<long, long>[] sessions)
+    private static DelegateFeed CreateFeed(params IFeedSession<long, long>[] sessions)
     {
         var queue = new Queue<IFeedSession<long, long>>(sessions);
 
-        return new DelegateSessionFactory<long>(_ => Task.FromResult(queue.Count > 0
-            ? queue.Dequeue()
-            : throw new InvalidOperationException("The test ran out of scripted sessions.")));
+        return new DelegateFeed(
+            _ => Task.FromResult(queue.Count > 0
+                ? queue.Dequeue()
+                : throw new InvalidOperationException("The test ran out of scripted sessions.")),
+            FastResumePolicy);
     }
+
+    private static FeedResumePolicy CreateResumePolicy(FeedResumeOptions options) =>
+        new(static ex => ex is IOException, options);
 
     private sealed class CompletionRecordingObserver : IFeedObserver<long>
     {
@@ -433,7 +476,7 @@ public class EventLogFeedTests
         private readonly TaskCompletionSource<bool> _isCompletedOnError =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public IFeedConnection<long>? Connection { get; set; }
+        public IEventLogFeed<long, long>? Feed { get; set; }
 
         public Task<bool> IsCompletedOnError => _isCompletedOnError.Task;
 
@@ -445,7 +488,7 @@ public class EventLogFeedTests
 
         public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken)
         {
-            _isCompletedOnError.TrySetResult(Connection.ShouldNotBeNull().Completion.IsCompleted);
+            _isCompletedOnError.TrySetResult(Feed.ShouldNotBeNull().Completion.IsCompleted);
             return default;
         }
     }
@@ -457,7 +500,7 @@ public class EventLogFeedTests
         private readonly TaskCompletionSource<long> _highWaterMarkOnNext =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public IFeedConnection<long>? Connection { get; set; }
+        public IEventLogFeed<long, long>? Feed { get; set; }
 
         public Task<long> HighWaterMarkOnNext => _highWaterMarkOnNext.Task;
 
@@ -466,7 +509,7 @@ public class EventLogFeedTests
         public async ValueTask OnNextAsync(long position, CancellationToken cancellationToken)
         {
             await _onNextReleased.Task;
-            _highWaterMarkOnNext.TrySetResult(Connection!.HighWaterMark);
+            _highWaterMarkOnNext.TrySetResult(Feed!.HighWaterMark);
         }
 
         public ValueTask OnResetAsync(CancellationToken cancellationToken) => default;
@@ -480,11 +523,10 @@ public class EventLogFeedTests
         public int CompareTo(TwoPartMark other) => (High, Low).CompareTo((other.High, other.Low));
     }
 
-    private sealed class UnusedSessionFactory : IFeedSessionFactory<long, TwoPartMark>
+    private sealed class UnusedFeed() : EventLogFeed<long, TwoPartMark>(FastResumePolicy)
     {
-        public Task<IFeedSession<long, TwoPartMark>> CreateAsync(CancellationToken cancellationToken) =>
+        protected internal override Task<IFeedSession<long, TwoPartMark>> CreateSessionAsync(
+            CancellationToken cancellationToken) =>
             throw new NotSupportedException();
-
-        public ValueTask DisposeAsync() => default;
     }
 }
