@@ -45,11 +45,11 @@ internal sealed class ChangeStreamSessionFactory<TDocument, TChange, TResult>(
     ILogger? logger = null) :
     IFeedSessionFactory<TResult, BsonTimestamp>
 {
-    private ChangeStreamResumePoint _resumePoint = new();
+    private ChangeStreamSession<TChange, TResult>? _lastSession;
 
     public async Task<IFeedSession<TResult, BsonTimestamp>> CreateAsync(CancellationToken cancellationToken)
     {
-        if (_resumePoint.ResumeToken is { } resumeToken)
+        if (_lastSession?.ResumeToken is { } resumeToken)
         {
             var resumeOptions = new ChangeStreamOptions { ResumeAfter = resumeToken };
 
@@ -60,6 +60,7 @@ internal sealed class ChangeStreamSessionFactory<TDocument, TChange, TResult>(
 
                 return CreateSession(
                     resumedCursor,
+                    resumeToken,
                     "resumed change stream",
                     isResumed: true,
                     initialHighWaterMark: null);
@@ -67,7 +68,7 @@ internal sealed class ChangeStreamSessionFactory<TDocument, TChange, TResult>(
             catch (MongoCommandException ex) when (IsHistoryLost(ex))
             {
                 logger?.ChangeStreamHistoryLost(ex);
-                _resumePoint = new ChangeStreamResumePoint();
+                _lastSession = null;
             }
         }
 
@@ -84,17 +85,20 @@ internal sealed class ChangeStreamSessionFactory<TDocument, TChange, TResult>(
         var startOptions = new ChangeStreamOptions { StartAtOperationTime = startAt };
         var cursor = await cursorFactory(pipeline, startOptions, cancellationToken).ConfigureAwait(false);
 
-        // The resume token is seeded when the cursor opens, so a cursor that fails before its first batch resumes
+        // The session starts with the cursor's resume token, so a cursor that fails before its first batch resumes
         // rather than restarting later. The driver exposes the token when the first batch is empty, and a non-empty
         // first batch cannot fail before it is read.
         // See:
         // - https://github.com/mongodb/specifications/blob/bed11334/source/change-streams/change-streams.md#updating-the-cached-resume-token
         // - https://jira.mongodb.org/browse/SERVER-35740
-        if (cursor.GetResumeToken() is { } initialResumeToken)
-            _resumePoint.Record(initialResumeToken);
-
+        //
         // The start is inclusive, so the stream won't deliver the changes up to the last write.
-        return CreateSession(cursor, $"change stream from {startAt}", isResumed: false, lastApplied);
+        return CreateSession(
+            cursor,
+            cursor.GetResumeToken(),
+            $"change stream from {startAt}",
+            isResumed: false,
+            lastApplied);
     }
 
     // Lost history can't be resumed from, but it can be recovered from: the next session finds the resume token gone
@@ -110,13 +114,14 @@ internal sealed class ChangeStreamSessionFactory<TDocument, TChange, TResult>(
 
     private ChangeStreamSession<TChange, TResult> CreateSession(
         IChangeStreamCursor<TChange> cursor,
+        BsonDocument? resumeToken,
         string description,
         bool isResumed,
         BsonTimestamp? initialHighWaterMark)
     {
-        return new ChangeStreamSession<TChange, TResult>(
+        _lastSession = new ChangeStreamSession<TChange, TResult>(
             cursor,
-            _resumePoint,
+            resumeToken,
             description,
             isResumed,
             initialHighWaterMark,
@@ -124,6 +129,8 @@ internal sealed class ChangeStreamSessionFactory<TDocument, TChange, TResult>(
             clusterTimeSelector,
             resultSelector,
             logger);
+
+        return _lastSession;
     }
 
     private async Task<BsonTimestamp> GetLastAppliedOpTimeAsync(CancellationToken cancellationToken)

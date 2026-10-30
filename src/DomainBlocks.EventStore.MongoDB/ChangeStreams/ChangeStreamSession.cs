@@ -7,12 +7,12 @@ using MongoDB.Driver;
 namespace DomainBlocks.EventStore.MongoDB.ChangeStreams;
 
 /// <summary>
-/// Represents one change stream of a feed. It records on the feed's <see cref="ChangeStreamResumePoint"/> what it
-/// delivers, so that the next change stream resumes where this one stops.
+/// Represents one change stream of a feed. It keeps the token of what it has delivered, so that the next change stream
+/// resumes where this one stops.
 /// </summary>
 internal sealed class ChangeStreamSession<TChange, TResult>(
     IChangeStreamCursor<TChange> cursor,
-    ChangeStreamResumePoint resumePoint,
+    BsonDocument? resumeToken,
     string description,
     bool isResumed,
     BsonTimestamp? initialHighWaterMark,
@@ -25,6 +25,12 @@ internal sealed class ChangeStreamSession<TChange, TResult>(
     public string Description { get; } = description;
 
     public bool IsResumed { get; } = isResumed;
+
+    /// <summary>
+    /// Gets the token that a later change stream resumes after: that of the last change delivered or, before the first,
+    /// the one that the session started from. It is <see langword="null"/> if there is none yet.
+    /// </summary>
+    public BsonDocument? ResumeToken { get; private set; } = resumeToken;
 
     /// <summary>
     /// Gets an optime at or after every change that the session won't deliver. A new change stream has the primary's
@@ -48,14 +54,14 @@ internal sealed class ChangeStreamSession<TChange, TResult>(
                 yield return (result, clusterTimeSelector(change));
 
                 // The feed has handed the change to its observers.
-                resumePoint.Record(resumeTokenSelector(change));
+                ResumeToken = resumeTokenSelector(change);
                 batchCount++;
             }
 
             logger?.ChangeStreamBatchProcessed(batchCount);
 
             if (cursor.GetResumeToken() is { } batchResumeToken)
-                resumePoint.Record(batchResumeToken);
+                ResumeToken = batchResumeToken;
         }
     }
 
