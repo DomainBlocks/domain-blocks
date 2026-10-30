@@ -2,7 +2,7 @@ using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.Internal.Feeds;
 using DomainBlocks.EventStore.Internal.Subscriptions;
-using DomainBlocks.EventStore.MongoDB.ChangeStreams;
+using DomainBlocks.EventStore.MongoDB.Feeds;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Testing.Events;

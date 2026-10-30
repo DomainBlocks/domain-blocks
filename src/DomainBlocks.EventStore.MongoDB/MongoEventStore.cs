@@ -6,7 +6,7 @@ using DomainBlocks.EventStore.Filtering.Nodes;
 using DomainBlocks.EventStore.Internal;
 using DomainBlocks.EventStore.Internal.Feeds;
 using DomainBlocks.EventStore.Internal.Subscriptions;
-using DomainBlocks.EventStore.MongoDB.ChangeStreams;
+using DomainBlocks.EventStore.MongoDB.Feeds;
 using DomainBlocks.MongoDB.Sequencing;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
