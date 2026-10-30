@@ -212,9 +212,9 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
     private SubscriptionAsyncEnumerable<object, EventLogRow<object>, long, LogPosition> SubscribeToAll(
         SubscriptionOptions options)
     {
-        var catchUpSource = new RecordingCatchUpSource(CreateCatchUpSource(options.Filter), this);
+        var catchUpReader = new RecordingCatchUpReader(CreateCatchUpReader(options.Filter), this);
 
-        return SubscribeToAll(catchUpSource, SubscriptionOrigin.Start, options);
+        return SubscribeToAll(catchUpReader, SubscriptionOrigin.Start, options);
     }
 
     // A second subscription to the same feed, from the end of the log, used to tell when the feed has given all the
@@ -224,7 +224,7 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
     {
         var options = new SubscriptionOptions();
 
-        var witness = SubscribeToAll(CreateCatchUpSource(EventFilter.All), SubscriptionOrigin.End, options).Probe(ct);
+        var witness = SubscribeToAll(CreateCatchUpReader(EventFilter.All), SubscriptionOrigin.End, options).Probe(ct);
 
         (await witness.NextAsync()).IsCaughtUp.ShouldBeTrue();
 
@@ -232,13 +232,13 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
     }
 
     private SubscriptionAsyncEnumerable<object, EventLogRow<object>, long, LogPosition> SubscribeToAll(
-        ICatchUpSource<object, long> catchUpSource,
+        ICatchUpReader<object, long> catchUpReader,
         SubscriptionOrigin<LogPosition> origin,
         SubscriptionOptions options)
     {
         return new SubscriptionAsyncEnumerable<object, EventLogRow<object>, long, LogPosition>(
             _feed,
-            catchUpSource,
+            catchUpReader,
             options.Filter,
             static ctx => ctx.LogPosition,
             origin,
@@ -247,11 +247,11 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
             LoggerFactory.CreateLogger("Subscription"));
     }
 
-    private PostgresCatchUpSource<object> CreateCatchUpSource(EventFilter filter)
+    private PostgresCatchUpReader<object> CreateCatchUpReader(EventFilter filter)
     {
         var logger = LoggerFactory.CreateLogger("CatchUp");
 
-        return new PostgresCatchUpSource<object>(_reader, streamId: null, filter, logger);
+        return new PostgresCatchUpReader<object>(_reader, streamId: null, filter, logger);
     }
 
     // Passes a replay through, noting what was asked for and whether it was read to its end.
@@ -310,39 +310,29 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
 
     private sealed record Replay(long StartExclusive, long EndInclusive, bool IsCompleted);
 
-    // Passes a catch-up source through, with each of its replays recorded by the test.
-    private sealed class RecordingCatchUpSource(
-        ICatchUpSource<object, long> inner,
+    // Passes a catch-up reader through, with each of its replays recorded by the test.
+    private sealed class RecordingCatchUpReader(
+        ICatchUpReader<object, long> inner,
         PostgresSubscriptionCatchUpTests test) :
-        ICatchUpSource<object, long>
+        ICatchUpReader<object, long>
     {
-        public async ValueTask<ICatchUp<object>> StartAsync(
-            long highWaterMark,
+        public ValueTask<(long? End, long Mark)> ReadEndAsync(
+            long mark,
             string correlationId,
             CancellationToken cancellationToken)
         {
-            var catchUp = await inner.StartAsync(highWaterMark, correlationId, cancellationToken);
-
-            return new RecordingCatchUp(catchUp, test);
+            return inner.ReadEndAsync(mark, correlationId, cancellationToken);
         }
-    }
-
-    private sealed class RecordingCatchUp(ICatchUp<object> inner, PostgresSubscriptionCatchUpTests test) :
-        ICatchUp<object>
-    {
-        public ValueTask<long?> ReadEndAsync(CancellationToken cancellationToken) =>
-            inner.ReadEndAsync(cancellationToken);
 
         public IAsyncEnumerable<Event> ReadAsync(
+            long mark,
             long startExclusive,
             long endInclusive,
             CancellationToken cancellationToken)
         {
-            var events = inner.ReadAsync(startExclusive, endInclusive, cancellationToken);
+            var events = inner.ReadAsync(mark, startExclusive, endInclusive, cancellationToken);
 
             return test.RecordAsync(events, startExclusive, endInclusive, cancellationToken);
         }
-
-        public void Dispose() => inner.Dispose();
     }
 }

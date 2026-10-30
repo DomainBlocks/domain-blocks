@@ -7,8 +7,8 @@ using Polly;
 namespace DomainBlocks.EventStore.Internal.Subscriptions;
 
 /// <summary>
-/// Implements a catch-up subscription to the global event log or one event stream. It replays from a store's catch-up
-/// source, then delivers live events from the store's feed.
+/// Implements a catch-up subscription to the global event log or one event stream. It replays through a store's
+/// catch-up reader, then delivers live events from the store's feed.
 /// </summary>
 internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, TPos> :
     IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>>
@@ -17,7 +17,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
     where TPos : struct, IPosition<TPos>
 {
     private readonly IRefCountedFeed<TSourceEvent, TMark> _feed;
-    private readonly ICatchUpSource<TEvent, TMark> _catchUpSource;
+    private readonly ICatchUpReader<TEvent, TMark> _catchUpReader;
     private readonly EventFilter _liveFilter;
     private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> _positionSelector;
     private readonly SubscriptionOrigin<TPos> _origin;
@@ -28,7 +28,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
 
     public SubscriptionAsyncEnumerable(
         IRefCountedFeed<TSourceEvent, TMark> feed,
-        ICatchUpSource<TEvent, TMark> catchUpSource,
+        ICatchUpReader<TEvent, TMark> catchUpReader,
         EventFilter liveFilter,
         Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> positionSelector,
         SubscriptionOrigin<TPos>? origin,
@@ -39,7 +39,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
         _origin = origin ?? SubscriptionOrigin.End;
         _options = options ?? SubscriptionOptions.Default;
         _feed = feed;
-        _catchUpSource = catchUpSource;
+        _catchUpReader = catchUpReader;
         _liveFilter = liveFilter;
         _positionSelector = positionSelector;
         _logger = logger;
@@ -207,43 +207,38 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
         TMark highWaterMark,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        using (var catchUp = await _retryPipeline
-                   .ExecuteAsync(
-                       static (s, ct) => s.Source.StartAsync(s.HighWaterMark, s.CorrelationId, ct),
-                       (Source: _catchUpSource, HighWaterMark: highWaterMark, CorrelationId: _correlationId),
-                       cancellationToken)
-                   .ConfigureAwait(false))
+        var (endInclusive, mark) = await _retryPipeline
+            .ExecuteAsync(
+                static (s, ct) => s.Reader.ReadEndAsync(s.HighWaterMark, s.CorrelationId, ct),
+                (Reader: _catchUpReader, HighWaterMark: highWaterMark, CorrelationId: _correlationId),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        _logger?.CatchUpBoundary(_correlationId, endInclusive);
+
+        if (endInclusive is { } end)
         {
-            var endInclusive = await _retryPipeline
-                .ExecuteAsync(static (s, ct) => s.ReadEndAsync(ct), catchUp, cancellationToken)
-                .ConfigureAwait(false);
-
-            _logger?.CatchUpBoundary(_correlationId, endInclusive);
-
-            if (endInclusive is { } end)
+            // A subscription from the end has nothing to replay on its first cycle.
+            if (!pinsEnd)
             {
-                // A subscription from the end has nothing to replay on its first cycle.
-                if (!pinsEnd)
-                {
-                    // After a transient error, the replay reads again after the last event that the subscriber took.
-                    var events = ResumableAsyncEnumerable.Create(
-                        static (s, after, ct) => s.CatchUp.ReadAsync(after, s.End, ct),
-                        static (s, e) => ToInt64(s.Self._positionSelector(e.Context)),
-                        (Self: this, CatchUp: catchUp, End: end),
-                        resumePosition.After ?? -1,
-                        _retryPipeline);
+                // After a transient error, the replay reads again after the last event that the subscriber took.
+                var events = ResumableAsyncEnumerable.Create(
+                    static (s, after, ct) => s.Self._catchUpReader.ReadAsync(s.Mark, after, s.End, ct),
+                    static (s, e) => ToInt64(s.Self._positionSelector(e.Context)),
+                    (Self: this, Mark: mark, End: end),
+                    resumePosition.After ?? -1,
+                    _retryPipeline);
 
-                    await foreach (var e in events.WithCancellation(cancellationToken).ConfigureAwait(false))
-                        yield return SubscriptionMessage.Event(e);
-                }
-
-                // The replay has covered the sequence up to the mark, even if the filter selected none of its events.
-                // Moving the resume position here means the next cycle does not read that part of the sequence again.
-                // It also pins the end for a subscription from the end. Otherwise, a restart before the first event is
-                // delivered would resume from a later end and skip the events appended in between. If the sequence is
-                // empty, the subscription resumes from the start.
-                resumePosition.AdvanceTo(end);
+                await foreach (var e in events.WithCancellation(cancellationToken).ConfigureAwait(false))
+                    yield return SubscriptionMessage.Event(e);
             }
+
+            // The replay has covered the sequence up to the mark, even if the filter selected none of its events.
+            // Moving the resume position here means the next cycle does not read that part of the sequence again.
+            // It also pins the end for a subscription from the end. Otherwise, a restart before the first event is
+            // delivered would resume from a later end and skip the events appended in between. If the sequence is
+            // empty, the subscription resumes from the start.
+            resumePosition.AdvanceTo(end);
         }
 
         // A restart signaled during the replay takes effect only now. Cancelling the replay would discard what it read,
