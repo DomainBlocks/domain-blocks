@@ -64,7 +64,7 @@ internal sealed class CatchUpScenario : IAsyncDisposable
         _feed = new RefCountedFeed<EventLogDocument<object>, BsonTimestamp>(() =>
         {
             var liveDocument = new EventLogDocument<object>(codec);
-            var logger = MongoTestEnvironment.LoggerFactory.CreateLogger("SessionFeed");
+            var logger = MongoTestEnvironment.LoggerFactory.CreateLogger("EventLogFeed");
 
             var sessionFactory = ChangeStreamSessionFactory.Create(
                 eventLog.Database.Client,
@@ -79,7 +79,7 @@ internal sealed class CatchUpScenario : IAsyncDisposable
                 },
                 logger);
 
-            return new SessionFeed<EventLogDocument<object>, BsonTimestamp>(sessionFactory, logger: logger);
+            return new EventLogFeed<EventLogDocument<object>, BsonTimestamp>(sessionFactory, logger: logger);
         });
     }
 

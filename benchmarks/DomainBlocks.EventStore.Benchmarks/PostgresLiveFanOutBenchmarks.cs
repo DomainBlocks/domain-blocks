@@ -69,7 +69,7 @@ public class PostgresLiveFanOutBenchmarks
     [Benchmark]
     public async Task<int> FanOut_NoIO()
     {
-        var feed = new SessionFeed<EventLogRow<IDomainEvent>, long>(new SessionFactory(_decoder, _rows, _streamIds));
+        var feed = new EventLogFeed<EventLogRow<IDomainEvent>, long>(new SessionFactory(_decoder, _rows, _streamIds));
 
         var subscribers = new Subscriber[SubscriberCount];
         var attachments = new IDisposable[SubscriberCount];

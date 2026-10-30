@@ -247,9 +247,9 @@ public class ChangeStreamSessionFactoryTests
         SetupChangeStream([]);
         _helloError = new TimeoutException();
 
-        var feed = new SessionFeed<ChangeStreamDocument<BsonDocument>, BsonTimestamp>(
+        var feed = new EventLogFeed<ChangeStreamDocument<BsonDocument>, BsonTimestamp>(
             CreateSessionFactory(),
-            new SessionFeedOptions { RetryDelay = TimeSpan.FromMilliseconds(1) });
+            new EventLogFeedOptions { RetryDelay = TimeSpan.FromMilliseconds(1) });
 
         await using var connection = await feed.ConnectAsync(ct);
 

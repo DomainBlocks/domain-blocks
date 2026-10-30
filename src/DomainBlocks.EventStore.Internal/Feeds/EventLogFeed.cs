@@ -6,9 +6,9 @@ using Polly.Retry;
 namespace DomainBlocks.EventStore.Internal.Feeds;
 
 /// <summary>
-/// Validates options for a <see cref="SessionFeed{T, THighWaterMark}"/>.
+/// Validates options for a <see cref="EventLogFeed{T, THighWaterMark}"/>.
 /// </summary>
-internal static class SessionFeed
+internal static class EventLogFeed
 {
     // Polly rejects retry delays longer than 1 day.
     private static readonly TimeSpan PollyMaxDelay = TimeSpan.FromDays(1);
@@ -17,7 +17,7 @@ internal static class SessionFeed
     /// Throws if a feed cannot use the options.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">An option is outside the range that a feed supports.</exception>
-    public static void ValidateOptions(SessionFeedOptions options)
+    public static void ValidateOptions(EventLogFeedOptions options)
     {
         ArgumentOutOfRangeException.ThrowIfGreaterThan(options.RetryDelay, PollyMaxDelay);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(options.MaxRetryDelay, PollyMaxDelay);
@@ -33,7 +33,7 @@ internal static class SessionFeed
 /// <see cref="IFeedObserver{T}.OnResetAsync"/> first and recover missed items by re-reading from their last
 /// position.
 /// </remarks>
-internal sealed class SessionFeed<T, THighWaterMark> : IFeed<T, THighWaterMark>
+internal sealed class EventLogFeed<T, THighWaterMark> : IEventLogFeed<T, THighWaterMark>
     where THighWaterMark : IComparable<THighWaterMark>
 {
     private readonly IFeedSessionFactory<T, THighWaterMark> _sessionFactory;
@@ -46,7 +46,7 @@ internal sealed class SessionFeed<T, THighWaterMark> : IFeed<T, THighWaterMark>
 
     // The connection reads the mark without a lock or an interlocked operation, so the mark must be a type whose reads
     // and writes are whole: a reference, or a primitive no wider than a pointer.
-    static SessionFeed()
+    static EventLogFeed()
     {
         var type = typeof(THighWaterMark);
 
@@ -68,14 +68,14 @@ internal sealed class SessionFeed<T, THighWaterMark> : IFeed<T, THighWaterMark>
     /// <remarks>
     /// The feed owns <paramref name="sessionFactory"/>, and disposes it once it has stopped.
     /// </remarks>
-    public SessionFeed(
+    public EventLogFeed(
         IFeedSessionFactory<T, THighWaterMark> sessionFactory,
-        SessionFeedOptions? options = null,
+        EventLogFeedOptions? options = null,
         ILogger? logger = null)
     {
         ArgumentNullException.ThrowIfNull(sessionFactory);
 
-        options ??= SessionFeedOptions.Default;
+        options ??= EventLogFeedOptions.Default;
 
         _sessionFactory = sessionFactory;
         _openSession = AddResilience(sessionFactory, options, logger, _feedId);
@@ -120,7 +120,7 @@ internal sealed class SessionFeed<T, THighWaterMark> : IFeed<T, THighWaterMark>
 
     private static Func<CancellationToken, Task<IFeedSession<T, THighWaterMark>>> AddResilience(
         IFeedSessionFactory<T, THighWaterMark> sessionFactory,
-        SessionFeedOptions options,
+        EventLogFeedOptions options,
         ILogger? logger,
         string feedId)
     {
@@ -159,7 +159,7 @@ internal sealed class SessionFeed<T, THighWaterMark> : IFeed<T, THighWaterMark>
 
     private sealed class Connection : IFeedConnection<THighWaterMark>
     {
-        private readonly SessionFeed<T, THighWaterMark> _feed;
+        private readonly EventLogFeed<T, THighWaterMark> _feed;
         private readonly FeedObserverHub<T> _observerHub;
         private readonly ILogger? _logger;
         private readonly string _feedId;
@@ -170,7 +170,7 @@ internal sealed class SessionFeed<T, THighWaterMark> : IFeed<T, THighWaterMark>
         private bool _hasHighWaterMark;
         private int _disposed;
 
-        public Connection(SessionFeed<T, THighWaterMark> feed)
+        public Connection(EventLogFeed<T, THighWaterMark> feed)
         {
             _feed = feed;
             _observerHub = feed._observerHub;

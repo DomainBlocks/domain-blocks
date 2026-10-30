@@ -337,10 +337,10 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
         var adminOptions = new PostgresEventStoreAdminOptions { CreatePublication = false };
         await PostgresEventStoreAdmin.EnsureInitializedAsync(DataSource, options, adminOptions, ct);
 
-        var feed = new SessionFeed<EventLogRow<RawEvent>, long>(
+        var feed = new EventLogFeed<EventLogRow<RawEvent>, long>(
             CreateSessionFactory(_slotNameGenerator, new SchemaObjectNames(options.Schema), Options.Replication),
-            new SessionFeedOptions { RetryDelay = TimeSpan.FromMilliseconds(10), MaxRetryAttempts = 1 },
-            LoggerFactory.CreateLogger("SessionFeed"));
+            new EventLogFeedOptions { RetryDelay = TimeSpan.FromMilliseconds(10), MaxRetryAttempts = 1 },
+            LoggerFactory.CreateLogger("EventLogFeed"));
 
         var observer = new CollectingObserver();
         using var attachment = feed.Attach(observer);
@@ -355,17 +355,17 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
         await connection.Completion.WaitAsync(ct).ShouldThrowAsync<PostgresException>();
     }
 
-    private SessionFeed<EventLogRow<RawEvent>, long> CreateFeed() =>
+    private EventLogFeed<EventLogRow<RawEvent>, long> CreateFeed() =>
         CreateFeed(_slotNameGenerator, Options.Replication);
 
-    private SessionFeed<EventLogRow<RawEvent>, long> CreateFeed(
+    private EventLogFeed<EventLogRow<RawEvent>, long> CreateFeed(
         SlotNameGenerator slotNameGenerator,
         PostgresReplicationOptions replicationOptions)
     {
-        return new SessionFeed<EventLogRow<RawEvent>, long>(
+        return new EventLogFeed<EventLogRow<RawEvent>, long>(
             CreateSessionFactory(slotNameGenerator, Names, replicationOptions),
-            new SessionFeedOptions { RetryDelay = TimeSpan.FromMilliseconds(100) },
-            LoggerFactory.CreateLogger("SessionFeed"));
+            new EventLogFeedOptions { RetryDelay = TimeSpan.FromMilliseconds(100) },
+            LoggerFactory.CreateLogger("EventLogFeed"));
     }
 
     private ReplicationEventLogSessionFactory<RawEvent> CreateSessionFactory(

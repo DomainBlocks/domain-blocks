@@ -351,7 +351,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
                 },
                 logger);
 
-            return new SessionFeed<EventLogDocument<TEvent>, BsonTimestamp>(sessionFactory, logger: logger);
+            return new EventLogFeed<EventLogDocument<TEvent>, BsonTimestamp>(sessionFactory, logger: logger);
         });
     }
 

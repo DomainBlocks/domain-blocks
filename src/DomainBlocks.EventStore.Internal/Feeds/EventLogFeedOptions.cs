@@ -1,8 +1,8 @@
 namespace DomainBlocks.EventStore.Internal.Feeds;
 
-internal sealed class SessionFeedOptions
+internal sealed class EventLogFeedOptions
 {
-    public static readonly SessionFeedOptions Default = new();
+    public static readonly EventLogFeedOptions Default = new();
 
     /// <summary>
     /// Gets or sets how many times in a row the feed retries a failed attempt to create a session before it faults.

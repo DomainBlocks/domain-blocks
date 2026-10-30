@@ -5,11 +5,11 @@ using static DomainBlocks.EventStore.Internal.Tests.Unit.Feeds.ScriptedSession;
 
 namespace DomainBlocks.EventStore.Internal.Tests.Unit.Feeds;
 
-public class SessionFeedTests
+public class EventLogFeedTests
 {
     private const int TestTimeoutMillis = 5 * 1000;
 
-    private static readonly SessionFeedOptions FastRetryOptions = new()
+    private static readonly EventLogFeedOptions FastRetryOptions = new()
     {
         RetryDelay = TimeSpan.FromMilliseconds(10),
         MaxRetryDelay = TimeSpan.FromMilliseconds(50)
@@ -190,7 +190,7 @@ public class SessionFeedTests
     {
         var attempts = 0;
 
-        var feed = new SessionFeed<long, long>(
+        var feed = new EventLogFeed<long, long>(
             new DelegateSessionFactory<long>(_ =>
             {
                 attempts++;
@@ -215,7 +215,7 @@ public class SessionFeedTests
         var attempts = 0;
 
         // A driver can report a timeout as a cancellation that the caller didn't ask for.
-        var feed = new SessionFeed<long, long>(
+        var feed = new EventLogFeed<long, long>(
             new DelegateSessionFactory<long>(
                 _ => ++attempts < 2
                     ? throw new OperationCanceledException("Timed out.")
@@ -238,13 +238,13 @@ public class SessionFeedTests
         var attempts = 0;
         var exception = new IOException("down");
 
-        var feed = new SessionFeed<long, long>(
+        var feed = new EventLogFeed<long, long>(
             new DelegateSessionFactory<long>(_ =>
             {
                 attempts++;
                 throw exception;
             }),
-            new SessionFeedOptions { MaxRetryAttempts = 0 });
+            new EventLogFeedOptions { MaxRetryAttempts = 0 });
 
         var observer = new RecordingObserver();
         using var attachment = feed.Attach(observer);
@@ -260,9 +260,9 @@ public class SessionFeedTests
     {
         var exception = new IOException("still down");
 
-        var feed = new SessionFeed<long, long>(
+        var feed = new EventLogFeed<long, long>(
             new DelegateSessionFactory<long>(_ => throw exception),
-            new SessionFeedOptions
+            new EventLogFeedOptions
             {
                 MaxRetryAttempts = 2,
                 RetryDelay = TimeSpan.FromMilliseconds(1),
@@ -296,7 +296,7 @@ public class SessionFeedTests
     {
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        var feed = new SessionFeed<long, long>(
+        var feed = new EventLogFeed<long, long>(
             new DelegateSessionFactory<long>(async _ =>
             {
                 await release.Task;
@@ -318,9 +318,9 @@ public class SessionFeedTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task ConnectAsync_WhenCancelledDuringRetryBackoff_StopsTheFeed(CancellationToken ct)
     {
-        var feed = new SessionFeed<long, long>(
+        var feed = new EventLogFeed<long, long>(
             new DelegateSessionFactory<long>(_ => throw new IOException("down")),
-            new SessionFeedOptions { RetryDelay = TimeSpan.FromMinutes(1), MaxRetryDelay = TimeSpan.FromMinutes(1) });
+            new EventLogFeedOptions { RetryDelay = TimeSpan.FromMinutes(1), MaxRetryDelay = TimeSpan.FromMinutes(1) });
 
         using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         connectCts.CancelAfter(100);
@@ -351,7 +351,7 @@ public class SessionFeedTests
     public void Constructor_NonPrimitiveStructMark_Throws()
     {
         var exception = Should.Throw<TypeInitializationException>(() =>
-            new SessionFeed<long, TwoPartMark>(new UnusedSessionFactory()));
+            new EventLogFeed<long, TwoPartMark>(new UnusedSessionFactory()));
 
         exception.InnerException.ShouldBeOfType<NotSupportedException>();
     }
@@ -367,10 +367,10 @@ public class SessionFeedTests
         await feed.ConnectAsync(ct).ShouldThrowAsync<InvalidOperationException>();
     }
 
-    private static SessionFeed<long, long> CreateFeed(params IFeedSession<long, long>[] sessions) =>
+    private static EventLogFeed<long, long> CreateFeed(params IFeedSession<long, long>[] sessions) =>
         CreateFeed(CreateSessionFactory(sessions));
 
-    private static SessionFeed<long, long> CreateFeed(IFeedSessionFactory<long, long> sessionFactory) =>
+    private static EventLogFeed<long, long> CreateFeed(IFeedSessionFactory<long, long> sessionFactory) =>
         new(sessionFactory, FastRetryOptions);
 
     private static DelegateSessionFactory<long> CreateSessionFactory(params IFeedSession<long, long>[] sessions)

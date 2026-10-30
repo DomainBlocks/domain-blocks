@@ -48,7 +48,7 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
         var slotNameGenerator = new SlotNameGenerator(names);
 
         _feed = new RefCountedFeed<EventLogRow<object>, long>(() =>
-            new SessionFeed<EventLogRow<object>, long>(
+            new EventLogFeed<EventLogRow<object>, long>(
                 new ReplicationEventLogSessionFactory<object>(
                     PostgresTestEnvironment.ConnectionString,
                     DataSource,

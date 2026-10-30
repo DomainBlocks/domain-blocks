@@ -4,7 +4,7 @@ namespace DomainBlocks.EventStore.Internal.Feeds;
 /// Connects the feed on the first attach and disconnects it on the last detach. A completed or faulted feed is replaced
 /// on the next attach.
 /// </summary>
-internal sealed class RefCountedFeed<T, THighWaterMark>(Func<IFeed<T, THighWaterMark>> feedFactory) :
+internal sealed class RefCountedFeed<T, THighWaterMark>(Func<IEventLogFeed<T, THighWaterMark>> feedFactory) :
     IRefCountedFeed<T, THighWaterMark>,
     IAsyncDisposable
 {
@@ -114,9 +114,11 @@ internal sealed class RefCountedFeed<T, THighWaterMark>(Func<IFeed<T, THighWater
         }
     }
 
-    private sealed class FeedConnection(IFeed<T, THighWaterMark> feed, IFeedConnection<THighWaterMark> connection)
+    private sealed class FeedConnection(
+        IEventLogFeed<T, THighWaterMark> feed,
+        IFeedConnection<THighWaterMark> connection)
     {
-        public IFeed<T, THighWaterMark> Feed { get; } = feed;
+        public IEventLogFeed<T, THighWaterMark> Feed { get; } = feed;
         public IFeedConnection<THighWaterMark> Connection { get; } = connection;
         public int RefCount { get; set; }
         public bool IsDisposed { get; set; }

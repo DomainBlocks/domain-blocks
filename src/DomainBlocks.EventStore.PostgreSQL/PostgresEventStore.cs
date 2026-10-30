@@ -65,7 +65,7 @@ public static class PostgresEventStore
 
         var slotNameGenerator = new SlotNameGenerator(names);
 
-        var feedOptions = new SessionFeedOptions
+        var feedOptions = new EventLogFeedOptions
         {
             RetryDelay = replicationOptions.RetryDelay,
             MaxRetryDelay = replicationOptions.MaxRetryDelay,
@@ -73,10 +73,10 @@ public static class PostgresEventStore
         };
 
         ReplicationEventLogSessionFactory.ValidateOptions(replicationOptions);
-        SessionFeed.ValidateOptions(feedOptions);
+        EventLogFeed.ValidateOptions(feedOptions);
 
         return new RefCountedFeed<EventLogRow<TEvent>, long>(() =>
-            new SessionFeed<EventLogRow<TEvent>, long>(
+            new EventLogFeed<EventLogRow<TEvent>, long>(
                 new ReplicationEventLogSessionFactory<TEvent>(
                     connectionString,
                     dataSource,

@@ -212,7 +212,7 @@ public class RefCountedFeedTests
         feed.Connection.DisposeCount.ShouldBe(1);
     }
 
-    private sealed class TestFeed(bool canConnect = true, bool advanceMarkOnAttach = false) : IFeed<int, long>
+    private sealed class TestFeed(bool canConnect = true, bool advanceMarkOnAttach = false) : IEventLogFeed<int, long>
     {
         private Exception? _attachException;
 
