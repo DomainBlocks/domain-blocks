@@ -26,17 +26,6 @@ internal static partial class LogMessages
     [LoggerMessage(LogLevel.Warning, "[sub: {SubscriptionId}] fell behind")]
     internal static partial void SubscriptionFellBehind(this ILogger logger, string subscriptionId);
 
-    [LoggerMessage(
-        LogLevel.Warning,
-        "[sub: {SubscriptionId}] queue overflowed (capacity {QueueCapacity}); restart pending")]
-    internal static partial void SubscriptionQueueOverflowed(
-        this ILogger logger,
-        string subscriptionId,
-        int queueCapacity);
-
-    [LoggerMessage(LogLevel.Warning, "[sub: {SubscriptionId}] feed was reset; restart pending")]
-    internal static partial void SubscriptionFeedReset(this ILogger logger, string subscriptionId);
-
     [LoggerMessage(LogLevel.Information, "[sub: {SubscriptionId}] restarting from start")]
     internal static partial void SubscriptionRestartingFromStart(this ILogger logger, string subscriptionId);
 

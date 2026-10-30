@@ -1,3 +1,5 @@
+extern alias mongo;
+
 using BenchmarkDotNet.Attributes;
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Filtering;
@@ -10,7 +12,9 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.Benchmarks;
 
-using SubscriptionObserver = SubscriptionAsyncEnumerable<IDomainEvent, LogPosition>.Observer;
+using SubscriptionObserver = mongo::DomainBlocks.EventStore.Internal.Subscriptions.SubscriptionObserver<
+    IDomainEvent,
+    EventLogDocument<IDomainEvent>>;
 
 /// <summary>
 /// Measures the MongoDB live path without I/O: <see cref="EventCount"/> changes are set on the store's one live
