@@ -60,8 +60,8 @@ internal sealed class EventLogFeed<T, THighWaterMark> : IEventLogFeed<T, THighWa
         if (type.IsValueType && Unsafe.SizeOf<THighWaterMark>() > IntPtr.Size)
         {
             throw new NotSupportedException(
-                $"A {type} high-water mark can be read while half written in a {IntPtr.Size * 8}-bit process. Live " +
-                "subscriptions require a 64-bit process.");
+                $"A {type} high-water mark can be read while half written in a {IntPtr.Size * 8}-bit process, so " +
+                "this store's live subscriptions require a 64-bit process.");
         }
     }
 
