@@ -16,22 +16,23 @@ internal static class PostgresCatchUpReader
 /// Represents the reads of the event log's history, or of one stream's if a stream ID is given. The end position is
 /// read behind the replication barrier, once queries can see the feed's high-water mark.
 /// </summary>
-internal sealed class PostgresCatchUpReader<TEvent>(
+internal sealed class PostgresCatchUpReader<TEvent, TPos>(
     EventLogReader<TEvent> reader,
     string? streamId,
     EventFilter filter,
     ILogger? logger) :
-    ICatchUpReader<TEvent, long>
+    ICatchUpReader<TEvent, long, TPos>
     where TEvent : notnull
+    where TPos : struct, IPosition<TPos>
 {
-    public async ValueTask<(long? End, long Mark)> ReadEndAsync(
-        long mark,
+    public async ValueTask<CatchUpSnapshot<TEvent, TPos>> ReadSnapshotAsync(
+        long highWaterMark,
         string correlationId,
         CancellationToken cancellationToken)
     {
         // Until the feed delivers a row, the mark is -1 and there is nothing to wait for.
-        if (mark >= 0)
-            await WaitUntilVisibleAsync(mark, correlationId, cancellationToken).ConfigureAwait(false);
+        if (highWaterMark >= 0)
+            await WaitUntilVisibleAsync(highWaterMark, correlationId, cancellationToken).ConfigureAwait(false);
 
         // The subscription replays up to the end, or starts after it, so the read is followed by the replication
         // barrier.
@@ -39,12 +40,10 @@ internal sealed class PostgresCatchUpReader<TEvent>(
             ? await reader.ReadMaxPositionWithBarrierAsync(cancellationToken).ConfigureAwait(false)
             : await reader.ReadMaxStreamPositionWithBarrierAsync(streamId, cancellationToken).ConfigureAwait(false);
 
-        return (end, mark);
+        return new Snapshot(this, end);
     }
 
-    // The mark isn't needed here. The read of the end has waited for it, and the end bounds the replay.
-    public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAsync(
-        long mark,
+    private IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAsync(
         long startExclusive,
         long endInclusive,
         CancellationToken cancellationToken)
@@ -74,6 +73,21 @@ internal sealed class PostgresCatchUpReader<TEvent>(
 
             await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
             delay = TimeSpan.FromTicks(Math.Min(delay.Ticks * 2, PostgresCatchUpReader.MaxVisibilityPollDelay.Ticks));
+        }
+    }
+
+    /// <summary>
+    /// Represents the sequence up to the end. The end bounds each read, since queries could already see it.
+    /// </summary>
+    private sealed class Snapshot(PostgresCatchUpReader<TEvent, TPos> owner, long? end) :
+        CatchUpSnapshot<TEvent, TPos>(end)
+    {
+        protected override IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCoreAsync(
+            long startExclusive,
+            long endInclusive,
+            CancellationToken cancellationToken)
+        {
+            return owner.ReadAsync(startExclusive, endInclusive, cancellationToken);
         }
     }
 }

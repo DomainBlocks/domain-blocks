@@ -8,7 +8,7 @@ internal static partial class SubscriptionLogMessages
     internal static partial void SubscriptionStarted(this ILogger logger, string subscriptionId);
 
     [LoggerMessage(LogLevel.Debug, "[sub: {SubscriptionId}] catch-up boundary is {EndPos}")]
-    internal static partial void CatchUpBoundary(this ILogger logger, string subscriptionId, long? endPos);
+    internal static partial void CatchUpBoundary(this ILogger logger, string subscriptionId, ulong? endPos);
 
     [LoggerMessage(
         LogLevel.Warning,
@@ -41,7 +41,7 @@ internal static partial class SubscriptionLogMessages
     internal static partial void SubscriptionRestartingFromStart(this ILogger logger, string subscriptionId);
 
     [LoggerMessage(LogLevel.Information, "[sub: {SubscriptionId}] restarting after position {Position}")]
-    internal static partial void SubscriptionRestarting(this ILogger logger, string subscriptionId, long position);
+    internal static partial void SubscriptionRestarting(this ILogger logger, string subscriptionId, ulong position);
 
     [LoggerMessage(LogLevel.Debug, "[sub: {SubscriptionId}] canceled")]
     internal static partial void SubscriptionCanceled(this ILogger logger, string subscriptionId);
