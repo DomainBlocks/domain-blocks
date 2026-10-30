@@ -294,7 +294,7 @@ public class MongoSubscriptionCatchUpTests
 
         (await subscription2.NextEventAsync()).ShouldBe(liveEvents[0]);
         var deliveredClusterTime = scenario.ChangeStreamProbe.LastDeliveredClusterTime.ShouldNotBeNull();
-        scenario.CatchUpOpTimes[^1].ShouldBeGreaterThanOrEqualTo(deliveredClusterTime);
+        scenario.CatchUpMarks[^1].ShouldBeGreaterThanOrEqualTo(deliveredClusterTime);
     }
 
     [Test]
