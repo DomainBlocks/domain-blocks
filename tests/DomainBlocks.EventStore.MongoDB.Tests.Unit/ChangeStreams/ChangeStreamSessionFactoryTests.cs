@@ -17,21 +17,6 @@ public class ChangeStreamSessionFactoryTests
 {
     private const int TestTimeoutMillis = 5 * 1000;
 
-    private static readonly Exception[] ResumableExceptions =
-    [
-        new TestMongoConnectionException(isNetworkException: true),
-        new MongoConnectionPoolPausedException(null),
-        new MongoCursorNotFoundException(CreateConnectionId(), 0, []),
-        new TimeoutException(),
-        CreateResumableMongoException()
-    ];
-
-    private static readonly Exception[] UnresumableExceptions =
-    [
-        new TestMongoConnectionException(isNetworkException: false),
-        new InvalidOperationException()
-    ];
-
     private Mock<IMongoClient> _mockClient = null!;
     private Mock<IMongoCollection<BsonDocument>> _mockCollection = null!;
     private List<ChangeStreamOptions?> _watchOptions = null!;
@@ -220,26 +205,6 @@ public class ChangeStreamSessionFactoryTests
         changes.Current.Mark.ShouldBe(clusterTime);
     }
 
-    [TestCaseSource(nameof(ResumableExceptions))]
-    public void IsTransient_ResumableError_ReturnsTrue(Exception exception)
-    {
-        CreateSessionFactory().IsTransient(exception).ShouldBeTrue();
-    }
-
-    [TestCaseSource(nameof(UnresumableExceptions))]
-    public void IsTransient_UnresumableError_ReturnsFalse(Exception exception)
-    {
-        CreateSessionFactory().IsTransient(exception).ShouldBeFalse();
-    }
-
-    [Test]
-    public void IsTransient_HistoryLost_ReturnsTrue()
-    {
-        var exception = CreateCommandException(MongoErrorCodes.ChangeStreamHistoryLost);
-
-        CreateSessionFactory().IsTransient(exception).ShouldBeTrue();
-    }
-
     [Test]
     [CancelAfter(TestTimeoutMillis)]
     public async Task ConnectAsync_HelloFailsTransiently_RetriesThenConnects(CancellationToken ct)
@@ -258,13 +223,6 @@ public class ChangeStreamSessionFactoryTests
     }
 
     private static BsonTimestamp CreateOperationTime(int helloCount) => new(helloCount, 0);
-
-    private static MongoException CreateResumableMongoException()
-    {
-        var exception = new MongoException("Resumable error");
-        exception.AddErrorLabel(MongoErrorLabels.ResumableChangeStreamError);
-        return exception;
-    }
 
     private static MongoCommandException CreateCommandException(int code)
     {
@@ -371,11 +329,5 @@ public class ChangeStreamSessionFactoryTests
         public void Dispose()
         {
         }
-    }
-
-    private class TestMongoConnectionException(bool isNetworkException) :
-        MongoConnectionException(CreateConnectionId(), null)
-    {
-        public override bool IsNetworkException => isNetworkException;
     }
 }

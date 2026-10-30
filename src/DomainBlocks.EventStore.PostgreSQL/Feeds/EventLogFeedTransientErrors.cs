@@ -3,7 +3,7 @@ using Npgsql;
 
 namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 
-internal static class EventLogFeedResumePolicy
+internal static class EventLogFeedTransientErrors
 {
     /// <summary>
     /// Treats connection loss, server restarts, resource exhaustion, a replication slot that is lost or still in use,

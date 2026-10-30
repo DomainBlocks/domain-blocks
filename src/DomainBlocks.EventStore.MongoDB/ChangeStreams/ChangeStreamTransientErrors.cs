@@ -2,9 +2,17 @@ using MongoDB.Driver;
 
 namespace DomainBlocks.EventStore.MongoDB.ChangeStreams;
 
-internal static class ChangeStreamResumePolicy
+internal static class ChangeStreamTransientErrors
 {
-    public static bool CanResume(Exception exception)
+    // Lost history can't be resumed from, but it can be recovered from: the next session finds the resume token gone
+    // and starts a new change stream.
+    public static bool IsTransient(Exception exception) =>
+        CanResume(exception) || exception is MongoCommandException ex && IsHistoryLost(ex);
+
+    public static bool IsHistoryLost(MongoCommandException exception) =>
+        exception.Code == MongoErrorCodes.ChangeStreamHistoryLost;
+
+    private static bool CanResume(Exception exception)
     {
         // See: https://github.com/mongodb/specifications/blob/master/source/change-streams/change-streams.md#resumable-error
         if (exception is

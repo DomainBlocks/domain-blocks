@@ -65,7 +65,7 @@ internal sealed class ChangeStreamSessionFactory<TDocument, TChange, TResult>(
                     isResumed: true,
                     initialMark: null);
             }
-            catch (MongoCommandException ex) when (IsHistoryLost(ex))
+            catch (MongoCommandException ex) when (ChangeStreamTransientErrors.IsHistoryLost(ex))
             {
                 logger?.ChangeStreamHistoryLost(ex);
                 _lastSession = null;
@@ -101,16 +101,10 @@ internal sealed class ChangeStreamSessionFactory<TDocument, TChange, TResult>(
             lastApplied);
     }
 
-    // Lost history can't be resumed from, but it can be recovered from: the next session finds the resume token gone
-    // and starts a new change stream.
-    public bool IsTransient(Exception exception) =>
-        ChangeStreamResumePolicy.CanResume(exception) || exception is MongoCommandException ex && IsHistoryLost(ex);
+    public bool IsTransient(Exception exception) => ChangeStreamTransientErrors.IsTransient(exception);
 
     // A change stream holds nothing on the server once its cursor is closed, which its session does.
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-
-    private static bool IsHistoryLost(MongoCommandException exception) =>
-        exception.Code == MongoErrorCodes.ChangeStreamHistoryLost;
 
     private ChangeStreamSession<TChange, TResult> CreateSession(
         IChangeStreamCursor<TChange> cursor,

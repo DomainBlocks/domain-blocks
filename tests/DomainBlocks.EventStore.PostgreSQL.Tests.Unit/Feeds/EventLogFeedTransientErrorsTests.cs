@@ -5,7 +5,7 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Unit.Feeds;
 
-public class EventLogFeedResumePolicyTests
+public class EventLogFeedTransientErrorsTests
 {
     [Test]
     public void IsTransient_ObjectNotInPrerequisiteState_ReturnsFalse()
@@ -17,6 +17,6 @@ public class EventLogFeedResumePolicyTests
             "ERROR",
             PostgresErrorCodes.ObjectNotInPrerequisiteState);
 
-        EventLogFeedResumePolicy.IsTransient(exception).ShouldBeFalse();
+        EventLogFeedTransientErrors.IsTransient(exception).ShouldBeFalse();
     }
 }
