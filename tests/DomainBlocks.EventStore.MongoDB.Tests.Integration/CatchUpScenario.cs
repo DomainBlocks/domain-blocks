@@ -62,26 +62,28 @@ internal sealed class CatchUpScenario : IAsyncDisposable
         var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(insertsOnly);
         var resumePolicy = new FeedResumePolicy(ChangeStreamTransientErrors.IsTransient);
 
-        _feed = new RefCountedFeed<EventLogDocument<object>, BsonTimestamp>(() =>
-        {
-            var liveDocument = new EventLogDocument<object>(codec);
-            var logger = MongoTestEnvironment.LoggerFactory.CreateLogger("EventLogFeed");
+        var logger = MongoTestEnvironment.LoggerFactory.CreateLogger("EventLogFeed");
 
-            var sessionFactory = ChangeStreamSessionFactory.Create(
-                eventLog.Database.Client,
-                ChangeStreamProbe.WatchAsync,
-                pipeline,
-                static change => change.ResumeToken,
-                static change => change.ClusterTime,
-                change =>
-                {
-                    liveDocument.Set(change.FullDocument);
-                    return liveDocument;
-                },
-                logger);
+        _feed = new RefCountedFeed<EventLogDocument<object>, BsonTimestamp>(
+            () =>
+            {
+                var liveDocument = new EventLogDocument<object>(codec);
 
-            return new EventLogFeed<EventLogDocument<object>, BsonTimestamp>(sessionFactory, resumePolicy, logger);
-        });
+                return ChangeStreamSessionFactory.Create(
+                    eventLog.Database.Client,
+                    ChangeStreamProbe.WatchAsync,
+                    pipeline,
+                    static change => change.ResumeToken,
+                    static change => change.ClusterTime,
+                    change =>
+                    {
+                        liveDocument.Set(change.FullDocument);
+                        return liveDocument;
+                    },
+                    logger);
+            },
+            sessionFactory =>
+                new EventLogFeed<EventLogDocument<object>, BsonTimestamp>(sessionFactory, resumePolicy, logger));
     }
 
     public ChangeStreamProbe ChangeStreamProbe { get; }

@@ -47,17 +47,18 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
 
         var slotNameGenerator = new SlotNameGenerator(names);
 
-        _feed = new RefCountedFeed<EventLogRow<object>, long>(() =>
-            new EventLogFeed<EventLogRow<object>, long>(
-                new ReplicationEventLogSessionFactory<object>(
-                    PostgresTestEnvironment.ConnectionString,
-                    DataSource,
-                    slotNameGenerator,
-                    names,
-                    Options.Replication,
-                    codec,
-                    LoggerFactory.CreateLogger("ReplicationEventLogSession")),
-                new FeedResumePolicy(EventLogFeedTransientErrors.IsTransient)));
+        var resumePolicy = new FeedResumePolicy(EventLogFeedTransientErrors.IsTransient);
+
+        _feed = new RefCountedFeed<EventLogRow<object>, long>(
+            () => new ReplicationEventLogSessionFactory<object>(
+                PostgresTestEnvironment.ConnectionString,
+                DataSource,
+                slotNameGenerator,
+                names,
+                Options.Replication,
+                codec,
+                LoggerFactory.CreateLogger("ReplicationEventLogSession")),
+            sessionFactory => new EventLogFeed<EventLogRow<object>, long>(sessionFactory, resumePolicy));
     }
 
     [TearDown]

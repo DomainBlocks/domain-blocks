@@ -45,7 +45,7 @@ internal sealed class EventLogFeed<T, THighWaterMark> : IEventLogFeed<T, THighWa
     }
 
     /// <remarks>
-    /// The feed owns <paramref name="sessionFactory"/>, and disposes it once it has stopped.
+    /// The caller owns <paramref name="sessionFactory"/>, and disposes it once the feed's connection has stopped.
     /// </remarks>
     public EventLogFeed(
         IFeedSessionFactory<T, THighWaterMark> sessionFactory,
@@ -231,7 +231,6 @@ internal sealed class EventLogFeed<T, THighWaterMark> : IEventLogFeed<T, THighWa
             }
             finally
             {
-                await _feed._sessionFactory.DisposeAsync().ConfigureAwait(false);
                 _logger?.FeedStopped(_feedId);
             }
         }

@@ -138,17 +138,15 @@ public class EventLogFeedTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task Connect_WhenConnectionIsDisposed_DisposesSessionFactory(CancellationToken ct)
+    public async Task Connect_ConnectionDisposed_LeavesSessionFactory(CancellationToken ct)
     {
         var sessionFactory = CreateSessionFactory(new ScriptedSession("s1"));
         var feed = CreateFeed(sessionFactory);
 
         var connection = await feed.ConnectAsync(ct);
-        sessionFactory.DisposeCount.ShouldBe(0);
-
         await connection.DisposeAsync();
 
-        sessionFactory.DisposeCount.ShouldBe(1);
+        sessionFactory.DisposeCount.ShouldBe(0);
     }
 
     [Test]

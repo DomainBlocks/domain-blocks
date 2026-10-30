@@ -335,25 +335,26 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(insertsOnly);
         var resumePolicy = new FeedResumePolicy(ChangeStreamTransientErrors.IsTransient, logger: logger);
 
-        return new RefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp>(() =>
-        {
-            var liveDocument = new EventLogDocument<TEvent>(_eventCodec);
+        return new RefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp>(
+            () =>
+            {
+                var liveDocument = new EventLogDocument<TEvent>(_eventCodec);
 
-            var sessionFactory = ChangeStreamSessionFactory.Create(
-                eventLog.Database.Client,
-                eventLog.WatchAsync,
-                pipeline,
-                static change => change.ResumeToken,
-                static change => change.ClusterTime,
-                change =>
-                {
-                    liveDocument.Set(change.FullDocument);
-                    return liveDocument;
-                },
-                logger);
-
-            return new EventLogFeed<EventLogDocument<TEvent>, BsonTimestamp>(sessionFactory, resumePolicy, logger);
-        });
+                return ChangeStreamSessionFactory.Create(
+                    eventLog.Database.Client,
+                    eventLog.WatchAsync,
+                    pipeline,
+                    static change => change.ResumeToken,
+                    static change => change.ClusterTime,
+                    change =>
+                    {
+                        liveDocument.Set(change.FullDocument);
+                        return liveDocument;
+                    },
+                    logger);
+            },
+            sessionFactory =>
+                new EventLogFeed<EventLogDocument<TEvent>, BsonTimestamp>(sessionFactory, resumePolicy, logger));
     }
 
     private static ReadQuery GetReadQuery<TPos>(

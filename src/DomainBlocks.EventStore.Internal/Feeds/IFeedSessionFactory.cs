@@ -5,7 +5,8 @@ namespace DomainBlocks.EventStore.Internal.Feeds;
 /// </summary>
 /// <remarks>
 /// The feed creates a session only after it has disposed the previous one, so the factory's sessions never run at the
-/// same time. Disposing the factory releases anything it holds across sessions, such as a replication slot.
+/// same time. Whoever creates the factory disposes it once the feed's connection has stopped, which releases anything
+/// it holds across sessions, such as a replication slot.
 /// </remarks>
 internal interface IFeedSessionFactory<T, TMark> : IAsyncDisposable
 {

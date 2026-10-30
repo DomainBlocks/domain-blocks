@@ -39,7 +39,7 @@ public class ChangeStreamFeedTests
 
         var logger = MongoTestEnvironment.LoggerFactory.CreateLogger<ChangeStreamFeedTests>();
 
-        var sessionFactory = ChangeStreamSessionFactory.Create(
+        await using var sessionFactory = ChangeStreamSessionFactory.Create(
             MongoTestEnvironment.MongoClient,
             _collection.WatchAsync,
             pipeline,

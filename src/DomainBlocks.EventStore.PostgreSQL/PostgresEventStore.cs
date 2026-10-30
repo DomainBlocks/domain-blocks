@@ -76,18 +76,16 @@ public static class PostgresEventStore
 
         var resumePolicy = new FeedResumePolicy(EventLogFeedTransientErrors.IsTransient, resumeOptions, logger);
 
-        return new RefCountedFeed<EventLogRow<TEvent>, long>(() =>
-            new EventLogFeed<EventLogRow<TEvent>, long>(
-                new ReplicationEventLogSessionFactory<TEvent>(
-                    connectionString,
-                    dataSource,
-                    slotNameGenerator,
-                    names,
-                    replicationOptions,
-                    decoder,
-                    logger),
-                resumePolicy,
-                logger));
+        return new RefCountedFeed<EventLogRow<TEvent>, long>(
+            () => new ReplicationEventLogSessionFactory<TEvent>(
+                connectionString,
+                dataSource,
+                slotNameGenerator,
+                names,
+                replicationOptions,
+                decoder,
+                logger),
+            sessionFactory => new EventLogFeed<EventLogRow<TEvent>, long>(sessionFactory, resumePolicy, logger));
     }
 }
 

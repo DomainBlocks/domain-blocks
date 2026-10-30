@@ -212,8 +212,10 @@ public class ChangeStreamSessionFactoryTests
         SetupChangeStream([]);
         _helloError = new TimeoutException();
 
+        await using var sessionFactory = CreateSessionFactory();
+
         var feed = new EventLogFeed<ChangeStreamDocument<BsonDocument>, BsonTimestamp>(
-            CreateSessionFactory(),
+            sessionFactory,
             new FeedResumePolicy(
                 ChangeStreamTransientErrors.IsTransient,
                 new FeedResumeOptions { RetryDelay = TimeSpan.FromMilliseconds(1) }));
