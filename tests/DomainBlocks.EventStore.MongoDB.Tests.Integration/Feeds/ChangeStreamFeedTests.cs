@@ -1,5 +1,5 @@
 using DomainBlocks.EventStore.Internal.Feeds;
-using DomainBlocks.EventStore.MongoDB.ChangeStreams;
+using DomainBlocks.EventStore.MongoDB.Feeds;
 using DomainBlocks.Testing.Integration.EventStore;
 using DomainBlocks.Testing.Integration.EventStore.MongoDB;
 using Microsoft.Extensions.Logging;
@@ -8,7 +8,7 @@ using MongoDB.Driver;
 using NUnit.Framework;
 using Shouldly;
 
-namespace DomainBlocks.EventStore.MongoDB.Tests.Integration.ChangeStreams;
+namespace DomainBlocks.EventStore.MongoDB.Tests.Integration.Feeds;
 
 [TestFixture]
 public class ChangeStreamFeedTests

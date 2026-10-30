@@ -1,5 +1,5 @@
 using System.Net;
-using DomainBlocks.EventStore.MongoDB.ChangeStreams;
+using DomainBlocks.EventStore.MongoDB.Feeds;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.Driver.Core.Clusters;
@@ -8,7 +8,7 @@ using MongoDB.Driver.Core.Servers;
 using NUnit.Framework;
 using Shouldly;
 
-namespace DomainBlocks.EventStore.MongoDB.Tests.Unit.ChangeStreams;
+namespace DomainBlocks.EventStore.MongoDB.Tests.Unit.Feeds;
 
 public class ChangeStreamTransientErrorsTests
 {

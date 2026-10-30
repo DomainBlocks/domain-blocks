@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
-namespace DomainBlocks.EventStore.MongoDB.ChangeStreams;
+namespace DomainBlocks.EventStore.MongoDB.Feeds;
 
 /// <summary>
 /// Creates a <see cref="ChangeStreamFeed{TDocument, TChange, TResult}"/>, inferring its type arguments.
