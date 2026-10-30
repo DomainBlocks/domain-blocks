@@ -24,20 +24,20 @@ internal sealed class PostgresCatchUpSource<TEvent>(
     ICatchUpSource<TEvent, long>
     where TEvent : notnull
 {
-    // The subscription replays up to the end, or starts after it, so the read is followed by the replication barrier.
-    public ValueTask<long?> ReadEndAsync(CancellationToken cancellationToken)
-    {
-        return new ValueTask<long?>(streamId is null
-            ? reader.ReadMaxPositionWithBarrierAsync(cancellationToken)
-            : reader.ReadMaxStreamPositionWithBarrierAsync(streamId, cancellationToken));
-    }
-
     public ValueTask<ICatchUp<TEvent>> StartAsync(
         long highWaterMark,
         string correlationId,
         CancellationToken cancellationToken)
     {
         return ValueTask.FromResult<ICatchUp<TEvent>>(new BarrierCatchUp(this, highWaterMark, correlationId));
+    }
+
+    // The subscription replays up to the end, or starts after it, so the read is followed by the replication barrier.
+    private Task<long?> ReadEndAsync(CancellationToken cancellationToken)
+    {
+        return streamId is null
+            ? reader.ReadMaxPositionWithBarrierAsync(cancellationToken)
+            : reader.ReadMaxStreamPositionWithBarrierAsync(streamId, cancellationToken);
     }
 
     private IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAsync(

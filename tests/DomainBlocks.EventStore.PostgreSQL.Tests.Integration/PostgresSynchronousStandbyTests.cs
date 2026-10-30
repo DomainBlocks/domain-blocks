@@ -405,7 +405,8 @@ public class PostgresSynchronousStandbyTests
             }
         });
 
-        // The subscription first reads the end, which fails on the standby until the endpoint reaches the primary.
+        // The feed can't connect through the standby, so the subscription reads the end once the endpoint reaches the
+        // primary.
         await using var subscription = eventStore.SubscribeToAll(SubscriptionOrigin.End).Probe(ct);
         var next = subscription.NextAsync();
 

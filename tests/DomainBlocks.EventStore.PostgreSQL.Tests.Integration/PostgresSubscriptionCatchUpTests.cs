@@ -316,9 +316,6 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
         PostgresSubscriptionCatchUpTests test) :
         ICatchUpSource<object, long>
     {
-        public ValueTask<long?> ReadEndAsync(CancellationToken cancellationToken) =>
-            inner.ReadEndAsync(cancellationToken);
-
         public async ValueTask<ICatchUp<object>> StartAsync(
             long highWaterMark,
             string correlationId,
