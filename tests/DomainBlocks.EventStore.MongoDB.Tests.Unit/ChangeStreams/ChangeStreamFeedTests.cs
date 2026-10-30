@@ -1,4 +1,5 @@
 ﻿using System.Net;
+using System.Threading.Channels;
 using DomainBlocks.EventStore.Internal.Feeds;
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using MongoDB.Bson;
@@ -20,6 +21,7 @@ public class ChangeStreamFeedTests
     private Mock<IMongoClient> _mockClient = null!;
     private Mock<IMongoCollection<BsonDocument>> _mockCollection = null!;
     private List<ChangeStreamOptions?> _watchOptions = null!;
+    private SemaphoreSlim _changeStreamOpened = null!;
     private BsonDocument? _initialResumeToken;
     private int _helloCount;
     private Exception? _helloError;
@@ -30,6 +32,7 @@ public class ChangeStreamFeedTests
     {
         _mockCollection = new Mock<IMongoCollection<BsonDocument>>();
         _watchOptions = [];
+        _changeStreamOpened = new SemaphoreSlim(0);
         _helloCount = 0;
         _helloError = null;
         _resumeError = null;
@@ -61,15 +64,14 @@ public class ChangeStreamFeedTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task CreateSessionAsync_NoResumeToken_StartsAfterLastWrite(CancellationToken ct)
+    public async Task ConnectAsync_NoResumeToken_StartsAfterLastWrite(CancellationToken ct)
     {
         SetupChangeStream([]);
         await using var feed = CreateFeed();
 
-        await using var session = await feed.CreateSessionAsync(ct);
+        await feed.ConnectAsync(ct);
 
-        session.IsResumed.ShouldBeFalse();
-        session.InitialMark.ShouldBe(CreateOperationTime(1));
+        feed.HighWaterMark.ShouldBe(CreateOperationTime(1));
 
         // The stream starts one tick after the last write.
         _watchOptions.ShouldHaveSingleItem().ShouldNotBeNull().StartAtOperationTime.ShouldBe(new BsonTimestamp(1, 1));
@@ -77,33 +79,38 @@ public class ChangeStreamFeedTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task CreateSessionAsync_ChangeDelivered_ResumesAfterChange(CancellationToken ct)
+    public async Task ConnectAsync_FailsPartWayThroughBatch_ResumesAfterLastChangeWithoutReset(CancellationToken ct)
     {
         var deliveredChange = CreateChange(new BsonDocument("_data", "1"));
-        var pendingChange = CreateChange(new BsonDocument("_data", "2"));
-        SetupChangeStream([new ChangeStreamBatch { Items = [deliveredChange, pendingChange] }]);
+        var nextChange = CreateChange(new BsonDocument("_data", "2"));
+
+        SetupChangeStream(
+        [
+            new ChangeStreamBatch { Items = FailAfter(deliveredChange) },
+            new ChangeStreamBatch { Items = [nextChange] }
+        ]);
+
         await using var feed = CreateFeed();
+        var observer = new RecordingObserver();
+        using var attachment = feed.Attach(observer);
 
-        await using (var session = await feed.CreateSessionAsync(ct))
-        {
-            await using var changes = session.ReadAsync(ct).GetAsyncEnumerator(ct);
+        await feed.ConnectAsync(ct);
 
-            // The feed asks for the next change once observers have the last one.
-            (await changes.MoveNextAsync()).ShouldBeTrue();
-            (await changes.MoveNextAsync()).ShouldBeTrue();
-        }
-
-        await using var resumedSession = await feed.CreateSessionAsync(ct);
-
-        resumedSession.IsResumed.ShouldBeTrue();
-        resumedSession.InitialMark.ShouldBeNull();
+        // A reset would appear between the two changes.
+        (await observer.ReadAsync(2, ct)).ShouldBe(["1", "2"]);
         _helloCount.ShouldBe(1);
         _watchOptions.Last().ShouldNotBeNull().ResumeAfter.ShouldBe(deliveredChange.ResumeToken);
+
+        static IEnumerable<ChangeStreamDocument<BsonDocument>> FailAfter(ChangeStreamDocument<BsonDocument> change)
+        {
+            yield return change;
+            throw new TimeoutException();
+        }
     }
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task CreateSessionAsync_BatchDelivered_ResumesAfterPostBatchToken(CancellationToken ct)
+    public async Task ConnectAsync_BatchDelivered_ResumesAfterPostBatchToken(CancellationToken ct)
     {
         var postBatchResumeToken = new BsonDocument("_data", "post-batch");
 
@@ -119,32 +126,28 @@ public class ChangeStreamFeedTests
 
         await using var feed = CreateFeed();
 
-        await using (var session = await feed.CreateSessionAsync(ct))
-            await session.ReadAsync(ct).ToArrayAsync(ct).AsTask().ShouldThrowAsync<TimeoutException>();
-
-        await using var resumedSession = await feed.CreateSessionAsync(ct);
+        await feed.ConnectAsync(ct);
+        await WaitForChangeStreamsAsync(2, ct);
 
         _watchOptions.Last().ShouldNotBeNull().ResumeAfter.ShouldBe(postBatchResumeToken);
     }
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task CreateSessionAsync_CursorFailedBeforeFirstBatch_ResumesAfterInitialToken(CancellationToken ct)
+    public async Task ConnectAsync_CursorFailsBeforeFirstBatch_ResumesAfterInitialToken(CancellationToken ct)
     {
         SetupChangeStream([new ChangeStreamBatch { Exception = new TimeoutException() }]);
         await using var feed = CreateFeed();
 
-        await using (var session = await feed.CreateSessionAsync(ct))
-            await session.ReadAsync(ct).ToArrayAsync(ct).AsTask().ShouldThrowAsync<TimeoutException>();
-
-        await using var resumedSession = await feed.CreateSessionAsync(ct);
+        await feed.ConnectAsync(ct);
+        await WaitForChangeStreamsAsync(2, ct);
 
         _watchOptions.Select(x => x?.ResumeAfter).ShouldBe([null, _initialResumeToken]);
     }
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task CreateSessionAsync_NoInitialToken_ResumesAfterLastChange(CancellationToken ct)
+    public async Task ConnectAsync_NoInitialToken_ResumesAfterLastChange(CancellationToken ct)
     {
         // A write landing while the cursor opens fills the first batch, and the driver then reports no token until the
         // batch has been read. The resume must come from the changes.
@@ -160,49 +163,49 @@ public class ChangeStreamFeedTests
 
         await using var feed = CreateFeed();
 
-        await using (var session = await feed.CreateSessionAsync(ct))
-            await session.ReadAsync(ct).ToArrayAsync(ct).AsTask().ShouldThrowAsync<TimeoutException>();
-
-        await using var resumedSession = await feed.CreateSessionAsync(ct);
+        await feed.ConnectAsync(ct);
+        await WaitForChangeStreamsAsync(2, ct);
 
         _watchOptions.Last().ShouldNotBeNull().ResumeAfter.ShouldBe(lastChange.ResumeToken);
     }
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task CreateSessionAsync_ResumeTokenLost_StartsNewChangeStream(CancellationToken ct)
+    public async Task ConnectAsync_ResumeTokenLost_StartsNewChangeStreamAndResets(CancellationToken ct)
     {
         SetupChangeStream([new ChangeStreamBatch { Exception = new TimeoutException() }]);
-        await using var feed = CreateFeed();
-
-        await using (var session = await feed.CreateSessionAsync(ct))
-            await session.ReadAsync(ct).ToArrayAsync(ct).AsTask().ShouldThrowAsync<TimeoutException>();
 
         // The oplog no longer holds the change that the resume token names.
         _resumeError = CreateCommandException(MongoErrorCodes.ChangeStreamHistoryLost);
 
-        await using var newSession = await feed.CreateSessionAsync(ct);
+        await using var feed = CreateFeed();
+        var observer = new RecordingObserver();
+        using var attachment = feed.Attach(observer);
 
-        newSession.IsResumed.ShouldBeFalse();
-        newSession.InitialMark.ShouldBe(CreateOperationTime(2));
+        await feed.ConnectAsync(ct);
+
+        (await observer.ReadAsync(1, ct)).ShouldBe(["reset"]);
+        feed.HighWaterMark.ShouldBe(CreateOperationTime(2));
         _watchOptions.Select(x => x?.ResumeAfter is not null).ShouldBe([false, true, false]);
         _watchOptions.Last().ShouldNotBeNull().StartAtOperationTime.ShouldBe(new BsonTimestamp(2, 1));
     }
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task ReadAsync_Change_ReportsClusterTime(CancellationToken ct)
+    public async Task ConnectAsync_ChangeDelivered_RaisesMarkToClusterTime(CancellationToken ct)
     {
         var clusterTime = new BsonTimestamp(5, 1);
         var change = CreateChange(new BsonDocument("_data", "1"), clusterTime);
         SetupChangeStream([new ChangeStreamBatch { Items = [change] }]);
+
         await using var feed = CreateFeed();
+        var observer = new RecordingObserver();
+        using var attachment = feed.Attach(observer);
 
-        await using var session = await feed.CreateSessionAsync(ct);
-        await using var changes = session.ReadAsync(ct).GetAsyncEnumerator(ct);
+        await feed.ConnectAsync(ct);
+        await observer.ReadAsync(1, ct);
 
-        (await changes.MoveNextAsync()).ShouldBeTrue();
-        changes.Current.Mark.ShouldBe(clusterTime);
+        feed.HighWaterMark.ShouldBe(clusterTime);
     }
 
     [Test]
@@ -212,7 +215,7 @@ public class ChangeStreamFeedTests
         SetupChangeStream([]);
         _helloError = new TimeoutException();
 
-        await using var feed = CreateFeed(new FeedResumeOptions { RetryDelay = TimeSpan.FromMilliseconds(1) });
+        await using var feed = CreateFeed();
 
         await feed.ConnectAsync(ct);
 
@@ -248,7 +251,7 @@ public class ChangeStreamFeedTests
     }
 
     private ChangeStreamFeed<BsonDocument, ChangeStreamDocument<BsonDocument>, ChangeStreamDocument<BsonDocument>>
-        CreateFeed(FeedResumeOptions? resumeOptions = null)
+        CreateFeed()
     {
         return ChangeStreamFeed.Create(
             _mockClient.Object,
@@ -257,7 +260,15 @@ public class ChangeStreamFeedTests
             static x => x.ResumeToken,
             static x => x.ClusterTime,
             static x => x,
-            new FeedResumePolicy(ChangeStreamTransientErrors.IsTransient, resumeOptions));
+            new FeedResumePolicy(
+                ChangeStreamTransientErrors.IsTransient,
+                new FeedResumeOptions { RetryDelay = TimeSpan.FromMilliseconds(1) }));
+    }
+
+    private async Task WaitForChangeStreamsAsync(int count, CancellationToken ct)
+    {
+        for (var i = 0; i < count; i++)
+            await _changeStreamOpened.WaitAsync(ct);
     }
 
     private void SetupChangeStream(IEnumerable<ChangeStreamBatch<ChangeStreamDocument<BsonDocument>>> batches)
@@ -273,7 +284,10 @@ public class ChangeStreamFeedTests
                     PipelineDefinition<ChangeStreamDocument<BsonDocument>, ChangeStreamDocument<BsonDocument>> _,
                     ChangeStreamOptions? options,
                     CancellationToken _) =>
-                _watchOptions.Add(options))
+                {
+                    _watchOptions.Add(options);
+                    _changeStreamOpened.Release();
+                })
             .Returns((
                     PipelineDefinition<ChangeStreamDocument<BsonDocument>, ChangeStreamDocument<BsonDocument>> _,
                     ChangeStreamOptions? options,
@@ -281,6 +295,38 @@ public class ChangeStreamFeedTests
                 options?.ResumeAfter is not null && Interlocked.Exchange(ref _resumeError, null) is { } error
                     ? Task.FromException<IChangeStreamCursor<ChangeStreamDocument<BsonDocument>>>(error)
                     : Task.FromResult<IChangeStreamCursor<ChangeStreamDocument<BsonDocument>>>(testCursor));
+    }
+
+    /// <summary>
+    /// Records the feed's deliveries in order: the data of each change's resume token, or "reset".
+    /// </summary>
+    private sealed class RecordingObserver : IFeedObserver<ChangeStreamDocument<BsonDocument>>
+    {
+        private readonly Channel<string> _channel = Channel.CreateUnbounded<string>();
+
+        public ValueTask OnNextAsync(ChangeStreamDocument<BsonDocument> item, CancellationToken cancellationToken)
+        {
+            _channel.Writer.TryWrite(item.ResumeToken["_data"].AsString);
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask OnResetAsync(CancellationToken cancellationToken)
+        {
+            _channel.Writer.TryWrite("reset");
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken) => default;
+
+        public async Task<string[]> ReadAsync(int count, CancellationToken cancellationToken)
+        {
+            var items = new string[count];
+
+            for (var i = 0; i < count; i++)
+                items[i] = await _channel.Reader.ReadAsync(cancellationToken);
+
+            return items;
+        }
     }
 
     private class ChangeStreamBatch<TDocument>

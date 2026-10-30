@@ -107,7 +107,7 @@ public class PostgresLiveFanOutBenchmarks
         string[] streamIds) :
         EventLogFeed<EventLogRow<IDomainEvent>, long>(ResumePolicy)
     {
-        protected internal override Task<IFeedSession<EventLogRow<IDomainEvent>, long>> CreateSessionAsync(
+        protected override Task<IFeedSession<EventLogRow<IDomainEvent>, long>> CreateSessionAsync(
             CancellationToken cancellationToken) =>
             Task.FromResult<IFeedSession<EventLogRow<IDomainEvent>, long>>(new Session(decoder, rows, streamIds));
     }

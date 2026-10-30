@@ -132,8 +132,7 @@ internal abstract class EventLogFeed<T, TMark> : IEventLogFeed<T, TMark>
     /// <remarks>
     /// The feed creates a session only after it has disposed the previous one, so sessions never run at the same time.
     /// </remarks>
-    protected internal abstract Task<IFeedSession<T, TMark>> CreateSessionAsync(
-        CancellationToken cancellationToken);
+    protected abstract Task<IFeedSession<T, TMark>> CreateSessionAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// Stops the feed. Observers still attached receive an <see cref="ObjectDisposedException"/>.

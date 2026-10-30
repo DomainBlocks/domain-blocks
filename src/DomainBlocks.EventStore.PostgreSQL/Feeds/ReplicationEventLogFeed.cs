@@ -76,7 +76,7 @@ internal sealed class ReplicationEventLogFeed<TEvent>(
     private FeedReplicationSlot? _slot;
     private bool _hasCreatedSessionOnSlot;
 
-    protected internal override async Task<IFeedSession<EventLogRow<TEvent>, long>> CreateSessionAsync(
+    protected override async Task<IFeedSession<EventLogRow<TEvent>, long>> CreateSessionAsync(
         CancellationToken cancellationToken)
     {
         ThrowIfMultipleHosts();

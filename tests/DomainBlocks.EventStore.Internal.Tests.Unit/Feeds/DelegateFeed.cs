@@ -16,8 +16,7 @@ internal sealed class DelegateFeed(
 {
     public int DisposeCount { get; private set; }
 
-    protected internal override Task<IFeedSession<long, long>> CreateSessionAsync(
-        CancellationToken cancellationToken) =>
+    protected override Task<IFeedSession<long, long>> CreateSessionAsync(CancellationToken cancellationToken) =>
         factory(cancellationToken);
 
     protected override async ValueTask DisposeAsyncCore()

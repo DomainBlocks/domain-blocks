@@ -50,7 +50,7 @@ internal sealed class ChangeStreamFeed<TDocument, TChange, TResult>(
 {
     private ChangeStreamSession<TChange, TResult>? _lastSession;
 
-    protected internal override async Task<IFeedSession<TResult, BsonTimestamp>> CreateSessionAsync(
+    protected override async Task<IFeedSession<TResult, BsonTimestamp>> CreateSessionAsync(
         CancellationToken cancellationToken)
     {
         if (_lastSession?.ResumeToken is { } resumeToken)

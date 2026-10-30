@@ -525,7 +525,7 @@ public class EventLogFeedTests
 
     private sealed class UnusedFeed() : EventLogFeed<long, TwoPartMark>(FastResumePolicy)
     {
-        protected internal override Task<IFeedSession<long, TwoPartMark>> CreateSessionAsync(
+        protected override Task<IFeedSession<long, TwoPartMark>> CreateSessionAsync(
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
     }
