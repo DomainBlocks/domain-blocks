@@ -9,7 +9,7 @@ namespace DomainBlocks.EventStore.Internal.Feeds;
 /// starting point, in commit order, until the session faults or is disposed. Uncommitted items are never yielded, and
 /// no item is yielded twice, even by a later session.
 /// </remarks>
-internal interface IFeedSession<T, THighWaterMark> : IAsyncDisposable
+internal interface IFeedSession<T, TMark> : IAsyncDisposable
 {
     /// <summary>
     /// Gets a short description for diagnostics, such as the replication slot name.
@@ -33,10 +33,10 @@ internal interface IFeedSession<T, THighWaterMark> : IAsyncDisposable
     /// own. With nothing to cover, a session returns <see langword="null"/> or a mark at or before the feed's, such as
     /// -1 for a position.
     /// </remarks>
-    THighWaterMark? InitialHighWaterMark { get; }
+    TMark? InitialMark { get; }
 
     /// <summary>
     /// Reads each item with a mark at or after it. The feed raises its own mark before observers receive the item.
     /// </summary>
-    IAsyncEnumerable<(T Item, THighWaterMark HighWaterMark)> ReadAsync(CancellationToken cancellationToken);
+    IAsyncEnumerable<(T Item, TMark Mark)> ReadAsync(CancellationToken cancellationToken);
 }

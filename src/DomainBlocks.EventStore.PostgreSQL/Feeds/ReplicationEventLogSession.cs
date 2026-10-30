@@ -36,9 +36,9 @@ internal sealed class ReplicationEventLogSession<TEvent>(
 
     public bool IsResumed { get; } = isResumed;
 
-    public long InitialHighWaterMark => -1;
+    public long InitialMark => -1;
 
-    public async IAsyncEnumerable<(EventLogRow<TEvent> Item, long HighWaterMark)> ReadAsync(
+    public async IAsyncEnumerable<(EventLogRow<TEvent> Item, long Mark)> ReadAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var pgOutputSlot = new PgOutputReplicationSlot(slot.Name);

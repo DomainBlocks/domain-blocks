@@ -7,9 +7,9 @@ namespace DomainBlocks.EventStore.Internal.Feeds;
 /// The feed creates a session only after it has disposed the previous one, so the factory's sessions never run at the
 /// same time. Disposing the factory releases anything it holds across sessions, such as a replication slot.
 /// </remarks>
-internal interface IFeedSessionFactory<T, THighWaterMark> : IAsyncDisposable
+internal interface IFeedSessionFactory<T, TMark> : IAsyncDisposable
 {
-    Task<IFeedSession<T, THighWaterMark>> CreateAsync(CancellationToken cancellationToken);
+    Task<IFeedSession<T, TMark>> CreateAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// Determines whether a failure to create or read a session is worth retrying.

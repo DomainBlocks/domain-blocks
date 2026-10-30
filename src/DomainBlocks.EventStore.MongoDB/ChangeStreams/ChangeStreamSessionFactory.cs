@@ -63,7 +63,7 @@ internal sealed class ChangeStreamSessionFactory<TDocument, TChange, TResult>(
                     resumeToken,
                     "resumed change stream",
                     isResumed: true,
-                    initialHighWaterMark: null);
+                    initialMark: null);
             }
             catch (MongoCommandException ex) when (IsHistoryLost(ex))
             {
@@ -117,14 +117,14 @@ internal sealed class ChangeStreamSessionFactory<TDocument, TChange, TResult>(
         BsonDocument? resumeToken,
         string description,
         bool isResumed,
-        BsonTimestamp? initialHighWaterMark)
+        BsonTimestamp? initialMark)
     {
         _lastSession = new ChangeStreamSession<TChange, TResult>(
             cursor,
             resumeToken,
             description,
             isResumed,
-            initialHighWaterMark,
+            initialMark,
             resumeTokenSelector,
             clusterTimeSelector,
             resultSelector,

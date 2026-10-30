@@ -15,7 +15,7 @@ internal sealed class ChangeStreamSession<TChange, TResult>(
     BsonDocument? resumeToken,
     string description,
     bool isResumed,
-    BsonTimestamp? initialHighWaterMark,
+    BsonTimestamp? initialMark,
     Func<TChange, BsonDocument> resumeTokenSelector,
     Func<TChange, BsonTimestamp> clusterTimeSelector,
     Func<TChange, TResult> resultSelector,
@@ -37,9 +37,9 @@ internal sealed class ChangeStreamSession<TChange, TResult>(
     /// last write, just before the stream's start, and a resumed one has none. A majority read that waits for it sees
     /// every such change, even on a node whose commit point lagged after a failover.
     /// </summary>
-    public BsonTimestamp? InitialHighWaterMark { get; } = initialHighWaterMark;
+    public BsonTimestamp? InitialMark { get; } = initialMark;
 
-    public async IAsyncEnumerable<(TResult Item, BsonTimestamp HighWaterMark)> ReadAsync(
+    public async IAsyncEnumerable<(TResult Item, BsonTimestamp Mark)> ReadAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         while (await cursor.MoveNextAsync(cancellationToken).ConfigureAwait(false))

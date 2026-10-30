@@ -129,9 +129,9 @@ public class PostgresLiveFanOutBenchmarks
 
         public bool IsResumed => false;
 
-        public long InitialHighWaterMark => -1;
+        public long InitialMark => -1;
 
-        public async IAsyncEnumerable<(EventLogRow<IDomainEvent> Item, long HighWaterMark)> ReadAsync(
+        public async IAsyncEnumerable<(EventLogRow<IDomainEvent> Item, long Mark)> ReadAsync(
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             for (var i = 0; i < rows.Length; i++)

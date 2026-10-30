@@ -233,7 +233,7 @@ internal sealed class EventLogFeed<T, THighWaterMark> : IEventLogFeed<T, THighWa
 
                         // A session can start with a mark, such as one that covers items it won't deliver, and
                         // observers read the mark as soon as the feed connects.
-                        RaiseHighWaterMark(session.InitialHighWaterMark);
+                        RaiseHighWaterMark(session.InitialMark);
 
                         // Unless the session resumes the previous one, items committed in between were missed. Reset
                         // observers before pumping the new session, so no item advances a position past the gap.
@@ -245,13 +245,11 @@ internal sealed class EventLogFeed<T, THighWaterMark> : IEventLogFeed<T, THighWa
 
                         try
                         {
-                            await foreach (var (item, highWaterMark) in session
-                                               .ReadAsync(_stopCts.Token)
-                                               .ConfigureAwait(false))
+                            await foreach (var (item, mark) in session.ReadAsync(_stopCts.Token).ConfigureAwait(false))
                             {
                                 // The mark is raised before observers are notified, and the exchange is a full
                                 // fence, so an observer that attaches too late for an item reads a mark that covers it.
-                                RaiseHighWaterMark(highWaterMark);
+                                RaiseHighWaterMark(mark);
 
                                 await _observerHub.NotifyNextAsync(item, _stopCts.Token).ConfigureAwait(false);
                             }

@@ -27,7 +27,7 @@ internal sealed class ScriptedSession(string description, params ScriptedSession
     /// <summary>
     /// Gets the mark that the session starts with, which is -1 by default.
     /// </summary>
-    public long InitialHighWaterMark { get; init; } = -1;
+    public long InitialMark { get; init; } = -1;
 
     public int DisposeCount { get; private set; }
 
@@ -37,7 +37,7 @@ internal sealed class ScriptedSession(string description, params ScriptedSession
 
     public static Step.End End() => new();
 
-    public async IAsyncEnumerable<(long Item, long HighWaterMark)> ReadAsync(
+    public async IAsyncEnumerable<(long Item, long Mark)> ReadAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         while (true)
