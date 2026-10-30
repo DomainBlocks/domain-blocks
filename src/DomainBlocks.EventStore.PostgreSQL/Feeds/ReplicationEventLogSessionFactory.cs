@@ -14,7 +14,7 @@ namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 internal static class ReplicationEventLogSessionFactory
 {
     /// <summary>
-    /// Throws if a factory and the sessions it opens cannot use the options.
+    /// Throws if a factory and the sessions it creates cannot use the options.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">
     /// An option is outside the range that a factory or its sessions support.
@@ -31,7 +31,7 @@ internal static class ReplicationEventLogSessionFactory
 }
 
 /// <summary>
-/// Opens one feed's logical replication sessions on a <see cref="FeedReplicationSlot"/>, which it creates for the
+/// Creates one feed's logical replication sessions on a <see cref="FeedReplicationSlot"/>, which it creates for the
 /// first session and drops when it is disposed. Each later session resumes on the slot where the previous one stopped,
 /// so a lost connection costs no reset. A dropped or invalidated slot is replaced, and the feed resets.
 /// </summary>
@@ -73,9 +73,9 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent>(
         logger);
 
     private FeedReplicationSlot? _slot;
-    private bool _hasOpenedSessionOnSlot;
+    private bool _hasCreatedSessionOnSlot;
 
-    public async Task<IFeedSession<EventLogRow<TEvent>, long>> OpenAsync(CancellationToken cancellationToken)
+    public async Task<IFeedSession<EventLogRow<TEvent>, long>> CreateAsync(CancellationToken cancellationToken)
     {
         ThrowIfMultipleHosts();
         await CheckServerAsync(cancellationToken).ConfigureAwait(false);
@@ -101,7 +101,7 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent>(
         if (_slot is null)
         {
             _slot = await CreateSlotAsync(cancellationToken).ConfigureAwait(false);
-            _hasOpenedSessionOnSlot = false;
+            _hasCreatedSessionOnSlot = false;
         }
 
         var connection = new LogicalReplicationConnection(connectionString)
@@ -121,8 +121,8 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent>(
         }
 
         // The first session on a slot starts where the slot does, and a later one resumes the session before it.
-        var isResumed = _hasOpenedSessionOnSlot;
-        _hasOpenedSessionOnSlot = true;
+        var isResumed = _hasCreatedSessionOnSlot;
+        _hasCreatedSessionOnSlot = true;
 
         return new ReplicationEventLogSession<TEvent>(connection, _slot, isResumed, _pgOutputOptions, names, decoder);
     }

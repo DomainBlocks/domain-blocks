@@ -210,7 +210,7 @@ public class SessionFeedTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task ConnectAsync_TransientCancellationAtOpen_RetriesThenConnects(CancellationToken ct)
+    public async Task ConnectAsync_TransientCancellationAtCreate_RetriesThenConnects(CancellationToken ct)
     {
         var attempts = 0;
 
@@ -351,7 +351,7 @@ public class SessionFeedTests
     public void Constructor_StructMark_Throws()
     {
         var exception = Should.Throw<TypeInitializationException>(() =>
-            new SessionFeed<long, TwoPartMark>(new UnopenedSessionFactory()));
+            new SessionFeed<long, TwoPartMark>(new UnusedSessionFactory()));
 
         exception.InnerException.ShouldBeOfType<NotSupportedException>();
     }
@@ -436,9 +436,9 @@ public class SessionFeedTests
         public int CompareTo(TwoPartMark other) => (High, Low).CompareTo((other.High, other.Low));
     }
 
-    private sealed class UnopenedSessionFactory : IFeedSessionFactory<long, TwoPartMark>
+    private sealed class UnusedSessionFactory : IFeedSessionFactory<long, TwoPartMark>
     {
-        public Task<IFeedSession<long, TwoPartMark>> OpenAsync(CancellationToken cancellationToken) =>
+        public Task<IFeedSession<long, TwoPartMark>> CreateAsync(CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
         public bool IsTransient(Exception exception) => false;

@@ -25,11 +25,11 @@ internal static class SessionFeed
 }
 
 /// <summary>
-/// Represents a feed that pumps items from a store's sessions to observers, opening a new session with backoff when
+/// Represents a feed that pumps items from a store's sessions to observers, creating a new session with backoff when
 /// one is lost.
 /// </summary>
 /// <remarks>
-/// A session that doesn't resume the previous one sees only items committed after it opens, so observers get
+/// A session that doesn't resume the previous one sees only items committed after it is created, so observers get
 /// <see cref="IFeedObserver{T}.OnResetAsync"/> first and recover missed items by re-reading from their last
 /// position.
 /// </remarks>
@@ -126,7 +126,7 @@ internal sealed class SessionFeed<T, THighWaterMark> : IFeed<T, THighWaterMark>
     {
         // Polly requires at least one retry.
         if (options.MaxRetryAttempts == 0)
-            return sessionFactory.OpenAsync;
+            return sessionFactory.CreateAsync;
 
         var resiliencePipeline = new ResiliencePipelineBuilder()
             .AddRetry(new RetryStrategyOptions
@@ -153,7 +153,7 @@ internal sealed class SessionFeed<T, THighWaterMark> : IFeed<T, THighWaterMark>
             .Build();
 
         return async ct => await resiliencePipeline
-            .ExecuteAsync(async innerCt => await sessionFactory.OpenAsync(innerCt).ConfigureAwait(false), ct)
+            .ExecuteAsync(async innerCt => await sessionFactory.CreateAsync(innerCt).ConfigureAwait(false), ct)
             .ConfigureAwait(false);
     }
 

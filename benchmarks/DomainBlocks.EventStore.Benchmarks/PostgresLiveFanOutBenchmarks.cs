@@ -98,7 +98,7 @@ public class PostgresLiveFanOutBenchmarks
     }
 
     /// <summary>
-    /// Opens a <see cref="Session"/> and holds nothing across sessions.
+    /// Creates a <see cref="Session"/> and holds nothing across sessions.
     /// </summary>
     private sealed class SessionFactory(
         IEventDecoder<IDomainEvent, PostgresEventData, string> decoder,
@@ -106,7 +106,7 @@ public class PostgresLiveFanOutBenchmarks
         string[] streamIds) :
         IFeedSessionFactory<EventLogRow<IDomainEvent>, long>
     {
-        public Task<IFeedSession<EventLogRow<IDomainEvent>, long>> OpenAsync(CancellationToken cancellationToken) =>
+        public Task<IFeedSession<EventLogRow<IDomainEvent>, long>> CreateAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IFeedSession<EventLogRow<IDomainEvent>, long>>(new Session(decoder, rows, streamIds));
 
         public bool IsTransient(Exception exception) => false;

@@ -5,7 +5,7 @@ namespace DomainBlocks.EventStore.Internal.Feeds;
 /// is the only part of a feed that knows the transport and how an item is decoded.
 /// </summary>
 /// <remarks>
-/// Once the factory has opened the session, <see cref="ReadAsync"/> yields every item committed after the session's
+/// Once the factory has created the session, <see cref="ReadAsync"/> yields every item committed after the session's
 /// starting point, in commit order, until the session faults or is disposed. Uncommitted items are never yielded, and
 /// no item is yielded twice, even by a later session.
 /// </remarks>
@@ -29,7 +29,7 @@ internal interface IFeedSession<T, THighWaterMark> : IAsyncDisposable
     /// Gets a mark at or after every item that the session won't yield.
     /// </summary>
     /// <remarks>
-    /// The feed reads it once the session is open, before the first item, and keeps the greater of this mark and its
+    /// The feed reads it once the session is created, before the first item, and keeps the greater of this mark and its
     /// own. With nothing to cover, a session returns <see langword="null"/> or a mark at or before the feed's, such as
     /// -1 for a position.
     /// </remarks>

@@ -47,7 +47,7 @@ internal sealed class ChangeStreamSessionFactory<TDocument, TChange, TResult>(
 {
     private ChangeStreamResumePoint _resumePoint = new();
 
-    public async Task<IFeedSession<TResult, BsonTimestamp>> OpenAsync(CancellationToken cancellationToken)
+    public async Task<IFeedSession<TResult, BsonTimestamp>> CreateAsync(CancellationToken cancellationToken)
     {
         if (_resumePoint.ResumeToken is { } resumeToken)
         {

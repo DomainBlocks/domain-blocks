@@ -74,12 +74,12 @@ public class ChangeStreamSessionFactoryTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task OpenAsync_NoResumeToken_StartsAfterLastWrite(CancellationToken ct)
+    public async Task CreateAsync_NoResumeToken_StartsAfterLastWrite(CancellationToken ct)
     {
         SetupChangeStream([]);
         var sessionFactory = CreateSessionFactory();
 
-        await using var session = await sessionFactory.OpenAsync(ct);
+        await using var session = await sessionFactory.CreateAsync(ct);
 
         session.IsResumed.ShouldBeFalse();
         session.InitialHighWaterMark.ShouldBe(CreateOperationTime(1));
@@ -90,14 +90,14 @@ public class ChangeStreamSessionFactoryTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task OpenAsync_ChangeDelivered_ResumesAfterChange(CancellationToken ct)
+    public async Task CreateAsync_ChangeDelivered_ResumesAfterChange(CancellationToken ct)
     {
         var deliveredChange = CreateChange(new BsonDocument("_data", "1"));
         var pendingChange = CreateChange(new BsonDocument("_data", "2"));
         SetupChangeStream([new ChangeStreamBatch { Items = [deliveredChange, pendingChange] }]);
         var sessionFactory = CreateSessionFactory();
 
-        await using (var session = await sessionFactory.OpenAsync(ct))
+        await using (var session = await sessionFactory.CreateAsync(ct))
         {
             await using var changes = session.ReadAsync(ct).GetAsyncEnumerator(ct);
 
@@ -106,7 +106,7 @@ public class ChangeStreamSessionFactoryTests
             (await changes.MoveNextAsync()).ShouldBeTrue();
         }
 
-        await using var resumedSession = await sessionFactory.OpenAsync(ct);
+        await using var resumedSession = await sessionFactory.CreateAsync(ct);
 
         resumedSession.IsResumed.ShouldBeTrue();
         resumedSession.InitialHighWaterMark.ShouldBeNull();
@@ -116,7 +116,7 @@ public class ChangeStreamSessionFactoryTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task OpenAsync_BatchDelivered_ResumesAfterPostBatchToken(CancellationToken ct)
+    public async Task CreateAsync_BatchDelivered_ResumesAfterPostBatchToken(CancellationToken ct)
     {
         var postBatchResumeToken = new BsonDocument("_data", "post-batch");
 
@@ -132,32 +132,32 @@ public class ChangeStreamSessionFactoryTests
 
         var sessionFactory = CreateSessionFactory();
 
-        await using (var session = await sessionFactory.OpenAsync(ct))
+        await using (var session = await sessionFactory.CreateAsync(ct))
             await session.ReadAsync(ct).ToArrayAsync(ct).AsTask().ShouldThrowAsync<TimeoutException>();
 
-        await using var resumedSession = await sessionFactory.OpenAsync(ct);
+        await using var resumedSession = await sessionFactory.CreateAsync(ct);
 
         _watchOptions.Last().ShouldNotBeNull().ResumeAfter.ShouldBe(postBatchResumeToken);
     }
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task OpenAsync_CursorFailedBeforeFirstBatch_ResumesAfterInitialToken(CancellationToken ct)
+    public async Task CreateAsync_CursorFailedBeforeFirstBatch_ResumesAfterInitialToken(CancellationToken ct)
     {
         SetupChangeStream([new ChangeStreamBatch { Exception = new TimeoutException() }]);
         var sessionFactory = CreateSessionFactory();
 
-        await using (var session = await sessionFactory.OpenAsync(ct))
+        await using (var session = await sessionFactory.CreateAsync(ct))
             await session.ReadAsync(ct).ToArrayAsync(ct).AsTask().ShouldThrowAsync<TimeoutException>();
 
-        await using var resumedSession = await sessionFactory.OpenAsync(ct);
+        await using var resumedSession = await sessionFactory.CreateAsync(ct);
 
         _watchOptions.Select(x => x?.ResumeAfter).ShouldBe([null, _initialResumeToken]);
     }
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task OpenAsync_NoInitialToken_ResumesAfterLastChange(CancellationToken ct)
+    public async Task CreateAsync_NoInitialToken_ResumesAfterLastChange(CancellationToken ct)
     {
         // A write landing while the cursor opens fills the first batch, and the driver then reports no token until the
         // batch has been read. The resume must come from the changes.
@@ -173,28 +173,28 @@ public class ChangeStreamSessionFactoryTests
 
         var sessionFactory = CreateSessionFactory();
 
-        await using (var session = await sessionFactory.OpenAsync(ct))
+        await using (var session = await sessionFactory.CreateAsync(ct))
             await session.ReadAsync(ct).ToArrayAsync(ct).AsTask().ShouldThrowAsync<TimeoutException>();
 
-        await using var resumedSession = await sessionFactory.OpenAsync(ct);
+        await using var resumedSession = await sessionFactory.CreateAsync(ct);
 
         _watchOptions.Last().ShouldNotBeNull().ResumeAfter.ShouldBe(lastChange.ResumeToken);
     }
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task OpenAsync_ResumeTokenLost_StartsNewChangeStream(CancellationToken ct)
+    public async Task CreateAsync_ResumeTokenLost_StartsNewChangeStream(CancellationToken ct)
     {
         SetupChangeStream([new ChangeStreamBatch { Exception = new TimeoutException() }]);
         var sessionFactory = CreateSessionFactory();
 
-        await using (var session = await sessionFactory.OpenAsync(ct))
+        await using (var session = await sessionFactory.CreateAsync(ct))
             await session.ReadAsync(ct).ToArrayAsync(ct).AsTask().ShouldThrowAsync<TimeoutException>();
 
         // The oplog no longer holds the change that the resume token names.
         _resumeError = CreateCommandException(MongoErrorCodes.ChangeStreamHistoryLost);
 
-        await using var newSession = await sessionFactory.OpenAsync(ct);
+        await using var newSession = await sessionFactory.CreateAsync(ct);
 
         newSession.IsResumed.ShouldBeFalse();
         newSession.InitialHighWaterMark.ShouldBe(CreateOperationTime(2));
@@ -211,7 +211,7 @@ public class ChangeStreamSessionFactoryTests
         SetupChangeStream([new ChangeStreamBatch { Items = [change] }]);
         var sessionFactory = CreateSessionFactory();
 
-        await using var session = await sessionFactory.OpenAsync(ct);
+        await using var session = await sessionFactory.CreateAsync(ct);
         await using var changes = session.ReadAsync(ct).GetAsyncEnumerator(ct);
 
         (await changes.MoveNextAsync()).ShouldBeTrue();

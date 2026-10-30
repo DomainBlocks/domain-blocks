@@ -5,7 +5,7 @@ internal sealed class SessionFeedOptions
     public static readonly SessionFeedOptions Default = new();
 
     /// <summary>
-    /// Gets or sets how many times in a row the feed retries a failed attempt to open a session before it faults.
+    /// Gets or sets how many times in a row the feed retries a failed attempt to create a session before it faults.
     /// </summary>
     public int MaxRetryAttempts { get; set; } = int.MaxValue;
 
