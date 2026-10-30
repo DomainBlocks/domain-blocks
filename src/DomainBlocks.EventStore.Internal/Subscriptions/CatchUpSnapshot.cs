@@ -1,24 +1,33 @@
+using Polly;
+
 namespace DomainBlocks.EventStore.Internal.Subscriptions;
 
 /// <summary>
-/// Represents a followed sequence from an origin up to the end that was read, which every read of the snapshot sees the
-/// same way. It is not a snapshot in the database's sense: the log is append-only and the reads stop at the end, so
-/// what they return can't change.
+/// Represents what a subscription replays from a snapshot of a store's history: the followed sequence from an origin up
+/// to the end. The rules for what each origin reads are here.
 /// </summary>
-/// <remarks>
-/// A store derives from this class to supply its read of the sequence. The rules for what each origin reads are here.
-/// </remarks>
-internal abstract class CatchUpSnapshot<TEvent, TPos>
+internal sealed class CatchUpSnapshot<TEvent, TPos>
     where TEvent : notnull
     where TPos : struct, IPosition<TPos>
 {
+    private readonly IHistorySnapshot<TEvent> _snapshot;
+    private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> _positionSelector;
+    private readonly ResiliencePipeline _retryPipeline;
     private readonly long _start;
     private readonly long _end;
 
-    protected CatchUpSnapshot(SubscriptionOrigin<TPos> origin, long? end)
+    public CatchUpSnapshot(
+        IHistorySnapshot<TEvent> snapshot,
+        SubscriptionOrigin<TPos> origin,
+        Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> positionSelector,
+        ResiliencePipeline retryPipeline)
     {
+        _snapshot = snapshot;
+        _positionSelector = positionSelector;
+        _retryPipeline = retryPipeline;
+
         // -1 is the position before the first event, where an empty sequence ends.
-        _end = end ?? -1;
+        _end = snapshot.End ?? -1;
 
         _start = origin switch
         {
@@ -48,25 +57,25 @@ internal abstract class CatchUpSnapshot<TEvent, TPos>
     public TPos? Position { get; }
 
     /// <summary>
-    /// Reads the events up to the end, from the origin, or after the given position to resume a read that failed. The
-    /// sequence is empty if there are no events to read.
+    /// Reads the events from the origin up to the end. After a transient error, it reads again after the last event
+    /// that the caller took. The sequence is empty if there are no events to read.
     /// </summary>
-    public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAsync(
-        TPos? after,
-        CancellationToken cancellationToken)
+    public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAsync()
     {
-        var start = after?.ToInt64() ?? _start;
-
-        return start < _end
-            ? ReadCoreAsync(start, _end, cancellationToken)
-            : AsyncEnumerable.Empty<ReadEvent<TEvent, string, StreamPosition, LogPosition>>();
+        return ResumableAsyncEnumerable.Create(
+            static (s, start, ct) => s.ReadAfterAsync(start, ct),
+            static (s, e) => s._positionSelector(e.Context).ToInt64(),
+            this,
+            _start,
+            _retryPipeline);
     }
 
-    /// <summary>
-    /// Reads the followed sequence from one position to another. A start of -1 reads from the start of the sequence.
-    /// </summary>
-    protected abstract IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCoreAsync(
+    private IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAfterAsync(
         long startExclusive,
-        long endInclusive,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken)
+    {
+        return startExclusive < _end
+            ? _snapshot.ReadAsync(startExclusive, _end, cancellationToken)
+            : AsyncEnumerable.Empty<ReadEvent<TEvent, string, StreamPosition, LogPosition>>();
+    }
 }

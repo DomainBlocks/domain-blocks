@@ -2,7 +2,6 @@ using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.Internal.Feeds;
 using Microsoft.Extensions.Logging;
-using Polly;
 
 namespace DomainBlocks.EventStore.Internal.Subscriptions;
 
@@ -17,18 +16,17 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
     where TPos : struct, IPosition<TPos>
 {
     private readonly IRefCountedFeed<TSourceEvent, TMark> _feed;
-    private readonly ICatchUpReader<TEvent, TMark, TPos> _catchUpReader;
+    private readonly CatchUpReader<TEvent, TMark, TPos> _catchUpReader;
     private readonly EventFilter _liveFilter;
     private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> _positionSelector;
     private readonly SubscriptionOrigin<TPos> _origin;
     private readonly SubscriptionOptions _options;
     private readonly ILogger? _logger;
     private readonly string _correlationId;
-    private readonly ResiliencePipeline _retryPipeline;
 
     public SubscriptionAsyncEnumerable(
         IRefCountedFeed<TSourceEvent, TMark> feed,
-        ICatchUpReader<TEvent, TMark, TPos> catchUpReader,
+        IHistoryReader<TEvent, TMark> historyReader,
         EventFilter liveFilter,
         Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> positionSelector,
         SubscriptionOrigin<TPos>? origin,
@@ -37,7 +35,6 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
         ILogger? logger)
     {
         _feed = feed;
-        _catchUpReader = catchUpReader;
         _liveFilter = liveFilter;
         _positionSelector = positionSelector;
         _origin = origin ?? SubscriptionOrigin.End;
@@ -48,11 +45,13 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
             ? CorrelationId.Reserve(id)
             : CorrelationId.ReserveGenerated();
 
-        _retryPipeline = RetryPipeline.Create(
+        _catchUpReader = new CatchUpReader<TEvent, TMark, TPos>(
+            historyReader,
+            positionSelector,
+            _options,
             isTransient,
-            _options.CatchUpMaxRetryAttempts,
-            _options.CatchUpRetryTimeout,
-            (_, ex, attempt, delay) => _logger?.CatchUpRetrying(ex, _correlationId, attempt, delay));
+            _correlationId,
+            logger);
     }
 
     public async IAsyncEnumerator<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> GetAsyncEnumerator(
@@ -81,13 +80,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
 
                 _logger?.CatchUpBoundary(_correlationId, position?.Value);
 
-                // After a transient error, the replay reads again after the last event that the subscriber took.
-                var events = ResumableAsyncEnumerable.Create(
-                    static (s, after, ct) => s.CatchUp.ReadAsync(after, ct),
-                    static (s, e) => (TPos?)s.Self._positionSelector(e.Context),
-                    (Self: this, CatchUp: catchUp),
-                    (TPos?)null,
-                    _retryPipeline);
+                var events = catchUp.ReadAsync();
 
                 await foreach (var e in WithLoggedExceptionsAsync(events, cancellationToken).ConfigureAwait(false))
                     yield return SubscriptionMessage.Event(e);
@@ -225,11 +218,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
     {
         try
         {
-            return await _retryPipeline
-                .ExecuteAsync(
-                    static (s, ct) => s.Reader.ReadSnapshotAsync(s.Mark, s.Origin, s.CorrelationId, ct),
-                    (Reader: _catchUpReader, Mark: highWaterMark, Origin: origin, CorrelationId: _correlationId),
-                    cancellationToken)
+            return await _catchUpReader
+                .ReadSnapshotAsync(highWaterMark, origin, cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

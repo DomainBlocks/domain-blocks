@@ -15,7 +15,7 @@ public class SubscriptionAsyncEnumerableTests
     {
         var calls = new List<string>();
         var feed = new TestFeed(calls);
-        var reader = new TestCatchUpReader(calls, end: 7);
+        var reader = new TestHistoryReader(calls, end: 7);
 
         await using var enumerator = Subscribe(feed, reader, SubscriptionOrigin.Start).GetAsyncEnumerator();
         await enumerator.MoveNextAsync();
@@ -29,7 +29,7 @@ public class SubscriptionAsyncEnumerableTests
     {
         var calls = new List<string>();
         var feed = new TestFeed(calls);
-        var reader = new TestCatchUpReader(calls, end: 7);
+        var reader = new TestHistoryReader(calls, end: 7);
 
         await using var enumerator = Subscribe(feed, reader, SubscriptionOrigin.End).GetAsyncEnumerator();
         await enumerator.MoveNextAsync();
@@ -43,7 +43,7 @@ public class SubscriptionAsyncEnumerableTests
     {
         var calls = new List<string>();
         var feed = new TestFeed(calls);
-        var reader = new TestCatchUpReader(calls, end: 7);
+        var reader = new TestHistoryReader(calls, end: 7);
 
         await using var enumerator = Subscribe(feed, reader, SubscriptionOrigin.End).GetAsyncEnumerator();
         await enumerator.MoveNextAsync();
@@ -65,7 +65,7 @@ public class SubscriptionAsyncEnumerableTests
     {
         var calls = new List<string>();
         var feed = new TestFeed(calls);
-        var reader = new TestCatchUpReader(calls, end: null);
+        var reader = new TestHistoryReader(calls, end: null);
 
         await using var enumerator = Subscribe(feed, reader, SubscriptionOrigin.End).GetAsyncEnumerator();
         await enumerator.MoveNextAsync();
@@ -84,7 +84,7 @@ public class SubscriptionAsyncEnumerableTests
 
     private static SubscriptionAsyncEnumerable<string, TestSourceEvent, long, LogPosition> Subscribe(
         TestFeed feed,
-        TestCatchUpReader reader,
+        TestHistoryReader reader,
         SubscriptionOrigin<LogPosition> origin)
     {
         return new SubscriptionAsyncEnumerable<string, TestSourceEvent, long, LogPosition>(
@@ -130,22 +130,20 @@ public class SubscriptionAsyncEnumerableTests
     }
 
     /// <summary>
-    /// Stands in for a store's catch-up reader, and notes each snapshot that it reads.
+    /// Stands in for a store's history reader, and notes each snapshot that it reads.
     /// </summary>
-    private sealed class TestCatchUpReader(List<string> calls, long? end) : ICatchUpReader<string, long, LogPosition>
+    private sealed class TestHistoryReader(List<string> calls, long? end) : IHistoryReader<string, long>
     {
         public long? End { get; set; } = end;
 
-        public ValueTask<CatchUpSnapshot<string, LogPosition>> ReadSnapshotAsync(
+        public ValueTask<IHistorySnapshot<string>> ReadSnapshotAsync(
             long highWaterMark,
-            SubscriptionOrigin<LogPosition> origin,
             string correlationId,
             CancellationToken cancellationToken)
         {
             calls.Add($"snapshot at {highWaterMark}");
 
-            return ValueTask.FromResult<CatchUpSnapshot<string, LogPosition>>(
-                new TestCatchUpSnapshot(origin, End, calls));
+            return ValueTask.FromResult<IHistorySnapshot<string>>(new TestHistorySnapshot(End, calls));
         }
     }
 }
