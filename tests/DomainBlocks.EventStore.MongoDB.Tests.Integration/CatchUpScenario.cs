@@ -1,6 +1,7 @@
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.Internal.Feeds;
+using DomainBlocks.EventStore.Internal.Subscriptions;
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.MongoDB.Bson;
@@ -148,34 +149,22 @@ internal sealed class CatchUpScenario : IAsyncDisposable
         FilterDefinition<BsonDocument>? catchUpFilter = null,
         EventFilter? liveFilter = null)
     {
-        var filter = catchUpFilter ?? Builders<BsonDocument>.Filter.Empty;
-
-        var subscription = new MongoSubscription<object, LogPosition>(
-            _reader,
+        var subscription = new SubscriptionAsyncEnumerable<
+            object,
+            EventLogDocument<object>,
+            BsonTimestamp,
+            LogPosition>(
             _feed,
-            (reader, session, from, to, ct) => _catchUpRecorder.Record(
-                reader.ReadCatchUpAsync(session, filter, EventLogEntry.FieldNames.Position, from, to, ct),
-                from,
-                to,
-                ct),
-            async (reader, session, ct) =>
-            {
-                // The end position is a catch-up's first read, so the session still holds the time it will wait for.
-                if (session is not null)
-                    _catchUpOpTimes.Add(session.OperationTime);
-
-                var endPos = await reader.GetEndPositionAsync(
-                    session,
-                    Builders<BsonDocument>.Filter.Empty,
-                    EventLogEntry.FieldNames.Position,
-                    ct);
-
-                return endPos is { } pos ? LogPosition.FromInt64(pos) : null;
-            },
+            new RecordingCatchUpSource(
+                _reader,
+                catchUpFilter ?? Builders<BsonDocument>.Filter.Empty,
+                _catchUpRecorder,
+                _catchUpOpTimes),
             liveFilter ?? EventFilter.All,
             static ctx => ctx.LogPosition,
             SubscriptionOrigin.Start,
             options,
+            MongoTransientErrors.IsTransient,
             MongoTestEnvironment.LoggerFactory.CreateLogger("Subscription"));
 
         return new SubscriptionProbe<StreamPosition, LogPosition>(subscription, _cancellationToken);
@@ -225,5 +214,77 @@ internal sealed class CatchUpScenario : IAsyncDisposable
     {
         await _eventStore.DisposeAsync();
         await MongoTestEnvironment.MongoClient.DropDatabaseAsync(_options.DatabaseName);
+    }
+
+    /// <summary>
+    /// Reads the event log as the store's catch-up source does, and records each replay and the operation time that
+    /// each catch-up's session waits for, which the store's source doesn't expose.
+    /// </summary>
+    private sealed class RecordingCatchUpSource(
+        EventLogReader<object> reader,
+        FilterDefinition<BsonDocument> replayFilter,
+        CatchUpRecorder recorder,
+        List<BsonTimestamp> opTimes) :
+        ICatchUpSource<object, BsonTimestamp>
+    {
+        public ValueTask<long?> ReadEndAsync(CancellationToken cancellationToken) =>
+            new(ReadEndAsync(null, cancellationToken));
+
+        public async ValueTask<ICatchUp<object>> StartAsync(
+            BsonTimestamp highWaterMark,
+            string correlationId,
+            CancellationToken cancellationToken)
+        {
+            var session = await reader.StartCatchUpSessionAsync(highWaterMark, cancellationToken);
+
+            return new RecordingCatchUp(this, session);
+        }
+
+        private Task<long?> ReadEndAsync(IClientSessionHandle? session, CancellationToken cancellationToken)
+        {
+            // The end position is a catch-up's first read, so the session still holds the time it will wait for.
+            if (session is not null)
+                opTimes.Add(session.OperationTime);
+
+            return reader.GetEndPositionAsync(
+                session,
+                Builders<BsonDocument>.Filter.Empty,
+                EventLogEntry.FieldNames.Position,
+                cancellationToken);
+        }
+
+        private IAsyncEnumerable<ReadEvent<object, string, StreamPosition, LogPosition>> ReadAsync(
+            IClientSessionHandle session,
+            long startExclusive,
+            long endInclusive,
+            CancellationToken cancellationToken)
+        {
+            var events = reader.ReadCatchUpAsync(
+                session,
+                replayFilter,
+                EventLogEntry.FieldNames.Position,
+                startExclusive,
+                endInclusive,
+                cancellationToken);
+
+            return recorder.Record(events, startExclusive, endInclusive, cancellationToken);
+        }
+
+        private sealed class RecordingCatchUp(RecordingCatchUpSource source, IClientSessionHandle session) :
+            ICatchUp<object>
+        {
+            public ValueTask<long?> ReadEndAsync(CancellationToken cancellationToken) =>
+                new(source.ReadEndAsync(session, cancellationToken));
+
+            public IAsyncEnumerable<ReadEvent<object, string, StreamPosition, LogPosition>> ReadAsync(
+                long startExclusive,
+                long endInclusive,
+                CancellationToken cancellationToken)
+            {
+                return source.ReadAsync(session, startExclusive, endInclusive, cancellationToken);
+            }
+
+            public void Dispose() => session.Dispose();
+        }
     }
 }

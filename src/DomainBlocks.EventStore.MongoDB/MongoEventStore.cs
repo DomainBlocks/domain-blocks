@@ -5,6 +5,7 @@ using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.Filtering.Nodes;
 using DomainBlocks.EventStore.Internal;
 using DomainBlocks.EventStore.Internal.Feeds;
+using DomainBlocks.EventStore.Internal.Subscriptions;
 using DomainBlocks.EventStore.MongoDB.ChangeStreams;
 using DomainBlocks.MongoDB.Sequencing;
 using Microsoft.Extensions.Logging;
@@ -258,23 +259,18 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         var filter = options?.Filter ?? EventFilter.All;
         var catchUpFilter = TranslateFilter(filter) ?? Builders<BsonDocument>.Filter.Empty;
 
-        return new MongoSubscription<TEvent, LogPosition>(
-            _reader,
+        return new SubscriptionAsyncEnumerable<TEvent, EventLogDocument<TEvent>, BsonTimestamp, LogPosition>(
             _feed,
-            (reader, session, start, end, ct) =>
-                reader.ReadCatchUpAsync(session, catchUpFilter, FieldNames.Position, start, end, ct),
-            static async (reader, session, ct) =>
-            {
-                var endPos = await reader
-                    .GetEndPositionAsync(session, Builders<BsonDocument>.Filter.Empty, FieldNames.Position, ct)
-                    .ConfigureAwait(false);
-
-                return endPos is { } pos ? LogPosition.FromInt64(pos) : null;
-            },
+            new MongoCatchUpSource<TEvent>(
+                _reader,
+                Builders<BsonDocument>.Filter.Empty,
+                catchUpFilter,
+                FieldNames.Position),
             filter,
             static ctx => ctx.LogPosition,
             origin,
             options,
+            MongoTransientErrors.IsTransient,
             _logger);
     }
 
@@ -287,23 +283,14 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         var streamFilter = Builders<BsonDocument>.Filter.Eq(FieldNames.StreamId, streamId);
         var catchUpFilter = TranslateFilter(filter) is { } translated ? streamFilter & translated : streamFilter;
 
-        return new MongoSubscription<TEvent, StreamPosition>(
-            _reader,
+        return new SubscriptionAsyncEnumerable<TEvent, EventLogDocument<TEvent>, BsonTimestamp, StreamPosition>(
             _feed,
-            (reader, session, start, end, ct) =>
-                reader.ReadCatchUpAsync(session, catchUpFilter, FieldNames.StreamPosition, start, end, ct),
-            async (reader, session, ct) =>
-            {
-                var endPos = await reader
-                    .GetEndPositionAsync(session, streamFilter, FieldNames.StreamPosition, ct)
-                    .ConfigureAwait(false);
-
-                return endPos is { } pos ? StreamPosition.FromInt64(pos) : null;
-            },
+            new MongoCatchUpSource<TEvent>(_reader, streamFilter, catchUpFilter, FieldNames.StreamPosition),
             EventFilter.StreamIds(streamId) & filter,
             static ctx => ctx.StreamPosition,
             origin,
             options,
+            MongoTransientErrors.IsTransient,
             _logger);
     }
 
