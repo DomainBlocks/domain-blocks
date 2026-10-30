@@ -1,5 +1,6 @@
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Internal;
+using DomainBlocks.EventStore.Internal.Feeds;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Npgsql.Replication;
@@ -8,15 +9,15 @@ using Npgsql.Replication.PgOutput;
 namespace DomainBlocks.EventStore.PostgreSQL.Feeds;
 
 /// <summary>
-/// Validates options for a <see cref="ReplicationEventLogSessionFactory{TEvent}"/>.
+/// Validates options for a <see cref="ReplicationEventLogFeed{TEvent}"/>.
 /// </summary>
-internal static class ReplicationEventLogSessionFactory
+internal static class ReplicationEventLogFeed
 {
     /// <summary>
-    /// Throws if a factory and the sessions it opens cannot use the options.
+    /// Throws if a feed and the sessions it creates cannot use the options.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// An option is outside the range that a factory or its sessions support.
+    /// An option is outside the range that a feed or its sessions support.
     /// </exception>
     public static void ValidateOptions(PostgresReplicationOptions options)
     {
@@ -30,7 +31,7 @@ internal static class ReplicationEventLogSessionFactory
 }
 
 /// <summary>
-/// Opens one feed's logical replication sessions on a <see cref="FeedReplicationSlot"/>, which it creates for the
+/// Represents a feed of logical replication sessions on a <see cref="FeedReplicationSlot"/>, which it creates for the
 /// first session and drops when it is disposed. Each later session resumes on the slot where the previous one stopped,
 /// so a lost connection costs no reset. A dropped or invalidated slot is replaced, and the feed resets.
 /// </summary>
@@ -41,18 +42,19 @@ internal static class ReplicationEventLogSessionFactory
 /// </para>
 /// <para>
 /// Before it creates a slot, and every <see cref="PostgresReplicationOptions.InactiveSlotTimeout"/> while the feed
-/// runs, the factory drops the slots that stores left behind, through an <see cref="InactiveSlotScavenger"/>.
+/// runs, the feed drops the slots that stores left behind, through an <see cref="InactiveSlotScavenger"/>.
 /// </para>
 /// </remarks>
-internal sealed class ReplicationEventLogSessionFactory<TEvent>(
+internal sealed class ReplicationEventLogFeed<TEvent>(
     string connectionString,
     NpgsqlDataSource dataSource,
     SlotNameGenerator slotNameGenerator,
     SchemaObjectNames names,
     PostgresReplicationOptions options,
     IEventDecoder<TEvent, PostgresEventData, string> decoder,
+    FeedResumePolicy resumePolicy,
     ILogger? logger) :
-    IEventLogSessionFactory<EventLogRow<TEvent>>
+    EventLogFeed<EventLogRow<TEvent>, long>(resumePolicy, logger)
     where TEvent : notnull
 {
     private const string ServerStateSql =
@@ -72,9 +74,10 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent>(
         logger);
 
     private FeedReplicationSlot? _slot;
-    private bool _hasOpenedSessionOnSlot;
+    private bool _hasCreatedSessionOnSlot;
 
-    public async Task<IEventLogSession<EventLogRow<TEvent>>> OpenAsync(CancellationToken cancellationToken)
+    protected override async Task<IFeedSession<EventLogRow<TEvent>, long>> CreateSessionAsync(
+        CancellationToken cancellationToken)
     {
         ThrowIfMultipleHosts();
         await CheckServerAsync(cancellationToken).ConfigureAwait(false);
@@ -87,7 +90,7 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent>(
             switch (await _slot.PrepareForSessionAsync(cancellationToken).ConfigureAwait(false))
             {
                 case PrepareForSessionResult.Lost:
-                    logger?.ReplicationSlotLost(_slot.Name);
+                    Logger?.ReplicationSlotLost(_slot.Name);
                     await _slot.DisposeAsync().ConfigureAwait(false);
                     _slot = null;
                     break;
@@ -100,7 +103,7 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent>(
         if (_slot is null)
         {
             _slot = await CreateSlotAsync(cancellationToken).ConfigureAwait(false);
-            _hasOpenedSessionOnSlot = false;
+            _hasCreatedSessionOnSlot = false;
         }
 
         var connection = new LogicalReplicationConnection(connectionString)
@@ -120,14 +123,17 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent>(
         }
 
         // The first session on a slot starts where the slot does, and a later one resumes the session before it.
-        var isResumed = _hasOpenedSessionOnSlot;
-        _hasOpenedSessionOnSlot = true;
+        var isResumed = _hasCreatedSessionOnSlot;
+        _hasCreatedSessionOnSlot = true;
 
         return new ReplicationEventLogSession<TEvent>(connection, _slot, isResumed, _pgOutputOptions, names, decoder);
     }
 
-    public async ValueTask DisposeAsync()
+    protected override async ValueTask DisposeAsyncCore()
     {
+        // The feed's session holds the slot until the feed has stopped.
+        await base.DisposeAsyncCore().ConfigureAwait(false);
+
         await _scavenger.DisposeAsync().ConfigureAwait(false);
 
         if (_slot is null)
@@ -142,7 +148,7 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent>(
         await _scavenger.DropInactiveSlotsAsync(cancellationToken).ConfigureAwait(false);
 
         return await FeedReplicationSlot
-            .CreateAsync(slotNameGenerator.Next(), connectionString, dataSource, names, logger, cancellationToken)
+            .CreateAsync(slotNameGenerator.Next(), connectionString, dataSource, names, Logger, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -195,6 +201,6 @@ internal sealed class ReplicationEventLogSessionFactory<TEvent>(
         // With synchronous standbys, an append is acknowledged once they have it, so a failover keeps it. Unless the
         // slot waits for them too, the feed can deliver an event before they have it, and a failover then loses it.
         if (reader.GetBoolean(1))
-            logger?.ReplicationSlotNotSynchronized();
+            Logger?.ReplicationSlotNotSynchronized();
     }
 }

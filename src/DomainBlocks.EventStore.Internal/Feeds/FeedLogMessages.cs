@@ -41,4 +41,36 @@ internal static partial class FeedLogMessages
         Exception exception,
         string feedId,
         string observerId);
+
+    [LoggerMessage(LogLevel.Debug, "[feed: {FeedId}] started")]
+    internal static partial void FeedStarted(this ILogger logger, string feedId);
+
+    [LoggerMessage(LogLevel.Debug, "[feed: {FeedId}] connected ({Session})")]
+    internal static partial void FeedConnected(this ILogger logger, string feedId, string session);
+
+    [LoggerMessage(LogLevel.Debug, "[feed: {FeedId}] stopping")]
+    internal static partial void FeedStopping(this ILogger logger, string feedId);
+
+    [LoggerMessage(LogLevel.Warning, "[feed: {FeedId}] session ended; reconnecting")]
+    internal static partial void FeedEnded(this ILogger logger, string feedId);
+
+    [LoggerMessage(LogLevel.Warning, "[feed: {FeedId}] connection lost; reconnecting")]
+    internal static partial void FeedConnectionLost(this ILogger logger, Exception exception, string feedId);
+
+    [LoggerMessage(LogLevel.Warning, "[feed: {FeedId}, attempt: {Attempt}] failed to connect; retrying in {Delay}")]
+    internal static partial void FeedRetrying(
+        this ILogger logger,
+        Exception exception,
+        string feedId,
+        int attempt,
+        TimeSpan delay);
+
+    [LoggerMessage(LogLevel.Debug, "[feed: {FeedId}] canceled")]
+    internal static partial void FeedCanceled(this ILogger logger, string feedId);
+
+    [LoggerMessage(LogLevel.Error, "[feed: {FeedId}] failed")]
+    internal static partial void FeedFailed(this ILogger logger, Exception exception, string feedId);
+
+    [LoggerMessage(LogLevel.Debug, "[feed: {FeedId}] stopped")]
+    internal static partial void FeedStopped(this ILogger logger, string feedId);
 }

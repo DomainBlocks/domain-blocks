@@ -6,7 +6,6 @@ using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Filtering;
 using pg::DomainBlocks.EventStore.Internal.Feeds;
 using DomainBlocks.EventStore.PostgreSQL;
-using DomainBlocks.EventStore.PostgreSQL.Feeds;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.SystemTextJson;
 
@@ -67,12 +66,12 @@ public class PostgresLiveFanOutBenchmarks
         };
     }
 
+    private static readonly FeedResumePolicy ResumePolicy = new(static _ => false);
+
     [Benchmark]
     public async Task<int> FanOut_NoIO()
     {
-        var feed = new EventLogFeed<EventLogRow<IDomainEvent>>(
-            new SessionFactory(_decoder, _rows, _streamIds),
-            static row => row.Position);
+        var feed = new Feed(_decoder, _rows, _streamIds);
 
         var subscribers = new Subscriber[SubscriberCount];
         var attachments = new IDisposable[SubscriberCount];
@@ -83,10 +82,9 @@ public class PostgresLiveFanOutBenchmarks
             attachments[i] = feed.Attach(subscribers[i]);
         }
 
-        await using (await feed.ConnectAsync())
-        {
-            await Task.WhenAll(subscribers.Select(x => x.Completion));
-        }
+        await feed.ConnectAsync();
+        await Task.WhenAll(subscribers.Select(x => x.Completion));
+        await feed.DisposeAsync();
 
         var deliveredCount = 0;
 
@@ -101,18 +99,17 @@ public class PostgresLiveFanOutBenchmarks
     }
 
     /// <summary>
-    /// Opens a <see cref="Session"/> and holds nothing across sessions.
+    /// Creates a <see cref="Session"/> and holds nothing across sessions.
     /// </summary>
-    private sealed class SessionFactory(
+    private sealed class Feed(
         IEventDecoder<IDomainEvent, PostgresEventData, string> decoder,
         EncodedEvent<PostgresEventData, string>[] rows,
         string[] streamIds) :
-        IEventLogSessionFactory<EventLogRow<IDomainEvent>>
+        EventLogFeed<EventLogRow<IDomainEvent>, long>(ResumePolicy)
     {
-        public Task<IEventLogSession<EventLogRow<IDomainEvent>>> OpenAsync(CancellationToken cancellationToken) =>
-            Task.FromResult<IEventLogSession<EventLogRow<IDomainEvent>>>(new Session(decoder, rows, streamIds));
-
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        protected override Task<IFeedSession<EventLogRow<IDomainEvent>, long>> CreateSessionAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IFeedSession<EventLogRow<IDomainEvent>, long>>(new Session(decoder, rows, streamIds));
     }
 
     /// <summary>
@@ -122,7 +119,7 @@ public class PostgresLiveFanOutBenchmarks
     private sealed class Session(
         IEventDecoder<IDomainEvent, PostgresEventData, string> decoder,
         EncodedEvent<PostgresEventData, string>[] rows,
-        string[] streamIds) : IEventLogSession<EventLogRow<IDomainEvent>>
+        string[] streamIds) : IFeedSession<EventLogRow<IDomainEvent>, long>
     {
         private readonly EventLogRow<IDomainEvent> _row = new(decoder);
 
@@ -130,7 +127,9 @@ public class PostgresLiveFanOutBenchmarks
 
         public bool IsResumed => false;
 
-        public async IAsyncEnumerable<EventLogRow<IDomainEvent>> ReadAsync(
+        public long InitialMark => -1;
+
+        public async IAsyncEnumerable<(EventLogRow<IDomainEvent> Item, long Mark)> ReadAsync(
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             for (var i = 0; i < rows.Length; i++)
@@ -141,7 +140,7 @@ public class PostgresLiveFanOutBenchmarks
 
                 _row.Set(i, streamId, i, eventName, eventData, metadata, NoIOEventStore.CreatedAt);
 
-                yield return _row;
+                yield return (_row, i);
             }
 
             await Task.Delay(Timeout.Infinite, cancellationToken);

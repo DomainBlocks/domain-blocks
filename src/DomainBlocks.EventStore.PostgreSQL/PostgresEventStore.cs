@@ -49,7 +49,7 @@ public static class PostgresEventStore
             logger);
     }
 
-    private static RefCountedFeed<EventLogRow<TEvent>, long?> CreateFeed<TEvent>(
+    private static RefCountedFeed<EventLogRow<TEvent>, long> CreateFeed<TEvent>(
         NpgsqlDataSource dataSource,
         SchemaObjectNames names,
         PostgresEventStoreOptions options,
@@ -65,28 +65,26 @@ public static class PostgresEventStore
 
         var slotNameGenerator = new SlotNameGenerator(names);
 
-        var feedOptions = new EventLogFeedOptions
+        var resumeOptions = new FeedResumeOptions
         {
             RetryDelay = replicationOptions.RetryDelay,
             MaxRetryDelay = replicationOptions.MaxRetryDelay,
             MaxRetryAttempts = replicationOptions.MaxRetryAttempts
         };
 
-        ReplicationEventLogSessionFactory.ValidateOptions(replicationOptions);
-        EventLogFeed.ValidateOptions(feedOptions);
+        ReplicationEventLogFeed.ValidateOptions(replicationOptions);
 
-        return new RefCountedFeed<EventLogRow<TEvent>, long?>(() =>
-            new EventLogFeed<EventLogRow<TEvent>>(
-                new ReplicationEventLogSessionFactory<TEvent>(
-                    connectionString,
-                    dataSource,
-                    slotNameGenerator,
-                    names,
-                    replicationOptions,
-                    decoder,
-                    logger),
-                static row => row.Position,
-                feedOptions,
+        var resumePolicy = new FeedResumePolicy(EventLogFeedTransientErrors.IsTransient, resumeOptions, logger);
+
+        return new RefCountedFeed<EventLogRow<TEvent>, long>(() =>
+            new ReplicationEventLogFeed<TEvent>(
+                connectionString,
+                dataSource,
+                slotNameGenerator,
+                names,
+                replicationOptions,
+                decoder,
+                resumePolicy,
                 logger));
     }
 }
@@ -107,7 +105,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
     private readonly PostgresEventStoreAdminOptions _adminOptions;
     private readonly IAppender _appender;
     private readonly EventLogReader<TEvent> _reader;
-    private readonly RefCountedFeed<EventLogRow<TEvent>, long?> _feed;
+    private readonly RefCountedFeed<EventLogRow<TEvent>, long> _feed;
     private readonly IEventCodec<TEvent, PostgresEventData, string> _eventCodec;
     private readonly ILogger? _logger;
 
@@ -118,7 +116,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         PostgresEventStoreAdminOptions adminOptions,
         IAppender appender,
         EventLogReader<TEvent> reader,
-        RefCountedFeed<EventLogRow<TEvent>, long?> feed,
+        RefCountedFeed<EventLogRow<TEvent>, long> feed,
         IEventCodec<TEvent, PostgresEventData, string> eventCodec,
         ILogger? logger)
     {

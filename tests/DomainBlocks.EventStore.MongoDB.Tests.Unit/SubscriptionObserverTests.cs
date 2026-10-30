@@ -17,7 +17,6 @@ using StopReason = SubscriptionAsyncEnumerable<string, LogPosition>.StopReason;
 
 public class SubscriptionObserverTests
 {
-    private const int ChangeStreamHistoryLostCode = 286;
     private const int UnauthorizedCode = 13;
 
     private static readonly DateTime CreatedAtUtc = new(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
@@ -189,45 +188,7 @@ public class SubscriptionObserverTests
     }
 
     [Test]
-    public async Task OnErrorAsync_WhenHistoryLost_SignalsRestart()
-    {
-        using var observer = new Observer(queueCapacity: 10, EventFilter.All);
-        await OfferAsync(observer, 0, "order-1");
-
-        await observer.OnErrorAsync(CreateCommandException(ChangeStreamHistoryLostCode), CancellationToken.None);
-
-        observer.StopReason.ShouldBe(StopReason.ChangeStreamHistoryLost);
-        observer.Reader.TryRead(out _).ShouldBeTrue();
-        (await observer.Reader.WaitToReadAsync()).ShouldBeFalse();
-    }
-
-    [Test]
-    public async Task OnErrorAsync_WhenHistoryLost_LogsWarningOnce()
-    {
-        var logger = new FakeLogger();
-        using var observer = new Observer(queueCapacity: 10, EventFilter.All, logger, "sub-1");
-
-        await observer.OnErrorAsync(CreateCommandException(ChangeStreamHistoryLostCode), CancellationToken.None);
-        await observer.OnErrorAsync(CreateCommandException(ChangeStreamHistoryLostCode), CancellationToken.None);
-
-        logger.Collector.GetSnapshot().Select(record => (record.Level, record.Message)).ShouldBe(
-            [(LogLevel.Warning, "[sub: sub-1] change stream history was lost; restart pending")]);
-    }
-
-    [Test]
-    public async Task OnErrorAsync_WhenHistoryLostAfterQueueOverflowed_KeepsFirstReason()
-    {
-        using var observer = new Observer(queueCapacity: 1, EventFilter.All);
-        await OfferAsync(observer, 0, "order-1");
-        await OfferAsync(observer, 1, "order-1");
-
-        await observer.OnErrorAsync(CreateCommandException(ChangeStreamHistoryLostCode), CancellationToken.None);
-
-        observer.StopReason.ShouldBe(StopReason.QueueOverflow);
-    }
-
-    [Test]
-    public async Task OnErrorAsync_WhenOtherError_FailsReader()
+    public async Task OnErrorAsync_FeedError_FailsReader()
     {
         using var observer = new Observer(queueCapacity: 10, EventFilter.All);
         var error = CreateCommandException(UnauthorizedCode);

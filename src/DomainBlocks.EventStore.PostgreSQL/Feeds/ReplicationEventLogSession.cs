@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Codecs;
+using DomainBlocks.EventStore.Internal.Feeds;
 using Npgsql;
 using Npgsql.Replication;
 using Npgsql.Replication.PgOutput;
@@ -24,7 +25,7 @@ internal sealed class ReplicationEventLogSession<TEvent>(
     PgOutputReplicationOptions pgOutputOptions,
     SchemaObjectNames names,
     IEventDecoder<TEvent, PostgresEventData, string> decoder) :
-    IEventLogSession<EventLogRow<TEvent>>
+    IFeedSession<EventLogRow<TEvent>, long>
     where TEvent : notnull
 {
     private readonly EventLogRow<TEvent> _row = new(decoder);
@@ -35,7 +36,9 @@ internal sealed class ReplicationEventLogSession<TEvent>(
 
     public bool IsResumed { get; } = isResumed;
 
-    public async IAsyncEnumerable<EventLogRow<TEvent>> ReadAsync(
+    public long InitialMark => -1;
+
+    public async IAsyncEnumerable<(EventLogRow<TEvent> Item, long Mark)> ReadAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var pgOutputSlot = new PgOutputReplicationSlot(slot.Name);
@@ -81,7 +84,7 @@ internal sealed class ReplicationEventLogSession<TEvent>(
                         if (row.Position <= slot.LastDeliveredPosition)
                             break;
 
-                        yield return row;
+                        yield return (row, row.Position);
 
                         // The feed has handed the row to its observers.
                         slot.RecordDeliveredRow(row.Position);

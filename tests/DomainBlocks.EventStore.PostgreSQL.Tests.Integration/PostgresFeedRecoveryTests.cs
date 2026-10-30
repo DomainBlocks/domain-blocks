@@ -1,6 +1,7 @@
 using DomainBlocks.Testing.Events;
 using DomainBlocks.Testing.Integration.EventStore;
 using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
+using Npgsql;
 using NUnit.Framework;
 using Shouldly;
 
@@ -187,6 +188,30 @@ public class PostgresFeedRecoveryTests() : PostgresIntegrationTest(x =>
 
         recovery.Events.ShouldBe(eventsBeforeNewSlot);
         recovery.FellBehindCount.ShouldBeGreaterThan(0);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_FeedFaults_DropsSlotBeforeThrowing(CancellationToken ct)
+    {
+        var options = new PostgresEventStoreOptions { Schema = "dbx_fault_no_publication" };
+        var adminOptions = new PostgresEventStoreAdminOptions { CreatePublication = false };
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(DataSource, options, adminOptions, ct);
+
+        await using var eventStore = CreateEventStore(options: options);
+
+        await using var enumerator = eventStore
+            .SubscribeToAll(SubscriptionOrigin.Start)
+            .GetAsyncEnumerator(ct);
+
+        await ShouldBeCaughtUpAsync(enumerator);
+
+        // The server resolves a slot's publications only when it decodes a change, from any schema.
+        await AppendEventsAsync("trigger", 1, ct);
+
+        await enumerator.MoveNextAsync().AsTask().ShouldThrowAsync<PostgresException>();
+
+        (await GetSlotNamesAsync(ct)).ShouldBeEmpty();
     }
 
     private async Task<TestEvent[]> AppendEventsAsync(string prefix, int count, CancellationToken ct)

@@ -21,7 +21,7 @@ public class RefCountedFeedTests
     }
 
     [Test]
-    public async Task AttachAsync_MultipleObservers_SharesConnection()
+    public async Task AttachAsync_MultipleObservers_SharesFeed()
     {
         var feed = new TestFeed();
         var refCountedFeed = new RefCountedFeed<int, long>(() => feed);
@@ -31,7 +31,7 @@ public class RefCountedFeedTests
 
         feed.ConnectCount.ShouldBe(1);
         feed.AttachCount.ShouldBe(2);
-        feed.Connection!.DisposeCount.ShouldBe(0);
+        feed.DisposeCount.ShouldBe(0);
     }
 
     [Test]
@@ -47,7 +47,7 @@ public class RefCountedFeedTests
     }
 
     [Test]
-    public async Task DisposeAsync_LastAttachment_DisposesConnection()
+    public async Task DisposeAsync_LastAttachment_DisposesFeed()
     {
         var feed = new TestFeed();
         var refCountedFeed = new RefCountedFeed<int, long>(() => feed);
@@ -57,13 +57,28 @@ public class RefCountedFeedTests
 
         await attachment1.DisposeAsync();
 
-        feed.Connection!.DisposeCount.ShouldBe(0);
+        feed.DisposeCount.ShouldBe(0);
         feed.DetachCount.ShouldBe(1);
 
         await attachment2.DisposeAsync();
 
-        feed.Connection.DisposeCount.ShouldBe(1);
+        feed.DisposeCount.ShouldBe(1);
         feed.DetachCount.ShouldBe(2);
+    }
+
+    [Test]
+    public async Task DisposeAsync_LastAttachmentAfterFault_DisposesFeed()
+    {
+        var feed = new TestFeed();
+        var refCountedFeed = new RefCountedFeed<int, long>(() => feed);
+        var attachment = await refCountedFeed.AttachAsync(new TestObserver());
+        feed.Fault(new InvalidOperationException());
+
+        feed.DisposeCount.ShouldBe(0);
+
+        await attachment.DisposeAsync();
+
+        feed.DisposeCount.ShouldBe(1);
     }
 
     [Test]
@@ -77,11 +92,11 @@ public class RefCountedFeedTests
         await attachment.DisposeAsync();
 
         feed.DetachCount.ShouldBe(1);
-        feed.Connection!.DisposeCount.ShouldBe(1);
+        feed.DisposeCount.ShouldBe(1);
     }
 
     [Test]
-    public async Task AttachAsync_AfterConnectionFault_ReplacesConnection()
+    public async Task AttachAsync_AfterFault_ReplacesFeed()
     {
         var feeds = new List<TestFeed>();
 
@@ -94,8 +109,7 @@ public class RefCountedFeedTests
 
         var attachment1 = await refCountedFeed.AttachAsync(new TestObserver());
         var attachment2 = await refCountedFeed.AttachAsync(new TestObserver());
-        var connection1 = feeds[0].Connection;
-        connection1!.Fault(new InvalidOperationException());
+        feeds[0].Fault(new InvalidOperationException());
 
         var attachment3 = await refCountedFeed.AttachAsync(new TestObserver());
 
@@ -105,14 +119,52 @@ public class RefCountedFeedTests
         feeds[1].ConnectCount.ShouldBe(1);
         feeds[1].AttachCount.ShouldBe(1);
 
-        await attachment1.DisposeAsync();
-        connection1.DisposeCount.ShouldBe(0);
+        // Observers still attached to the faulted feed don't hold it open.
+        feeds[0].DisposeCount.ShouldBe(1);
 
+        await attachment1.DisposeAsync();
         await attachment2.DisposeAsync();
-        connection1.DisposeCount.ShouldBe(1);
+        feeds[0].DisposeCount.ShouldBe(1);
 
         await attachment3.DisposeAsync();
-        feeds[1].Connection!.DisposeCount.ShouldBe(1);
+        feeds[1].DisposeCount.ShouldBe(1);
+    }
+
+    [Test]
+    public async Task AttachAsync_AfterFault_DisposesFeedBeforeCreatingNext()
+    {
+        var feeds = new List<TestFeed>();
+        var disposeCountAtNextFeed = -1;
+
+        var refCountedFeed = new RefCountedFeed<int, long>(() =>
+        {
+            if (feeds.Count == 1)
+                disposeCountAtNextFeed = feeds[0].DisposeCount;
+
+            var feed = new TestFeed();
+            feeds.Add(feed);
+            return feed;
+        });
+
+        await using var attachment1 = await refCountedFeed.AttachAsync(new TestObserver());
+        feeds[0].Fault(new InvalidOperationException());
+
+        await using var attachment2 = await refCountedFeed.AttachAsync(new TestObserver());
+
+        disposeCountAtNextFeed.ShouldBe(1);
+        feeds[1].DisposeCount.ShouldBe(0);
+    }
+
+    [Test]
+    public async Task AttachAsync_FirstAttachFails_DisposesFeed()
+    {
+        var feed = new TestFeed();
+        var refCountedFeed = new RefCountedFeed<int, long>(() => feed);
+        feed.FaultOnNextAttach(new InvalidOperationException());
+
+        await refCountedFeed.AttachAsync(new TestObserver()).ShouldThrowAsync<InvalidOperationException>();
+
+        feed.DisposeCount.ShouldBe(1);
     }
 
     [Test]
@@ -137,10 +189,10 @@ public class RefCountedFeedTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task AttachAsync_WhileLastConnectionIsStillStopping_WaitsForItBeforeConnectingAgain()
+    public async Task AttachAsync_LastFeedStillStopping_WaitsBeforeCreatingNext()
     {
-        // A connection that is stopping may still hold server resources, such as PostgreSQL's replication slot, so
-        // the next connection waits until it has stopped.
+        // A feed that is stopping may still hold server resources, such as PostgreSQL's replication slot, so the next
+        // feed waits until it has stopped.
         var feeds = new List<TestFeed>();
 
         var refCountedFeed = new RefCountedFeed<int, long>(() =>
@@ -151,16 +203,15 @@ public class RefCountedFeedTests
         });
 
         var first = await refCountedFeed.AttachAsync(new TestObserver());
-        var connection = feeds[0].Connection!;
-        connection.HoldDispose();
+        feeds[0].HoldDispose();
 
         var detaching = first.DisposeAsync().AsTask();
-        await connection.Disposing;
+        await feeds[0].Disposing;
 
         var attaching = refCountedFeed.AttachAsync(new TestObserver());
         feeds.Count.ShouldBe(1);
 
-        connection.ReleaseDispose();
+        feeds[0].ReleaseDispose();
         await detaching;
         var second = await attaching;
 
@@ -186,6 +237,7 @@ public class RefCountedFeedTests
         await attachCts.CancelAsync();
 
         await attaching.ShouldThrowAsync<OperationCanceledException>();
+        feeds[0].DisposeCount.ShouldBe(1);
 
         await using var attachment = await refCountedFeed.AttachAsync(new TestObserver(), cancellationToken: ct);
 
@@ -196,7 +248,7 @@ public class RefCountedFeedTests
     }
 
     [Test]
-    public async Task DisposeAsync_DisposesConnectionAndRejectsFurtherAttachments()
+    public async Task DisposeAsync_DisposesFeedAndRejectsFurtherAttachments()
     {
         var feed = new TestFeed();
         var refCountedFeed = new RefCountedFeed<int, long>(() => feed);
@@ -204,22 +256,28 @@ public class RefCountedFeedTests
 
         await refCountedFeed.DisposeAsync();
 
-        feed.Connection!.DisposeCount.ShouldBe(1);
+        feed.DisposeCount.ShouldBe(1);
         await Should.ThrowAsync<ObjectDisposedException>(() => refCountedFeed.AttachAsync(new TestObserver()));
 
         // Detaching after disposal is harmless.
         await attachment.DisposeAsync();
-        feed.Connection.DisposeCount.ShouldBe(1);
+        feed.DisposeCount.ShouldBe(1);
     }
 
-    private sealed class TestFeed(bool canConnect = true, bool advanceMarkOnAttach = false) : IFeed<int, long>
+    private sealed class TestFeed(bool canConnect = true, bool advanceMarkOnAttach = false) : IEventLogFeed<int, long>
     {
+        private readonly TaskCompletionSource _completionTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _disposingTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private TaskCompletionSource? _disposeGate;
         private Exception? _attachException;
 
         public int AttachCount { get; private set; }
         public int DetachCount { get; private set; }
         public int ConnectCount { get; private set; }
-        public TestConnection? Connection { get; private set; }
+        public int DisposeCount { get; private set; }
+        public Task Completion => _completionTcs.Task;
+        public Task Disposing => _disposingTcs.Task;
+        public long HighWaterMark { get; private set; }
 
         public IDisposable Attach(IFeedObserver<int> observer, string correlationId = "unknown")
         {
@@ -232,42 +290,24 @@ public class RefCountedFeedTests
             }
 
             if (advanceMarkOnAttach)
-                Connection!.HighWaterMark++;
+                HighWaterMark++;
 
             return new TestAttachment(() => DetachCount++);
         }
 
-        public async Task<IFeedConnection<long>> ConnectAsync(CancellationToken cancellationToken = default)
+        public async Task ConnectAsync(CancellationToken cancellationToken = default)
         {
             ConnectCount++;
 
             if (!canConnect)
                 await Task.Delay(Timeout.Infinite, cancellationToken);
-
-            Connection = new TestConnection();
-            return Connection;
         }
 
         public void FaultOnNextAttach(Exception exception) => _attachException = exception;
-    }
-
-    private sealed class TestConnection : IFeedConnection<long>
-    {
-        private readonly TaskCompletionSource _completionTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private readonly TaskCompletionSource _disposingTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private TaskCompletionSource? _disposeGate;
-
-        public Task Completion => _completionTcs.Task;
-
-        public Task Disposing => _disposingTcs.Task;
-
-        public long HighWaterMark { get; set; }
-
-        public int DisposeCount { get; private set; }
 
         public void Fault(Exception exception) => _completionTcs.TrySetException(exception);
 
-        // Holds disposal until it is released, as a connection that is still handing out an item would.
+        // Holds disposal until it is released, as a feed that is still handing out an item would.
         public void HoldDispose() =>
             _disposeGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 

@@ -11,7 +11,7 @@ using Shouldly;
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration.ChangeStreams;
 
 [TestFixture]
-public class ChangeStreamSubjectTests
+public class ChangeStreamFeedTests
 {
     private IMongoCollection<BsonDocument> _collection = null!;
 
@@ -37,22 +37,23 @@ public class ChangeStreamSubjectTests
         var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>()
             .Match(x => x.OperationType == ChangeStreamOperationType.Insert);
 
-        var logger = MongoTestEnvironment.LoggerFactory.CreateLogger<ChangeStreamSubjectTests>();
+        var logger = MongoTestEnvironment.LoggerFactory.CreateLogger<ChangeStreamFeedTests>();
 
-        var subject = ChangeStreamSubject.Create(
+        await using var feed = ChangeStreamFeed.Create(
             MongoTestEnvironment.MongoClient,
             _collection.WatchAsync,
             pipeline,
             static x => x.ResumeToken,
             static x => x.ClusterTime,
             static x => x,
-            logger: logger);
+            new FeedResumePolicy(ChangeStreamTransientErrors.IsTransient),
+            logger);
 
         var observer1 = new TestChangeStreamObserver(expectedCount: insertCount);
         var observer2 = new TestChangeStreamObserver(expectedCount: insertCount);
-        using var attachment1 = subject.Attach(observer1);
-        using var attachment2 = subject.Attach(observer2);
-        await using var connection = await subject.ConnectAsync(ct);
+        using var attachment1 = feed.Attach(observer1);
+        using var attachment2 = feed.Attach(observer2);
+        await feed.ConnectAsync(ct);
 
         var insertedDocs = Enumerable
             .Range(1, insertCount)

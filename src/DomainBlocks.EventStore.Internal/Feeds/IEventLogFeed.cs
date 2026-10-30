@@ -1,10 +1,10 @@
 namespace DomainBlocks.EventStore.Internal.Feeds;
 
 /// <summary>
-/// A feed's running connection. Disposing it stops the feed, and observers still attached receive an
-/// <see cref="ObjectDisposedException"/>.
+/// A live feed of items that fans out to any number of observers. Disposing it stops the feed, and observers still
+/// attached receive an <see cref="ObjectDisposedException"/>.
 /// </summary>
-internal interface IFeedConnection<out THighWaterMark> : IAsyncDisposable
+internal interface IEventLogFeed<out T, out TMark> : IAsyncDisposable
 {
     /// <summary>
     /// Gets a task that completes when the feed stops: successfully when disposed, or faulted when it fails
@@ -16,5 +16,9 @@ internal interface IFeedConnection<out THighWaterMark> : IAsyncDisposable
     /// Gets a mark at or after every item that the feed has delivered. The feed can deliver an item before reads see
     /// it, so a catch-up waits until reads reach the mark. What the mark is depends on the store.
     /// </summary>
-    THighWaterMark HighWaterMark { get; }
+    TMark HighWaterMark { get; }
+
+    IDisposable Attach(IFeedObserver<T> observer, string correlationId = "unknown");
+
+    Task ConnectAsync(CancellationToken cancellationToken = default);
 }

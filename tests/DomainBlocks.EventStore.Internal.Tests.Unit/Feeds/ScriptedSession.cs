@@ -1,12 +1,13 @@
 using System.Runtime.CompilerServices;
-using DomainBlocks.EventStore.PostgreSQL.Feeds;
+using DomainBlocks.EventStore.Internal.Feeds;
 
-namespace DomainBlocks.EventStore.PostgreSQL.Tests.Unit.Feeds;
+namespace DomainBlocks.EventStore.Internal.Tests.Unit.Feeds;
 
 /// <summary>
 /// A fake session that plays a script of row positions, failures, and endings, then blocks like a live session would.
 /// </summary>
-internal sealed class ScriptedSession(string description, params ScriptedSession.Step[] steps) : IEventLogSession<long>
+internal sealed class ScriptedSession(string description, params ScriptedSession.Step[] steps) :
+    IFeedSession<long, long>
 {
     public abstract record Step
     {
@@ -23,6 +24,11 @@ internal sealed class ScriptedSession(string description, params ScriptedSession
 
     public bool IsResumed { get; init; }
 
+    /// <summary>
+    /// Gets the mark that the session starts with, which is -1 by default.
+    /// </summary>
+    public long InitialMark { get; init; } = -1;
+
     public int DisposeCount { get; private set; }
 
     public static Step.Row Row(long position) => new(position);
@@ -31,7 +37,7 @@ internal sealed class ScriptedSession(string description, params ScriptedSession
 
     public static Step.End End() => new();
 
-    public async IAsyncEnumerable<long> ReadAsync(
+    public async IAsyncEnumerable<(long Item, long Mark)> ReadAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         while (true)
@@ -42,7 +48,7 @@ internal sealed class ScriptedSession(string description, params ScriptedSession
             switch (_steps.Dequeue())
             {
                 case Step.Row row:
-                    yield return row.Position;
+                    yield return (row.Position, row.Position);
                     break;
 
                 case Step.Throw failure:

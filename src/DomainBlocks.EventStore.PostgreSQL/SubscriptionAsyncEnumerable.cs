@@ -22,7 +22,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     private static readonly TimeSpan VisibilityWaitWarningInterval = TimeSpan.FromSeconds(10);
 
     private readonly EventLogReader<TEvent> _reader;
-    private readonly IRefCountedFeed<EventLogRow<TEvent>, long?> _feed;
+    private readonly IRefCountedFeed<EventLogRow<TEvent>, long> _feed;
     private readonly CatchUpReader _catchUpReader;
     private readonly EndPositionReader _endPositionReader;
     private readonly EventFilter _liveFilter;
@@ -35,7 +35,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
     public SubscriptionAsyncEnumerable(
         EventLogReader<TEvent> reader,
-        IRefCountedFeed<EventLogRow<TEvent>, long?> feed,
+        IRefCountedFeed<EventLogRow<TEvent>, long> feed,
         CatchUpReader catchUpReader,
         EndPositionReader endPositionReader,
         EventFilter liveFilter,
@@ -62,14 +62,14 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
             PostgresTransientErrors.IsTransient,
             _options.CatchUpMaxRetryAttempts,
             _options.CatchUpRetryTimeout,
-            (ex, attempt, delay) => _logger?.CatchUpRetrying(ex, _correlationId, attempt, delay));
+            (_, ex, attempt, delay) => _logger?.CatchUpRetrying(ex, _correlationId, attempt, delay));
     }
 
     public async IAsyncEnumerator<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> GetAsyncEnumerator(
         CancellationToken cancellationToken = default)
     {
         Observer? observer = null;
-        IFeedAttachment<long?>? attachment = null;
+        IFeedAttachment<long>? attachment = null;
 
         try
         {
@@ -188,7 +188,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         {
             return await _retryPipeline
                 .ExecuteAsync(
-                    static (s, ct) => s.ReadEndAsync(null, ct),
+                    static (s, ct) => s.ReadEndAsync(-1, ct),
                     this,
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -205,7 +205,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         }
     }
 
-    private async Task<IFeedAttachment<long?>> AttachObserverAsync(
+    private async Task<IFeedAttachment<long>> AttachObserverAsync(
         Observer observer,
         CancellationToken cancellationToken)
     {
@@ -230,7 +230,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     private async IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> ReadAllAsync(
         ResumePosition resumePosition,
         Observer observer,
-        long? positionHighWaterMark,
+        long positionHighWaterMark,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var endInclusive = await _retryPipeline
@@ -287,10 +287,11 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         }
     }
 
-    private async ValueTask<TPos?> ReadEndAsync(long? positionHighWaterMark, CancellationToken cancellationToken)
+    private async ValueTask<TPos?> ReadEndAsync(long positionHighWaterMark, CancellationToken cancellationToken)
     {
-        if (positionHighWaterMark.HasValue)
-            await WaitUntilVisibleAsync(positionHighWaterMark.Value, cancellationToken).ConfigureAwait(false);
+        // Until the feed delivers a row, the mark is -1 and there is nothing to wait for.
+        if (positionHighWaterMark >= 0)
+            await WaitUntilVisibleAsync(positionHighWaterMark, cancellationToken).ConfigureAwait(false);
 
         return await _endPositionReader(_reader, cancellationToken).ConfigureAwait(false);
     }

@@ -1,5 +1,8 @@
-namespace DomainBlocks.EventStore.MongoDB;
+namespace DomainBlocks.EventStore.Internal;
 
+/// <summary>
+/// Short, process-unique IDs that correlate the log messages of subscriptions and feeds.
+/// </summary>
 internal static class CorrelationId
 {
     public const int IdLength = 6;

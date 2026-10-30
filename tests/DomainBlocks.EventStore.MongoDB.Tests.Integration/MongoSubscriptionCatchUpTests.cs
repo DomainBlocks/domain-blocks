@@ -231,7 +231,8 @@ public class MongoSubscriptionCatchUpTests
 
         var meanwhile = await scenario.AppendAsync("meanwhile", 2);
 
-        // The oplog no longer holds the resume point, so the subscription restarts with a new change stream.
+        // The oplog no longer holds the resume point, so the feed starts a new change stream and resets, and the
+        // subscription restarts.
         disconnect.FailResumption(CreateCommandException(MongoErrorCodes.ChangeStreamHistoryLost));
         var messages = await subscription.ReadUntilCaughtUpAsync();
 
@@ -248,7 +249,9 @@ public class MongoSubscriptionCatchUpTests
             .Select(x => x.Event!.Value.Payload)
             .ShouldBe([meanwhile[0], meanwhile[1]]);
 
-        scenario.ChangeStreamProbe.InitialOpenCount.ShouldBe(2);
+        // A lone subscription's restart detaches it before it attaches again, which closes the feed's connection, so
+        // the third change stream comes from a new connection.
+        scenario.ChangeStreamProbe.InitialOpenCount.ShouldBe(3);
 
         // The new change stream delivers live events.
         var live = await scenario.AppendAsync("live", 1);
