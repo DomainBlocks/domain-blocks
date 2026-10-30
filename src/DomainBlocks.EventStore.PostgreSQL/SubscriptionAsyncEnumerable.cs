@@ -62,7 +62,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
             PostgresTransientErrors.IsTransient,
             _options.CatchUpMaxRetryAttempts,
             _options.CatchUpRetryTimeout,
-            (ex, attempt, delay) => _logger?.CatchUpRetrying(ex, _correlationId, attempt, delay));
+            (_, ex, attempt, delay) => _logger?.CatchUpRetrying(ex, _correlationId, attempt, delay));
     }
 
     public async IAsyncEnumerator<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> GetAsyncEnumerator(

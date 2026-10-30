@@ -27,7 +27,9 @@ internal static class RetryPipeline
     /// How long after its first failure an execution stops retrying and throws its last error, or
     /// <see cref="Timeout.InfiniteTimeSpan"/> to retry without a limit.
     /// </param>
-    /// <param name="onRetry">Called before each delay with the error, the retry's number from 1, and the delay.</param>
+    /// <param name="onRetry">
+    /// Called before each delay with the execution's context, the error, the retry's number from 1, and the delay.
+    /// </param>
     /// <param name="delay">The delay before the first retry, or <see langword="null"/> for 1 second.</param>
     /// <param name="maxDelay">The longest delay between retries, or <see langword="null"/> for 1 minute.</param>
     /// <param name="timeProvider">
@@ -37,7 +39,7 @@ internal static class RetryPipeline
         Func<Exception, bool> isTransient,
         int maxRetryAttempts,
         TimeSpan timeout,
-        Action<Exception, int, TimeSpan> onRetry,
+        Action<ResilienceContext, Exception, int, TimeSpan> onRetry,
         TimeSpan? delay = null,
         TimeSpan? maxDelay = null,
         TimeProvider? timeProvider = null)
@@ -78,7 +80,7 @@ internal static class RetryPipeline
                 OnRetry = args =>
                 {
                     if (args.Outcome.Exception is { } ex)
-                        onRetry(ex, args.AttemptNumber + 1, args.RetryDelay);
+                        onRetry(args.Context, ex, args.AttemptNumber + 1, args.RetryDelay);
 
                     return ValueTask.CompletedTask;
                 }

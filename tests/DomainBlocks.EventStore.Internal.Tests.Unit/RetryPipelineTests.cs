@@ -193,7 +193,7 @@ public class RetryPipelineTests
             static ex => ex is TransientException,
             maxRetryAttempts,
             timeout,
-            (_, attempt, _) => retries.Add(attempt),
+            (_, _, attempt, _) => retries.Add(attempt),
             delay: TimeSpan.Zero,
             maxDelay: TimeSpan.Zero,
             timeProvider: timeProvider);
