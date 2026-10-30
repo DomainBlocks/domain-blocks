@@ -82,7 +82,7 @@ public class ChangeStreamSessionFactoryTests
         await using var session = await sessionFactory.OpenAsync(ct);
 
         session.IsResumed.ShouldBeFalse();
-        session.HighWaterMark.ShouldBe(CreateOperationTime(1));
+        session.InitialHighWaterMark.ShouldBe(CreateOperationTime(1));
 
         // The stream starts one tick after the last write.
         _watchOptions.ShouldHaveSingleItem().ShouldNotBeNull().StartAtOperationTime.ShouldBe(new BsonTimestamp(1, 1));
@@ -109,7 +109,7 @@ public class ChangeStreamSessionFactoryTests
         await using var resumedSession = await sessionFactory.OpenAsync(ct);
 
         resumedSession.IsResumed.ShouldBeTrue();
-        resumedSession.HighWaterMark.ShouldBeNull();
+        resumedSession.InitialHighWaterMark.ShouldBeNull();
         _helloCount.ShouldBe(1);
         _watchOptions.Last().ShouldNotBeNull().ResumeAfter.ShouldBe(deliveredChange.ResumeToken);
     }
@@ -197,7 +197,7 @@ public class ChangeStreamSessionFactoryTests
         await using var newSession = await sessionFactory.OpenAsync(ct);
 
         newSession.IsResumed.ShouldBeFalse();
-        newSession.HighWaterMark.ShouldBe(CreateOperationTime(2));
+        newSession.InitialHighWaterMark.ShouldBe(CreateOperationTime(2));
         _watchOptions.Select(x => x?.ResumeAfter is not null).ShouldBe([false, true, false]);
         _watchOptions.Last().ShouldNotBeNull().StartAtOperationTime.ShouldBe(new BsonTimestamp(2, 1));
     }
@@ -215,7 +215,7 @@ public class ChangeStreamSessionFactoryTests
         await using var changes = session.ReadAsync(ct).GetAsyncEnumerator(ct);
 
         (await changes.MoveNextAsync()).ShouldBeTrue();
-        session.HighWaterMark.ShouldBe(clusterTime);
+        changes.Current.HighWaterMark.ShouldBe(clusterTime);
     }
 
     [TestCaseSource(nameof(ResumableExceptions))]

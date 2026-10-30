@@ -19,20 +19,15 @@ internal sealed class ScriptedSession(string description, params ScriptedSession
     }
 
     private readonly Queue<Step> _steps = new(steps);
-    private long _highWaterMark = -1;
 
     public string Description { get; } = description;
 
     public bool IsResumed { get; init; }
 
     /// <summary>
-    /// Gets the position of the last row played, or the mark that the session starts with, which is -1 by default.
+    /// Gets the mark that the session starts with, which is -1 by default.
     /// </summary>
-    public long HighWaterMark
-    {
-        get => _highWaterMark;
-        init => _highWaterMark = value;
-    }
+    public long InitialHighWaterMark { get; init; } = -1;
 
     public int DisposeCount { get; private set; }
 
@@ -42,7 +37,7 @@ internal sealed class ScriptedSession(string description, params ScriptedSession
 
     public static Step.End End() => new();
 
-    public async IAsyncEnumerable<long> ReadAsync(
+    public async IAsyncEnumerable<(long Item, long HighWaterMark)> ReadAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         while (true)
@@ -53,8 +48,7 @@ internal sealed class ScriptedSession(string description, params ScriptedSession
             switch (_steps.Dequeue())
             {
                 case Step.Row row:
-                    _highWaterMark = row.Position;
-                    yield return row.Position;
+                    yield return (row.Position, row.Position);
                     break;
 
                 case Step.Throw failure:

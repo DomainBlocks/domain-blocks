@@ -15,7 +15,7 @@ internal sealed class ChangeStreamSession<TChange, TResult>(
     ChangeStreamResumePoint resumePoint,
     string description,
     bool isResumed,
-    BsonTimestamp? highWaterMark,
+    BsonTimestamp? initialHighWaterMark,
     Func<TChange, BsonDocument> resumeTokenSelector,
     Func<TChange, BsonTimestamp> clusterTimeSelector,
     Func<TChange, TResult> resultSelector,
@@ -27,14 +27,14 @@ internal sealed class ChangeStreamSession<TChange, TResult>(
     public bool IsResumed { get; } = isResumed;
 
     /// <summary>
-    /// Gets an optime at or after every change that the session has delivered or won't deliver. A new change stream
-    /// starts it at the primary's last write, just before the stream's start, and a resumed one has none until its
-    /// first change. A majority read that waits for it sees every such change, even on a node whose commit point
-    /// lagged after a failover.
+    /// Gets an optime at or after every change that the session won't deliver. A new change stream has the primary's
+    /// last write, just before the stream's start, and a resumed one has none. A majority read that waits for it sees
+    /// every such change, even on a node whose commit point lagged after a failover.
     /// </summary>
-    public BsonTimestamp? HighWaterMark { get; private set; } = highWaterMark;
+    public BsonTimestamp? InitialHighWaterMark { get; } = initialHighWaterMark;
 
-    public async IAsyncEnumerable<TResult> ReadAsync([EnumeratorCancellation] CancellationToken cancellationToken)
+    public async IAsyncEnumerable<(TResult Item, BsonTimestamp HighWaterMark)> ReadAsync(
+        [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         while (await cursor.MoveNextAsync(cancellationToken).ConfigureAwait(false))
         {
@@ -45,9 +45,7 @@ internal sealed class ChangeStreamSession<TChange, TResult>(
                 var result = resultSelector(change);
 
                 // A change's cluster time is the optime of the oplog entry that committed it, so reads can wait for it.
-                HighWaterMark = clusterTimeSelector(change);
-
-                yield return result;
+                yield return (result, clusterTimeSelector(change));
 
                 // The feed has handed the change to its observers.
                 resumePoint.Record(resumeTokenSelector(change));

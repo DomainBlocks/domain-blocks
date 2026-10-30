@@ -129,9 +129,9 @@ public class PostgresLiveFanOutBenchmarks
 
         public bool IsResumed => false;
 
-        public long HighWaterMark { get; private set; } = -1;
+        public long InitialHighWaterMark => -1;
 
-        public async IAsyncEnumerable<EventLogRow<IDomainEvent>> ReadAsync(
+        public async IAsyncEnumerable<(EventLogRow<IDomainEvent> Item, long HighWaterMark)> ReadAsync(
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             for (var i = 0; i < rows.Length; i++)
@@ -142,8 +142,7 @@ public class PostgresLiveFanOutBenchmarks
 
                 _row.Set(i, streamId, i, eventName, eventData, metadata, NoIOEventStore.CreatedAt);
 
-                HighWaterMark = i;
-                yield return _row;
+                yield return (_row, i);
             }
 
             await Task.Delay(Timeout.Infinite, cancellationToken);

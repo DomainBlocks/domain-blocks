@@ -36,9 +36,9 @@ internal sealed class ReplicationEventLogSession<TEvent>(
 
     public bool IsResumed { get; } = isResumed;
 
-    public long HighWaterMark { get; private set; } = -1;
+    public long InitialHighWaterMark => -1;
 
-    public async IAsyncEnumerable<EventLogRow<TEvent>> ReadAsync(
+    public async IAsyncEnumerable<(EventLogRow<TEvent> Item, long HighWaterMark)> ReadAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var pgOutputSlot = new PgOutputReplicationSlot(slot.Name);
@@ -84,8 +84,7 @@ internal sealed class ReplicationEventLogSession<TEvent>(
                         if (row.Position <= slot.LastDeliveredPosition)
                             break;
 
-                        HighWaterMark = row.Position;
-                        yield return row;
+                        yield return (row, row.Position);
 
                         // The feed has handed the row to its observers.
                         slot.RecordDeliveredRow(row.Position);

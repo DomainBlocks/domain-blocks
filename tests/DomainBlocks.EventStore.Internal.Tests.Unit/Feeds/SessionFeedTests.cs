@@ -52,7 +52,7 @@ public class SessionFeedTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task ConnectAsync_SessionStartsWithMark_PublishesMark(CancellationToken ct)
     {
-        var feed = CreateFeed(new ScriptedSession("s1") { HighWaterMark = 3 });
+        var feed = CreateFeed(new ScriptedSession("s1") { InitialHighWaterMark = 3 });
 
         await using var connection = await feed.ConnectAsync(ct);
 

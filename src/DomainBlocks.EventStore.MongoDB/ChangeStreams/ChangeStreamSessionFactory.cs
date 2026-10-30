@@ -58,7 +58,11 @@ internal sealed class ChangeStreamSessionFactory<TDocument, TChange, TResult>(
                 var resumedCursor = await cursorFactory(pipeline, resumeOptions, cancellationToken)
                     .ConfigureAwait(false);
 
-                return CreateSession(resumedCursor, "resumed change stream", isResumed: true, highWaterMark: null);
+                return CreateSession(
+                    resumedCursor,
+                    "resumed change stream",
+                    isResumed: true,
+                    initialHighWaterMark: null);
             }
             catch (MongoCommandException ex) when (IsHistoryLost(ex))
             {
@@ -90,7 +94,7 @@ internal sealed class ChangeStreamSessionFactory<TDocument, TChange, TResult>(
             _resumePoint.Record(initialResumeToken);
 
         // The start is inclusive, so the stream won't deliver the changes up to the last write.
-        return CreateSession(cursor, $"change stream from {startAt}", isResumed: false, highWaterMark: lastApplied);
+        return CreateSession(cursor, $"change stream from {startAt}", isResumed: false, lastApplied);
     }
 
     // Lost history can't be resumed from, but it can be recovered from: the next session finds the resume token gone
@@ -108,14 +112,14 @@ internal sealed class ChangeStreamSessionFactory<TDocument, TChange, TResult>(
         IChangeStreamCursor<TChange> cursor,
         string description,
         bool isResumed,
-        BsonTimestamp? highWaterMark)
+        BsonTimestamp? initialHighWaterMark)
     {
         return new ChangeStreamSession<TChange, TResult>(
             cursor,
             _resumePoint,
             description,
             isResumed,
-            highWaterMark,
+            initialHighWaterMark,
             resumeTokenSelector,
             clusterTimeSelector,
             resultSelector,
