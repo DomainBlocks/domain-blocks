@@ -260,7 +260,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
     {
         var filter = options?.Filter ?? EventFilter.All;
 
-        return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
+        return new PostgresSubscription<TEvent, LogPosition>(
             _reader,
             _feed,
             (reader, from, to, ct) => reader.ReadCatchUpAllAsync(from, to, filter, ct),
@@ -284,7 +284,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
 
         var filter = options?.Filter ?? EventFilter.All;
 
-        return new SubscriptionAsyncEnumerable<TEvent, StreamPosition>(
+        return new PostgresSubscription<TEvent, StreamPosition>(
             _reader,
             _feed,
             (reader, from, to, ct) => reader.ReadCatchUpStreamAsync(streamId, from, to, filter, ct),

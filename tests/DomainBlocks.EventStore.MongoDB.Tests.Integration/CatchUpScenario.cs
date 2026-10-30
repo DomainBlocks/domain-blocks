@@ -150,7 +150,7 @@ internal sealed class CatchUpScenario : IAsyncDisposable
     {
         var filter = catchUpFilter ?? Builders<BsonDocument>.Filter.Empty;
 
-        var subscription = new SubscriptionAsyncEnumerable<object, LogPosition>(
+        var subscription = new MongoSubscription<object, LogPosition>(
             _reader,
             _feed,
             (reader, session, from, to, ct) => _catchUpRecorder.Record(

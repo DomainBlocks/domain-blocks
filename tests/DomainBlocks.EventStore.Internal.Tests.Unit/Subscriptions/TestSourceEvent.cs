@@ -4,8 +4,8 @@ using DomainBlocks.EventStore.Filtering;
 namespace DomainBlocks.EventStore.Internal.Tests.Unit.Subscriptions;
 
 /// <summary>
-/// Stands in for a store's undecoded live event. As in the stores, one instance is reused for every item, and it decodes
-/// once per item, on the first request for its payload or metadata.
+/// Stands in for a store's undecoded live event. As in the stores, one instance is reused for every item, and it
+/// decodes once per item, on the first request for its payload or metadata.
 /// </summary>
 internal sealed class TestSourceEvent : IFilterableEvent, IReadEvent<string, string, StreamPosition, LogPosition>
 {

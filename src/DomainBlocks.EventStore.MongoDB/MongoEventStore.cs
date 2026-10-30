@@ -258,7 +258,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         var filter = options?.Filter ?? EventFilter.All;
         var catchUpFilter = TranslateFilter(filter) ?? Builders<BsonDocument>.Filter.Empty;
 
-        return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
+        return new MongoSubscription<TEvent, LogPosition>(
             _reader,
             _feed,
             (reader, session, start, end, ct) =>
@@ -287,7 +287,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         var streamFilter = Builders<BsonDocument>.Filter.Eq(FieldNames.StreamId, streamId);
         var catchUpFilter = TranslateFilter(filter) is { } translated ? streamFilter & translated : streamFilter;
 
-        return new SubscriptionAsyncEnumerable<TEvent, StreamPosition>(
+        return new MongoSubscription<TEvent, StreamPosition>(
             _reader,
             _feed,
             (reader, session, start, end, ct) =>
