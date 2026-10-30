@@ -208,7 +208,7 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
     }
 
     // The subscription under test, from the start of the log, with each of its replays recorded.
-    private SubscriptionAsyncEnumerable<object, LogPosition> SubscribeToAll(SubscriptionOptions options)
+    private PostgresSubscription<object, LogPosition> SubscribeToAll(SubscriptionOptions options)
     {
         return SubscribeToAll(
             (reader, start, end, ct) =>
@@ -234,12 +234,12 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
         return witness;
     }
 
-    private SubscriptionAsyncEnumerable<object, LogPosition> SubscribeToAll(
-        SubscriptionAsyncEnumerable<object, LogPosition>.CatchUpReader catchUpReader,
+    private PostgresSubscription<object, LogPosition> SubscribeToAll(
+        PostgresSubscription<object, LogPosition>.CatchUpReader catchUpReader,
         SubscriptionOrigin<LogPosition> origin,
         SubscriptionOptions options)
     {
-        return new SubscriptionAsyncEnumerable<object, LogPosition>(
+        return new PostgresSubscription<object, LogPosition>(
             _reader,
             _feed,
             catchUpReader,

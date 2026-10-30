@@ -1,79 +1,73 @@
-using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Filtering;
-using DomainBlocks.EventStore.Internal;
 using DomainBlocks.EventStore.Internal.Feeds;
-using DomainBlocks.EventStore.Internal.Subscriptions;
 using Microsoft.Extensions.Logging;
 using Polly;
 
-namespace DomainBlocks.EventStore.PostgreSQL;
+namespace DomainBlocks.EventStore.Internal.Subscriptions;
 
 /// <summary>
 /// Implements a catch-up subscription to the global event log or one event stream.
 /// </summary>
-internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
+/// <remarks>
+/// A store derives from this class to supply its reads: the end position that a subscription from the end pins, and the
+/// catch-up that each cycle replays through.
+/// </remarks>
+internal abstract class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, TPos> :
     IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>>
     where TEvent : notnull
+    where TSourceEvent : class, IFilterableEvent, IReadEvent<TEvent, string, StreamPosition, LogPosition>
     where TPos : struct, IPosition<TPos>
 {
-    private static readonly TimeSpan MinVisibilityPollDelay = TimeSpan.FromMilliseconds(1);
-    private static readonly TimeSpan MaxVisibilityPollDelay = TimeSpan.FromMilliseconds(100);
-    private static readonly TimeSpan VisibilityWaitWarningInterval = TimeSpan.FromSeconds(10);
-
-    private readonly EventLogReader<TEvent> _reader;
-    private readonly IRefCountedFeed<EventLogRow<TEvent>, long> _feed;
-    private readonly CatchUpReader _catchUpReader;
-    private readonly EndPositionReader _endPositionReader;
+    private readonly IRefCountedFeed<TSourceEvent, TMark> _feed;
     private readonly EventFilter _liveFilter;
     private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> _positionSelector;
     private readonly SubscriptionOrigin<TPos> _origin;
     private readonly SubscriptionOptions _options;
     private readonly ILogger? _logger;
-    private readonly string _correlationId;
     private readonly ResiliencePipeline _retryPipeline;
 
-    public SubscriptionAsyncEnumerable(
-        EventLogReader<TEvent> reader,
-        IRefCountedFeed<EventLogRow<TEvent>, long> feed,
-        CatchUpReader catchUpReader,
-        EndPositionReader endPositionReader,
+    protected SubscriptionAsyncEnumerable(
+        IRefCountedFeed<TSourceEvent, TMark> feed,
         EventFilter liveFilter,
         Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> positionSelector,
         SubscriptionOrigin<TPos>? origin,
         SubscriptionOptions? options,
+        Func<Exception, bool> isTransient,
         ILogger? logger)
     {
         _origin = origin ?? SubscriptionOrigin.End;
         _options = options ?? SubscriptionOptions.Default;
-        _catchUpReader = catchUpReader;
-        _endPositionReader = endPositionReader;
         _liveFilter = liveFilter;
         _positionSelector = positionSelector;
-        _reader = reader;
         _feed = feed;
         _logger = logger;
 
-        _correlationId = _options.CorrelationId is { } id
+        SubscriptionId = _options.CorrelationId is { } id
             ? CorrelationId.Reserve(id)
             : CorrelationId.ReserveGenerated();
 
         _retryPipeline = RetryPipeline.Create(
-            PostgresTransientErrors.IsTransient,
+            isTransient,
             _options.CatchUpMaxRetryAttempts,
             _options.CatchUpRetryTimeout,
-            (_, ex, attempt, delay) => _logger?.CatchUpRetrying(ex, _correlationId, attempt, delay));
+            (_, ex, attempt, delay) => _logger?.CatchUpRetrying(ex, SubscriptionId, attempt, delay));
     }
+
+    /// <summary>
+    /// Gets the ID that correlates the subscription's log messages.
+    /// </summary>
+    protected string SubscriptionId { get; }
 
     public async IAsyncEnumerator<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> GetAsyncEnumerator(
         CancellationToken cancellationToken = default)
     {
-        SubscriptionObserver<TEvent, EventLogRow<TEvent>>? observer = null;
-        IFeedAttachment<long>? attachment = null;
+        SubscriptionObserver<TEvent, TSourceEvent>? observer = null;
+        IFeedAttachment<TMark>? attachment = null;
 
         try
         {
-            _logger?.SubscriptionStarted(_correlationId);
+            _logger?.SubscriptionStarted(SubscriptionId);
 
             var resumePosition = new ResumePosition(_origin switch
             {
@@ -91,14 +85,19 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                 if (observer is not null)
                 {
                     if (resumePosition.After is { } after)
-                        _logger?.SubscriptionRestarting(_correlationId, after.Value);
+                        _logger?.SubscriptionRestarting(SubscriptionId, after.Value);
                     else
-                        _logger?.SubscriptionRestartingFromStart(_correlationId);
+                        _logger?.SubscriptionRestartingFromStart(SubscriptionId);
                 }
 
                 // The new observer is attached before the old one is detached, so the ref count never drops to zero and
-                // the replication session stays open.
-                var nextObserver = new SubscriptionObserver<TEvent, EventLogRow<TEvent>>(_options.QueueCapacity, _liveFilter, _logger, _correlationId);
+                // the feed keeps its connection.
+                var nextObserver = new SubscriptionObserver<TEvent, TSourceEvent>(
+                    _options.QueueCapacity,
+                    _liveFilter,
+                    _logger,
+                    SubscriptionId);
+
                 var nextAttachment = await AttachObserverAsync(nextObserver, cancellationToken).ConfigureAwait(false);
 
                 if (attachment is not null)
@@ -130,7 +129,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                 switch (observer.StopReason)
                 {
                     case SubscriptionStopReason.QueueOverflow when isCaughtUp:
-                        _logger?.SubscriptionFellBehind(_correlationId);
+                        _logger?.SubscriptionFellBehind(SubscriptionId);
                         break;
 
                     case SubscriptionStopReason.QueueOverflow or SubscriptionStopReason.FeedReset:
@@ -154,10 +153,23 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
 
             observer?.Dispose();
 
-            _logger?.SubscriptionStopped(_correlationId);
-            CorrelationId.Release(_correlationId);
+            _logger?.SubscriptionStopped(SubscriptionId);
+            CorrelationId.Release(SubscriptionId);
         }
     }
+
+    /// <summary>
+    /// Reads the end position of the followed sequence, or <see langword="null"/> if it is empty, when the subscription
+    /// is not yet attached to the feed.
+    /// </summary>
+    protected abstract ValueTask<TPos?> ReadEndAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Creates the catch-up of one cycle, whose reads see every event up to the feed's high-water mark.
+    /// </summary>
+    protected abstract ValueTask<ICatchUp<TEvent, TPos>> CreateCatchUpAsync(
+        TMark highWaterMark,
+        CancellationToken cancellationToken);
 
     private async ValueTask<bool> MoveNextAsync(
         IAsyncEnumerator<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> enumerator,
@@ -169,12 +181,12 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            _logger?.SubscriptionCanceled(_correlationId);
+            _logger?.SubscriptionCanceled(SubscriptionId);
             throw;
         }
         catch (Exception ex)
         {
-            _logger?.SubscriptionFailed(ex, _correlationId);
+            _logger?.SubscriptionFailed(ex, SubscriptionId);
             throw;
         }
     }
@@ -188,78 +200,86 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         {
             return await _retryPipeline
                 .ExecuteAsync(
-                    static (s, ct) => s.ReadEndAsync(-1, ct),
+                    static (s, ct) => s.ReadEndAsync(ct),
                     this,
                     cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            _logger?.SubscriptionCanceled(_correlationId);
+            _logger?.SubscriptionCanceled(SubscriptionId);
             throw;
         }
         catch (Exception ex)
         {
-            _logger?.SubscriptionFailed(ex, _correlationId);
+            _logger?.SubscriptionFailed(ex, SubscriptionId);
             throw;
         }
     }
 
-    private async Task<IFeedAttachment<long>> AttachObserverAsync(
-        SubscriptionObserver<TEvent, EventLogRow<TEvent>> observer,
+    private async Task<IFeedAttachment<TMark>> AttachObserverAsync(
+        SubscriptionObserver<TEvent, TSourceEvent> observer,
         CancellationToken cancellationToken)
     {
         try
         {
-            return await _feed.AttachAsync(observer, _correlationId, cancellationToken).ConfigureAwait(false);
+            return await _feed.AttachAsync(observer, SubscriptionId, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             observer.Dispose();
-            _logger?.SubscriptionCanceled(_correlationId);
+            _logger?.SubscriptionCanceled(SubscriptionId);
             throw;
         }
         catch (Exception ex)
         {
             observer.Dispose();
-            _logger?.SubscriptionFailed(ex, _correlationId);
+            _logger?.SubscriptionFailed(ex, SubscriptionId);
             throw;
         }
     }
 
     private async IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> ReadAllAsync(
         ResumePosition resumePosition,
-        SubscriptionObserver<TEvent, EventLogRow<TEvent>> observer,
-        long positionHighWaterMark,
+        SubscriptionObserver<TEvent, TSourceEvent> observer,
+        TMark highWaterMark,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var endInclusive = await _retryPipeline
-            .ExecuteAsync(
-                static (s, ct) => s.Self.ReadEndAsync(s.PositionHighWaterMark, ct),
-                (Self: this, PositionHighWaterMark: positionHighWaterMark),
-                cancellationToken)
-            .ConfigureAwait(false);
-
-        _logger?.CatchUpBoundary(_correlationId, endInclusive?.Value);
-
-        if (endInclusive.HasValue)
+        using (var catchUp = await _retryPipeline
+                   .ExecuteAsync(
+                       static (s, ct) => s.Self.CreateCatchUpAsync(s.HighWaterMark, ct),
+                       (Self: this, HighWaterMark: highWaterMark),
+                       cancellationToken)
+                   .ConfigureAwait(false))
         {
-            var end = checked((long)endInclusive.Value.Value);
+            var endInclusive = await _retryPipeline
+                .ExecuteAsync(
+                    static (s, ct) => s.ReadEndAsync(ct),
+                    catchUp,
+                    cancellationToken)
+                .ConfigureAwait(false);
 
-            // After a transient error, the replay reads again after the last event that the subscriber took.
-            var events = ResumableAsyncEnumerable.Create(
-                static (s, after, ct) => s.Self.ReadCatchUpAsync(after, s.End, ct),
-                static (s, e) => s.Self._positionSelector(e.Context),
-                (Self: this, End: end),
-                resumePosition.After,
-                _retryPipeline);
+            _logger?.CatchUpBoundary(SubscriptionId, endInclusive?.Value);
 
-            await foreach (var e in events.WithCancellation(cancellationToken).ConfigureAwait(false))
-                yield return SubscriptionMessage.Event(e);
+            if (endInclusive.HasValue)
+            {
+                var end = checked((long)endInclusive.Value.Value);
 
-            // The replay has covered the sequence up to the mark, even if the filter selected none of its events.
-            // Moving the resume position here means the next cycle does not read that part of the sequence again.
-            resumePosition.AdvanceTo(endInclusive.Value);
+                // After a transient error, the replay reads again after the last event that the subscriber took.
+                var events = ResumableAsyncEnumerable.Create(
+                    static (s, after, ct) => ReadCatchUpAsync(s.CatchUp, after, s.End, ct),
+                    static (s, e) => s.Self._positionSelector(e.Context),
+                    (Self: this, CatchUp: catchUp, End: end),
+                    resumePosition.After,
+                    _retryPipeline);
+
+                await foreach (var e in events.WithCancellation(cancellationToken).ConfigureAwait(false))
+                    yield return SubscriptionMessage.Event(e);
+
+                // The replay has covered the sequence up to the mark, even if the filter selected none of its events.
+                // Moving the resume position here means the next cycle does not read that part of the sequence again.
+                resumePosition.AdvanceTo(endInclusive.Value);
+            }
         }
 
         // A restart signaled during the replay takes effect only now. Cancelling the replay would discard what it read,
@@ -267,7 +287,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         if (observer.StopReason != SubscriptionStopReason.None)
             yield break;
 
-        _logger?.SubscriptionCaughtUp(_correlationId);
+        _logger?.SubscriptionCaughtUp(SubscriptionId);
 
         yield return SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>.CaughtUp;
 
@@ -287,62 +307,16 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         }
     }
 
-    private async ValueTask<TPos?> ReadEndAsync(long positionHighWaterMark, CancellationToken cancellationToken)
-    {
-        // Until the feed delivers a row, the mark is -1 and there is nothing to wait for.
-        if (positionHighWaterMark >= 0)
-            await WaitUntilVisibleAsync(positionHighWaterMark, cancellationToken).ConfigureAwait(false);
-
-        return await _endPositionReader(_reader, cancellationToken).ConfigureAwait(false);
-    }
-
     // Reads after the given position, or from the start if there is none.
-    private IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCatchUpAsync(
+    private static IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCatchUpAsync(
+        ICatchUp<TEvent, TPos> catchUp,
         TPos? after,
         long endInclusive,
         CancellationToken cancellationToken)
     {
         var startExclusive = after is { } position ? checked((long)position.Value) : -1;
-        return _catchUpReader(_reader, startExclusive, endInclusive, cancellationToken);
+        return catchUp.ReadAsync(startExclusive, endInclusive, cancellationToken);
     }
-
-    // The feed can deliver a row before queries can see it: the walsender sends a commit once it is flushed, and the
-    // commit becomes visible only later, after any wait for the synchronous standbys. Commits become visible in
-    // position order, and a later query sees at least as much, so once a query sees the position, the end that the
-    // catch-up reads next covers every row the observer missed.
-    private async Task WaitUntilVisibleAsync(long position, CancellationToken cancellationToken)
-    {
-        var delay = MinVisibilityPollDelay;
-        var stopwatch = Stopwatch.StartNew();
-        var nextWarning = VisibilityWaitWarningInterval;
-
-        while ((await _reader.GetMaxPositionAsync(cancellationToken).ConfigureAwait(false) ?? -1) < position)
-        {
-            if (stopwatch.Elapsed >= nextWarning)
-            {
-                _logger?.CatchUpWaitingForVisibility(_correlationId, position, stopwatch.Elapsed);
-                nextWarning += VisibilityWaitWarningInterval;
-            }
-
-            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
-            delay = TimeSpan.FromTicks(Math.Min(delay.Ticks * 2, MaxVisibilityPollDelay.Ticks));
-        }
-    }
-
-    /// <summary>
-    /// Reads the followed sequence from one position to another.
-    /// </summary>
-    public delegate IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> CatchUpReader(
-        EventLogReader<TEvent> reader,
-        long startExclusive,
-        long endInclusive,
-        CancellationToken cancellationToken);
-
-    /// <summary>
-    /// Reads the end position of the followed sequence, or <see langword="null"/> if it is empty. The subscription
-    /// replays up to the end, or starts after it, so the read must be followed by the replication barrier.
-    /// </summary>
-    public delegate Task<TPos?> EndPositionReader(EventLogReader<TEvent> reader, CancellationToken cancellationToken);
 
     /// <summary>
     /// The furthest position delivered or covered by a replay. It only moves forward.
