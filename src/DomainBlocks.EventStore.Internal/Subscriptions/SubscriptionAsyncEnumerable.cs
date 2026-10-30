@@ -74,19 +74,19 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
 
             do
             {
-                var catchUp = await ReadSnapshotAsync(attachment.HighWaterMark, cancellationToken)
+                var catchUp = await ReadSnapshotAsync(attachment.HighWaterMark, origin, cancellationToken)
                     .ConfigureAwait(false);
 
-                var position = catchUp.GetResumePosition(origin);
+                var position = catchUp.Position;
 
                 _logger?.CatchUpBoundary(_correlationId, position?.Value);
 
                 // After a transient error, the replay reads again after the last event that the subscriber took.
                 var events = ResumableAsyncEnumerable.Create(
                     static (s, after, ct) => s.CatchUp.ReadAsync(after, ct),
-                    static (s, e) => SubscriptionOrigin.After(s.Self._positionSelector(e.Context)),
+                    static (s, e) => (TPos?)s.Self._positionSelector(e.Context),
                     (Self: this, CatchUp: catchUp),
-                    origin,
+                    (TPos?)null,
                     _retryPipeline);
 
                 await foreach (var e in WithLoggedExceptionsAsync(events, cancellationToken).ConfigureAwait(false))
@@ -220,14 +220,15 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
 
     private async Task<CatchUpSnapshot<TEvent, TPos>> ReadSnapshotAsync(
         TMark highWaterMark,
+        SubscriptionOrigin<TPos> origin,
         CancellationToken cancellationToken)
     {
         try
         {
             return await _retryPipeline
                 .ExecuteAsync(
-                    static (s, ct) => s.Reader.ReadSnapshotAsync(s.HighWaterMark, s.CorrelationId, ct),
-                    (Reader: _catchUpReader, HighWaterMark: highWaterMark, CorrelationId: _correlationId),
+                    static (s, ct) => s.Reader.ReadSnapshotAsync(s.Mark, s.Origin, s.CorrelationId, ct),
+                    (Reader: _catchUpReader, Mark: highWaterMark, Origin: origin, CorrelationId: _correlationId),
                     cancellationToken)
                 .ConfigureAwait(false);
         }

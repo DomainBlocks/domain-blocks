@@ -318,30 +318,29 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
     {
         public async ValueTask<CatchUpSnapshot<object, LogPosition>> ReadSnapshotAsync(
             long highWaterMark,
+            SubscriptionOrigin<LogPosition> origin,
             string correlationId,
             CancellationToken cancellationToken)
         {
-            var snapshot = await inner.ReadSnapshotAsync(highWaterMark, correlationId, cancellationToken);
+            var snapshot = await inner.ReadSnapshotAsync(highWaterMark, origin, correlationId, cancellationToken);
 
-            return new RecordingSnapshot(snapshot, test);
+            return new RecordingSnapshot(origin, snapshot, test);
         }
     }
 
     private sealed class RecordingSnapshot(
+        SubscriptionOrigin<LogPosition> origin,
         CatchUpSnapshot<object, LogPosition> inner,
         PostgresSubscriptionCatchUpTests test) :
-        CatchUpSnapshot<object, LogPosition>(inner.GetResumePosition(SubscriptionOrigin.Start)?.ToInt64())
+        CatchUpSnapshot<object, LogPosition>(origin, inner.Position?.ToInt64())
     {
         protected override IAsyncEnumerable<Event> ReadCoreAsync(
             long startExclusive,
             long endInclusive,
             CancellationToken cancellationToken)
         {
-            SubscriptionOrigin<LogPosition> origin = startExclusive < 0
-                ? SubscriptionOrigin.Start
-                : SubscriptionOrigin.After(LogPosition.FromInt64(startExclusive));
-
-            var events = inner.ReadAsync(origin, cancellationToken);
+            LogPosition? after = startExclusive < 0 ? null : LogPosition.FromInt64(startExclusive);
+            var events = inner.ReadAsync(after, cancellationToken);
 
             return test.RecordAsync(events, startExclusive, endInclusive, cancellationToken);
         }

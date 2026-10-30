@@ -261,30 +261,31 @@ internal sealed class CatchUpScenario : IAsyncDisposable
     {
         public async ValueTask<CatchUpSnapshot<object, LogPosition>> ReadSnapshotAsync(
             BsonTimestamp highWaterMark,
+            SubscriptionOrigin<LogPosition> origin,
             string correlationId,
             CancellationToken cancellationToken)
         {
             marks.Add(highWaterMark);
 
-            var snapshot = await inner.ReadSnapshotAsync(highWaterMark, correlationId, cancellationToken);
+            var snapshot = await inner.ReadSnapshotAsync(highWaterMark, origin, correlationId, cancellationToken);
 
-            return new RecordingSnapshot(snapshot, recorder);
+            return new RecordingSnapshot(origin, snapshot, recorder);
         }
     }
 
-    private sealed class RecordingSnapshot(CatchUpSnapshot<object, LogPosition> inner, CatchUpRecorder recorder) :
-        CatchUpSnapshot<object, LogPosition>(inner.GetResumePosition(SubscriptionOrigin.Start)?.ToInt64())
+    private sealed class RecordingSnapshot(
+        SubscriptionOrigin<LogPosition> origin,
+        CatchUpSnapshot<object, LogPosition> inner,
+        CatchUpRecorder recorder) :
+        CatchUpSnapshot<object, LogPosition>(origin, inner.Position?.ToInt64())
     {
         protected override IAsyncEnumerable<ReadEvent<object, string, StreamPosition, LogPosition>> ReadCoreAsync(
             long startExclusive,
             long endInclusive,
             CancellationToken cancellationToken)
         {
-            SubscriptionOrigin<LogPosition> origin = startExclusive < 0
-                ? SubscriptionOrigin.Start
-                : SubscriptionOrigin.After(LogPosition.FromInt64(startExclusive));
-
-            var events = inner.ReadAsync(origin, cancellationToken);
+            LogPosition? after = startExclusive < 0 ? null : LogPosition.FromInt64(startExclusive);
+            var events = inner.ReadAsync(after, cancellationToken);
 
             return recorder.Record(events, startExclusive, endInclusive, cancellationToken);
         }

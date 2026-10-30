@@ -138,12 +138,14 @@ public class SubscriptionAsyncEnumerableTests
 
         public ValueTask<CatchUpSnapshot<string, LogPosition>> ReadSnapshotAsync(
             long highWaterMark,
+            SubscriptionOrigin<LogPosition> origin,
             string correlationId,
             CancellationToken cancellationToken)
         {
             calls.Add($"snapshot at {highWaterMark}");
 
-            return ValueTask.FromResult<CatchUpSnapshot<string, LogPosition>>(new TestCatchUpSnapshot(End, calls));
+            return ValueTask.FromResult<CatchUpSnapshot<string, LogPosition>>(
+                new TestCatchUpSnapshot(origin, End, calls));
         }
     }
 }

@@ -9,10 +9,12 @@ internal interface ICatchUpReader<TEvent, in TMark, TPos>
     where TPos : struct, IPosition<TPos>
 {
     /// <summary>
-    /// Reads a snapshot of the followed sequence that covers every event up to the feed's high-water mark.
+    /// Reads a snapshot of the followed sequence from the origin, which covers every event up to the feed's high-water
+    /// mark.
     /// </summary>
     ValueTask<CatchUpSnapshot<TEvent, TPos>> ReadSnapshotAsync(
         TMark highWaterMark,
+        SubscriptionOrigin<TPos> origin,
         string correlationId,
         CancellationToken cancellationToken);
 }

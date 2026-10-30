@@ -26,6 +26,7 @@ internal sealed class MongoCatchUpReader<TEvent, TPos>(
     // that time can't see less than that end.
     public async ValueTask<CatchUpSnapshot<TEvent, TPos>> ReadSnapshotAsync(
         BsonTimestamp highWaterMark,
+        SubscriptionOrigin<TPos> origin,
         string correlationId,
         CancellationToken cancellationToken)
     {
@@ -37,7 +38,7 @@ internal sealed class MongoCatchUpReader<TEvent, TPos>(
             .GetEndPositionAsync(session, sequenceFilter, positionFieldName, cancellationToken)
             .ConfigureAwait(false);
 
-        return new Snapshot(this, end, session.OperationTime);
+        return new Snapshot(this, origin, end, session.OperationTime);
     }
 
     private async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAsync(
@@ -68,9 +69,10 @@ internal sealed class MongoCatchUpReader<TEvent, TPos>(
     /// </summary>
     private sealed class Snapshot(
         MongoCatchUpReader<TEvent, TPos> owner,
+        SubscriptionOrigin<TPos> origin,
         long? end,
         BsonTimestamp operationTime) :
-        CatchUpSnapshot<TEvent, TPos>(end)
+        CatchUpSnapshot<TEvent, TPos>(origin, end)
     {
         protected override IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCoreAsync(
             long startExclusive,
