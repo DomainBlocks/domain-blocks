@@ -11,31 +11,30 @@ namespace DomainBlocks.EventStore.MongoDB;
 /// Implements a catch-up subscription whose replay reads in a session that waits for the change stream's high-water
 /// mark.
 /// </summary>
-internal sealed class MongoSubscription<TEvent, TPos> :
-    SubscriptionAsyncEnumerable<TEvent, EventLogDocument<TEvent>, BsonTimestamp, TPos>
+internal sealed class MongoSubscription<TEvent, TPos>(
+    EventLogReader<TEvent> reader,
+    IRefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp> feed,
+    MongoSubscription<TEvent, TPos>.CatchUpReader catchUpReader,
+    MongoSubscription<TEvent, TPos>.EndPositionReader endPositionReader,
+    EventFilter liveFilter,
+    Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> positionSelector,
+    SubscriptionOrigin<TPos>? origin,
+    SubscriptionOptions? options,
+    ILogger? logger) :
+    SubscriptionAsyncEnumerable<TEvent, EventLogDocument<TEvent>, BsonTimestamp, TPos>(
+        feed,
+        liveFilter,
+        positionSelector,
+        origin,
+        options,
+        MongoTransientErrors.IsTransient,
+        logger)
     where TEvent : notnull
     where TPos : struct, IPosition<TPos>
 {
-    private readonly EventLogReader<TEvent> _reader;
-    private readonly CatchUpReader _catchUpReader;
-    private readonly EndPositionReader _endPositionReader;
-
-    public MongoSubscription(
-        EventLogReader<TEvent> reader,
-        IRefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp> feed,
-        CatchUpReader catchUpReader,
-        EndPositionReader endPositionReader,
-        EventFilter liveFilter,
-        Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> positionSelector,
-        SubscriptionOrigin<TPos>? origin,
-        SubscriptionOptions? options,
-        ILogger? logger)
-        : base(feed, liveFilter, positionSelector, origin, options, MongoTransientErrors.IsTransient, logger)
-    {
-        _reader = reader;
-        _catchUpReader = catchUpReader;
-        _endPositionReader = endPositionReader;
-    }
+    private readonly EventLogReader<TEvent> _reader = reader;
+    private readonly CatchUpReader _catchUpReader = catchUpReader;
+    private readonly EndPositionReader _endPositionReader = endPositionReader;
 
     protected override ValueTask<TPos?> ReadEndAsync(CancellationToken cancellationToken)
     {

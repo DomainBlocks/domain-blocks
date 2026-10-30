@@ -10,8 +10,24 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// Implements a catch-up subscription whose replay reads the end position behind the replication barrier, once queries
 /// can see the feed's high-water mark.
 /// </summary>
-internal sealed class PostgresSubscription<TEvent, TPos> :
-    SubscriptionAsyncEnumerable<TEvent, EventLogRow<TEvent>, long, TPos>
+internal sealed class PostgresSubscription<TEvent, TPos>(
+    EventLogReader<TEvent> reader,
+    IRefCountedFeed<EventLogRow<TEvent>, long> feed,
+    PostgresSubscription<TEvent, TPos>.CatchUpReader catchUpReader,
+    PostgresSubscription<TEvent, TPos>.EndPositionReader endPositionReader,
+    EventFilter liveFilter,
+    Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> positionSelector,
+    SubscriptionOrigin<TPos>? origin,
+    SubscriptionOptions? options,
+    ILogger? logger) :
+    SubscriptionAsyncEnumerable<TEvent, EventLogRow<TEvent>, long, TPos>(
+        feed,
+        liveFilter,
+        positionSelector,
+        origin,
+        options,
+        PostgresTransientErrors.IsTransient,
+        logger)
     where TEvent : notnull
     where TPos : struct, IPosition<TPos>
 {
@@ -19,32 +35,13 @@ internal sealed class PostgresSubscription<TEvent, TPos> :
     private static readonly TimeSpan MaxVisibilityPollDelay = TimeSpan.FromMilliseconds(100);
     private static readonly TimeSpan VisibilityWaitWarningInterval = TimeSpan.FromSeconds(10);
 
-    private readonly EventLogReader<TEvent> _reader;
-    private readonly CatchUpReader _catchUpReader;
-    private readonly EndPositionReader _endPositionReader;
-    private readonly ILogger? _logger;
-
-    public PostgresSubscription(
-        EventLogReader<TEvent> reader,
-        IRefCountedFeed<EventLogRow<TEvent>, long> feed,
-        CatchUpReader catchUpReader,
-        EndPositionReader endPositionReader,
-        EventFilter liveFilter,
-        Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> positionSelector,
-        SubscriptionOrigin<TPos>? origin,
-        SubscriptionOptions? options,
-        ILogger? logger)
-        : base(feed, liveFilter, positionSelector, origin, options, PostgresTransientErrors.IsTransient, logger)
-    {
-        _reader = reader;
-        _catchUpReader = catchUpReader;
-        _endPositionReader = endPositionReader;
-        _logger = logger;
-    }
+    private readonly EventLogReader<TEvent> _reader = reader;
+    private readonly CatchUpReader _catchUpReader = catchUpReader;
+    private readonly ILogger? _logger = logger;
 
     protected override ValueTask<TPos?> ReadEndAsync(CancellationToken cancellationToken)
     {
-        return new ValueTask<TPos?>(_endPositionReader(_reader, cancellationToken));
+        return new ValueTask<TPos?>(endPositionReader(_reader, cancellationToken));
     }
 
     protected override ValueTask<ICatchUp<TEvent, TPos>> CreateCatchUpAsync(
