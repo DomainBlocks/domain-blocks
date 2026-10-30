@@ -66,10 +66,14 @@ public class PostgresLiveFanOutBenchmarks
         };
     }
 
+    private static readonly FeedResumePolicy ResumePolicy = new(static _ => false);
+
     [Benchmark]
     public async Task<int> FanOut_NoIO()
     {
-        var feed = new EventLogFeed<EventLogRow<IDomainEvent>, long>(new SessionFactory(_decoder, _rows, _streamIds));
+        var feed = new EventLogFeed<EventLogRow<IDomainEvent>, long>(
+            new SessionFactory(_decoder, _rows, _streamIds),
+            ResumePolicy);
 
         var subscribers = new Subscriber[SubscriberCount];
         var attachments = new IDisposable[SubscriberCount];
@@ -108,8 +112,6 @@ public class PostgresLiveFanOutBenchmarks
     {
         public Task<IFeedSession<EventLogRow<IDomainEvent>, long>> CreateAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IFeedSession<EventLogRow<IDomainEvent>, long>>(new Session(decoder, rows, streamIds));
-
-        public bool IsTransient(Exception exception) => false;
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

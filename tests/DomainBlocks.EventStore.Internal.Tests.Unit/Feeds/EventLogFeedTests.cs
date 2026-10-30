@@ -1,4 +1,5 @@
 using DomainBlocks.EventStore.Internal.Feeds;
+using Microsoft.Extensions.Logging.Testing;
 using NUnit.Framework;
 using Shouldly;
 using static DomainBlocks.EventStore.Internal.Tests.Unit.Feeds.ScriptedSession;
@@ -9,11 +10,13 @@ public class EventLogFeedTests
 {
     private const int TestTimeoutMillis = 5 * 1000;
 
-    private static readonly EventLogFeedOptions FastRetryOptions = new()
+    private static readonly FeedResumeOptions FastRetryOptions = new()
     {
         RetryDelay = TimeSpan.FromMilliseconds(10),
         MaxRetryDelay = TimeSpan.FromMilliseconds(50)
     };
+
+    private static readonly FeedResumePolicy FastResumePolicy = CreateResumePolicy(FastRetryOptions);
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
@@ -198,7 +201,7 @@ public class EventLogFeedTests
                     ? throw new IOException("not yet")
                     : Task.FromResult<IFeedSession<long, long>>(new ScriptedSession("s1", Row(1)));
             }),
-            FastRetryOptions);
+            FastResumePolicy);
 
         var observer = new RecordingObserver();
         using var attachment = feed.Attach(observer);
@@ -210,18 +213,54 @@ public class EventLogFeedTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
+    public async Task ConnectAsync_FeedsSharePolicy_LogRetriesWithOwnFeedId(CancellationToken ct)
+    {
+        var logger = new FakeLogger();
+        var resumePolicy = new FeedResumePolicy(static ex => ex is IOException, FastRetryOptions, logger);
+
+        await ConnectAfterOneFailureAsync();
+        await ConnectAfterOneFailureAsync();
+
+        var startedFeedIds = FeedIds(logger, "started");
+
+        startedFeedIds.Distinct().Count().ShouldBe(2);
+        FeedIds(logger, "failed to connect").ShouldBe(startedFeedIds);
+
+        async Task ConnectAfterOneFailureAsync()
+        {
+            var attempts = 0;
+
+            var feed = new EventLogFeed<long, long>(
+                new DelegateSessionFactory<long>(_ => ++attempts < 2
+                    ? throw new IOException("not yet")
+                    : Task.FromResult<IFeedSession<long, long>>(new ScriptedSession("s1"))),
+                resumePolicy,
+                logger);
+
+            await using var connection = await feed.ConnectAsync(ct);
+        }
+
+        static string?[] FeedIds(FakeLogger logger, string message) =>
+        [
+            .. logger.Collector
+                .GetSnapshot()
+                .Where(x => x.Message.Contains(message))
+                .Select(x => x.GetStructuredStateValue("FeedId"))
+        ];
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
     public async Task ConnectAsync_TransientCancellationAtCreate_RetriesThenConnects(CancellationToken ct)
     {
         var attempts = 0;
 
         // A driver can report a timeout as a cancellation that the caller didn't ask for.
         var feed = new EventLogFeed<long, long>(
-            new DelegateSessionFactory<long>(
-                _ => ++attempts < 2
-                    ? throw new OperationCanceledException("Timed out.")
-                    : Task.FromResult<IFeedSession<long, long>>(new ScriptedSession("s1", Row(1))),
-                static ex => ex is OperationCanceledException),
-            FastRetryOptions);
+            new DelegateSessionFactory<long>(_ => ++attempts < 2
+                ? throw new OperationCanceledException("Timed out.")
+                : Task.FromResult<IFeedSession<long, long>>(new ScriptedSession("s1", Row(1)))),
+            new FeedResumePolicy(static ex => ex is OperationCanceledException, FastRetryOptions));
 
         var observer = new RecordingObserver();
         using var attachment = feed.Attach(observer);
@@ -244,7 +283,7 @@ public class EventLogFeedTests
                 attempts++;
                 throw exception;
             }),
-            new EventLogFeedOptions { MaxRetryAttempts = 0 });
+            CreateResumePolicy(new FeedResumeOptions { MaxRetryAttempts = 0 }));
 
         var observer = new RecordingObserver();
         using var attachment = feed.Attach(observer);
@@ -262,12 +301,12 @@ public class EventLogFeedTests
 
         var feed = new EventLogFeed<long, long>(
             new DelegateSessionFactory<long>(_ => throw exception),
-            new EventLogFeedOptions
+            CreateResumePolicy(new FeedResumeOptions
             {
                 MaxRetryAttempts = 2,
                 RetryDelay = TimeSpan.FromMilliseconds(1),
                 MaxRetryDelay = TimeSpan.FromMilliseconds(1)
-            });
+            }));
 
         var observer = new RecordingObserver();
         using var attachment = feed.Attach(observer);
@@ -302,7 +341,7 @@ public class EventLogFeedTests
                 await release.Task;
                 return new ScriptedSession("s1", Row(1));
             }),
-            FastRetryOptions);
+            FastResumePolicy);
 
         var connectTask = feed.ConnectAsync(ct);
 
@@ -320,7 +359,11 @@ public class EventLogFeedTests
     {
         var feed = new EventLogFeed<long, long>(
             new DelegateSessionFactory<long>(_ => throw new IOException("down")),
-            new EventLogFeedOptions { RetryDelay = TimeSpan.FromMinutes(1), MaxRetryDelay = TimeSpan.FromMinutes(1) });
+            CreateResumePolicy(new FeedResumeOptions
+            {
+                RetryDelay = TimeSpan.FromMinutes(1),
+                MaxRetryDelay = TimeSpan.FromMinutes(1)
+            }));
 
         using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         connectCts.CancelAfter(100);
@@ -351,7 +394,7 @@ public class EventLogFeedTests
     public void Constructor_NonPrimitiveStructMark_Throws()
     {
         var exception = Should.Throw<TypeInitializationException>(() =>
-            new EventLogFeed<long, TwoPartMark>(new UnusedSessionFactory()));
+            new EventLogFeed<long, TwoPartMark>(new UnusedSessionFactory(), FastResumePolicy));
 
         exception.InnerException.ShouldBeOfType<NotSupportedException>();
     }
@@ -371,7 +414,10 @@ public class EventLogFeedTests
         CreateFeed(CreateSessionFactory(sessions));
 
     private static EventLogFeed<long, long> CreateFeed(IFeedSessionFactory<long, long> sessionFactory) =>
-        new(sessionFactory, FastRetryOptions);
+        new(sessionFactory, FastResumePolicy);
+
+    private static FeedResumePolicy CreateResumePolicy(FeedResumeOptions options) =>
+        new(static ex => ex is IOException, options);
 
     private static DelegateSessionFactory<long> CreateSessionFactory(params IFeedSession<long, long>[] sessions)
     {
@@ -440,8 +486,6 @@ public class EventLogFeedTests
     {
         public Task<IFeedSession<long, TwoPartMark>> CreateAsync(CancellationToken cancellationToken) =>
             throw new NotSupportedException();
-
-        public bool IsTransient(Exception exception) => false;
 
         public ValueTask DisposeAsync() => default;
     }

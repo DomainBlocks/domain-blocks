@@ -48,7 +48,10 @@ public class ChangeStreamFeedTests
             static x => x,
             logger);
 
-        var feed = new EventLogFeed<ChangeStreamDocument<BsonDocument>, BsonTimestamp>(sessionFactory, logger: logger);
+        var feed = new EventLogFeed<ChangeStreamDocument<BsonDocument>, BsonTimestamp>(
+            sessionFactory,
+            new FeedResumePolicy(ChangeStreamTransientErrors.IsTransient),
+            logger);
 
         var observer1 = new TestChangeStreamObserver(expectedCount: insertCount);
         var observer2 = new TestChangeStreamObserver(expectedCount: insertCount);

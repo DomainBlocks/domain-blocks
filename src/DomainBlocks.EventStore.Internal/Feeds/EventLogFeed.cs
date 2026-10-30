@@ -1,28 +1,7 @@
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
-using Polly;
-using Polly.Retry;
 
 namespace DomainBlocks.EventStore.Internal.Feeds;
-
-/// <summary>
-/// Validates options for a <see cref="EventLogFeed{T, THighWaterMark}"/>.
-/// </summary>
-internal static class EventLogFeed
-{
-    // Polly rejects retry delays longer than 1 day.
-    private static readonly TimeSpan PollyMaxDelay = TimeSpan.FromDays(1);
-
-    /// <summary>
-    /// Throws if a feed cannot use the options.
-    /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException">An option is outside the range that a feed supports.</exception>
-    public static void ValidateOptions(EventLogFeedOptions options)
-    {
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(options.RetryDelay, PollyMaxDelay);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(options.MaxRetryDelay, PollyMaxDelay);
-    }
-}
 
 /// <summary>
 /// Represents a feed that pumps items from a store's sessions to observers, creating a new session with backoff when
@@ -37,7 +16,7 @@ internal sealed class EventLogFeed<T, THighWaterMark> : IEventLogFeed<T, THighWa
     where THighWaterMark : IComparable<THighWaterMark>
 {
     private readonly IFeedSessionFactory<T, THighWaterMark> _sessionFactory;
-    private readonly Func<CancellationToken, Task<IFeedSession<T, THighWaterMark>>> _openSession;
+    private readonly FeedResumePolicy _resumePolicy;
     private readonly ILogger? _logger;
     private readonly FeedObserverHub<T> _observerHub;
     private readonly string _feedId = CorrelationId.ReserveGenerated();
@@ -70,15 +49,14 @@ internal sealed class EventLogFeed<T, THighWaterMark> : IEventLogFeed<T, THighWa
     /// </remarks>
     public EventLogFeed(
         IFeedSessionFactory<T, THighWaterMark> sessionFactory,
-        EventLogFeedOptions? options = null,
+        FeedResumePolicy resumePolicy,
         ILogger? logger = null)
     {
         ArgumentNullException.ThrowIfNull(sessionFactory);
-
-        options ??= EventLogFeedOptions.Default;
+        ArgumentNullException.ThrowIfNull(resumePolicy);
 
         _sessionFactory = sessionFactory;
-        _openSession = AddResilience(sessionFactory, options, logger, _feedId);
+        _resumePolicy = resumePolicy;
         _logger = logger;
         _observerHub = new FeedObserverHub<T>(logger, _feedId);
     }
@@ -116,45 +94,6 @@ internal sealed class EventLogFeed<T, THighWaterMark> : IEventLogFeed<T, THighWa
         await connection.DisposeAsync().ConfigureAwait(false);
         await connection.Completion.ConfigureAwait(false);
         throw new InvalidOperationException("The feed completed before it connected.");
-    }
-
-    private static Func<CancellationToken, Task<IFeedSession<T, THighWaterMark>>> AddResilience(
-        IFeedSessionFactory<T, THighWaterMark> sessionFactory,
-        EventLogFeedOptions options,
-        ILogger? logger,
-        string feedId)
-    {
-        // Polly requires at least one retry.
-        if (options.MaxRetryAttempts == 0)
-            return sessionFactory.CreateAsync;
-
-        var resiliencePipeline = new ResiliencePipelineBuilder()
-            .AddRetry(new RetryStrategyOptions
-            {
-                MaxRetryAttempts = options.MaxRetryAttempts,
-                BackoffType = DelayBackoffType.Exponential,
-                UseJitter = true,
-                Delay = options.RetryDelay,
-                MaxDelay = options.MaxRetryDelay,
-                ShouldHandle = args =>
-                {
-                    var shouldHandle = args.Outcome.Exception is { } ex && sessionFactory.IsTransient(ex);
-
-                    return ValueTask.FromResult(shouldHandle);
-                },
-                OnRetry = args =>
-                {
-                    if (args.Outcome.Exception is { } ex)
-                        logger?.FeedRetrying(ex, feedId, args.AttemptNumber + 1, args.RetryDelay);
-
-                    return ValueTask.CompletedTask;
-                }
-            })
-            .Build();
-
-        return async ct => await resiliencePipeline
-            .ExecuteAsync(async innerCt => await sessionFactory.CreateAsync(innerCt).ConfigureAwait(false), ct)
-            .ConfigureAwait(false);
     }
 
     private sealed class Connection : IFeedConnection<THighWaterMark>
@@ -225,7 +164,9 @@ internal sealed class EventLogFeed<T, THighWaterMark> : IEventLogFeed<T, THighWa
                 {
                     _stopCts.Token.ThrowIfCancellationRequested();
 
-                    var session = await _feed._openSession(_stopCts.Token).ConfigureAwait(false);
+                    var session = await _feed._resumePolicy
+                        .ExecuteAsync(_feed._sessionFactory.CreateAsync, _feedId, _stopCts.Token)
+                        .ConfigureAwait(false);
 
                     await using (session.ConfigureAwait(false))
                     {
@@ -258,7 +199,7 @@ internal sealed class EventLogFeed<T, THighWaterMark> : IEventLogFeed<T, THighWa
                             _logger?.FeedEnded(_feedId);
                         }
                         catch (Exception ex) when (!_stopCts.IsCancellationRequested &&
-                                                   _feed._sessionFactory.IsTransient(ex))
+                                                   _feed._resumePolicy.IsTransient(ex))
                         {
                             _logger?.FeedConnectionLost(ex, _feedId);
                         }

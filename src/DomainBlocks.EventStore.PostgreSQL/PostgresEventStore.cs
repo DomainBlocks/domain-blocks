@@ -65,7 +65,7 @@ public static class PostgresEventStore
 
         var slotNameGenerator = new SlotNameGenerator(names);
 
-        var feedOptions = new EventLogFeedOptions
+        var resumeOptions = new FeedResumeOptions
         {
             RetryDelay = replicationOptions.RetryDelay,
             MaxRetryDelay = replicationOptions.MaxRetryDelay,
@@ -73,7 +73,8 @@ public static class PostgresEventStore
         };
 
         ReplicationEventLogSessionFactory.ValidateOptions(replicationOptions);
-        EventLogFeed.ValidateOptions(feedOptions);
+
+        var resumePolicy = new FeedResumePolicy(EventLogFeedTransientErrors.IsTransient, resumeOptions, logger);
 
         return new RefCountedFeed<EventLogRow<TEvent>, long>(() =>
             new EventLogFeed<EventLogRow<TEvent>, long>(
@@ -85,7 +86,7 @@ public static class PostgresEventStore
                     replicationOptions,
                     decoder,
                     logger),
-                feedOptions,
+                resumePolicy,
                 logger));
     }
 }

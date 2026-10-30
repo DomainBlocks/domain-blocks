@@ -60,6 +60,7 @@ internal sealed class CatchUpScenario : IAsyncDisposable
         ChangeStreamProbe = new ChangeStreamProbe(eventLog);
 
         var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(insertsOnly);
+        var resumePolicy = new FeedResumePolicy(ChangeStreamTransientErrors.IsTransient);
 
         _feed = new RefCountedFeed<EventLogDocument<object>, BsonTimestamp>(() =>
         {
@@ -79,7 +80,7 @@ internal sealed class CatchUpScenario : IAsyncDisposable
                 },
                 logger);
 
-            return new EventLogFeed<EventLogDocument<object>, BsonTimestamp>(sessionFactory, logger: logger);
+            return new EventLogFeed<EventLogDocument<object>, BsonTimestamp>(sessionFactory, resumePolicy, logger);
         });
     }
 

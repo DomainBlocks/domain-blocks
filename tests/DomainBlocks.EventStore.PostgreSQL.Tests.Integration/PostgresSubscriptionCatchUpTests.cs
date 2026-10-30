@@ -56,7 +56,8 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
                     names,
                     Options.Replication,
                     codec,
-                    LoggerFactory.CreateLogger("ReplicationEventLogSession"))));
+                    LoggerFactory.CreateLogger("ReplicationEventLogSession")),
+                new FeedResumePolicy(EventLogFeedTransientErrors.IsTransient)));
     }
 
     [TearDown]

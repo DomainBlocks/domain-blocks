@@ -322,7 +322,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         _ownedClient?.Dispose();
     }
 
-    // Each connection has its own live document, which its subject sets to each inserted document and hands to every
+    // Each feed has its own live document, which its session factory sets to each inserted document and hands to every
     // subscription.
     private RefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp> CreateFeed(
         IMongoCollection<BsonDocument> eventLog,
@@ -333,6 +333,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
             ChangeStreamOperationType.Insert);
 
         var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(insertsOnly);
+        var resumePolicy = new FeedResumePolicy(ChangeStreamTransientErrors.IsTransient, logger: logger);
 
         return new RefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp>(() =>
         {
@@ -351,7 +352,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
                 },
                 logger);
 
-            return new EventLogFeed<EventLogDocument<TEvent>, BsonTimestamp>(sessionFactory, logger: logger);
+            return new EventLogFeed<EventLogDocument<TEvent>, BsonTimestamp>(sessionFactory, resumePolicy, logger);
         });
     }
 

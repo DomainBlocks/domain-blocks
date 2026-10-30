@@ -214,7 +214,9 @@ public class ChangeStreamSessionFactoryTests
 
         var feed = new EventLogFeed<ChangeStreamDocument<BsonDocument>, BsonTimestamp>(
             CreateSessionFactory(),
-            new EventLogFeedOptions { RetryDelay = TimeSpan.FromMilliseconds(1) });
+            new FeedResumePolicy(
+                ChangeStreamTransientErrors.IsTransient,
+                new FeedResumeOptions { RetryDelay = TimeSpan.FromMilliseconds(1) }));
 
         await using var connection = await feed.ConnectAsync(ct);
 

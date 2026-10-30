@@ -101,8 +101,6 @@ internal sealed class ChangeStreamSessionFactory<TDocument, TChange, TResult>(
             lastApplied);
     }
 
-    public bool IsTransient(Exception exception) => ChangeStreamTransientErrors.IsTransient(exception);
-
     // A change stream holds nothing on the server once its cursor is closed, which its session does.
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
