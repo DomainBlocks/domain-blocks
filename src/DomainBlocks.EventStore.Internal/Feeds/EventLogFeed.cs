@@ -123,7 +123,6 @@ internal abstract class EventLogFeed<T, TMark> : IEventLogFeed<T, TMark>
             return;
 
         await DisposeAsyncCore().ConfigureAwait(false);
-        GC.SuppressFinalize(this);
     }
 
     /// <summary>
