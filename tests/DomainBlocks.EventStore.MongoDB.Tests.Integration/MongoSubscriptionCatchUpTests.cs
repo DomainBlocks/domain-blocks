@@ -249,9 +249,9 @@ public class MongoSubscriptionCatchUpTests
             .Select(x => x.Event!.Value.Payload)
             .ShouldBe([meanwhile[0], meanwhile[1]]);
 
-        // A lone subscription's restart detaches it before it attaches again, which closes the feed's connection, so
-        // the third change stream comes from a new connection.
-        scenario.ChangeStreamProbe.InitialOpenCount.ShouldBe(3);
+        // A lone subscription's restart attaches it again before it detaches, so the feed keeps its connection and
+        // the change stream that it started after losing its history.
+        scenario.ChangeStreamProbe.InitialOpenCount.ShouldBe(2);
 
         // The new change stream delivers live events.
         var live = await scenario.AppendAsync("live", 1);

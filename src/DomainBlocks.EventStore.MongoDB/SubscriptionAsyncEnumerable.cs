@@ -65,6 +65,9 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
     public async IAsyncEnumerator<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> GetAsyncEnumerator(
         CancellationToken cancellationToken = default)
     {
+        Observer? observer = null;
+        IFeedAttachment<BsonTimestamp>? attachment = null;
+
         try
         {
             _logger?.SubscriptionStarted(_correlationId);
@@ -77,13 +80,12 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
             });
 
             var isCaughtUp = false;
-            var isFirstCycle = true;
 
             while (true)
             {
                 // Every cycle after the first is a restart. It is logged here because it can happen long after the
                 // observer recorded the reason for it.
-                if (!isFirstCycle)
+                if (observer is not null)
                 {
                     if (resumePosition.After is { } after)
                         _logger?.SubscriptionRestarting(_correlationId, after.Value);
@@ -91,11 +93,17 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
                         _logger?.SubscriptionRestartingFromStart(_correlationId);
                 }
 
-                isFirstCycle = false;
+                // The new observer is attached before the old one is detached, so the ref count never drops to zero and
+                // the change stream stays open.
+                var nextObserver = new Observer(_options.QueueCapacity, _liveFilter, _logger, _correlationId);
+                var nextAttachment = await AttachObserverAsync(nextObserver, cancellationToken).ConfigureAwait(false);
 
-                using var observer = new Observer(_options.QueueCapacity, _liveFilter, _logger, _correlationId);
-                await using var attachment = await AttachObserverAsync(observer, cancellationToken)
-                    .ConfigureAwait(false);
+                if (attachment is not null)
+                    await attachment.DisposeAsync().ConfigureAwait(false);
+
+                observer?.Dispose();
+                observer = nextObserver;
+                attachment = nextAttachment;
 
                 var enumerator = ReadAllAsync(
                         resumePosition,
@@ -138,6 +146,11 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         }
         finally
         {
+            if (attachment is not null)
+                await attachment.DisposeAsync().ConfigureAwait(false);
+
+            observer?.Dispose();
+
             _logger?.SubscriptionStopped(_correlationId);
             CorrelationId.Release(_correlationId);
         }
@@ -199,11 +212,13 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TPos> :
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            observer.Dispose();
             _logger?.SubscriptionCanceled(_correlationId);
             throw;
         }
         catch (Exception ex)
         {
+            observer.Dispose();
             _logger?.SubscriptionFailed(ex, _correlationId);
             throw;
         }
