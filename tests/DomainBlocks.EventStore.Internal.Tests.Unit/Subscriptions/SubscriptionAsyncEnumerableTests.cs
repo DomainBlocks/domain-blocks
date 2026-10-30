@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.EventStore.Internal.Feeds;
 using DomainBlocks.EventStore.Internal.Subscriptions;
@@ -7,15 +6,12 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.Internal.Tests.Unit.Subscriptions;
 
-using Event = ReadEvent<string, string, StreamPosition, LogPosition>;
-
 public class SubscriptionAsyncEnumerableTests
 {
     private const long FeedMark = 10;
-    private const long ReadMark = 20;
 
     [Test]
-    public async Task GetAsyncEnumerator_FromStart_ReadsEndAtFeedMarkAndReplaysAtReadMark()
+    public async Task GetAsyncEnumerator_FromStart_ReadsSnapshotAtFeedMarkAndReplaysIt()
     {
         var calls = new List<string>();
         var feed = new TestFeed(calls);
@@ -25,11 +21,11 @@ public class SubscriptionAsyncEnumerableTests
         await enumerator.MoveNextAsync();
 
         enumerator.Current.IsCaughtUp.ShouldBeTrue();
-        calls.ShouldBe(["attach", $"end at {FeedMark}", $"read at {ReadMark} from -1 to 7"]);
+        calls.ShouldBe(["attach", $"snapshot at {FeedMark}", "read from -1 to 7"]);
     }
 
     [Test]
-    public async Task GetAsyncEnumerator_FromEnd_AttachesBeforeReadingEndAndReplaysNothing()
+    public async Task GetAsyncEnumerator_FromEnd_AttachesBeforeReadingSnapshotOnceAndReplaysNothing()
     {
         var calls = new List<string>();
         var feed = new TestFeed(calls);
@@ -39,7 +35,7 @@ public class SubscriptionAsyncEnumerableTests
         await enumerator.MoveNextAsync();
 
         enumerator.Current.IsCaughtUp.ShouldBeTrue();
-        calls.ShouldBe(["attach", $"end at {FeedMark}"]);
+        calls.ShouldBe(["attach", $"snapshot at {FeedMark}"]);
     }
 
     [Test]
@@ -61,7 +57,7 @@ public class SubscriptionAsyncEnumerableTests
         await enumerator.MoveNextAsync();
 
         enumerator.Current.IsCaughtUp.ShouldBeTrue();
-        calls.ShouldBe(["attach", "detach", $"end at {FeedMark}", $"read at {ReadMark} from 7 to 9"]);
+        calls.ShouldBe(["attach", "detach", $"snapshot at {FeedMark}", "read from 7 to 9"]);
     }
 
     [Test]
@@ -83,7 +79,7 @@ public class SubscriptionAsyncEnumerableTests
         await enumerator.MoveNextAsync();
 
         enumerator.Current.IsCaughtUp.ShouldBeTrue();
-        calls.ShouldBe(["attach", "detach", $"end at {FeedMark}", $"read at {ReadMark} from -1 to 2"]);
+        calls.ShouldBe(["attach", "detach", $"snapshot at {FeedMark}", "read from -1 to 2"]);
     }
 
     private static SubscriptionAsyncEnumerable<string, TestSourceEvent, long, LogPosition> Subscribe(
@@ -134,31 +130,20 @@ public class SubscriptionAsyncEnumerableTests
     }
 
     /// <summary>
-    /// Stands in for a store's catch-up reader, with an empty replay and a read mark of <see cref="ReadMark"/>, and
-    /// notes each read.
+    /// Stands in for a store's catch-up reader, and notes each snapshot that it reads.
     /// </summary>
-    private sealed class TestCatchUpReader(List<string> calls, long? end) : ICatchUpReader<string, long>
+    private sealed class TestCatchUpReader(List<string> calls, long? end) : ICatchUpReader<string, long, LogPosition>
     {
         public long? End { get; set; } = end;
 
-        public ValueTask<(long? End, long Mark)> ReadEndAsync(
-            long mark,
+        public ValueTask<CatchUpSnapshot<string, LogPosition>> ReadSnapshotAsync(
+            long highWaterMark,
             string correlationId,
             CancellationToken cancellationToken)
         {
-            calls.Add($"end at {mark}");
-            return ValueTask.FromResult((End, ReadMark));
-        }
+            calls.Add($"snapshot at {highWaterMark}");
 
-        public async IAsyncEnumerable<Event> ReadAsync(
-            long mark,
-            long startExclusive,
-            long endInclusive,
-            [EnumeratorCancellation] CancellationToken cancellationToken)
-        {
-            calls.Add($"read at {mark} from {startExclusive} to {endInclusive}");
-            await Task.CompletedTask;
-            yield break;
+            return ValueTask.FromResult<CatchUpSnapshot<string, LogPosition>>(new TestCatchUpSnapshot(End, calls));
         }
     }
 }

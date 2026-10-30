@@ -6,44 +6,49 @@ using MongoDB.Driver;
 namespace DomainBlocks.EventStore.MongoDB;
 
 /// <summary>
-/// Represents the reads of the event log's history, or of one stream's. Each read is in its own session, which waits
-/// for the operation time that it is given as the mark.
+/// Represents the reads of the event log's history, or of one stream's. The end position is read in a session that
+/// waits for the change stream's high-water mark.
 /// </summary>
 /// <param name="reader">The reader of the event log.</param>
 /// <param name="sequenceFilter">Selects the followed sequence, which sets its end position.</param>
 /// <param name="replayFilter">Selects the events to replay from the followed sequence.</param>
 /// <param name="positionFieldName">The name of the field that holds an event's position in the sequence.</param>
-internal sealed class MongoCatchUpReader<TEvent>(
+internal sealed class MongoCatchUpReader<TEvent, TPos>(
     EventLogReader<TEvent> reader,
     FilterDefinition<BsonDocument> sequenceFilter,
     FilterDefinition<BsonDocument> replayFilter,
     string positionFieldName) :
-    ICatchUpReader<TEvent, BsonTimestamp>
+    ICatchUpReader<TEvent, BsonTimestamp, TPos>
     where TEvent : notnull
+    where TPos : struct, IPosition<TPos>
 {
-    // The read advances the session's operation time past the end it found, so a replay that waits for that time can't
-    // see less than that end.
-    public async ValueTask<(long? End, BsonTimestamp Mark)> ReadEndAsync(
-        BsonTimestamp mark,
+    // The read advances the session's operation time past the end it found, so a read of the snapshot that waits for
+    // that time can't see less than that end.
+    public async ValueTask<CatchUpSnapshot<TEvent, TPos>> ReadSnapshotAsync(
+        BsonTimestamp highWaterMark,
         string correlationId,
         CancellationToken cancellationToken)
     {
-        using var session = await reader.StartCatchUpSessionAsync(mark, cancellationToken).ConfigureAwait(false);
+        using var session = await reader
+            .StartCatchUpSessionAsync(highWaterMark, cancellationToken)
+            .ConfigureAwait(false);
 
         var end = await reader
             .GetEndPositionAsync(session, sequenceFilter, positionFieldName, cancellationToken)
             .ConfigureAwait(false);
 
-        return (end, session.OperationTime);
+        return new Snapshot(this, end, session.OperationTime);
     }
 
-    public async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAsync(
-        BsonTimestamp mark,
+    private async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAsync(
+        BsonTimestamp operationTime,
         long startExclusive,
         long endInclusive,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        using var session = await reader.StartCatchUpSessionAsync(mark, cancellationToken).ConfigureAwait(false);
+        using var session = await reader
+            .StartCatchUpSessionAsync(operationTime, cancellationToken)
+            .ConfigureAwait(false);
 
         var events = reader.ReadCatchUpAsync(
             session,
@@ -55,5 +60,24 @@ internal sealed class MongoCatchUpReader<TEvent>(
 
         await foreach (var e in events.ConfigureAwait(false))
             yield return e;
+    }
+
+    /// <summary>
+    /// Represents the sequence up to the end. Each read is in its own session, which waits for the operation time of
+    /// the read of the end.
+    /// </summary>
+    private sealed class Snapshot(
+        MongoCatchUpReader<TEvent, TPos> owner,
+        long? end,
+        BsonTimestamp operationTime) :
+        CatchUpSnapshot<TEvent, TPos>(end)
+    {
+        protected override IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCoreAsync(
+            long startExclusive,
+            long endInclusive,
+            CancellationToken cancellationToken)
+        {
+            return owner.ReadAsync(operationTime, startExclusive, endInclusive, cancellationToken);
+        }
     }
 }

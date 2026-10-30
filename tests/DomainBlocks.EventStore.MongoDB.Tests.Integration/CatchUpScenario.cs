@@ -22,6 +22,7 @@ internal sealed class CatchUpScenario : IAsyncDisposable
     private readonly MongoEventStoreOptions _options;
     private readonly IEventStore<object, string, StreamPosition, LogPosition> _eventStore;
     private readonly EventLogReader<object> _reader;
+    private readonly IEventCodec<object, BsonValue, BsonValue> _codec;
     private readonly RefCountedFeed<EventLogDocument<object>, BsonTimestamp> _feed;
     private readonly CatchUpRecorder _catchUpRecorder = new();
     private readonly List<BsonTimestamp> _catchUpMarks = [];
@@ -57,6 +58,7 @@ internal sealed class CatchUpScenario : IAsyncDisposable
             x => x.OperationType,
             ChangeStreamOperationType.Insert);
 
+        _codec = codec;
         _reader = new EventLogReader<object>(eventLog, codec);
         ChangeStreamProbe = new ChangeStreamProbe(eventLog);
 
@@ -157,7 +159,7 @@ internal sealed class CatchUpScenario : IAsyncDisposable
             LogPosition>(
             _feed,
             new RecordingCatchUpReader(
-                new MongoCatchUpReader<object>(
+                new MongoCatchUpReader<object, LogPosition>(
                     _reader,
                     Builders<BsonDocument>.Filter.Empty,
                     catchUpFilter ?? Builders<BsonDocument>.Filter.Empty,
@@ -175,12 +177,28 @@ internal sealed class CatchUpScenario : IAsyncDisposable
     }
 
     /// <summary>
-    /// Creates a catch-up reader of the sequence that the given filter selects.
+    /// Creates a catch-up reader of the sequence that the given filter selects, reading through the given client, or
+    /// the scenario's if there is none.
     /// </summary>
-    public MongoCatchUpReader<object> CreateCatchUpReader(FilterDefinition<BsonDocument> sequenceFilter)
+    public MongoCatchUpReader<object, LogPosition> CreateCatchUpReader(
+        FilterDefinition<BsonDocument> sequenceFilter,
+        IMongoClient? client = null)
     {
-        return new MongoCatchUpReader<object>(
-            _reader,
+        var reader = _reader;
+
+        if (client is not null)
+        {
+            var eventLog = client
+                .GetDatabase(_options.DatabaseName)
+                .GetCollection<BsonDocument>(_options.EventLogCollectionName)
+                .WithReadConcern(ReadConcern.Majority)
+                .WithReadPreference(ReadPreference.Primary);
+
+            reader = new EventLogReader<object>(eventLog, _codec);
+        }
+
+        return new MongoCatchUpReader<object, LogPosition>(
+            reader,
             sequenceFilter,
             sequenceFilter,
             EventLogEntry.FieldNames.Position);
@@ -233,31 +251,40 @@ internal sealed class CatchUpScenario : IAsyncDisposable
     }
 
     /// <summary>
-    /// Passes a catch-up reader through, recording each replay and the mark that each read of the end waits for.
+    /// Passes a catch-up reader through, recording each replay and the mark that each snapshot waits for.
     /// </summary>
     private sealed class RecordingCatchUpReader(
-        ICatchUpReader<object, BsonTimestamp> inner,
+        ICatchUpReader<object, BsonTimestamp, LogPosition> inner,
         CatchUpRecorder recorder,
         List<BsonTimestamp> marks) :
-        ICatchUpReader<object, BsonTimestamp>
+        ICatchUpReader<object, BsonTimestamp, LogPosition>
     {
-        public ValueTask<(long? End, BsonTimestamp Mark)> ReadEndAsync(
-            BsonTimestamp mark,
+        public async ValueTask<CatchUpSnapshot<object, LogPosition>> ReadSnapshotAsync(
+            BsonTimestamp highWaterMark,
             string correlationId,
             CancellationToken cancellationToken)
         {
-            marks.Add(mark);
+            marks.Add(highWaterMark);
 
-            return inner.ReadEndAsync(mark, correlationId, cancellationToken);
+            var snapshot = await inner.ReadSnapshotAsync(highWaterMark, correlationId, cancellationToken);
+
+            return new RecordingSnapshot(snapshot, recorder);
         }
+    }
 
-        public IAsyncEnumerable<ReadEvent<object, string, StreamPosition, LogPosition>> ReadAsync(
-            BsonTimestamp mark,
+    private sealed class RecordingSnapshot(CatchUpSnapshot<object, LogPosition> inner, CatchUpRecorder recorder) :
+        CatchUpSnapshot<object, LogPosition>(inner.GetResumePosition(SubscriptionOrigin.Start)?.ToInt64())
+    {
+        protected override IAsyncEnumerable<ReadEvent<object, string, StreamPosition, LogPosition>> ReadCoreAsync(
             long startExclusive,
             long endInclusive,
             CancellationToken cancellationToken)
         {
-            var events = inner.ReadAsync(mark, startExclusive, endInclusive, cancellationToken);
+            SubscriptionOrigin<LogPosition> origin = startExclusive < 0
+                ? SubscriptionOrigin.Start
+                : SubscriptionOrigin.After(LogPosition.FromInt64(startExclusive));
+
+            var events = inner.ReadAsync(origin, cancellationToken);
 
             return recorder.Record(events, startExclusive, endInclusive, cancellationToken);
         }

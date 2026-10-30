@@ -232,7 +232,7 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
     }
 
     private SubscriptionAsyncEnumerable<object, EventLogRow<object>, long, LogPosition> SubscribeToAll(
-        ICatchUpReader<object, long> catchUpReader,
+        ICatchUpReader<object, long, LogPosition> catchUpReader,
         SubscriptionOrigin<LogPosition> origin,
         SubscriptionOptions options)
     {
@@ -247,11 +247,11 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
             LoggerFactory.CreateLogger("Subscription"));
     }
 
-    private PostgresCatchUpReader<object> CreateCatchUpReader(EventFilter filter)
+    private PostgresCatchUpReader<object, LogPosition> CreateCatchUpReader(EventFilter filter)
     {
         var logger = LoggerFactory.CreateLogger("CatchUp");
 
-        return new PostgresCatchUpReader<object>(_reader, streamId: null, filter, logger);
+        return new PostgresCatchUpReader<object, LogPosition>(_reader, streamId: null, filter, logger);
     }
 
     // Passes a replay through, noting what was asked for and whether it was read to its end.
@@ -310,27 +310,38 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
 
     private sealed record Replay(long StartExclusive, long EndInclusive, bool IsCompleted);
 
-    // Passes a catch-up reader through, with each of its replays recorded by the test.
+    // Passes a catch-up reader through, with each of its snapshot's replays recorded by the test.
     private sealed class RecordingCatchUpReader(
-        ICatchUpReader<object, long> inner,
+        ICatchUpReader<object, long, LogPosition> inner,
         PostgresSubscriptionCatchUpTests test) :
-        ICatchUpReader<object, long>
+        ICatchUpReader<object, long, LogPosition>
     {
-        public ValueTask<(long? End, long Mark)> ReadEndAsync(
-            long mark,
+        public async ValueTask<CatchUpSnapshot<object, LogPosition>> ReadSnapshotAsync(
+            long highWaterMark,
             string correlationId,
             CancellationToken cancellationToken)
         {
-            return inner.ReadEndAsync(mark, correlationId, cancellationToken);
-        }
+            var snapshot = await inner.ReadSnapshotAsync(highWaterMark, correlationId, cancellationToken);
 
-        public IAsyncEnumerable<Event> ReadAsync(
-            long mark,
+            return new RecordingSnapshot(snapshot, test);
+        }
+    }
+
+    private sealed class RecordingSnapshot(
+        CatchUpSnapshot<object, LogPosition> inner,
+        PostgresSubscriptionCatchUpTests test) :
+        CatchUpSnapshot<object, LogPosition>(inner.GetResumePosition(SubscriptionOrigin.Start)?.ToInt64())
+    {
+        protected override IAsyncEnumerable<Event> ReadCoreAsync(
             long startExclusive,
             long endInclusive,
             CancellationToken cancellationToken)
         {
-            var events = inner.ReadAsync(mark, startExclusive, endInclusive, cancellationToken);
+            SubscriptionOrigin<LogPosition> origin = startExclusive < 0
+                ? SubscriptionOrigin.Start
+                : SubscriptionOrigin.After(LogPosition.FromInt64(startExclusive));
+
+            var events = inner.ReadAsync(origin, cancellationToken);
 
             return test.RecordAsync(events, startExclusive, endInclusive, cancellationToken);
         }

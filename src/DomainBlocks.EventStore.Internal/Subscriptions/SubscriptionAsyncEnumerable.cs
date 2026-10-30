@@ -16,11 +16,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
     where TSourceEvent : class, IFilterableEvent, IReadEvent<TEvent, string, StreamPosition, LogPosition>
     where TPos : struct, IPosition<TPos>
 {
-    // The position before the first of the sequence. A read that starts after it reads from the start.
-    private const long BeforeStartPosition = -1;
-
     private readonly IRefCountedFeed<TSourceEvent, TMark> _feed;
-    private readonly ICatchUpReader<TEvent, TMark> _catchUpReader;
+    private readonly ICatchUpReader<TEvent, TMark, TPos> _catchUpReader;
     private readonly EventFilter _liveFilter;
     private readonly Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> _positionSelector;
     private readonly SubscriptionOrigin<TPos> _origin;
@@ -31,7 +28,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
 
     public SubscriptionAsyncEnumerable(
         IRefCountedFeed<TSourceEvent, TMark> feed,
-        ICatchUpReader<TEvent, TMark> catchUpReader,
+        ICatchUpReader<TEvent, TMark, TPos> catchUpReader,
         EventFilter liveFilter,
         Func<ReadEventContext<string, StreamPosition, LogPosition>, TPos> positionSelector,
         SubscriptionOrigin<TPos>? origin,
@@ -71,44 +68,29 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
             observer = CreateObserver();
             attachment = await AttachObserverAsync(observer, cancellationToken).ConfigureAwait(false);
 
-            var (end, mark) = await ReadEndAsync(attachment.HighWaterMark, cancellationToken).ConfigureAwait(false);
-
-            // The position to resume after. It only moves forward, once the subscriber has taken an event or a replay
-            // has covered the sequence up to its end.
-            var resumeAfter = _origin switch
-            {
-                SubscriptionOrigin<TPos>.After after => after.Position.ToInt64(),
-
-                // The end is pinned here, so there is nothing to replay. Otherwise, a restart before the first event is
-                // delivered would resume from a later end and skip the events appended in between. If the sequence is
-                // empty, the subscription resumes from the start.
-                SubscriptionOrigin<TPos>.End => end ?? BeforeStartPosition,
-
-                _ => BeforeStartPosition
-            };
-
+            var origin = _origin;
             var isCaughtUp = false;
             bool isRestarting;
 
             do
             {
-                if (end > resumeAfter)
-                {
-                    // After a transient error, the replay reads again after the last event that the subscriber took.
-                    var events = ResumableAsyncEnumerable.Create(
-                        static (s, after, ct) => s.Self._catchUpReader.ReadAsync(s.Mark, after, s.End, ct),
-                        static (s, e) => s.Self._positionSelector(e.Context).ToInt64(),
-                        (Self: this, Mark: mark, End: end.Value),
-                        resumeAfter,
-                        _retryPipeline);
+                var catchUp = await ReadSnapshotAsync(attachment.HighWaterMark, cancellationToken)
+                    .ConfigureAwait(false);
 
-                    await foreach (var e in WithLoggedExceptionsAsync(events, cancellationToken).ConfigureAwait(false))
-                        yield return SubscriptionMessage.Event(e);
+                var position = catchUp.GetResumePosition(origin);
 
-                    // The replay has covered the sequence up to the mark, even if the filter selected none of its
-                    // events. Moving the position here means the next cycle does not read that part of it again.
-                    resumeAfter = end.Value;
-                }
+                _logger?.CatchUpBoundary(_correlationId, position?.Value);
+
+                // After a transient error, the replay reads again after the last event that the subscriber took.
+                var events = ResumableAsyncEnumerable.Create(
+                    static (s, after, ct) => s.CatchUp.ReadAsync(after, ct),
+                    static (s, e) => SubscriptionOrigin.After(s.Self._positionSelector(e.Context)),
+                    (Self: this, CatchUp: catchUp),
+                    origin,
+                    _retryPipeline);
+
+                await foreach (var e in WithLoggedExceptionsAsync(events, cancellationToken).ConfigureAwait(false))
+                    yield return SubscriptionMessage.Event(e);
 
                 // A restart signaled during the replay takes effect only now. Cancelling the replay would discard what
                 // it read, and a replay slower than the queue's overflow would never finish.
@@ -126,16 +108,16 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
                     await foreach (var e in WithLoggedExceptionsAsync(liveEvents, cancellationToken)
                                        .ConfigureAwait(false))
                     {
-                        var position = _positionSelector(e.Context).ToInt64();
+                        var eventPosition = _positionSelector(e.Context);
 
                         // The replay has covered it.
-                        if (position <= resumeAfter)
+                        if (eventPosition.Value <= position?.Value)
                             continue;
 
                         yield return SubscriptionMessage.Event(e);
 
                         // The subscriber has taken the event and come back for more.
-                        resumeAfter = position;
+                        position = eventPosition;
                     }
                 }
 
@@ -157,10 +139,16 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
 
                 // The restart is logged here because it can happen long after the observer recorded the reason for
                 // it.
-                if (resumeAfter != BeforeStartPosition)
-                    _logger?.SubscriptionRestarting(_correlationId, resumeAfter);
+                if (position is { } restartPosition)
+                {
+                    _logger?.SubscriptionRestarting(_correlationId, restartPosition.Value);
+                    origin = SubscriptionOrigin.After(restartPosition);
+                }
                 else
+                {
                     _logger?.SubscriptionRestartingFromStart(_correlationId);
+                    origin = SubscriptionOrigin.Start;
+                }
 
                 // The new observer is attached before the old one is detached, so the ref count never drops to zero
                 // and the feed keeps its connection.
@@ -174,8 +162,6 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
 
                 observer = nextObserver;
                 attachment = nextAttachment;
-
-                (end, mark) = await ReadEndAsync(attachment.HighWaterMark, cancellationToken).ConfigureAwait(false);
             } while (isRestarting);
         }
         finally
@@ -232,20 +218,18 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
         }
     }
 
-    private async Task<(long? End, TMark Mark)> ReadEndAsync(TMark highWaterMark, CancellationToken cancellationToken)
+    private async Task<CatchUpSnapshot<TEvent, TPos>> ReadSnapshotAsync(
+        TMark highWaterMark,
+        CancellationToken cancellationToken)
     {
         try
         {
-            var result = await _retryPipeline
+            return await _retryPipeline
                 .ExecuteAsync(
-                    static (s, ct) => s.Reader.ReadEndAsync(s.HighWaterMark, s.CorrelationId, ct),
+                    static (s, ct) => s.Reader.ReadSnapshotAsync(s.HighWaterMark, s.CorrelationId, ct),
                     (Reader: _catchUpReader, HighWaterMark: highWaterMark, CorrelationId: _correlationId),
                     cancellationToken)
                 .ConfigureAwait(false);
-
-            _logger?.CatchUpBoundary(_correlationId, result.End);
-
-            return result;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

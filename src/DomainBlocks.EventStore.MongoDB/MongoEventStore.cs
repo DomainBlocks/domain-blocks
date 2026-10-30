@@ -261,7 +261,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
 
         return new SubscriptionAsyncEnumerable<TEvent, EventLogDocument<TEvent>, BsonTimestamp, LogPosition>(
             _feed,
-            new MongoCatchUpReader<TEvent>(
+            new MongoCatchUpReader<TEvent, LogPosition>(
                 _reader,
                 Builders<BsonDocument>.Filter.Empty,
                 catchUpFilter,
@@ -285,7 +285,11 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
 
         return new SubscriptionAsyncEnumerable<TEvent, EventLogDocument<TEvent>, BsonTimestamp, StreamPosition>(
             _feed,
-            new MongoCatchUpReader<TEvent>(_reader, streamFilter, catchUpFilter, FieldNames.StreamPosition),
+            new MongoCatchUpReader<TEvent, StreamPosition>(
+                _reader,
+                streamFilter,
+                catchUpFilter,
+                FieldNames.StreamPosition),
             EventFilter.StreamIds(streamId) & filter,
             static ctx => ctx.StreamPosition,
             origin,
