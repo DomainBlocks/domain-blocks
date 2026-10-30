@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 
 namespace DomainBlocks.EventStore.PostgreSQL;
 
-internal static class PostgresCatchUpReader
+internal static class PostgresHistoryReader
 {
     public static readonly TimeSpan MinVisibilityPollDelay = TimeSpan.FromMilliseconds(1);
     public static readonly TimeSpan MaxVisibilityPollDelay = TimeSpan.FromMilliseconds(100);
@@ -16,18 +16,16 @@ internal static class PostgresCatchUpReader
 /// Represents the reads of the event log's history, or of one stream's if a stream ID is given. The end position is
 /// read behind the replication barrier, once queries can see the feed's high-water mark.
 /// </summary>
-internal sealed class PostgresCatchUpReader<TEvent, TPos>(
+internal sealed class PostgresHistoryReader<TEvent>(
     EventLogReader<TEvent> reader,
     string? streamId,
     EventFilter filter,
     ILogger? logger) :
-    ICatchUpReader<TEvent, long, TPos>
+    IHistoryReader<TEvent, long>
     where TEvent : notnull
-    where TPos : struct, IPosition<TPos>
 {
-    public async ValueTask<CatchUpSnapshot<TEvent, TPos>> ReadSnapshotAsync(
+    public async ValueTask<IHistorySnapshot<TEvent>> ReadSnapshotAsync(
         long highWaterMark,
-        SubscriptionOrigin<TPos> origin,
         string correlationId,
         CancellationToken cancellationToken)
     {
@@ -41,7 +39,7 @@ internal sealed class PostgresCatchUpReader<TEvent, TPos>(
             ? await reader.ReadMaxPositionWithBarrierAsync(cancellationToken).ConfigureAwait(false)
             : await reader.ReadMaxStreamPositionWithBarrierAsync(streamId, cancellationToken).ConfigureAwait(false);
 
-        return new Snapshot(this, origin, end);
+        return new Snapshot(this, end);
     }
 
     private IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAsync(
@@ -60,33 +58,31 @@ internal sealed class PostgresCatchUpReader<TEvent, TPos>(
     // catch-up reads next covers every row the observer missed.
     private async Task WaitUntilVisibleAsync(long position, string correlationId, CancellationToken cancellationToken)
     {
-        var delay = PostgresCatchUpReader.MinVisibilityPollDelay;
+        var delay = PostgresHistoryReader.MinVisibilityPollDelay;
         var stopwatch = Stopwatch.StartNew();
-        var nextWarning = PostgresCatchUpReader.VisibilityWaitWarningInterval;
+        var nextWarning = PostgresHistoryReader.VisibilityWaitWarningInterval;
 
         while ((await reader.GetMaxPositionAsync(cancellationToken).ConfigureAwait(false) ?? -1) < position)
         {
             if (stopwatch.Elapsed >= nextWarning)
             {
                 logger?.CatchUpWaitingForVisibility(correlationId, position, stopwatch.Elapsed);
-                nextWarning += PostgresCatchUpReader.VisibilityWaitWarningInterval;
+                nextWarning += PostgresHistoryReader.VisibilityWaitWarningInterval;
             }
 
             await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
-            delay = TimeSpan.FromTicks(Math.Min(delay.Ticks * 2, PostgresCatchUpReader.MaxVisibilityPollDelay.Ticks));
+            delay = TimeSpan.FromTicks(Math.Min(delay.Ticks * 2, PostgresHistoryReader.MaxVisibilityPollDelay.Ticks));
         }
     }
 
     /// <summary>
     /// Represents the sequence up to the end. The end bounds each read, since queries could already see it.
     /// </summary>
-    private sealed class Snapshot(
-        PostgresCatchUpReader<TEvent, TPos> owner,
-        SubscriptionOrigin<TPos> origin,
-        long? end) :
-        CatchUpSnapshot<TEvent, TPos>(origin, end)
+    private sealed class Snapshot(PostgresHistoryReader<TEvent> owner, long? end) : IHistorySnapshot<TEvent>
     {
-        protected override IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCoreAsync(
+        public long? End => end;
+
+        public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAsync(
             long startExclusive,
             long endInclusive,
             CancellationToken cancellationToken)

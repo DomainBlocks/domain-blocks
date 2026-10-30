@@ -158,8 +158,8 @@ internal sealed class CatchUpScenario : IAsyncDisposable
             BsonTimestamp,
             LogPosition>(
             _feed,
-            new RecordingCatchUpReader(
-                new MongoCatchUpReader<object, LogPosition>(
+            new RecordingHistoryReader(
+                new MongoHistoryReader<object>(
                     _reader,
                     Builders<BsonDocument>.Filter.Empty,
                     catchUpFilter ?? Builders<BsonDocument>.Filter.Empty,
@@ -177,10 +177,10 @@ internal sealed class CatchUpScenario : IAsyncDisposable
     }
 
     /// <summary>
-    /// Creates a catch-up reader of the sequence that the given filter selects, reading through the given client, or
+    /// Creates a history reader of the sequence that the given filter selects, reading through the given client, or
     /// the scenario's if there is none.
     /// </summary>
-    public MongoCatchUpReader<object, LogPosition> CreateCatchUpReader(
+    public MongoHistoryReader<object> CreateHistoryReader(
         FilterDefinition<BsonDocument> sequenceFilter,
         IMongoClient? client = null)
     {
@@ -197,7 +197,7 @@ internal sealed class CatchUpScenario : IAsyncDisposable
             reader = new EventLogReader<object>(eventLog, _codec);
         }
 
-        return new MongoCatchUpReader<object, LogPosition>(
+        return new MongoHistoryReader<object>(
             reader,
             sequenceFilter,
             sequenceFilter,
@@ -251,41 +251,38 @@ internal sealed class CatchUpScenario : IAsyncDisposable
     }
 
     /// <summary>
-    /// Passes a catch-up reader through, recording each replay and the mark that each snapshot waits for.
+    /// Passes a history reader through, recording each read of the events and the mark that each snapshot waits for.
     /// </summary>
-    private sealed class RecordingCatchUpReader(
-        ICatchUpReader<object, BsonTimestamp, LogPosition> inner,
+    private sealed class RecordingHistoryReader(
+        IHistoryReader<object, BsonTimestamp> inner,
         CatchUpRecorder recorder,
         List<BsonTimestamp> marks) :
-        ICatchUpReader<object, BsonTimestamp, LogPosition>
+        IHistoryReader<object, BsonTimestamp>
     {
-        public async ValueTask<CatchUpSnapshot<object, LogPosition>> ReadSnapshotAsync(
+        public async ValueTask<IHistorySnapshot<object>> ReadSnapshotAsync(
             BsonTimestamp highWaterMark,
-            SubscriptionOrigin<LogPosition> origin,
             string correlationId,
             CancellationToken cancellationToken)
         {
             marks.Add(highWaterMark);
 
-            var snapshot = await inner.ReadSnapshotAsync(highWaterMark, origin, correlationId, cancellationToken);
+            var snapshot = await inner.ReadSnapshotAsync(highWaterMark, correlationId, cancellationToken);
 
-            return new RecordingSnapshot(origin, snapshot, recorder);
+            return new RecordingSnapshot(snapshot, recorder);
         }
     }
 
-    private sealed class RecordingSnapshot(
-        SubscriptionOrigin<LogPosition> origin,
-        CatchUpSnapshot<object, LogPosition> inner,
-        CatchUpRecorder recorder) :
-        CatchUpSnapshot<object, LogPosition>(origin, inner.Position?.ToInt64())
+    private sealed class RecordingSnapshot(IHistorySnapshot<object> inner, CatchUpRecorder recorder) :
+        IHistorySnapshot<object>
     {
-        protected override IAsyncEnumerable<ReadEvent<object, string, StreamPosition, LogPosition>> ReadCoreAsync(
+        public long? End => inner.End;
+
+        public IAsyncEnumerable<ReadEvent<object, string, StreamPosition, LogPosition>> ReadAsync(
             long startExclusive,
             long endInclusive,
             CancellationToken cancellationToken)
         {
-            LogPosition? after = startExclusive < 0 ? null : LogPosition.FromInt64(startExclusive);
-            var events = inner.ReadAsync(after, cancellationToken);
+            var events = inner.ReadAsync(startExclusive, endInclusive, cancellationToken);
 
             return recorder.Record(events, startExclusive, endInclusive, cancellationToken);
         }

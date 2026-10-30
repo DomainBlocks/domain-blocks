@@ -13,20 +13,18 @@ namespace DomainBlocks.EventStore.MongoDB;
 /// <param name="sequenceFilter">Selects the followed sequence, which sets its end position.</param>
 /// <param name="replayFilter">Selects the events to replay from the followed sequence.</param>
 /// <param name="positionFieldName">The name of the field that holds an event's position in the sequence.</param>
-internal sealed class MongoCatchUpReader<TEvent, TPos>(
+internal sealed class MongoHistoryReader<TEvent>(
     EventLogReader<TEvent> reader,
     FilterDefinition<BsonDocument> sequenceFilter,
     FilterDefinition<BsonDocument> replayFilter,
     string positionFieldName) :
-    ICatchUpReader<TEvent, BsonTimestamp, TPos>
+    IHistoryReader<TEvent, BsonTimestamp>
     where TEvent : notnull
-    where TPos : struct, IPosition<TPos>
 {
     // The read advances the session's operation time past the end it found, so a read of the snapshot that waits for
     // that time can't see less than that end.
-    public async ValueTask<CatchUpSnapshot<TEvent, TPos>> ReadSnapshotAsync(
+    public async ValueTask<IHistorySnapshot<TEvent>> ReadSnapshotAsync(
         BsonTimestamp highWaterMark,
-        SubscriptionOrigin<TPos> origin,
         string correlationId,
         CancellationToken cancellationToken)
     {
@@ -38,7 +36,7 @@ internal sealed class MongoCatchUpReader<TEvent, TPos>(
             .GetEndPositionAsync(session, sequenceFilter, positionFieldName, cancellationToken)
             .ConfigureAwait(false);
 
-        return new Snapshot(this, origin, end, session.OperationTime);
+        return new Snapshot(this, end, session.OperationTime);
     }
 
     private async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAsync(
@@ -67,14 +65,12 @@ internal sealed class MongoCatchUpReader<TEvent, TPos>(
     /// Represents the sequence up to the end. Each read is in its own session, which waits for the operation time of
     /// the read of the end.
     /// </summary>
-    private sealed class Snapshot(
-        MongoCatchUpReader<TEvent, TPos> owner,
-        SubscriptionOrigin<TPos> origin,
-        long? end,
-        BsonTimestamp operationTime) :
-        CatchUpSnapshot<TEvent, TPos>(origin, end)
+    private sealed class Snapshot(MongoHistoryReader<TEvent> owner, long? end, BsonTimestamp operationTime) :
+        IHistorySnapshot<TEvent>
     {
-        protected override IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadCoreAsync(
+        public long? End => end;
+
+        public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAsync(
             long startExclusive,
             long endInclusive,
             CancellationToken cancellationToken)
