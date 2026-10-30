@@ -17,8 +17,8 @@ namespace DomainBlocks.EventStore.Internal.Feeds;
 /// slot, it overrides <see cref="DisposeAsyncCore"/>, and calls the base method first, which stops the feed.
 /// </para>
 /// </remarks>
-internal abstract class EventLogFeed<T, THighWaterMark> : IEventLogFeed<T, THighWaterMark>
-    where THighWaterMark : IComparable<THighWaterMark>
+internal abstract class EventLogFeed<T, TMark> : IEventLogFeed<T, TMark>
+    where TMark : IComparable<TMark>
 {
     private readonly FeedResumePolicy _resumePolicy;
     private readonly FeedObserverHub<T> _observerHub;
@@ -27,7 +27,7 @@ internal abstract class EventLogFeed<T, THighWaterMark> : IEventLogFeed<T, THigh
     private readonly TaskCompletionSource _connectedTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _completionTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Task? _producerTask;
-    private THighWaterMark _highWaterMark = default!;
+    private TMark _highWaterMark = default!;
     private bool _hasHighWaterMark;
     private int _hasStarted;
     private int _isDisposed;
@@ -36,7 +36,7 @@ internal abstract class EventLogFeed<T, THighWaterMark> : IEventLogFeed<T, THigh
     // writes are whole: a reference, or a primitive no wider than a pointer.
     static EventLogFeed()
     {
-        var type = typeof(THighWaterMark);
+        var type = typeof(TMark);
 
         if (type is { IsValueType: true, IsPrimitive: false })
         {
@@ -45,7 +45,7 @@ internal abstract class EventLogFeed<T, THighWaterMark> : IEventLogFeed<T, THigh
                 "copied in parts.");
         }
 
-        if (type.IsValueType && Unsafe.SizeOf<THighWaterMark>() > IntPtr.Size)
+        if (type.IsValueType && Unsafe.SizeOf<TMark>() > IntPtr.Size)
         {
             throw new NotSupportedException(
                 $"A {type} high-water mark can be read while half written in a {IntPtr.Size * 8}-bit process, so " +
@@ -67,7 +67,7 @@ internal abstract class EventLogFeed<T, THighWaterMark> : IEventLogFeed<T, THigh
     // An observer reads the mark just after it attaches, and the attach ends with a compare-exchange on the observer
     // list, a full fence that orders the attach before this read. So the read needs no fence before it, only to be
     // whole, which the static constructor checks. The barrier keeps later reads after it.
-    public THighWaterMark HighWaterMark
+    public TMark HighWaterMark
     {
         get
         {
@@ -132,7 +132,7 @@ internal abstract class EventLogFeed<T, THighWaterMark> : IEventLogFeed<T, THigh
     /// <remarks>
     /// The feed creates a session only after it has disposed the previous one, so sessions never run at the same time.
     /// </remarks>
-    protected internal abstract Task<IFeedSession<T, THighWaterMark>> CreateSessionAsync(
+    protected internal abstract Task<IFeedSession<T, TMark>> CreateSessionAsync(
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -250,7 +250,7 @@ internal abstract class EventLogFeed<T, THighWaterMark> : IEventLogFeed<T, THigh
 
     // Only the producer writes the mark, and it publishes the first session's mark as it is. After that, the mark only
     // moves forwards, so a session with nothing to cover yet leaves it as it is.
-    private void RaiseHighWaterMark(THighWaterMark? mark)
+    private void RaiseHighWaterMark(TMark? mark)
     {
         if (mark is null || _hasHighWaterMark && mark.CompareTo(_highWaterMark) <= 0)
             return;

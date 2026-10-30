@@ -7,15 +7,15 @@ namespace DomainBlocks.EventStore.Internal.Feeds;
 /// <remarks>
 /// This class owns each feed that it creates, and disposes it on the last detach or before it replaces it.
 /// </remarks>
-internal sealed class RefCountedFeed<T, THighWaterMark>(Func<IEventLogFeed<T, THighWaterMark>> feedFactory) :
-    IRefCountedFeed<T, THighWaterMark>,
+internal sealed class RefCountedFeed<T, TMark>(Func<IEventLogFeed<T, TMark>> feedFactory) :
+    IRefCountedFeed<T, TMark>,
     IAsyncDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private SharedFeed? _current;
     private bool _disposed;
 
-    public async Task<IFeedAttachment<THighWaterMark>> AttachAsync(
+    public async Task<IFeedAttachment<TMark>> AttachAsync(
         IFeedObserver<T> observer,
         string correlationId = "unknown",
         CancellationToken cancellationToken = default)
@@ -68,7 +68,7 @@ internal sealed class RefCountedFeed<T, THighWaterMark>(Func<IEventLogFeed<T, TH
     /// </summary>
     public async ValueTask DisposeAsync()
     {
-        IEventLogFeed<T, THighWaterMark>? feedToDispose;
+        IEventLogFeed<T, TMark>? feedToDispose;
 
         await _gate.WaitAsync().ConfigureAwait(false);
 
@@ -143,19 +143,19 @@ internal sealed class RefCountedFeed<T, THighWaterMark>(Func<IEventLogFeed<T, TH
         }
     }
 
-    private sealed class SharedFeed(IEventLogFeed<T, THighWaterMark> feed)
+    private sealed class SharedFeed(IEventLogFeed<T, TMark> feed)
     {
-        public IEventLogFeed<T, THighWaterMark> Feed { get; } = feed;
+        public IEventLogFeed<T, TMark> Feed { get; } = feed;
         public int RefCount { get; set; }
         public bool IsDisposed { get; set; }
     }
 
-    private sealed class Attachment(THighWaterMark highWaterMark, Func<Task> onDispose) :
-        IFeedAttachment<THighWaterMark>
+    private sealed class Attachment(TMark highWaterMark, Func<Task> onDispose) :
+        IFeedAttachment<TMark>
     {
         private int _disposed;
 
-        public THighWaterMark HighWaterMark { get; } = highWaterMark;
+        public TMark HighWaterMark { get; } = highWaterMark;
 
         public async ValueTask DisposeAsync()
         {

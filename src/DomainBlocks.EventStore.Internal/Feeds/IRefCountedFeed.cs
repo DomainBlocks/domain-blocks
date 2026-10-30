@@ -1,8 +1,8 @@
 namespace DomainBlocks.EventStore.Internal.Feeds;
 
-internal interface IRefCountedFeed<out T, THighWaterMark>
+internal interface IRefCountedFeed<out T, TMark>
 {
-    Task<IFeedAttachment<THighWaterMark>> AttachAsync(
+    Task<IFeedAttachment<TMark>> AttachAsync(
         IFeedObserver<T> observer,
         string correlationId = "unknown",
         CancellationToken cancellationToken = default);
