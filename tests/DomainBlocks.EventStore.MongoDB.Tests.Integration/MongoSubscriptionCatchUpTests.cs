@@ -297,6 +297,23 @@ public class MongoSubscriptionCatchUpTests
         scenario.CatchUpOpTimes[^1].ShouldBeGreaterThanOrEqualTo(deliveredClusterTime);
     }
 
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_FromEnd_SkipsExistingEventsWithoutReplay(CancellationToken ct)
+    {
+        await using var scenario = await CatchUpScenario.StartAsync(ct);
+        await scenario.AppendAsync("existing", 2);
+
+        await using var subscription = scenario.SubscribeToAll(origin: SubscriptionOrigin.End);
+
+        (await subscription.NextAsync()).IsCaughtUp.ShouldBeTrue();
+
+        scenario.CatchUpReads.ShouldBeEmpty();
+
+        var live = await scenario.AppendAsync("live", 1);
+        (await subscription.NextEventAsync()).ShouldBe(live[0]);
+    }
+
     private static MongoCommandException CreateCommandException(int code)
     {
         var serverId = new ServerId(new ClusterId(), new IPEndPoint(IPAddress.Loopback, 27017));

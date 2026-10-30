@@ -137,7 +137,7 @@ internal sealed class CatchUpScenario : IAsyncDisposable
     }
 
     /// <summary>
-    /// Creates a subscription from the beginning of the event log.
+    /// Creates a subscription from the specified origin, or from the beginning of the event log if there is none.
     /// </summary>
     /// <remarks>
     /// The catch-up filter controls which events are read during catch-up, while the live filter controls which events
@@ -147,7 +147,8 @@ internal sealed class CatchUpScenario : IAsyncDisposable
     public SubscriptionProbe<StreamPosition, LogPosition> SubscribeToAll(
         SubscriptionOptions? options = null,
         FilterDefinition<BsonDocument>? catchUpFilter = null,
-        EventFilter? liveFilter = null)
+        EventFilter? liveFilter = null,
+        SubscriptionOrigin<LogPosition>? origin = null)
     {
         var subscription = new SubscriptionAsyncEnumerable<
             object,
@@ -162,7 +163,7 @@ internal sealed class CatchUpScenario : IAsyncDisposable
                 _catchUpOpTimes),
             liveFilter ?? EventFilter.All,
             static ctx => ctx.LogPosition,
-            SubscriptionOrigin.Start,
+            origin ?? SubscriptionOrigin.Start,
             options,
             MongoTransientErrors.IsTransient,
             MongoTestEnvironment.LoggerFactory.CreateLogger("Subscription"));
@@ -227,9 +228,6 @@ internal sealed class CatchUpScenario : IAsyncDisposable
         List<BsonTimestamp> opTimes) :
         ICatchUpSource<object, BsonTimestamp>
     {
-        public ValueTask<long?> ReadEndAsync(CancellationToken cancellationToken) =>
-            new(ReadEndAsync(null, cancellationToken));
-
         public async ValueTask<ICatchUp<object>> StartAsync(
             BsonTimestamp highWaterMark,
             string correlationId,
@@ -240,11 +238,10 @@ internal sealed class CatchUpScenario : IAsyncDisposable
             return new RecordingCatchUp(this, session);
         }
 
-        private Task<long?> ReadEndAsync(IClientSessionHandle? session, CancellationToken cancellationToken)
+        private Task<long?> ReadEndAsync(IClientSessionHandle session, CancellationToken cancellationToken)
         {
             // The end position is a catch-up's first read, so the session still holds the time it will wait for.
-            if (session is not null)
-                opTimes.Add(session.OperationTime);
+            opTimes.Add(session.OperationTime);
 
             return reader.GetEndPositionAsync(
                 session,

@@ -68,7 +68,6 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
             var resumePosition = new ResumePosition(_origin switch
             {
                 SubscriptionOrigin<TPos>.After after => ToInt64(after.Position),
-                SubscriptionOrigin<TPos>.End => await PinEndAsync(cancellationToken).ConfigureAwait(false),
                 _ => null
             });
 
@@ -76,6 +75,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
 
             while (true)
             {
+                var pinsEnd = observer is null && _origin is SubscriptionOrigin<TPos>.End;
+
                 // Every cycle after the first is a restart. It is logged here because it can happen long after the
                 // observer recorded the reason for it.
                 if (observer is not null)
@@ -105,6 +106,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
 
                 var enumerator = ReadAllAsync(
                         resumePosition,
+                        pinsEnd,
                         observer,
                         attachment.HighWaterMark,
                         cancellationToken)
@@ -176,29 +178,6 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
         }
     }
 
-    // The end is pinned when the subscription starts. Otherwise, a restart before the first event is delivered would
-    // resume from a later end and skip the events appended in between. If the sequence is empty, the subscription
-    // resumes from the start.
-    private async Task<long?> PinEndAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            return await _retryPipeline
-                .ExecuteAsync(static (s, ct) => s.ReadEndAsync(ct), _catchUpSource, cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            _logger?.SubscriptionCanceled(_correlationId);
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger?.SubscriptionFailed(ex, _correlationId);
-            throw;
-        }
-    }
-
     private async Task<IFeedAttachment<TMark>> AttachObserverAsync(
         SubscriptionObserver<TEvent, TSourceEvent> observer,
         CancellationToken cancellationToken)
@@ -223,6 +202,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
 
     private async IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>> ReadAllAsync(
         ResumePosition resumePosition,
+        bool pinsEnd,
         SubscriptionObserver<TEvent, TSourceEvent> observer,
         TMark highWaterMark,
         [EnumeratorCancellation] CancellationToken cancellationToken)
@@ -242,19 +222,26 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
 
             if (endInclusive is { } end)
             {
-                // After a transient error, the replay reads again after the last event that the subscriber took.
-                var events = ResumableAsyncEnumerable.Create(
-                    static (s, after, ct) => s.CatchUp.ReadAsync(after, s.End, ct),
-                    static (s, e) => ToInt64(s.Self._positionSelector(e.Context)),
-                    (Self: this, CatchUp: catchUp, End: end),
-                    resumePosition.After ?? -1,
-                    _retryPipeline);
+                // A subscription from the end has nothing to replay on its first cycle.
+                if (!pinsEnd)
+                {
+                    // After a transient error, the replay reads again after the last event that the subscriber took.
+                    var events = ResumableAsyncEnumerable.Create(
+                        static (s, after, ct) => s.CatchUp.ReadAsync(after, s.End, ct),
+                        static (s, e) => ToInt64(s.Self._positionSelector(e.Context)),
+                        (Self: this, CatchUp: catchUp, End: end),
+                        resumePosition.After ?? -1,
+                        _retryPipeline);
 
-                await foreach (var e in events.WithCancellation(cancellationToken).ConfigureAwait(false))
-                    yield return SubscriptionMessage.Event(e);
+                    await foreach (var e in events.WithCancellation(cancellationToken).ConfigureAwait(false))
+                        yield return SubscriptionMessage.Event(e);
+                }
 
                 // The replay has covered the sequence up to the mark, even if the filter selected none of its events.
                 // Moving the resume position here means the next cycle does not read that part of the sequence again.
+                // It also pins the end for a subscription from the end. Otherwise, a restart before the first event is
+                // delivered would resume from a later end and skip the events appended in between. If the sequence is
+                // empty, the subscription resumes from the start.
                 resumePosition.AdvanceTo(end);
             }
         }

@@ -20,11 +20,6 @@ internal sealed class MongoCatchUpSource<TEvent>(
     ICatchUpSource<TEvent, BsonTimestamp>
     where TEvent : notnull
 {
-    public ValueTask<long?> ReadEndAsync(CancellationToken cancellationToken)
-    {
-        return new ValueTask<long?>(ReadEndAsync(null, cancellationToken));
-    }
-
     public async ValueTask<ICatchUp<TEvent>> StartAsync(
         BsonTimestamp highWaterMark,
         string correlationId,
@@ -35,7 +30,7 @@ internal sealed class MongoCatchUpSource<TEvent>(
         return new SessionCatchUp(this, session);
     }
 
-    private Task<long?> ReadEndAsync(IClientSessionHandle? session, CancellationToken cancellationToken)
+    private Task<long?> ReadEndAsync(IClientSessionHandle session, CancellationToken cancellationToken)
     {
         return reader.GetEndPositionAsync(session, sequenceFilter, positionFieldName, cancellationToken);
     }
