@@ -85,40 +85,20 @@ public class CatchUpTests
     }
 
     [Test]
-    public void EndPosition_FromStart_IsEnd()
+    public void EndPosition_AnyOrigin_IsEnd()
     {
         CreateCatchUp(FromStart, end: 7).EndPosition.ShouldBe(LogPosition.FromInt64(7));
-    }
-
-    [Test]
-    public void EndPosition_FromEnd_IsEnd()
-    {
         CreateCatchUp(FromEnd, end: 7).EndPosition.ShouldBe(LogPosition.FromInt64(7));
-    }
-
-    [Test]
-    public void EndPosition_AfterPositionBeforeEnd_IsEnd()
-    {
         CreateCatchUp(After(3), end: 7).EndPosition.ShouldBe(LogPosition.FromInt64(7));
+        CreateCatchUp(After(9), end: 7).EndPosition.ShouldBe(LogPosition.FromInt64(7));
     }
 
     [Test]
-    public void EndPosition_AfterPositionPastEnd_IsPosition()
-    {
-        CreateCatchUp(After(9), end: 7).EndPosition.ShouldBe(LogPosition.FromInt64(9));
-    }
-
-    [Test]
-    public void EndPosition_EmptySequenceFromStartOrEnd_IsNull()
+    public void EndPosition_EmptySequence_IsNull()
     {
         CreateCatchUp(FromStart, end: null).EndPosition.ShouldBeNull();
         CreateCatchUp(FromEnd, end: null).EndPosition.ShouldBeNull();
-    }
-
-    [Test]
-    public void EndPosition_EmptySequenceAfterPosition_IsPosition()
-    {
-        CreateCatchUp(After(3), end: null).EndPosition.ShouldBe(LogPosition.FromInt64(3));
+        CreateCatchUp(After(3), end: null).EndPosition.ShouldBeNull();
     }
 
     private static SubscriptionOrigin<LogPosition> After(long position) =>

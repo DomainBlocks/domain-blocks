@@ -83,6 +83,29 @@ public class SubscriptionAsyncEnumerableTests
     }
 
     [Test]
+    public async Task GetAsyncEnumerator_AfterPositionPastEndWhenRestarted_ReplaysFromPosition()
+    {
+        var calls = new List<string>();
+        var feed = new TestFeed(calls);
+        var reader = new TestCatchUpReader(calls, end: 7);
+        var origin = SubscriptionOrigin.After(LogPosition.FromInt64(9));
+
+        await using var enumerator = Subscribe(feed, reader, origin).GetAsyncEnumerator();
+        await enumerator.MoveNextAsync();
+
+        calls.Clear();
+        reader.End = 11;
+        await feed.Observers[^1].OnResetAsync(CancellationToken.None);
+        await enumerator.MoveNextAsync();
+
+        enumerator.Current.IsFellBehind.ShouldBeTrue();
+        await enumerator.MoveNextAsync();
+
+        enumerator.Current.IsCaughtUp.ShouldBeTrue();
+        calls.ShouldBe(["attach", "detach", $"catch-up at {FeedMark}", "read from 9 to 11", "dispose"]);
+    }
+
+    [Test]
     public async Task GetAsyncEnumerator_RestartSignaledDuringReplay_FinishesReplayBeforeRestarting()
     {
         var calls = new List<string>();

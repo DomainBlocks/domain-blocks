@@ -39,23 +39,16 @@ internal abstract class CatchUp<TEvent, TPos> : IAsyncDisposable
             _ => throw new UnreachableException($"Unexpected subscription origin of type '{origin.GetType()}'.")
         };
 
-        var endPosition = Math.Max(_start, _end);
-        EndPosition = endPosition < 0 ? null : TPos.FromInt64(endPosition);
+        EndPosition = end is { } endValue ? TPos.FromInt64(endValue) : null;
     }
 
     /// <summary>
-    /// Gets the position where the catch-up ends, which is the later of its origin and the end of the sequence, or
-    /// <see langword="null"/> if that is before the first event.
+    /// Gets the position of the sequence's last event when the end was read, or <see langword="null"/> if it had no
+    /// events.
     /// </summary>
     /// <remarks>
-    /// <para>
     /// A read covers the sequence up to the end, even if the filter selected none of its events, so a later read does
     /// not need that part of the sequence again.
-    /// </para>
-    /// <para>
-    /// For a subscription from the end, this pins the end. Otherwise, a restart before the first event is delivered
-    /// would resume from a later end and skip the events appended in between.
-    /// </para>
     /// </remarks>
     public TPos? EndPosition { get; }
 

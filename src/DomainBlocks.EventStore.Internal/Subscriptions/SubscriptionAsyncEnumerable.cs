@@ -42,6 +42,10 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
             observer = CreateObserver();
             attachment = await AttachObserverAsync(observer, cancellationToken).ConfigureAwait(false);
 
+            // How far the subscription has got, which only moves forward. An origin can be past the end of the
+            // sequence, and the events up to it aren't delivered when they arrive.
+            TPos? position = origin is SubscriptionOrigin<TPos>.After after ? after.Position : null;
+
             var nextOrigin = origin ?? SubscriptionOrigin.End;
             var isCaughtUp = false;
             bool isRestarting;
@@ -51,7 +55,9 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
                 var catchUp = await ReadCatchUpAsync(nextOrigin, attachment.HighWaterMark, cancellationToken)
                     .ConfigureAwait(false);
 
-                var position = catchUp.EndPosition;
+                // For a subscription from the end, this pins the end. Otherwise, a restart before the first event is
+                // delivered would resume from a later end and skip the events appended in between.
+                position = Max(position, catchUp.EndPosition);
 
                 logger?.CatchUpBoundary(correlationId, position?.Value);
 
@@ -146,6 +152,11 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
             logger?.SubscriptionStopped(correlationId);
             CorrelationId.Release(correlationId);
         }
+    }
+
+    private static TPos? Max(TPos? first, TPos? second)
+    {
+        return second is null || first?.Value > second?.Value ? first : second;
     }
 
     private SubscriptionObserver<TEvent, TSourceEvent> CreateObserver()
