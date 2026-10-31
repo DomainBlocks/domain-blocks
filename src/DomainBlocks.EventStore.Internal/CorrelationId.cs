@@ -33,6 +33,8 @@ internal static class CorrelationId
         }
     }
 
+    public static string ReserveOrGenerate(string? id) => id is null ? ReserveGenerated() : Reserve(id);
+
     public static void Release(string id)
     {
         lock (Gate)

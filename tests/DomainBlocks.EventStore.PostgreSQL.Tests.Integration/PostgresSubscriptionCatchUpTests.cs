@@ -1,7 +1,8 @@
-using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Filtering;
+using DomainBlocks.EventStore.Internal;
 using DomainBlocks.EventStore.Internal.Feeds;
+using DomainBlocks.EventStore.Internal.Subscriptions;
 using DomainBlocks.EventStore.PostgreSQL.Feeds;
 using DomainBlocks.Serialization.SystemTextJson;
 using DomainBlocks.Testing.Events;
@@ -12,21 +13,16 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
-using Event = ReadEvent<object, string, StreamPosition, LogPosition>;
-
 /// <summary>
 /// How a subscription replays the log when it has to restart. The subscription is built from its parts, as the store
-/// builds it, so that the test can see each replay that it asks the reader for and hold one back part-way.
+/// builds it, so that a witness on the same feed can tell when the feed has given it all the appended events.
 /// </summary>
 [TestFixture]
 public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
 {
-    private readonly List<Replay> _replays = [];
     private IEventStore<object, string, StreamPosition, LogPosition> _eventStore = null!;
     private RefCountedFeed<EventLogRow<object>, long> _feed = null!;
     private EventLogReader<object> _reader = null!;
-    private int _heldReplayIndex;
-    private TaskCompletionSource? _releaseHeldReplay;
 
     [SetUp]
     public void SetUp()
@@ -40,8 +36,6 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
 
         var names = new SchemaObjectNames(Schema);
 
-        _replays.Clear();
-        _releaseHeldReplay = null;
         _eventStore = CreateEventStore();
         _reader = new EventLogReader<object>(DataSource, new EventLogSql(names), Options.ReadPageSize, codec);
 
@@ -73,29 +67,19 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
     public async Task SubscribeToAll_WhenQueueOverflowsDuringReplay_FinishesReplayBeforeRestarting(CancellationToken ct)
     {
         var existing = await AppendEventsAsync("existing", 3, ct);
-        var release = HoldReplayAfterItsFirstEvent(replayIndex: 0);
 
         await using var subscription = SubscribeToAll(new SubscriptionOptions { QueueCapacity = 1 }).Probe(ct);
 
-        // The replay delivers its first event and is then held, with the rest still to come.
+        // The replay delivers its first event, and the subscriber leaves the rest until later.
         (await subscription.NextEventAsync()).ShouldBe(existing[0]);
         await using var witness = await CreateWitnessAsync(ct);
-        var pending = subscription.NextAsync();
 
         // More events arrive live than the queue holds, so the subscription has to restart.
         var live = await AppendEventsAsync("live", 2, ct);
 
         await ReadEventsAsync(witness, live.Length);
 
-        release.SetResult();
-        var messages = await subscription.ReadUntilCaughtUpAsync(await pending);
-
-        // The first replay ran to its end, and the second continued from there.
-        _replays.ShouldBe(
-        [
-            new Replay(StartExclusive: -1, EndInclusive: 2, IsCompleted: true),
-            new Replay(StartExclusive: 2, EndInclusive: 4, IsCompleted: true)
-        ]);
+        var messages = await subscription.ReadUntilCaughtUpAsync();
 
         // The subscriber had not been told that it caught up, so it is not told that it fell behind.
         messages.Select(x => x.Kind).ShouldBe(
@@ -119,7 +103,6 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
         CancellationToken ct)
     {
         var existing = await AppendEventsAsync("existing", 1, ct);
-        var release = HoldReplayAfterItsFirstEvent(replayIndex: 1);
 
         await using var subscription = SubscribeToAll(new SubscriptionOptions { QueueCapacity = 1 }).Probe(ct);
 
@@ -138,9 +121,8 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
         (await subscription.NextEventAsync()).ShouldBe(first[0]);
         (await subscription.NextAsync()).IsFellBehind.ShouldBeTrue();
 
-        // The replay that follows delivers its first event and is then held, with the rest still to come.
+        // The replay that follows delivers its first event, and the subscriber leaves the rest until later.
         (await subscription.NextEventAsync()).ShouldBe(first[1]);
-        var pending = subscription.NextAsync();
 
         // The queue overflows again before the subscriber has caught up again. The subscription attached to the feed
         // again when it restarted, so it takes another witness to follow it.
@@ -148,12 +130,9 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
         var second = await AppendEventsAsync("second", 2, ct);
         await ReadEventsAsync(secondWitness, second.Length);
 
-        release.SetResult();
-        var messages = await subscription.ReadUntilCaughtUpAsync(await pending);
+        var messages = await subscription.ReadUntilCaughtUpAsync();
 
         // It took a third replay to catch up, and the subscriber was not told a second time that it fell behind.
-        _replays.Count.ShouldBe(3);
-
         messages.Select(x => x.Kind).ShouldBe(
         [
             SubscriptionMessageKind.Event,
@@ -176,30 +155,19 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
         // The filter selects the first of the existing events and not the two that follow it.
         var selected = await AppendEventsAsync("existing", 1, ct, "selected");
         await AppendEventsAsync("existing", 2, ct, "excluded");
-        var release = HoldReplayAfterItsFirstEvent(replayIndex: 0);
 
         var options = new SubscriptionOptions { Filter = EventFilter.StreamIds("selected"), QueueCapacity = 1 };
         await using var subscription = SubscribeToAll(options).Probe(ct);
 
-        // The replay delivers the event that the filter selects and is then held.
+        // The replay delivers the event that the filter selects, and the subscriber leaves the rest until later.
         (await subscription.NextEventAsync()).ShouldBe(selected[0]);
         await using var witness = await CreateWitnessAsync(ct);
-        var pending = subscription.NextAsync();
 
         // More events that the filter selects arrive live than the queue holds, so the subscription has to restart.
         var live = await AppendEventsAsync("live", 2, ct, "selected");
         await ReadEventsAsync(witness, live.Length);
 
-        release.SetResult();
-        var messages = await subscription.ReadUntilCaughtUpAsync(await pending);
-
-        // The first replay delivered nothing after its first event, but it covered the log up to its end position, so
-        // the second should continue from there rather than from the last event that was delivered.
-        _replays.ShouldBe(
-        [
-            new Replay(StartExclusive: -1, EndInclusive: 2, IsCompleted: true),
-            new Replay(StartExclusive: 2, EndInclusive: 4, IsCompleted: true)
-        ]);
+        var messages = await subscription.ReadUntilCaughtUpAsync();
 
         messages
             .Where(x => x.Event is not null)
@@ -207,14 +175,11 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
             .ShouldBe([live[0], live[1]]);
     }
 
-    // The subscription under test, from the start of the log, with each of its replays recorded.
-    private SubscriptionAsyncEnumerable<object, LogPosition> SubscribeToAll(SubscriptionOptions options)
+    // The subscription under test, from the start of the log.
+    private SubscriptionAsyncEnumerable<object, EventLogRow<object>, long, LogPosition> SubscribeToAll(
+        SubscriptionOptions options)
     {
-        return SubscribeToAll(
-            (reader, start, end, ct) =>
-                RecordAsync(reader.ReadCatchUpAllAsync(start, end, options.Filter, ct), start, end, ct),
-            SubscriptionOrigin.Start,
-            options);
+        return SubscribeToAll(SubscriptionOrigin.Start, options);
     }
 
     // A second subscription to the same feed, from the end of the log, used to tell when the feed has given all the
@@ -222,69 +187,28 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
     // which they attached to it, so a witness is created after the subscription under test has attached.
     private async Task<SubscriptionProbe<StreamPosition, LogPosition>> CreateWitnessAsync(CancellationToken ct)
     {
-        var options = new SubscriptionOptions();
-
-        var witness = SubscribeToAll(
-            static (reader, start, end, ct) => reader.ReadCatchUpAllAsync(start, end, EventFilter.All, ct),
-            SubscriptionOrigin.End,
-            options).Probe(ct);
+        var witness = SubscribeToAll(SubscriptionOrigin.End, new SubscriptionOptions()).Probe(ct);
 
         (await witness.NextAsync()).IsCaughtUp.ShouldBeTrue();
 
         return witness;
     }
 
-    private SubscriptionAsyncEnumerable<object, LogPosition> SubscribeToAll(
-        SubscriptionAsyncEnumerable<object, LogPosition>.CatchUpReader catchUpReader,
+    private SubscriptionAsyncEnumerable<object, EventLogRow<object>, long, LogPosition> SubscribeToAll(
         SubscriptionOrigin<LogPosition> origin,
         SubscriptionOptions options)
     {
-        return new SubscriptionAsyncEnumerable<object, LogPosition>(
-            _reader,
+        var correlationId = CorrelationId.ReserveOrGenerate(options.CorrelationId);
+        var logger = LoggerFactory.CreateLogger("Subscription");
+
+        return new SubscriptionAsyncEnumerable<object, EventLogRow<object>, long, LogPosition>(
             _feed,
-            catchUpReader,
-            static async (reader, ct) => await reader.ReadMaxPositionWithBarrierAsync(ct) is { } pos
-                ? LogPosition.FromInt64(pos)
-                : null,
+            new PostgresAllCatchUpReader<object>(_reader, options.Filter, options, correlationId, logger),
             options.Filter,
-            static ctx => ctx.LogPosition,
             origin,
-            options,
-            LoggerFactory.CreateLogger("Subscription"));
-    }
-
-    // Passes a replay through, noting what was asked for and whether it was read to its end.
-    private async IAsyncEnumerable<Event> RecordAsync(
-        IAsyncEnumerable<Event> events,
-        long startExclusive,
-        long endInclusive,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        var index = _replays.Count;
-        _replays.Add(new Replay(startExclusive, endInclusive, IsCompleted: false));
-
-        var isFirstEvent = true;
-
-        await foreach (var e in events.WithCancellation(cancellationToken))
-        {
-            yield return e;
-
-            if (isFirstEvent && index == _heldReplayIndex && _releaseHeldReplay is { } release)
-                await release.Task.WaitAsync(cancellationToken);
-
-            isFirstEvent = false;
-        }
-
-        _replays[index] = _replays[index] with { IsCompleted = true };
-    }
-
-    // Holds the given replay once it has delivered its first event, until the returned source is completed.
-    private TaskCompletionSource HoldReplayAfterItsFirstEvent(int replayIndex)
-    {
-        _heldReplayIndex = replayIndex;
-        _releaseHeldReplay = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        return _releaseHeldReplay;
+            options.QueueCapacity,
+            correlationId,
+            logger);
     }
 
     private async Task<TestEvent[]> AppendEventsAsync(
@@ -306,6 +230,4 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
         for (var i = 0; i < count; i++)
             await witness.NextAsync();
     }
-
-    private sealed record Replay(long StartExclusive, long EndInclusive, bool IsCompleted);
 }

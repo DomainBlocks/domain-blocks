@@ -1,38 +1,26 @@
-using System.Net;
 using DomainBlocks.EventStore.Filtering;
+using DomainBlocks.EventStore.Internal.Subscriptions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
-using MongoDB.Bson;
-using MongoDB.Driver;
-using MongoDB.Driver.Core.Clusters;
-using MongoDB.Driver.Core.Connections;
-using MongoDB.Driver.Core.Servers;
 using NUnit.Framework;
 using Shouldly;
 
-namespace DomainBlocks.EventStore.MongoDB.Tests.Unit;
+namespace DomainBlocks.EventStore.Internal.Tests.Unit.Subscriptions;
 
-using Observer = SubscriptionAsyncEnumerable<string, LogPosition>.Observer;
-using StopReason = SubscriptionAsyncEnumerable<string, LogPosition>.StopReason;
+using Observer = SubscriptionObserver<string, TestSourceEvent>;
 
 public class SubscriptionObserverTests
 {
-    private const int UnauthorizedCode = 13;
-
-    private static readonly DateTime CreatedAtUtc = new(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
-
-    private CountingDecoder _decoder = null!;
-    private EventLogDocument<string> _document = null!;
+    private TestSourceEvent _sourceEvent = null!;
 
     [SetUp]
     public void SetUp()
     {
-        _decoder = new CountingDecoder();
-        _document = new EventLogDocument<string>(_decoder);
+        _sourceEvent = new TestSourceEvent();
     }
 
     [Test]
-    public async Task OnNextAsync_SelectedDocument_QueuesItsEvent()
+    public async Task OnNextAsync_SelectedItem_QueuesItsEvent()
     {
         using var observer = new Observer(queueCapacity: 2, EventFilter.StreamIds("order-1"));
 
@@ -45,7 +33,7 @@ public class SubscriptionObserverTests
         observer.Reader.TryRead(out _).ShouldBeFalse();
         first.Context.LogPosition.ShouldBe(LogPosition.FromInt64(0));
         second.Context.LogPosition.ShouldBe(LogPosition.FromInt64(2));
-        _decoder.DecodeCount.ShouldBe(2);
+        _sourceEvent.DecodeCount.ShouldBe(2);
     }
 
     [Test]
@@ -54,11 +42,11 @@ public class SubscriptionObserverTests
         using var observer = new Observer(queueCapacity: 1, EventFilter.All);
 
         await OfferAsync(observer, 0, "order-1");
-        observer.StopReason.ShouldBe(StopReason.None);
+        observer.StopReason.ShouldBe(SubscriptionStopReason.None);
 
         await OfferAsync(observer, 1, "order-1");
 
-        observer.StopReason.ShouldBe(StopReason.QueueOverflow);
+        observer.StopReason.ShouldBe(SubscriptionStopReason.QueueOverflow);
     }
 
     [Test]
@@ -92,56 +80,44 @@ public class SubscriptionObserverTests
     }
 
     [Test]
-    public async Task Dispose_WhenAlreadyStoppedByQueueOverflow_KeepsFirstReason()
-    {
-        var observer = new Observer(queueCapacity: 1, EventFilter.All);
-        await OfferAsync(observer, 0, "order-1");
-        await OfferAsync(observer, 1, "order-1");
-
-        observer.Dispose();
-
-        observer.StopReason.ShouldBe(StopReason.QueueOverflow);
-    }
-
-    [Test]
-    public async Task Dispose_WhenNotYetStopped_EndsReaderOnceQueuedEventIsRead()
-    {
-        var observer = new Observer(queueCapacity: 10, EventFilter.All);
-        await OfferAsync(observer, 0, "order-1");
-
-        observer.Dispose();
-
-        observer.StopReason.ShouldBe(StopReason.Disposed);
-        observer.Reader.TryRead(out _).ShouldBeTrue();
-        (await observer.Reader.WaitToReadAsync()).ShouldBeFalse();
-    }
-
-    [Test]
-    public async Task OnNextAsync_AfterQueueOverflowed_DoesNotDecodeFurtherDocuments()
+    public async Task OnNextAsync_AfterQueueOverflowed_DoesNotDecodeFurtherItems()
     {
         using var observer = new Observer(queueCapacity: 1, EventFilter.All);
         await OfferAsync(observer, 0, "order-1");
         await OfferAsync(observer, 1, "order-1");
-        var decodeCountAtOverflow = _decoder.DecodeCount;
+        var decodeCountAtOverflow = _sourceEvent.DecodeCount;
 
         await OfferAsync(observer, 2, "order-1");
         await OfferAsync(observer, 3, "order-1");
 
-        _decoder.DecodeCount.ShouldBe(decodeCountAtOverflow);
+        _sourceEvent.DecodeCount.ShouldBe(decodeCountAtOverflow);
     }
 
     [Test]
-    public async Task OnNextAsync_AfterDocumentCouldNotBeDecoded_FailsReaderAndDoesNotDecodeFurtherDocuments()
+    public async Task OnNextAsync_AfterFeedReset_DoesNotDecodeFurtherItems()
     {
         using var observer = new Observer(queueCapacity: 10, EventFilter.All);
-        _decoder.Failure = new InvalidOperationException("Cannot decode.");
         await OfferAsync(observer, 0, "order-1");
+        await observer.OnResetAsync(CancellationToken.None);
 
-        _decoder.Failure = null;
         await OfferAsync(observer, 1, "order-1");
 
-        _decoder.DecodeCount.ShouldBe(1);
-        observer.StopReason.ShouldBe(StopReason.None);
+        _sourceEvent.DecodeCount.ShouldBe(1);
+        observer.StopReason.ShouldBe(SubscriptionStopReason.FeedReset);
+    }
+
+    [Test]
+    public async Task OnNextAsync_AfterItemCouldNotBeDecoded_FailsReaderAndDoesNotDecodeFurtherItems()
+    {
+        using var observer = new Observer(queueCapacity: 10, EventFilter.All);
+        _sourceEvent.DecodeFailure = new InvalidOperationException("Cannot decode.");
+        await OfferAsync(observer, 0, "order-1");
+
+        _sourceEvent.DecodeFailure = null;
+        await OfferAsync(observer, 1, "order-1");
+
+        _sourceEvent.DecodeCount.ShouldBe(1);
+        observer.StopReason.ShouldBe(SubscriptionStopReason.None);
 
         var exception = await Should.ThrowAsync<InvalidOperationException>(async () =>
             await observer.Reader.WaitToReadAsync());
@@ -157,7 +133,7 @@ public class SubscriptionObserverTests
 
         await observer.OnResetAsync(CancellationToken.None);
 
-        observer.StopReason.ShouldBe(StopReason.FeedReset);
+        observer.StopReason.ShouldBe(SubscriptionStopReason.FeedReset);
         observer.Reader.TryRead(out _).ShouldBeTrue();
         (await observer.Reader.WaitToReadAsync()).ShouldBeFalse();
     }
@@ -184,49 +160,54 @@ public class SubscriptionObserverTests
 
         await observer.OnResetAsync(CancellationToken.None);
 
-        observer.StopReason.ShouldBe(StopReason.QueueOverflow);
+        observer.StopReason.ShouldBe(SubscriptionStopReason.QueueOverflow);
     }
 
     [Test]
     public async Task OnErrorAsync_FeedError_FailsReader()
     {
         using var observer = new Observer(queueCapacity: 10, EventFilter.All);
-        var error = CreateCommandException(UnauthorizedCode);
+        var error = new InvalidOperationException("Feed failed.");
 
         await observer.OnErrorAsync(error, CancellationToken.None);
 
-        observer.StopReason.ShouldBe(StopReason.None);
+        observer.StopReason.ShouldBe(SubscriptionStopReason.None);
 
-        var exception = await Should.ThrowAsync<MongoCommandException>(async () =>
+        var exception = await Should.ThrowAsync<InvalidOperationException>(async () =>
             await observer.Reader.WaitToReadAsync());
 
         exception.ShouldBeSameAs(error);
     }
 
-    private static MongoCommandException CreateCommandException(int code)
+    [Test]
+    public async Task Dispose_WhenAlreadyStoppedByQueueOverflow_KeepsFirstReason()
     {
-        var serverId = new ServerId(new ClusterId(), new IPEndPoint(IPAddress.Loopback, 27017));
+        var observer = new Observer(queueCapacity: 1, EventFilter.All);
+        await OfferAsync(observer, 0, "order-1");
+        await OfferAsync(observer, 1, "order-1");
 
-        return new MongoCommandException(
-            new ConnectionId(serverId),
-            "The command failed.",
-            new BsonDocument("getMore", 1),
-            new BsonDocument { { "ok", 0 }, { "code", code } });
+        observer.Dispose();
+
+        observer.StopReason.ShouldBe(SubscriptionStopReason.QueueOverflow);
+    }
+
+    [Test]
+    public async Task Dispose_WhenNotYetStopped_EndsReaderOnceQueuedEventIsRead()
+    {
+        var observer = new Observer(queueCapacity: 10, EventFilter.All);
+        await OfferAsync(observer, 0, "order-1");
+
+        observer.Dispose();
+
+        observer.StopReason.ShouldBe(SubscriptionStopReason.Disposed);
+        observer.Reader.TryRead(out _).ShouldBeTrue();
+        (await observer.Reader.WaitToReadAsync()).ShouldBeFalse();
     }
 
     private ValueTask OfferAsync(Observer observer, long position, string streamId)
     {
-        _document.Set(new BsonDocument
-        {
-            { EventLogEntry.FieldNames.Position, position },
-            { EventLogEntry.FieldNames.StreamId, streamId },
-            { EventLogEntry.FieldNames.StreamPosition, position },
-            { EventLogEntry.FieldNames.EventName, "OrderPlaced" },
-            { EventLogEntry.FieldNames.EventData, new BsonDocument() },
-            { EventLogEntry.FieldNames.Metadata, BsonNull.Value },
-            { EventLogEntry.FieldNames.CreatedAtUtc, CreatedAtUtc }
-        });
+        _sourceEvent.Set(position, streamId);
 
-        return observer.OnNextAsync(_document, CancellationToken.None);
+        return observer.OnNextAsync(_sourceEvent, CancellationToken.None);
     }
 }
