@@ -1,7 +1,9 @@
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Filtering;
+using DomainBlocks.EventStore.Internal;
 using DomainBlocks.EventStore.Internal.Feeds;
+using DomainBlocks.EventStore.Internal.Subscriptions;
 using DomainBlocks.EventStore.PostgreSQL.Feeds;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -258,20 +260,16 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         SubscriptionOrigin<LogPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
-        var filter = options?.Filter ?? EventFilter.All;
+        options ??= SubscriptionOptions.Default;
+        var correlationId = CorrelationId.ReserveOrGenerate(options.CorrelationId);
 
-        return new SubscriptionAsyncEnumerable<TEvent, LogPosition>(
-            _reader,
+        return new SubscriptionAsyncEnumerable<TEvent, EventLogRow<TEvent>, long, LogPosition>(
             _feed,
-            (reader, from, to, ct) => reader.ReadCatchUpAllAsync(from, to, filter, ct),
-            static async (reader, ct) =>
-                await reader.ReadMaxPositionWithBarrierAsync(ct).ConfigureAwait(false) is { } pos
-                    ? LogPosition.FromInt64(pos)
-                    : null,
-            filter,
-            static ctx => ctx.LogPosition,
+            new PostgresAllCatchUpSnapshotReader<TEvent>(_reader, options.Filter, options, correlationId, _logger),
+            options.Filter,
             origin,
-            options,
+            options.QueueCapacity,
+            correlationId,
             _logger);
     }
 
@@ -282,20 +280,22 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
     {
         ArgumentException.ThrowIfNullOrEmpty(streamId);
 
-        var filter = options?.Filter ?? EventFilter.All;
+        options ??= SubscriptionOptions.Default;
+        var correlationId = CorrelationId.ReserveOrGenerate(options.CorrelationId);
 
-        return new SubscriptionAsyncEnumerable<TEvent, StreamPosition>(
-            _reader,
+        return new SubscriptionAsyncEnumerable<TEvent, EventLogRow<TEvent>, long, StreamPosition>(
             _feed,
-            (reader, from, to, ct) => reader.ReadCatchUpStreamAsync(streamId, from, to, filter, ct),
-            async (reader, ct) =>
-                await reader.ReadMaxStreamPositionWithBarrierAsync(streamId, ct).ConfigureAwait(false) is { } pos
-                    ? StreamPosition.FromInt64(pos)
-                    : null,
-            EventFilter.StreamIds(streamId) & filter,
-            static ctx => ctx.StreamPosition,
+            new PostgresStreamCatchUpSnapshotReader<TEvent>(
+                _reader,
+                streamId,
+                options.Filter,
+                options,
+                correlationId,
+                _logger),
+            EventFilter.StreamIds(streamId) & options.Filter,
             origin,
-            options,
+            options.QueueCapacity,
+            correlationId,
             _logger);
     }
 

@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
-namespace DomainBlocks.EventStore.MongoDB.ChangeStreams;
+namespace DomainBlocks.EventStore.MongoDB.Feeds;
 
 /// <summary>
 /// Represents one change stream of a feed. It keeps the token of what it has delivered, so that the next change stream

@@ -11,6 +11,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Include="..\..\src\DomainBlocks.EventStore.Internal\**\*.cs" LinkBase="DomainBlocks.EventStore.Internal" />
   </ItemGroup>
 

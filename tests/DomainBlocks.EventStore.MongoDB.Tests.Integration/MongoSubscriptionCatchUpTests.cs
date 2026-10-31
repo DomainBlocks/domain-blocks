@@ -25,25 +25,22 @@ public class MongoSubscriptionCatchUpTests
     {
         await using var scenario = await CatchUpScenario.StartAsync(ct);
         var existing = await scenario.AppendAsync("existing", 3);
-        var hold = scenario.HoldCatchUp(0);
 
         await using var subscription = scenario.SubscribeToAll(new SubscriptionOptions { QueueCapacity = 1 });
 
-        // The replay delivers its first event and is then held, with the rest still to come.
+        // The replay delivers its first event, and the subscriber leaves the rest until later.
         (await subscription.NextEventAsync()).ShouldBe(existing[0]);
-        var pending = subscription.NextAsync();
 
         // More events arrive live than the queue holds, so the subscription has to restart.
         var live = await scenario.AppendLiveAsync("live", 2);
 
-        hold.Release();
-        var messages = await subscription.ReadUntilCaughtUpAsync(await pending);
+        var messages = await subscription.ReadUntilCaughtUpAsync();
 
         // The first replay ran to its end position, and the second continued from there.
         scenario.CatchUpReads.ShouldBe(
         [
-            new CatchUpRead(StartExclusive: -1, EndInclusive: 2, IsCompleted: true),
-            new CatchUpRead(StartExclusive: 2, EndInclusive: 4, IsCompleted: true)
+            new CatchUpRead(StartExclusive: -1, EndInclusive: 2),
+            new CatchUpRead(StartExclusive: 2, EndInclusive: 4)
         ]);
 
         // The subscriber had not been told that it caught up, so it is not told that it fell behind.
@@ -69,7 +66,6 @@ public class MongoSubscriptionCatchUpTests
     {
         await using var scenario = await CatchUpScenario.StartAsync(ct);
         var existing = await scenario.AppendAsync("existing", 1);
-        var hold = scenario.HoldCatchUp(1);
 
         await using var subscription = scenario.SubscribeToAll(new SubscriptionOptions { QueueCapacity = 1 });
 
@@ -82,15 +78,13 @@ public class MongoSubscriptionCatchUpTests
         (await subscription.NextEventAsync()).ShouldBe(first[0]);
         (await subscription.NextAsync()).IsFellBehind.ShouldBeTrue();
 
-        // The replay that follows delivers its first event and is then held, with the rest still to come.
+        // The replay that follows delivers its first event, and the subscriber leaves the rest until later.
         (await subscription.NextEventAsync()).ShouldBe(first[1]);
-        var pending = subscription.NextAsync();
 
         // The queue overflows again before the subscriber has caught up again.
         var second = await scenario.AppendLiveAsync("second", 2);
 
-        hold.Release();
-        var messages = await subscription.ReadUntilCaughtUpAsync(await pending);
+        var messages = await subscription.ReadUntilCaughtUpAsync();
 
         // It took a third replay to catch up, and the subscriber was not told a second time that it fell behind.
         scenario.CatchUpReads.Count.ShouldBe(3);
@@ -119,29 +113,26 @@ public class MongoSubscriptionCatchUpTests
         // The filter selects the first of the existing events and not the two that follow it.
         var selected = await scenario.AppendAsync("existing", 1, "selected");
         await scenario.AppendAsync("existing", 2, "excluded");
-        var hold = scenario.HoldCatchUp(0);
 
         await using var subscription = scenario.SubscribeToAll(
             new SubscriptionOptions { QueueCapacity = 1 },
             Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, "selected"),
             EventFilter.StreamIds("selected"));
 
-        // The replay delivers the event that the filter selects and is then held.
+        // The replay delivers the event that the filter selects, and the subscriber leaves the rest until later.
         (await subscription.NextEventAsync()).ShouldBe(selected[0]);
-        var pending = subscription.NextAsync();
 
         // More events that the filter selects arrive live than the queue holds, so the subscription has to restart.
         var live = await scenario.AppendLiveAsync("live", 2, "selected");
 
-        hold.Release();
-        var messages = await subscription.ReadUntilCaughtUpAsync(await pending);
+        var messages = await subscription.ReadUntilCaughtUpAsync();
 
         // The first replay delivered nothing after its first event, but it covered the log up to its end position, so
         // the second should continue from there rather than from the last event that was delivered.
         scenario.CatchUpReads.ShouldBe(
         [
-            new CatchUpRead(StartExclusive: -1, EndInclusive: 2, IsCompleted: true),
-            new CatchUpRead(StartExclusive: 2, EndInclusive: 4, IsCompleted: true)
+            new CatchUpRead(StartExclusive: -1, EndInclusive: 2),
+            new CatchUpRead(StartExclusive: 2, EndInclusive: 4)
         ]);
 
         messages
@@ -158,26 +149,21 @@ public class MongoSubscriptionCatchUpTests
 
         // A find's first batch holds fewer events than this, so the replay reads the rest with getMore.
         var existing = await scenario.AppendAsync("existing", 150);
-        var hold = scenario.HoldCatchUp(0);
 
         await using var subscription = scenario.SubscribeToAll();
 
         (await subscription.NextEventAsync()).ShouldBe(existing[0]);
-        var pending = subscription.NextAsync();
 
         await scenario.KillReplayCursorsAsync();
 
-        hold.Release();
-        var messages = await subscription.ReadUntilCaughtUpAsync(await pending);
+        var messages = await subscription.ReadUntilCaughtUpAsync();
 
         // The first replay failed at its getMore, and the second continued after the last event delivered.
         scenario.CatchUpReads.Count.ShouldBe(2);
-        scenario.CatchUpReads[0].IsCompleted.ShouldBeFalse();
 
         var resumedRead = scenario.CatchUpReads[1];
         resumedRead.StartExclusive.ShouldBeGreaterThan(0);
         resumedRead.EndInclusive.ShouldBe(149);
-        resumedRead.IsCompleted.ShouldBeTrue();
 
         // The first event was taken before the cursor was killed, so the messages read after start with the second.
         messages
@@ -194,19 +180,15 @@ public class MongoSubscriptionCatchUpTests
 
         // A find's first batch holds fewer events than this, so the replay reads the rest with getMore.
         var existing = await scenario.AppendAsync("existing", 150);
-        var hold = scenario.HoldCatchUp(0);
 
         await using var subscription = scenario.SubscribeToAll(new SubscriptionOptions { CatchUpMaxRetryAttempts = 0 });
 
         (await subscription.NextEventAsync()).ShouldBe(existing[0]);
-        var pending = subscription.NextAsync();
 
         await scenario.KillReplayCursorsAsync();
 
-        hold.Release();
-
         await Should.ThrowAsync<MongoCursorNotFoundException>(async () =>
-            await subscription.ReadUntilCaughtUpAsync(await pending));
+            await subscription.ReadUntilCaughtUpAsync());
 
         scenario.CatchUpReads.Count.ShouldBe(1);
     }
@@ -249,9 +231,9 @@ public class MongoSubscriptionCatchUpTests
             .Select(x => x.Event!.Value.Payload)
             .ShouldBe([meanwhile[0], meanwhile[1]]);
 
-        // A lone subscription's restart detaches it before it attaches again, which closes the feed's connection, so
-        // the third change stream comes from a new connection.
-        scenario.ChangeStreamProbe.InitialOpenCount.ShouldBe(3);
+        // A lone subscription's restart attaches it again before it detaches, so the feed keeps its connection and
+        // the change stream that it started after losing its history.
+        scenario.ChangeStreamProbe.InitialOpenCount.ShouldBe(2);
 
         // The new change stream delivers live events.
         var live = await scenario.AppendAsync("live", 1);
@@ -294,7 +276,24 @@ public class MongoSubscriptionCatchUpTests
 
         (await subscription2.NextEventAsync()).ShouldBe(liveEvents[0]);
         var deliveredClusterTime = scenario.ChangeStreamProbe.LastDeliveredClusterTime.ShouldNotBeNull();
-        scenario.CatchUpOpTimes[^1].ShouldBeGreaterThanOrEqualTo(deliveredClusterTime);
+        scenario.CatchUpMarks[^1].ShouldBeGreaterThanOrEqualTo(deliveredClusterTime);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_FromEnd_SkipsExistingEventsWithoutReplay(CancellationToken ct)
+    {
+        await using var scenario = await CatchUpScenario.StartAsync(ct);
+        await scenario.AppendAsync("existing", 2);
+
+        await using var subscription = scenario.SubscribeToAll(origin: SubscriptionOrigin.End);
+
+        (await subscription.NextAsync()).IsCaughtUp.ShouldBeTrue();
+
+        scenario.CatchUpReads.ShouldBeEmpty();
+
+        var live = await scenario.AppendAsync("live", 1);
+        (await subscription.NextEventAsync()).ShouldBe(live[0]);
     }
 
     private static MongoCommandException CreateCommandException(int code)

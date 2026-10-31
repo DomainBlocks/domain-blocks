@@ -1,7 +1,7 @@
 ﻿using System.Net;
 using System.Threading.Channels;
 using DomainBlocks.EventStore.Internal.Feeds;
-using DomainBlocks.EventStore.MongoDB.ChangeStreams;
+using DomainBlocks.EventStore.MongoDB.Feeds;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
@@ -12,7 +12,7 @@ using Moq;
 using NUnit.Framework;
 using Shouldly;
 
-namespace DomainBlocks.EventStore.MongoDB.Tests.Unit.ChangeStreams;
+namespace DomainBlocks.EventStore.MongoDB.Tests.Unit.Feeds;
 
 public class ChangeStreamFeedTests
 {
