@@ -194,7 +194,7 @@ public class SubscriptionAsyncEnumerableTests
     }
 
     /// <summary>
-    /// Stands in for a store's reader, and notes each snapshot that it reads.
+    /// Stands in for a store's reader, and notes each catch-up that it reads.
     /// </summary>
     private sealed class TestCatchUpReader(List<string> calls, long? end) :
         CatchUpReader<string, LogPosition, long>(

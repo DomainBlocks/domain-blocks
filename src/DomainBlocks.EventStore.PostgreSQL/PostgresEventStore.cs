@@ -263,9 +263,16 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         options ??= SubscriptionOptions.Default;
         var correlationId = CorrelationId.ReserveOrGenerate(options.CorrelationId);
 
+        var catchUpReader = new PostgresAllCatchUpReader<TEvent>(
+            _reader,
+            options.Filter,
+            options,
+            correlationId,
+            _logger);
+
         return new SubscriptionAsyncEnumerable<TEvent, EventLogRow<TEvent>, long, LogPosition>(
             _feed,
-            new PostgresAllCatchUpReader<TEvent>(_reader, options.Filter, options, correlationId, _logger),
+            catchUpReader,
             options.Filter,
             origin,
             options.QueueCapacity,
@@ -283,15 +290,17 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         options ??= SubscriptionOptions.Default;
         var correlationId = CorrelationId.ReserveOrGenerate(options.CorrelationId);
 
+        var catchUpReader = new PostgresStreamCatchUpReader<TEvent>(
+            _reader,
+            streamId,
+            options.Filter,
+            options,
+            correlationId,
+            _logger);
+
         return new SubscriptionAsyncEnumerable<TEvent, EventLogRow<TEvent>, long, StreamPosition>(
             _feed,
-            new PostgresStreamCatchUpReader<TEvent>(
-                _reader,
-                streamId,
-                options.Filter,
-                options,
-                correlationId,
-                _logger),
+            catchUpReader,
             EventFilter.StreamIds(streamId) & options.Filter,
             origin,
             options.QueueCapacity,

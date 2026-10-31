@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 namespace DomainBlocks.EventStore.Internal.Subscriptions;
 
 /// <summary>
-/// Implements a catch-up subscription to the global event log or one event stream. It replays a snapshot from a store's
+/// Implements a catch-up subscription to the global event log or one event stream. It replays a catch-up from a store's
 /// reader, then delivers live events from the store's feed.
 /// </summary>
 /// <param name="feed">The store's feed of live events.</param>
@@ -117,6 +117,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
                 }
                 else
                 {
+                    // The sequence had no events when the end was read, and no live event has been delivered since.
                     logger?.SubscriptionRestartingFromStart(correlationId);
                     nextOrigin = SubscriptionOrigin.Start;
                 }

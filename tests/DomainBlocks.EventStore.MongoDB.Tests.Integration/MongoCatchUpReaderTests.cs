@@ -9,8 +9,8 @@ using Shouldly;
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
 /// <summary>
-/// Tests that a snapshot's read of the end waits for the mark that it is given, and that its reads of the events wait
-/// for the operation time of that read, so they can't see less than the end it found.
+/// Tests that a catch-up reader's read of the end waits for the mark that it is given, and that the catch-up's reads of
+/// the events wait for the operation time of that read, so they can't see less than the end it found.
 /// </summary>
 [TestFixture]
 public class MongoCatchUpReaderTests
@@ -54,6 +54,7 @@ public class MongoCatchUpReaderTests
         await using var scenario = await CatchUpScenario.StartAsync(ct);
         var reader = scenario.CreateCatchUpReader(Builders<BsonDocument>.Filter.Empty);
 
+        // The server refuses a time later than its own cluster time, rather than waiting for it.
         var exception = await Should.ThrowAsync<MongoCommandException>(async () =>
             await reader.ReadAsync(SubscriptionOrigin.Start, MarkAheadOfCluster, ct));
 

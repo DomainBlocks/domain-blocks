@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Polly;
 
 namespace DomainBlocks.EventStore.Internal.Subscriptions;
@@ -7,8 +8,8 @@ namespace DomainBlocks.EventStore.Internal.Subscriptions;
 /// returns the same events, because the log is append-only and the reads stop at the end.
 /// </summary>
 /// <remarks>
-/// A store derives from this class to supply its reads, and overrides <see cref="DisposeAsyncCore"/> if a snapshot holds
-/// a resource for them, such as a session. So a caller reads a snapshot one read at a time, and not after disposing it.
+/// A store derives from this class to supply its reads, and overrides <see cref="DisposeAsyncCore"/> if a catch-up
+/// holds a resource for them, such as a session. So a caller makes one read at a time, and none after disposing it.
 /// </remarks>
 internal abstract class CatchUp<TEvent, TPos> : IAsyncDisposable
     where TEvent : notnull
@@ -22,7 +23,7 @@ internal abstract class CatchUp<TEvent, TPos> : IAsyncDisposable
     /// <param name="end">
     /// The position of the sequence's last event, or <see langword="null"/> if it has no events.
     /// </param>
-    /// <param name="resiliencePipeline">The policy that retries each read.</param>
+    /// <param name="resiliencePipeline">The resilience pipeline that retries each read.</param>
     protected CatchUp(SubscriptionOrigin<TPos> origin, long? end, ResiliencePipeline resiliencePipeline)
     {
         _resiliencePipeline = resiliencePipeline;
@@ -32,9 +33,10 @@ internal abstract class CatchUp<TEvent, TPos> : IAsyncDisposable
 
         _start = origin switch
         {
-            SubscriptionOrigin<TPos>.After after => after.Position.ToInt64(),
+            SubscriptionOrigin<TPos>.Start => -1,
             SubscriptionOrigin<TPos>.End => _end,
-            _ => -1
+            SubscriptionOrigin<TPos>.After after => after.Position.ToInt64(),
+            _ => throw new UnreachableException()
         };
 
         var endPosition = Math.Max(_start, _end);
@@ -42,8 +44,9 @@ internal abstract class CatchUp<TEvent, TPos> : IAsyncDisposable
     }
 
     /// <summary>
-    /// Gets the position that a subscription has reached once it has read the snapshot, or <see langword="null"/> if it
-    /// is still before the first event.
+    /// Gets the position where the catch-up ends, which is the later of its origin and the end of the sequence, or
+    /// <see langword="null"/> if that is before the first event. A subscription has reached this position once it has
+    /// read the catch-up.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -82,7 +85,7 @@ internal abstract class CatchUp<TEvent, TPos> : IAsyncDisposable
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Releases what the snapshot holds for its reads. By default, it holds nothing.
+    /// Releases what the catch-up holds for its reads. By default, it holds nothing.
     /// </summary>
     protected virtual ValueTask DisposeAsyncCore() => ValueTask.CompletedTask;
 

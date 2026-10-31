@@ -166,7 +166,7 @@ public class CatchUpTests
     }
 
     /// <summary>
-    /// Stands in for a store's snapshot whose first read delivers one event and then fails with a transient error, and
+    /// Stands in for a store's catch-up whose first read delivers one event and then fails with a transient error, and
     /// whose later reads return no events.
     /// </summary>
     private sealed class FailingCatchUp(

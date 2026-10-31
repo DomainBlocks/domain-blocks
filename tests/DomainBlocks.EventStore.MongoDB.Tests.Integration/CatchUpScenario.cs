@@ -194,7 +194,7 @@ internal sealed class CatchUpScenario : IAsyncDisposable
     }
 
     /// <summary>
-    /// Creates a snapshot reader of the sequence that the given filter selects, reading through the given client, or
+    /// Creates a catch-up reader of the sequence that the given filter selects, reading through the given client, or
     /// the scenario's if there is none.
     /// </summary>
     public MongoCatchUpReader<object, LogPosition> CreateCatchUpReader(

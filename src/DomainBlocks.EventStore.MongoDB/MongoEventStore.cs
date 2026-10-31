@@ -258,17 +258,19 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         var catchUpFilter = TranslateFilter(options.Filter) ?? Builders<BsonDocument>.Filter.Empty;
         var correlationId = CorrelationId.ReserveOrGenerate(options.CorrelationId);
 
+        var catchUpReader = new MongoCatchUpReader<TEvent, LogPosition>(
+            _eventLog,
+            _eventCodec,
+            Builders<BsonDocument>.Filter.Empty,
+            catchUpFilter,
+            FieldNames.Position,
+            options,
+            correlationId,
+            _logger);
+
         return new SubscriptionAsyncEnumerable<TEvent, EventLogDocument<TEvent>, BsonTimestamp, LogPosition>(
             _feed,
-            new MongoCatchUpReader<TEvent, LogPosition>(
-                _eventLog,
-                _eventCodec,
-                Builders<BsonDocument>.Filter.Empty,
-                catchUpFilter,
-                FieldNames.Position,
-                options,
-                correlationId,
-                _logger),
+            catchUpReader,
             options.Filter,
             origin,
             options.QueueCapacity,
@@ -287,17 +289,19 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         var catchUpFilter = translatedFilter is null ? streamFilter : streamFilter & translatedFilter;
         var correlationId = CorrelationId.ReserveOrGenerate(options.CorrelationId);
 
+        var catchUpReader = new MongoCatchUpReader<TEvent, StreamPosition>(
+            _eventLog,
+            _eventCodec,
+            streamFilter,
+            catchUpFilter,
+            FieldNames.StreamPosition,
+            options,
+            correlationId,
+            _logger);
+
         return new SubscriptionAsyncEnumerable<TEvent, EventLogDocument<TEvent>, BsonTimestamp, StreamPosition>(
             _feed,
-            new MongoCatchUpReader<TEvent, StreamPosition>(
-                _eventLog,
-                _eventCodec,
-                streamFilter,
-                catchUpFilter,
-                FieldNames.StreamPosition,
-                options,
-                correlationId,
-                _logger),
+            catchUpReader,
             EventFilter.StreamIds(streamId) & options.Filter,
             origin,
             options.QueueCapacity,

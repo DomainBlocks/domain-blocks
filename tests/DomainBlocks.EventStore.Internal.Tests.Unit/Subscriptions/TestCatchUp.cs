@@ -5,7 +5,7 @@ using Polly;
 namespace DomainBlocks.EventStore.Internal.Tests.Unit.Subscriptions;
 
 /// <summary>
-/// Stands in for a store's snapshot. Each read is noted as "read from {start} to {end}", and returns the events at the
+/// Stands in for a store's catch-up. Each read is noted as "read from {start} to {end}", and returns the events at the
 /// given positions within its range. The filter is taken to have selected only those positions. Disposal is noted as
 /// "dispose".
 /// </summary>
