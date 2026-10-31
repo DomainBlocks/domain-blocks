@@ -156,7 +156,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
 
     private static TPos? Max(TPos? first, TPos? second)
     {
-        return second is null || first?.Value > second?.Value ? first : second;
+        return second is null || first?.Value > second.Value.Value ? first : second;
     }
 
     private SubscriptionObserver<TEvent, TSourceEvent> CreateObserver()

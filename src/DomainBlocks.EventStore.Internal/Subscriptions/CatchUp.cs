@@ -39,7 +39,7 @@ internal abstract class CatchUp<TEvent, TPos> : IAsyncDisposable
             _ => throw new UnreachableException($"Unexpected subscription origin of type '{origin.GetType()}'.")
         };
 
-        EndPosition = end is { } endValue ? TPos.FromInt64(endValue) : null;
+        EndPosition = end.HasValue ? TPos.FromInt64(end.Value) : null;
     }
 
     /// <summary>
