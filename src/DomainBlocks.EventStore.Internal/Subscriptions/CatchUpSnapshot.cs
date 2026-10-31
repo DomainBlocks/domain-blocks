@@ -6,7 +6,11 @@ namespace DomainBlocks.EventStore.Internal.Subscriptions;
 /// Represents what a subscription replays: the followed sequence from an origin up to an end that was read. Every read
 /// returns the same events, because the log is append-only and the reads stop at the end.
 /// </summary>
-internal abstract class CatchUpSnapshot<TEvent, TPos>
+/// <remarks>
+/// A store derives from this class to supply its reads, and overrides <see cref="DisposeAsyncCore"/> if a snapshot holds
+/// a resource for them, such as a session. So a caller reads a snapshot one read at a time, and not after disposing it.
+/// </remarks>
+internal abstract class CatchUpSnapshot<TEvent, TPos> : IAsyncDisposable
     where TEvent : notnull
     where TPos : struct, IPosition<TPos>
 {
@@ -67,6 +71,8 @@ internal abstract class CatchUpSnapshot<TEvent, TPos>
             _resiliencePipeline);
     }
 
+    public ValueTask DisposeAsync() => DisposeAsyncCore();
+
     /// <summary>
     /// Reads the followed sequence from one position to another. A start of -1 reads from the start of the sequence.
     /// </summary>
@@ -74,6 +80,11 @@ internal abstract class CatchUpSnapshot<TEvent, TPos>
         long startExclusive,
         long endInclusive,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Releases what the snapshot holds for its reads. By default, it holds nothing.
+    /// </summary>
+    protected virtual ValueTask DisposeAsyncCore() => ValueTask.CompletedTask;
 
     private IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAfterAsync(
         long startExclusive,

@@ -32,23 +32,12 @@ internal sealed class MongoCatchUpSnapshotReader<TEvent, TPos>(
     where TEvent : notnull
     where TPos : struct, IPosition<TPos>
 {
-    // The read advances the session's operation time past the end it found, so a read of the snapshot that waits for
-    // that time can't see less than that end.
+    // The session is causally consistent, so its first read waits until it can see every change up to the high-water
+    // mark. That read advances the session's operation time past the end it found, so the session's later reads can't
+    // see less than that end.
     protected override async ValueTask<CatchUpSnapshot<TEvent, TPos>> ReadSnapshotCoreAsync(
         SubscriptionOrigin<TPos> origin,
         BsonTimestamp highWaterMark,
-        CancellationToken cancellationToken)
-    {
-        using var session = await StartSessionAsync(highWaterMark, cancellationToken).ConfigureAwait(false);
-
-        var end = await ReadEndAsync(session, cancellationToken).ConfigureAwait(false);
-
-        return new Snapshot(this, origin, end, session.OperationTime);
-    }
-
-    // Starts a causally consistent session whose reads wait until they can see every change up to the given time.
-    private async Task<IClientSessionHandle> StartSessionAsync(
-        BsonTimestamp operationTime,
         CancellationToken cancellationToken)
     {
         var session = await eventLog.Database.Client
@@ -57,8 +46,11 @@ internal sealed class MongoCatchUpSnapshotReader<TEvent, TPos>(
 
         try
         {
-            session.AdvanceOperationTime(operationTime);
-            return session;
+            session.AdvanceOperationTime(highWaterMark);
+
+            var end = await ReadEndAsync(session, cancellationToken).ConfigureAwait(false);
+
+            return new Snapshot(this, origin, end, session);
         }
         catch
         {
@@ -81,13 +73,11 @@ internal sealed class MongoCatchUpSnapshotReader<TEvent, TPos>(
     }
 
     private async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadEventsAsync(
-        BsonTimestamp operationTime,
+        IClientSessionHandle session,
         long startExclusive,
         long endInclusive,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        using var session = await StartSessionAsync(operationTime, cancellationToken).ConfigureAwait(false);
-
         var filter = replayFilter &
                      Builders<BsonDocument>.Filter.Gt(positionFieldName, startExclusive) &
                      Builders<BsonDocument>.Filter.Lte(positionFieldName, endInclusive);
@@ -106,14 +96,14 @@ internal sealed class MongoCatchUpSnapshotReader<TEvent, TPos>(
     }
 
     /// <summary>
-    /// Represents the sequence up to the end. Each read is in its own session, which waits for the operation time of
-    /// the read of the end.
+    /// Represents the sequence up to the end. It holds the session that read the end, so each read of the events waits
+    /// until it can see at least that end.
     /// </summary>
     private sealed class Snapshot(
         MongoCatchUpSnapshotReader<TEvent, TPos> owner,
         SubscriptionOrigin<TPos> origin,
         long? end,
-        BsonTimestamp operationTime) :
+        IClientSessionHandle session) :
         CatchUpSnapshot<TEvent, TPos>(origin, end, owner.RetryPolicy)
     {
         protected override IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAsync(
@@ -121,7 +111,13 @@ internal sealed class MongoCatchUpSnapshotReader<TEvent, TPos>(
             long endInclusive,
             CancellationToken cancellationToken)
         {
-            return owner.ReadEventsAsync(operationTime, startExclusive, endInclusive, cancellationToken);
+            return owner.ReadEventsAsync(session, startExclusive, endInclusive, cancellationToken);
+        }
+
+        protected override ValueTask DisposeAsyncCore()
+        {
+            session.Dispose();
+            return ValueTask.CompletedTask;
         }
     }
 }

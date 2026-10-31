@@ -28,7 +28,7 @@ public class MongoCatchUpSnapshotReaderTests
         await scenario.AppendAsync("existing", 2);
         var reader = scenario.CreateSnapshotReader(Builders<BsonDocument>.Filter.Empty);
 
-        var snapshot = await reader.ReadSnapshotAsync(SubscriptionOrigin.Start, EarliestMark, ct);
+        await using var snapshot = await reader.ReadSnapshotAsync(SubscriptionOrigin.Start, EarliestMark, ct);
 
         snapshot.CaughtUpPosition.ShouldBe(LogPosition.FromInt64(1));
     }
@@ -42,7 +42,7 @@ public class MongoCatchUpSnapshotReaderTests
         var noEvents = Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, "no-such-stream");
         var reader = scenario.CreateSnapshotReader(noEvents);
 
-        var snapshot = await reader.ReadSnapshotAsync(SubscriptionOrigin.Start, EarliestMark, ct);
+        await using var snapshot = await reader.ReadSnapshotAsync(SubscriptionOrigin.Start, EarliestMark, ct);
 
         snapshot.CaughtUpPosition.ShouldBeNull();
     }
@@ -79,7 +79,7 @@ public class MongoCatchUpSnapshotReaderTests
         using var client = new MongoClient(settings);
         var reader = scenario.CreateSnapshotReader(Builders<BsonDocument>.Filter.Empty, client);
 
-        var snapshot = await reader.ReadSnapshotAsync(SubscriptionOrigin.Start, EarliestMark, ct);
+        await using var snapshot = await reader.ReadSnapshotAsync(SubscriptionOrigin.Start, EarliestMark, ct);
 
         await foreach (var _ in snapshot.ReadAllAsync().WithCancellation(ct))
         {

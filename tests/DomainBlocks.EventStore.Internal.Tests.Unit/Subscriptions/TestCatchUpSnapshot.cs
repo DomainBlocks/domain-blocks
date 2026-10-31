@@ -6,7 +6,8 @@ namespace DomainBlocks.EventStore.Internal.Tests.Unit.Subscriptions;
 
 /// <summary>
 /// Stands in for a store's snapshot. Each read is noted as "read from {start} to {end}", and returns the events at the
-/// given positions within its range. The filter is taken to have selected only those positions.
+/// given positions within its range. The filter is taken to have selected only those positions. Disposal is noted as
+/// "dispose".
 /// </summary>
 internal sealed class TestCatchUpSnapshot(
     SubscriptionOrigin<LogPosition> origin,
@@ -41,5 +42,11 @@ internal sealed class TestCatchUpSnapshot(
             if (position > startExclusive && position <= endInclusive)
                 yield return CreateEvent(position);
         }
+    }
+
+    protected override ValueTask DisposeAsyncCore()
+    {
+        calls.Add("dispose");
+        return ValueTask.CompletedTask;
     }
 }

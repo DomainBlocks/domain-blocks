@@ -21,7 +21,7 @@ public class SubscriptionAsyncEnumerableTests
         await enumerator.MoveNextAsync();
 
         enumerator.Current.IsCaughtUp.ShouldBeTrue();
-        calls.ShouldBe(["attach", $"snapshot at {FeedMark}", "read from -1 to 7"]);
+        calls.ShouldBe(["attach", $"snapshot at {FeedMark}", "read from -1 to 7", "dispose"]);
     }
 
     [Test]
@@ -35,7 +35,7 @@ public class SubscriptionAsyncEnumerableTests
         await enumerator.MoveNextAsync();
 
         enumerator.Current.IsCaughtUp.ShouldBeTrue();
-        calls.ShouldBe(["attach", $"snapshot at {FeedMark}"]);
+        calls.ShouldBe(["attach", $"snapshot at {FeedMark}", "dispose"]);
     }
 
     [Test]
@@ -57,7 +57,7 @@ public class SubscriptionAsyncEnumerableTests
         await enumerator.MoveNextAsync();
 
         enumerator.Current.IsCaughtUp.ShouldBeTrue();
-        calls.ShouldBe(["attach", "detach", $"snapshot at {FeedMark}", "read from 7 to 9"]);
+        calls.ShouldBe(["attach", "detach", $"snapshot at {FeedMark}", "read from 7 to 9", "dispose"]);
     }
 
     [Test]
@@ -79,7 +79,7 @@ public class SubscriptionAsyncEnumerableTests
         await enumerator.MoveNextAsync();
 
         enumerator.Current.IsCaughtUp.ShouldBeTrue();
-        calls.ShouldBe(["attach", "detach", $"snapshot at {FeedMark}", "read from -1 to 2"]);
+        calls.ShouldBe(["attach", "detach", $"snapshot at {FeedMark}", "read from -1 to 2", "dispose"]);
     }
 
     [Test]
@@ -106,7 +106,7 @@ public class SubscriptionAsyncEnumerableTests
 
         // The subscriber had not been told that it caught up, so it is not told that it fell behind.
         enumerator.Current.IsCaughtUp.ShouldBeTrue();
-        calls.ShouldBe(["attach", "detach", $"snapshot at {FeedMark}", "read from 2 to 4"]);
+        calls.ShouldBe(["dispose", "attach", "detach", $"snapshot at {FeedMark}", "read from 2 to 4", "dispose"]);
     }
 
     [Test]
@@ -129,7 +129,22 @@ public class SubscriptionAsyncEnumerableTests
         await enumerator.MoveNextAsync();
 
         enumerator.Current.IsCaughtUp.ShouldBeTrue();
-        calls.ShouldBe(["attach", "detach", $"snapshot at {FeedMark}", "read from 2 to 4"]);
+        calls.ShouldBe(["dispose", "attach", "detach", $"snapshot at {FeedMark}", "read from 2 to 4", "dispose"]);
+    }
+
+    [Test]
+    public async Task DisposeAsync_DuringReplay_DisposesSnapshotBeforeDetaching()
+    {
+        var calls = new List<string>();
+        var feed = new TestFeed(calls);
+        var reader = new TestSnapshotReader(calls, end: 1) { EventPositions = [0, 1] };
+
+        var enumerator = Subscribe(feed, reader, SubscriptionOrigin.Start).GetAsyncEnumerator();
+        await enumerator.MoveNextAsync();
+
+        await enumerator.DisposeAsync();
+
+        calls.ShouldBe(["attach", $"snapshot at {FeedMark}", "read from -1 to 1", "dispose", "detach"]);
     }
 
     private static SubscriptionAsyncEnumerable<string, TestSourceEvent, long, LogPosition> Subscribe(

@@ -55,10 +55,13 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
 
                 logger?.CatchUpBoundary(correlationId, position?.Value);
 
-                var events = snapshot.ReadAllAsync();
+                await using (snapshot.ConfigureAwait(false))
+                {
+                    var events = snapshot.ReadAllAsync();
 
-                await foreach (var e in WithLoggedExceptionsAsync(events, cancellationToken).ConfigureAwait(false))
-                    yield return SubscriptionMessage.Event(e);
+                    await foreach (var e in WithLoggedExceptionsAsync(events, cancellationToken).ConfigureAwait(false))
+                        yield return SubscriptionMessage.Event(e);
+                }
 
                 // A restart signaled during the replay takes effect only now. Cancelling the replay would discard what
                 // it read, and a replay slower than the queue's overflow would never finish.

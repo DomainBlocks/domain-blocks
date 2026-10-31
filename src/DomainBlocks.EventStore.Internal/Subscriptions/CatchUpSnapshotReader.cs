@@ -52,7 +52,7 @@ internal abstract class CatchUpSnapshotReader<TEvent, TPos, TMark>
 
     /// <summary>
     /// Reads a snapshot of the followed sequence from the origin, which covers every event up to the feed's high-water
-    /// mark.
+    /// mark. The caller disposes the snapshot once it has read it.
     /// </summary>
     public ValueTask<CatchUpSnapshot<TEvent, TPos>> ReadSnapshotAsync(
         SubscriptionOrigin<TPos> origin,
