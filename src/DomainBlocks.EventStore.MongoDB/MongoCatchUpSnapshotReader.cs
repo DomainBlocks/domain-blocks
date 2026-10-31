@@ -1,9 +1,9 @@
 using System.Runtime.CompilerServices;
+using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Internal.Subscriptions;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
-using Polly;
 
 namespace DomainBlocks.EventStore.MongoDB;
 
@@ -11,7 +11,8 @@ namespace DomainBlocks.EventStore.MongoDB;
 /// Represents the reads of the event log's history, or of one stream's. The end position is read in a session that
 /// waits for the change stream's high-water mark.
 /// </summary>
-/// <param name="reader">The reader of the event log.</param>
+/// <param name="eventLog">The event log.</param>
+/// <param name="decoder">The decoder of the events that it reads.</param>
 /// <param name="sequenceFilter">Selects the followed sequence, which sets its end position.</param>
 /// <param name="replayFilter">Selects the events to replay from the followed sequence.</param>
 /// <param name="positionFieldName">The name of the field that holds an event's position in the sequence.</param>
@@ -19,7 +20,8 @@ namespace DomainBlocks.EventStore.MongoDB;
 /// <param name="correlationId">The subscription's ID, which the log of each retry includes.</param>
 /// <param name="logger">The logger for retries.</param>
 internal sealed class MongoCatchUpSnapshotReader<TEvent, TPos>(
-    EventLogReader<TEvent> reader,
+    IMongoCollection<BsonDocument> eventLog,
+    IEventDecoder<TEvent, BsonValue, BsonValue> decoder,
     FilterDefinition<BsonDocument> sequenceFilter,
     FilterDefinition<BsonDocument> replayFilter,
     string positionFieldName,
@@ -37,22 +39,70 @@ internal sealed class MongoCatchUpSnapshotReader<TEvent, TPos>(
         BsonTimestamp highWaterMark,
         CancellationToken cancellationToken)
     {
-        using var session = await reader
-            .StartCatchUpSessionAsync(highWaterMark, cancellationToken)
+        using var session = await StartSessionAsync(highWaterMark, cancellationToken).ConfigureAwait(false);
+
+        var end = await ReadEndAsync(session, cancellationToken).ConfigureAwait(false);
+
+        return new Snapshot(this, origin, end, session.OperationTime);
+    }
+
+    // Starts a causally consistent session whose reads wait until they can see every change up to the given time.
+    private async Task<IClientSessionHandle> StartSessionAsync(
+        BsonTimestamp operationTime,
+        CancellationToken cancellationToken)
+    {
+        var session = await eventLog.Database.Client
+            .StartSessionAsync(new ClientSessionOptions { CausalConsistency = true }, cancellationToken)
             .ConfigureAwait(false);
 
-        var end = await reader
-            .GetEndPositionAsync(session, sequenceFilter, positionFieldName, cancellationToken)
+        try
+        {
+            session.AdvanceOperationTime(operationTime);
+            return session;
+        }
+        catch
+        {
+            session.Dispose();
+            throw;
+        }
+    }
+
+    private async Task<long?> ReadEndAsync(IClientSessionHandle session, CancellationToken cancellationToken)
+    {
+        var last = await eventLog
+            .Find(session, sequenceFilter)
+            .Sort(Builders<BsonDocument>.Sort.Descending(positionFieldName))
+            .Limit(1)
+            .Project(Builders<BsonDocument>.Projection.Include(positionFieldName))
+            .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return new Snapshot(
-            origin,
-            end,
-            RetryPolicy,
-            session.OperationTime,
-            reader,
-            replayFilter,
-            positionFieldName);
+        return last?[positionFieldName].AsInt64;
+    }
+
+    private async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadEventsAsync(
+        BsonTimestamp operationTime,
+        long startExclusive,
+        long endInclusive,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        using var session = await StartSessionAsync(operationTime, cancellationToken).ConfigureAwait(false);
+
+        var filter = replayFilter &
+                     Builders<BsonDocument>.Filter.Gt(positionFieldName, startExclusive) &
+                     Builders<BsonDocument>.Filter.Lte(positionFieldName, endInclusive);
+
+        using var cursor = await eventLog
+            .Find(session, filter)
+            .Sort(Builders<BsonDocument>.Sort.Ascending(positionFieldName))
+            .ToCursorAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        while (await cursor.MoveNextAsync(cancellationToken).ConfigureAwait(false))
+        {
+            foreach (var doc in cursor.Current)
+                yield return decoder.Decode(doc);
+        }
     }
 
     /// <summary>
@@ -60,34 +110,18 @@ internal sealed class MongoCatchUpSnapshotReader<TEvent, TPos>(
     /// the read of the end.
     /// </summary>
     private sealed class Snapshot(
+        MongoCatchUpSnapshotReader<TEvent, TPos> owner,
         SubscriptionOrigin<TPos> origin,
         long? end,
-        ResiliencePipeline resiliencePipeline,
-        BsonTimestamp operationTime,
-        EventLogReader<TEvent> reader,
-        FilterDefinition<BsonDocument> replayFilter,
-        string positionFieldName) :
-        CatchUpSnapshot<TEvent, TPos>(origin, end, resiliencePipeline)
+        BsonTimestamp operationTime) :
+        CatchUpSnapshot<TEvent, TPos>(origin, end, owner.RetryPolicy)
     {
-        protected override async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAsync(
+        protected override IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAsync(
             long startExclusive,
             long endInclusive,
-            [EnumeratorCancellation] CancellationToken cancellationToken)
+            CancellationToken cancellationToken)
         {
-            using var session = await reader
-                .StartCatchUpSessionAsync(operationTime, cancellationToken)
-                .ConfigureAwait(false);
-
-            var events = reader.ReadCatchUpAsync(
-                session,
-                replayFilter,
-                positionFieldName,
-                startExclusive,
-                endInclusive,
-                cancellationToken);
-
-            await foreach (var e in events.ConfigureAwait(false))
-                yield return e;
+            return owner.ReadEventsAsync(operationTime, startExclusive, endInclusive, cancellationToken);
         }
     }
 }

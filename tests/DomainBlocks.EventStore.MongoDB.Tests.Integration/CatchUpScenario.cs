@@ -24,7 +24,7 @@ internal sealed class CatchUpScenario : IAsyncDisposable
 {
     private readonly MongoEventStoreOptions _options;
     private readonly IEventStore<object, string, StreamPosition, LogPosition> _eventStore;
-    private readonly EventLogReader<object> _reader;
+    private readonly IMongoCollection<BsonDocument> _catchUpEventLog;
     private readonly IEventCodec<object, BsonValue, BsonValue> _codec;
     private readonly RefCountedFeed<EventLogDocument<object>, BsonTimestamp> _feed;
     private readonly MongoClient _catchUpClient;
@@ -68,7 +68,7 @@ internal sealed class CatchUpScenario : IAsyncDisposable
         _catchUpClient = new MongoClient(settings);
 
         _codec = codec;
-        _reader = CreateReader(_catchUpClient);
+        _catchUpEventLog = GetEventLog(_catchUpClient);
         ChangeStreamProbe = new ChangeStreamProbe(eventLog);
 
         var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(insertsOnly);
@@ -176,7 +176,8 @@ internal sealed class CatchUpScenario : IAsyncDisposable
             LogPosition>(
             _feed,
             new MongoCatchUpSnapshotReader<object, LogPosition>(
-                _reader,
+                _catchUpEventLog,
+                _codec,
                 Builders<BsonDocument>.Filter.Empty,
                 catchUpFilter ?? Builders<BsonDocument>.Filter.Empty,
                 EventLogEntry.FieldNames.Position,
@@ -201,7 +202,8 @@ internal sealed class CatchUpScenario : IAsyncDisposable
         IMongoClient? client = null)
     {
         return new MongoCatchUpSnapshotReader<object, LogPosition>(
-            client is null ? _reader : CreateReader(client),
+            client is null ? _catchUpEventLog : GetEventLog(client),
+            _codec,
             sequenceFilter,
             sequenceFilter,
             EventLogEntry.FieldNames.Position,
@@ -252,15 +254,13 @@ internal sealed class CatchUpScenario : IAsyncDisposable
         await MongoTestEnvironment.MongoClient.DropDatabaseAsync(_options.DatabaseName);
     }
 
-    private EventLogReader<object> CreateReader(IMongoClient client)
+    private IMongoCollection<BsonDocument> GetEventLog(IMongoClient client)
     {
-        var eventLog = client
+        return client
             .GetDatabase(_options.DatabaseName)
             .GetCollection<BsonDocument>(_options.EventLogCollectionName)
             .WithReadConcern(ReadConcern.Majority)
             .WithReadPreference(ReadPreference.Primary);
-
-        return new EventLogReader<object>(eventLog, _codec);
     }
 
     // A catch-up reads the end by sorting on position in descending order, and reads the events in ascending order.

@@ -79,7 +79,6 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
     private readonly IMongoCollection<BsonDocument> _eventLog;
     private readonly IEventCodec<TEvent, BsonValue, BsonValue> _eventCodec;
     private readonly ILogger? _logger;
-    private readonly EventLogReader<TEvent> _reader;
     private readonly RefCountedFeed<EventLogDocument<TEvent>, BsonTimestamp> _feed;
 
     internal MongoEventStore(
@@ -102,7 +101,6 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
             .WithReadConcern(ReadConcern.Majority)
             .WithReadPreference(ReadPreference.Primary);
 
-        _reader = new EventLogReader<TEvent>(_eventLog, eventCodec);
         _feed = CreateFeed(_eventLog, logger);
     }
 
@@ -263,7 +261,8 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         return new SubscriptionAsyncEnumerable<TEvent, EventLogDocument<TEvent>, BsonTimestamp, LogPosition>(
             _feed,
             new MongoCatchUpSnapshotReader<TEvent, LogPosition>(
-                _reader,
+                _eventLog,
+                _eventCodec,
                 Builders<BsonDocument>.Filter.Empty,
                 catchUpFilter,
                 FieldNames.Position,
@@ -291,7 +290,8 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         return new SubscriptionAsyncEnumerable<TEvent, EventLogDocument<TEvent>, BsonTimestamp, StreamPosition>(
             _feed,
             new MongoCatchUpSnapshotReader<TEvent, StreamPosition>(
-                _reader,
+                _eventLog,
+                _eventCodec,
                 streamFilter,
                 catchUpFilter,
                 FieldNames.StreamPosition,
