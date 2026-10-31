@@ -256,21 +256,24 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         SubscriptionOrigin<LogPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
-        var filter = options?.Filter ?? EventFilter.All;
-        var catchUpFilter = TranslateFilter(filter) ?? Builders<BsonDocument>.Filter.Empty;
+        options ??= SubscriptionOptions.Default;
+        var catchUpFilter = TranslateFilter(options.Filter) ?? Builders<BsonDocument>.Filter.Empty;
+        var correlationId = CorrelationId.ReserveOrGenerate(options.CorrelationId);
 
         return new SubscriptionAsyncEnumerable<TEvent, EventLogDocument<TEvent>, BsonTimestamp, LogPosition>(
             _feed,
-            new MongoHistoryReader<TEvent>(
+            new MongoCatchUpSnapshotReader<TEvent, LogPosition>(
                 _reader,
                 Builders<BsonDocument>.Filter.Empty,
                 catchUpFilter,
-                FieldNames.Position),
-            filter,
-            static ctx => ctx.LogPosition,
+                FieldNames.Position,
+                options,
+                correlationId,
+                _logger),
+            options.Filter,
             origin,
-            options,
-            MongoTransientErrors.IsTransient,
+            options.QueueCapacity,
+            correlationId,
             _logger);
     }
 
@@ -279,18 +282,26 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         SubscriptionOrigin<StreamPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
-        var filter = options?.Filter ?? EventFilter.All;
+        options ??= SubscriptionOptions.Default;
         var streamFilter = Builders<BsonDocument>.Filter.Eq(FieldNames.StreamId, streamId);
-        var catchUpFilter = TranslateFilter(filter) is { } translated ? streamFilter & translated : streamFilter;
+        var translatedFilter = TranslateFilter(options.Filter);
+        var catchUpFilter = translatedFilter is null ? streamFilter : streamFilter & translatedFilter;
+        var correlationId = CorrelationId.ReserveOrGenerate(options.CorrelationId);
 
         return new SubscriptionAsyncEnumerable<TEvent, EventLogDocument<TEvent>, BsonTimestamp, StreamPosition>(
             _feed,
-            new MongoHistoryReader<TEvent>(_reader, streamFilter, catchUpFilter, FieldNames.StreamPosition),
-            EventFilter.StreamIds(streamId) & filter,
-            static ctx => ctx.StreamPosition,
+            new MongoCatchUpSnapshotReader<TEvent, StreamPosition>(
+                _reader,
+                streamFilter,
+                catchUpFilter,
+                FieldNames.StreamPosition,
+                options,
+                correlationId,
+                _logger),
+            EventFilter.StreamIds(streamId) & options.Filter,
             origin,
-            options,
-            MongoTransientErrors.IsTransient,
+            options.QueueCapacity,
+            correlationId,
             _logger);
     }
 

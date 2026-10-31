@@ -24,4 +24,22 @@ public class CorrelationIdTests
         CorrelationId.TryReserve(id).ShouldBeFalse();
         CorrelationId.Release(id);
     }
+
+    [Test]
+    public void ReserveOrGenerate_WithId_ReservesId()
+    {
+        CorrelationId.ReserveOrGenerate("payments").ShouldBe("payments");
+        CorrelationId.TryReserve("payments").ShouldBeFalse();
+        CorrelationId.Release("payments");
+    }
+
+    [Test]
+    public void ReserveOrGenerate_WithoutId_ReservesGeneratedId()
+    {
+        var id = CorrelationId.ReserveOrGenerate(null);
+
+        id.Length.ShouldBe(CorrelationId.IdLength);
+        CorrelationId.TryReserve(id).ShouldBeFalse();
+        CorrelationId.Release(id);
+    }
 }

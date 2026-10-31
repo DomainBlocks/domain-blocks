@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Filtering;
+using DomainBlocks.EventStore.Internal;
 using DomainBlocks.EventStore.Internal.Feeds;
 using DomainBlocks.EventStore.Internal.Subscriptions;
 using DomainBlocks.EventStore.PostgreSQL.Feeds;
@@ -259,16 +260,16 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
         SubscriptionOrigin<LogPosition>? origin = null,
         SubscriptionOptions? options = null)
     {
-        var filter = options?.Filter ?? EventFilter.All;
+        options ??= SubscriptionOptions.Default;
+        var correlationId = CorrelationId.ReserveOrGenerate(options.CorrelationId);
 
         return new SubscriptionAsyncEnumerable<TEvent, EventLogRow<TEvent>, long, LogPosition>(
             _feed,
-            new PostgresHistoryReader<TEvent>(_reader, streamId: null, filter, _logger),
-            filter,
-            static ctx => ctx.LogPosition,
+            new PostgresAllCatchUpSnapshotReader<TEvent>(_reader, options.Filter, options, correlationId, _logger),
+            options.Filter,
             origin,
-            options,
-            PostgresTransientErrors.IsTransient,
+            options.QueueCapacity,
+            correlationId,
             _logger);
     }
 
@@ -279,16 +280,22 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
     {
         ArgumentException.ThrowIfNullOrEmpty(streamId);
 
-        var filter = options?.Filter ?? EventFilter.All;
+        options ??= SubscriptionOptions.Default;
+        var correlationId = CorrelationId.ReserveOrGenerate(options.CorrelationId);
 
         return new SubscriptionAsyncEnumerable<TEvent, EventLogRow<TEvent>, long, StreamPosition>(
             _feed,
-            new PostgresHistoryReader<TEvent>(_reader, streamId, filter, _logger),
-            EventFilter.StreamIds(streamId) & filter,
-            static ctx => ctx.StreamPosition,
+            new PostgresStreamCatchUpSnapshotReader<TEvent>(
+                _reader,
+                streamId,
+                options.Filter,
+                options,
+                correlationId,
+                _logger),
+            EventFilter.StreamIds(streamId) & options.Filter,
             origin,
-            options,
-            PostgresTransientErrors.IsTransient,
+            options.QueueCapacity,
+            correlationId,
             _logger);
     }
 

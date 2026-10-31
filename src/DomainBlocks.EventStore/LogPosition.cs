@@ -19,6 +19,18 @@ public readonly record struct LogPosition(ulong Value) : IPosition<LogPosition>
     }
 
     /// <summary>
+    /// Gets an event's log position from its context.
+    /// </summary>
+    /// <typeparam name="TStreamId">The type of the stream ID.</typeparam>
+    /// <param name="context">The event's context.</param>
+    /// <returns>The event's log position.</returns>
+    public static LogPosition FromContext<TStreamId>(ReadEventContext<TStreamId, StreamPosition, LogPosition> context)
+        where TStreamId : notnull
+    {
+        return context.LogPosition;
+    }
+
+    /// <summary>
     /// Returns the position as a string.
     /// </summary>
     public override string ToString() => Value.ToString();

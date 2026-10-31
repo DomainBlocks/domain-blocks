@@ -1,5 +1,7 @@
+using System.Collections.Concurrent;
 using DomainBlocks.EventStore.Codecs;
 using DomainBlocks.EventStore.Filtering;
+using DomainBlocks.EventStore.Internal;
 using DomainBlocks.EventStore.Internal.Feeds;
 using DomainBlocks.EventStore.Internal.Subscriptions;
 using DomainBlocks.EventStore.MongoDB.Feeds;
@@ -10,6 +12,7 @@ using DomainBlocks.Testing.Integration.EventStore;
 using DomainBlocks.Testing.Integration.EventStore.MongoDB;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using MongoDB.Driver.Core.Events;
 
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
@@ -24,8 +27,9 @@ internal sealed class CatchUpScenario : IAsyncDisposable
     private readonly EventLogReader<object> _reader;
     private readonly IEventCodec<object, BsonValue, BsonValue> _codec;
     private readonly RefCountedFeed<EventLogDocument<object>, BsonTimestamp> _feed;
-    private readonly CatchUpRecorder _catchUpRecorder = new();
-    private readonly List<BsonTimestamp> _catchUpMarks = [];
+    private readonly MongoClient _catchUpClient;
+    private readonly ConcurrentQueue<CatchUpRead> _catchUpReads = new();
+    private readonly ConcurrentQueue<BsonTimestamp> _catchUpMarks = new();
     private readonly CancellationToken _cancellationToken;
 
     private CatchUpScenario(MongoEventStoreOptions options, CancellationToken cancellationToken)
@@ -58,8 +62,13 @@ internal sealed class CatchUpScenario : IAsyncDisposable
             x => x.OperationType,
             ChangeStreamOperationType.Insert);
 
+        // Catch-ups read through a client of their own, so each of their commands can be recorded.
+        var settings = MongoClientSettings.FromConnectionString(MongoTestEnvironment.ConnectionString);
+        settings.ClusterConfigurator = builder => builder.Subscribe<CommandStartedEvent>(RecordCatchUpCommand);
+        _catchUpClient = new MongoClient(settings);
+
         _codec = codec;
-        _reader = new EventLogReader<object>(eventLog, codec);
+        _reader = CreateReader(_catchUpClient);
         ChangeStreamProbe = new ChangeStreamProbe(eventLog);
 
         var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>().Match(insertsOnly);
@@ -89,12 +98,15 @@ internal sealed class CatchUpScenario : IAsyncDisposable
 
     public ChangeStreamProbe ChangeStreamProbe { get; }
 
-    public IReadOnlyList<CatchUpRead> CatchUpReads => _catchUpRecorder.Reads;
+    /// <summary>
+    /// Gets each read of the events that a catch-up sent to the server, in order.
+    /// </summary>
+    public IReadOnlyList<CatchUpRead> CatchUpReads => _catchUpReads.ToArray();
 
     /// <summary>
-    /// The mark that each catch-up's read of the end waited for, in order.
+    /// Gets the mark that each catch-up's read of the end waited for, in order.
     /// </summary>
-    public IReadOnlyList<BsonTimestamp> CatchUpMarks => _catchUpMarks;
+    public IReadOnlyList<BsonTimestamp> CatchUpMarks => _catchUpMarks.ToArray();
 
     public static async Task<CatchUpScenario> StartAsync(CancellationToken cancellationToken)
     {
@@ -152,62 +164,51 @@ internal sealed class CatchUpScenario : IAsyncDisposable
         EventFilter? liveFilter = null,
         SubscriptionOrigin<LogPosition>? origin = null)
     {
+        options ??= SubscriptionOptions.Default;
+
+        var correlationId = CorrelationId.ReserveOrGenerate(options.CorrelationId);
+        var logger = MongoTestEnvironment.LoggerFactory.CreateLogger("Subscription");
+
         var subscription = new SubscriptionAsyncEnumerable<
             object,
             EventLogDocument<object>,
             BsonTimestamp,
             LogPosition>(
             _feed,
-            new RecordingHistoryReader(
-                new MongoHistoryReader<object>(
-                    _reader,
-                    Builders<BsonDocument>.Filter.Empty,
-                    catchUpFilter ?? Builders<BsonDocument>.Filter.Empty,
-                    EventLogEntry.FieldNames.Position),
-                _catchUpRecorder,
-                _catchUpMarks),
+            new MongoCatchUpSnapshotReader<object, LogPosition>(
+                _reader,
+                Builders<BsonDocument>.Filter.Empty,
+                catchUpFilter ?? Builders<BsonDocument>.Filter.Empty,
+                EventLogEntry.FieldNames.Position,
+                options,
+                correlationId,
+                logger),
             liveFilter ?? EventFilter.All,
-            static ctx => ctx.LogPosition,
             origin ?? SubscriptionOrigin.Start,
-            options,
-            MongoTransientErrors.IsTransient,
-            MongoTestEnvironment.LoggerFactory.CreateLogger("Subscription"));
+            options.QueueCapacity,
+            correlationId,
+            logger);
 
         return new SubscriptionProbe<StreamPosition, LogPosition>(subscription, _cancellationToken);
     }
 
     /// <summary>
-    /// Creates a history reader of the sequence that the given filter selects, reading through the given client, or
+    /// Creates a snapshot reader of the sequence that the given filter selects, reading through the given client, or
     /// the scenario's if there is none.
     /// </summary>
-    public MongoHistoryReader<object> CreateHistoryReader(
+    public MongoCatchUpSnapshotReader<object, LogPosition> CreateSnapshotReader(
         FilterDefinition<BsonDocument> sequenceFilter,
         IMongoClient? client = null)
     {
-        var reader = _reader;
-
-        if (client is not null)
-        {
-            var eventLog = client
-                .GetDatabase(_options.DatabaseName)
-                .GetCollection<BsonDocument>(_options.EventLogCollectionName)
-                .WithReadConcern(ReadConcern.Majority)
-                .WithReadPreference(ReadPreference.Primary);
-
-            reader = new EventLogReader<object>(eventLog, _codec);
-        }
-
-        return new MongoHistoryReader<object>(
-            reader,
+        return new MongoCatchUpSnapshotReader<object, LogPosition>(
+            client is null ? _reader : CreateReader(client),
             sequenceFilter,
             sequenceFilter,
-            EventLogEntry.FieldNames.Position);
+            EventLogEntry.FieldNames.Position,
+            SubscriptionOptions.Default,
+            "sub-1",
+            logger: null);
     }
-
-    /// <summary>
-    /// Holds the catch-up with the given index once it has delivered its first event, until the hold is released.
-    /// </summary>
-    public CatchUpHold HoldCatchUp(int index) => _catchUpRecorder.Hold(index);
 
     /// <summary>
     /// Kills the cursors of the finds on the event log that wait for a getMore, as a primary that restarts loses them,
@@ -247,44 +248,36 @@ internal sealed class CatchUpScenario : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await _eventStore.DisposeAsync();
+        _catchUpClient.Dispose();
         await MongoTestEnvironment.MongoClient.DropDatabaseAsync(_options.DatabaseName);
     }
 
-    /// <summary>
-    /// Passes a history reader through, recording each read of the events and the mark that each snapshot waits for.
-    /// </summary>
-    private sealed class RecordingHistoryReader(
-        IHistoryReader<object, BsonTimestamp> inner,
-        CatchUpRecorder recorder,
-        List<BsonTimestamp> marks) :
-        IHistoryReader<object, BsonTimestamp>
+    private EventLogReader<object> CreateReader(IMongoClient client)
     {
-        public async ValueTask<IHistorySnapshot<object>> ReadSnapshotAsync(
-            BsonTimestamp highWaterMark,
-            string correlationId,
-            CancellationToken cancellationToken)
-        {
-            marks.Add(highWaterMark);
+        var eventLog = client
+            .GetDatabase(_options.DatabaseName)
+            .GetCollection<BsonDocument>(_options.EventLogCollectionName)
+            .WithReadConcern(ReadConcern.Majority)
+            .WithReadPreference(ReadPreference.Primary);
 
-            var snapshot = await inner.ReadSnapshotAsync(highWaterMark, correlationId, cancellationToken);
-
-            return new RecordingSnapshot(snapshot, recorder);
-        }
+        return new EventLogReader<object>(eventLog, _codec);
     }
 
-    private sealed class RecordingSnapshot(IHistorySnapshot<object> inner, CatchUpRecorder recorder) :
-        IHistorySnapshot<object>
+    // A catch-up reads the end by sorting on position in descending order, and reads the events in ascending order.
+    private void RecordCatchUpCommand(CommandStartedEvent e)
     {
-        public long? End => inner.End;
+        if (e.CommandName != "find")
+            return;
 
-        public IAsyncEnumerable<ReadEvent<object, string, StreamPosition, LogPosition>> ReadAsync(
-            long startExclusive,
-            long endInclusive,
-            CancellationToken cancellationToken)
+        var position = EventLogEntry.FieldNames.Position;
+
+        if (e.Command["sort"][position].ToInt32() < 0)
         {
-            var events = inner.ReadAsync(startExclusive, endInclusive, cancellationToken);
-
-            return recorder.Record(events, startExclusive, endInclusive, cancellationToken);
+            _catchUpMarks.Enqueue(e.Command["readConcern"]["afterClusterTime"].AsBsonTimestamp);
+            return;
         }
+
+        var range = e.Command["filter"][position];
+        _catchUpReads.Enqueue(new CatchUpRead(range["$gt"].ToInt64(), range["$lte"].ToInt64()));
     }
 }

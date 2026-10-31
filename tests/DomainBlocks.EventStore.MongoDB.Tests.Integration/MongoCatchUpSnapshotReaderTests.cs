@@ -13,7 +13,7 @@ namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 /// for the operation time of that read, so they can't see less than the end it found.
 /// </summary>
 [TestFixture]
-public class MongoHistoryReaderTests
+public class MongoCatchUpSnapshotReaderTests
 {
     private const int InvalidOptionsCode = 72;
 
@@ -26,11 +26,11 @@ public class MongoHistoryReaderTests
     {
         await using var scenario = await CatchUpScenario.StartAsync(ct);
         await scenario.AppendAsync("existing", 2);
-        var reader = scenario.CreateHistoryReader(Builders<BsonDocument>.Filter.Empty);
+        var reader = scenario.CreateSnapshotReader(Builders<BsonDocument>.Filter.Empty);
 
-        var snapshot = await reader.ReadSnapshotAsync(EarliestMark, "sub-1", ct);
+        var snapshot = await reader.ReadSnapshotAsync(SubscriptionOrigin.Start, EarliestMark, ct);
 
-        snapshot.End.ShouldBe(1);
+        snapshot.CaughtUpPosition.ShouldBe(LogPosition.FromInt64(1));
     }
 
     [Test]
@@ -40,11 +40,11 @@ public class MongoHistoryReaderTests
         await using var scenario = await CatchUpScenario.StartAsync(ct);
         await scenario.AppendAsync("existing", 2);
         var noEvents = Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, "no-such-stream");
-        var reader = scenario.CreateHistoryReader(noEvents);
+        var reader = scenario.CreateSnapshotReader(noEvents);
 
-        var snapshot = await reader.ReadSnapshotAsync(EarliestMark, "sub-1", ct);
+        var snapshot = await reader.ReadSnapshotAsync(SubscriptionOrigin.Start, EarliestMark, ct);
 
-        snapshot.End.ShouldBeNull();
+        snapshot.CaughtUpPosition.ShouldBeNull();
     }
 
     [Test]
@@ -52,17 +52,17 @@ public class MongoHistoryReaderTests
     public async Task ReadSnapshotAsync_MarkAheadOfCluster_Throws(CancellationToken ct)
     {
         await using var scenario = await CatchUpScenario.StartAsync(ct);
-        var reader = scenario.CreateHistoryReader(Builders<BsonDocument>.Filter.Empty);
+        var reader = scenario.CreateSnapshotReader(Builders<BsonDocument>.Filter.Empty);
 
         var exception = await Should.ThrowAsync<MongoCommandException>(async () =>
-            await reader.ReadSnapshotAsync(MarkAheadOfCluster, "sub-1", ct));
+            await reader.ReadSnapshotAsync(SubscriptionOrigin.Start, MarkAheadOfCluster, ct));
 
         exception.Code.ShouldBe(InvalidOptionsCode);
     }
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task ReadAsync_AfterSnapshot_WaitsForOperationTimeOfEndRead(CancellationToken ct)
+    public async Task ReadAllAsync_AfterSnapshot_WaitsForOperationTimeOfEndRead(CancellationToken ct)
     {
         await using var scenario = await CatchUpScenario.StartAsync(ct);
         var deliveredClusterTime = await AppendLiveEventAsync(scenario);
@@ -77,12 +77,11 @@ public class MongoHistoryReaderTests
         });
 
         using var client = new MongoClient(settings);
-        var reader = scenario.CreateHistoryReader(Builders<BsonDocument>.Filter.Empty, client);
+        var reader = scenario.CreateSnapshotReader(Builders<BsonDocument>.Filter.Empty, client);
 
-        var snapshot = await reader.ReadSnapshotAsync(EarliestMark, "sub-1", ct);
-        var end = snapshot.End.ShouldNotBeNull();
+        var snapshot = await reader.ReadSnapshotAsync(SubscriptionOrigin.Start, EarliestMark, ct);
 
-        await foreach (var _ in snapshot.ReadAsync(startExclusive: -1, end, ct))
+        await foreach (var _ in snapshot.ReadAllAsync().WithCancellation(ct))
         {
         }
 
