@@ -36,7 +36,7 @@ internal abstract class CatchUp<TEvent, TPos> : IAsyncDisposable
             SubscriptionOrigin<TPos>.Start => -1,
             SubscriptionOrigin<TPos>.End => _end,
             SubscriptionOrigin<TPos>.After after => after.Position.ToInt64(),
-            _ => throw new UnreachableException()
+            _ => throw new UnreachableException($"Unexpected subscription origin of type '{origin.GetType()}'.")
         };
 
         var endPosition = Math.Max(_start, _end);
@@ -45,8 +45,7 @@ internal abstract class CatchUp<TEvent, TPos> : IAsyncDisposable
 
     /// <summary>
     /// Gets the position where the catch-up ends, which is the later of its origin and the end of the sequence, or
-    /// <see langword="null"/> if that is before the first event. A subscription has reached this position once it has
-    /// read the catch-up.
+    /// <see langword="null"/> if that is before the first event.
     /// </summary>
     /// <remarks>
     /// <para>
