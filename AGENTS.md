@@ -34,7 +34,8 @@ TBD
 ## Code Conventions
 
 - 120 char maximum line width - applies to both *.cs and *.md files
-- All comments, including doc comments, wrap at 120 chars
+- Wrap all comments, including doc comments, at 120 chars
+- Prefer succint doc comments that follow BCL conventions
 - Prefer primary constructors
 - Use record types only where value semantics apply, otherwise choose classes
 - Sealed records and classes for implementations

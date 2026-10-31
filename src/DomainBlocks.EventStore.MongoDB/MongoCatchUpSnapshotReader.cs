@@ -62,12 +62,12 @@ internal sealed class MongoCatchUpSnapshotReader<TEvent, TPos>(
     private sealed class Snapshot(
         SubscriptionOrigin<TPos> origin,
         long? end,
-        ResiliencePipeline retryPolicy,
+        ResiliencePipeline resiliencePipeline,
         BsonTimestamp operationTime,
         EventLogReader<TEvent> reader,
         FilterDefinition<BsonDocument> replayFilter,
         string positionFieldName) :
-        CatchUpSnapshot<TEvent, TPos>(origin, end, retryPolicy)
+        CatchUpSnapshot<TEvent, TPos>(origin, end, resiliencePipeline)
     {
         protected override async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAsync(
             long startExclusive,

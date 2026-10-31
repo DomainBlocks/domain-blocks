@@ -10,7 +10,7 @@ internal abstract class CatchUpSnapshot<TEvent, TPos>
     where TEvent : notnull
     where TPos : struct, IPosition<TPos>
 {
-    private readonly ResiliencePipeline _retryPolicy;
+    private readonly ResiliencePipeline _resiliencePipeline;
     private readonly long _start;
     private readonly long _end;
 
@@ -18,10 +18,10 @@ internal abstract class CatchUpSnapshot<TEvent, TPos>
     /// <param name="end">
     /// The position of the sequence's last event, or <see langword="null"/> if it has no events.
     /// </param>
-    /// <param name="retryPolicy">The policy that retries each read.</param>
-    protected CatchUpSnapshot(SubscriptionOrigin<TPos> origin, long? end, ResiliencePipeline retryPolicy)
+    /// <param name="resiliencePipeline">The policy that retries each read.</param>
+    protected CatchUpSnapshot(SubscriptionOrigin<TPos> origin, long? end, ResiliencePipeline resiliencePipeline)
     {
-        _retryPolicy = retryPolicy;
+        _resiliencePipeline = resiliencePipeline;
 
         // -1 is the position before the first event, where an empty sequence ends.
         _end = end ?? -1;
@@ -64,7 +64,7 @@ internal abstract class CatchUpSnapshot<TEvent, TPos>
             static (_, e) => TPos.FromContext(e.Context).ToInt64(),
             this,
             _start,
-            _retryPolicy);
+            _resiliencePipeline);
     }
 
     /// <summary>
