@@ -10,7 +10,7 @@ namespace DomainBlocks.EventStore.Internal.Subscriptions;
 /// A store derives from this class to supply its reads, and overrides <see cref="DisposeAsyncCore"/> if a snapshot holds
 /// a resource for them, such as a session. So a caller reads a snapshot one read at a time, and not after disposing it.
 /// </remarks>
-internal abstract class CatchUpSnapshot<TEvent, TPos> : IAsyncDisposable
+internal abstract class CatchUp<TEvent, TPos> : IAsyncDisposable
     where TEvent : notnull
     where TPos : struct, IPosition<TPos>
 {
@@ -23,7 +23,7 @@ internal abstract class CatchUpSnapshot<TEvent, TPos> : IAsyncDisposable
     /// The position of the sequence's last event, or <see langword="null"/> if it has no events.
     /// </param>
     /// <param name="resiliencePipeline">The policy that retries each read.</param>
-    protected CatchUpSnapshot(SubscriptionOrigin<TPos> origin, long? end, ResiliencePipeline resiliencePipeline)
+    protected CatchUp(SubscriptionOrigin<TPos> origin, long? end, ResiliencePipeline resiliencePipeline)
     {
         _resiliencePipeline = resiliencePipeline;
 
@@ -37,8 +37,8 @@ internal abstract class CatchUpSnapshot<TEvent, TPos> : IAsyncDisposable
             _ => -1
         };
 
-        var caughtUpPosition = Math.Max(_start, _end);
-        CaughtUpPosition = caughtUpPosition < 0 ? null : TPos.FromInt64(caughtUpPosition);
+        var endPosition = Math.Max(_start, _end);
+        EndPosition = endPosition < 0 ? null : TPos.FromInt64(endPosition);
     }
 
     /// <summary>
@@ -55,13 +55,13 @@ internal abstract class CatchUpSnapshot<TEvent, TPos> : IAsyncDisposable
     /// would resume from a later end and skip the events appended in between.
     /// </para>
     /// </remarks>
-    public TPos? CaughtUpPosition { get; }
+    public TPos? EndPosition { get; }
 
     /// <summary>
     /// Reads the events from the origin up to the end. After a transient error, it reads again after the last event
     /// that the caller took. The sequence is empty if there are no events to read.
     /// </summary>
-    public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAllAsync()
+    public IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAll()
     {
         return ResumableAsyncEnumerable.Create(
             static (s, start, ct) => s.ReadAfterAsync(start, ct),

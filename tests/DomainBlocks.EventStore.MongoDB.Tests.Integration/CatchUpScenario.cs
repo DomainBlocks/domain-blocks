@@ -175,7 +175,7 @@ internal sealed class CatchUpScenario : IAsyncDisposable
             BsonTimestamp,
             LogPosition>(
             _feed,
-            new MongoCatchUpSnapshotReader<object, LogPosition>(
+            new MongoCatchUpReader<object, LogPosition>(
                 _catchUpEventLog,
                 _codec,
                 Builders<BsonDocument>.Filter.Empty,
@@ -197,11 +197,11 @@ internal sealed class CatchUpScenario : IAsyncDisposable
     /// Creates a snapshot reader of the sequence that the given filter selects, reading through the given client, or
     /// the scenario's if there is none.
     /// </summary>
-    public MongoCatchUpSnapshotReader<object, LogPosition> CreateSnapshotReader(
+    public MongoCatchUpReader<object, LogPosition> CreateCatchUpReader(
         FilterDefinition<BsonDocument> sequenceFilter,
         IMongoClient? client = null)
     {
-        return new MongoCatchUpSnapshotReader<object, LogPosition>(
+        return new MongoCatchUpReader<object, LogPosition>(
             client is null ? _catchUpEventLog : GetEventLog(client),
             _codec,
             sequenceFilter,

@@ -9,13 +9,13 @@ namespace DomainBlocks.EventStore.Internal.Tests.Unit.Subscriptions;
 /// given positions within its range. The filter is taken to have selected only those positions. Disposal is noted as
 /// "dispose".
 /// </summary>
-internal sealed class TestCatchUpSnapshot(
+internal sealed class TestCatchUp(
     SubscriptionOrigin<LogPosition> origin,
     long? end,
-    ResiliencePipeline retryPolicy,
+    ResiliencePipeline resiliencePipeline,
     List<string> calls,
     IReadOnlyList<long>? eventPositions = null) :
-    CatchUpSnapshot<string, LogPosition>(origin, end, retryPolicy)
+    CatchUp<string, LogPosition>(origin, end, resiliencePipeline)
 {
     public static ReadEvent<string, string, StreamPosition, LogPosition> CreateEvent(long position)
     {

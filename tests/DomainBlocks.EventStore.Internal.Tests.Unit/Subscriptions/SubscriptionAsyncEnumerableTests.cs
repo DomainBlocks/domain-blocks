@@ -11,31 +11,31 @@ public class SubscriptionAsyncEnumerableTests
     private const long FeedMark = 10;
 
     [Test]
-    public async Task GetAsyncEnumerator_FromStart_ReadsSnapshotAtFeedMarkAndReplaysIt()
+    public async Task GetAsyncEnumerator_FromStart_ReadsAtFeedMarkAndReplaysUpToEnd()
     {
         var calls = new List<string>();
         var feed = new TestFeed(calls);
-        var reader = new TestSnapshotReader(calls, end: 7);
+        var reader = new TestCatchUpReader(calls, end: 7);
 
         await using var enumerator = Subscribe(feed, reader, SubscriptionOrigin.Start).GetAsyncEnumerator();
         await enumerator.MoveNextAsync();
 
         enumerator.Current.IsCaughtUp.ShouldBeTrue();
-        calls.ShouldBe(["attach", $"snapshot at {FeedMark}", "read from -1 to 7", "dispose"]);
+        calls.ShouldBe(["attach", $"catch-up at {FeedMark}", "read from -1 to 7", "dispose"]);
     }
 
     [Test]
-    public async Task GetAsyncEnumerator_FromEnd_AttachesBeforeReadingSnapshotOnceAndReplaysNothing()
+    public async Task GetAsyncEnumerator_FromEnd_AttachesBeforeReadingOnceAndReplaysNothing()
     {
         var calls = new List<string>();
         var feed = new TestFeed(calls);
-        var reader = new TestSnapshotReader(calls, end: 7);
+        var reader = new TestCatchUpReader(calls, end: 7);
 
         await using var enumerator = Subscribe(feed, reader, SubscriptionOrigin.End).GetAsyncEnumerator();
         await enumerator.MoveNextAsync();
 
         enumerator.Current.IsCaughtUp.ShouldBeTrue();
-        calls.ShouldBe(["attach", $"snapshot at {FeedMark}", "dispose"]);
+        calls.ShouldBe(["attach", $"catch-up at {FeedMark}", "dispose"]);
     }
 
     [Test]
@@ -43,7 +43,7 @@ public class SubscriptionAsyncEnumerableTests
     {
         var calls = new List<string>();
         var feed = new TestFeed(calls);
-        var reader = new TestSnapshotReader(calls, end: 7);
+        var reader = new TestCatchUpReader(calls, end: 7);
 
         await using var enumerator = Subscribe(feed, reader, SubscriptionOrigin.End).GetAsyncEnumerator();
         await enumerator.MoveNextAsync();
@@ -57,7 +57,7 @@ public class SubscriptionAsyncEnumerableTests
         await enumerator.MoveNextAsync();
 
         enumerator.Current.IsCaughtUp.ShouldBeTrue();
-        calls.ShouldBe(["attach", "detach", $"snapshot at {FeedMark}", "read from 7 to 9", "dispose"]);
+        calls.ShouldBe(["attach", "detach", $"catch-up at {FeedMark}", "read from 7 to 9", "dispose"]);
     }
 
     [Test]
@@ -65,7 +65,7 @@ public class SubscriptionAsyncEnumerableTests
     {
         var calls = new List<string>();
         var feed = new TestFeed(calls);
-        var reader = new TestSnapshotReader(calls, end: null);
+        var reader = new TestCatchUpReader(calls, end: null);
 
         await using var enumerator = Subscribe(feed, reader, SubscriptionOrigin.End).GetAsyncEnumerator();
         await enumerator.MoveNextAsync();
@@ -79,7 +79,7 @@ public class SubscriptionAsyncEnumerableTests
         await enumerator.MoveNextAsync();
 
         enumerator.Current.IsCaughtUp.ShouldBeTrue();
-        calls.ShouldBe(["attach", "detach", $"snapshot at {FeedMark}", "read from -1 to 2", "dispose"]);
+        calls.ShouldBe(["attach", "detach", $"catch-up at {FeedMark}", "read from -1 to 2", "dispose"]);
     }
 
     [Test]
@@ -87,7 +87,7 @@ public class SubscriptionAsyncEnumerableTests
     {
         var calls = new List<string>();
         var feed = new TestFeed(calls);
-        var reader = new TestSnapshotReader(calls, end: 2) { EventPositions = [0, 1, 2] };
+        var reader = new TestCatchUpReader(calls, end: 2) { EventPositions = [0, 1, 2] };
 
         await using var enumerator = Subscribe(feed, reader, SubscriptionOrigin.Start).GetAsyncEnumerator();
         await enumerator.MoveNextAsync();
@@ -106,7 +106,7 @@ public class SubscriptionAsyncEnumerableTests
 
         // The subscriber had not been told that it caught up, so it is not told that it fell behind.
         enumerator.Current.IsCaughtUp.ShouldBeTrue();
-        calls.ShouldBe(["dispose", "attach", "detach", $"snapshot at {FeedMark}", "read from 2 to 4", "dispose"]);
+        calls.ShouldBe(["dispose", "attach", "detach", $"catch-up at {FeedMark}", "read from 2 to 4", "dispose"]);
     }
 
     [Test]
@@ -116,7 +116,7 @@ public class SubscriptionAsyncEnumerableTests
         var feed = new TestFeed(calls);
 
         // The filter selects the first event in the sequence and not the two that follow it.
-        var reader = new TestSnapshotReader(calls, end: 2) { EventPositions = [0] };
+        var reader = new TestCatchUpReader(calls, end: 2) { EventPositions = [0] };
 
         await using var enumerator = Subscribe(feed, reader, SubscriptionOrigin.Start).GetAsyncEnumerator();
         await enumerator.MoveNextAsync();
@@ -129,27 +129,27 @@ public class SubscriptionAsyncEnumerableTests
         await enumerator.MoveNextAsync();
 
         enumerator.Current.IsCaughtUp.ShouldBeTrue();
-        calls.ShouldBe(["dispose", "attach", "detach", $"snapshot at {FeedMark}", "read from 2 to 4", "dispose"]);
+        calls.ShouldBe(["dispose", "attach", "detach", $"catch-up at {FeedMark}", "read from 2 to 4", "dispose"]);
     }
 
     [Test]
-    public async Task DisposeAsync_DuringReplay_DisposesSnapshotBeforeDetaching()
+    public async Task DisposeAsync_DuringReplay_DisposesCatchUpBeforeDetaching()
     {
         var calls = new List<string>();
         var feed = new TestFeed(calls);
-        var reader = new TestSnapshotReader(calls, end: 1) { EventPositions = [0, 1] };
+        var reader = new TestCatchUpReader(calls, end: 1) { EventPositions = [0, 1] };
 
         var enumerator = Subscribe(feed, reader, SubscriptionOrigin.Start).GetAsyncEnumerator();
         await enumerator.MoveNextAsync();
 
         await enumerator.DisposeAsync();
 
-        calls.ShouldBe(["attach", $"snapshot at {FeedMark}", "read from -1 to 1", "dispose", "detach"]);
+        calls.ShouldBe(["attach", $"catch-up at {FeedMark}", "read from -1 to 1", "dispose", "detach"]);
     }
 
     private static SubscriptionAsyncEnumerable<string, TestSourceEvent, long, LogPosition> Subscribe(
         TestFeed feed,
-        TestSnapshotReader reader,
+        TestCatchUpReader reader,
         SubscriptionOrigin<LogPosition> origin)
     {
         return new SubscriptionAsyncEnumerable<string, TestSourceEvent, long, LogPosition>(
@@ -196,8 +196,8 @@ public class SubscriptionAsyncEnumerableTests
     /// <summary>
     /// Stands in for a store's reader, and notes each snapshot that it reads.
     /// </summary>
-    private sealed class TestSnapshotReader(List<string> calls, long? end) :
-        CatchUpSnapshotReader<string, LogPosition, long>(
+    private sealed class TestCatchUpReader(List<string> calls, long? end) :
+        CatchUpReader<string, LogPosition, long>(
             static _ => false,
             SubscriptionOptions.Default,
             "sub-1",
@@ -207,15 +207,15 @@ public class SubscriptionAsyncEnumerableTests
 
         public IReadOnlyList<long> EventPositions { get; init; } = [];
 
-        protected override ValueTask<CatchUpSnapshot<string, LogPosition>> ReadSnapshotCoreAsync(
+        protected override ValueTask<CatchUp<string, LogPosition>> ReadCoreAsync(
             SubscriptionOrigin<LogPosition> origin,
             long highWaterMark,
             CancellationToken cancellationToken)
         {
-            calls.Add($"snapshot at {highWaterMark}");
+            calls.Add($"catch-up at {highWaterMark}");
 
-            return ValueTask.FromResult<CatchUpSnapshot<string, LogPosition>>(
-                new TestCatchUpSnapshot(origin, End, ResiliencePipeline, calls, EventPositions));
+            return ValueTask.FromResult<CatchUp<string, LogPosition>>(
+                new TestCatchUp(origin, End, ResiliencePipeline, calls, EventPositions));
         }
     }
 }

@@ -10,7 +10,7 @@ namespace DomainBlocks.EventStore.Internal.Subscriptions;
 /// reader, then delivers live events from the store's feed.
 /// </summary>
 /// <param name="feed">The store's feed of live events.</param>
-/// <param name="snapshotReader">The reader of the subscription's history.</param>
+/// <param name="catchUpReader">The reader of the subscription's history.</param>
 /// <param name="liveFilter">Selects the live events to deliver.</param>
 /// <param name="origin">Where the subscription starts, or <see langword="null"/> for the end.</param>
 /// <param name="queueCapacity">The number of live events to queue before the subscription has to restart.</param>
@@ -18,7 +18,7 @@ namespace DomainBlocks.EventStore.Internal.Subscriptions;
 /// <param name="logger">The logger for the subscription's lifecycle.</param>
 internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, TPos>(
     IRefCountedFeed<TSourceEvent, TMark> feed,
-    CatchUpSnapshotReader<TEvent, TPos, TMark> snapshotReader,
+    CatchUpReader<TEvent, TPos, TMark> catchUpReader,
     EventFilter liveFilter,
     SubscriptionOrigin<TPos>? origin,
     int queueCapacity,
@@ -48,16 +48,16 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
 
             do
             {
-                var snapshot = await ReadSnapshotAsync(nextOrigin, attachment.HighWaterMark, cancellationToken)
+                var catchUp = await ReadCatchUpAsync(nextOrigin, attachment.HighWaterMark, cancellationToken)
                     .ConfigureAwait(false);
 
-                var position = snapshot.CaughtUpPosition;
+                var position = catchUp.EndPosition;
 
                 logger?.CatchUpBoundary(correlationId, position?.Value);
 
-                await using (snapshot.ConfigureAwait(false))
+                await using (catchUp.ConfigureAwait(false))
                 {
-                    var events = snapshot.ReadAllAsync();
+                    var events = catchUp.ReadAll();
 
                     await foreach (var e in WithLoggedExceptionsAsync(events, cancellationToken).ConfigureAwait(false))
                         yield return SubscriptionMessage.Event(e);
@@ -189,15 +189,15 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
         }
     }
 
-    private async Task<CatchUpSnapshot<TEvent, TPos>> ReadSnapshotAsync(
-        SubscriptionOrigin<TPos> snapshotOrigin,
+    private async Task<CatchUp<TEvent, TPos>> ReadCatchUpAsync(
+        SubscriptionOrigin<TPos> catchUpOrigin,
         TMark highWaterMark,
         CancellationToken cancellationToken)
     {
         try
         {
-            return await snapshotReader
-                .ReadSnapshotAsync(snapshotOrigin, highWaterMark, cancellationToken)
+            return await catchUpReader
+                .ReadAsync(catchUpOrigin, highWaterMark, cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

@@ -203,7 +203,7 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
 
         return new SubscriptionAsyncEnumerable<object, EventLogRow<object>, long, LogPosition>(
             _feed,
-            new PostgresAllCatchUpSnapshotReader<object>(_reader, options.Filter, options, correlationId, logger),
+            new PostgresAllCatchUpReader<object>(_reader, options.Filter, options, correlationId, logger),
             options.Filter,
             origin,
             options.QueueCapacity,

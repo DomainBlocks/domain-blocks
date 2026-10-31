@@ -265,7 +265,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
 
         return new SubscriptionAsyncEnumerable<TEvent, EventLogRow<TEvent>, long, LogPosition>(
             _feed,
-            new PostgresAllCatchUpSnapshotReader<TEvent>(_reader, options.Filter, options, correlationId, _logger),
+            new PostgresAllCatchUpReader<TEvent>(_reader, options.Filter, options, correlationId, _logger),
             options.Filter,
             origin,
             options.QueueCapacity,
@@ -285,7 +285,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
 
         return new SubscriptionAsyncEnumerable<TEvent, EventLogRow<TEvent>, long, StreamPosition>(
             _feed,
-            new PostgresStreamCatchUpSnapshotReader<TEvent>(
+            new PostgresStreamCatchUpReader<TEvent>(
                 _reader,
                 streamId,
                 options.Filter,

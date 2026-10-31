@@ -13,7 +13,7 @@ namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 /// for the operation time of that read, so they can't see less than the end it found.
 /// </summary>
 [TestFixture]
-public class MongoCatchUpSnapshotReaderTests
+public class MongoCatchUpReaderTests
 {
     private const int InvalidOptionsCode = 72;
 
@@ -22,47 +22,47 @@ public class MongoCatchUpSnapshotReaderTests
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task ReadSnapshotAsync_EventsInSequence_EndsAtLastEvent(CancellationToken ct)
+    public async Task ReadAsync_EventsInSequence_EndsAtLastEvent(CancellationToken ct)
     {
         await using var scenario = await CatchUpScenario.StartAsync(ct);
         await scenario.AppendAsync("existing", 2);
-        var reader = scenario.CreateSnapshotReader(Builders<BsonDocument>.Filter.Empty);
+        var reader = scenario.CreateCatchUpReader(Builders<BsonDocument>.Filter.Empty);
 
-        await using var snapshot = await reader.ReadSnapshotAsync(SubscriptionOrigin.Start, EarliestMark, ct);
+        await using var catchUp = await reader.ReadAsync(SubscriptionOrigin.Start, EarliestMark, ct);
 
-        snapshot.CaughtUpPosition.ShouldBe(LogPosition.FromInt64(1));
+        catchUp.EndPosition.ShouldBe(LogPosition.FromInt64(1));
     }
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task ReadSnapshotAsync_EmptySequence_HasNoEnd(CancellationToken ct)
+    public async Task ReadAsync_EmptySequence_HasNoEnd(CancellationToken ct)
     {
         await using var scenario = await CatchUpScenario.StartAsync(ct);
         await scenario.AppendAsync("existing", 2);
         var noEvents = Builders<BsonDocument>.Filter.Eq(EventLogEntry.FieldNames.StreamId, "no-such-stream");
-        var reader = scenario.CreateSnapshotReader(noEvents);
+        var reader = scenario.CreateCatchUpReader(noEvents);
 
-        await using var snapshot = await reader.ReadSnapshotAsync(SubscriptionOrigin.Start, EarliestMark, ct);
+        await using var catchUp = await reader.ReadAsync(SubscriptionOrigin.Start, EarliestMark, ct);
 
-        snapshot.CaughtUpPosition.ShouldBeNull();
+        catchUp.EndPosition.ShouldBeNull();
     }
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task ReadSnapshotAsync_MarkAheadOfCluster_Throws(CancellationToken ct)
+    public async Task ReadAsync_MarkAheadOfCluster_Throws(CancellationToken ct)
     {
         await using var scenario = await CatchUpScenario.StartAsync(ct);
-        var reader = scenario.CreateSnapshotReader(Builders<BsonDocument>.Filter.Empty);
+        var reader = scenario.CreateCatchUpReader(Builders<BsonDocument>.Filter.Empty);
 
         var exception = await Should.ThrowAsync<MongoCommandException>(async () =>
-            await reader.ReadSnapshotAsync(SubscriptionOrigin.Start, MarkAheadOfCluster, ct));
+            await reader.ReadAsync(SubscriptionOrigin.Start, MarkAheadOfCluster, ct));
 
         exception.Code.ShouldBe(InvalidOptionsCode);
     }
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task ReadAllAsync_AfterSnapshot_WaitsForOperationTimeOfEndRead(CancellationToken ct)
+    public async Task ReadAll_AfterEndRead_WaitsForItsOperationTime(CancellationToken ct)
     {
         await using var scenario = await CatchUpScenario.StartAsync(ct);
         var deliveredClusterTime = await AppendLiveEventAsync(scenario);
@@ -77,11 +77,11 @@ public class MongoCatchUpSnapshotReaderTests
         });
 
         using var client = new MongoClient(settings);
-        var reader = scenario.CreateSnapshotReader(Builders<BsonDocument>.Filter.Empty, client);
+        var reader = scenario.CreateCatchUpReader(Builders<BsonDocument>.Filter.Empty, client);
 
-        await using var snapshot = await reader.ReadSnapshotAsync(SubscriptionOrigin.Start, EarliestMark, ct);
+        await using var catchUp = await reader.ReadAsync(SubscriptionOrigin.Start, EarliestMark, ct);
 
-        await foreach (var _ in snapshot.ReadAllAsync().WithCancellation(ct))
+        await foreach (var _ in catchUp.ReadAll().WithCancellation(ct))
         {
         }
 

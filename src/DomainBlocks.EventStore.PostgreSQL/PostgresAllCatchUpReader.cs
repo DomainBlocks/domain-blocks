@@ -9,20 +9,20 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// Represents the reads of the event log's history. The end position is read behind the replication barrier, once
 /// queries can see the feed's high-water mark.
 /// </summary>
-internal sealed class PostgresAllCatchUpSnapshotReader<TEvent>(
+internal sealed class PostgresAllCatchUpReader<TEvent>(
     EventLogReader<TEvent> reader,
     EventFilter filter,
     SubscriptionOptions options,
     string correlationId,
     ILogger? logger) :
-    CatchUpSnapshotReader<TEvent, LogPosition, long>(
+    CatchUpReader<TEvent, LogPosition, long>(
         PostgresTransientErrors.IsTransient,
         options,
         correlationId,
         logger)
     where TEvent : notnull
 {
-    protected override async ValueTask<CatchUpSnapshot<TEvent, LogPosition>> ReadSnapshotCoreAsync(
+    protected override async ValueTask<CatchUp<TEvent, LogPosition>> ReadCoreAsync(
         SubscriptionOrigin<LogPosition> origin,
         long highWaterMark,
         CancellationToken cancellationToken)
@@ -35,19 +35,19 @@ internal sealed class PostgresAllCatchUpSnapshotReader<TEvent>(
         // barrier.
         var end = await reader.ReadMaxPositionWithBarrierAsync(cancellationToken).ConfigureAwait(false);
 
-        return new Snapshot(origin, end, ResiliencePipeline, reader, filter);
+        return new AllCatchUp(origin, end, ResiliencePipeline, reader, filter);
     }
 
     /// <summary>
     /// Represents the event log up to the end. The end bounds each read, since queries could already see it.
     /// </summary>
-    private sealed class Snapshot(
+    private sealed class AllCatchUp(
         SubscriptionOrigin<LogPosition> origin,
         long? end,
-        ResiliencePipeline retryPolicy,
+        ResiliencePipeline resiliencePipeline,
         EventLogReader<TEvent> reader,
         EventFilter filter) :
-        CatchUpSnapshot<TEvent, LogPosition>(origin, end, retryPolicy)
+        CatchUp<TEvent, LogPosition>(origin, end, resiliencePipeline)
     {
         protected override IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAsync(
             long startExclusive,
