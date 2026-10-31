@@ -104,7 +104,7 @@ internal sealed class MongoCatchUpSnapshotReader<TEvent, TPos>(
         SubscriptionOrigin<TPos> origin,
         long? end,
         IClientSessionHandle session) :
-        CatchUpSnapshot<TEvent, TPos>(origin, end, owner.RetryPolicy)
+        CatchUpSnapshot<TEvent, TPos>(origin, end, owner.ResiliencePipeline)
     {
         protected override IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadAsync(
             long startExclusive,

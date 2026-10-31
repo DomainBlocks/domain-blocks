@@ -75,7 +75,7 @@ public class CatchUpSnapshotReaderTests
                 throw failure ?? new IOException("The read failed.");
 
             return ValueTask.FromResult<CatchUpSnapshot<string, LogPosition>>(
-                new TestCatchUpSnapshot(origin, 7, RetryPolicy, []));
+                new TestCatchUpSnapshot(origin, 7, ResiliencePipeline, []));
         }
     }
 }

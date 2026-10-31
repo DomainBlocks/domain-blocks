@@ -215,7 +215,7 @@ public class SubscriptionAsyncEnumerableTests
             calls.Add($"snapshot at {highWaterMark}");
 
             return ValueTask.FromResult<CatchUpSnapshot<string, LogPosition>>(
-                new TestCatchUpSnapshot(origin, End, RetryPolicy, calls, EventPositions));
+                new TestCatchUpSnapshot(origin, End, ResiliencePipeline, calls, EventPositions));
         }
     }
 }

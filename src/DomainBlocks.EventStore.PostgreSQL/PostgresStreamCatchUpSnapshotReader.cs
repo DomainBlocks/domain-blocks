@@ -36,7 +36,7 @@ internal sealed class PostgresStreamCatchUpSnapshotReader<TEvent>(
         // barrier.
         var end = await reader.ReadMaxStreamPositionWithBarrierAsync(streamId, cancellationToken).ConfigureAwait(false);
 
-        return new Snapshot(origin, end, RetryPolicy, reader, streamId, filter);
+        return new Snapshot(origin, end, ResiliencePipeline, reader, streamId, filter);
     }
 
     /// <summary>
