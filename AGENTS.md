@@ -54,7 +54,7 @@ TBD
 - NUnit
 - Shouldy for assertions
 - Prefer using the `ShouldNotBeNull()` assertion rather than the null-forgiving operator
-- Test method names to match [SubjectUnderTest]_[ScenarioUnderTest]_[ExpectedBehaviour], where SubjectUnderTest is
+- Test method names to match [SubjectUnderTest]\_[ScenarioUnderTest]\_[ExpectedBehaviour], where SubjectUnderTest is
   typically a method name for unit tests, but may be broader, especially for integration, scenario, or end-to-end tests.
   Examples:
     - Unit test: CalculateTotal_WithDiscount_ReturnsDiscountedTotal
