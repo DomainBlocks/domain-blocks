@@ -378,6 +378,119 @@ public class RefCountedFeedTests
         feed.DisposeCount.ShouldBe(1);
     }
 
+    // A feed that hasn't connected fails both of its tasks, and one that has connected fails only its completion.
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task DisposeAsync_LastAttachmentAfterFault_LeavesNoUnreadError(bool hasConnected)
+    {
+        var error = new InvalidOperationException();
+
+        var isReported = await IsReportedAsUnreadAsync(error, async () =>
+        {
+            var feed = new TestFeed(canConnect: hasConnected);
+            var refCountedFeed = new RefCountedFeed<int, long>(() => feed);
+            var attachment = await refCountedFeed.AttachAsync(new TestObserver());
+            feed.Fault(error);
+
+            await attachment.DisposeAsync();
+        });
+
+        isReported.ShouldBeFalse();
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task AttachAsync_AfterFault_LeavesNoUnreadError(bool hasConnected)
+    {
+        var error = new InvalidOperationException();
+
+        var isReported = await IsReportedAsUnreadAsync(error, async () =>
+        {
+            var feed = new TestFeed(canConnect: hasConnected);
+            var feeds = new Queue<TestFeed>([feed, new TestFeed()]);
+            var refCountedFeed = new RefCountedFeed<int, long>(feeds.Dequeue);
+            await using var attachment = await refCountedFeed.AttachAsync(new TestObserver());
+            feed.Fault(error);
+
+            await using var next = await refCountedFeed.AttachAsync(new TestObserver());
+        });
+
+        isReported.ShouldBeFalse();
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task DisposeAsync_FeedFaulted_LeavesNoUnreadError(bool hasConnected)
+    {
+        var error = new InvalidOperationException();
+
+        var isReported = await IsReportedAsUnreadAsync(error, async () =>
+        {
+            var feed = new TestFeed(canConnect: hasConnected);
+            var refCountedFeed = new RefCountedFeed<int, long>(() => feed);
+            await refCountedFeed.AttachAsync(new TestObserver());
+            feed.Fault(error);
+
+            await refCountedFeed.DisposeAsync();
+        });
+
+        isReported.ShouldBeFalse();
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task DisposeAsync_LastAttachmentAfterEventLogFeedFaulted_LeavesNoUnreadError(CancellationToken ct)
+    {
+        var error = new InvalidOperationException();
+
+        var isReported = await IsReportedAsUnreadAsync(error, async () =>
+        {
+            var resumePolicy = new FeedResumePolicy(static ex => ex is IOException, new FeedResumeOptions());
+            var feed = new DelegateFeed(_ => throw error, resumePolicy);
+            var refCountedFeed = new RefCountedFeed<long, long>(() => feed);
+            var observer = new RecordingObserver();
+            var attachment = await refCountedFeed.AttachAsync(observer, cancellationToken: ct);
+            await observer.Error.WaitAsync(ct);
+
+            await attachment.DisposeAsync();
+        });
+
+        isReported.ShouldBeFalse();
+    }
+
+    // .NET reports a faulted task's unread error when the task is finalized, so the scenario must leave nothing holding
+    // on to the feed. The error is compared by reference because other tests' tasks can be finalized here too.
+    private static async Task<bool> IsReportedAsUnreadAsync(Exception error, Func<Task> scenario)
+    {
+        var isReported = false;
+
+        void OnUnobserved(object? sender, UnobservedTaskExceptionEventArgs e)
+        {
+            if (e.Exception.InnerExceptions.Contains(error))
+                isReported = true;
+        }
+
+        TaskScheduler.UnobservedTaskException += OnUnobserved;
+
+        try
+        {
+            await scenario();
+
+            for (var i = 0; i < 3; i++)
+            {
+                await Task.Delay(10);
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+            }
+
+            return isReported;
+        }
+        finally
+        {
+            TaskScheduler.UnobservedTaskException -= OnUnobserved;
+        }
+    }
+
     private sealed class TestFeed(bool canConnect = true, bool advanceMarkOnAttach = false) : IEventLogFeed<int, long>
     {
         private readonly TaskCompletionSource _completionTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);

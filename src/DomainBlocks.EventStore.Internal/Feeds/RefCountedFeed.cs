@@ -36,7 +36,7 @@ internal sealed class RefCountedFeed<T, TMark>(Func<IEventLogFeed<T, TMark>> fee
                 {
                     _current = null;
                     completed.IsDisposed = true;
-                    await completed.Feed.DisposeAsync().ConfigureAwait(false);
+                    await DisposeFeedAsync(completed).ConfigureAwait(false);
                 }
 
                 (sharedFeed, attachment) = await StartAsync(observer, correlationId).ConfigureAwait(false);
@@ -65,7 +65,7 @@ internal sealed class RefCountedFeed<T, TMark>(Func<IEventLogFeed<T, TMark>> fee
     /// </summary>
     public async ValueTask DisposeAsync()
     {
-        IEventLogFeed<T, TMark>? feedToDispose;
+        SharedFeed? feedToDispose;
 
         await _gate.WaitAsync().ConfigureAwait(false);
 
@@ -75,7 +75,7 @@ internal sealed class RefCountedFeed<T, TMark>(Func<IEventLogFeed<T, TMark>> fee
                 return;
 
             _disposed = true;
-            feedToDispose = _current?.Feed;
+            feedToDispose = _current;
 
             _current?.IsDisposed = true;
 
@@ -87,7 +87,7 @@ internal sealed class RefCountedFeed<T, TMark>(Func<IEventLogFeed<T, TMark>> fee
         }
 
         if (feedToDispose is not null)
-            await feedToDispose.DisposeAsync().ConfigureAwait(false);
+            await DisposeFeedAsync(feedToDispose).ConfigureAwait(false);
     }
 
     // The gate isn't held while the feed connects, which could take as long as an outage lasts. Other observers attach,
@@ -102,13 +102,6 @@ internal sealed class RefCountedFeed<T, TMark>(Func<IEventLogFeed<T, TMark>> fee
         {
             var attachment = feed.Attach(observer, correlationId);
             var connection = feed.ConnectAsync();
-
-            // Every observer may have left by the time the connection fails, so no one may read its error.
-            _ = connection.ContinueWith(
-                static task => task.Exception,
-                CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
 
             return (new SharedFeed(feed, connection), attachment);
         }
@@ -140,12 +133,24 @@ internal sealed class RefCountedFeed<T, TMark>(Func<IEventLogFeed<T, TMark>> fee
             // This runs within the gate, so the next feed does not connect until this one has stopped and released what
             // it holds on the server. On PostgreSQL that is a replication slot and a walsender, so two feeds at once
             // would hold two of each, counted against max_replication_slots and max_wal_senders.
-            await sharedFeed.Feed.DisposeAsync().ConfigureAwait(false);
+            await DisposeFeedAsync(sharedFeed).ConfigureAwait(false);
         }
         finally
         {
             _gate.Release();
         }
+    }
+
+    // Disposing stops the feed, which finishes both of its tasks. Observers are told of a failure separately, and the
+    // last of them may leave before either task fails, so nothing else might read the tasks' errors. .NET reports an
+    // unread error through TaskScheduler.UnobservedTaskException, which would make a subscriber giving up look like a
+    // fault that nobody handled.
+    private static async ValueTask DisposeFeedAsync(SharedFeed sharedFeed)
+    {
+        await sharedFeed.Feed.DisposeAsync().ConfigureAwait(false);
+
+        await sharedFeed.Connection.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        await sharedFeed.Feed.Completion.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
     }
 
     private sealed class SharedFeed(IEventLogFeed<T, TMark> feed, Task connection)
