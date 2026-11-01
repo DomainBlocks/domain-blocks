@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using DomainBlocks.Benchmarking;
 using DomainBlocks.Benchmarking.EventStore;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Events;

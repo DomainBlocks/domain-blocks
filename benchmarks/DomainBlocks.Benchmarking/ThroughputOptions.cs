@@ -1,4 +1,4 @@
-namespace DomainBlocks.Benchmarking.EventStore;
+namespace DomainBlocks.Benchmarking;
 
 public sealed record ThroughputOptions
 {

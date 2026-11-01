@@ -1,12 +1,13 @@
 using System.Diagnostics;
 using HdrHistogram;
 
-namespace DomainBlocks.Benchmarking.EventStore;
+namespace DomainBlocks.Benchmarking;
 
 /// <summary>
-/// Store-agnostic closed-loop benchmark harness. Every run uses a fresh stream ID per operation, generated outside the
-/// timed region, so the store sees the same "new stream" path during warm-up and measurement. Latencies are recorded in
-/// <see cref="Stopwatch"/> ticks to an HdrHistogram with microsecond resolution and three significant digits.
+/// Closed-loop append benchmark harness. Every operation gets a unique ID, generated outside the timed region, so a
+/// caller that uses it as a stream ID makes the store take the same "new stream" path during warm-up and measurement.
+/// Latencies are recorded in <see cref="Stopwatch"/> ticks to an HdrHistogram with microsecond resolution and three
+/// significant digits.
 /// </summary>
 public sealed class AppendBenchmarkRunner
 {
@@ -15,7 +16,7 @@ public sealed class AppendBenchmarkRunner
     private static readonly long HighestTrackableTicks = TimeStamp.Hours(1);
 
     private readonly string _runId = $"bench-{Guid.NewGuid():N}";
-    private long _nextStreamNumber;
+    private long _nextOperationNumber;
     private bool _stop;
     private bool _measuring;
 
@@ -32,7 +33,7 @@ public sealed class AppendBenchmarkRunner
 
         while (warmUpOps < options.MinWarmUpOperations || Stopwatch.GetElapsedTime(warmUpStart) < options.WarmUp)
         {
-            await operation(0, NextStreamId(), cancellationToken);
+            await operation(0, NextOperationId(), cancellationToken);
             warmUpOps++;
         }
 
@@ -47,12 +48,12 @@ public sealed class AppendBenchmarkRunner
 
         for (var i = 0; i < options.SampleCount && Stopwatch.GetElapsedTime(start) < options.MaxDuration; i++)
         {
-            var streamId = NextStreamId();
+            var operationId = NextOperationId();
             var operationStart = Stopwatch.GetTimestamp();
 
             try
             {
-                await operation(0, streamId, cancellationToken);
+                await operation(0, operationId, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -100,12 +101,12 @@ public sealed class AppendBenchmarkRunner
                 {
                     while (!Volatile.Read(ref _stop))
                     {
-                        var streamId = NextStreamId();
+                        var operationId = NextOperationId();
                         var operationStart = Stopwatch.GetTimestamp();
 
                         try
                         {
-                            var task = operation(workerIndex, streamId, cancellationToken);
+                            var task = operation(workerIndex, operationId, cancellationToken);
 
                             // An operation that completes synchronously would turn this loop into a busy spin that
                             // never yields its thread-pool thread. With many workers, that starves the timer
@@ -192,5 +193,5 @@ public sealed class AppendBenchmarkRunner
         }
     }
 
-    private string NextStreamId() => $"{_runId}-{Interlocked.Increment(ref _nextStreamNumber)}";
+    private string NextOperationId() => $"{_runId}-{Interlocked.Increment(ref _nextOperationNumber)}";
 }

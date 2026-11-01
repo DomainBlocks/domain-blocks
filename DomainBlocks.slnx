@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/DomainBlocks.Benchmarking/DomainBlocks.Benchmarking.csproj" />
     <Project Path="benchmarks/DomainBlocks.Benchmarking.EventStore/DomainBlocks.Benchmarking.EventStore.csproj" />
     <Project Path="benchmarks/DomainBlocks.EventStore.Benchmarks/DomainBlocks.EventStore.Benchmarks.csproj" />
     <Project Path="benchmarks/DomainBlocks.EventStore.MongoDB.Benchmarks/DomainBlocks.EventStore.MongoDB.Benchmarks.csproj" />

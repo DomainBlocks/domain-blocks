@@ -1,6 +1,6 @@
 using HdrHistogram;
 
-namespace DomainBlocks.Benchmarking.EventStore;
+namespace DomainBlocks.Benchmarking;
 
 public sealed record ThroughputResult(
     int InFlight,
