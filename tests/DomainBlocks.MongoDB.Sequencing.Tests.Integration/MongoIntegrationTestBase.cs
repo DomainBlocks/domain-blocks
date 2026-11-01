@@ -63,10 +63,7 @@ public abstract class MongoIntegrationTestBase(string connectionString)
         finally
         {
             LoggerFactory.Dispose();
-
-#if !MONGO_DRIVER_V2
             MongoClient.Dispose();
-#endif
         }
     }
 

@@ -63,16 +63,12 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
         var serializerRegistry = BsonSerializer.SerializerRegistry;
         var documentSerializer = serializerRegistry.GetSerializer<TDocument>();
 
-#if MONGO_DRIVER_V2
-        var targetFieldName = binding.TargetField.Render(documentSerializer, serializerRegistry).FieldName;
-#else
         var renderArgs = new RenderArgs<TDocument>(
             documentSerializer,
             serializerRegistry,
             translationOptions: mongoClient.Settings.TranslationOptions);
 
         var targetFieldName = binding.TargetField.Render(renderArgs).FieldName;
-#endif
 
         _mongoClient = mongoClient;
 
