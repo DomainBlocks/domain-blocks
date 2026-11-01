@@ -1,4 +1,4 @@
-namespace DomainBlocks.Benchmarking;
+namespace DomainBlocks.Benchmarking.EventStore;
 
 /// <summary>
 /// The result of reading the log from start to end several times.

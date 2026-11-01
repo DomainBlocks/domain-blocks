@@ -190,7 +190,7 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
         var result = new ReadThroughputResult(eventsInLog, eventsRead, passes, allocated, gc);
 
         await BenchmarkReport.WriteEnvironmentAsync(eventStore.GetType(), await Harness.DescribeAsync());
-        await BenchmarkReport.WriteReadThroughputAsync(title, result);
+        await ReadBenchmarkReport.WriteAsync(title, result);
 
         return result;
     }
