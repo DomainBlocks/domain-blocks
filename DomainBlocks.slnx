@@ -6,12 +6,18 @@
     <Project Path="benchmarks/DomainBlocks.EventStore.NoOp.Benchmarks/DomainBlocks.EventStore.NoOp.Benchmarks.csproj" />
     <Project Path="benchmarks/DomainBlocks.EventStore.PostgreSQL.Benchmarks/DomainBlocks.EventStore.PostgreSQL.Benchmarks.csproj" />
   </Folder>
+  <Folder Name="/examples/">
+    <Project Path="examples/DomainBlocks.MongoDB.Sequencing.Examples.Tests.Integration/DomainBlocks.MongoDB.Sequencing.Examples.Tests.Integration.csproj" />
+    <Project Path="examples/DomainBlocks.MongoDB.Sequencing.Examples/DomainBlocks.MongoDB.Sequencing.Examples.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/DomainBlocks.Core/DomainBlocks.Core.csproj" />
     <Project Path="src/DomainBlocks.EventSourcing/DomainBlocks.EventSourcing.csproj" />
     <Project Path="src/DomainBlocks.EventStore.MongoDB/DomainBlocks.EventStore.MongoDB.csproj" />
     <Project Path="src/DomainBlocks.EventStore.PostgreSQL/DomainBlocks.EventStore.PostgreSQL.csproj" />
     <Project Path="src/DomainBlocks.EventStore/DomainBlocks.EventStore.csproj" />
+    <Project Path="src/DomainBlocks.MongoDB.Sequencing.V2/DomainBlocks.MongoDB.Sequencing.V2.csproj" />
+    <Project Path="src/DomainBlocks.MongoDB.Sequencing/DomainBlocks.MongoDB.Sequencing.csproj" />
     <Project Path="src/DomainBlocks.Serialization.Abstractions/DomainBlocks.Serialization.Abstractions.csproj" />
     <Project Path="src/DomainBlocks.Serialization.Google.Protobuf/DomainBlocks.Serialization.Google.Protobuf.csproj" />
     <Project Path="src/DomainBlocks.Serialization.MongoDB.Bson/DomainBlocks.Serialization.MongoDB.Bson.csproj" />
@@ -26,6 +32,8 @@
     <Project Path="tests/DomainBlocks.EventStore.PostgreSQL.Tests.Integration/DomainBlocks.EventStore.PostgreSQL.Tests.Integration.csproj" />
     <Project Path="tests/DomainBlocks.EventStore.Internal.Tests.Unit/DomainBlocks.EventStore.Internal.Tests.Unit.csproj" />
     <Project Path="tests/DomainBlocks.EventStore.Tests.Unit/DomainBlocks.EventStore.Tests.Unit.csproj" />
+    <Project Path="tests/DomainBlocks.MongoDB.Sequencing.Tests.Integration/DomainBlocks.MongoDB.Sequencing.Tests.Integration.csproj" />
+    <Project Path="tests/DomainBlocks.MongoDB.Sequencing.V2.Tests.Integration/DomainBlocks.MongoDB.Sequencing.V2.Tests.Integration.csproj" />
     <Project Path="tests/DomainBlocks.Serialization.Google.Protobuf.Tests.Unit/DomainBlocks.Serialization.Google.Protobuf.Tests.Unit.csproj" />
     <Project Path="tests/DomainBlocks.Testing.Integration.EventStore.MongoDB/DomainBlocks.Testing.Integration.EventStore.MongoDB.csproj" />
     <Project Path="tests/DomainBlocks.Testing.Integration.EventStore.PostgreSQL/DomainBlocks.Testing.Integration.EventStore.PostgreSQL.csproj" />
