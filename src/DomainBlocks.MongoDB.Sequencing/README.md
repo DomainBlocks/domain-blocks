@@ -6,7 +6,6 @@ guaranteeing total order across historical reads and change stream observations.
 ## Table of contents
 
 - [Prerequisites](#prerequisites)
-- [Driver version support](#driver-version-support)
 - [The problem](#the-problem)
 - [How it works](#how-it-works)
 - [Use cases](#use-cases)
@@ -23,17 +22,6 @@ guaranteeing total order across historical reads and change stream observations.
 - MongoDB replica set deployment
 - .NET 10
 
-## Driver version support
-
-Two NuGet packages are provided targeting different versions of the official MongoDB .NET driver:
-
-| Package                            | MongoDB.Driver version   |
-|:-----------------------------------|:-------------------------|
-| DomainBlocks.MongoDB.Sequencing    | 3.x (>= 3.6.0, < 4.0.0)  |
-| DomainBlocks.MongoDB.Sequencing.V2 | 2.x (>= 2.27.0, < 3.0.0) |
-
-Both packages expose the same API and share the same source code.
-
 ## The problem
 
 Out of the box, MongoDB does not provide a way to assign a globally ordered sequence number to documents that reflects
@@ -48,7 +36,7 @@ and the boundary between catching up historically and tailing live cannot be rea
 
 ## How it works
 
-[MongoSequencedAppender](src/DomainBlocks.MongoDB.Sequencing/MongoSequencedAppender.cs) solves this by:
+[MongoSequencedAppender](MongoSequencedAppender.cs) solves this by:
 
 1. Atomically claiming a range of sequence numbers from a counter document using `findOneAndUpdate` inside a MongoDB
    multi-document transaction.
@@ -90,8 +78,8 @@ within a collection that's being used as an append-only log, independent of the 
 
 ### Example: implementing a simple event store
 
-See [SimpleEventStore](examples/DomainBlocks.MongoDB.Sequencing.Examples/SimpleEventStore/SimpleEventStore.cs) for an
-example showing how to build a simple, globally ordered event store using this library.
+See [SimpleEventStore](../../examples/DomainBlocks.MongoDB.Sequencing.Examples/SimpleEventStore/SimpleEventStore.cs) for
+an example showing how to build a simple, globally ordered event store using this library.
 
 ## Customizing append behavior
 
@@ -111,7 +99,7 @@ Uses include:
 - Implementing optimistic concurrency checks.
 
 For an example implementation,
-see [AppenderPolicy](examples/DomainBlocks.MongoDB.Sequencing.Examples/SimpleEventStore/AppenderPolicy.cs).
+see [AppenderPolicy](../../examples/DomainBlocks.MongoDB.Sequencing.Examples/SimpleEventStore/AppenderPolicy.cs).
 
 ## Benchmarks
 
@@ -119,8 +107,9 @@ Benchmarks were run against a local single-node MongoDB replica set running in D
 Real-world deployments with network latency between the application and MongoDB will see higher latency and lower
 throughput.
 
-The [benchmarks](tests/DomainBlocks.MongoDB.Sequencing.Tests.Integration/MongoSequencedAppenderBenchmarkTests.cs) are
-included in the repository and can be run against your own environment to get representative numbers for your setup.
+The [benchmarks](../../tests/DomainBlocks.MongoDB.Sequencing.Tests.Integration/MongoSequencedAppenderBenchmarkTests.cs)
+are included in the repository and can be run against your own environment to get representative numbers for your
+setup.
 
 ### Peak throughput
 

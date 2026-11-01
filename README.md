@@ -25,6 +25,10 @@ The event store is built to be trusted as the system of record:
 - **Subscriptions never skip or repeat.** A subscriber that cannot keep up is told it fell behind and resumes from its
   last delivered position; no event is dropped silently.
 
+The MongoDB store gets its global order from
+[`DomainBlocks.MongoDB.Sequencing`](src/DomainBlocks.MongoDB.Sequencing/README.md), a package that can also be used on
+its own to append documents to a collection with a contiguous sequence number.
+
 `DomainBlocks.EventStore` holds the store contracts and the append/read pipeline; a store package plugs a database in.
 Add `DomainBlocks.EventStore.PostgreSQL` or `DomainBlocks.EventStore.MongoDB`, build a store, then append and read
 events:
@@ -218,4 +222,6 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 Licensed under [AGPL v3](./LICENSE).
 
-Note that the [legacy repository](https://github.com/DomainBlocks/domain-blocks-legacy) remains licensed under MIT.
+Note that the [legacy repository](https://github.com/DomainBlocks/domain-blocks-legacy) remains licensed under MIT, and
+that the [mongodb-sequencing repository](https://github.com/DomainBlocks/mongodb-sequencing), including every
+`DomainBlocks.MongoDB.Sequencing` release up to and including 1.0.0, remains licensed under Apache 2.0.
