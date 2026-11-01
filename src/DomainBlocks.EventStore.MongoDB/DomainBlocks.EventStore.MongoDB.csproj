@@ -11,7 +11,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="DomainBlocks.MongoDB.Sequencing" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Resilience" />
     <PackageReference Include="MongoDB.Driver" />
@@ -23,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj"/>
+    <ProjectReference Include="..\DomainBlocks.MongoDB.Sequencing\DomainBlocks.MongoDB.Sequencing.csproj"/>
     <ProjectReference Include="..\DomainBlocks.Serialization.MongoDB.Bson\DomainBlocks.Serialization.MongoDB.Bson.csproj"/>
   </ItemGroup>
 

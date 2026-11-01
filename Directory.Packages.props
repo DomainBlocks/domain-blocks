@@ -6,7 +6,6 @@
     <PackageVersion Include="AWSSDK.RDS" Version="4.0.107.1" />
     <PackageVersion Include="AWSSDK.SecretsManager" Version="4.0.100.21" />
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
-    <PackageVersion Include="DomainBlocks.MongoDB.Sequencing" Version="1.0.0-rc.2" />
     <PackageVersion Include="Google.Protobuf" Version="3.36.1" />
     <PackageVersion Include="Grpc.Tools" Version="2.83.0" />
     <PackageVersion Include="HdrHistogram" Version="2.5.0" />
