@@ -72,9 +72,9 @@ internal abstract class EventLogFeed<T, TMark> : IEventLogFeed<T, TMark>
 
     public Task Completion => _completionTcs.Task;
 
-    // An observer reads the mark just after it attaches, and the attach ends with a compare-exchange on the observer
-    // list, a full fence that orders the attach before this read. So the read needs no fence before it, only to be
-    // whole, which the static constructor checks. The barrier keeps later reads after it.
+    // An observer reads the mark after it attaches, and the attach ends with a compare-exchange on the observer list, a
+    // full fence that orders the attach before this read. So the read needs no fence before it, only to be whole, which
+    // the static constructor checks. The barrier keeps later reads after it.
     public TMark HighWaterMark
     {
         get

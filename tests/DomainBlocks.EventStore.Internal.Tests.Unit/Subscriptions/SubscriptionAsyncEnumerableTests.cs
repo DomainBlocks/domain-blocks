@@ -207,7 +207,7 @@ public class SubscriptionAsyncEnumerableTests
 
     private sealed class TestAttachment(List<string> calls) : IFeedAttachment<long>
     {
-        public long HighWaterMark => FeedMark;
+        public Task<long> WaitForConnectionAsync(CancellationToken cancellationToken) => Task.FromResult(FeedMark);
 
         public ValueTask DisposeAsync()
         {

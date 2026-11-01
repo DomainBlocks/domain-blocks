@@ -42,6 +42,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
             observer = CreateObserver();
             attachment = await AttachObserverAsync(observer, cancellationToken).ConfigureAwait(false);
 
+            var highWaterMark = await WaitForConnectionAsync(attachment, cancellationToken).ConfigureAwait(false);
+
             // How far the subscription has got, which only moves forward. An origin can be past the end of the
             // sequence, and the events up to it aren't delivered when they arrive.
             TPos? position = origin is SubscriptionOrigin<TPos>.After after ? after.Position : null;
@@ -52,7 +54,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
 
             do
             {
-                var catchUp = await ReadCatchUpAsync(nextOrigin, attachment.HighWaterMark, cancellationToken)
+                var catchUp = await ReadCatchUpAsync(nextOrigin, highWaterMark, cancellationToken)
                     .ConfigureAwait(false);
 
                 // For a subscription from the end, this pins the end. Otherwise, a restart before the first event is
@@ -140,6 +142,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
 
                 observer = nextObserver;
                 attachment = nextAttachment;
+
+                highWaterMark = await WaitForConnectionAsync(attachment, cancellationToken).ConfigureAwait(false);
             } while (isRestarting);
         }
         finally
@@ -188,6 +192,26 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
         try
         {
             return await enumerator.MoveNextAsync().ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            logger?.SubscriptionCanceled(correlationId);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger?.SubscriptionFailed(ex, correlationId);
+            throw;
+        }
+    }
+
+    private async Task<TMark> WaitForConnectionAsync(
+        IFeedAttachment<TMark> attachment,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await attachment.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
