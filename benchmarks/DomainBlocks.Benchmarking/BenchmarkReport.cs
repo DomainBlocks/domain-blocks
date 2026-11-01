@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 using HdrHistogram;
 using NUnit.Framework;
 
-namespace DomainBlocks.Benchmarking.EventStore;
+namespace DomainBlocks.Benchmarking;
 
 /// <summary>
 /// Writes benchmark results in a fixed layout, preceded by environment detail needed to interpret the results.
@@ -71,23 +71,6 @@ public static class BenchmarkReport
             $"little's law:  in-flight / throughput = {expectedMeanMillis:F3} ms, " +
             $"measured mean {measuredMeanMillis:F3} ms");
 
-        await output.WriteLineAsync($"gc:            {result.Gc}");
-    }
-
-    public static async Task WriteReadThroughputAsync(string title, ReadThroughputResult result)
-    {
-        var output = TestContext.Out;
-        var passes = string.Join(", ", result.Passes.Select(x => $"{x.TotalMilliseconds:F0}"));
-
-        await output.WriteLineAsync($"--- {title} ---");
-
-        await output.WriteLineAsync(
-            $"log:           {result.EventsInLog:N0} events, {result.EventsRead:N0} read per pass");
-
-        await output.WriteLineAsync($"median pass:   {result.MedianPass.TotalMilliseconds:F1} ms");
-        await output.WriteLineAsync($"throughput:    {result.EventsPerSecond:N0} events/s through the log");
-        await output.WriteLineAsync($"allocated:     {result.AllocatedBytesPerEvent:F0} B per event in the log");
-        await output.WriteLineAsync($"passes (ms):   {passes}");
         await output.WriteLineAsync($"gc:            {result.Gc}");
     }
 

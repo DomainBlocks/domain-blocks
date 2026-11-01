@@ -36,10 +36,11 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
     {
         await using var eventStore = CreateEventStore(_eventTypeMap);
 
-        var runner = new AppendBenchmarkRunner();
+        var streamIdGenerator = new StreamIdGenerator();
+        var runner = new BenchmarkRunner();
 
         var result = await runner.MeasureLatencyAsync(
-            (_, streamId, token) => AppendAsync(eventStore, streamId, token),
+            (_, token) => AppendAsync(eventStore, streamIdGenerator.Next(), token),
             new LatencyOptions(),
             ct);
 
@@ -70,10 +71,14 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
 
         try
         {
-            var runner = new AppendBenchmarkRunner();
+            var streamIdGenerator = new StreamIdGenerator();
+            var runner = new BenchmarkRunner();
 
             var result = await runner.MeasureThroughputAsync(
-                (workerIndex, streamId, token) => AppendAsync(instances[workerIndex % instanceCount], streamId, token),
+                (workerIndex, token) => AppendAsync(
+                    instances[workerIndex % instanceCount],
+                    streamIdGenerator.Next(),
+                    token),
                 new ThroughputOptions { InFlight = inFlight },
                 ct);
 
@@ -190,7 +195,7 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
         var result = new ReadThroughputResult(eventsInLog, eventsRead, passes, allocated, gc);
 
         await BenchmarkReport.WriteEnvironmentAsync(eventStore.GetType(), await Harness.DescribeAsync());
-        await BenchmarkReport.WriteReadThroughputAsync(title, result);
+        await ReadBenchmarkReport.WriteAsync(title, result);
 
         return result;
     }
