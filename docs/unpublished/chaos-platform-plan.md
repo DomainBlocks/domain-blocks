@@ -207,6 +207,11 @@ These are sketches. Phase 1 will change them.
   `aurora_inject_disk_failure`, `aurora_inject_disk_congestion` and `FailoverDBCluster`, and consider AWS FIS for
   network disruption. A proxy in front of the cluster endpoint can hide its DNS change on failover, so check how it
   resolves the upstream.
+- Aurora: test the assumption that logical decoding sends a commit only once storage has it, which AWS doesn't
+  document ([PostgreSQL on Aurora](postgresql-on-aurora.md)). Slow storage with `aurora_inject_disk_congestion`, and
+  for each event compare when a subscriber receives it with when its append returns. A short lead is a normal race
+  between the two connections, but a lead near the injected delay means a subscriber got the event before storage
+  had it, so a failover could lose it.
 - Atlas: the Admin API's primary failover test and regional outage simulation. Atlas's internal network cannot be
   faulted, so network faults are on the client side only.
 - Cloud runs cost time and money, and failovers take tens of seconds to minutes, so scenarios need longer timeouts.
