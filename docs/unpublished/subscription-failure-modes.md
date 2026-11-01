@@ -30,8 +30,13 @@ They also fix failures found since:
   It now retries until it reaches the primary.
 - **A transient error while a subscription started or caught up failed it**, in both stores: a dropped connection, a
   failover, a lost cursor, or in PostgreSQL an unconfirmed barrier or a barrier on a standby. The reads now retry, and
-  a replay resumes after the last event delivered, until they reach `SubscriptionOptions.CatchUpMaxRetryAttempts` or
-  `CatchUpRetryTimeout` without progress.
+  a replay resumes after the last event delivered, until they reach `SubscriptionOptions.MaxRetryAttempts` or
+  `RetryTimeout` without progress.
+- **A feed's transient errors never reached its subscriptions**, in both stores, and a session that failed just after it
+  was created reconnected in a loop with no delay. The feed now backs off until a session has stayed up for 2 minutes,
+  and retries without a limit. Each subscription gives up under its own `MaxRetryAttempts` and `RetryTimeout`, until the
+  feed first connects and once it is live. Feed failures during a catch-up don't count, as the feed may recover before
+  the replay ends.
 
 [PostgreSQL replication concepts](postgresql-replication-concepts.md) describes the PostgreSQL design as built.
 

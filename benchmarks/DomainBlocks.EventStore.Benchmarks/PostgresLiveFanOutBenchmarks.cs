@@ -185,6 +185,9 @@ public class PostgresLiveFanOutBenchmarks
 
         public ValueTask OnResetAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
 
+        public ValueTask OnFailureAsync(FeedFailure failure, CancellationToken cancellationToken) =>
+            ValueTask.CompletedTask;
+
         public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken)
         {
             _completion.TrySetException(exception);

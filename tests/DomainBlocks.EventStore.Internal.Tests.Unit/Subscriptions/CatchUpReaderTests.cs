@@ -14,7 +14,7 @@ public class CatchUpReaderTests
     public async Task ReadAsync_TransientError_RetriesAndLogsSubscriptionId()
     {
         var logger = new FakeLogger();
-        var options = new SubscriptionOptions { CatchUpMaxRetryAttempts = 1 };
+        var options = new SubscriptionOptions { MaxRetryAttempts = 1 };
         var reader = new FailingReader(failureCount: 1, failure: null, options, logger);
 
         var catchUp = await reader.ReadAsync(SubscriptionOrigin.Start, 10, CancellationToken.None);
@@ -27,7 +27,7 @@ public class CatchUpReaderTests
     [Test]
     public async Task ReadAsync_TransientErrorWithoutRetries_Throws()
     {
-        var options = new SubscriptionOptions { CatchUpMaxRetryAttempts = 0 };
+        var options = new SubscriptionOptions { MaxRetryAttempts = 0 };
         var reader = new FailingReader(failureCount: 1, failure: null, options, logger: null);
 
         await Should.ThrowAsync<IOException>(async () =>
@@ -39,7 +39,7 @@ public class CatchUpReaderTests
     [Test]
     public async Task ReadAsync_OtherError_Throws()
     {
-        var options = new SubscriptionOptions { CatchUpMaxRetryAttempts = 1 };
+        var options = new SubscriptionOptions { MaxRetryAttempts = 1 };
         var reader = new FailingReader(failureCount: 1, new InvalidOperationException(), options, logger: null);
 
         await Should.ThrowAsync<InvalidOperationException>(async () =>

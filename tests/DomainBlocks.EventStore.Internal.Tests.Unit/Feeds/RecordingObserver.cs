@@ -4,11 +4,13 @@ using DomainBlocks.EventStore.Internal.Feeds;
 namespace DomainBlocks.EventStore.Internal.Tests.Unit.Feeds;
 
 /// <summary>
-/// Records what the feed delivers, in order, as readable strings: "row:{position}", "reset", or "error".
+/// Records what the feed delivers, in order, as readable strings: "row:{position}", "reset", or "error". Failures are
+/// recorded separately.
 /// </summary>
 internal sealed class RecordingObserver : IFeedObserver<long>
 {
     private readonly Channel<string> _channel = Channel.CreateUnbounded<string>();
+    private readonly Channel<FeedFailure> _failures = Channel.CreateUnbounded<FeedFailure>();
 
     private readonly TaskCompletionSource<Exception> _errorTcs =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -27,12 +29,21 @@ internal sealed class RecordingObserver : IFeedObserver<long>
         return ValueTask.CompletedTask;
     }
 
+    public ValueTask OnFailureAsync(FeedFailure failure, CancellationToken cancellationToken)
+    {
+        _failures.Writer.TryWrite(failure);
+        return ValueTask.CompletedTask;
+    }
+
     public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken)
     {
         _channel.Writer.TryWrite("error");
         _errorTcs.TrySetResult(exception);
         return ValueTask.CompletedTask;
     }
+
+    public ValueTask<FeedFailure> ReadFailureAsync(CancellationToken cancellationToken) =>
+        _failures.Reader.ReadAsync(cancellationToken);
 
     public async Task<string[]> ReadAsync(int count, CancellationToken cancellationToken)
     {

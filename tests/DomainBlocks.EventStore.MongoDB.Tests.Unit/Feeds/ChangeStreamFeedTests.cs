@@ -339,6 +339,8 @@ public class ChangeStreamFeedTests
             return ValueTask.CompletedTask;
         }
 
+        public ValueTask OnFailureAsync(FeedFailure failure, CancellationToken cancellationToken) => default;
+
         public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken) => default;
 
         public async Task<string[]> ReadAsync(int count, CancellationToken cancellationToken)

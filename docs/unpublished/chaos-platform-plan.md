@@ -134,7 +134,7 @@ source and fixed. Each one should become a scenario, so the fixes stay fixed:
 - PostgreSQL commit visible before the standby has it: cancel a commit waiting on the standby, then fail over (#164)
 - Appends taking the session's `synchronous_commit` (#161)
 - A feed whose endpoint reaches a standby during failover (#170)
-- Transient errors during catch-up, and giving up at `CatchUpMaxRetryAttempts` or `CatchUpRetryTimeout`
+- Transient errors during catch-up, and giving up at `MaxRetryAttempts` or `RetryTimeout`
 
 Some configurations are expected to fail, such as asynchronous standbys or `w:1`. Those runs are still worth having:
 they show a client why the configuration matters.
@@ -199,7 +199,7 @@ These are sketches. Phase 1 will change them.
 
 **Phase 3: random faults and give-ups.**
 - A seeded random nemesis, with the seed in the report.
-- Give-up scenarios with expectations on `CatchUpMaxRetryAttempts` and `CatchUpRetryTimeout`.
+- Give-up scenarios with expectations on `MaxRetryAttempts` and `RetryTimeout`.
 - Swimlanes in the UI, with one lane per writer and subscriber and outcomes marked.
 
 **Phase 4: cloud.**

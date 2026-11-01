@@ -35,7 +35,7 @@ public class RefCountedFeedTests
     }
 
     [Test]
-    public async Task AttachAsync_MarkAdvancesDuringAttach_CarriesLaterMark()
+    public async Task WaitForConnectionAsync_MarkAdvancesDuringAttach_ReturnsLaterMark()
     {
         // The feed delivers an item while the observer attaches, too late for the observer to receive it.
         var feed = new TestFeed(advanceMarkOnAttach: true);
@@ -43,7 +43,120 @@ public class RefCountedFeedTests
 
         await using var attachment = await refCountedFeed.AttachAsync(new TestObserver());
 
-        attachment.HighWaterMark.ShouldBe(1);
+        (await attachment.WaitForConnectionAsync(CancellationToken.None)).ShouldBe(1);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task AttachAsync_FeedConnecting_AttachesWithoutWaiting(CancellationToken ct)
+    {
+        var feed = new TestFeed(canConnect: false);
+        var refCountedFeed = new RefCountedFeed<int, long>(() => feed);
+
+        await using var attachment1 = await refCountedFeed
+            .AttachAsync(new TestObserver(), cancellationToken: ct)
+            .WaitAsync(ct);
+
+        await using var attachment2 = await refCountedFeed
+            .AttachAsync(new TestObserver(), cancellationToken: ct)
+            .WaitAsync(ct);
+
+        feed.ConnectCount.ShouldBe(1);
+        feed.AttachCount.ShouldBe(2);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task WaitForConnectionAsync_FeedConnects_CompletesForEachObserver(CancellationToken ct)
+    {
+        var feed = new TestFeed(canConnect: false);
+        var refCountedFeed = new RefCountedFeed<int, long>(() => feed);
+        await using var attachment1 = await refCountedFeed.AttachAsync(new TestObserver(), cancellationToken: ct);
+        await using var attachment2 = await refCountedFeed.AttachAsync(new TestObserver(), cancellationToken: ct);
+
+        var waiting1 = attachment1.WaitForConnectionAsync(ct);
+        var waiting2 = attachment2.WaitForConnectionAsync(ct);
+
+        waiting1.IsCompleted.ShouldBeFalse();
+        waiting2.IsCompleted.ShouldBeFalse();
+
+        feed.AllowConnection();
+
+        await waiting1;
+        await waiting2;
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task WaitForConnectionAsync_ObserverAttachedBeforeConnection_ReturnsMarkFromConnection(
+        CancellationToken ct)
+    {
+        var feed = new TestFeed(canConnect: false);
+        var refCountedFeed = new RefCountedFeed<int, long>(() => feed);
+        await using var attachment = await refCountedFeed.AttachAsync(new TestObserver(), cancellationToken: ct);
+
+        var waiting = attachment.WaitForConnectionAsync(ct);
+        feed.AllowConnection(highWaterMark: 5);
+
+        (await waiting).ShouldBe(5);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task WaitForConnectionAsync_Canceled_LeavesOtherObserversWaiting(CancellationToken ct)
+    {
+        var feed = new TestFeed(canConnect: false);
+        var refCountedFeed = new RefCountedFeed<int, long>(() => feed);
+        var attachment1 = await refCountedFeed.AttachAsync(new TestObserver(), cancellationToken: ct);
+        await using var attachment2 = await refCountedFeed.AttachAsync(new TestObserver(), cancellationToken: ct);
+        using var waitCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+        var canceled = attachment1.WaitForConnectionAsync(waitCts.Token);
+        var waiting = attachment2.WaitForConnectionAsync(ct);
+        await waitCts.CancelAsync();
+
+        await Task.WhenAny(canceled, Task.Delay(Timeout.Infinite, ct));
+        canceled.IsCanceled.ShouldBeTrue();
+
+        await attachment1.DisposeAsync();
+
+        feed.DisposeCount.ShouldBe(0);
+        waiting.IsCompleted.ShouldBeFalse();
+
+        feed.AllowConnection();
+
+        await waiting;
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task WaitForConnectionAsync_FeedFaultsBeforeConnecting_ThrowsFeedError(CancellationToken ct)
+    {
+        var feed = new TestFeed(canConnect: false);
+        var refCountedFeed = new RefCountedFeed<int, long>(() => feed);
+        await using var attachment = await refCountedFeed.AttachAsync(new TestObserver(), cancellationToken: ct);
+        var exception = new InvalidOperationException();
+
+        var waiting = attachment.WaitForConnectionAsync(ct);
+        feed.Fault(exception);
+
+        (await Should.ThrowAsync<InvalidOperationException>(() => waiting)).ShouldBeSameAs(exception);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task DisposeAsync_LastAttachmentDuringBackoff_StopsFeed(CancellationToken ct)
+    {
+        var options = new FeedResumeOptions { RetryDelay = TimeSpan.FromMinutes(1) };
+        var resumePolicy = new FeedResumePolicy(static ex => ex is IOException, options);
+        var feed = new DelegateFeed(_ => throw new IOException("down"), resumePolicy);
+        var refCountedFeed = new RefCountedFeed<long, long>(() => feed);
+        var attachment = await refCountedFeed.AttachAsync(new RecordingObserver(), cancellationToken: ct);
+
+        await attachment.DisposeAsync();
+
+        feed.DisposeCount.ShouldBe(1);
+        await feed.Completion;
     }
 
     [Test]
@@ -221,7 +334,7 @@ public class RefCountedFeedTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task AttachAsync_WhenCancelledWhileConnecting_ConnectsAgainOnNextAttach(CancellationToken ct)
+    public async Task DisposeAsync_CanceledWhileConnecting_ConnectsAgainOnNextAttach(CancellationToken ct)
     {
         var feeds = new List<TestFeed>();
 
@@ -233,16 +346,17 @@ public class RefCountedFeedTests
         });
 
         using var attachCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var attaching = refCountedFeed.AttachAsync(new TestObserver(), cancellationToken: attachCts.Token);
+        var first = await refCountedFeed.AttachAsync(new TestObserver(), cancellationToken: ct);
+        var waiting = first.WaitForConnectionAsync(attachCts.Token);
         await attachCts.CancelAsync();
 
-        await attaching.ShouldThrowAsync<OperationCanceledException>();
+        await waiting.ShouldThrowAsync<OperationCanceledException>();
+        await first.DisposeAsync();
         feeds[0].DisposeCount.ShouldBe(1);
 
         await using var attachment = await refCountedFeed.AttachAsync(new TestObserver(), cancellationToken: ct);
 
         feeds.Count.ShouldBe(2);
-        feeds[0].AttachCount.ShouldBe(0);
         feeds[1].ConnectCount.ShouldBe(1);
         feeds[1].AttachCount.ShouldBe(1);
     }
@@ -264,10 +378,124 @@ public class RefCountedFeedTests
         feed.DisposeCount.ShouldBe(1);
     }
 
+    // A feed that hasn't connected fails both of its tasks, and one that has connected fails only its completion.
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task DisposeAsync_LastAttachmentAfterFault_LeavesNoUnreadError(bool hasConnected)
+    {
+        var error = new InvalidOperationException();
+
+        var isReported = await IsReportedAsUnreadAsync(error, async () =>
+        {
+            var feed = new TestFeed(canConnect: hasConnected);
+            var refCountedFeed = new RefCountedFeed<int, long>(() => feed);
+            var attachment = await refCountedFeed.AttachAsync(new TestObserver());
+            feed.Fault(error);
+
+            await attachment.DisposeAsync();
+        });
+
+        isReported.ShouldBeFalse();
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task AttachAsync_AfterFault_LeavesNoUnreadError(bool hasConnected)
+    {
+        var error = new InvalidOperationException();
+
+        var isReported = await IsReportedAsUnreadAsync(error, async () =>
+        {
+            var feed = new TestFeed(canConnect: hasConnected);
+            var feeds = new Queue<TestFeed>([feed, new TestFeed()]);
+            var refCountedFeed = new RefCountedFeed<int, long>(feeds.Dequeue);
+            await using var attachment = await refCountedFeed.AttachAsync(new TestObserver());
+            feed.Fault(error);
+
+            await using var next = await refCountedFeed.AttachAsync(new TestObserver());
+        });
+
+        isReported.ShouldBeFalse();
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task DisposeAsync_FeedFaulted_LeavesNoUnreadError(bool hasConnected)
+    {
+        var error = new InvalidOperationException();
+
+        var isReported = await IsReportedAsUnreadAsync(error, async () =>
+        {
+            var feed = new TestFeed(canConnect: hasConnected);
+            var refCountedFeed = new RefCountedFeed<int, long>(() => feed);
+            await refCountedFeed.AttachAsync(new TestObserver());
+            feed.Fault(error);
+
+            await refCountedFeed.DisposeAsync();
+        });
+
+        isReported.ShouldBeFalse();
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task DisposeAsync_LastAttachmentAfterEventLogFeedFaulted_LeavesNoUnreadError(CancellationToken ct)
+    {
+        var error = new InvalidOperationException();
+
+        var isReported = await IsReportedAsUnreadAsync(error, async () =>
+        {
+            var resumePolicy = new FeedResumePolicy(static ex => ex is IOException, new FeedResumeOptions());
+            var feed = new DelegateFeed(_ => throw error, resumePolicy);
+            var refCountedFeed = new RefCountedFeed<long, long>(() => feed);
+            var observer = new RecordingObserver();
+            var attachment = await refCountedFeed.AttachAsync(observer, cancellationToken: ct);
+            await observer.Error.WaitAsync(ct);
+
+            await attachment.DisposeAsync();
+        });
+
+        isReported.ShouldBeFalse();
+    }
+
+    // .NET reports a faulted task's unread error when the task is finalized, so the scenario must leave nothing holding
+    // on to the feed. The error is compared by reference because other tests' tasks can be finalized here too.
+    private static async Task<bool> IsReportedAsUnreadAsync(Exception error, Func<Task> scenario)
+    {
+        var isReported = false;
+
+        void OnUnobserved(object? sender, UnobservedTaskExceptionEventArgs e)
+        {
+            if (e.Exception.InnerExceptions.Contains(error))
+                isReported = true;
+        }
+
+        TaskScheduler.UnobservedTaskException += OnUnobserved;
+
+        try
+        {
+            await scenario();
+
+            for (var i = 0; i < 3; i++)
+            {
+                await Task.Delay(10);
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+            }
+
+            return isReported;
+        }
+        finally
+        {
+            TaskScheduler.UnobservedTaskException -= OnUnobserved;
+        }
+    }
+
     private sealed class TestFeed(bool canConnect = true, bool advanceMarkOnAttach = false) : IEventLogFeed<int, long>
     {
         private readonly TaskCompletionSource _completionTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource _disposingTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _connectionTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private TaskCompletionSource? _disposeGate;
         private Exception? _attachException;
 
@@ -299,8 +527,17 @@ public class RefCountedFeedTests
         {
             ConnectCount++;
 
-            if (!canConnect)
-                await Task.Delay(Timeout.Infinite, cancellationToken);
+            if (canConnect)
+                return;
+
+            var connection = await Task.WhenAny(_connectionTcs.Task, Completion).WaitAsync(cancellationToken);
+            await connection;
+        }
+
+        public void AllowConnection(long highWaterMark = 0)
+        {
+            HighWaterMark = highWaterMark;
+            _connectionTcs.TrySetResult();
         }
 
         public void FaultOnNextAttach(Exception exception) => _attachException = exception;
@@ -341,6 +578,8 @@ public class RefCountedFeedTests
         public ValueTask OnNextAsync(int item, CancellationToken cancellationToken) => default;
 
         public ValueTask OnResetAsync(CancellationToken cancellationToken) => default;
+
+        public ValueTask OnFailureAsync(FeedFailure failure, CancellationToken cancellationToken) => default;
 
         public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken) => default;
     }
