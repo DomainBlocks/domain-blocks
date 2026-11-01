@@ -34,7 +34,7 @@ public class PostgresEventStoreBenchmarkTests() :
         enumerator.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
 
         var streamIds = new StreamIdGenerator();
-        var runner = new AppendBenchmarkRunner();
+        var runner = new BenchmarkRunner();
 
         var result = await runner.MeasureLatencyAsync(
             async (_, token) =>
@@ -95,7 +95,7 @@ public class PostgresEventStoreBenchmarkTests() :
         var start = Stopwatch.GetTimestamp();
 
         var streamIds = new StreamIdGenerator();
-        var runner = new AppendBenchmarkRunner();
+        var runner = new BenchmarkRunner();
 
         var result = await runner.MeasureThroughputAsync(
             (_, token) => eventStore.AppendAsync(

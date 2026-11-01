@@ -7,7 +7,7 @@ namespace DomainBlocks.Benchmarking;
 /// Measures an operation's latency and throughput with closed-loop workers. Latencies are recorded in
 /// <see cref="Stopwatch"/> ticks to an HdrHistogram with microsecond resolution and three significant digits.
 /// </summary>
-public sealed class AppendBenchmarkRunner
+public sealed class BenchmarkRunner
 {
     private const int SignificantDigits = 3;
     private static readonly long LowestTrackableTicks = Math.Max(1, Stopwatch.Frequency / 1_000_000);
