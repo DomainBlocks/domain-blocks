@@ -246,7 +246,7 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
         await eventStore.AppendAsync("s1", [.. events.Select(Appendable)], cancellationToken: ct);
 
         await using var subscription = eventStore
-            .SubscribeToAll(SubscriptionOrigin.Start, new SubscriptionOptions { CatchUpMaxRetryAttempts = 0 })
+            .SubscribeToAll(SubscriptionOrigin.Start, new SubscriptionOptions { MaxRetryAttempts = 0 })
             .GetAsyncEnumerator(ct);
 
         (await NextEventAsync(subscription)).Payload.ShouldBe(events[0]);

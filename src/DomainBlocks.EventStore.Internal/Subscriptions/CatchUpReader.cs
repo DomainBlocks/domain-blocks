@@ -36,8 +36,8 @@ internal abstract class CatchUpReader<TEvent, TPos, TMark>(
     /// </summary>
     protected ResiliencePipeline ResiliencePipeline { get; } = RetryPipeline.Create(
         isTransient,
-        options.CatchUpMaxRetryAttempts,
-        options.CatchUpRetryTimeout,
+        options.MaxRetryAttempts,
+        options.RetryTimeout,
         (_, ex, attempt, delay) => logger?.CatchUpRetrying(ex, correlationId, attempt, delay));
 
     /// <summary>
