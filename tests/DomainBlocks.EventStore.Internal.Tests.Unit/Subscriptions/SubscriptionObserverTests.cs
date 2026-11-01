@@ -1,4 +1,5 @@
 using DomainBlocks.EventStore.Filtering;
+using DomainBlocks.EventStore.Internal.Feeds;
 using DomainBlocks.EventStore.Internal.Subscriptions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
@@ -180,6 +181,116 @@ public class SubscriptionObserverTests
     }
 
     [Test]
+    public async Task OnFailureAsync_BeforeFirstConnectionAtLimit_FailsReader()
+    {
+        using var observer = new Observer(queueCapacity: 10, EventFilter.All, maxRetryAttempts: 1);
+        var error = new IOException("down");
+
+        await observer.OnFailureAsync(Failure(1, hasConnected: false), CancellationToken.None);
+        observer.Reader.Completion.IsCompleted.ShouldBeFalse();
+
+        await observer.OnFailureAsync(Failure(2, hasConnected: false, error), CancellationToken.None);
+
+        (await Should.ThrowAsync<IOException>(() => observer.Reader.Completion)).ShouldBeSameAs(error);
+    }
+
+    [Test]
+    public async Task OnFailureAsync_CatchingUpAfterConnection_DoesNotCount()
+    {
+        using var observer = new Observer(queueCapacity: 10, EventFilter.All, maxRetryAttempts: 0);
+
+        await observer.OnFailureAsync(Failure(1, hasConnected: true), CancellationToken.None);
+
+        observer.Reader.Completion.IsCompleted.ShouldBeFalse();
+    }
+
+    [Test]
+    public async Task OnFailureAsync_LiveAtLimit_FailsReaderAfterQueuedEvent()
+    {
+        using var observer = new Observer(queueCapacity: 10, EventFilter.All, maxRetryAttempts: 0);
+        var error = new IOException("lost");
+        await OfferAsync(observer, 0, "order-1");
+        observer.OnCaughtUp();
+
+        await observer.OnFailureAsync(Failure(1, hasConnected: true, error), CancellationToken.None);
+
+        observer.Reader.TryRead(out _).ShouldBeTrue();
+        (await Should.ThrowAsync<IOException>(() => observer.Reader.Completion)).ShouldBeSameAs(error);
+    }
+
+    [Test]
+    public async Task OnFailureAsync_LiveWithRetryTimeout_FailsReaderOnceTimeHasPassed()
+    {
+        var retryTimeout = TimeSpan.FromMinutes(5);
+        using var observer = new Observer(queueCapacity: 10, EventFilter.All, retryTimeout: retryTimeout);
+        observer.OnCaughtUp();
+
+        await observer.OnFailureAsync(Failure(1, hasConnected: true), CancellationToken.None);
+        observer.Reader.Completion.IsCompleted.ShouldBeFalse();
+
+        var failure = new FeedFailure(new IOException("lost"), 2, retryTimeout, hasConnected: true);
+        await observer.OnFailureAsync(failure, CancellationToken.None);
+
+        await Should.ThrowAsync<IOException>(() => observer.Reader.Completion);
+    }
+
+    [Test]
+    public async Task OnFailureAsync_LiveAfterFailuresBeforeConnection_StartsLimitsAgain()
+    {
+        using var observer = new Observer(queueCapacity: 10, EventFilter.All, maxRetryAttempts: 1);
+        await observer.OnFailureAsync(Failure(1, hasConnected: false), CancellationToken.None);
+        observer.OnCaughtUp();
+
+        await observer.OnFailureAsync(Failure(2, hasConnected: true), CancellationToken.None);
+        observer.Reader.Completion.IsCompleted.ShouldBeFalse();
+
+        await observer.OnFailureAsync(Failure(3, hasConnected: true), CancellationToken.None);
+
+        await Should.ThrowAsync<IOException>(() => observer.Reader.Completion);
+    }
+
+    [Test]
+    public async Task OnFailureAsync_AfterLimitReached_DoesNotDecodeFurtherItems()
+    {
+        using var observer = new Observer(queueCapacity: 10, EventFilter.All, maxRetryAttempts: 0);
+        observer.OnCaughtUp();
+        await observer.OnFailureAsync(Failure(1, hasConnected: true), CancellationToken.None);
+
+        await OfferAsync(observer, 0, "order-1");
+
+        _sourceEvent.DecodeCount.ShouldBe(0);
+    }
+
+    [Test]
+    public async Task OnFailureAsync_LimitReached_LogsWarningOnce()
+    {
+        var logger = new FakeLogger();
+        using var observer = new Observer(queueCapacity: 10, EventFilter.All, logger, "sub-1", maxRetryAttempts: 0);
+        observer.OnCaughtUp();
+
+        await observer.OnFailureAsync(Failure(1, hasConnected: true), CancellationToken.None);
+        await observer.OnFailureAsync(Failure(2, hasConnected: true), CancellationToken.None);
+
+        logger.Collector.GetSnapshot().Select(record => (record.Level, record.Message)).ShouldBe(
+            [(LogLevel.Warning, "[sub: sub-1] reached its retry limit while the feed was failing")]);
+    }
+
+    [Test]
+    public async Task OnFailureAsync_AlreadyStoppedByQueueOverflow_EndsReaderWithoutError()
+    {
+        using var observer = new Observer(queueCapacity: 1, EventFilter.All, maxRetryAttempts: 0);
+        observer.OnCaughtUp();
+        await OfferAsync(observer, 0, "order-1");
+        await OfferAsync(observer, 1, "order-1");
+
+        await observer.OnFailureAsync(Failure(1, hasConnected: true), CancellationToken.None);
+
+        observer.StopReason.ShouldBe(SubscriptionStopReason.QueueOverflow);
+        observer.Reader.TryRead(out _).ShouldBeTrue();
+        await observer.Reader.Completion;
+    }
+
+    [Test]
     public async Task Dispose_WhenAlreadyStoppedByQueueOverflow_KeepsFirstReason()
     {
         var observer = new Observer(queueCapacity: 1, EventFilter.All);
@@ -203,6 +314,9 @@ public class SubscriptionObserverTests
         observer.Reader.TryRead(out _).ShouldBeTrue();
         (await observer.Reader.WaitToReadAsync()).ShouldBeFalse();
     }
+
+    private static FeedFailure Failure(int failureCount, bool hasConnected, Exception? error = null) =>
+        new(error ?? new IOException("lost"), failureCount, TimeSpan.Zero, hasConnected);
 
     private ValueTask OfferAsync(Observer observer, long position, string streamId)
     {

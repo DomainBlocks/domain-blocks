@@ -5,7 +5,7 @@ namespace DomainBlocks.EventStore.Internal.Feeds;
 
 /// <summary>
 /// Represents a feed that pumps items from a store's sessions to observers, creating a new session with backoff when
-/// one is lost.
+/// one is lost. It retries transient errors without a limit, and each observer decides how long it will wait.
 /// </summary>
 /// <remarks>
 /// <para>

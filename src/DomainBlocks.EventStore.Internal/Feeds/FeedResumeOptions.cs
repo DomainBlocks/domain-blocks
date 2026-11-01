@@ -5,11 +5,6 @@ internal sealed class FeedResumeOptions
     public static readonly FeedResumeOptions Default = new();
 
     /// <summary>
-    /// Gets or sets how many times in a row the feed retries a failed attempt to create a session before it faults.
-    /// </summary>
-    public int MaxRetryAttempts { get; set; } = int.MaxValue;
-
-    /// <summary>
     /// Gets or sets the delay before the first retry, which grows exponentially, with jitter, up to
     /// <see cref="MaxRetryDelay"/>.
     /// </summary>

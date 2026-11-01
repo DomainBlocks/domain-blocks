@@ -318,51 +318,6 @@ public class EventLogFeedTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task Connect_NoRetries_FaultsOnFirstFailure(CancellationToken ct)
-    {
-        var attempts = 0;
-        var exception = new IOException("down");
-
-        await using var feed = new DelegateFeed(
-            _ =>
-            {
-                attempts++;
-                throw exception;
-            },
-            CreateResumePolicy(new FeedResumeOptions { MaxRetryAttempts = 0 }));
-
-        var observer = new RecordingObserver();
-        using var attachment = feed.Attach(observer);
-
-        await feed.ConnectAsync(ct).ShouldThrowAsync<IOException>();
-        (await observer.Error.WaitAsync(ct)).ShouldBeSameAs(exception);
-        attempts.ShouldBe(1);
-    }
-
-    [Test]
-    [CancelAfter(TestTimeoutMillis)]
-    public async Task Connect_WhenRetriesAreExhausted_Faults(CancellationToken ct)
-    {
-        var exception = new IOException("still down");
-
-        await using var feed = new DelegateFeed(
-            _ => throw exception,
-            CreateResumePolicy(new FeedResumeOptions
-            {
-                MaxRetryAttempts = 2,
-                RetryDelay = TimeSpan.FromMilliseconds(1),
-                MaxRetryDelay = TimeSpan.FromMilliseconds(1)
-            }));
-
-        var observer = new RecordingObserver();
-        using var attachment = feed.Attach(observer);
-
-        await feed.ConnectAsync(ct).ShouldThrowAsync<IOException>();
-        (await observer.Error.WaitAsync(ct)).ShouldBeSameAs(exception);
-    }
-
-    [Test]
-    [CancelAfter(TestTimeoutMillis)]
     public async Task Attach_AfterNonTransientFailure_Throws(CancellationToken ct)
     {
         var exception = new InvalidOperationException("misconfigured");
@@ -510,7 +465,8 @@ public class EventLogFeedTests
         var clock = new FakeTimeProvider();
         var first = new ScriptedSession("s1", Do(() => clock.Advance(StabilityPeriod)), Throw(new IOException("lost")));
         var second = new ScriptedSession("s2", Row(1)) { IsResumed = true };
-        await using var feed = CreateFeed(new([first, second]), CreateClockedResumePolicy(clock));
+        var sessions = new Queue<IFeedSession<long, long>>([first, second]);
+        await using var feed = CreateFeed(sessions, CreateClockedResumePolicy(clock));
 
         var observer = new RecordingObserver();
         using var attachment = feed.Attach(observer);
@@ -569,15 +525,15 @@ public class EventLogFeedTests
         var thirdError = new IOException("lost after a while");
         var tenSeconds = TimeSpan.FromSeconds(10);
 
-        await using var feed = CreateFeed(
-            new(
-            [
-                new ScriptedSession("s1", Throw(new IOException("lost"))),
-                new ScriptedSession("s2", Do(() => clock.Advance(tenSeconds)), Throw(secondError)),
-                new ScriptedSession("s3", Do(() => clock.Advance(StabilityPeriod)), Throw(thirdError)),
-                new ScriptedSession("s4")
-            ]),
-            CreateClockedResumePolicy(clock));
+        var sessions = new Queue<IFeedSession<long, long>>(
+        [
+            new ScriptedSession("s1", Throw(new IOException("lost"))),
+            new ScriptedSession("s2", Do(() => clock.Advance(tenSeconds)), Throw(secondError)),
+            new ScriptedSession("s3", Do(() => clock.Advance(StabilityPeriod)), Throw(thirdError)),
+            new ScriptedSession("s4")
+        ]);
+
+        await using var feed = CreateFeed(sessions, CreateClockedResumePolicy(clock));
 
         var observer = new RecordingObserver();
         using var attachment = feed.Attach(observer);

@@ -13,7 +13,7 @@ namespace DomainBlocks.EventStore.Internal.Subscriptions;
 /// <param name="catchUpReader">The reader of the subscription's history.</param>
 /// <param name="liveFilter">Selects the live events to deliver.</param>
 /// <param name="origin">Where the subscription starts, or <see langword="null"/> for the end.</param>
-/// <param name="queueCapacity">The number of live events to queue before the subscription has to restart.</param>
+/// <param name="options">The subscription's queue capacity and retry limits.</param>
 /// <param name="correlationId">The subscription's reserved ID, which it releases when it stops.</param>
 /// <param name="logger">The logger for the subscription's lifecycle.</param>
 internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, TPos>(
@@ -21,7 +21,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
     CatchUpReader<TEvent, TPos, TMark> catchUpReader,
     EventFilter liveFilter,
     SubscriptionOrigin<TPos>? origin,
-    int queueCapacity,
+    SubscriptionOptions options,
     string correlationId,
     ILogger? logger) :
     IAsyncEnumerable<SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>>
@@ -42,7 +42,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
             observer = CreateObserver();
             attachment = await AttachObserverAsync(observer, cancellationToken).ConfigureAwait(false);
 
-            var highWaterMark = await WaitForConnectionAsync(attachment, cancellationToken).ConfigureAwait(false);
+            var highWaterMark = await WaitForConnectionAsync(attachment, observer, cancellationToken)
+                .ConfigureAwait(false);
 
             // How far the subscription has got, which only moves forward. An origin can be past the end of the
             // sequence, and the events up to it aren't delivered when they arrive.
@@ -75,6 +76,7 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
                 // it read, and a replay slower than the queue's overflow would never finish.
                 if (observer.StopReason == SubscriptionStopReason.None)
                 {
+                    observer.OnCaughtUp();
                     logger?.SubscriptionCaughtUp(correlationId);
 
                     yield return SubscriptionMessage<TEvent, string, StreamPosition, LogPosition>.CaughtUp;
@@ -143,7 +145,8 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
                 observer = nextObserver;
                 attachment = nextAttachment;
 
-                highWaterMark = await WaitForConnectionAsync(attachment, cancellationToken).ConfigureAwait(false);
+                highWaterMark = await WaitForConnectionAsync(attachment, observer, cancellationToken)
+                    .ConfigureAwait(false);
             } while (isRestarting);
         }
         finally
@@ -166,10 +169,12 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
     private SubscriptionObserver<TEvent, TSourceEvent> CreateObserver()
     {
         return new SubscriptionObserver<TEvent, TSourceEvent>(
-            queueCapacity,
+            options.QueueCapacity,
             liveFilter,
             logger,
-            correlationId);
+            correlationId,
+            options.MaxRetryAttempts,
+            options.RetryTimeout);
     }
 
     private async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> WithLoggedExceptionsAsync(
@@ -205,13 +210,30 @@ internal sealed class SubscriptionAsyncEnumerable<TEvent, TSourceEvent, TMark, T
         }
     }
 
+    // The observer's queue faults if the subscription reaches a retry limit before the feed connects. The queue holds
+    // nothing until then, so its completion doesn't wait for a reader.
     private async Task<TMark> WaitForConnectionAsync(
         IFeedAttachment<TMark> attachment,
+        SubscriptionObserver<TEvent, TSourceEvent> observer,
         CancellationToken cancellationToken)
     {
+        using var waitCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
         try
         {
-            return await attachment.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
+            var connection = attachment.WaitForConnectionAsync(waitCts.Token);
+            var queueCompletion = observer.Reader.Completion;
+
+            await Task.WhenAny(connection, queueCompletion).ConfigureAwait(false);
+
+            if (queueCompletion.IsFaulted)
+            {
+                // Without this, the abandoned wait could fault later, with no one to read its error.
+                await waitCts.CancelAsync().ConfigureAwait(false);
+                await queueCompletion.ConfigureAwait(false);
+            }
+
+            return await connection.ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

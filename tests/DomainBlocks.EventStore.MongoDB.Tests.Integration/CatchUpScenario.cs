@@ -186,7 +186,7 @@ internal sealed class CatchUpScenario : IAsyncDisposable
                 logger),
             liveFilter ?? EventFilter.All,
             origin ?? SubscriptionOrigin.Start,
-            options.QueueCapacity,
+            options,
             correlationId,
             logger);
 

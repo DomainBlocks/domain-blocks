@@ -260,6 +260,20 @@ public class MongoSubscriptionCatchUpTests
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_ChangeStreamLostWhileLiveWithoutRetries_Throws(CancellationToken ct)
+    {
+        await using var scenario = await CatchUpScenario.StartAsync(ct);
+        await using var subscription = scenario.SubscribeToAll(new SubscriptionOptions { MaxRetryAttempts = 0 });
+
+        (await subscription.NextAsync()).IsCaughtUp.ShouldBeTrue();
+
+        scenario.ChangeStreamProbe.SimulateDisconnect();
+
+        await Should.ThrowAsync<TimeoutException>(subscription.NextAsync);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task SubscribeToAll_AfterLiveDelivery_WaitsForDeliveredClusterTime(CancellationToken ct)
     {
         await using var scenario = await CatchUpScenario.StartAsync(ct);

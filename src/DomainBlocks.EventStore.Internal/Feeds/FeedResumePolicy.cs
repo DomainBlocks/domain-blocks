@@ -43,7 +43,7 @@ internal sealed class FeedResumePolicy
 
         _retryPipeline = RetryPipeline.Create(
             _isTransient,
-            options.MaxRetryAttempts,
+            int.MaxValue,
             Timeout.InfiniteTimeSpan,
             (context, ex, attempt, delay) =>
                 logger?.FeedRetrying(ex, context.Properties.GetValue(FeedIdKey, "unknown"), attempt, delay),
