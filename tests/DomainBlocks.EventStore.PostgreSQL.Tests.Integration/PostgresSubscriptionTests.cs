@@ -291,6 +291,30 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_ServerUnreachableWithoutRetries_Throws(CancellationToken ct)
+    {
+        // Nothing listens on this port, so the feed can't connect.
+        var builder = new NpgsqlConnectionStringBuilder(PostgresTestEnvironment.ConnectionString) { Port = 1 };
+
+        await using var dataSource = new NpgsqlDataSourceBuilder(builder.ConnectionString)
+            .UsePostgresEventStore(Options)
+            .Build();
+
+        await using var eventStore = new PostgresEventStoreBuilder<object>()
+            .UseDataSource(dataSource)
+            .UseOptions(Options)
+            .ConfigureCodec(x => x.UseEventTypeMap(DefaultEventTypeMap))
+            .Build();
+
+        await using var subscription = eventStore
+            .SubscribeToAll(SubscriptionOrigin.Start, new SubscriptionOptions { MaxRetryAttempts = 0 })
+            .GetAsyncEnumerator(ct);
+
+        await Should.ThrowAsync<NpgsqlException>(subscription.MoveNextAsync().AsTask());
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task SubscribeToAll_DataSourceWithMultipleHosts_Fails(CancellationToken ct)
     {
         var connectionString = WithStandbyHost(PostgresTestEnvironment.ConnectionString);
