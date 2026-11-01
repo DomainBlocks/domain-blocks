@@ -13,6 +13,11 @@ namespace DomainBlocks.EventStore.Internal.Feeds;
 /// <see cref="IFeedObserver{T}.OnResetAsync"/> first and recover missed items by re-reading from their last position.
 /// </para>
 /// <para>
+/// A session counts as working only once it has stayed up for <see cref="FeedResumeOptions.StabilityPeriod"/>. Until
+/// then, its failure continues the outage, so the feed backs off, and observers can see that the failure hasn't gone
+/// away. Neither connecting nor delivering an item is enough, because a session can fail after either, over and over.
+/// </para>
+/// <para>
 /// A store derives from this class to supply its sessions. If it holds anything across sessions, such as a replication
 /// slot, it overrides <see cref="DisposeAsyncCore"/>, and calls the base method first, which stops the feed.
 /// </para>
@@ -29,6 +34,9 @@ internal abstract class EventLogFeed<T, TMark> : IEventLogFeed<T, TMark>
     private Task? _producerTask;
     private TMark _highWaterMark = default!;
     private bool _hasHighWaterMark;
+    private bool _hasConnected;
+    private int _outageFailureCount;
+    private long _outageStartTimestamp;
     private int _hasStarted;
     private int _isDisposed;
 
@@ -170,51 +178,15 @@ internal abstract class EventLogFeed<T, TMark> : IEventLogFeed<T, TMark>
 
         try
         {
-            var hasConnectedBefore = false;
-
+            // One execution of the policy covers failures that follow each other, so that its backoff keeps growing. It
+            // ends only after a session that counted as working, and the next one starts without a delay.
             while (true)
             {
                 _stopCts.Token.ThrowIfCancellationRequested();
 
-                var session = await _resumePolicy
-                    .ExecuteAsync(CreateSessionAsync, _feedId, _stopCts.Token)
+                await _resumePolicy
+                    .ExecuteAsync(RunSessionAsync, _feedId, _stopCts.Token)
                     .ConfigureAwait(false);
-
-                await using (session.ConfigureAwait(false))
-                {
-                    Logger?.FeedConnected(_feedId, session.Description);
-
-                    // A session can start with a mark, such as one that covers items it won't deliver, and observers
-                    // read the mark as soon as the feed connects.
-                    RaiseHighWaterMark(session.InitialMark);
-
-                    // Unless the session resumes the previous one, items committed in between were missed. Reset
-                    // observers before pumping the new session, so no item advances a position past the gap.
-                    if (hasConnectedBefore && !session.IsResumed)
-                        await _observerHub.NotifyResetAsync(_stopCts.Token).ConfigureAwait(false);
-
-                    hasConnectedBefore = true;
-                    _connectedTcs.TrySetResult();
-
-                    try
-                    {
-                        await foreach (var (item, mark) in session.ReadAsync(_stopCts.Token).ConfigureAwait(false))
-                        {
-                            // The mark is raised before observers are notified, and the exchange is a full fence, so an
-                            // observer that attaches too late for an item reads a mark that covers it.
-                            RaiseHighWaterMark(mark);
-
-                            await _observerHub.NotifyNextAsync(item, _stopCts.Token).ConfigureAwait(false);
-                        }
-
-                        // A live session should never end, so reconnect.
-                        Logger?.FeedEnded(_feedId);
-                    }
-                    catch (Exception ex) when (!_stopCts.IsCancellationRequested && _resumePolicy.IsTransient(ex))
-                    {
-                        Logger?.FeedConnectionLost(ex, _feedId);
-                    }
-                }
             }
         }
         catch (OperationCanceledException) when (_stopCts.IsCancellationRequested)
@@ -244,6 +216,77 @@ internal abstract class EventLogFeed<T, TMark> : IEventLogFeed<T, TMark>
         {
             Logger?.FeedStopped(_feedId);
         }
+    }
+
+    // Runs one session until it fails. The session is disposed by the time the policy waits, so that it doesn't hold a
+    // connection during the delay.
+    private async Task RunSessionAsync(CancellationToken cancellationToken)
+    {
+        long? connectedTimestamp = null;
+
+        try
+        {
+            var session = await CreateSessionAsync(cancellationToken).ConfigureAwait(false);
+
+            await using (session.ConfigureAwait(false))
+            {
+                Logger?.FeedConnected(_feedId, session.Description);
+
+                // A session can start with a mark, such as one that covers items it won't deliver, and observers read
+                // the mark as soon as the feed connects.
+                RaiseHighWaterMark(session.InitialMark);
+
+                // Unless the session resumes the previous one, items committed in between were missed. Reset observers
+                // before pumping the new session, so no item advances a position past the gap.
+                if (_hasConnected && !session.IsResumed)
+                    await _observerHub.NotifyResetAsync(cancellationToken).ConfigureAwait(false);
+
+                _hasConnected = true;
+                _connectedTcs.TrySetResult();
+                connectedTimestamp = _resumePolicy.GetTimestamp();
+
+                await foreach (var (item, mark) in session.ReadAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    // The mark is raised before observers are notified, and the exchange is a full fence, so an
+                    // observer that attaches too late for an item reads a mark that covers it.
+                    RaiseHighWaterMark(mark);
+
+                    await _observerHub.NotifyNextAsync(item, cancellationToken).ConfigureAwait(false);
+                }
+
+                throw new FeedSessionEndedException();
+            }
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested && _resumePolicy.IsTransient(ex))
+        {
+            var wasStable = connectedTimestamp is { } timestamp && _resumePolicy.IsStable(timestamp);
+
+            await NotifyFailureAsync(ex, isNewOutage: wasStable, cancellationToken).ConfigureAwait(false);
+
+            if (!wasStable)
+                throw;
+
+            Logger?.FeedConnectionLost(ex, _feedId);
+        }
+    }
+
+    private ValueTask NotifyFailureAsync(Exception error, bool isNewOutage, CancellationToken cancellationToken)
+    {
+        if (isNewOutage || _outageFailureCount == 0)
+        {
+            _outageFailureCount = 0;
+            _outageStartTimestamp = _resumePolicy.GetTimestamp();
+        }
+
+        _outageFailureCount++;
+
+        var failure = new FeedFailure(
+            error,
+            _outageFailureCount,
+            _resumePolicy.GetElapsedTime(_outageStartTimestamp),
+            _hasConnected);
+
+        return _observerHub.NotifyFailureAsync(failure, cancellationToken);
     }
 
     // Only the producer writes the mark, and it publishes the first session's mark as it is. After that, the mark only

@@ -14,11 +14,13 @@ internal sealed class FeedResumePolicy
     private static readonly ResiliencePropertyKey<string> FeedIdKey = new("DomainBlocks.FeedId");
 
     private readonly Func<Exception, bool> _isTransient;
+    private readonly TimeProvider _timeProvider;
+    private readonly TimeSpan _stabilityPeriod;
     private readonly ResiliencePipeline _retryPipeline;
 
     /// <param name="isTransient">
-    /// Whether an error is worth retrying. A feed retries creating a session, and creates a new one when a read fails,
-    /// only for the errors that this accepts. Any other error faults the feed.
+    /// Whether an error is worth retrying. A feed creates a new session only after the errors that this accepts, and
+    /// after a session that ends without an error. Any other error faults the feed.
     /// </param>
     /// <param name="options">The retry options, or <see langword="null"/> for the defaults.</param>
     /// <param name="logger">The logger for retries.</param>
@@ -35,16 +37,19 @@ internal sealed class FeedResumePolicy
         ArgumentOutOfRangeException.ThrowIfGreaterThan(options.RetryDelay, PollyMaxDelay);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(options.MaxRetryDelay, PollyMaxDelay);
 
-        _isTransient = isTransient;
+        _isTransient = ex => ex is FeedSessionEndedException || isTransient(ex);
+        _timeProvider = options.TimeProvider;
+        _stabilityPeriod = options.StabilityPeriod;
 
         _retryPipeline = RetryPipeline.Create(
-            isTransient,
+            _isTransient,
             options.MaxRetryAttempts,
             Timeout.InfiniteTimeSpan,
             (context, ex, attempt, delay) =>
                 logger?.FeedRetrying(ex, context.Properties.GetValue(FeedIdKey, "unknown"), attempt, delay),
             options.RetryDelay,
-            options.MaxRetryDelay);
+            options.MaxRetryDelay,
+            options.TimeProvider);
     }
 
     /// <summary>
@@ -53,13 +58,29 @@ internal sealed class FeedResumePolicy
     public bool IsTransient(Exception exception) => _isTransient(exception);
 
     /// <summary>
+    /// Gets a timestamp from the policy's clock.
+    /// </summary>
+    public long GetTimestamp() => _timeProvider.GetTimestamp();
+
+    /// <summary>
+    /// Gets the time since a timestamp from <see cref="GetTimestamp"/>.
+    /// </summary>
+    public TimeSpan GetElapsedTime(long startingTimestamp) => _timeProvider.GetElapsedTime(startingTimestamp);
+
+    /// <summary>
+    /// Determines whether a session that connected at a timestamp from <see cref="GetTimestamp"/> has stayed up long
+    /// enough to count as working.
+    /// </summary>
+    public bool IsStable(long connectedTimestamp) => GetElapsedTime(connectedTimestamp) >= _stabilityPeriod;
+
+    /// <summary>
     /// Runs an operation for a feed, retrying it after a transient error with backoff.
     /// </summary>
     /// <param name="operation">The operation to run.</param>
     /// <param name="feedId">The feed's ID, which the log of each retry includes.</param>
     /// <param name="cancellationToken">The token that stops the retries.</param>
-    public async Task<TResult> ExecuteAsync<TResult>(
-        Func<CancellationToken, Task<TResult>> operation,
+    public async Task ExecuteAsync(
+        Func<CancellationToken, Task> operation,
         string feedId,
         CancellationToken cancellationToken)
     {
@@ -68,7 +89,7 @@ internal sealed class FeedResumePolicy
 
         try
         {
-            return await _retryPipeline
+            await _retryPipeline
                 .ExecuteAsync(
                     static async (ctx, op) => await op(ctx.CancellationToken).ConfigureAwait(false),
                     context,

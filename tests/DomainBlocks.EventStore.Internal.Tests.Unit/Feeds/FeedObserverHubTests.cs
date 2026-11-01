@@ -55,6 +55,23 @@ public class FeedObserverHubTests
     }
 
     [Test]
+    public async Task NotifyFailureAsync_ObserverThrows_DetachesObserver()
+    {
+        var observerHub = new FeedObserverHub<int>(null, "feed");
+        var throwing = new TestObserver(throwOnFailure: true);
+        var receiving = new TestObserver();
+        using var throwingAttachment = observerHub.Attach(throwing, "throwing");
+        using var receivingAttachment = observerHub.Attach(receiving, "receiving");
+        var failure = new FeedFailure(new IOException("lost"), 1, TimeSpan.Zero, hasConnected: true);
+
+        await observerHub.NotifyFailureAsync(failure, CancellationToken.None);
+        await observerHub.NotifyNextAsync(1, CancellationToken.None);
+
+        throwing.Received.ShouldBe(["failure:lost"]);
+        receiving.Received.ShouldBe(["failure:lost", "item:1"]);
+    }
+
+    [Test]
     public async Task NotifyNextAsync_Canceled_ThrowsAndKeepsObserver()
     {
         var observerHub = new FeedObserverHub<int>(null, "feed");
@@ -223,7 +240,11 @@ public class FeedObserverHubTests
         }
     }
 
-    private sealed class TestObserver(bool throwOnNext = false, bool throwOnReset = false, bool throwOnError = false) :
+    private sealed class TestObserver(
+        bool throwOnNext = false,
+        bool throwOnReset = false,
+        bool throwOnFailure = false,
+        bool throwOnError = false) :
         IFeedObserver<int>
     {
         public List<string> Received { get; } = [];
@@ -241,6 +262,12 @@ public class FeedObserverHubTests
         {
             Received.Add("reset");
             return throwOnReset ? throw new InvalidOperationException("The test observer failed.") : default;
+        }
+
+        public ValueTask OnFailureAsync(FeedFailure failure, CancellationToken cancellationToken)
+        {
+            Received.Add($"failure:{failure.Error.Message}");
+            return throwOnFailure ? throw new InvalidOperationException("The test observer failed.") : default;
         }
 
         public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken)

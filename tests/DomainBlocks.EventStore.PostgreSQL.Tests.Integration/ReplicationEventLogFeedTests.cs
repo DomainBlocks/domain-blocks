@@ -575,6 +575,9 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
             return ValueTask.CompletedTask;
         }
 
+        public ValueTask OnFailureAsync(FeedFailure failure, CancellationToken cancellationToken) =>
+            ValueTask.CompletedTask;
+
         public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken)
         {
             _errorTcs.TrySetResult(exception);

@@ -342,6 +342,8 @@ public class RefCountedFeedTests
 
         public ValueTask OnResetAsync(CancellationToken cancellationToken) => default;
 
+        public ValueTask OnFailureAsync(FeedFailure failure, CancellationToken cancellationToken) => default;
+
         public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken) => default;
     }
 }

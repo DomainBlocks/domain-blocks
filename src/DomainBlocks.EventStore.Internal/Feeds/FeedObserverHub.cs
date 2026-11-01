@@ -4,8 +4,8 @@ using Microsoft.Extensions.Logging;
 namespace DomainBlocks.EventStore.Internal.Feeds;
 
 /// <summary>
-/// Holds a feed's observers and notifies them in turn. An observer that throws while receiving an item or a reset is
-/// detached. Once the feed completes or faults, no observer can attach.
+/// Holds a feed's observers and notifies them in turn. An observer that throws while receiving an item, a reset, or a
+/// failure is detached. Once the feed completes or faults, no observer can attach.
 /// </summary>
 internal sealed class FeedObserverHub<T>(ILogger? logger, string feedId)
 {
@@ -67,6 +67,26 @@ internal sealed class FeedObserverHub<T>(ILogger? logger, string feedId)
             catch (Exception observerException)
             {
                 logger?.ObserverOnResetFailed(observerException, feedId, attachment.ObserverId);
+                attachment.Dispose();
+            }
+        }
+    }
+
+    public async ValueTask NotifyFailureAsync(FeedFailure failure, CancellationToken cancellationToken)
+    {
+        foreach (var attachment in Volatile.Read(ref _state).Attachments)
+        {
+            try
+            {
+                await attachment.Observer.OnFailureAsync(failure, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception observerException)
+            {
+                logger?.ObserverOnFailureFailed(observerException, feedId, attachment.ObserverId);
                 attachment.Dispose();
             }
         }

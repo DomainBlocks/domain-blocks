@@ -1,5 +1,6 @@
 using DomainBlocks.EventStore.Internal.Feeds;
 using Microsoft.Extensions.Logging.Testing;
+using Microsoft.Extensions.Time.Testing;
 using NUnit.Framework;
 using Shouldly;
 using static DomainBlocks.EventStore.Internal.Tests.Unit.Feeds.ScriptedSession;
@@ -9,6 +10,9 @@ namespace DomainBlocks.EventStore.Internal.Tests.Unit.Feeds;
 public class EventLogFeedTests
 {
     private const int TestTimeoutMillis = 5 * 1000;
+
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan StabilityPeriod = TimeSpan.FromMinutes(2);
 
     private static readonly FeedResumeOptions FastRetryOptions = new()
     {
@@ -455,15 +459,237 @@ public class EventLogFeedTests
         await feed.ConnectAsync(ct).ShouldThrowAsync<InvalidOperationException>();
     }
 
-    private static DelegateFeed CreateFeed(params IFeedSession<long, long>[] sessions)
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task Connect_SessionFailsAtOnce_DisposesSessionAndBacksOff(CancellationToken ct)
     {
-        var queue = new Queue<IFeedSession<long, long>>(sessions);
+        var clock = new FakeTimeProvider();
+        var first = new ScriptedSession("s1", Throw(new IOException("lost")));
+        var second = new ScriptedSession("s2", Row(1)) { IsResumed = true };
+        var sessions = new Queue<IFeedSession<long, long>>([first, second]);
+        await using var feed = CreateFeed(sessions, CreateClockedResumePolicy(clock));
 
-        return new DelegateFeed(
-            _ => Task.FromResult(queue.Count > 0
-                ? queue.Dequeue()
-                : throw new InvalidOperationException("The test ran out of scripted sessions.")),
+        var observer = new RecordingObserver();
+        using var attachment = feed.Attach(observer);
+        await feed.ConnectAsync(ct);
+
+        await observer.ReadFailureAsync(ct);
+        first.DisposeCount.ShouldBe(1);
+
+        await Task.Delay(50, ct);
+        sessions.ShouldHaveSingleItem();
+
+        (await ReadWhileAdvancingAsync(observer, clock, ct)).ShouldBe("row:1");
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task Connect_SessionFailsJustBeforeStabilityPeriod_BacksOff(CancellationToken ct)
+    {
+        var clock = new FakeTimeProvider();
+        var justUnder = StabilityPeriod - TimeSpan.FromTicks(1);
+        var first = new ScriptedSession("s1", Do(() => clock.Advance(justUnder)), Throw(new IOException("lost")));
+        var second = new ScriptedSession("s2", Row(1)) { IsResumed = true };
+        var sessions = new Queue<IFeedSession<long, long>>([first, second]);
+        await using var feed = CreateFeed(sessions, CreateClockedResumePolicy(clock));
+
+        var observer = new RecordingObserver();
+        using var attachment = feed.Attach(observer);
+        await feed.ConnectAsync(ct);
+
+        await observer.ReadFailureAsync(ct);
+        await Task.Delay(50, ct);
+
+        sessions.ShouldHaveSingleItem();
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task Connect_SessionFailsAfterStabilityPeriod_ReconnectsWithoutDelay(CancellationToken ct)
+    {
+        var clock = new FakeTimeProvider();
+        var first = new ScriptedSession("s1", Do(() => clock.Advance(StabilityPeriod)), Throw(new IOException("lost")));
+        var second = new ScriptedSession("s2", Row(1)) { IsResumed = true };
+        await using var feed = CreateFeed(new([first, second]), CreateClockedResumePolicy(clock));
+
+        var observer = new RecordingObserver();
+        using var attachment = feed.Attach(observer);
+        await feed.ConnectAsync(ct);
+
+        // The clock doesn't move again, so a delay would never end.
+        (await observer.ReadAsync(1, ct)).ShouldBe(["row:1"]);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task Connect_SessionDeliversRowThenFails_BacksOff(CancellationToken ct)
+    {
+        var clock = new FakeTimeProvider();
+        var first = new ScriptedSession("s1", Row(1), Throw(new IOException("lost")));
+        var second = new ScriptedSession("s2", Row(2)) { IsResumed = true };
+        var sessions = new Queue<IFeedSession<long, long>>([first, second]);
+        await using var feed = CreateFeed(sessions, CreateClockedResumePolicy(clock));
+
+        var observer = new RecordingObserver();
+        using var attachment = feed.Attach(observer);
+        await feed.ConnectAsync(ct);
+
+        await observer.ReadFailureAsync(ct);
+        await Task.Delay(50, ct);
+
+        sessions.ShouldHaveSingleItem();
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task Connect_SessionEndsWithoutError_ReportsFailureAndBacksOff(CancellationToken ct)
+    {
+        var clock = new FakeTimeProvider();
+        var first = new ScriptedSession("s1", End());
+        var second = new ScriptedSession("s2", Row(1)) { IsResumed = true };
+        var sessions = new Queue<IFeedSession<long, long>>([first, second]);
+        await using var feed = CreateFeed(sessions, CreateClockedResumePolicy(clock));
+
+        var observer = new RecordingObserver();
+        using var attachment = feed.Attach(observer);
+        await feed.ConnectAsync(ct);
+
+        (await observer.ReadFailureAsync(ct)).Error.ShouldBeOfType<FeedSessionEndedException>();
+
+        await Task.Delay(50, ct);
+        sessions.ShouldHaveSingleItem();
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task Connect_FailuresBeforeStableSession_ReportsOneOutage(CancellationToken ct)
+    {
+        var clock = new FakeTimeProvider();
+        var secondError = new IOException("lost again");
+        var thirdError = new IOException("lost after a while");
+        var tenSeconds = TimeSpan.FromSeconds(10);
+
+        await using var feed = CreateFeed(
+            new(
+            [
+                new ScriptedSession("s1", Throw(new IOException("lost"))),
+                new ScriptedSession("s2", Do(() => clock.Advance(tenSeconds)), Throw(secondError)),
+                new ScriptedSession("s3", Do(() => clock.Advance(StabilityPeriod)), Throw(thirdError)),
+                new ScriptedSession("s4")
+            ]),
+            CreateClockedResumePolicy(clock));
+
+        var observer = new RecordingObserver();
+        using var attachment = feed.Attach(observer);
+        await feed.ConnectAsync(ct);
+
+        var first = await observer.ReadFailureAsync(ct);
+        first.FailureCount.ShouldBe(1);
+        first.OutageDuration.ShouldBe(TimeSpan.Zero);
+
+        var second = await ReadFailureWhileAdvancingAsync(observer, clock, ct);
+        second.Error.ShouldBeSameAs(secondError);
+        second.FailureCount.ShouldBe(2);
+        second.OutageDuration.ShouldBeGreaterThanOrEqualTo(tenSeconds);
+
+        // The session stayed up for long enough, so the failure that ended it starts a new outage.
+        var third = await ReadFailureWhileAdvancingAsync(observer, clock, ct);
+        third.Error.ShouldBeSameAs(thirdError);
+        third.FailureCount.ShouldBe(1);
+        third.OutageDuration.ShouldBe(TimeSpan.Zero);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task Connect_FailuresAroundFirstConnection_ReportsWhetherFeedHasConnected(CancellationToken ct)
+    {
+        var attempts = 0;
+
+        await using var feed = new DelegateFeed(
+            _ => ++attempts < 2
+                ? throw new IOException("not yet")
+                : Task.FromResult<IFeedSession<long, long>>(new ScriptedSession("s1", Throw(new IOException("lost")))),
             FastResumePolicy);
+
+        var observer = new RecordingObserver();
+        using var attachment = feed.Attach(observer);
+        await feed.ConnectAsync(ct);
+
+        (await observer.ReadFailureAsync(ct)).HasConnected.ShouldBeFalse();
+        (await observer.ReadFailureAsync(ct)).HasConnected.ShouldBeTrue();
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task Connect_SessionFailsNonTransiently_ReportsErrorNotFailure(CancellationToken ct)
+    {
+        var exception = new InvalidOperationException("misconfigured");
+        await using var feed = CreateFeed(new ScriptedSession("s1", Throw(exception)));
+
+        var observer = new RecordingObserver();
+        using var attachment = feed.Attach(observer);
+        await feed.ConnectAsync(ct);
+
+        (await observer.Error.WaitAsync(ct)).ShouldBeSameAs(exception);
+
+        using var noFailure = new CancellationTokenSource(50);
+        await observer.ReadFailureAsync(noFailure.Token).AsTask().ShouldThrowAsync<OperationCanceledException>();
+    }
+
+    private static async Task<string> ReadWhileAdvancingAsync(
+        RecordingObserver observer,
+        FakeTimeProvider clock,
+        CancellationToken ct)
+    {
+        var reading = observer.ReadAsync(1, ct);
+
+        while (!reading.IsCompleted)
+        {
+            clock.Advance(RetryDelay);
+            await Task.Delay(1, ct);
+        }
+
+        return (await reading)[0];
+    }
+
+    private static async Task<FeedFailure> ReadFailureWhileAdvancingAsync(
+        RecordingObserver observer,
+        FakeTimeProvider clock,
+        CancellationToken ct)
+    {
+        var reading = observer.ReadFailureAsync(ct).AsTask();
+
+        while (!reading.IsCompleted)
+        {
+            clock.Advance(RetryDelay);
+            await Task.Delay(1, ct);
+        }
+
+        return await reading;
+    }
+
+    private static DelegateFeed CreateFeed(params IFeedSession<long, long>[] sessions) =>
+        CreateFeed(new Queue<IFeedSession<long, long>>(sessions), FastResumePolicy);
+
+    private static DelegateFeed CreateFeed(Queue<IFeedSession<long, long>> sessions, FeedResumePolicy resumePolicy)
+    {
+        return new DelegateFeed(
+            _ => Task.FromResult(sessions.Count > 0
+                ? sessions.Dequeue()
+                : throw new InvalidOperationException("The test ran out of scripted sessions.")),
+            resumePolicy);
+    }
+
+    // Delays and the stability period run on the given clock, so a test decides when they pass.
+    private static FeedResumePolicy CreateClockedResumePolicy(FakeTimeProvider clock)
+    {
+        return CreateResumePolicy(new FeedResumeOptions
+        {
+            RetryDelay = RetryDelay,
+            MaxRetryDelay = RetryDelay,
+            StabilityPeriod = StabilityPeriod,
+            TimeProvider = clock
+        });
     }
 
     private static FeedResumePolicy CreateResumePolicy(FeedResumeOptions options) =>
@@ -485,6 +711,8 @@ public class EventLogFeedTests
         public ValueTask OnNextAsync(long position, CancellationToken cancellationToken) => new(_onNextReleased.Task);
 
         public ValueTask OnResetAsync(CancellationToken cancellationToken) => default;
+
+        public ValueTask OnFailureAsync(FeedFailure failure, CancellationToken cancellationToken) => default;
 
         public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken)
         {
@@ -513,6 +741,8 @@ public class EventLogFeedTests
         }
 
         public ValueTask OnResetAsync(CancellationToken cancellationToken) => default;
+
+        public ValueTask OnFailureAsync(FeedFailure failure, CancellationToken cancellationToken) => default;
 
         public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken) => default;
     }
