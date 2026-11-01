@@ -6,6 +6,7 @@ using DomainBlocks.Serialization.Abstractions;
 using DomainBlocks.Serialization.Google.Protobuf;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Serialization.SystemTextJson;
+using DomainBlocks.Testing.Integration.MongoDB;
 using MongoDB.Bson;
 
 namespace DomainBlocks.Testing.Integration.EventStore.MongoDB;

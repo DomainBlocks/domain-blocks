@@ -1,6 +1,6 @@
 using DomainBlocks.Testing.Events;
 using DomainBlocks.Testing.Integration.EventStore;
-using DomainBlocks.Testing.Integration.EventStore.MongoDB;
+using DomainBlocks.Testing.Integration.MongoDB;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using NUnit.Framework;

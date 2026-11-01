@@ -2,7 +2,7 @@
 using MongoDB.Bson.Serialization;
 using MongoDB.Bson.Serialization.Serializers;
 
-namespace DomainBlocks.Testing.Integration.EventStore.MongoDB;
+namespace DomainBlocks.Testing.Integration.MongoDB;
 
 public static class TestMongoSerialization
 {

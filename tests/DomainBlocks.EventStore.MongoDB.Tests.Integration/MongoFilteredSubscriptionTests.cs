@@ -1,6 +1,6 @@
 using DomainBlocks.EventStore.Filtering;
 using DomainBlocks.Testing.Events;
-using DomainBlocks.Testing.Integration.EventStore.MongoDB;
+using DomainBlocks.Testing.Integration.MongoDB;
 using NUnit.Framework;
 using Shouldly;
 
