@@ -36,11 +36,11 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
     {
         await using var eventStore = CreateEventStore(_eventTypeMap);
 
-        var streamIds = new StreamIdGenerator();
+        var streamIdGenerator = new StreamIdGenerator();
         var runner = new BenchmarkRunner();
 
         var result = await runner.MeasureLatencyAsync(
-            (_, token) => AppendAsync(eventStore, streamIds.Next(), token),
+            (_, token) => AppendAsync(eventStore, streamIdGenerator.Next(), token),
             new LatencyOptions(),
             ct);
 
@@ -71,11 +71,14 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
 
         try
         {
-            var streamIds = new StreamIdGenerator();
+            var streamIdGenerator = new StreamIdGenerator();
             var runner = new BenchmarkRunner();
 
             var result = await runner.MeasureThroughputAsync(
-                (workerIndex, token) => AppendAsync(instances[workerIndex % instanceCount], streamIds.Next(), token),
+                (workerIndex, token) => AppendAsync(
+                    instances[workerIndex % instanceCount],
+                    streamIdGenerator.Next(),
+                    token),
                 new ThroughputOptions { InFlight = inFlight },
                 ct);
 

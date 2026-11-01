@@ -33,13 +33,15 @@ public class PostgresEventStoreBenchmarkTests() :
         (await enumerator.MoveNextAsync()).ShouldBeTrue();
         enumerator.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
 
-        var streamIds = new StreamIdGenerator();
+        var streamIdGenerator = new StreamIdGenerator();
         var runner = new BenchmarkRunner();
 
         var result = await runner.MeasureLatencyAsync(
             async (_, token) =>
             {
-                await eventStore.AppendAsync(streamIds.Next(), [new TestEvent { Value = "Benchmark" }],
+                await eventStore.AppendAsync(
+                    streamIdGenerator.Next(),
+                    [new TestEvent { Value = "Benchmark" }],
                     cancellationToken: token);
 
                 (await enumerator.MoveNextAsync()).ShouldBeTrue();
@@ -94,12 +96,12 @@ public class PostgresEventStoreBenchmarkTests() :
         var (nextBefore, callsBefore, millisBefore) = await ReadAppendStatsAsync();
         var start = Stopwatch.GetTimestamp();
 
-        var streamIds = new StreamIdGenerator();
+        var streamIdGenerator = new StreamIdGenerator();
         var runner = new BenchmarkRunner();
 
         var result = await runner.MeasureThroughputAsync(
             (_, token) => eventStore.AppendAsync(
-                streamIds.Next(),
+                streamIdGenerator.Next(),
                 [new TestEvent { Value = "Benchmark" }],
                 cancellationToken: token),
             new ThroughputOptions { InFlight = inFlight },
