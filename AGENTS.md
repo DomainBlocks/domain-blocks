@@ -22,8 +22,10 @@ TBD
 - src/DomainBlocks.EventSourcing/ - Storage and retrieval of event-sourced state
 - src/DomainBlocks.EventStore/ - Common event store abstractions and related reusable types
 - src/DomainBlocks.EventStore.[DatabaseTechnology]/ - An event store implementation for a specific database technology
+- src/DomainBlocks.MongoDB.Sequencing/ - Appends to a MongoDB collection with a contiguous sequence number
 - src/DomainBlocks.Serialization.Abstractions/ - Common serialization abstractions
 - src/DomainBlocks.Serialization.[SerializationFormat]/ - A serialization implementation for a specific format
+- examples/ - Example applications of the library's packages
 - New assemblies/renames/reshuffling may be proposed where justified
 
 ## File Naming
