@@ -1,8 +1,7 @@
 namespace DomainBlocks.Benchmarking;
 
 /// <summary>
-/// One append (or append-shaped) operation against the system under test. <paramref name="workerIndex"/> lets callers
-/// spread workers over several instances without synchronization, and <paramref name="operationId"/> is unique per
-/// call.
+/// One operation against the system under test. <paramref name="workerIndex"/> lets callers spread workers over several
+/// instances without synchronization.
 /// </summary>
-public delegate Task BenchmarkOperation(int workerIndex, string operationId, CancellationToken cancellationToken);
+public delegate Task BenchmarkOperation(int workerIndex, CancellationToken cancellationToken);
