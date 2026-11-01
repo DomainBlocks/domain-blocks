@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 
-namespace DomainBlocks.Testing.Integration.EventStore.MongoDB;
+namespace DomainBlocks.Testing.Integration.MongoDB;
 
 /// <summary>
 /// The MongoDB replica set shared by every fixture in a test assembly. An assembly's <c>[SetUpFixture]</c> starts and

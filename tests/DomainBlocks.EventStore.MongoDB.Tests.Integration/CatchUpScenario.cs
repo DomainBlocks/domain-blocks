@@ -9,7 +9,7 @@ using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Serialization.MongoDB.Bson;
 using DomainBlocks.Testing.Events;
 using DomainBlocks.Testing.Integration.EventStore;
-using DomainBlocks.Testing.Integration.EventStore.MongoDB;
+using DomainBlocks.Testing.Integration.MongoDB;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.Driver.Core.Events;

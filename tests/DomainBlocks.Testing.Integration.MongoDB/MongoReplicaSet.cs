@@ -4,7 +4,7 @@ using MongoDB.Bson;
 using MongoDB.Driver;
 using Testcontainers.MongoDb;
 
-namespace DomainBlocks.Testing.Integration.EventStore.MongoDB;
+namespace DomainBlocks.Testing.Integration.MongoDB;
 
 public sealed class MongoReplicaSet : IAsyncDisposable
 {

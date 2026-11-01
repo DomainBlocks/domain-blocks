@@ -1,4 +1,4 @@
-using DomainBlocks.Testing.Integration.EventStore.MongoDB;
+using DomainBlocks.Testing.Integration.MongoDB;
 using NUnit.Framework;
 
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;

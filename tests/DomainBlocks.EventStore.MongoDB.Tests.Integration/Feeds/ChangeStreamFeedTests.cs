@@ -1,7 +1,7 @@
 using DomainBlocks.EventStore.Internal.Feeds;
 using DomainBlocks.EventStore.MongoDB.Feeds;
 using DomainBlocks.Testing.Integration.EventStore;
-using DomainBlocks.Testing.Integration.EventStore.MongoDB;
+using DomainBlocks.Testing.Integration.MongoDB;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;

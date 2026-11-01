@@ -36,6 +36,7 @@
     <Project Path="tests/DomainBlocks.Testing.Integration.EventStore.MongoDB/DomainBlocks.Testing.Integration.EventStore.MongoDB.csproj" />
     <Project Path="tests/DomainBlocks.Testing.Integration.EventStore.PostgreSQL/DomainBlocks.Testing.Integration.EventStore.PostgreSQL.csproj" />
     <Project Path="tests/DomainBlocks.Testing.Integration.EventStore/DomainBlocks.Testing.Integration.EventStore.csproj" />
+    <Project Path="tests/DomainBlocks.Testing.Integration.MongoDB/DomainBlocks.Testing.Integration.MongoDB.csproj" />
     <Project Path="tests/DomainBlocks.Testing/DomainBlocks.Testing.csproj" />
   </Folder>
 </Solution>
