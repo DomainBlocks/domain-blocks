@@ -94,13 +94,20 @@ public sealed class BenchmarkRunner
             workers[i] = Task.Run(
                 async () =>
                 {
+                    // Operations often register on the token they are given. If every worker passed the caller's
+                    // token, all of those registrations would go to one source, which measurably cuts throughput at
+                    // high concurrency. A worker has one operation in flight at a time, so its own token serves only
+                    // that operation.
+                    using var workerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    var workerToken = workerCancellation.Token;
+
                     while (!Volatile.Read(ref _stop))
                     {
                         var operationStart = Stopwatch.GetTimestamp();
 
                         try
                         {
-                            var task = operation(workerIndex, cancellationToken);
+                            var task = operation(workerIndex, workerToken);
 
                             // An operation that completes synchronously would turn this loop into a busy spin that
                             // never yields its thread-pool thread. With many workers, that starves the timer
