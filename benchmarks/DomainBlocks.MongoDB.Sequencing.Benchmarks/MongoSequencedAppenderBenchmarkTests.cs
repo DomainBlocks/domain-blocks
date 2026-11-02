@@ -13,7 +13,7 @@ namespace DomainBlocks.MongoDB.Sequencing.Benchmarks;
 public class MongoSequencedAppenderBenchmarkTests
 {
     /// <summary>
-    /// Unloaded append latency: one append in flight at a time.
+    /// Measures the latency of a single append with no concurrent appends.
     /// </summary>
     [Test]
     [Explicit("Benchmark")]
@@ -36,7 +36,8 @@ public class MongoSequencedAppenderBenchmarkTests
     }
 
     /// <summary>
-    /// Append throughput with a fixed number of closed-loop workers spread over one or more appender instances.
+    /// Measures append throughput with a fixed number of closed-loop workers spread over one or more appender
+    /// instances.
     /// </summary>
     [TestCase(1, 1)]
     [TestCase(1, 10)]
@@ -74,7 +75,8 @@ public class MongoSequencedAppenderBenchmarkTests
     }
 
     /// <summary>
-    /// Unloaded append latency through a proxy that delays the server's responses.
+    /// Measures the latency of a single append with no concurrent appends, through a proxy that delays the server's
+    /// responses.
     /// </summary>
     [Test]
     [Explicit("Benchmark")]
@@ -115,7 +117,7 @@ public class MongoSequencedAppenderBenchmarkTests
     }
 
     /// <summary>
-    /// Append throughput through a proxy that delays the server's responses.
+    /// Measures append throughput through a proxy that delays the server's responses.
     /// </summary>
     [Test]
     [Explicit("Benchmark")]
