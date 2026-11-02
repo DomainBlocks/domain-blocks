@@ -17,7 +17,7 @@ public sealed class BenchmarkRunner
     private bool _measuring;
 
     /// <summary>
-    /// Measures unloaded latency: one operation in flight, sequentially, on a single worker.
+    /// Measures the latency of a single operation with no concurrent operations, on a single worker.
     /// </summary>
     public async Task<LatencyResult> MeasureLatencyAsync(
         BenchmarkOperation operation,

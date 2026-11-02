@@ -28,7 +28,7 @@
   with 2000 unrelated inserts per second, pull uses only 1.0 to 1.4 times push's CPU. With heavier unrelated traffic
   and more instances, push could use more; that wasn't measured.
 
-Unloaded latency in ms, from the start of an append to its delivery, one append at a time:
+Latency in ms, from the start of an append to its delivery, with one append at a time:
 
 | Setup                      | Push p50 | Pull p50 | Push p99 | Pull p99 |
 |----------------------------|----------|----------|----------|----------|
@@ -53,7 +53,7 @@ plus standby):
   store instance has one `SubscribeToAll` from the end of the log. A separate store appends one event per append, each
   to its own stream, at a paced rate.
 - **Configurations.** 1, 4 or 16 instances; idle, 100 or 1000 events per second; and 100 events per second with 2000
-  unrelated inserts per second into a table outside the store's schema ("other writes"). Unloaded latency uses one
+  unrelated inserts per second into a table outside the store's schema ("other writes"). The latency table uses one
   instance, one append at a time, and 2000 samples.
 - **Runs.** 5 s of warm-up, then 20 s measured. Two runs per variant per configuration, in ABBA order, alternating
   which variant starts.
