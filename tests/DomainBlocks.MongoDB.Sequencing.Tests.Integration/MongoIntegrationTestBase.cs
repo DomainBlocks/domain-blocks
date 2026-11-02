@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using DomainBlocks.Testing.Integration.MongoDB;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Driver;
@@ -6,32 +6,22 @@ using NUnit.Framework;
 
 namespace DomainBlocks.MongoDB.Sequencing.Tests.Integration;
 
-public abstract class MongoIntegrationTestBase(string connectionString)
+public abstract class MongoIntegrationTestBase
 {
     private const string TestDbPrefix = "seq_test_";
     protected const string SequenceId = "test_seq";
 
-    protected MongoClient MongoClient { get; private set; } = null!;
+    protected static IMongoClient MongoClient => MongoTestEnvironment.MongoClient;
     protected string DatabaseName { get; private set; } = null!;
     protected CollectionNamespace SequenceNs { get; private set; } = null!;
     protected CollectionNamespace TargetNs { get; private set; } = null!;
-    private ILoggerFactory LoggerFactory { get; set; } = null!;
 
     [SetUp]
     public async Task SetUp()
     {
-        MongoClient = new MongoClient(connectionString);
         DatabaseName = $"{TestDbPrefix}{Guid.NewGuid():N}";
         SequenceNs = new CollectionNamespace(DatabaseName, "sequences");
         TargetNs = new CollectionNamespace(DatabaseName, "targets");
-
-        LoggerFactory = Microsoft.Extensions.Logging.LoggerFactory.Create(x => x
-            .AddSimpleConsole(opt =>
-            {
-                opt.IncludeScopes = true;
-                opt.TimestampFormat = "HH:mm:ss.fff ";
-            })
-            .SetMinimumLevel(LogLevel.Debug));
 
         var db = MongoClient.GetDatabase(DatabaseName);
         var targetCollection = db.GetCollection<TargetDoc>(TargetNs.CollectionName);
@@ -60,11 +50,6 @@ public abstract class MongoIntegrationTestBase(string connectionString)
         {
             // best-effort
         }
-        finally
-        {
-            LoggerFactory.Dispose();
-            MongoClient.Dispose();
-        }
     }
 
     protected MongoSequencedAppender<TargetDoc, TContext> CreateAppender<TContext>(
@@ -83,7 +68,7 @@ public abstract class MongoIntegrationTestBase(string connectionString)
             binding,
             policy,
             options,
-            LoggerFactory.CreateLogger($"appender_{index}"));
+            MongoTestEnvironment.LoggerFactory.CreateLogger($"appender_{index}"));
     }
 
     protected async Task<long[]> ReadSequenceAsync(CancellationToken ct = default)

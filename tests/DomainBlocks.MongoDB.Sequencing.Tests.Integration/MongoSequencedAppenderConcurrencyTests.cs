@@ -5,8 +5,7 @@ using Shouldly;
 
 namespace DomainBlocks.MongoDB.Sequencing.Tests.Integration;
 
-public class MongoSequencedAppenderConcurrencyTests() :
-    MongoIntegrationTestBase(MongoReplicaSetFixture.ConnectionString)
+public class MongoSequencedAppenderConcurrencyTests : MongoIntegrationTestBase
 {
     private const int TimeoutMillis = 10_000;
     private const int LongRunningTimeoutMillis = 60_000;
