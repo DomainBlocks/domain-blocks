@@ -8,6 +8,11 @@ namespace DomainBlocks.Testing.Integration.MongoDB;
 
 public sealed class MongoReplicaSet : IAsyncDisposable
 {
+    /// <summary>
+    /// The name that resolves to the MongoDB container from other containers on <see cref="Network"/>.
+    /// </summary>
+    public const string NetworkAlias = "mongo";
+
     private const string ReplicaSetName = "rs0";
 
     // The number of lines of each of the container's output streams that a failed start reports.
@@ -16,18 +21,19 @@ public sealed class MongoReplicaSet : IAsyncDisposable
     private static readonly TimeSpan PrimaryTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan PrimaryPollInterval = TimeSpan.FromMilliseconds(100);
 
-    private readonly INetwork _network;
     private readonly MongoDbContainer _container;
 
     private MongoReplicaSet(INetwork network, MongoDbContainer container)
     {
-        _network = network;
+        Network = network;
         _container = container;
     }
 
     public string ConnectionString => _container.GetConnectionString();
 
-    public static async Task<MongoReplicaSet> CreateAsync(string networkAlias = "mongo")
+    public INetwork Network { get; }
+
+    public static async Task<MongoReplicaSet> CreateAsync()
     {
         var network = new NetworkBuilder()
             .WithName($"mongo-test-{Guid.NewGuid():N}")
@@ -45,7 +51,7 @@ public sealed class MongoReplicaSet : IAsyncDisposable
             .WithPassword(string.Empty)
             .WithCommand("--replSet", ReplicaSetName)
             .WithNetwork(network)
-            .WithNetworkAliases(networkAlias)
+            .WithNetworkAliases(NetworkAlias)
             .Build();
 
         try
@@ -67,7 +73,7 @@ public sealed class MongoReplicaSet : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await _container.DisposeAsync();
-        await _network.DisposeAsync();
+        await Network.DisposeAsync();
     }
 
     private static async Task InitiateAsync(string connectionString)

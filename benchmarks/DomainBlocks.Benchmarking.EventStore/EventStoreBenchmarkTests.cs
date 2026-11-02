@@ -27,7 +27,7 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
     protected override bool ResetLogBeforeEachTest => true;
 
     /// <summary>
-    /// Unloaded append latency: one append in flight at a time.
+    /// Measures the latency of a single append with no concurrent appends.
     /// </summary>
     [Test]
     [Explicit("Benchmark")]

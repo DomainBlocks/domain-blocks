@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit3TestAdapter" />
+    <PackageReference Include="Shouldly" />
+    <PackageReference Include="Testcontainers.Toxiproxy" />
+    <PackageReference Include="ToxiproxyNetCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DomainBlocks.MongoDB.Sequencing\DomainBlocks.MongoDB.Sequencing.csproj" />
+    <ProjectReference Include="..\..\tests\DomainBlocks.Testing.Integration.MongoDB\DomainBlocks.Testing.Integration.MongoDB.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Benchmarking\DomainBlocks.Benchmarking.csproj" />
+  </ItemGroup>
+
+</Project>
