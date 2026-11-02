@@ -107,7 +107,7 @@ Benchmarks were run against a local single-node MongoDB replica set running in D
 Real-world deployments with network latency between the application and MongoDB will see higher latency and lower
 throughput.
 
-The [benchmarks](../../tests/DomainBlocks.MongoDB.Sequencing.Tests.Integration/MongoSequencedAppenderBenchmarkTests.cs)
+The [benchmarks](../../benchmarks/DomainBlocks.MongoDB.Sequencing.Benchmarks/MongoSequencedAppenderBenchmarkTests.cs)
 are included in the repository and can be run against your own environment to get representative numbers for your
 setup.
 

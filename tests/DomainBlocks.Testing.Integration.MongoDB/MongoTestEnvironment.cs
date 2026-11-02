@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace DomainBlocks.Testing.Integration.MongoDB;
@@ -9,7 +10,7 @@ namespace DomainBlocks.Testing.Integration.MongoDB;
 /// </summary>
 public static class MongoTestEnvironment
 {
-    private static MongoReplicaSet? _replicaSet;
+    public static MongoReplicaSet ReplicaSet { get; private set; } = null!;
 
     public static IMongoClient MongoClient { get; private set; } = null!;
 
@@ -22,8 +23,8 @@ public static class MongoTestEnvironment
 
     public static async Task StartAsync()
     {
-        _replicaSet = await MongoReplicaSet.CreateAsync();
-        ConnectionString = _replicaSet.ConnectionString;
+        ReplicaSet = await MongoReplicaSet.CreateAsync();
+        ConnectionString = ReplicaSet.ConnectionString;
         MongoClient = new MongoClient(ConnectionString);
         LoggerFactory = TestLoggerFactory.Create();
         TestMongoSerialization.Configure();
@@ -34,7 +35,16 @@ public static class MongoTestEnvironment
         LoggerFactory.Dispose();
         MongoClient.Dispose();
 
-        if (_replicaSet is not null)
-            await _replicaSet.DisposeAsync();
+        if (ReplicaSet is not null)
+            await ReplicaSet.DisposeAsync();
+    }
+
+    public static async Task<string> GetServerVersionAsync()
+    {
+        var buildInfo = await MongoClient
+            .GetDatabase("admin")
+            .RunCommandAsync<BsonDocument>(new BsonDocument("buildInfo", 1));
+
+        return buildInfo["version"].AsString;
     }
 }

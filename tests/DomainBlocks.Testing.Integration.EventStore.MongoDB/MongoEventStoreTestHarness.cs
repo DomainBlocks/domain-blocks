@@ -70,13 +70,11 @@ public sealed class MongoEventStoreTestHarness(Action<MongoEventStoreOptions>? c
 
     public async Task<string?> DescribeAsync()
     {
-        var buildInfo = await MongoTestEnvironment.MongoClient
-            .GetDatabase("admin")
-            .RunCommandAsync<BsonDocument>(new BsonDocument("buildInfo", 1));
+        var serverVersion = await MongoTestEnvironment.GetServerVersionAsync();
 
         return
             $"MongoEventStore: database {Options.DatabaseName}, append batch size {Options.AppendMaxBatchSize}, " +
-            $"append queue capacity {Options.AppendQueueCapacity}; server {buildInfo["version"]}";
+            $"append queue capacity {Options.AppendQueueCapacity}; server {serverVersion}";
     }
 
     private static IObjectSerializer<BsonValue> EventSerializerFor(EventFormat format) => format switch

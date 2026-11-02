@@ -6,6 +6,7 @@
     <Project Path="benchmarks/DomainBlocks.EventStore.MongoDB.Benchmarks/DomainBlocks.EventStore.MongoDB.Benchmarks.csproj" />
     <Project Path="benchmarks/DomainBlocks.EventStore.NoOp.Benchmarks/DomainBlocks.EventStore.NoOp.Benchmarks.csproj" />
     <Project Path="benchmarks/DomainBlocks.EventStore.PostgreSQL.Benchmarks/DomainBlocks.EventStore.PostgreSQL.Benchmarks.csproj" />
+    <Project Path="benchmarks/DomainBlocks.MongoDB.Sequencing.Benchmarks/DomainBlocks.MongoDB.Sequencing.Benchmarks.csproj" />
   </Folder>
   <Folder Name="/examples/">
     <Project Path="examples/DomainBlocks.MongoDB.Sequencing.Examples.Tests.Integration/DomainBlocks.MongoDB.Sequencing.Examples.Tests.Integration.csproj" />
