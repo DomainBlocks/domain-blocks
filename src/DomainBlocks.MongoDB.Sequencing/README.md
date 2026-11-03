@@ -112,9 +112,8 @@ Benchmarks were run against a local single-node MongoDB replica set running in D
 | Docker  | Docker Desktop                 | Docker Desktop on WSL 2                      |
 | MongoDB | 7.0.32                         | 7.0.40                                       |
 
-Each machine has its own column in the tables below. The columns show what to expect in each environment, not a
-ranking. Real-world deployments with network latency between the application and MongoDB will see higher latency and
-lower throughput.
+Each machine has its own column in the tables below. Real-world deployments with network latency between the application
+and MongoDB will see higher latency and lower throughput.
 
 The [benchmarks](../../benchmarks/DomainBlocks.MongoDB.Sequencing.Benchmarks/MongoSequencedAppenderBenchmarkTests.cs)
 are included in the repository and can be run against your own environment to get representative numbers for your
