@@ -21,6 +21,11 @@ public class MongoSequencedAppenderOptions
     /// multiple requests are queued together, the appender will wait up to this duration to coalesce further incoming
     /// requests into the same batch. The default value is <see cref="TimeSpan.Zero"/> (no delay).
     /// </summary>
+    /// <remarks>
+    /// The delay depends on the system clock, so a delay shorter than the clock's resolution lasts about as long as the
+    /// resolution. On Windows, the resolution is about 15 ms by default, and an application can raise it, e.g., with
+    /// <c>timeBeginPeriod</c>.
+    /// </remarks>
     public TimeSpan BatchingDelay { get; set; }
 
     /// <summary>
