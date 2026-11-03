@@ -152,10 +152,10 @@ The Windows PC and MacBook Air columns come from the throughput table above. The
 runs that raised the timer resolution to 1 ms with `timeBeginPeriod`, using the median of three runs for each instance
 count. Raising the resolution removes part of the difference, but not all of it.
 
-| Appender instance count | Windows PC | Windows PC, 1 ms timer | MacBook Air |
-|------------------------:|-----------:|-----------------------:|------------:|
-|                       3 |        39% |                    24% |         18% |
-|                       5 |        47% |                    36% |         28% |
+| Appender instance count | Windows PC (drop) | Windows PC, 1 ms timer (drop) | MacBook Air (drop) |
+|------------------------:|------------------:|------------------------------:|-------------------:|
+|                       3 |               39% |                           24% |                18% |
+|                       5 |               47% |                           36% |                28% |
 
 Deployments with a multi-node MongoDB cluster will see reduced throughput due to replication overhead, as
 `w: "majority"` write concern requires acknowledgement from a majority of members before a transaction can commit.
