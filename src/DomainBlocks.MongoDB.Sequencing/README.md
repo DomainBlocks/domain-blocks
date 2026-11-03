@@ -105,12 +105,12 @@ see [AppenderPolicy](../../examples/DomainBlocks.MongoDB.Sequencing.Examples/Sim
 
 Benchmarks were run against a local single-node MongoDB replica set running in Docker, on two machines:
 
-|         | Windows PC                                   | MacBook Air                    |
-|:--------|:---------------------------------------------|:-------------------------------|
-| CPU     | AMD Ryzen AI MAX+ 395, 32 logical processors | Apple M3, 8 logical processors |
-| OS      | Windows 11 Pro                               | macOS 26.6.2                   |
-| Docker  | Docker Desktop on WSL 2                      | Docker Desktop                 |
-| MongoDB | 7.0.40                                       | 7.0.32                         |
+|         | MacBook Air                    | Windows PC                                   |
+|:--------|:-------------------------------|:---------------------------------------------|
+| CPU     | Apple M3, 8 logical processors | AMD Ryzen AI MAX+ 395, 32 logical processors |
+| OS      | macOS 26.6.2                   | Windows 11 Pro                               |
+| Docker  | Docker Desktop                 | Docker Desktop on WSL 2                      |
+| MongoDB | 7.0.32                         | 7.0.40                                       |
 
 Each machine has its own column in the tables below. The columns show what to expect in each environment, not a
 ranking. Real-world deployments with network latency between the application and MongoDB will see higher latency and
@@ -130,11 +130,11 @@ following parameters were used:
 - Queue capacity: 1,000 (maximum append operations buffered before callers block)
 - Batching delay: 5 ms (maximum time to wait for more append operations before committing a batch)
 
-| Appender instance count* | Windows PC (ops/sec) | MacBook Air (ops/sec) |
-|-------------------------:|---------------------:|----------------------:|
-|                        1 |               87,073 |               126,814 |
-|                        3 |               53,365 |               103,949 |
-|                        5 |               46,126 |                90,718 |
+| Appender instance count* | MacBook Air (ops/sec) | Windows PC (ops/sec) |
+|-------------------------:|----------------------:|---------------------:|
+|                        1 |               126,814 |               87,073 |
+|                        3 |               103,949 |               53,365 |
+|                        5 |                90,718 |               46,126 |
 
 \* Values greater than 1 indicate multiple appender instances issuing append operations concurrently.
 
@@ -148,14 +148,14 @@ batching delay therefore waits about 15 ms. With more than one instance, each in
 the Windows figures for 3 and 5 instances.
 
 Throughput therefore drops further on Windows as instances are added. The table below gives the drop from one instance.
-The Windows PC and MacBook Air columns come from the throughput table above. The 1 ms timer column comes from separate
+The MacBook Air and Windows PC columns come from the throughput table above. The 1 ms timer column comes from separate
 runs that raised the timer resolution to 1 ms with `timeBeginPeriod`, using the median of three runs for each instance
 count. Raising the resolution removes part of the difference, but not all of it.
 
-| Appender instance count | Windows PC (drop) | Windows PC, 1 ms timer (drop) | MacBook Air (drop) |
-|------------------------:|------------------:|------------------------------:|-------------------:|
-|                       3 |               39% |                           24% |                18% |
-|                       5 |               47% |                           36% |                28% |
+| Appender instance count | MacBook Air (drop) | Windows PC (drop) | Windows PC, 1 ms timer (drop) |
+|------------------------:|-------------------:|------------------:|------------------------------:|
+|                       3 |                18% |               39% |                           24% |
+|                       5 |                28% |               47% |                           36% |
 
 Deployments with a multi-node MongoDB cluster will see reduced throughput due to replication overhead, as
 `w: "majority"` write concern requires acknowledgement from a majority of members before a transaction can commit.
@@ -164,13 +164,13 @@ Deployments with a multi-node MongoDB cluster will see reduced throughput due to
 
 Single-appender latency with one append in flight and one document per operation, using the default appender options.
 Warm-up runs for at least 2 seconds and 1,000 appends. Measurement then stops after 10,000 appends or 30 seconds,
-whichever comes first: 8,875 appends on the Windows PC and 10,000 on the MacBook Air.
+whichever comes first: 10,000 appends on the MacBook Air and 8,875 on the Windows PC.
 
-| Metric | Windows PC (ms) | MacBook Air (ms) |
-|-------:|----------------:|-----------------:|
-|    p50 |            3.18 |             0.64 |
-|    p90 |            4.09 |             0.95 |
-|    p99 |            5.20 |             1.58 |
-|    min |            2.52 |             0.55 |
-|    max |            8.92 |             3.78 |
-|   mean |            3.38 |             0.71 |
+| Metric | MacBook Air (ms) | Windows PC (ms) |
+|-------:|-----------------:|----------------:|
+|    p50 |             0.64 |            3.18 |
+|    p90 |             0.95 |            4.09 |
+|    p99 |             1.58 |            5.20 |
+|    min |             0.55 |            2.52 |
+|    max |             3.78 |            8.92 |
+|   mean |             0.71 |            3.38 |
