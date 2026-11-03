@@ -103,9 +103,18 @@ see [AppenderPolicy](../../examples/DomainBlocks.MongoDB.Sequencing.Examples/Sim
 
 ## Benchmarks
 
-Benchmarks were run against a local single-node MongoDB replica set running in Docker on an Apple M3 MacBook Air.
-Real-world deployments with network latency between the application and MongoDB will see higher latency and lower
-throughput.
+Benchmarks were run against a local single-node MongoDB replica set running in Docker, on two machines:
+
+|         | Windows PC                                   | MacBook Air                    |
+|:--------|:---------------------------------------------|:-------------------------------|
+| CPU     | AMD Ryzen AI MAX+ 395, 32 logical processors | Apple M3, 8 logical processors |
+| OS      | Windows 11 Pro                               | macOS 26.6.2                   |
+| Docker  | Docker Desktop on WSL 2                      | Docker Desktop                 |
+| MongoDB | 7.0.40                                       | 7.0.32                         |
+
+Each machine has its own column in the tables below. The columns show what to expect in each environment, not a
+ranking. Real-world deployments with network latency between the application and MongoDB will see higher latency and
+lower throughput.
 
 The [benchmarks](../../benchmarks/DomainBlocks.MongoDB.Sequencing.Benchmarks/MongoSequencedAppenderBenchmarkTests.cs)
 are included in the repository and can be run against your own environment to get representative numbers for your
@@ -113,18 +122,19 @@ setup.
 
 ### Peak throughput
 
-Peak throughput measured over 15 seconds after a 3-second warm-up, with each operation appending a single document. The
+Peak throughput measured over 15 seconds after a 5-second warm-up, with each operation appending a single document. The
 following parameters were used:
 
-- Max in-flight operations: 1,000 total across all concurrent appender instances
+- Max in-flight operations: 1,000 total, spread evenly across the appender instances
 - Batch size: 1,000 (maximum append operations committed in a single transaction)
 - Queue capacity: 1,000 (maximum append operations buffered before callers block)
+- Batching delay: 5 ms (maximum time to wait for more append operations before committing a batch)
 
-| Appender instance count* | Throughput (ops/sec) |
-|-------------------------:|---------------------:|
-|                        1 |              105,863 |
-|                        3 |               91,697 |
-|                        5 |               76,439 |
+| Appender instance count* | Windows PC (ops/sec) | MacBook Air (ops/sec) |
+|-------------------------:|---------------------:|----------------------:|
+|                        1 |               87,073 |               126,814 |
+|                        3 |               53,365 |               103,949 |
+|                        5 |               46,126 |                90,718 |
 
 \* Values greater than 1 indicate multiple appender instances issuing append operations concurrently.
 
@@ -136,14 +146,15 @@ Deployments with a multi-node MongoDB cluster will see reduced throughput due to
 
 ### Latency
 
-Single-appender latency, measured over 1,000 sequential appends following 100 warm-up iterations, one document per
-operation.
+Single-appender latency with one append in flight and one document per operation, using the default appender options.
+Warm-up runs for at least 2 seconds and 1,000 appends. Measurement then stops after 10,000 appends or 30 seconds,
+whichever comes first: 8,875 appends on the Windows PC and 10,000 on the MacBook Air.
 
-| Metric | Latency (ms) |
-|-------:|-------------:|
-|    p50 |          1.2 |
-|    p90 |          2.2 |
-|    p99 |          2.8 |
-|    min |          0.7 |
-|    max |          6.5 |
-|   mean |          1.4 |
+| Metric | Windows PC (ms) | MacBook Air (ms) |
+|-------:|----------------:|-----------------:|
+|    p50 |            3.18 |             0.64 |
+|    p90 |            4.09 |             0.95 |
+|    p99 |            5.20 |             1.58 |
+|    min |            2.52 |             0.55 |
+|    max |            8.92 |             3.78 |
+|   mean |            3.38 |             0.71 |
