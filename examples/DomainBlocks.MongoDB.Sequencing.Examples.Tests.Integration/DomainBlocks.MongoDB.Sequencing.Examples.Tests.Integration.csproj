@@ -5,11 +5,11 @@
     <PackageReference Include="NUnit" />
     <PackageReference Include="NUnit3TestAdapter" />
     <PackageReference Include="Shouldly" />
-    <PackageReference Include="Testcontainers.MongoDb" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\DomainBlocks.MongoDB.Sequencing.Examples\DomainBlocks.MongoDB.Sequencing.Examples.csproj" />
+    <ProjectReference Include="..\..\tests\DomainBlocks.Testing.Integration.MongoDB\DomainBlocks.Testing.Integration.MongoDB.csproj" />
   </ItemGroup>
 
 </Project>

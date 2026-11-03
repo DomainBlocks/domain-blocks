@@ -1,6 +1,6 @@
-﻿using MongoDB.Bson.Serialization;
+﻿using DomainBlocks.Testing.Integration.MongoDB;
+using MongoDB.Bson.Serialization;
 using MongoDB.Bson.Serialization.Serializers;
-using MongoDB.Driver;
 using NUnit.Framework;
 using Shouldly;
 
@@ -8,7 +8,6 @@ namespace DomainBlocks.MongoDB.Sequencing.Examples.Tests.Integration.SimpleEvent
 
 public class SimpleEventStoreTests
 {
-    private MongoClient _mongoClient = null!;
     private string _databaseName = null!;
     private Examples.SimpleEventStore.SimpleEventStore _eventStore = null!;
 
@@ -31,9 +30,8 @@ public class SimpleEventStoreTests
     [SetUp]
     public async Task SetUp()
     {
-        _mongoClient = new MongoClient(MongoReplicaSetFixture.ConnectionString);
         _databaseName = $"es_test_{Guid.NewGuid():N}";
-        _eventStore = new Examples.SimpleEventStore.SimpleEventStore(_mongoClient, _databaseName);
+        _eventStore = new Examples.SimpleEventStore.SimpleEventStore(MongoTestEnvironment.MongoClient, _databaseName);
         await _eventStore.EnsureIndexesAsync();
     }
 
@@ -41,8 +39,7 @@ public class SimpleEventStoreTests
     public async Task TearDown()
     {
         await _eventStore.DisposeAsync();
-        await _mongoClient.DropDatabaseAsync(_databaseName);
-        _mongoClient.Dispose();
+        await MongoTestEnvironment.MongoClient.DropDatabaseAsync(_databaseName);
     }
 
     [Test]
