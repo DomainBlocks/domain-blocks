@@ -33,14 +33,14 @@ public class PostgresEventStoreBenchmarkTests() :
         (await enumerator.MoveNextAsync()).ShouldBeTrue();
         enumerator.Current.Kind.ShouldBe(SubscriptionMessageKind.CaughtUp);
 
-        var streamIdGenerator = new StreamIdGenerator();
+        var streamIdGenerator = new StreamIdGenerator(workerCount: 1, DefaultEventsPerStream);
         var runner = new BenchmarkRunner();
 
         var result = await runner.MeasureLatencyAsync(
-            async (_, token) =>
+            async (workerIndex, token) =>
             {
                 await eventStore.AppendAsync(
-                    streamIdGenerator.Next(),
+                    streamIdGenerator.Next(workerIndex),
                     [new TestEvent { Value = "Benchmark" }],
                     cancellationToken: token);
 
@@ -96,12 +96,12 @@ public class PostgresEventStoreBenchmarkTests() :
         var (nextBefore, callsBefore, millisBefore) = await ReadAppendStatsAsync();
         var start = Stopwatch.GetTimestamp();
 
-        var streamIdGenerator = new StreamIdGenerator();
+        var streamIdGenerator = new StreamIdGenerator(inFlight, DefaultEventsPerStream);
         var runner = new BenchmarkRunner();
 
         var result = await runner.MeasureThroughputAsync(
-            (_, token) => eventStore.AppendAsync(
-                streamIdGenerator.Next(),
+            (workerIndex, token) => eventStore.AppendAsync(
+                streamIdGenerator.Next(workerIndex),
                 [new TestEvent { Value = "Benchmark" }],
                 cancellationToken: token),
             new ThroughputOptions { InFlight = inFlight },
@@ -117,7 +117,7 @@ public class PostgresEventStoreBenchmarkTests() :
 
         await BenchmarkReport.WriteThroughputAsync(
             $"append throughput, batch size {batchSize:N0}, 1 instance, {inFlight:N0} in flight, " +
-            "1 event per append, new stream per append",
+            $"1 event per append, {DefaultEventsPerStream} events per stream",
             result);
 
         if (batches > 0)

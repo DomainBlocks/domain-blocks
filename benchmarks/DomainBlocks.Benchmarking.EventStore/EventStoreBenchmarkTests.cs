@@ -10,9 +10,10 @@ using Shouldly;
 namespace DomainBlocks.Benchmarking.EventStore;
 
 /// <summary>
-/// Append and read benchmarks shared by every store. Each append test writes one small event per append to a new
-/// stream, so it measures the store's ceiling rather than a realistic workload. Results are printed to the test output.
-/// An append test fails only if an append fails, and a read test fails only if it reads the wrong number of events.
+/// Append and read benchmarks shared by every store. Each append test writes one small event per append. Each worker
+/// appends to a stream of its own until the stream holds <see cref="DefaultEventsPerStream"/> events, unless the test
+/// sets another length, and then starts a new stream. Results are printed to the test output. An append test fails only
+/// if an append fails, and a read test fails only if it reads the wrong number of events.
 /// </summary>
 [Category("Benchmark")]
 public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
@@ -21,6 +22,12 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
     where TStreamPos : notnull
     where TLogPos : notnull
 {
+    /// <summary>
+    /// The number of events a worker appends to a stream before it starts a new stream, unless a test sets another
+    /// length.
+    /// </summary>
+    protected const int DefaultEventsPerStream = 10;
+
     private readonly EventTypeMap _eventTypeMap = new EventTypeMapBuilder().Add<TestEvent>().Build();
 
     // A benchmark's result must not depend on which tests ran before it.
@@ -36,17 +43,17 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
     {
         await using var eventStore = CreateEventStore(_eventTypeMap);
 
-        var streamIdGenerator = new StreamIdGenerator();
+        var streamIdGenerator = new StreamIdGenerator(workerCount: 1, DefaultEventsPerStream);
         var runner = new BenchmarkRunner();
 
         var result = await runner.MeasureLatencyAsync(
-            (_, token) => AppendAsync(eventStore, streamIdGenerator.Next(), token),
+            (workerIndex, token) => AppendAsync(eventStore, streamIdGenerator.Next(workerIndex), token),
             new LatencyOptions(),
             ct);
 
         await BenchmarkReport.WriteEnvironmentAsync(eventStore.GetType(), await Harness.DescribeAsync());
         await BenchmarkReport.WriteLatencyAsync(
-            "append latency, 1 in flight, 1 event per append, new stream per append", result);
+            $"append latency, 1 in flight, 1 event per append, {DefaultEventsPerStream} events per stream", result);
 
         result.Errors.ShouldBe(0, "a latency figure with failed appends is not meaningful");
         result.Latencies.TotalCount.ShouldBeGreaterThan(0);
@@ -63,41 +70,20 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
     [TestCase(4, 1_000)]
     [Explicit("Benchmark")]
     [CancelAfter(BenchmarkTimeouts.DefaultMillis)]
-    public async Task AppendAsync_MeasureThroughput(int instanceCount, int inFlight, CancellationToken ct)
-    {
-        var instances = new IEventStore<object, string, TStreamPos, TLogPos>[instanceCount];
-        for (var i = 0; i < instanceCount; i++)
-            instances[i] = CreateEventStore(_eventTypeMap, loggerNameSuffix: $"_{i}");
+    public Task AppendAsync_MeasureThroughput(int instanceCount, int inFlight, CancellationToken ct) =>
+        MeasureAppendThroughputAsync(instanceCount, inFlight, DefaultEventsPerStream, ct);
 
-        try
-        {
-            var streamIdGenerator = new StreamIdGenerator();
-            var runner = new BenchmarkRunner();
-
-            var result = await runner.MeasureThroughputAsync(
-                (workerIndex, token) => AppendAsync(
-                    instances[workerIndex % instanceCount],
-                    streamIdGenerator.Next(),
-                    token),
-                new ThroughputOptions { InFlight = inFlight },
-                ct);
-
-            await BenchmarkReport.WriteEnvironmentAsync(instances[0].GetType(), await Harness.DescribeAsync());
-
-            await BenchmarkReport.WriteThroughputAsync(
-                $"append throughput, {instanceCount} instance(s), {inFlight:N0} in flight, " +
-                "1 event per append, new stream per append",
-                result);
-
-            result.Errors.ShouldBe(0, "a throughput figure with failed appends is not meaningful");
-            result.Completed.ShouldBeGreaterThan(0);
-        }
-        finally
-        {
-            foreach (var instance in instances)
-                await instance.DisposeAsync();
-        }
-    }
+    /// <summary>
+    /// Append throughput as a function of stream length, with one instance and 1,000 in flight. With one event per
+    /// stream, every append takes the store's new-stream path.
+    /// </summary>
+    [TestCase(1)]
+    [TestCase(10)]
+    [TestCase(100)]
+    [Explicit("Benchmark")]
+    [CancelAfter(BenchmarkTimeouts.DefaultMillis)]
+    public Task AppendAsync_MeasureThroughput_StreamLengthSweep(int eventsPerStream, CancellationToken ct) =>
+        MeasureAppendThroughputAsync(instanceCount: 1, inFlight: 1_000, eventsPerStream, ct);
 
     /// <summary>
     /// Read throughput: one reader reads a log of a hundred streams from start to end, several times over. The median
@@ -131,6 +117,46 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
         var result = await MeasureReadAllAsync($"read all, forward, with metadata, {selection}", options, ct);
 
         result.EventsRead.ShouldBe(expectedCount);
+    }
+
+    private async Task MeasureAppendThroughputAsync(
+        int instanceCount,
+        int inFlight,
+        int eventsPerStream,
+        CancellationToken ct)
+    {
+        var instances = new IEventStore<object, string, TStreamPos, TLogPos>[instanceCount];
+        for (var i = 0; i < instanceCount; i++)
+            instances[i] = CreateEventStore(_eventTypeMap, loggerNameSuffix: $"_{i}");
+
+        try
+        {
+            var streamIdGenerator = new StreamIdGenerator(inFlight, eventsPerStream);
+            var runner = new BenchmarkRunner();
+
+            var result = await runner.MeasureThroughputAsync(
+                (workerIndex, token) => AppendAsync(
+                    instances[workerIndex % instanceCount],
+                    streamIdGenerator.Next(workerIndex),
+                    token),
+                new ThroughputOptions { InFlight = inFlight },
+                ct);
+
+            await BenchmarkReport.WriteEnvironmentAsync(instances[0].GetType(), await Harness.DescribeAsync());
+
+            await BenchmarkReport.WriteThroughputAsync(
+                $"append throughput, {instanceCount} instance(s), {inFlight:N0} in flight, " +
+                $"1 event per append, {eventsPerStream:N0} event(s) per stream",
+                result);
+
+            result.Errors.ShouldBe(0, "a throughput figure with failed appends is not meaningful");
+            result.Completed.ShouldBeGreaterThan(0);
+        }
+        finally
+        {
+            foreach (var instance in instances)
+                await instance.DisposeAsync();
+        }
     }
 
     /// <summary>
