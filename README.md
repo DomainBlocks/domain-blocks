@@ -2,36 +2,37 @@
 
 DomainBlocks is a .NET library for building applications using Domain-Driven Design (DDD) principles.
 
-> 🚧 **Work in progress:** The API and functionality may change as the project matures.
+> 🚧 **Pre-release:** DomainBlocks is in active development, and the API may change before the first stable release.
 
 ## Features
 
 DomainBlocks is a set of NuGet packages, so you reference only what you need. Event storage, event filtering, and event
-evolution are the first feature areas; others will follow.
+evolution are the first major feature areas; others will follow.
 
 ### Event store
 
 The event store is built to be trusted as the system of record:
 
-- **Atomic appends.** The events in a given append operation either all commit or none do, and they are contiguous in
-  the stream.
-- **Optimistic concurrency.** Pass the stream state you expect, and the append is rejected with
-  `StreamAppendConflictException` if another writer got there first. The exception carries the state that was
-  observed, so the caller can reload and retry.
-- **Idempotent appends.** Give an append a commit id and a retry of the same request succeeds without writing again,
-  even if the first attempt committed but its reply was lost (e.g. due to a timeout).
-- **One global log in commit order.** Positions are assigned at commit time, without gaps, so a replay from the start
-  and a live subscription see the same events in the same order.
-- **Subscriptions never skip or repeat.** A subscriber that cannot keep up is told it fell behind and resumes from its
-  last delivered position; no event is dropped silently.
+- **Atomic appends.** The events in a given append operation either all commit or none do.
+- **Optimistic concurrency.** Pass the [`ExpectedStreamState`](src/DomainBlocks.EventStore/ExpectedStreamState.cs) with
+  an append, and the operation is rejected with
+  [`StreamAppendConflictException`](src/DomainBlocks.EventStore/StreamAppendConflictException.cs) if another writer got
+  there first. The exception carries the state that was observed, so the caller may reload and retry.
+- **Idempotent appends.** Give an append a unique commit ID, and a retry of the same request succeeds without writing
+  again, even if the first attempt committed but its reply was lost (e.g. due to a timeout).
+- **Globally ordered event log.** Global event sequencing guarantees events are observed in commit order
+  across both historical reads and live subscriptions. Causes are always observed before their effects, and a replay
+  sees exactly the sequence a live subscriber saw.
+- **No skipped, phantom, or duplicate events.** A subscription delivers every committed event once, in order, and never
+  delivers an event from a transaction that rolled back. A subscriber that cannot keep up is told it fell behind and
+  automatically resumes from its last delivered position, so nothing is dropped silently.
 
 The MongoDB store gets its global order from
 [`DomainBlocks.MongoDB.Sequencing`](src/DomainBlocks.MongoDB.Sequencing/README.md), a package that can also be used on
 its own to append documents to a collection with a contiguous sequence number.
 
-`DomainBlocks.EventStore` holds the store contracts and the append/read pipeline; a store package plugs a database in.
-Add `DomainBlocks.EventStore.PostgreSQL` or `DomainBlocks.EventStore.MongoDB`, build a store, then append and read
-events:
+Add a reference to `DomainBlocks.EventStore.PostgreSQL` or `DomainBlocks.EventStore.MongoDB`, build a store, then append
+and read events:
 
 ```csharp
 await using var store = new PostgresEventStoreBuilder<IDomainEvent>() // Or MongoEventStoreBuilder
@@ -65,15 +66,15 @@ await foreach (var message in store.SubscribeToAll(SubscriptionOrigin.Start))
 }
 ```
 
-The default origin is the end of the log, so omitting it receives only new events. `SubscribeToStream` works the same
-way for a single event stream. A subscriber that consumes too slowly receives a message with `IsFellBehind` set to
-`true`, then catches up again.
+The default origin is the end of the event log, so omitting it receives only new events. `SubscribeToStream` works the
+same way for a single event stream. A subscriber that consumes too slowly receives a message with `IsFellBehind` set to
+`true`, then automatically catches up again.
 
 Subscriptions never deliver an event that a failover could undo, provided the deployment does its part:
 
-- **MongoDB** needs a replica set. The store sends its reads to the primary, whatever read preference the connection
-  string sets.
 - **PostgreSQL** needs version 17 or later, set up as [Deploying PostgreSQL](#deploying-postgresql) describes.
+- **MongoDB** needs a replica set. The event store always reads and writes with majority concern, so it never returns an
+  event that a failover could roll back.
 
 ### Event filtering
 
@@ -88,15 +89,13 @@ await foreach (var e in store.ReadAll(options: options))
 
 These are the filters to build from:
 
-```csharp
-EventFilter.EventNames("OrderPlaced", "OrderShipped")
-EventFilter.StreamIds("order-1", "order-2")
-EventFilter.StreamIdStartsWith("order-")
-EventFilter.MetadataExists("tenant")
-EventFilter.Metadata("tenant", "acme", "initech")
-EventFilter.CreatedAtOrAfter(dateTime)
-EventFilter.CreatedBefore(dateTime)
-```
+- `EventFilter.EventNames("OrderPlaced", "OrderShipped")`
+- `EventFilter.StreamIds("order-1", "order-2")`
+- `EventFilter.StreamIdStartsWith("order-")`
+- `EventFilter.MetadataExists("tenant")`
+- `EventFilter.Metadata("tenant", "acme", "initech")`
+- `EventFilter.CreatedAtOrAfter(dateTime)`
+- `EventFilter.CreatedBefore(dateTime)`
 
 Combine them with `&`, `|`, and `!`:
 
@@ -119,13 +118,11 @@ await foreach (var message in store.SubscribeToAll(SubscriptionOrigin.Start, opt
 }
 ```
 
-Names and values match exactly, and event names are the names that events are stored under. Events that a filter
-excludes are never decoded.
-
 ### Event evolution
 
-Stored events are never rewritten. Instead, the event type map and read transforms reshape old events as they are read,
-on ordinary reads and subscriptions alike, so the rest of the code only sees current shapes.
+Events are never modified in place in storage. To evolve their shape, register mappings in the event type map and add
+read transforms. These apply whenever an event is read, through a normal read or a subscription, so the rest of your
+code only ever sees current shapes.
 
 Upcast an event that gained a field. `AddRead` keeps the previous version readable under its stored name, and `Add` maps
 the current version for both reading and writing:
@@ -144,10 +141,10 @@ var builder = new PostgresEventStoreBuilder<IDomainEvent>()
 Split an event that recorded two things at once:
 
 ```csharp
-builder.AddReadTransform((TradeExecutedV1 e) =>
+builder.AddReadTransform((OrderShippedV1 e) =>
 [
-    new TradeExecuted(e.TradeId, e.Commodity, e.Quantity, e.Price),
-    new BrokerFeeAccrued(e.TradeId, e.BrokerFee)
+    new OrderShipped(e.OrderId),
+    new TrackingNumberAssigned(e.OrderId, e.TrackingNumber)
 ]);
 ```
 
@@ -155,23 +152,24 @@ Rename an event by also reading its old stored name:
 
 ```csharp
 new EventTypeMapBuilder()
-    .Add<TradeBooked>()
-    .AddRead<TradeBooked>("TradeCreated");
+    .Add<OrderCancelled>()
+    .AddRead<OrderCancelled>("OrderVoided");
 ```
 
-Ignore events by mapping their stored names to a placeholder instance, or by returning it from a transform. Returning a
-placeholder event allows the event's stream position to still be observed - important for optimistic concurrency.
+Reading an event fails if its stored name has no mapping, or if a read transform produces no events for it. To ignore
+an event, map its stored name to a placeholder instance, or return the placeholder from a read transform when the
+decision depends on the event's content.
 
 ```csharp
 var typeMap = new EventTypeMapBuilder()
-    .Add<TradeBooked>()
-    .AddRead<TradeBookedV1>()
-    .AddRead(Ignored.Instance, "TradeNoteAdded", "TradeNoteRemoved")
+    .AddRead<OrderPlacedV1>("OrderPlaced")
+    .Add<OrderPlaced>("OrderPlacedV2")
+    .AddRead(Ignored.Instance, "OrderNoteAdded", "OrderNoteRemoved")
     .Build();
 
-builder.AddReadTransform((TradeBookedV1 e) => e.IsTest
+builder.AddReadTransform((OrderPlacedV1 e) => e.IsTest
     ? Ignored.Instance
-    : new TradeBooked(e.TradeId, e.Quantity));
+    : new OrderPlaced(e.OrderId, e.Total, Currency: "GBP"));
 
 public sealed record Ignored : IDomainEvent
 {
@@ -185,11 +183,9 @@ The PostgreSQL implementation of the event store needs PostgreSQL 17 or later. I
 through logical replication, so they also need `wal_level = logical` and a role with the `REPLICATION` attribute.
 
 Connect through a single host that always reaches the primary. Subscriptions fail if the connection string lists
-multiple hosts, because Npgsql can't open a replication connection to them. Never connect to a standby, even a
-synchronous one. Appends and the store's replication slot need the primary, so on a standby appends fail, and live
-subscriptions keep retrying until the connection reaches the primary.
+multiple hosts, because Npgsql can't open a replication connection to them.
 
-What else the server needs depends on how it is replicated:
+The rest depends on how PostgreSQL is deployed:
 
 |                              | Single server | Amazon Aurora        | Cluster with standbys                 |
 |------------------------------|---------------|----------------------|---------------------------------------|
@@ -202,17 +198,18 @@ What else the server needs depends on how it is replicated:
 
 ### Amazon Aurora
 
-Aurora needs no standbys: a commit is durable once Aurora's shared cluster volume has it. Use Aurora PostgreSQL 17 or
-later with `rds.logical_replication = 1`, grant the store's role `rds_replication`, and connect to the cluster
-endpoint. [PostgreSQL on Amazon Aurora](docs/unpublished/postgresql-on-aurora.md) covers the setup, what happens in a
-failover, and an assumption about Aurora that hasn't been confirmed yet.
+Aurora needs none of the standby settings. A commit is durable once it reaches the cluster volume, which every
+instance shares, so a failover can't lose it. Use Aurora PostgreSQL 17 or later with `rds.logical_replication = 1`,
+grant the store's role `rds_replication`, and connect to the cluster endpoint.
+[PostgreSQL on Amazon Aurora](docs/unpublished/postgresql-on-aurora.md) covers the setup, what happens in a failover,
+and an assumption about Aurora that hasn't been confirmed yet.
 
 ### A cluster with standbys
 
-A commit is durable only once the synchronous standbys have it. Name the standbys that a failover can promote in
-`synchronous_standby_names`, list their physical slots in `synchronized_standby_slots`, and use a failover manager
-that keeps both lists in step. [PostgreSQL with standbys](docs/unpublished/postgresql-with-standbys.md) explains each
-setting, the optional copies of the store's slot, and what happens when the lists drift.
+A failover keeps a commit only if the standby it promotes has already flushed it to disk. To make sure it does, name
+the standbys that a failover can promote in `synchronous_standby_names`, list their physical slots in
+`synchronized_standby_slots`, and use a failover manager that keeps both lists in step. See
+[PostgreSQL with standbys](docs/unpublished/postgresql-with-standbys.md) for further details.
 
 ## Contributing
 
