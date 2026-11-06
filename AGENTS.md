@@ -36,13 +36,22 @@ TBD
 ## Code Conventions
 
 - 120 char maximum line width - applies to both *.cs and *.md files
-- Wrap all comments, including doc comments, at 120 chars
-- Prefer succinct doc comments that follow BCL conventions
 - Prefer primary constructors
 - Use record types only where value semantics apply, otherwise choose classes
 - Sealed records and classes for implementations
 - Outer-most types internal by default, public only for the library's API surface
 - File-scoped namespaces
+
+## Code Comments
+
+- Comments explain *why* (constraints, invariants, domain rules, workarounds), not *what* the code does.
+- Prefer better names, extracted methods, or domain types over explanatory inline comments.
+- Doc comments:
+    - Public APIs: kept succinct and following BCL conventions.
+    - Describe the contracts that callers rely on, never implementation details.
+    - Non-public types and members: use sparingly, only when the contract or details aren't obvious.
+    - `<remarks>` sections: use sparingly, only for supplementary details that callers must be aware of, kept brief.
+- Wrap all comments, including doc comments, at 120 chars.
 
 ## Patterns We Use
 
