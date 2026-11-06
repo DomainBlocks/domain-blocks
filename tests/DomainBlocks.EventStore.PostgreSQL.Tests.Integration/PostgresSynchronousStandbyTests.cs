@@ -130,7 +130,7 @@ public class PostgresSynchronousStandbyTests
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task AppendAsync_CommitWaitCanceled_CompletesOnceStandbyHasIt(CancellationToken ct)
+    public async Task AppendAsync_CommitWaitCanceled_CompletesAppendOnceOnStandby(CancellationToken ct)
     {
         await using var dataSource = CreateDataSource();
         await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
