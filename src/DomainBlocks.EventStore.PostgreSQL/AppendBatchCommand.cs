@@ -17,9 +17,15 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// commit still waits for the synchronous standbys. A batch that fails to commit completes no request, so it can be
 /// retried.
 /// </para>
+/// <para>
+/// A batch whose commit completes without confirmation from the synchronous standbys throws
+/// <see cref="CommitNotConfirmedException"/> and completes no request either. When it is run again, the requests that
+/// committed report as duplicates once the standbys have them.
+/// </para>
 /// </remarks>
 internal sealed class AppendBatchCommand : IDisposable
 {
+    private readonly NpgsqlDataSource _dataSource;
     private readonly NpgsqlCommand _command;
     private readonly NpgsqlParameter<string[]> _streamIds;
     private readonly NpgsqlParameter<AppendProtocol.ExpectedKind[]> _expectedKinds;
@@ -33,7 +39,10 @@ internal sealed class AppendBatchCommand : IDisposable
 
     public AppendBatchCommand(NpgsqlDataSource dataSource, SchemaObjectNames names)
     {
-        _command = dataSource.CreateCommand(
+        _dataSource = dataSource;
+
+        // The command runs on a connection that each batch opens, so that the batch can watch it for warnings.
+        _command = new NpgsqlCommand(
             "SELECT request_index, status, observed_version " +
             $"FROM {names.AppendEventsFunction}($1, $2, $3, $4, $5, $6, $7, $8, $9)");
 
@@ -78,18 +87,32 @@ internal sealed class AppendBatchCommand : IDisposable
         var errors = new Exception?[batch.Count];
         var hasRow = new bool[batch.Count];
 
-        await using (var reader = await _command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+        await using (var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false))
         {
-            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            using var confirmation = new CommitConfirmationWatcher(connection);
+            _command.Connection = connection;
+
+            try
             {
-                var index = reader.GetInt32(0);
-                errors[index] = ReadError(reader, batch[index]);
-                hasRow[index] = true;
+                await using var reader = await _command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+
+                while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    var index = reader.GetInt32(0);
+                    errors[index] = ReadError(reader, batch[index]);
+                    hasRow[index] = true;
+                }
+
+                // The server reports the commit after the rows, so closing the reader waits for it, and throws if the
+                // batch did not commit.
+                await reader.CloseAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                _command.Connection = null;
             }
 
-            // The server reports the commit after the rows, so closing the reader waits for it, and throws if the batch
-            // did not commit.
-            await reader.CloseAsync().ConfigureAwait(false);
+            confirmation.ThrowIfNotConfirmed("The append batch");
         }
 
         // The function returns exactly one row per request, so a request without a row means the protocol was broken.

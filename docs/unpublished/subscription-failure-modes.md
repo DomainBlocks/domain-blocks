@@ -158,10 +158,19 @@ Either way the backend goes on to step 4 and the transaction becomes visible. Th
 The standby normally receives the WAL moments later, because the cancel stops only the waiting, not the replication.
 The danger is a failover in between, which is most likely when waits are long, that is, when the standby is slow.
 
-Causes: disposing our appender while a commit waits, probably a `statement_timeout` that covers the `COMMIT` (not
-traced in the source), and an administrator's `pg_cancel_backend` or `pg_terminate_backend`. The caller's token never
-reaches the commit: only the appender's stop token does, which `DisposeAsync` cancels (`BatchingAppender.cs` 47 and
-76-85), and Npgsql then sends a cancel request.
+Causes: disposing our appender while a commit waits, a command that times out, probably a `statement_timeout` that
+covers the `COMMIT` (not traced in the source), and an administrator's `pg_cancel_backend` or `pg_terminate_backend`.
+The caller's token never reaches the commit: only the appender's stop token does, which `DisposeAsync` cancels. Npgsql
+sends a cancel request when that token is cancelled, and also when a command outlasts its `CommandTimeout`, which is
+30 seconds by default.
+
+The appender acknowledges an append only once its commit is confirmed. It completes the requests of a batch only
+after the server has reported the commit, so a batch whose connection is lost while it waits completes none of them.
+It recognizes the cancelled wait's warning by the server function that raises it, `SyncRepWaitForLSN`, since the
+warning's SQLSTATE is the generic `01000` and its text is translated. Either way it runs the batch once more, and the
+commit IDs report the requests that committed as duplicates. That batch still locks the sequence row, which writes
+WAL, so its commit waits for the standbys too, and once they confirm it they have the earlier commit. If that commit
+isn't confirmed either, the appends fail.
 
 #### Spike results
 
@@ -225,11 +234,11 @@ The barrier costs one xid, a few bytes of WAL and one standby round trip per tai
 synchronous standby confirms, it blocks, so subscribers stall instead of seeing data that could be lost, as in MongoDB
 when no majority is available.
 
-The barrier runs on a single server too. With no standby configured, its commit still flushes the WAL locally, and
-with `synchronous_commit = off` appends that flush is what stops a crash from undoing a row a subscriber saw. What must
-be configurable is how it treats an empty `synchronous_standby_names`. On a single server that is expected, and the
-local flush is enough. In a replicated deployment it means synchronous replication has been switched off, so the
-barrier reports it and subscribers stall.
+As built, the barrier does nothing while `synchronous_standby_names` is empty. Appends commit with
+`synchronous_commit = on` (#161), so a read only ever sees commits that are already flushed locally, and on a single
+server that is enough. In a replicated deployment an empty list means synchronous replication has been switched off,
+and the store follows that setting rather than stalling subscribers. The guarantee below says what that leaves to the
+failover tooling.
 
 ## Recommended design: wake-up plus polling
 
@@ -418,12 +427,15 @@ batch and before delivering it, and the catch-up runs one after reading its end.
 synchronous standbys have flushed, whatever the appender's `synchronous_commit` and whether or not its wait was
 cancelled. Two things remain the deployment's job:
 
-1. `synchronous_standby_names` names the standbys to wait for. In a replicated deployment the barrier checks this on
-   every call.
+1. `synchronous_standby_names` names the standbys to wait for. The barrier reads it on every call, and does nothing
+   while it is empty.
 2. Failover tooling promotes only a standby that confirmed the commits. With `ANY 1 (a, b)` only one of them may have
    them. Patroni's `synchronous_mode` handles this, but without `synchronous_mode_strict` it empties
-   `synchronous_standby_names` when no synchronous standby is available. The barrier then reports it, and subscribers
-   stall rather than lose the guarantee.
+   `synchronous_standby_names` when no synchronous standby is available. PostgreSQL then releases the commits waiting
+   for the standbys as if they had confirmed them, with no warning, and later commits don't wait. Neither the appender
+   nor the barrier can tell, so appends are acknowledged, and events delivered, that the standbys might not have. The
+   store follows the setting, as the server does. Patroni promotes no standby automatically in that state, so only a
+   manual failover can lose those commits, and `synchronous_mode_strict` blocks writes instead.
 
 MongoDB's election rule is built in; PostgreSQL relies on the failover tooling for item 2.
 

@@ -26,14 +26,18 @@ What the settings and the store do, in the order they come into play.
    standby reports over its own connection to the primary, not from slots. Flushed means safe on the standby's disk,
    which is what survives a failover. It doesn't mean visible to queries on the standby, which only `remote_apply`
    waits for.
-4. **The wait can end early.** If the waiting backend is cancelled or terminated, the primary restarts, or
-   `synchronous_standby_names` is emptied, the commit becomes visible on the primary even though the standbys don't
-   have it. A failover then loses it, and the next append reuses its position. A subscriber that was given the lost
-   event is already past that position, so it also skips the event that reuses it: one phantom event, and one missed.
-   With healthy replication the window is milliseconds, because the WAL still reaches the standby a moment later. But
-   a wait only lasts long enough to be cut short when the standby is slow, disconnected or cut off, and then the
-   window stays open for as long as the standby is away. Those are the same incidents that lead to failovers. A
-   failover manager protects only acknowledged commits, and a commit whose wait was cut short never was acknowledged.
+4. **The wait can end early.** If the waiting backend is cancelled or terminated, or the primary restarts, the commit
+   becomes visible on the primary even though the standbys don't have it. A failover then loses it, and the next
+   append reuses its position. A subscriber that was given the lost event is already past that position, so it also
+   skips the event that reuses it: one phantom event, and one missed. With healthy replication the window is
+   milliseconds, because the WAL still reaches the standby a moment later. But a wait only lasts long enough to be cut
+   short when the standby is slow, disconnected or cut off, and then the window stays open for as long as the standby
+   is away. Those are the same incidents that lead to failovers. A failover manager can only protect commits that the
+   standbys confirmed. So the store acknowledges an append only once its commit is confirmed: a cancelled wait sends a
+   warning, which the store recognizes, and a lost connection fails the batch, and either way the store runs the batch
+   again. Emptying `synchronous_standby_names` releases waiting commits too, but as if the standbys had confirmed them,
+   with no warning, and later commits don't wait. That switches synchronous replication off, and the store follows
+   the setting, so the failover manager must then not promote a standby that lacks those commits.
 5. **The barrier protects catch-up reads.** After a catch-up has read up to the end, it commits a tiny transaction
    that writes one WAL record (`pg_logical_emit_message`) with `synchronous_commit = on`. WAL is sequential, so once
    the synchronous standbys have flushed that record, they have everything the read saw. Only then are the events

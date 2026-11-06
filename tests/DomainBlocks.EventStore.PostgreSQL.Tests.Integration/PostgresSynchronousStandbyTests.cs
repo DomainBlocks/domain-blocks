@@ -130,6 +130,54 @@ public class PostgresSynchronousStandbyTests
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task AppendAsync_CommitWaitCanceled_CompletesOnceStandbyHasIt(CancellationToken ct)
+    {
+        await using var dataSource = CreateDataSource();
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
+        await using var eventStore = CreateEventStore(dataSource);
+
+        await _server.CutOffStandbyAsync();
+
+        var append = eventStore.AppendAsync(
+            "s1",
+            [AppendableEvent.Create<object>(new TestEvent { Value = "e" })],
+            cancellationToken: ct);
+
+        // The canceled commit stands on the primary. The appender runs the batch again, and that commit waits too.
+        await CancelBackendAsync(dataSource, await WaitForSyncRepAsync(ct), ct);
+
+        await Task.Delay(HoldDuration, ct);
+        append.IsCompleted.ShouldBeFalse();
+
+        await _server.ReconnectStandbyAsync();
+        await append;
+
+        (await CountEventsAsync(dataSource, ct)).ShouldBe(1);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task AppendAsync_CommandTimesOutWhileCommitWaits_ThrowsCommitNotConfirmed(CancellationToken ct)
+    {
+        await using var dataSource = CreateDataSource();
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
+
+        // When the command times out, Npgsql sends a cancel request, which cancels the commit's wait.
+        await using var timingOutDataSource = CreateDataSource(x => x.CommandTimeout = 1);
+        await using var eventStore = CreateEventStore(timingOutDataSource);
+
+        await _server.CutOffStandbyAsync();
+
+        await Should.ThrowAsync<CommitNotConfirmedException>(() => eventStore.AppendAsync(
+            "s1",
+            [AppendableEvent.Create<object>(new TestEvent { Value = "e" })],
+            cancellationToken: ct));
+
+        (await CountEventsAsync(dataSource, ct)).ShouldBe(1);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task SubscribeToAll_EventDeliveredButNotVisible_ReplaysEventOnceVisible(CancellationToken ct)
     {
         await using var dataSource = CreateDataSource();
