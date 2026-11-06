@@ -167,7 +167,6 @@ public class PostgresEventStoreAppendTests : PostgresIntegrationTest
         return Harness.CreateEventStore(eventCodec);
     }
 
-    // A statement trigger on the event log that raises a warning on every append, as an application's own trigger might.
     private sealed class WarningTrigger(NpgsqlDataSource dataSource, string schema) : IAsyncDisposable
     {
         public static async Task<WarningTrigger> CreateAsync(
