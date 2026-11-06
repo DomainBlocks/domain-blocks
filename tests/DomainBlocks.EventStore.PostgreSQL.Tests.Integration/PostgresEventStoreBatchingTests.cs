@@ -180,7 +180,6 @@ public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
         (await Client.ReadRowsAsync(cancellationToken: ct)).Count.ShouldBe(1);
     }
 
-    // Waits until an append batch on the fixture's schema waits for a lock, such as the sequence row's.
     private async Task WaitForAppendLockWaitAsync(CancellationToken ct)
     {
         await using var command = DataSource.CreateCommand(

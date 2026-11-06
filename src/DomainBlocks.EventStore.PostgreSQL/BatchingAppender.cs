@@ -164,8 +164,7 @@ internal sealed class BatchingAppender : IAppender
     }
 
     // The batch runs without the stop token, because canceling it could cancel its commit's wait for the synchronous
-    // standbys, which leaves the commit on the primary before the standbys have it. Once the appender is stopping, a
-    // failed batch isn't retried.
+    // standbys, which leaves the commit on the primary before the standbys have it.
     private async Task ProcessBatchAsync(List<AppendRequest> batch, CancellationToken stopToken)
     {
         try
