@@ -119,11 +119,11 @@ public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task DisposeAsync_WithQueuedRequests_FaultsThem(CancellationToken ct)
+    public async Task DisposeAsync_BatchInFlight_CommitsBatchAndFaultsQueuedRequests(CancellationToken ct)
     {
         var eventStore = CreateEventStore("_dispose");
 
-        // Hold the sequence row so that the appender's batch blocks inside the database.
+        // Holding the sequence row keeps the first batch waiting inside the database, so the appends after it queue.
         await using var connection = await DataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
 
@@ -132,21 +132,28 @@ public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
             await lockCommand.ExecuteNonQueryAsync(ct);
         }
 
-        var tasks = Enumerable.Range(0, 5)
+        var inFlight = eventStore.AppendAsync("s0", [Appendable("e0")], cancellationToken: ct);
+        await WaitForAppendLockWaitAsync(ct);
+
+        var queued = Enumerable.Range(1, 4)
             .Select(i => eventStore.AppendAsync($"s{i}", [Appendable($"e{i}")], cancellationToken: ct))
             .ToArray();
 
+        var dispose = eventStore.DisposeAsync().AsTask();
+
         await Task.Delay(200, ct);
-        tasks.ShouldAllBe(x => !x.IsCompleted);
-
-        await eventStore.DisposeAsync();
-
-        foreach (var task in tasks)
-            await Should.ThrowAsync<OperationCanceledException>(() => task);
+        dispose.IsCompleted.ShouldBeFalse();
+        inFlight.IsCompleted.ShouldBeFalse();
 
         await transaction.RollbackAsync(ct);
 
-        (await Client.ReadRowsAsync(cancellationToken: ct)).ShouldBeEmpty();
+        await inFlight;
+        await dispose;
+
+        foreach (var task in queued)
+            await Should.ThrowAsync<OperationCanceledException>(() => task);
+
+        (await Client.ReadRowsAsync(cancellationToken: ct)).Select(x => x.StreamId).ShouldBe(["s0"]);
     }
 
     [Test]
@@ -171,5 +178,21 @@ public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
         await eventStore.AppendAsync("s1", [Appendable("e")], cancellationToken: ct);
 
         (await Client.ReadRowsAsync(cancellationToken: ct)).Count.ShouldBe(1);
+    }
+
+    // Waits until an append batch on the fixture's schema waits for a lock, such as the sequence row's.
+    private async Task WaitForAppendLockWaitAsync(CancellationToken ct)
+    {
+        await using var command = DataSource.CreateCommand(
+            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity " +
+            "WHERE wait_event_type = 'Lock' AND position($1 IN query) > 0)");
+
+        command.Parameters.Add(new NpgsqlParameter<string>
+        {
+            TypedValue = new SchemaObjectNames(Schema).AppendEventsFunction
+        });
+
+        while (!(bool)(await command.ExecuteScalarAsync(ct)).ShouldNotBeNull())
+            await Task.Delay(20, ct);
     }
 }

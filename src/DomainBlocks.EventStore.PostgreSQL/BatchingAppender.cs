@@ -72,6 +72,10 @@ internal sealed class BatchingAppender : IAppender
         }
     }
 
+    /// <summary>
+    /// Stops taking requests, waits for a batch that is already committing, and faults the requests still queued with
+    /// an <see cref="OperationCanceledException"/>.
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
@@ -134,10 +138,6 @@ internal sealed class BatchingAppender : IAppender
                         _channel.Reader.Count,
                         Stopwatch.GetElapsedTime(start).TotalMilliseconds);
                 }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested)
-                {
-                    throw; // Let the outer catch handle the graceful stop.
-                }
                 catch (Exception ex)
                 {
                     _logger?.AppendBatchFailed(ex, batch.Count);
@@ -163,19 +163,22 @@ internal sealed class BatchingAppender : IAppender
         }
     }
 
-    private async Task ProcessBatchAsync(List<AppendRequest> batch, CancellationToken ct)
+    // The batch runs without the stop token, because canceling it could cancel its commit's wait for the synchronous
+    // standbys, which leaves the commit on the primary before the standbys have it. Once the appender is stopping, a
+    // failed batch isn't retried.
+    private async Task ProcessBatchAsync(List<AppendRequest> batch, CancellationToken stopToken)
     {
         try
         {
-            await _command.ExecuteAsync(batch, ct).ConfigureAwait(false);
+            await _command.ExecuteAsync(batch, CancellationToken.None).ConfigureAwait(false);
         }
-        catch (Exception ex) when (PostgresTransientErrors.IsTransient(ex) && !ct.IsCancellationRequested)
+        catch (Exception ex) when (PostgresTransientErrors.IsTransient(ex) && !stopToken.IsCancellationRequested)
         {
             // Retrying is safe because commit IDs make already-committed requests report as duplicates. A batch of
             // duplicates still locks the sequence row, which writes WAL, so its commit waits for the synchronous
             // standbys, and once they confirm it they have every earlier commit too.
             _logger?.AppendBatchRetrying(ex, batch.Count);
-            await _command.ExecuteAsync(batch, ct).ConfigureAwait(false);
+            await _command.ExecuteAsync(batch, CancellationToken.None).ConfigureAwait(false);
         }
     }
 

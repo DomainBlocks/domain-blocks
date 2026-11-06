@@ -158,11 +158,10 @@ Either way the backend goes on to step 4 and the transaction becomes visible. Th
 The standby normally receives the WAL moments later, because the cancel stops only the waiting, not the replication.
 The danger is a failover in between, which is most likely when waits are long, that is, when the standby is slow.
 
-Causes: disposing our appender while a commit waits, a command that times out, probably a `statement_timeout` that
-covers the `COMMIT` (not traced in the source), and an administrator's `pg_cancel_backend` or `pg_terminate_backend`.
-The caller's token never reaches the commit: only the appender's stop token does, which `DisposeAsync` cancels. Npgsql
-sends a cancel request when that token is cancelled, and also when a command outlasts its `CommandTimeout`, which is
-30 seconds by default.
+Causes: a command that times out, probably a `statement_timeout` that covers the `COMMIT` (not traced in the source),
+and an administrator's `pg_cancel_backend` or `pg_terminate_backend`. Npgsql sends a cancel request when a command
+outlasts its `CommandTimeout`, which is 30 seconds by default. The store never cancels a commit itself: the caller's
+token never reaches it, and disposing the appender lets a batch that is already committing finish.
 
 The appender acknowledges an append only once its commit is confirmed. It completes the requests of a batch only after
 the server has reported the commit, so a batch whose connection is lost while it waits completes none of them, and a
