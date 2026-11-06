@@ -92,7 +92,7 @@ public class PostgresSynchronousStandbyTests
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task AppendAsync_LargeBatchNotOnStandby_CompletesAppendsOnceOnStandby(CancellationToken ct)
+    public async Task AppendAsync_LargeBatchNotYetOnStandby_CompletesAppendsOnceOnStandby(CancellationToken ct)
     {
         // The result rows of a batch this large fill the server's output buffer several times, so most of them reach
         // the client while the commit waits.
