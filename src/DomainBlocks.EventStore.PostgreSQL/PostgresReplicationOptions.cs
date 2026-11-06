@@ -128,19 +128,4 @@ public sealed class PostgresReplicationOptions
             field = value;
         }
     } = TimeSpan.FromMinutes(1);
-
-    /// <summary>
-    /// Gets or sets how many times in a row to retry a failed connection attempt before subscriptions fail. The default
-    /// is <see cref="int.MaxValue"/>.
-    /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
-    public int MaxRetryAttempts
-    {
-        get;
-        set
-        {
-            ArgumentOutOfRangeException.ThrowIfNegative(value);
-            field = value;
-        }
-    } = int.MaxValue;
 }

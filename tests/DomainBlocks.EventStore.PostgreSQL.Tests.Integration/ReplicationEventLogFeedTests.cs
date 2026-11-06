@@ -341,7 +341,7 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
             _slotNameGenerator,
             new SchemaObjectNames(options.Schema),
             Options.Replication,
-            new FeedResumeOptions { RetryDelay = TimeSpan.FromMilliseconds(10), MaxRetryAttempts = 1 });
+            new FeedResumeOptions { RetryDelay = TimeSpan.FromMilliseconds(10) });
 
         var observer = new CollectingObserver();
         using var attachment = feed.Attach(observer);
@@ -574,6 +574,9 @@ public class ReplicationEventLogFeedTests : PostgresIntegrationTest
             ResetCount++;
             return ValueTask.CompletedTask;
         }
+
+        public ValueTask OnFailureAsync(FeedFailure failure, CancellationToken cancellationToken) =>
+            ValueTask.CompletedTask;
 
         public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken)
         {

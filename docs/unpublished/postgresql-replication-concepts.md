@@ -39,8 +39,8 @@ What the settings and the store do, in the order they come into play.
    the synchronous standbys have flushed that record, they have everything the read saw. Only then are the events
    delivered. The read can still see an event whose wait ended early, but the barrier makes sure it isn't delivered
    until the standbys have it. If the barrier's own wait ends early, or the barrier reaches a standby, the catch-up
-   reads the end again behind a new barrier, until it reaches `SubscriptionOptions.CatchUpMaxRetryAttempts` or
-   `CatchUpRetryTimeout` without progress. The barrier runs only when `synchronous_standby_names` is set.
+   reads the end again behind a new barrier, until it reaches `SubscriptionOptions.MaxRetryAttempts` or
+   `RetryTimeout` without progress. The barrier runs only when `synchronous_standby_names` is set.
 6. **The gate protects live delivery.** Live subscriptions come from logical replication: the feed reads decoded row
    changes through its logical slot, which records how far the feed has got, so the feed resumes there after a
    reconnect. The primary would send a commit to the feed as soon as it is in the primary's own WAL, before any
