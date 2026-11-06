@@ -92,6 +92,44 @@ public class PostgresSynchronousStandbyTests
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task AppendAsync_LargeBatchNotYetOnStandby_CompletesAppendsOnceOnStandby(CancellationToken ct)
+    {
+        // The result rows of a batch this large fill the server's output buffer several times, so most of them reach
+        // the client while the commit waits.
+        const int appendCount = 2_000;
+
+        await using var dataSource = CreateDataSource();
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
+
+        // The batching delay holds the batch open until every append has joined it.
+        await using var eventStore = CreateEventStore(dataSource, new PostgresEventStoreOptions
+        {
+            Schema = _options.Schema,
+            AppendQueueCapacity = appendCount,
+            AppendMaxBatchSize = appendCount,
+            AppendBatchingDelay = TimeSpan.FromMinutes(1)
+        });
+
+        await _server.CutOffStandbyAsync();
+
+        var appends = Enumerable.Range(0, appendCount)
+            .Select(i => eventStore.AppendAsync(
+                $"s{i}",
+                [AppendableEvent.Create<object>(new TestEvent { Value = $"e{i}" })],
+                cancellationToken: ct))
+            .ToArray();
+
+        await WaitForSyncRepAsync(ct);
+
+        await Task.Delay(HoldDuration, ct);
+        appends.ShouldAllBe(x => !x.IsCompleted);
+
+        await _server.ReconnectStandbyAsync();
+        await Task.WhenAll(appends);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task SubscribeToAll_EventDeliveredButNotVisible_ReplaysEventOnceVisible(CancellationToken ct)
     {
         await using var dataSource = CreateDataSource();

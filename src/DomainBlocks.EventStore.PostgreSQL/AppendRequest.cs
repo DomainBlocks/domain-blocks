@@ -37,8 +37,6 @@ internal sealed class AppendRequest
 
     public Task Completion => _tcs.Task;
 
-    public bool IsCompleted => _tcs.Task.IsCompleted;
-
     public bool TryComplete(Exception? error = null)
     {
         return error is null ? _tcs.TrySetResult() : _tcs.TrySetException(error);
