@@ -143,7 +143,8 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
         var maxBatchSize = _options.MaxBatchSize;
         var batchingDelay = _options.BatchingDelay;
         var batchingDelayThreshold = _options.BatchingDelayMinCount;
-        var batch = new List<AppendRequest<TContext>>(maxBatchSize);
+        // The batch grows as it fills, since the maximum batch size can be far larger than any real batch.
+        var batch = new List<AppendRequest<TContext>>();
 
         try
         {
