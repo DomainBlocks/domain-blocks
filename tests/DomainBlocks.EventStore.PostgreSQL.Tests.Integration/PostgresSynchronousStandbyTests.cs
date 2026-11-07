@@ -4,6 +4,7 @@ using DomainBlocks.Testing.Events;
 using DomainBlocks.Testing.Integration.EventStore;
 using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
 using Npgsql;
+using NpgsqlTypes;
 using NUnit.Framework;
 using Shouldly;
 using static DomainBlocks.EventStore.PostgreSQL.Tests.Integration.AppendFunctionClient;
@@ -143,10 +144,12 @@ public class PostgresSynchronousStandbyTests
             [AppendableEvent.Create<object>(new TestEvent { Value = "e" })],
             cancellationToken: ct);
 
-        // The canceled commit stands on the primary. The appender runs the batch again, and that commit waits too.
-        await CancelBackendAsync(dataSource, await WaitForSyncRepAsync(ct), ct);
+        var canceled = await WaitForSyncRepCommitAsync(null, ct);
+        await CancelBackendAsync(dataSource, canceled.ProcessId, ct);
 
-        await Task.Delay(HoldDuration, ct);
+        // The canceled commit stands on the primary, so a commit in another transaction that waits for the standby is
+        // the appender running the batch again.
+        await WaitForSyncRepCommitAsync(canceled.TransactionId, ct);
         append.IsCompleted.ShouldBeFalse();
 
         await _server.ReconnectStandbyAsync();
@@ -646,6 +649,36 @@ public class PostgresSynchronousStandbyTests
         {
             if (await command.ExecuteScalarAsync(ct) is int pid)
                 return pid;
+
+            await Task.Delay(20, ct);
+        }
+    }
+
+    // Returns the process and transaction IDs of a backend whose commit waits for the standby, once there is one whose
+    // transaction isn't the excluded one.
+    private async Task<(int ProcessId, string TransactionId)> WaitForSyncRepCommitAsync(
+        string? excludedTransactionId,
+        CancellationToken ct)
+    {
+        await using var dataSource = CreateDataSource();
+
+        await using var command = dataSource.CreateCommand(
+            "SELECT pid, backend_xid::text FROM pg_stat_activity " +
+            "WHERE wait_event = 'SyncRep' AND backend_xid::text IS DISTINCT FROM $1 LIMIT 1");
+
+        command.Parameters.Add(new NpgsqlParameter
+        {
+            NpgsqlDbType = NpgsqlDbType.Text,
+            Value = (object?)excludedTransactionId ?? DBNull.Value
+        });
+
+        while (true)
+        {
+            await using (var reader = await command.ExecuteReaderAsync(ct))
+            {
+                if (await reader.ReadAsync(ct))
+                    return (reader.GetInt32(0), reader.GetString(1));
+            }
 
             await Task.Delay(20, ct);
         }
