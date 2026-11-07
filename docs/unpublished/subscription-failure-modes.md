@@ -171,7 +171,8 @@ more specific code has, and its message is translated into the language that the
 So the appender recognizes the warning by the name of the server function that raises it, `SyncRepWaitForLSN`, which is
 never translated. In both cases it runs the batch once more, and the commit IDs report the requests that committed as
 duplicates. That batch still locks the sequence row, which writes WAL, so its commit waits for the standbys too, and
-once they confirm it they have the earlier commit. If that commit isn't confirmed either, the appends fail.
+once they confirm it they have the earlier commit. If that commit isn't confirmed either, or the appender is being
+disposed, the appends fail with `AppendNotConfirmedException`, which tells the callers that they may have been written.
 
 #### Spike results
 

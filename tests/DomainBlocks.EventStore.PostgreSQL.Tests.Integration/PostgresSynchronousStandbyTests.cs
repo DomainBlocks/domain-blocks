@@ -162,7 +162,7 @@ public class PostgresSynchronousStandbyTests
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task AppendAsync_CommandTimesOutWhileCommitWaits_ThrowsCommitNotConfirmed(CancellationToken ct)
+    public async Task AppendAsync_CommandTimesOutWhileCommitWaits_ThrowsAppendNotConfirmed(CancellationToken ct)
     {
         await using var dataSource = CreateDataSource();
         await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
@@ -173,11 +173,35 @@ public class PostgresSynchronousStandbyTests
 
         await _server.CutOffStandbyAsync();
 
-        await Should.ThrowAsync<CommitNotConfirmedException>(() => eventStore.AppendAsync(
+        var exception = await Should.ThrowAsync<AppendNotConfirmedException>(() => eventStore.AppendAsync(
             "s1",
             [AppendableEvent.Create<object>(new TestEvent { Value = "e" })],
             cancellationToken: ct));
 
+        exception.StreamId.ShouldBe("s1");
+        (await CountEventsAsync(dataSource, ct)).ShouldBe(1);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task AppendAsync_StoreDisposedWhileCommitWaits_ThrowsAppendNotConfirmed(CancellationToken ct)
+    {
+        await using var dataSource = CreateDataSource();
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
+        var eventStore = CreateEventStore(dataSource);
+
+        await _server.CutOffStandbyAsync();
+
+        var append = eventStore.AppendAsync(
+            "s1",
+            [AppendableEvent.Create<object>(new TestEvent { Value = "e" })],
+            cancellationToken: ct);
+
+        // Disposing the store cancels the batch, which cancels its commit's wait for the standby.
+        await WaitForSyncRepAsync(ct);
+        await eventStore.DisposeAsync();
+
+        (await Should.ThrowAsync<AppendNotConfirmedException>(append)).StreamId.ShouldBe("s1");
         (await CountEventsAsync(dataSource, ct)).ShouldBe(1);
     }
 
