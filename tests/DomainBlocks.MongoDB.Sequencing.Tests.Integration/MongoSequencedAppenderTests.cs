@@ -40,6 +40,18 @@ public class MongoSequencedAppenderTests : MongoIntegrationTestBase
         sequence.ShouldBe([0]);
     }
 
+    [Test]
+    [CancelAfter(TimeoutMillis)]
+    public async Task AppendAsync_LargestMaxBatchSize_Commits(CancellationToken ct)
+    {
+        await using var appender = CreateAppender<object>(
+            options: new MongoSequencedAppenderOptions { MaxBatchSize = int.MaxValue });
+
+        await appender.AppendAsync([new TargetDoc { Value = "e" }], new object(), cancellationToken: ct);
+
+        (await ReadSequenceAsync(ct)).ShouldBe([0]);
+    }
+
     private class CallbackAppenderPolicy<TContext>(
         Func<IReadOnlyList<AppendRequest<TContext>>, CancellationToken, Task>? onBatchCommitting = null) :
         IMongoSequencedAppenderPolicy<TContext>
