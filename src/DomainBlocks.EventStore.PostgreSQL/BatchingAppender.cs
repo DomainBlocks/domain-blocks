@@ -181,8 +181,14 @@ internal sealed class BatchingAppender : IAppender
 
     private static void FaultAll(List<AppendRequest> batch, Exception exception)
     {
+        // A batch whose commit wasn't confirmed may have been written, so its callers must be able to tell that apart
+        // from a failed append.
         foreach (var request in batch)
-            request.TryComplete(exception);
+        {
+            request.TryComplete(exception is CommitNotConfirmedException
+                ? new AppendNotConfirmedException(request.StreamId, exception)
+                : exception);
+        }
     }
 
     private static void DrainWithFault(ChannelReader<AppendRequest> reader, Exception exception)
