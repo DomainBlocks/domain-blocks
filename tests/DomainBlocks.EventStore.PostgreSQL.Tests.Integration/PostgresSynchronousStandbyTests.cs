@@ -144,12 +144,14 @@ public class PostgresSynchronousStandbyTests
             [AppendableEvent.Create<object>(new TestEvent { Value = "e" })],
             cancellationToken: ct);
 
-        var canceled = await WaitForSyncRepCommitAsync(null, ct);
-        await CancelBackendAsync(dataSource, canceled.ProcessId, ct);
+        var (canceledProcessId, canceledTransactionId) =
+            await WaitForSyncRepCommitAsync(excludedTransactionId: null, ct);
+
+        await CancelBackendAsync(dataSource, canceledProcessId, ct);
 
         // The canceled commit stands on the primary, so a commit in another transaction that waits for the standby is
         // the appender running the batch again.
-        await WaitForSyncRepCommitAsync(canceled.TransactionId, ct);
+        await WaitForSyncRepCommitAsync(excludedTransactionId: canceledTransactionId, ct);
         append.IsCompleted.ShouldBeFalse();
 
         await _server.ReconnectStandbyAsync();
