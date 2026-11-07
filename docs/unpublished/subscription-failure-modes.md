@@ -164,13 +164,14 @@ The caller's token never reaches the commit: only the appender's stop token does
 sends a cancel request when that token is cancelled, and also when a command outlasts its `CommandTimeout`, which is
 30 seconds by default.
 
-The appender acknowledges an append only once its commit is confirmed. It completes the requests of a batch only
-after the server has reported the commit, so a batch whose connection is lost while it waits completes none of them.
-It recognizes the cancelled wait's warning by the server function that raises it, `SyncRepWaitForLSN`, since the
-warning's SQLSTATE is the generic `01000` and its text is translated. Either way it runs the batch once more, and the
-commit IDs report the requests that committed as duplicates. That batch still locks the sequence row, which writes
-WAL, so its commit waits for the standbys too, and once they confirm it they have the earlier commit. If that commit
-isn't confirmed either, the appends fail.
+The appender acknowledges an append only once its commit is confirmed. It completes the requests of a batch only after
+the server has reported the commit, so a batch whose connection is lost while it waits completes none of them, and a
+batch whose wait is cancelled fails on the warning. The warning's SQLSTATE is `01000`, which every warning without a
+more specific code has, and its message is translated into the language that the server's `lc_messages` setting selects.
+So the appender recognizes the warning by the name of the server function that raises it, `SyncRepWaitForLSN`, which is
+never translated. In both cases it runs the batch once more, and the commit IDs report the requests that committed as
+duplicates. That batch still locks the sequence row, which writes WAL, so its commit waits for the standbys too, and
+once they confirm it they have the earlier commit. If that commit isn't confirmed either, the appends fail.
 
 #### Spike results
 

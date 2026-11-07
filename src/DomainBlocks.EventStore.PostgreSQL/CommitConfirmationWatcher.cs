@@ -18,10 +18,11 @@ internal sealed class CommitConfirmationWatcher : IDisposable
         _connection.Notice += OnNotice;
     }
 
-    // A commit whose wait for the synchronous standbys is canceled completes normally, with only a warning. Its code
-    // is generic and its text translated, so it is recognized by the server function that raises it, which notices
-    // report untranslated and which has kept its name since PostgreSQL 9.1. A warning that names no function counts
-    // too, so that a server that stopped naming it would leave commits unconfirmed.
+    // A commit whose wait for the synchronous standbys is canceled completes normally, with only a warning. Its
+    // SQLSTATE is 01000, which every warning without a more specific code has, and its message is translated into the
+    // language that the server's lc_messages setting selects. So the warning is recognized by the name of the server
+    // function that raises it, which is never translated and hasn't changed since PostgreSQL 9.1. A warning that names
+    // no function counts too, so that a server that stopped naming it would leave commits unconfirmed.
     public static bool IsUnconfirmedCommitWarning(PostgresNotice notice) =>
         notice.InvariantSeverity == "WARNING" &&
         (string.IsNullOrEmpty(notice.Routine) || notice.Routine == SyncRepWaitRoutine);
