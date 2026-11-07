@@ -6,6 +6,10 @@ delivers what it read only once the synchronous standbys have it. The server has
 
 - Name the standbys that a failover can promote in `synchronous_standby_names`, and use a failover manager that
   promotes only a synchronous standby, such as Patroni in synchronous mode.
+- If the manager empties `synchronous_standby_names` when no standby is available, as Patroni does without
+  `synchronous_mode_strict`, commits stop waiting for the standbys, including those already waiting, and the store
+  follows that setting. A failover could then lose acknowledged appends, so the manager must not promote a standby in
+  that state. Patroni doesn't, unless an administrator fails over by hand.
 - Set up those standbys as the primary is: `wal_level = logical`, and `pg_hba.conf` rules that let the store's role
   connect. Replication copies roles, the store's schema and its publication to the standbys, but not server settings
   or `pg_hba.conf`. After a failover to a standby with `wal_level = replica`, every live subscription fails.

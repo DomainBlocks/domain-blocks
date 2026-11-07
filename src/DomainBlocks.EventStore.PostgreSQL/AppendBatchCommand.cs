@@ -7,19 +7,12 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 /// Commits a batch of append requests with one <c>append_events</c> call and completes each from its result row.
 /// </summary>
 /// <remarks>
-/// <para>
 /// The command runs in autocommit mode and must never join a caller's transaction, because the sequence row lock must
 /// be released as soon as the batch commits.
-/// </para>
-/// <para>
-/// The requests are completed only once the batch has committed. The server sends the result rows before it commits,
-/// and flushes them whenever they fill its output buffer, so the rows of a large batch reach the client while the
-/// commit still waits for the synchronous standbys. A batch that fails to commit completes no request, so it can be
-/// retried.
-/// </para>
 /// </remarks>
 internal sealed class AppendBatchCommand : IDisposable
 {
+    private readonly NpgsqlDataSource _dataSource;
     private readonly NpgsqlCommand _command;
     private readonly NpgsqlParameter<string[]> _streamIds;
     private readonly NpgsqlParameter<AppendProtocol.ExpectedKind[]> _expectedKinds;
@@ -33,7 +26,10 @@ internal sealed class AppendBatchCommand : IDisposable
 
     public AppendBatchCommand(NpgsqlDataSource dataSource, SchemaObjectNames names)
     {
-        _command = dataSource.CreateCommand(
+        _dataSource = dataSource;
+
+        // The command runs on a connection that each batch opens, so that the batch can watch it for warnings.
+        _command = new NpgsqlCommand(
             "SELECT request_index, status, observed_version " +
             $"FROM {names.AppendEventsFunction}($1, $2, $3, $4, $5, $6, $7, $8, $9)");
 
@@ -69,8 +65,11 @@ internal sealed class AppendBatchCommand : IDisposable
 
     /// <summary>
     /// Executes the batch and, once it has committed, completes each request from its result row. A request without a
-    /// result row is completed with an error.
+    /// result row is completed with an error. A batch that fails completes no request, so that it can be run again.
     /// </summary>
+    /// <exception cref="CommitNotConfirmedException">
+    /// The batch committed without confirmation from the synchronous standbys.
+    /// </exception>
     public async Task ExecuteAsync(IReadOnlyList<AppendRequest> batch, CancellationToken cancellationToken)
     {
         Fill(batch);
@@ -78,18 +77,33 @@ internal sealed class AppendBatchCommand : IDisposable
         var errors = new Exception?[batch.Count];
         var hasRow = new bool[batch.Count];
 
-        await using (var reader = await _command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+        await using (var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false))
         {
-            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            using var confirmation = new CommitConfirmationWatcher(connection);
+            _command.Connection = connection;
+
+            try
             {
-                var index = reader.GetInt32(0);
-                errors[index] = ReadError(reader, batch[index]);
-                hasRow[index] = true;
+                await using var reader = await _command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+
+                while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    var index = reader.GetInt32(0);
+                    errors[index] = ReadError(reader, batch[index]);
+                    hasRow[index] = true;
+                }
+
+                // The rows can reach the client while the commit still waits for the synchronous standbys, so the
+                // requests are completed only after closing the reader, which waits for the commit and throws if the
+                // batch did not commit.
+                await reader.CloseAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                _command.Connection = null;
             }
 
-            // The server reports the commit after the rows, so closing the reader waits for it, and throws if the batch
-            // did not commit.
-            await reader.CloseAsync().ConfigureAwait(false);
+            confirmation.ThrowIfNotConfirmed("The append batch");
         }
 
         // The function returns exactly one row per request, so a request without a row means the protocol was broken.
@@ -103,7 +117,6 @@ internal sealed class AppendBatchCommand : IDisposable
 
     public void Dispose() => _command.Dispose();
 
-    // Returns the error to complete the request with, or null if the request was appended or was a duplicate.
     private static Exception? ReadError(NpgsqlDataReader reader, AppendRequest request)
     {
         var status = reader.GetFieldValue<AppendProtocol.Status>(1);

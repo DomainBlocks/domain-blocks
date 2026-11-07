@@ -172,9 +172,8 @@ internal sealed class EventLogReader<TEvent>(
     // Runs the query and then the replication barrier in one round trip, so a failover can't undo what the query saw.
     // The batch is one transaction, and its commit waits for the synchronous standbys, so it covers every commit that
     // the query saw. Rows can reach the client before the commit, so the query's result is used only once the batch
-    // completes. A canceled wait completes with only a warning, so any warning means the barrier was not confirmed.
-    // On a server in recovery the barrier can't write WAL, and its error says only that something failed internally,
-    // so the batch first reads whether the server is in recovery.
+    // completes, and only if its commit was confirmed. On a server in recovery the barrier can't write WAL, and its
+    // error says only that something failed internally, so the batch first reads whether the server is in recovery.
     private async Task<T> ReadWithBarrierAsync<T>(
         NpgsqlBatchCommand query,
         NpgsqlBatchCommand barrier,
@@ -182,63 +181,49 @@ internal sealed class EventLogReader<TEvent>(
         CancellationToken cancellationToken)
     {
         var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        PostgresNotice? warning = null;
         T result;
 
         await using (connection.ConfigureAwait(false))
         {
-            connection.Notice += OnNotice;
+            using var confirmation = new CommitConfirmationWatcher(connection);
 
-            try
+            await using var batch = new NpgsqlBatch(connection);
+            batch.BatchCommands.Add(query);
+            batch.BatchCommands.Add(new NpgsqlBatchCommand(IsInRecoverySql));
+            batch.BatchCommands.Add(barrier);
+
+            var reader = await batch.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+
+            await using (reader.ConfigureAwait(false))
             {
-                await using var batch = new NpgsqlBatch(connection);
-                batch.BatchCommands.Add(query);
-                batch.BatchCommands.Add(new NpgsqlBatchCommand(IsInRecoverySql));
-                batch.BatchCommands.Add(barrier);
+                result = await resultReader(reader, cancellationToken).ConfigureAwait(false);
 
-                var reader = await batch.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                await reader.NextResultAsync(cancellationToken).ConfigureAwait(false);
+                await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+                var isInRecovery = reader.GetBoolean(0);
 
-                await using (reader.ConfigureAwait(false))
+                // A failed barrier closes the connection, which then has no host.
+                var host = connection.Host;
+
+                try
                 {
-                    result = await resultReader(reader, cancellationToken).ConfigureAwait(false);
-
-                    await reader.NextResultAsync(cancellationToken).ConfigureAwait(false);
-                    await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
-                    var isInRecovery = reader.GetBoolean(0);
-
-                    // A failed barrier closes the connection, which then has no host.
-                    var host = connection.Host;
-
-                    try
-                    {
-                        // The batch completes once its commit has, so closing the reader waits for the standbys.
-                        await reader.CloseAsync().ConfigureAwait(false);
-                    }
-                    catch (PostgresException ex) when (isInRecovery)
-                    {
-                        throw new ServerInRecoveryException(host, ex);
-                    }
+                    // The batch completes once its commit has, so closing the reader waits for the standbys.
+                    await reader.CloseAsync().ConfigureAwait(false);
+                }
+                catch (PostgresException ex) when (isInRecovery)
+                {
+                    throw new ServerInRecoveryException(host, ex);
                 }
             }
-            finally
-            {
-                connection.Notice -= OnNotice;
-            }
+
+            // Canceling the token can cancel the barrier's wait, so a canceled caller is told it was canceled rather
+            // than that the barrier was not confirmed.
+            cancellationToken.ThrowIfCancellationRequested();
+
+            confirmation.ThrowIfNotConfirmed("The replication barrier");
         }
-
-        // A canceled wait completes as if it had been confirmed, so a canceled caller must not use the result.
-        cancellationToken.ThrowIfCancellationRequested();
-
-        if (warning is not null)
-            throw new ReplicationBarrierException($"The replication barrier was not confirmed: {warning.MessageText}");
 
         return result;
-
-        void OnNotice(object? sender, NpgsqlNoticeEventArgs e)
-        {
-            if (e.Notice.InvariantSeverity == "WARNING")
-                warning ??= e.Notice;
-        }
     }
 
     private async IAsyncEnumerable<ReadEvent<TEvent, string, StreamPosition, LogPosition>> ReadPagesAsync(

@@ -144,6 +144,17 @@ public class PostgresEventStoreAppendTests : PostgresIntegrationTest
             await Task.Delay(50, ct);
     }
 
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task AppendAsync_TriggerRaisesWarning_Appends(CancellationToken ct)
+    {
+        await using var trigger = await WarningTrigger.CreateAsync(DataSource, Schema, ct);
+
+        await _eventStore.AppendAsync("s1", [Appendable("a")], cancellationToken: ct);
+
+        (await Client.ReadRowsAsync(cancellationToken: ct)).Count.ShouldBe(1);
+    }
+
     private IEventStore<object, string, StreamPosition, LogPosition> CreateBytesEventStore()
     {
         var eventCodec = EventCodec.Create(new EventCodecOptions<object, PostgresEventData, string>
@@ -154,5 +165,32 @@ public class PostgresEventStoreAppendTests : PostgresIntegrationTest
         });
 
         return Harness.CreateEventStore(eventCodec);
+    }
+
+    private sealed class WarningTrigger(NpgsqlDataSource dataSource, string schema) : IAsyncDisposable
+    {
+        public static async Task<WarningTrigger> CreateAsync(
+            NpgsqlDataSource dataSource,
+            string schema,
+            CancellationToken ct)
+        {
+            await using var command = dataSource.CreateCommand(
+                $"""
+                CREATE FUNCTION {schema}.raise_warning() RETURNS trigger LANGUAGE plpgsql AS
+                $$ BEGIN RAISE WARNING 'An unrelated warning.'; RETURN NULL; END $$;
+                CREATE TRIGGER raise_warning AFTER INSERT ON {new SchemaObjectNames(schema).EventLog}
+                    FOR EACH STATEMENT EXECUTE FUNCTION {schema}.raise_warning();
+                """);
+
+            await command.ExecuteNonQueryAsync(ct);
+
+            return new WarningTrigger(dataSource, schema);
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            await using var command = dataSource.CreateCommand($"DROP FUNCTION {schema}.raise_warning() CASCADE");
+            await command.ExecuteNonQueryAsync();
+        }
     }
 }

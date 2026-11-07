@@ -4,6 +4,7 @@ using DomainBlocks.Testing.Events;
 using DomainBlocks.Testing.Integration.EventStore;
 using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
 using Npgsql;
+using NpgsqlTypes;
 using NUnit.Framework;
 using Shouldly;
 using static DomainBlocks.EventStore.PostgreSQL.Tests.Integration.AppendFunctionClient;
@@ -126,6 +127,58 @@ public class PostgresSynchronousStandbyTests
 
         await _server.ReconnectStandbyAsync();
         await Task.WhenAll(appends);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task AppendAsync_CommitWaitCanceled_CompletesAppendOnceOnStandby(CancellationToken ct)
+    {
+        await using var dataSource = CreateDataSource();
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
+        await using var eventStore = CreateEventStore(dataSource);
+
+        await _server.CutOffStandbyAsync();
+
+        var append = eventStore.AppendAsync(
+            "s1",
+            [AppendableEvent.Create<object>(new TestEvent { Value = "e" })],
+            cancellationToken: ct);
+
+        var (canceledProcessId, canceledTransactionId) =
+            await WaitForSyncRepCommitAsync(excludedTransactionId: null, ct);
+
+        await CancelBackendAsync(dataSource, canceledProcessId, ct);
+
+        // The canceled commit stands on the primary, so a commit in another transaction that waits for the standby is
+        // the appender running the batch again.
+        await WaitForSyncRepCommitAsync(excludedTransactionId: canceledTransactionId, ct);
+        append.IsCompleted.ShouldBeFalse();
+
+        await _server.ReconnectStandbyAsync();
+        await append;
+
+        (await CountEventsAsync(dataSource, ct)).ShouldBe(1);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task AppendAsync_CommandTimesOutWhileCommitWaits_ThrowsCommitNotConfirmed(CancellationToken ct)
+    {
+        await using var dataSource = CreateDataSource();
+        await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
+
+        // When the command times out, Npgsql sends a cancel request, which cancels the commit's wait.
+        await using var timingOutDataSource = CreateDataSource(x => x.CommandTimeout = 1);
+        await using var eventStore = CreateEventStore(timingOutDataSource);
+
+        await _server.CutOffStandbyAsync();
+
+        await Should.ThrowAsync<CommitNotConfirmedException>(() => eventStore.AppendAsync(
+            "s1",
+            [AppendableEvent.Create<object>(new TestEvent { Value = "e" })],
+            cancellationToken: ct));
+
+        (await CountEventsAsync(dataSource, ct)).ShouldBe(1);
     }
 
     [Test]
@@ -598,6 +651,36 @@ public class PostgresSynchronousStandbyTests
         {
             if (await command.ExecuteScalarAsync(ct) is int pid)
                 return pid;
+
+            await Task.Delay(20, ct);
+        }
+    }
+
+    // Returns the process and transaction IDs of a backend whose commit waits for the standby, once there is one whose
+    // transaction isn't the excluded one.
+    private async Task<(int ProcessId, string TransactionId)> WaitForSyncRepCommitAsync(
+        string? excludedTransactionId,
+        CancellationToken ct)
+    {
+        await using var dataSource = CreateDataSource();
+
+        await using var command = dataSource.CreateCommand(
+            "SELECT pid, backend_xid::text FROM pg_stat_activity " +
+            "WHERE wait_event = 'SyncRep' AND backend_xid::text IS DISTINCT FROM $1 LIMIT 1");
+
+        command.Parameters.Add(new NpgsqlParameter
+        {
+            NpgsqlDbType = NpgsqlDbType.Text,
+            Value = (object?)excludedTransactionId ?? DBNull.Value
+        });
+
+        while (true)
+        {
+            await using (var reader = await command.ExecuteReaderAsync(ct))
+            {
+                if (await reader.ReadAsync(ct))
+                    return (reader.GetInt32(0), reader.GetString(1));
+            }
 
             await Task.Delay(20, ct);
         }

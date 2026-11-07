@@ -8,7 +8,7 @@ public class PostgresTransientErrorsTests
 {
     private static readonly Exception[] TransientErrors =
     [
-        new ReplicationBarrierException("The replication barrier was not confirmed."),
+        new CommitNotConfirmedException("The commit was not confirmed."),
         new ServerInRecoveryException("standby"),
         new NpgsqlException("Exception while reading from stream", new EndOfStreamException()),
         new NpgsqlException("Exception while reading from stream", new TimeoutException()),
