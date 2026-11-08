@@ -20,6 +20,7 @@ internal sealed class BatchingAppender : IAppender
     private readonly Channel<AppendRequest> _channel;
     private readonly CancellationTokenSource _stopCts = new();
     private readonly Task _runAppendLoopTask;
+    private readonly HashSet<Guid> _batchCommitIds = [];
     private int _disposed;
 
     public BatchingAppender(
@@ -93,8 +94,7 @@ internal sealed class BatchingAppender : IAppender
         {
             while (await _channel.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
             {
-                while (batch.Count < _maxBatchSize && _channel.Reader.TryRead(out var request))
-                    batch.Add(request);
+                TakeQueued(batch);
 
                 // Waiting briefly for more requests trades latency for larger batches.
                 if (_batchingDelay > TimeSpan.Zero &&
@@ -109,8 +109,7 @@ internal sealed class BatchingAppender : IAppender
                         while (batch.Count < _maxBatchSize &&
                                await _channel.Reader.WaitToReadAsync(delayCts.Token).ConfigureAwait(false))
                         {
-                            while (batch.Count < _maxBatchSize && _channel.Reader.TryRead(out var request))
-                                batch.Add(request);
+                            TakeQueued(batch);
                         }
                     }
                     catch (OperationCanceledException) when (!ct.IsCancellationRequested)
@@ -145,6 +144,7 @@ internal sealed class BatchingAppender : IAppender
                 }
 
                 batch.Clear();
+                _batchCommitIds.Clear();
             }
         }
         catch (OperationCanceledException ex) when (ct.IsCancellationRequested)
@@ -160,6 +160,19 @@ internal sealed class BatchingAppender : IAppender
             _channel.Writer.TryComplete(ex);
             FaultAll(batch, ex);
             DrainWithFault(_channel.Reader, ex);
+        }
+    }
+
+    // A repeated commit ID is rejected rather than sent, because the batch would report it as a committed duplicate
+    // even when the first append with that ID is rejected.
+    private void TakeQueued(List<AppendRequest> batch)
+    {
+        while (batch.Count < _maxBatchSize && _channel.Reader.TryRead(out var request))
+        {
+            if (_batchCommitIds.Add(request.CommitId))
+                batch.Add(request);
+            else
+                request.TryComplete(AppendError.CommitIdInProgress(request.CommitId));
         }
     }
 

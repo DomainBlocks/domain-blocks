@@ -319,6 +319,57 @@ public abstract class EventStoreTests<TStreamPos, TLogPos>(IEventStoreTestHarnes
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task AppendAsync_SameCommitIdConcurrently_ThrowsForRepeat(CancellationToken cancellationToken)
+    {
+        RequireCapability(StoreCapabilities.IdempotentAppends);
+
+        var streamId = NewStreamId();
+        var commitId = Guid.NewGuid();
+        TestEvent[] events = [new() { Value = "TestEvent1" }];
+        var backlog = AppendBacklog(cancellationToken);
+
+        var first = EventStore.AppendAsync(streamId, events, commitId: commitId, cancellationToken: cancellationToken);
+        var repeat = EventStore.AppendAsync(streamId, events, commitId: commitId, cancellationToken: cancellationToken);
+
+        await first;
+        await repeat.ShouldThrowAsync<InvalidOperationException>();
+        await Task.WhenAll(backlog);
+
+        (await ReadStreamFromLogAsync(streamId, cancellationToken)).ShouldBe(events);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task AppendAsync_SameCommitIdConcurrentlyAndFirstConflicts_ThrowsForRepeat(
+        CancellationToken cancellationToken)
+    {
+        RequireCapability(StoreCapabilities.IdempotentAppends);
+
+        var streamId = NewStreamId();
+        var commitId = Guid.NewGuid();
+        var existing = new TestEvent { Value = "TestEvent1" };
+        await EventStore.AppendAsync(streamId, [existing], cancellationToken: cancellationToken);
+        var backlog = AppendBacklog(cancellationToken);
+
+        var first = AppendExpectingNoStream();
+        var repeat = AppendExpectingNoStream();
+
+        await first.ShouldThrowAsync<StreamAppendConflictException<TStreamPos>>();
+        await repeat.ShouldThrowAsync<InvalidOperationException>();
+        await Task.WhenAll(backlog);
+
+        (await ReadStreamFromLogAsync(streamId, cancellationToken)).ShouldBe([existing]);
+
+        Task AppendExpectingNoStream() => EventStore.AppendAsync(
+            streamId,
+            [new TestEvent { Value = "TestEvent2" }],
+            ExpectedStreamState.DoesNotExist<TStreamPos>(),
+            commitId,
+            cancellationToken: cancellationToken);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task AppendAsync_EmptyEvents_WritesNothing(CancellationToken cancellationToken)
     {
         var streamId = NewStreamId();
@@ -481,6 +532,30 @@ public abstract class EventStoreTests<TStreamPos, TLogPos>(IEventStoreTestHarnes
         await EventStore.AppendAsync(streamId, events, cancellationToken: cancellationToken);
 
         return (streamId, events);
+    }
+
+    // Appends to other streams keep the store busy, so that the appends made right after them are queued together.
+    private Task[] AppendBacklog(CancellationToken cancellationToken)
+    {
+        return
+        [
+            .. Enumerable
+                .Range(0, 300)
+                .Select(_ => EventStore.AppendAsync(
+                    NewStreamId(),
+                    [new TestEvent { Value = "Backlog" }],
+                    cancellationToken: cancellationToken))
+        ];
+    }
+
+    // A stream read might not return an event written without a stream position, but a log read does.
+    private async Task<object[]> ReadStreamFromLogAsync(string streamId, CancellationToken cancellationToken)
+    {
+        return await EventStore
+            .ReadAll()
+            .Where(x => x.Context.StreamId == streamId)
+            .Select(x => x.Payload)
+            .ToArrayAsync(cancellationToken);
     }
 
     private IEnumerable<TStreamPos> StreamPositions(int from, int count) =>
