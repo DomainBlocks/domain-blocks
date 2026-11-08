@@ -1,4 +1,5 @@
-﻿using NUnit.Framework;
+﻿using MongoDB.Driver;
+using NUnit.Framework;
 using Shouldly;
 
 namespace DomainBlocks.MongoDB.Sequencing.Tests.Integration;
@@ -52,8 +53,71 @@ public class MongoSequencedAppenderTests : MongoIntegrationTestBase
         (await ReadSequenceAsync(ct)).ShouldBe([0]);
     }
 
+    [Test]
+    [CancelAfter(TimeoutMillis)]
+    public async Task AppendAsync_ConflictRetried_PreparesOnlyPendingRequests(CancellationToken ct)
+    {
+        var targets = MongoClient.GetDatabase(DatabaseName).GetCollection<TargetDoc>(TargetNs.CollectionName);
+        var batchHeld = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseBatch = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var rejection = new InvalidOperationException();
+        var preparedBatches = new List<string>();
+
+        // A unique value stands in for a key the policy owns, like a stream position in the event store.
+        var uniqueValue = new CreateIndexModel<TargetDoc>(
+            Builders<TargetDoc>.IndexKeys.Ascending(x => x.Value),
+            new CreateIndexOptions { Unique = true });
+
+        await targets.Indexes.CreateOneAsync(uniqueValue, cancellationToken: ct);
+
+        var policy = new CallbackAppenderPolicy<string>(
+            onBatchCommitting: async (batch, _) =>
+            {
+                preparedBatches.Add(string.Join(", ", batch.Select(x => x.Context)));
+
+                switch (preparedBatches.Count)
+                {
+                    // Holding the first batch keeps the appender busy, so the next two appends form one batch.
+                    case 1:
+                        batchHeld.SetResult();
+                        await releaseBatch.Task;
+                        break;
+
+                    // The policy rejects one request in the pair. The other's value is already taken, so its insert
+                    // conflicts and the batch is retried.
+                    case 2:
+                        batch.Single(x => x.Context == "rejected").TryComplete(rejection);
+                        break;
+
+                    // On the retry, the policy gives the pending document a value of its own, so the batch commits.
+                    case 3:
+                        batch.Single(x => x.Context == "pending").Documents[0][nameof(TargetDoc.Value)] = "pending";
+                        break;
+                }
+            },
+            onConflict: _ => ConflictResolution.Retry);
+
+        await using var appender = CreateAppender(policy: policy);
+
+        var held = appender.AppendAsync([new TargetDoc { Value = "held" }], "held", cancellationToken: ct);
+        await batchHeld.Task.WaitAsync(ct);
+        var rejected = appender.AppendAsync([new TargetDoc { Value = "rejected" }], "rejected", cancellationToken: ct);
+
+        // The pending document reuses the held document's value, as a stale read would reuse a stream position.
+        var pending = appender.AppendAsync([new TargetDoc { Value = "held" }], "pending", cancellationToken: ct);
+        releaseBatch.SetResult();
+
+        await held;
+        (await rejected.ShouldThrowAsync<InvalidOperationException>()).ShouldBeSameAs(rejection);
+        await pending;
+
+        // The retry left out the request that the policy had already rejected.
+        preparedBatches.ShouldBe(["held", "rejected, pending", "pending"]);
+    }
+
     private class CallbackAppenderPolicy<TContext>(
-        Func<IReadOnlyList<AppendRequest<TContext>>, CancellationToken, Task>? onBatchCommitting = null) :
+        Func<IReadOnlyList<AppendRequest<TContext>>, CancellationToken, Task>? onBatchCommitting = null,
+        Func<AppendConflict<TContext>, ConflictResolution>? onConflict = null) :
         IMongoSequencedAppenderPolicy<TContext>
     {
         public Task OnBatchCommittingAsync(IReadOnlyList<AppendRequest<TContext>> batch, CancellationToken ct)
@@ -63,7 +127,7 @@ public class MongoSequencedAppenderTests : MongoIntegrationTestBase
 
         public ConflictResolution OnConflict(AppendConflict<TContext> conflict)
         {
-            return ConflictResolution.Fail();
+            return onConflict?.Invoke(conflict) ?? ConflictResolution.Fail();
         }
     }
 }

@@ -1,3 +1,4 @@
+using DomainBlocks.EventStore.Internal;
 using DomainBlocks.MongoDB.Sequencing;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -36,7 +37,10 @@ internal sealed class AppenderPolicy(IMongoCollection<BsonDocument> eventLog) :
             var commitId = request.Context.CommitId;
 
             if (!_buffers.SeenCommitIds.Add(commitId))
+            {
+                request.TryComplete(AppendError.CommitIdInProgress(commitId));
                 continue;
+            }
 
             if (_buffers.ExistingCommitIds.Contains(commitId))
             {

@@ -172,4 +172,85 @@ public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
 
         (await Client.ReadRowsAsync(cancellationToken: ct)).Count.ShouldBe(1);
     }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task AppendAsync_SameCommitIdInBatch_ThrowsForRepeat(CancellationToken ct)
+    {
+        await using var eventStore = CreateEventStore("_repeat");
+        var commitId = Guid.NewGuid();
+
+        var (first, repeat) = await AppendTwiceInOneBatchAsync(
+            eventStore,
+            "s1",
+            ExpectedStreamState.Any<StreamPosition>(),
+            commitId,
+            ct);
+
+        await first;
+        (await repeat.ShouldThrowAsync<InvalidOperationException>()).Message.ShouldContain(commitId.ToString());
+        (await Client.ReadRowsAsync(cancellationToken: ct)).Count(x => x.StreamId == "s1").ShouldBe(1);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task AppendAsync_SameCommitIdInBatchAndFirstConflicts_ThrowsForRepeat(CancellationToken ct)
+    {
+        await using var eventStore = CreateEventStore("_repeat-conflict");
+        await eventStore.AppendAsync("s1", [Appendable("existing")], cancellationToken: ct);
+        var commitId = Guid.NewGuid();
+
+        var (first, repeat) = await AppendTwiceInOneBatchAsync(
+            eventStore,
+            "s1",
+            ExpectedStreamState.DoesNotExist<StreamPosition>(),
+            commitId,
+            ct);
+
+        await first.ShouldThrowAsync<StreamAppendConflictException<StreamPosition>>();
+        (await repeat.ShouldThrowAsync<InvalidOperationException>()).Message.ShouldContain(commitId.ToString());
+        (await Client.ReadRowsAsync(cancellationToken: ct)).Count(x => x.StreamId == "s1").ShouldBe(1);
+    }
+
+    // Makes the same append twice in one batch: both queue up while a test transaction holds the sequence row, so the
+    // batch before them waits inside the database.
+    private async Task<(Task First, Task Repeat)> AppendTwiceInOneBatchAsync(
+        IEventStore<object, string, StreamPosition, LogPosition> eventStore,
+        string streamId,
+        ExpectedStreamState<StreamPosition> expectedState,
+        Guid commitId,
+        CancellationToken ct)
+    {
+        await using var connection = await DataSource.OpenConnectionAsync(ct);
+        await using var transaction = await connection.BeginTransactionAsync(ct);
+
+        await using (var lockCommand = new NpgsqlCommand($"SELECT next FROM {Schema}.sequences FOR UPDATE", connection))
+        {
+            await lockCommand.ExecuteNonQueryAsync(ct);
+        }
+
+        var held = eventStore.AppendAsync("held", [Appendable("held")], cancellationToken: ct);
+        await WaitUntilBlockingAsync(connection.ProcessID, ct);
+
+        AppendableEvent<object>[] events = [Appendable("e")];
+        var first = eventStore.AppendAsync(streamId, events, expectedState, commitId, cancellationToken: ct);
+        var repeat = eventStore.AppendAsync(streamId, events, expectedState, commitId, cancellationToken: ct);
+
+        await transaction.RollbackAsync(ct);
+        await held;
+
+        return (first, repeat);
+    }
+
+    // Polls outside the holder's transaction, which would keep seeing the activity snapshot it took first.
+    private async Task WaitUntilBlockingAsync(int holderProcessId, CancellationToken ct)
+    {
+        await using var command = DataSource.CreateCommand(
+            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY (pg_blocking_pids(pid)))");
+
+        command.Parameters.Add(new NpgsqlParameter<int> { TypedValue = holderProcessId });
+
+        while (!(bool)(await command.ExecuteScalarAsync(ct))!)
+            await Task.Delay(20, ct);
+    }
 }

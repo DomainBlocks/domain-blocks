@@ -34,7 +34,8 @@ public interface IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> : IAsyncDis
     /// </param>
     /// <param name="commitId">
     /// An ID that makes the append idempotent, or <see langword="null"/> to generate one. An append whose ID is already
-    /// committed succeeds without writing anything.
+    /// committed succeeds without writing anything. An append made while another with the same commit ID is still in
+    /// progress may throw an <see cref="InvalidOperationException"/>.
     /// </param>
     /// <param name="options">The append options, or <see langword="null"/> for the defaults.</param>
     /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
