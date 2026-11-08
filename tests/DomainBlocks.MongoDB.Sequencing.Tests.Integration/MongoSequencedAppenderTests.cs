@@ -61,6 +61,7 @@ public class MongoSequencedAppenderTests : MongoIntegrationTestBase
         var firstBatchHeld = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseFirstBatch = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var batches = new List<string>();
+        var rejection = new InvalidOperationException();
 
         var policy = new CallbackAppenderPolicy<string>(
             onBatchCommitting: async (batch, token) =>
@@ -74,7 +75,7 @@ public class MongoSequencedAppenderTests : MongoIntegrationTestBase
                         await releaseFirstBatch.Task;
                         break;
                     case 2:
-                        batch.Single(x => x.Context == "rejected").TryComplete(new InvalidOperationException());
+                        batch.Single(x => x.Context == "rejected").TryComplete(rejection);
                         break;
                     default:
                         // Removing the other writer's document lets the retry commit.
@@ -98,7 +99,7 @@ public class MongoSequencedAppenderTests : MongoIntegrationTestBase
         releaseFirstBatch.SetResult();
 
         await first;
-        await rejected.ShouldThrowAsync<InvalidOperationException>();
+        (await rejected.ShouldThrowAsync<InvalidOperationException>()).ShouldBeSameAs(rejection);
         await pending;
 
         batches.ShouldBe(["first", "rejected pending", "pending"]);

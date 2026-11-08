@@ -188,7 +188,7 @@ public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
             ct);
 
         await first;
-        await repeat.ShouldThrowAsync<InvalidOperationException>();
+        (await repeat.ShouldThrowAsync<InvalidOperationException>()).Message.ShouldContain(commitId.ToString());
         (await Client.ReadRowsAsync(cancellationToken: ct)).Count(x => x.StreamId == "s1").ShouldBe(1);
     }
 
@@ -208,7 +208,7 @@ public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
             ct);
 
         await first.ShouldThrowAsync<StreamAppendConflictException<StreamPosition>>();
-        await repeat.ShouldThrowAsync<InvalidOperationException>();
+        (await repeat.ShouldThrowAsync<InvalidOperationException>()).Message.ShouldContain(commitId.ToString());
         (await Client.ReadRowsAsync(cancellationToken: ct)).Count(x => x.StreamId == "s1").ShouldBe(1);
     }
 

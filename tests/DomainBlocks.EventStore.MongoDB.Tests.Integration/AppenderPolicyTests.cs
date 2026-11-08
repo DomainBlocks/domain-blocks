@@ -20,7 +20,7 @@ public class AppenderPolicyTests
             ct);
 
         await first;
-        await repeat.ShouldThrowAsync<InvalidOperationException>();
+        (await repeat.ShouldThrowAsync<InvalidOperationException>()).Message.ShouldContain(commitId.ToString());
         (await scenario.CountEventsAsync("stream-1", ct)).ShouldBe(1);
     }
 
@@ -39,7 +39,7 @@ public class AppenderPolicyTests
             ct);
 
         await first.ShouldThrowAsync<StreamAppendConflictException<StreamPosition>>();
-        await repeat.ShouldThrowAsync<InvalidOperationException>();
+        (await repeat.ShouldThrowAsync<InvalidOperationException>()).Message.ShouldContain(commitId.ToString());
         (await scenario.CountEventsAsync("stream-1", ct)).ShouldBe(1);
     }
 }
