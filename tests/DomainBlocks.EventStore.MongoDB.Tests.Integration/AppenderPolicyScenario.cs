@@ -63,21 +63,25 @@ internal sealed class AppenderPolicyScenario : IAsyncDisposable
     }
 
     /// <summary>
-    /// Makes two appends that form one batch: they queue up while the policy holds the batch before them.
+    /// Makes the same append twice in one batch: both queue up while the policy holds the batch before them.
     /// </summary>
-    public async Task<(Task First, Task Second)> AppendTogetherAsync(Func<Task> append, CancellationToken ct)
+    public async Task<(Task First, Task Repeat)> AppendTwiceInOneBatchAsync(
+        string streamId,
+        ExpectedStreamState<StreamPosition> expectedState,
+        Guid commitId,
+        CancellationToken ct)
     {
         _policy.HoldNextBatch();
         var held = AppendAsync("held", ExpectedStreamState.Any<StreamPosition>(), Guid.NewGuid(), ct);
         await _policy.BatchHeld.WaitAsync(ct);
 
-        var first = append();
-        var second = append();
+        var first = AppendAsync(streamId, expectedState, commitId, ct);
+        var repeat = AppendAsync(streamId, expectedState, commitId, ct);
 
         _policy.ReleaseBatch();
         await held;
 
-        return (first, second);
+        return (first, repeat);
     }
 
     public Task<long> CountEventsAsync(string streamId, CancellationToken ct)

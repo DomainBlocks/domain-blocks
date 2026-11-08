@@ -13,8 +13,10 @@ public class AppenderPolicyTests
         await using var scenario = await AppenderPolicyScenario.StartAsync(ct);
         var commitId = Guid.NewGuid();
 
-        var (first, repeat) = await scenario.AppendTogetherAsync(
-            () => scenario.AppendAsync("stream-1", ExpectedStreamState.Any<StreamPosition>(), commitId, ct),
+        var (first, repeat) = await scenario.AppendTwiceInOneBatchAsync(
+            "stream-1",
+            ExpectedStreamState.Any<StreamPosition>(),
+            commitId,
             ct);
 
         await first;
@@ -30,8 +32,10 @@ public class AppenderPolicyTests
         await scenario.AppendAsync("stream-1", ExpectedStreamState.Any<StreamPosition>(), Guid.NewGuid(), ct);
         var commitId = Guid.NewGuid();
 
-        var (first, repeat) = await scenario.AppendTogetherAsync(
-            () => scenario.AppendAsync("stream-1", ExpectedStreamState.DoesNotExist<StreamPosition>(), commitId, ct),
+        var (first, repeat) = await scenario.AppendTwiceInOneBatchAsync(
+            "stream-1",
+            ExpectedStreamState.DoesNotExist<StreamPosition>(),
+            commitId,
             ct);
 
         await first.ShouldThrowAsync<StreamAppendConflictException<StreamPosition>>();

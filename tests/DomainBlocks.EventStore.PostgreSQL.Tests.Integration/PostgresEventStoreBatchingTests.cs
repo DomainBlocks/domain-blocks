@@ -180,9 +180,11 @@ public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
         await using var eventStore = CreateEventStore("_repeat");
         var commitId = Guid.NewGuid();
 
-        var (first, repeat) = await AppendTogetherAsync(
+        var (first, repeat) = await AppendTwiceInOneBatchAsync(
             eventStore,
-            () => eventStore.AppendAsync("s1", [Appendable("e")], commitId: commitId, cancellationToken: ct),
+            "s1",
+            ExpectedStreamState.Any<StreamPosition>(),
+            commitId,
             ct);
 
         await first;
@@ -198,14 +200,11 @@ public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
         await eventStore.AppendAsync("s1", [Appendable("existing")], cancellationToken: ct);
         var commitId = Guid.NewGuid();
 
-        var (first, repeat) = await AppendTogetherAsync(
+        var (first, repeat) = await AppendTwiceInOneBatchAsync(
             eventStore,
-            () => eventStore.AppendAsync(
-                "s1",
-                [Appendable("e")],
-                ExpectedStreamState.DoesNotExist<StreamPosition>(),
-                commitId,
-                cancellationToken: ct),
+            "s1",
+            ExpectedStreamState.DoesNotExist<StreamPosition>(),
+            commitId,
             ct);
 
         await first.ShouldThrowAsync<StreamAppendConflictException<StreamPosition>>();
@@ -213,11 +212,13 @@ public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
         (await Client.ReadRowsAsync(cancellationToken: ct)).Count(x => x.StreamId == "s1").ShouldBe(1);
     }
 
-    // Makes two appends that form one batch: they queue up while a test transaction holds the sequence row, so the
+    // Makes the same append twice in one batch: both queue up while a test transaction holds the sequence row, so the
     // batch before them waits inside the database.
-    private async Task<(Task First, Task Second)> AppendTogetherAsync(
+    private async Task<(Task First, Task Repeat)> AppendTwiceInOneBatchAsync(
         IEventStore<object, string, StreamPosition, LogPosition> eventStore,
-        Func<Task> append,
+        string streamId,
+        ExpectedStreamState<StreamPosition> expectedState,
+        Guid commitId,
         CancellationToken ct)
     {
         await using var connection = await DataSource.OpenConnectionAsync(ct);
@@ -231,13 +232,14 @@ public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
         var held = eventStore.AppendAsync("held", [Appendable("held")], cancellationToken: ct);
         await WaitUntilBlockingAsync(connection.ProcessID, ct);
 
-        var first = append();
-        var second = append();
+        AppendableEvent<object>[] events = [Appendable("e")];
+        var first = eventStore.AppendAsync(streamId, events, expectedState, commitId, cancellationToken: ct);
+        var repeat = eventStore.AppendAsync(streamId, events, expectedState, commitId, cancellationToken: ct);
 
         await transaction.RollbackAsync(ct);
         await held;
 
-        return (first, second);
+        return (first, repeat);
     }
 
     // Polls outside the holder's transaction, which would keep seeing the activity snapshot it took first.
