@@ -58,27 +58,34 @@ public class MongoSequencedAppenderTests : MongoIntegrationTestBase
     public async Task AppendAsync_ConflictRetried_PreparesOnlyPendingRequests(CancellationToken ct)
     {
         var targets = MongoClient.GetDatabase(DatabaseName).GetCollection<TargetDoc>(TargetNs.CollectionName);
-        var firstBatchHeld = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var releaseFirstBatch = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var batches = new List<string>();
+        var batchHeld = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseBatch = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var rejection = new InvalidOperationException();
+        var preparedBatches = new List<string>();
 
         var policy = new CallbackAppenderPolicy<string>(
             onBatchCommitting: async (batch, token) =>
             {
-                batches.Add(string.Join(' ', batch.Select(x => x.Context)));
+                preparedBatches.Add(string.Join(' ', batch.Select(x => x.Context)));
 
-                switch (batches.Count)
+                switch (preparedBatches.Count)
                 {
+                    // Holding the first batch keeps the appender busy, so the next two appends form one batch.
                     case 1:
-                        firstBatchHeld.SetResult();
-                        await releaseFirstBatch.Task;
+                        batchHeld.SetResult();
+                        await releaseBatch.Task;
                         break;
+
+                    // The policy rejects one request in the pair. Another writer then takes the next sequence number,
+                    // so the pending request's insert conflicts and the batch is retried.
                     case 2:
                         batch.Single(x => x.Context == "rejected").TryComplete(rejection);
+                        var other = new TargetDoc { Value = "other", Nested = new NestedDoc { Sequence = 1 } };
+                        await targets.InsertOneAsync(other, cancellationToken: token);
                         break;
-                    default:
-                        // Removing the other writer's document lets the retry commit.
+
+                    // The retry claims the same sequence number, so it commits only once the other document is gone.
+                    case 3:
                         await targets.DeleteOneAsync(x => x.Value == "other", token);
                         break;
                 }
@@ -87,22 +94,18 @@ public class MongoSequencedAppenderTests : MongoIntegrationTestBase
 
         await using var appender = CreateAppender(policy: policy);
 
-        // While the policy holds the first batch, the next two appends queue up and form the second batch together.
-        var first = appender.AppendAsync([new TargetDoc { Value = "first" }], "first", cancellationToken: ct);
-        await firstBatchHeld.Task.WaitAsync(ct);
+        var held = appender.AppendAsync([new TargetDoc { Value = "held" }], "held", cancellationToken: ct);
+        await batchHeld.Task.WaitAsync(ct);
         var rejected = appender.AppendAsync([new TargetDoc { Value = "rejected" }], "rejected", cancellationToken: ct);
         var pending = appender.AppendAsync([new TargetDoc { Value = "pending" }], "pending", cancellationToken: ct);
+        releaseBatch.SetResult();
 
-        // Another writer takes the second batch's sequence number, so that batch conflicts and is retried.
-        var other = new TargetDoc { Value = "other", Nested = new NestedDoc { Sequence = 1 } };
-        await targets.InsertOneAsync(other, cancellationToken: ct);
-        releaseFirstBatch.SetResult();
-
-        await first;
+        await held;
         (await rejected.ShouldThrowAsync<InvalidOperationException>()).ShouldBeSameAs(rejection);
         await pending;
 
-        batches.ShouldBe(["first", "rejected pending", "pending"]);
+        // The retry left out the request that the policy had already rejected.
+        preparedBatches.ShouldBe(["held", "rejected pending", "pending"]);
     }
 
     private class CallbackAppenderPolicy<TContext>(
