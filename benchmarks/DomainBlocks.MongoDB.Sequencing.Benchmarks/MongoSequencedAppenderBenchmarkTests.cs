@@ -75,6 +75,42 @@ public class MongoSequencedAppenderBenchmarkTests
     }
 
     /// <summary>
+    /// Measures append throughput with one appender instance when every append is given the same cancellable token, as
+    /// callers that share a host's stopping token would do. The other throughput cases give each worker its own token.
+    /// </summary>
+    [TestCase(10)]
+    [TestCase(100)]
+    [TestCase(1_000)]
+    [Explicit("Benchmark")]
+    [CancelAfter(BenchmarkTimeouts.DefaultMillis)]
+    public async Task AppendAsync_SharedToken_MeasureThroughput(int inFlight, CancellationToken ct)
+    {
+        var options = new MongoSequencedAppenderOptions
+        {
+            MaxBatchSize = 1_000,
+            BatchingDelay = TimeSpan.FromMilliseconds(5)
+        };
+
+        await using var scenario = await AppenderBenchmarkScenario.CreateAsync(
+            MongoTestEnvironment.ConnectionString,
+            instanceCount: 1,
+            options);
+
+        var result = await new BenchmarkRunner().MeasureThroughputAsync(
+            (workerIndex, _) => scenario.AppendAsync(workerIndex, ct),
+            new ThroughputOptions { InFlight = inFlight },
+            ct);
+
+        await WriteEnvironmentAsync(options);
+
+        await BenchmarkReport.WriteThroughputAsync(
+            $"append throughput, 1 instance(s), {inFlight:N0} in flight, one shared token",
+            result);
+
+        AssertSucceeded(result);
+    }
+
+    /// <summary>
     /// Measures the latency of a single append with no concurrent appends, through a proxy that delays the server's
     /// responses.
     /// </summary>
