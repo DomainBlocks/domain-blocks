@@ -8,8 +8,14 @@ namespace DomainBlocks.MongoDB.Sequencing;
 public sealed class AppendRequest<TContext>
 {
     private readonly TaskCompletionSource _tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private AppendRequest<TContext>? _nextAttached;
 
     public AppendRequest(IReadOnlyList<BsonDocument> documents, TContext context)
+        : this(documents, context, Guid.NewGuid())
+    {
+    }
+
+    internal AppendRequest(IReadOnlyList<BsonDocument> documents, TContext context, Guid id)
     {
         ArgumentNullException.ThrowIfNull(documents);
 
@@ -18,6 +24,7 @@ public sealed class AppendRequest<TContext>
 
         Documents = documents;
         Context = context;
+        Id = id;
     }
 
     /// <summary>
@@ -35,7 +42,7 @@ public sealed class AppendRequest<TContext>
     /// </summary>
     public bool IsCompleted => _tcs.Task.IsCompleted;
 
-    internal Guid Id { get; } = Guid.NewGuid();
+    internal Guid Id { get; }
     internal Task Completion => _tcs.Task;
 
     /// <summary>
@@ -43,6 +50,27 @@ public sealed class AppendRequest<TContext>
     /// </summary>
     /// <returns>True if the request has completed, or false if it has already been completed.</returns>
     public bool TryComplete(Exception? error = null)
+    {
+        if (!TrySetOutcome(error))
+            return false;
+
+        for (var request = _nextAttached; request is not null; request = request._nextAttached)
+            request.TrySetOutcome(error);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Makes another request with this request's ID complete with this request's outcome. Called before the policy sees
+    /// either request, so neither can have been completed yet.
+    /// </summary>
+    internal void Attach(AppendRequest<TContext> request)
+    {
+        request._nextAttached = _nextAttached;
+        _nextAttached = request;
+    }
+
+    private bool TrySetOutcome(Exception? error)
     {
         return error is null ? _tcs.TrySetResult() : _tcs.TrySetException(error);
     }

@@ -59,7 +59,9 @@ internal sealed class AppenderPolicyScenario : IAsyncDisposable
             { EventLogEntry.FieldNames.StreamId, streamId }
         };
 
-        return _appender.AppendAsync([document], new AppendContext(commitId, streamId, expectedState), null, ct);
+        var context = new AppendContext(commitId, streamId, expectedState);
+
+        return _appender.AppendAsync([document], context, cancellationToken: ct);
     }
 
     /// <summary>

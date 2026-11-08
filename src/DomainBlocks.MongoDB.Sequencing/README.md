@@ -91,6 +91,9 @@ points:
 - **After a duplicate key conflict** - runs outside the transaction, after it has been aborted due to a duplicate key
   conflict on the target collection.
 
+Requests appended with the same `requestId` in one batch reach the policy once: it receives the first, and the others
+complete with that request's outcome.
+
 Uses include:
 
 - Stamping per-stream version numbers onto event documents before commit.

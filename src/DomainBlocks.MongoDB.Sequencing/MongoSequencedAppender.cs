@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -98,6 +99,7 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
     public async Task AppendAsync(
         IEnumerable<TDocument> documents,
         TContext context,
+        Guid? requestId = null,
         AppendOptions? options = null,
         CancellationToken cancellationToken = default)
     {
@@ -106,7 +108,7 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
             return;
 
         options ??= new AppendOptions();
-        var request = new AppendRequest<TContext>(bsonDocuments, context);
+        var request = new AppendRequest<TContext>(bsonDocuments, context, requestId ?? Guid.NewGuid());
 
         using var linkedTimeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         linkedTimeoutCts.CancelAfter(options.Timeout);
@@ -255,14 +257,24 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
         _buffers.Documents.Clear();
         _buffers.RequestByDocumentIndex.Clear();
 
+        GroupById(batch);
+
         await _appenderPolicy.OnBatchCommittingAsync(batch, ct);
 
         // A completed request is never written, so a conflict prepares the batch again without it.
-        batch.RemoveAll(static request => request.IsCompleted);
+        var count = 0;
 
-        foreach (var request in batch)
+        for (var i = 0; i < batch.Count; i++)
         {
-            _buffers.Requests.Add(request.Id, request);
+            var request = batch[i];
+
+            if (request.IsCompleted)
+            {
+                _buffers.Requests.Remove(request.Id);
+                continue;
+            }
+
+            batch[count++] = request;
 
             foreach (var document in request.Documents)
             {
@@ -270,6 +282,35 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
                 _buffers.RequestByDocumentIndex.Add(request);
             }
         }
+
+        batch.RemoveRange(count, batch.Count - count);
+    }
+
+    // Keeps the first request for each ID and attaches the others to it, so the policy sees each ID once.
+    private void GroupById(List<AppendRequest<TContext>> batch)
+    {
+        var count = 0;
+
+        for (var i = 0; i < batch.Count; i++)
+        {
+            var request = batch[i];
+
+            ref var first = ref CollectionsMarshal.GetValueRefOrAddDefault(
+                _buffers.Requests,
+                request.Id,
+                out var exists);
+
+            if (exists)
+            {
+                first!.Attach(request);
+                continue;
+            }
+
+            first = request;
+            batch[count++] = request;
+        }
+
+        batch.RemoveRange(count, batch.Count - count);
     }
 
     private async Task<CommitResult> CommitAsync(CancellationToken ct)

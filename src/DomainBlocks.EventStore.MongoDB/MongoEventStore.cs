@@ -147,7 +147,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         var appendOptions = new DomainBlocks.MongoDB.Sequencing.AppendOptions { Timeout = options.Timeout };
 
         await _sequencedAppender
-            .AppendAsync(eventDocuments, context, appendOptions, cancellationToken)
+            .AppendAsync(eventDocuments, context, options: appendOptions, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
     }
 
