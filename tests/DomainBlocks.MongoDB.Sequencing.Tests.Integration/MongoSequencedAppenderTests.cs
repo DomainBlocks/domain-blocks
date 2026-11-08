@@ -1,4 +1,5 @@
-﻿using NUnit.Framework;
+﻿using MongoDB.Driver;
+using NUnit.Framework;
 using Shouldly;
 
 namespace DomainBlocks.MongoDB.Sequencing.Tests.Integration;
@@ -52,8 +53,60 @@ public class MongoSequencedAppenderTests : MongoIntegrationTestBase
         (await ReadSequenceAsync(ct)).ShouldBe([0]);
     }
 
+    [Test]
+    [CancelAfter(TimeoutMillis)]
+    public async Task AppendAsync_ConflictRetried_PreparesOnlyPendingRequests(CancellationToken ct)
+    {
+        var targets = MongoClient.GetDatabase(DatabaseName).GetCollection<TargetDoc>(TargetNs.CollectionName);
+        var firstBatchHeld = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirstBatch = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var batches = new List<string>();
+
+        var policy = new CallbackAppenderPolicy<string>(
+            onBatchCommitting: async (batch, token) =>
+            {
+                batches.Add(string.Join(' ', batch.Select(x => x.Context)));
+
+                switch (batches.Count)
+                {
+                    case 1:
+                        firstBatchHeld.SetResult();
+                        await releaseFirstBatch.Task;
+                        break;
+                    case 2:
+                        batch.Single(x => x.Context == "rejected").TryComplete(new InvalidOperationException());
+                        break;
+                    default:
+                        // Removing the other writer's document lets the retry commit.
+                        await targets.DeleteOneAsync(x => x.Value == "other", token);
+                        break;
+                }
+            },
+            onConflict: _ => ConflictResolution.Retry);
+
+        await using var appender = CreateAppender(policy: policy);
+
+        // While the policy holds the first batch, the next two appends queue up and form the second batch together.
+        var first = appender.AppendAsync([new TargetDoc { Value = "first" }], "first", cancellationToken: ct);
+        await firstBatchHeld.Task.WaitAsync(ct);
+        var rejected = appender.AppendAsync([new TargetDoc { Value = "rejected" }], "rejected", cancellationToken: ct);
+        var pending = appender.AppendAsync([new TargetDoc { Value = "pending" }], "pending", cancellationToken: ct);
+
+        // Another writer takes the second batch's sequence number, so that batch conflicts and is retried.
+        var other = new TargetDoc { Value = "other", Nested = new NestedDoc { Sequence = 1 } };
+        await targets.InsertOneAsync(other, cancellationToken: ct);
+        releaseFirstBatch.SetResult();
+
+        await first;
+        await rejected.ShouldThrowAsync<InvalidOperationException>();
+        await pending;
+
+        batches.ShouldBe(["first", "rejected pending", "pending"]);
+    }
+
     private class CallbackAppenderPolicy<TContext>(
-        Func<IReadOnlyList<AppendRequest<TContext>>, CancellationToken, Task>? onBatchCommitting = null) :
+        Func<IReadOnlyList<AppendRequest<TContext>>, CancellationToken, Task>? onBatchCommitting = null,
+        Func<AppendConflict<TContext>, ConflictResolution>? onConflict = null) :
         IMongoSequencedAppenderPolicy<TContext>
     {
         public Task OnBatchCommittingAsync(IReadOnlyList<AppendRequest<TContext>> batch, CancellationToken ct)
@@ -63,7 +116,7 @@ public class MongoSequencedAppenderTests : MongoIntegrationTestBase
 
         public ConflictResolution OnConflict(AppendConflict<TContext> conflict)
         {
-            return ConflictResolution.Fail();
+            return onConflict?.Invoke(conflict) ?? ConflictResolution.Fail();
         }
     }
 }

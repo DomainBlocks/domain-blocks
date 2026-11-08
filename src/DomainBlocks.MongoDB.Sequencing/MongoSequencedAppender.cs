@@ -257,11 +257,11 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
 
         await _appenderPolicy.OnBatchCommittingAsync(batch, ct);
 
+        // A completed request is never written, so a conflict prepares the batch again without it.
+        batch.RemoveAll(static request => request.IsCompleted);
+
         foreach (var request in batch)
         {
-            if (request.IsCompleted)
-                continue;
-
             _buffers.Requests.Add(request.Id, request);
 
             foreach (var document in request.Documents)

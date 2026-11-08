@@ -34,11 +34,6 @@ internal sealed class AppenderPolicy(IMongoCollection<BsonDocument> eventLog) :
 
         foreach (var request in batch)
         {
-            // A conflict prepares the batch again, and a request completed earlier isn't written, so it mustn't move
-            // its stream's head.
-            if (request.IsCompleted)
-                continue;
-
             var commitId = request.Context.CommitId;
 
             if (!_buffers.SeenCommitIds.Add(commitId))

@@ -7,8 +7,9 @@ namespace DomainBlocks.MongoDB.Sequencing;
 public interface IMongoSequencedAppenderPolicy<TContext>
 {
     /// <summary>
-    /// Called before each batch is committed. Implementations may inspect and mutate the documents in each append
-    /// request, and chose to succeed or fail individual requests early. Requests not completed here will be committed.
+    /// Called before each batch is committed, and again with the requests that are still pending when a conflict is
+    /// retried. Implementations may inspect and mutate the documents in each append request, and choose to succeed or
+    /// fail individual requests early. Requests not completed here will be committed.
     /// </summary>
     Task OnBatchCommittingAsync(IReadOnlyList<AppendRequest<TContext>> batch, CancellationToken cancellationToken);
 
