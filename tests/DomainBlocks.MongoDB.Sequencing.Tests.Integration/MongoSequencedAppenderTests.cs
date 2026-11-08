@@ -66,7 +66,7 @@ public class MongoSequencedAppenderTests : MongoIntegrationTestBase
         var policy = new CallbackAppenderPolicy<string>(
             onBatchCommitting: async (batch, token) =>
             {
-                preparedBatches.Add(string.Join(' ', batch.Select(x => x.Context)));
+                preparedBatches.Add(string.Join(", ", batch.Select(x => x.Context)));
 
                 switch (preparedBatches.Count)
                 {
@@ -105,7 +105,7 @@ public class MongoSequencedAppenderTests : MongoIntegrationTestBase
         await pending;
 
         // The retry left out the request that the policy had already rejected.
-        preparedBatches.ShouldBe(["held", "rejected pending", "pending"]);
+        preparedBatches.ShouldBe(["held", "rejected, pending", "pending"]);
     }
 
     private class CallbackAppenderPolicy<TContext>(
