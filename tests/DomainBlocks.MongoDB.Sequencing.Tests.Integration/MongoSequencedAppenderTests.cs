@@ -63,8 +63,15 @@ public class MongoSequencedAppenderTests : MongoIntegrationTestBase
         var rejection = new InvalidOperationException();
         var preparedBatches = new List<string>();
 
+        // A unique value stands in for a key the policy owns, like a stream position in the event store.
+        var uniqueValue = new CreateIndexModel<TargetDoc>(
+            Builders<TargetDoc>.IndexKeys.Ascending(x => x.Value),
+            new CreateIndexOptions { Unique = true });
+
+        await targets.Indexes.CreateOneAsync(uniqueValue, cancellationToken: ct);
+
         var policy = new CallbackAppenderPolicy<string>(
-            onBatchCommitting: async (batch, token) =>
+            onBatchCommitting: async (batch, _) =>
             {
                 preparedBatches.Add(string.Join(", ", batch.Select(x => x.Context)));
 
@@ -76,17 +83,15 @@ public class MongoSequencedAppenderTests : MongoIntegrationTestBase
                         await releaseBatch.Task;
                         break;
 
-                    // The policy rejects one request in the pair. Another writer then takes the next sequence number,
-                    // so the pending request's insert conflicts and the batch is retried.
+                    // The policy rejects one request in the pair. The other's value is already taken, so its insert
+                    // conflicts and the batch is retried.
                     case 2:
                         batch.Single(x => x.Context == "rejected").TryComplete(rejection);
-                        var other = new TargetDoc { Value = "other", Nested = new NestedDoc { Sequence = 1 } };
-                        await targets.InsertOneAsync(other, cancellationToken: token);
                         break;
 
-                    // The retry claims the same sequence number, so it commits only once the other document is gone.
+                    // On the retry, the policy gives the pending document a value of its own, so the batch commits.
                     case 3:
-                        await targets.DeleteOneAsync(x => x.Value == "other", token);
+                        batch.Single(x => x.Context == "pending").Documents[0][nameof(TargetDoc.Value)] = "pending";
                         break;
                 }
             },
@@ -97,7 +102,9 @@ public class MongoSequencedAppenderTests : MongoIntegrationTestBase
         var held = appender.AppendAsync([new TargetDoc { Value = "held" }], "held", cancellationToken: ct);
         await batchHeld.Task.WaitAsync(ct);
         var rejected = appender.AppendAsync([new TargetDoc { Value = "rejected" }], "rejected", cancellationToken: ct);
-        var pending = appender.AppendAsync([new TargetDoc { Value = "pending" }], "pending", cancellationToken: ct);
+
+        // The pending document reuses the held document's value, as a stale read would reuse a stream position.
+        var pending = appender.AppendAsync([new TargetDoc { Value = "held" }], "pending", cancellationToken: ct);
         releaseBatch.SetResult();
 
         await held;
