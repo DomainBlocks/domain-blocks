@@ -29,6 +29,7 @@ DECLARE
     v_bad_expected_kind bigint;
     v_missing_version   bigint;
     v_stray_version     bigint;
+    v_repeat_commit_id  bigint;
 BEGIN
     v_request_count := coalesce(cardinality(p_stream_ids), 0);
 
@@ -48,16 +49,19 @@ BEGIN
            min(r.ord) FILTER (WHERE r.expected_kind IS NULL),
            min(r.ord) FILTER (WHERE r.expected_kind = 'at_version' AND
                                     (r.expected_version IS NULL OR r.expected_version < 0)),
-           min(r.ord) FILTER (WHERE r.expected_kind <> 'at_version' AND r.expected_version IS NOT NULL)
+           min(r.ord) FILTER (WHERE r.expected_kind <> 'at_version' AND r.expected_version IS NOT NULL),
+           min(r.ord) FILTER (WHERE r.commit_id_nth > 1)
     INTO v_event_total,
         v_bad_event_count,
         v_bad_stream_id,
         v_bad_commit_id,
         v_bad_expected_kind,
         v_missing_version,
-        v_stray_version
-    FROM unnest(p_stream_ids, p_expected_kinds, p_expected_versions, p_commit_ids, p_event_counts)
-             WITH ORDINALITY AS r(stream_id, expected_kind, expected_version, commit_id, event_count, ord);
+        v_stray_version,
+        v_repeat_commit_id
+    FROM (SELECT u.*, row_number() OVER (PARTITION BY u.commit_id ORDER BY u.ord) AS commit_id_nth
+          FROM unnest(p_stream_ids, p_expected_kinds, p_expected_versions, p_commit_ids, p_event_counts)
+                   WITH ORDINALITY AS u(stream_id, expected_kind, expected_version, commit_id, event_count, ord)) AS r;
 
     IF v_bad_event_count IS NOT NULL THEN
         RAISE EXCEPTION 'request %: event count must be positive', v_bad_event_count - 1
@@ -79,6 +83,12 @@ BEGIN
 
     IF v_bad_commit_id IS NOT NULL THEN
         RAISE EXCEPTION 'request %: commit id must not be null', v_bad_commit_id - 1
+            USING ERRCODE = 'invalid_parameter_value';
+    END IF;
+
+    -- The appender sends each commit ID once per batch, so a repeat means that the protocol was broken.
+    IF v_repeat_commit_id IS NOT NULL THEN
+        RAISE EXCEPTION 'request %: commit id repeats an earlier request', v_repeat_commit_id - 1
             USING ERRCODE = 'invalid_parameter_value';
     END IF;
 
@@ -160,8 +170,8 @@ SELECT r.ord,
        r.event_count,
        -- Position of the request among the requests to its stream, in batch order.
        row_number() OVER (PARTITION BY r.stream_id COLLATE "C" ORDER BY r.ord),
-       -- The first occurrence of a commit ID in the batch wins. Later ones and already committed ones are duplicates.
-       row_number() OVER (PARTITION BY r.commit_id ORDER BY r.ord) > 1 OR r.commit_id = ANY (p_existing_commits),
+       -- A request whose commit ID is already committed is a duplicate.
+       r.commit_id = ANY (p_existing_commits),
        -- 1-based offset of the request's first event in the flattened event arrays.
        1 + coalesce(sum(r.event_count) OVER (ORDER BY r.ord ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0)
 FROM unnest(p_stream_ids, p_expected_kinds, p_expected_versions, p_commit_ids, p_event_counts)

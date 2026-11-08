@@ -262,55 +262,6 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task RepeatedCommitIdInBatch_WritesFirstOnly()
-    {
-        var request = Any("s1", JsonEvent());
-
-        var results = await Client.AppendAsync(
-        [
-            request,
-            request,
-            request with { StreamId = "s2" }
-        ]);
-
-        results.Select(x => x.Status).ShouldBe(
-        [
-            AppendProtocol.Status.Appended,
-            AppendProtocol.Status.Duplicate,
-            AppendProtocol.Status.Duplicate
-        ]);
-
-        (await Client.ReadRowsAsync()).Count.ShouldBe(1);
-        (await Client.GetSequenceNextAsync()).ShouldBe(1);
-    }
-
-    [Test]
-    public async Task RepeatedCommitIdInBatch_OnDistinctStreams_WritesFirstOnly()
-    {
-        // Duplicates within the batch, on distinct streams. The first occurrence wins, and later ones report Duplicate.
-        var request = Any("s1", JsonEvent());
-
-        var results = await Client.AppendAsync(
-        [
-            request,
-            request with { StreamId = "s2" },
-            Any("s3", JsonEvent()),
-            request with { StreamId = "s4" }
-        ]);
-
-        results.Select(x => (x.Status, x.FirstPosition)).ShouldBe(
-        [
-            (AppendProtocol.Status.Appended, 0L),
-            (AppendProtocol.Status.Duplicate, null),
-            (AppendProtocol.Status.Appended, 1L),
-            (AppendProtocol.Status.Duplicate, null)
-        ]);
-
-        (await Client.ReadRowsAsync()).Select(x => x.StreamId).ShouldBe(["s1", "s3"]);
-        (await Client.GetSequenceNextAsync()).ShouldBe(2);
-    }
-
-    [Test]
     public async Task DistinctStreams_MixedOutcomes_AssignsPositionsAndEventsInRequestOrder()
     {
         // A multi-event conflict and a duplicate in the middle of the batch must not shift the events of later
@@ -505,6 +456,16 @@ public class AppendFunctionTests : PostgresIntegrationTest
                 "ARRAY['e', 'e'], ARRAY['{}'::jsonb, '{}'::jsonb], ARRAY[NULL::bytea, NULL::bytea], " +
                 "ARRAY[NULL::jsonb, NULL::jsonb]"),
             "request 1: commit id must not be null");
+    }
+
+    [Test]
+    public async Task RepeatedCommitId_RaisesWithRequestIndex()
+    {
+        var request = Any("s1", JsonEvent());
+
+        await ShouldRaiseInvalidParameterValueAsync(
+            () => Client.AppendAsync([request, Any("s2", JsonEvent()), request with { StreamId = "s3" }]),
+            "request 2: commit id repeats an earlier request");
     }
 
     [Test]

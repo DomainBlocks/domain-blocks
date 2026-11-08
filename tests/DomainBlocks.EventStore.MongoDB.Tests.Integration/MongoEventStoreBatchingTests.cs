@@ -4,42 +4,40 @@ using Shouldly;
 
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
-public class AppenderPolicyTests
+public class MongoEventStoreBatchingTests
 {
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task OnBatchCommittingAsync_SameCommitIdInBatch_FailsRepeat(CancellationToken ct)
+    public async Task AppendAsync_SameCommitIdInBatch_WritesOnce(CancellationToken ct)
     {
-        await using var scenario = await AppenderPolicyScenario.StartAsync(ct);
-        var commitId = Guid.NewGuid();
+        await using var scenario = await BatchingScenario.StartAsync(ct);
 
         var (first, repeat) = await scenario.AppendTwiceInOneBatchAsync(
             "stream-1",
             ExpectedStreamState.Any<StreamPosition>(),
-            commitId,
+            Guid.NewGuid(),
             ct);
 
         await first;
-        (await repeat.ShouldThrowAsync<InvalidOperationException>()).Message.ShouldContain(commitId.ToString());
+        await repeat;
         (await scenario.CountEventsAsync("stream-1", ct)).ShouldBe(1);
     }
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task OnBatchCommittingAsync_SameCommitIdInBatchAndFirstConflicts_FailsRepeat(CancellationToken ct)
+    public async Task AppendAsync_SameCommitIdInBatchAndFirstConflicts_ThrowsSameConflict(CancellationToken ct)
     {
-        await using var scenario = await AppenderPolicyScenario.StartAsync(ct);
+        await using var scenario = await BatchingScenario.StartAsync(ct);
         await scenario.AppendAsync("stream-1", ExpectedStreamState.Any<StreamPosition>(), Guid.NewGuid(), ct);
-        var commitId = Guid.NewGuid();
 
         var (first, repeat) = await scenario.AppendTwiceInOneBatchAsync(
             "stream-1",
             ExpectedStreamState.DoesNotExist<StreamPosition>(),
-            commitId,
+            Guid.NewGuid(),
             ct);
 
-        await first.ShouldThrowAsync<StreamAppendConflictException<StreamPosition>>();
-        (await repeat.ShouldThrowAsync<InvalidOperationException>()).Message.ShouldContain(commitId.ToString());
+        var conflict = await first.ShouldThrowAsync<StreamAppendConflictException<StreamPosition>>();
+        (await repeat.ShouldThrowAsync<StreamAppendConflictException<StreamPosition>>()).ShouldBeSameAs(conflict);
         (await scenario.CountEventsAsync("stream-1", ct)).ShouldBe(1);
     }
 }
