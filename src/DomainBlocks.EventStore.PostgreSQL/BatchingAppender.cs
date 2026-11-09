@@ -177,7 +177,7 @@ internal sealed class BatchingAppender : IAppender
 
             if (exists)
             {
-                first!.Attach(request);
+                request.CompleteWith(first!);
                 continue;
             }
 

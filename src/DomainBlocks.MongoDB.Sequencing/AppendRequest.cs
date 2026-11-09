@@ -8,7 +8,7 @@ namespace DomainBlocks.MongoDB.Sequencing;
 public sealed class AppendRequest<TContext>
 {
     private readonly TaskCompletionSource _tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private AppendRequest<TContext>? _nextAttached;
+    private AppendRequest<TContext>? _next;
 
     public AppendRequest(IReadOnlyList<BsonDocument> documents, TContext context)
         : this(documents, context, Guid.NewGuid())
@@ -54,20 +54,20 @@ public sealed class AppendRequest<TContext>
         if (!TrySetOutcome(error))
             return false;
 
-        for (var request = _nextAttached; request is not null; request = request._nextAttached)
+        for (var request = _next; request is not null; request = request._next)
             request.TrySetOutcome(error);
 
         return true;
     }
 
     /// <summary>
-    /// Makes another request with this request's ID complete with this request's outcome. Called before the policy sees
-    /// either request, so neither can have been completed yet.
+    /// Makes this request complete with the outcome of another request with the same ID. Called before either request
+    /// has completed.
     /// </summary>
-    internal void Attach(AppendRequest<TContext> request)
+    internal void CompleteWith(AppendRequest<TContext> first)
     {
-        request._nextAttached = _nextAttached;
-        _nextAttached = request;
+        _next = first._next;
+        first._next = this;
     }
 
     private bool TrySetOutcome(Exception? error)

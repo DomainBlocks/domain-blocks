@@ -286,7 +286,7 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
         batch.RemoveRange(count, batch.Count - count);
     }
 
-    // Keeps the first request for each ID and attaches the others to it, so the policy sees each ID once.
+    // Keeps the first request for each ID and makes the others complete with it, so the policy sees each ID once.
     private void GroupById(List<AppendRequest<TContext>> batch)
     {
         var count = 0;
@@ -302,7 +302,7 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
 
             if (exists)
             {
-                first!.Attach(request);
+                request.CompleteWith(first!);
                 continue;
             }
 
