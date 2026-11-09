@@ -459,7 +459,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task RepeatedCommitId_RaisesWithRequestIndex()
+    public async Task AppendEvents_RepeatedCommitId_RaisesWithRequestIndex()
     {
         var request = Any("s1", JsonEvent());
 
