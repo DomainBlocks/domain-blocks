@@ -15,15 +15,18 @@ public class AppenderPolicy(IMongoCollection<EventDocument> collection) : IMongo
         // Collect unique stream IDs from this batch.
         var streamIds = batch.Select(x => x.Context.StreamId).Distinct().ToList();
 
-        // Fetch the current max version for each stream.
+        // Fetch the current max version for each stream. Sorting on the unique index's fields lets First() find it with
+        // one index lookup per stream, where Max() would read every index entry of each stream.
         var currentVersions = await collection
             .WithReadConcern(ReadConcern.Majority)
             .WithReadPreference(ReadPreference.Primary)
             .Aggregate()
             .Match(x => streamIds.Contains(x.StreamId))
+            .SortByDescending(x => x.StreamId)
+            .ThenByDescending(x => x.StreamVersion)
             .Group(
                 x => x.StreamId,
-                g => new { StreamId = g.Key, MaxVersion = g.Max(x => x.StreamVersion) })
+                g => new { StreamId = g.Key, MaxVersion = g.First().StreamVersion })
             .ToListAsync(cancellationToken);
 
         var versionByStream = currentVersions.ToDictionary(x => x.StreamId, x => x.MaxVersion);
