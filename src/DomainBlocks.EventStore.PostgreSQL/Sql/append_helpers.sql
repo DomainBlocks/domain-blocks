@@ -77,18 +77,18 @@ BEGIN
     END IF;
 
     IF v_bad_stream_id IS NOT NULL THEN
-        RAISE EXCEPTION 'request %: stream id must not be null or empty', v_bad_stream_id - 1
+        RAISE EXCEPTION 'request %: stream ID must not be null or empty', v_bad_stream_id - 1
             USING ERRCODE = 'invalid_parameter_value';
     END IF;
 
     IF v_bad_commit_id IS NOT NULL THEN
-        RAISE EXCEPTION 'request %: commit id must not be null', v_bad_commit_id - 1
+        RAISE EXCEPTION 'request %: commit ID must not be null', v_bad_commit_id - 1
             USING ERRCODE = 'invalid_parameter_value';
     END IF;
 
     -- The appender sends each commit ID once per batch, so a repeat means that the protocol was broken.
     IF v_repeat_commit_id IS NOT NULL THEN
-        RAISE EXCEPTION 'request %: commit id repeats an earlier request', v_repeat_commit_id - 1
+        RAISE EXCEPTION 'request %: commit ID repeats an earlier request', v_repeat_commit_id - 1
             USING ERRCODE = 'invalid_parameter_value';
     END IF;
 

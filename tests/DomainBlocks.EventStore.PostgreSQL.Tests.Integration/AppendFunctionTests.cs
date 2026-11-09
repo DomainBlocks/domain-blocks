@@ -443,7 +443,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     {
         await ShouldRaiseInvalidParameterValueAsync(
             () => Client.AppendAsync([Any("s1", JsonEvent()), Any("", JsonEvent())]),
-            "request 1: stream id must not be null or empty");
+            "request 1: stream ID must not be null or empty");
     }
 
     [Test]
@@ -455,7 +455,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
                 "ARRAY[gen_random_uuid(), NULL::uuid], ARRAY[1, 1], " +
                 "ARRAY['e', 'e'], ARRAY['{}'::jsonb, '{}'::jsonb], ARRAY[NULL::bytea, NULL::bytea], " +
                 "ARRAY[NULL::jsonb, NULL::jsonb]"),
-            "request 1: commit id must not be null");
+            "request 1: commit ID must not be null");
     }
 
     [Test]
@@ -465,7 +465,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
 
         await ShouldRaiseInvalidParameterValueAsync(
             () => Client.AppendAsync([request, Any("s2", JsonEvent()), request with { StreamId = "s3" }]),
-            "request 2: commit id repeats an earlier request");
+            "request 2: commit ID repeats an earlier request");
     }
 
     [Test]
@@ -528,7 +528,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     {
         await ShouldRaiseInvalidParameterValueAsync(
             () => Client.AppendAsync([Any("s1", JsonEvent()), Any("", JsonEvent()), Any("", JsonEvent())]),
-            "request 1: stream id must not be null or empty");
+            "request 1: stream ID must not be null or empty");
     }
 
     [Test]
