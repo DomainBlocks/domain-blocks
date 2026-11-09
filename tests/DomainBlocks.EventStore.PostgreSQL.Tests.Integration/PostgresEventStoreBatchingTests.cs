@@ -175,40 +175,38 @@ public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task AppendAsync_SameCommitIdInBatch_ThrowsForRepeat(CancellationToken ct)
+    public async Task AppendAsync_SameCommitIdInBatch_WritesOnce(CancellationToken ct)
     {
         await using var eventStore = CreateEventStore("_repeat");
-        var commitId = Guid.NewGuid();
 
         var (first, repeat) = await AppendTwiceInOneBatchAsync(
             eventStore,
             "s1",
             ExpectedStreamState.Any<StreamPosition>(),
-            commitId,
+            Guid.NewGuid(),
             ct);
 
         await first;
-        (await repeat.ShouldThrowAsync<InvalidOperationException>()).Message.ShouldContain(commitId.ToString());
+        await repeat;
         (await Client.ReadRowsAsync(cancellationToken: ct)).Count(x => x.StreamId == "s1").ShouldBe(1);
     }
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task AppendAsync_SameCommitIdInBatchAndFirstConflicts_ThrowsForRepeat(CancellationToken ct)
+    public async Task AppendAsync_SameCommitIdInBatchAndFirstConflicts_ThrowsSameConflict(CancellationToken ct)
     {
         await using var eventStore = CreateEventStore("_repeat-conflict");
         await eventStore.AppendAsync("s1", [Appendable("existing")], cancellationToken: ct);
-        var commitId = Guid.NewGuid();
 
         var (first, repeat) = await AppendTwiceInOneBatchAsync(
             eventStore,
             "s1",
             ExpectedStreamState.DoesNotExist<StreamPosition>(),
-            commitId,
+            Guid.NewGuid(),
             ct);
 
-        await first.ShouldThrowAsync<StreamAppendConflictException<StreamPosition>>();
-        (await repeat.ShouldThrowAsync<InvalidOperationException>()).Message.ShouldContain(commitId.ToString());
+        var conflict = await first.ShouldThrowAsync<StreamAppendConflictException<StreamPosition>>();
+        (await repeat.ShouldThrowAsync<StreamAppendConflictException<StreamPosition>>()).ShouldBeSameAs(conflict);
         (await Client.ReadRowsAsync(cancellationToken: ct)).Count(x => x.StreamId == "s1").ShouldBe(1);
     }
 

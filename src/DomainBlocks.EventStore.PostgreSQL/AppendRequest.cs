@@ -5,6 +5,7 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 internal sealed class AppendRequest
 {
     private readonly TaskCompletionSource _tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private AppendRequest? _next;
 
     public AppendRequest(
         string streamId,
@@ -38,6 +39,27 @@ internal sealed class AppendRequest
     public Task Completion => _tcs.Task;
 
     public bool TryComplete(Exception? error = null)
+    {
+        if (!TrySetOutcome(error))
+            return false;
+
+        for (var request = _next; request is not null; request = request._next)
+            request.TrySetOutcome(error);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Makes this request complete with the outcome of another request with the same commit ID. Called before either
+    /// request has completed.
+    /// </summary>
+    public void CompleteWith(AppendRequest first)
+    {
+        _next = first._next;
+        first._next = this;
+    }
+
+    private bool TrySetOutcome(Exception? error)
     {
         return error is null ? _tcs.TrySetResult() : _tcs.TrySetException(error);
     }

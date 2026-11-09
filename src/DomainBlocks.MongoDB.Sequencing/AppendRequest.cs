@@ -8,8 +8,9 @@ namespace DomainBlocks.MongoDB.Sequencing;
 public sealed class AppendRequest<TContext>
 {
     private readonly TaskCompletionSource _tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private AppendRequest<TContext>? _next;
 
-    public AppendRequest(IReadOnlyList<BsonDocument> documents, TContext context)
+    public AppendRequest(IReadOnlyList<BsonDocument> documents, TContext context, Guid? id = null)
     {
         ArgumentNullException.ThrowIfNull(documents);
 
@@ -18,6 +19,7 @@ public sealed class AppendRequest<TContext>
 
         Documents = documents;
         Context = context;
+        Id = id ?? Guid.NewGuid();
     }
 
     /// <summary>
@@ -35,7 +37,7 @@ public sealed class AppendRequest<TContext>
     /// </summary>
     public bool IsCompleted => _tcs.Task.IsCompleted;
 
-    internal Guid Id { get; } = Guid.NewGuid();
+    internal Guid Id { get; }
     internal Task Completion => _tcs.Task;
 
     /// <summary>
@@ -43,6 +45,27 @@ public sealed class AppendRequest<TContext>
     /// </summary>
     /// <returns>True if the request has completed, or false if it has already been completed.</returns>
     public bool TryComplete(Exception? error = null)
+    {
+        if (!TrySetOutcome(error))
+            return false;
+
+        for (var request = _next; request is not null; request = request._next)
+            request.TrySetOutcome(error);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Makes this request complete with the outcome of another request with the same ID. Called before either request
+    /// has completed.
+    /// </summary>
+    internal void CompleteWith(AppendRequest<TContext> first)
+    {
+        _next = first._next;
+        first._next = this;
+    }
+
+    private bool TrySetOutcome(Exception? error)
     {
         return error is null ? _tcs.TrySetResult() : _tcs.TrySetException(error);
     }

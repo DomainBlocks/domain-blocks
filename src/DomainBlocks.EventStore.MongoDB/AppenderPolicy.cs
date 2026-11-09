@@ -1,4 +1,3 @@
-using DomainBlocks.EventStore.Internal;
 using DomainBlocks.MongoDB.Sequencing;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -34,15 +33,7 @@ internal sealed class AppenderPolicy(IMongoCollection<BsonDocument> eventLog) :
 
         foreach (var request in batch)
         {
-            var commitId = request.Context.CommitId;
-
-            if (!_buffers.SeenCommitIds.Add(commitId))
-            {
-                request.TryComplete(AppendError.CommitIdInProgress(commitId));
-                continue;
-            }
-
-            if (_buffers.ExistingCommitIds.Contains(commitId))
+            if (_buffers.ExistingCommitIds.Contains(request.Context.CommitId))
             {
                 request.TryComplete();
                 continue;
@@ -104,13 +95,11 @@ internal sealed class AppenderPolicy(IMongoCollection<BsonDocument> eventLog) :
 
     private sealed class Buffers
     {
-        public readonly HashSet<Guid> SeenCommitIds = [];
         public readonly HashSet<Guid> ExistingCommitIds = [];
         public readonly Dictionary<string, long> HeadStreamVersions = [];
 
         public void ClearAll()
         {
-            SeenCommitIds.Clear();
             ExistingCommitIds.Clear();
             HeadStreamVersions.Clear();
         }

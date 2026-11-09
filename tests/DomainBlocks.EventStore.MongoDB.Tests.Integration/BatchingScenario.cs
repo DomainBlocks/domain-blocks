@@ -1,4 +1,8 @@
+using DomainBlocks.EventStore.Codecs;
+using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.MongoDB.Sequencing;
+using DomainBlocks.Serialization.MongoDB.Bson;
+using DomainBlocks.Testing.Events;
 using DomainBlocks.Testing.Integration.MongoDB;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -6,17 +10,17 @@ using MongoDB.Driver;
 namespace DomainBlocks.EventStore.MongoDB.Tests.Integration;
 
 /// <summary>
-/// Runs the store's appender policy in an appender of its own against an isolated database, with a hold that controls
-/// which appends share a batch.
+/// Runs a store against an isolated database, with a hold on its appender's policy that controls which appends share a
+/// batch.
 /// </summary>
-internal sealed class AppenderPolicyScenario : IAsyncDisposable
+internal sealed class BatchingScenario : IAsyncDisposable
 {
     private readonly MongoEventStoreOptions _options;
     private readonly IMongoCollection<BsonDocument> _eventLog;
     private readonly HoldingPolicy _policy;
-    private readonly MongoSequencedAppender<BsonDocument, AppendContext> _appender;
+    private readonly MongoEventStore<object> _eventStore;
 
-    private AppenderPolicyScenario(MongoEventStoreOptions options)
+    private BatchingScenario(MongoEventStoreOptions options)
     {
         var client = MongoTestEnvironment.MongoClient;
         var database = client.GetDatabase(options.DatabaseName);
@@ -31,20 +35,29 @@ internal sealed class AppenderPolicyScenario : IAsyncDisposable
             new CollectionNamespace(database.DatabaseNamespace, options.EventLogCollectionName),
             new StringFieldDefinition<BsonDocument, long>(EventLogEntry.FieldNames.Position));
 
-        _appender = new MongoSequencedAppender<BsonDocument, AppendContext>(
+        var appender = new MongoSequencedAppender<BsonDocument, AppendContext>(
             client,
             binding,
             _policy,
             options: null,
-            MongoTestEnvironment.LoggerFactory.CreateLogger("AppenderPolicyScenario"));
+            MongoTestEnvironment.LoggerFactory.CreateLogger("BatchingScenario"));
+
+        var codec = EventCodec.Create(new EventCodecOptions<object, BsonValue, BsonValue>
+        {
+            TypeMap = new EventTypeMapBuilder().Add<TestEvent>().Build(),
+            EventSerializer = new BsonDocumentObjectSerializer(),
+            MetadataSerializer = new BsonDocumentMetadataSerializer()
+        });
+
+        _eventStore = new MongoEventStore<object>(client, ownedClient: null, options, appender, _eventLog, codec);
     }
 
-    public static async Task<AppenderPolicyScenario> StartAsync(CancellationToken ct)
+    public static async Task<BatchingScenario> StartAsync(CancellationToken ct)
     {
-        var options = new MongoEventStoreOptions { DatabaseName = $"pol_{Guid.NewGuid():N}" };
+        var options = new MongoEventStoreOptions { DatabaseName = $"batch_{Guid.NewGuid():N}" };
         await MongoEventStoreAdmin.EnsureInitializedAsync(MongoTestEnvironment.MongoClient, options, ct);
 
-        return new AppenderPolicyScenario(options);
+        return new BatchingScenario(options);
     }
 
     public Task AppendAsync(
@@ -53,13 +66,8 @@ internal sealed class AppenderPolicyScenario : IAsyncDisposable
         Guid commitId,
         CancellationToken ct)
     {
-        var document = new BsonDocument
-        {
-            { EventLogEntry.FieldNames.CommitId, new BsonBinaryData(commitId, GuidRepresentation.Standard) },
-            { EventLogEntry.FieldNames.StreamId, streamId }
-        };
-
-        return _appender.AppendAsync([document], new AppendContext(commitId, streamId, expectedState), null, ct);
+        TestEvent[] events = [new() { Value = "e" }];
+        return _eventStore.AppendAsync(streamId, events, expectedState, commitId, cancellationToken: ct);
     }
 
     /// <summary>
@@ -92,7 +100,7 @@ internal sealed class AppenderPolicyScenario : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        await _appender.DisposeAsync();
+        await _eventStore.DisposeAsync();
         await MongoTestEnvironment.MongoClient.DropDatabaseAsync(_options.DatabaseName);
     }
 

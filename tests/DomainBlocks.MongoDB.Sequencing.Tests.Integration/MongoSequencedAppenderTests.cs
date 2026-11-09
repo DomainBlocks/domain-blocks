@@ -115,6 +115,130 @@ public class MongoSequencedAppenderTests : MongoIntegrationTestBase
         preparedBatches.ShouldBe(["held", "rejected, pending", "pending"]);
     }
 
+    [Test]
+    [CancelAfter(TimeoutMillis)]
+    public async Task AppendAsync_RepeatedRequestId_AppendsFirstOnly(CancellationToken ct)
+    {
+        var batchHeld = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseBatch = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var preparedBatches = new List<string>();
+
+        var policy = new CallbackAppenderPolicy<string>(
+            onBatchCommitting: async (batch, _) =>
+            {
+                preparedBatches.Add(string.Join(", ", batch.Select(x => x.Context)));
+
+                // Holding the first batch keeps the appender busy, so the next two appends form one batch.
+                if (preparedBatches.Count == 1)
+                {
+                    batchHeld.SetResult();
+                    await releaseBatch.Task;
+                }
+            });
+
+        await using var appender = CreateAppender(policy: policy);
+        var requestId = Guid.NewGuid();
+
+        var held = AppendValueAsync(appender, "held", null, ct);
+        await batchHeld.Task.WaitAsync(ct);
+        var first = AppendValueAsync(appender, "first", requestId, ct);
+        var repeat = AppendValueAsync(appender, "repeat", requestId, ct);
+        releaseBatch.SetResult();
+
+        await Task.WhenAll(held, first, repeat);
+
+        preparedBatches.ShouldBe(["held", "first"]);
+        (await ReadValuesAsync(ct)).ShouldBe(["held", "first"]);
+    }
+
+    [Test]
+    [CancelAfter(TimeoutMillis)]
+    public async Task AppendAsync_FirstOfRepeatedRequestIdRejected_RejectsRepeat(CancellationToken ct)
+    {
+        var batchHeld = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseBatch = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var rejection = new InvalidOperationException();
+        var batchCount = 0;
+
+        var policy = new CallbackAppenderPolicy<string>(
+            onBatchCommitting: async (batch, _) =>
+            {
+                switch (++batchCount)
+                {
+                    // Holding the first batch keeps the appender busy, so the next two appends form one batch.
+                    case 1:
+                        batchHeld.SetResult();
+                        await releaseBatch.Task;
+                        break;
+
+                    case 2:
+                        batch.Single().TryComplete(rejection);
+                        break;
+                }
+            });
+
+        await using var appender = CreateAppender(policy: policy);
+        var requestId = Guid.NewGuid();
+
+        var held = AppendValueAsync(appender, "held", null, ct);
+        await batchHeld.Task.WaitAsync(ct);
+        var first = AppendValueAsync(appender, "first", requestId, ct);
+        var repeat = AppendValueAsync(appender, "repeat", requestId, ct);
+        releaseBatch.SetResult();
+
+        await held;
+        (await first.ShouldThrowAsync<InvalidOperationException>()).ShouldBeSameAs(rejection);
+        (await repeat.ShouldThrowAsync<InvalidOperationException>()).ShouldBeSameAs(rejection);
+        (await ReadValuesAsync(ct)).ShouldBe(["held"]);
+    }
+
+    [Test]
+    [CancelAfter(TimeoutMillis)]
+    public async Task AppendAsync_RequestIdRepeatedInLaterBatch_AppendsBoth(CancellationToken ct)
+    {
+        // The appender doesn't make appends idempotent: it only groups requests with the same ID in one batch, so a
+        // repeat in a later batch is appended again. Making appends idempotent is up to the policy.
+        var preparedBatches = new List<string>();
+
+        var policy = new CallbackAppenderPolicy<string>(
+            onBatchCommitting: (batch, _) =>
+            {
+                preparedBatches.Add(string.Join(", ", batch.Select(x => x.Context)));
+                return Task.CompletedTask;
+            });
+
+        await using var appender = CreateAppender(policy: policy);
+        var requestId = Guid.NewGuid();
+
+        await AppendValueAsync(appender, "first", requestId, ct);
+        await AppendValueAsync(appender, "repeat", requestId, ct);
+
+        preparedBatches.ShouldBe(["first", "repeat"]);
+        (await ReadValuesAsync(ct)).ShouldBe(["first", "repeat"]);
+    }
+
+    // Uses the value as the context too, so a test can tell which requests reached the policy.
+    private static Task AppendValueAsync(
+        MongoSequencedAppender<TargetDoc, string> appender,
+        string value,
+        Guid? requestId,
+        CancellationToken ct)
+    {
+        return appender.AppendAsync([new TargetDoc { Value = value }], value, requestId, cancellationToken: ct);
+    }
+
+    private async Task<string[]> ReadValuesAsync(CancellationToken ct)
+    {
+        var docs = await MongoClient
+            .GetDatabase(DatabaseName)
+            .GetCollection<TargetDoc>(TargetNs.CollectionName)
+            .Find(FilterDefinition<TargetDoc>.Empty)
+            .Sort(Builders<TargetDoc>.Sort.Ascending(x => x.Nested!.Sequence))
+            .ToListAsync(ct);
+
+        return [.. docs.Select(x => x.Value)];
+    }
+
     private class CallbackAppenderPolicy<TContext>(
         Func<IReadOnlyList<AppendRequest<TContext>>, CancellationToken, Task>? onBatchCommitting = null,
         Func<AppendConflict<TContext>, ConflictResolution>? onConflict = null) :

@@ -20,7 +20,7 @@ internal sealed class BatchingAppender : IAppender
     private readonly Channel<AppendRequest> _channel;
     private readonly CancellationTokenSource _stopCts = new();
     private readonly Task _runAppendLoopTask;
-    private readonly HashSet<Guid> _batchCommitIds = [];
+    private readonly Dictionary<Guid, AppendRequest> _batchRequests = [];
     private int _disposed;
 
     public BatchingAppender(
@@ -144,7 +144,7 @@ internal sealed class BatchingAppender : IAppender
                 }
 
                 batch.Clear();
-                _batchCommitIds.Clear();
+                _batchRequests.Clear();
             }
         }
         catch (OperationCanceledException ex) when (ct.IsCancellationRequested)
@@ -163,16 +163,19 @@ internal sealed class BatchingAppender : IAppender
         }
     }
 
-    // A repeated commit ID is rejected rather than sent, because the batch would report it as a committed duplicate
-    // even when the first append with that ID is rejected.
+    // Requests with the same commit ID in one batch are one request: only the first is sent, and the others complete
+    // with its outcome.
     private void TakeQueued(List<AppendRequest> batch)
     {
         while (batch.Count < _maxBatchSize && _channel.Reader.TryRead(out var request))
         {
-            if (_batchCommitIds.Add(request.CommitId))
-                batch.Add(request);
-            else
-                request.TryComplete(AppendError.CommitIdInProgress(request.CommitId));
+            if (!_batchRequests.TryAdd(request.CommitId, request))
+            {
+                request.CompleteWith(_batchRequests[request.CommitId]);
+                continue;
+            }
+
+            batch.Add(request);
         }
     }
 

@@ -11,7 +11,7 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 public class AppendFunctionTests : PostgresIntegrationTest
 {
     [Test]
-    public async Task NewStream_AssignsStreamPositionsFromZero()
+    public async Task AppendEvents_NewStream_AssignsStreamPositionsFromZero()
     {
         var results = await Client.AppendAsync([Any("s1", JsonEvent(), JsonEvent(), JsonEvent())]);
 
@@ -25,7 +25,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task ExistingStream_ContinuesFromHead()
+    public async Task AppendEvents_ExistingStream_ContinuesFromHead()
     {
         await Client.AppendAsync([Any("s1", JsonEvent(), JsonEvent())]);
 
@@ -36,7 +36,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task MultipleRequests_AssignsContiguousGlobalPositions()
+    public async Task AppendEvents_MultipleRequests_AssignsContiguousGlobalPositions()
     {
         var results = await Client.AppendAsync(
         [
@@ -58,7 +58,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task AdvancesSequenceByRowsInserted()
+    public async Task AppendEvents_SuccessiveBatches_AdvancesSequenceByRowsInserted()
     {
         await Client.AppendAsync([Any("s1", JsonEvent(), JsonEvent()), Any("s2", JsonEvent())]);
         (await Client.GetSequenceNextAsync()).ShouldBe(3);
@@ -68,7 +68,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task ExpectedDoesNotExist_WhenStreamExists_ReturnsConflictAtVersion()
+    public async Task AppendEvents_DoesNotExistOnExistingStream_ReturnsConflictAtVersion()
     {
         await Client.AppendAsync([Any("s1", JsonEvent(), JsonEvent())]);
 
@@ -81,7 +81,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task ExpectedExists_WhenStreamMissing_ReturnsConflictDoesNotExist()
+    public async Task AppendEvents_ExistsOnMissingStream_ReturnsConflictDoesNotExist()
     {
         var results = await Client.AppendAsync([Exists("s1", JsonEvent())]);
 
@@ -92,7 +92,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task ExpectedAtVersion_WhenMismatched_ReturnsConflictWithHead()
+    public async Task AppendEvents_AtVersionMismatch_ReturnsConflictWithHead()
     {
         await Client.AppendAsync([Any("s1", JsonEvent(), JsonEvent(), JsonEvent())]);
 
@@ -103,7 +103,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task ExpectedAtVersion_WhenStreamMissing_ReturnsConflictDoesNotExist()
+    public async Task AppendEvents_AtVersionOnMissingStream_ReturnsConflictDoesNotExist()
     {
         var results = await Client.AppendAsync([AtVersion("s1", 0, JsonEvent())]);
 
@@ -112,7 +112,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task ExpectedAtVersion_WhenMatched_Appends()
+    public async Task AppendEvents_AtVersionMatch_Appends()
     {
         await Client.AppendAsync([Any("s1", JsonEvent(), JsonEvent())]);
 
@@ -123,7 +123,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task ConflictInBatch_DoesNotAbortOtherRequests()
+    public async Task AppendEvents_ConflictInBatch_DoesNotAbortOtherRequests()
     {
         await Client.AppendAsync([Any("s1", JsonEvent())]);
 
@@ -145,7 +145,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task ConflictsAndDuplicates_DoNotAdvanceSequence()
+    public async Task AppendEvents_ConflictsAndDuplicates_DoesNotAdvanceSequence()
     {
         var first = Any("s1", JsonEvent());
         await Client.AppendAsync([first]);
@@ -162,7 +162,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task ExistingCommitId_ReturnsDuplicateWithoutWriting()
+    public async Task AppendEvents_ExistingCommitId_ReturnsDuplicateWithoutWriting()
     {
         var request = Any("s1", JsonEvent(), JsonEvent());
         await Client.AppendAsync([request]);
@@ -176,7 +176,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task ExistingCommitId_ProbeUsesPartialIndex()
+    public async Task AppendEvents_CommitIdProbe_UsesPartialIndex()
     {
         // The probe must repeat the index predicate. Without it, the planner falls back to a sequential scan.
         await Client.AppendAsync(
@@ -250,7 +250,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task ExistingCommitId_OnDifferentStream_ReturnsDuplicate()
+    public async Task AppendEvents_ExistingCommitIdOnDifferentStream_ReturnsDuplicate()
     {
         var request = Any("s1", JsonEvent());
         await Client.AppendAsync([request]);
@@ -262,56 +262,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task RepeatedCommitIdInBatch_WritesFirstOnly()
-    {
-        var request = Any("s1", JsonEvent());
-
-        var results = await Client.AppendAsync(
-        [
-            request,
-            request,
-            request with { StreamId = "s2" }
-        ]);
-
-        results.Select(x => x.Status).ShouldBe(
-        [
-            AppendProtocol.Status.Appended,
-            AppendProtocol.Status.Duplicate,
-            AppendProtocol.Status.Duplicate
-        ]);
-
-        (await Client.ReadRowsAsync()).Count.ShouldBe(1);
-        (await Client.GetSequenceNextAsync()).ShouldBe(1);
-    }
-
-    [Test]
-    public async Task RepeatedCommitIdInBatch_OnDistinctStreams_WritesFirstOnly()
-    {
-        // Duplicates within the batch, on distinct streams. The first occurrence wins, and later ones report Duplicate.
-        var request = Any("s1", JsonEvent());
-
-        var results = await Client.AppendAsync(
-        [
-            request,
-            request with { StreamId = "s2" },
-            Any("s3", JsonEvent()),
-            request with { StreamId = "s4" }
-        ]);
-
-        results.Select(x => (x.Status, x.FirstPosition)).ShouldBe(
-        [
-            (AppendProtocol.Status.Appended, 0L),
-            (AppendProtocol.Status.Duplicate, null),
-            (AppendProtocol.Status.Appended, 1L),
-            (AppendProtocol.Status.Duplicate, null)
-        ]);
-
-        (await Client.ReadRowsAsync()).Select(x => x.StreamId).ShouldBe(["s1", "s3"]);
-        (await Client.GetSequenceNextAsync()).ShouldBe(2);
-    }
-
-    [Test]
-    public async Task DistinctStreams_MixedOutcomes_AssignsPositionsAndEventsInRequestOrder()
+    public async Task AppendEvents_MixedOutcomes_AssignsPositionsAndEventsInRequestOrder()
     {
         // A multi-event conflict and a duplicate in the middle of the batch must not shift the events of later
         // requests, and positions must be contiguous over appended requests only.
@@ -356,7 +307,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task DistinctStreams_AllConflictOrDuplicate_LeavesSequenceUntouched()
+    public async Task AppendEvents_AllConflictOrDuplicate_LeavesSequenceUntouched()
     {
         var existing = Any("s1", JsonEvent());
         await Client.AppendAsync([existing]);
@@ -373,7 +324,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task SameStreamTwiceInBatch_SecondSeesFirstHead()
+    public async Task AppendEvents_SameStreamTwiceInBatch_SecondSeesFirstHead()
     {
         var results = await Client.AppendAsync(
         [
@@ -393,7 +344,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task JsonAndBytesEvents_StoredInRespectiveColumns()
+    public async Task AppendEvents_JsonAndBytesEvents_StoresInRespectiveColumns()
     {
         byte[] bytes = [1, 2, 3, 255];
 
@@ -419,7 +370,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task CreatedAt_IsSharedByTheBatchAndUtc()
+    public async Task AppendEvents_MultipleRequests_SharesOneUtcCreatedAt()
     {
         var before = DateTime.UtcNow.AddSeconds(-1);
 
@@ -436,7 +387,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task EmptyBatch_ReturnsNoRows()
+    public async Task AppendEvents_EmptyBatch_ReturnsNoRows()
     {
         var results = await Client.AppendAsync([]);
 
@@ -448,7 +399,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     // valid request first and the offender second. Cases the typed client cannot express go through raw SQL.
 
     [Test]
-    public async Task RequestArrayLengthMismatch_RaisesWithExpectedLength()
+    public async Task AppendEvents_RequestArrayLengthMismatch_RaisesWithExpectedLength()
     {
         await ShouldRaiseInvalidParameterValueAsync(
             () => AppendRawAsync(
@@ -458,7 +409,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task ZeroEventCount_RaisesWithRequestIndex()
+    public async Task AppendEvents_ZeroEventCount_RaisesWithRequestIndex()
     {
         await ShouldRaiseInvalidParameterValueAsync(
             () => Client.AppendAsync([Any("s1", JsonEvent()), Any("s2")]),
@@ -466,7 +417,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task EventArrayLengthMismatch_RaisesWithExpectedLength()
+    public async Task AppendEvents_EventArrayLengthMismatch_RaisesWithExpectedLength()
     {
         await ShouldRaiseInvalidParameterValueAsync(
             () => AppendRawAsync(
@@ -478,7 +429,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task EmptyBatchWithEvents_RaisesWithExpectedLength()
+    public async Task AppendEvents_EmptyBatchWithEvents_RaisesWithExpectedLength()
     {
         await ShouldRaiseInvalidParameterValueAsync(
             () => AppendRawAsync(
@@ -488,15 +439,15 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task EmptyStreamId_RaisesWithRequestIndex()
+    public async Task AppendEvents_EmptyStreamId_RaisesWithRequestIndex()
     {
         await ShouldRaiseInvalidParameterValueAsync(
             () => Client.AppendAsync([Any("s1", JsonEvent()), Any("", JsonEvent())]),
-            "request 1: stream id must not be null or empty");
+            "request 1: stream ID must not be null or empty");
     }
 
     [Test]
-    public async Task NullCommitId_RaisesWithRequestIndex()
+    public async Task AppendEvents_NullCommitId_RaisesWithRequestIndex()
     {
         await ShouldRaiseInvalidParameterValueAsync(
             () => AppendRawAsync(
@@ -504,11 +455,21 @@ public class AppendFunctionTests : PostgresIntegrationTest
                 "ARRAY[gen_random_uuid(), NULL::uuid], ARRAY[1, 1], " +
                 "ARRAY['e', 'e'], ARRAY['{}'::jsonb, '{}'::jsonb], ARRAY[NULL::bytea, NULL::bytea], " +
                 "ARRAY[NULL::jsonb, NULL::jsonb]"),
-            "request 1: commit id must not be null");
+            "request 1: commit ID must not be null");
     }
 
     [Test]
-    public async Task UnknownExpectedKind_RaisesInvalidTextRepresentation()
+    public async Task AppendEvents_RepeatedCommitId_RaisesWithRequestIndex()
+    {
+        var request = Any("s1", JsonEvent());
+
+        await ShouldRaiseInvalidParameterValueAsync(
+            () => Client.AppendAsync([request, Any("s2", JsonEvent()), request with { StreamId = "s3" }]),
+            "request 2: commit ID repeats an earlier request");
+    }
+
+    [Test]
+    public async Task AppendEvents_UnknownExpectedKind_RaisesInvalidTextRepresentation()
     {
         // The enum rejects a label it does not have while the batch is read, before the function runs. The typed client
         // cannot express it, so this goes through raw SQL.
@@ -523,7 +484,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task NullExpectedKind_RaisesWithRequestIndex()
+    public async Task AppendEvents_NullExpectedKind_RaisesWithRequestIndex()
     {
         await ShouldRaiseInvalidParameterValueAsync(
             () => AppendRawAsync(
@@ -535,7 +496,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task AtVersionWithoutVersion_RaisesWithRequestIndex()
+    public async Task AppendEvents_AtVersionWithoutVersion_RaisesWithRequestIndex()
     {
         var request = new Request("s2", AppendProtocol.ExpectedKind.AtVersion, null, Guid.NewGuid(), JsonEvent());
 
@@ -545,7 +506,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task AtVersionWithNegativeVersion_RaisesWithRequestIndex()
+    public async Task AppendEvents_AtVersionWithNegativeVersion_RaisesWithRequestIndex()
     {
         await ShouldRaiseInvalidParameterValueAsync(
             () => Client.AppendAsync([Any("s1", JsonEvent()), AtVersion("s2", -1, JsonEvent())]),
@@ -553,7 +514,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task VersionWithoutAtVersion_RaisesWithRequestIndex()
+    public async Task AppendEvents_VersionWithoutAtVersion_RaisesWithRequestIndex()
     {
         var request = new Request("s2", AppendProtocol.ExpectedKind.Any, 3, Guid.NewGuid(), JsonEvent());
 
@@ -563,15 +524,15 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task MultipleInvalidRequests_ReportsTheFirst()
+    public async Task AppendEvents_MultipleInvalidRequests_ReportsFirst()
     {
         await ShouldRaiseInvalidParameterValueAsync(
             () => Client.AppendAsync([Any("s1", JsonEvent()), Any("", JsonEvent()), Any("", JsonEvent())]),
-            "request 1: stream id must not be null or empty");
+            "request 1: stream ID must not be null or empty");
     }
 
     [Test]
-    public async Task InvalidBatch_AppendsNothing()
+    public async Task AppendEvents_InvalidBatch_AppendsNothing()
     {
         await Should.ThrowAsync<PostgresException>(() => Client.AppendAsync([Any("s1", JsonEvent()), Any("s2")]));
 
@@ -580,7 +541,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
     }
 
     [Test]
-    public async Task UnderRepeatableRead_RaisesInvalidTransactionState()
+    public async Task AppendEvents_RepeatableRead_RaisesInvalidTransactionState()
     {
         await using var connection = await DataSource.OpenConnectionAsync();
         await using var transaction = await connection.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead);
@@ -593,7 +554,7 @@ public class AppendFunctionTests : PostgresIntegrationTest
 
     [TestCase(true)]
     [TestCase(false)]
-    public async Task LargeBatch_CompletesInLinearTime(bool distinctStreams)
+    public async Task AppendEvents_LargeBatch_CompletesInLinearTime(bool distinctStreams)
     {
         // 500 requests of 10 events, with distinct and with repeated streams. The time limit is there to catch a cost
         // inside the function that grows quadratically with the batch size.
