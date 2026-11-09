@@ -196,6 +196,8 @@ public class MongoSequencedAppenderTests : MongoIntegrationTestBase
     [CancelAfter(TimeoutMillis)]
     public async Task AppendAsync_RequestIdRepeatedInLaterBatch_AppendsBoth(CancellationToken ct)
     {
+        // The appender doesn't make appends idempotent: it only groups requests with the same ID in one batch, so a
+        // repeat in a later batch is appended again. Making appends idempotent is up to the policy.
         var preparedBatches = new List<string>();
 
         var policy = new CallbackAppenderPolicy<string>(
@@ -211,7 +213,6 @@ public class MongoSequencedAppenderTests : MongoIntegrationTestBase
         await AppendValueAsync(appender, "first", requestId, ct);
         await AppendValueAsync(appender, "repeat", requestId, ct);
 
-        // Only requests in one batch are grouped. Across batches, the policy decides what a repeated ID means.
         preparedBatches.ShouldBe(["first", "repeat"]);
         (await ReadValuesAsync(ct)).ShouldBe(["first", "repeat"]);
     }
