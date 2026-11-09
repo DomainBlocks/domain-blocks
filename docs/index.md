@@ -18,7 +18,7 @@ The event store is built to be trusted as the system of record:
   `StreamAppendConflictException` if another writer got there first. The exception carries the state that was observed,
   so the caller may reload and retry.
 - **Idempotent appends.** Give an append a unique commit ID, and a retry of the same request succeeds without writing
-  again, even if the first attempt committed but its reply was lost (e.g. due to a timeout).
+  again, even if the first attempt committed but its reply was lost (e.g. due to a timeout or cancellation).
 - **Globally ordered event log.** Global event sequencing guarantees events are observed in commit order across both
   historical reads and live subscriptions. Causes are always observed before their effects, and a replay sees exactly
   the sequence a live subscriber saw.
