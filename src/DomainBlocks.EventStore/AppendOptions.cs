@@ -12,7 +12,8 @@ public sealed class AppendOptions
 
     /// <summary>
     /// Gets how long to wait for the store to acknowledge the append before timing out, or
-    /// <see cref="System.Threading.Timeout.InfiniteTimeSpan"/> to wait without a timeout. The default is 30 seconds.
+    /// <see cref="System.Threading.Timeout.InfiniteTimeSpan"/> to wait without a timeout. An append that times out may
+    /// still be written. The default is 30 seconds.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">
     /// The value is zero, or negative and not <see cref="System.Threading.Timeout.InfiniteTimeSpan"/>.

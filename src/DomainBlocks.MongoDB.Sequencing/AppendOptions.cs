@@ -6,7 +6,8 @@ namespace DomainBlocks.MongoDB.Sequencing;
 public class AppendOptions
 {
     /// <summary>
-    /// Gets or sets the maximum time to wait for the append operation to complete. Defaults to 10 seconds.
+    /// Gets or sets the maximum time to wait for the append operation to complete. If the wait times out, the documents
+    /// may still be appended. Defaults to 10 seconds.
     /// </summary>
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(10);
 }

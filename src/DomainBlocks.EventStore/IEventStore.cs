@@ -40,7 +40,10 @@ public interface IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> : IAsyncDis
     /// concurrent appends with the same commit ID aren't guaranteed to be idempotent, and may fail with a conflict.
     /// </param>
     /// <param name="options">The append options, or <see langword="null"/> for the defaults.</param>
-    /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
+    /// <param name="cancellationToken">
+    /// The token to monitor for cancellation requests. A canceled append may still be written, so a retry should use
+    /// the same <paramref name="commitId"/>.
+    /// </param>
     /// <returns>A task that represents the asynchronous operation.</returns>
     Task AppendAsync(
         TStreamId streamId,

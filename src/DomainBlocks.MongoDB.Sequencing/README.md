@@ -86,8 +86,9 @@ an example showing how to build a simple, globally ordered event store using thi
 An implementation of `IMongoSequencedAppenderPolicy<TContext>` can be provided to hook into the append pipeline at two
 points:
 
-- **Before each transaction attempt** - runs outside the transaction, before the sequence counter is incremented and
-  documents are inserted. Fires on every attempt, including retries after a duplicate key conflict.
+- **Before each batch is committed** - runs outside the transaction, before the sequence counter is incremented and
+  documents are inserted. Runs again with the requests that are still pending after a duplicate key conflict, but not
+  when the transaction is retried after a transient error.
 - **After a duplicate key conflict** - runs outside the transaction, after it has been aborted due to a duplicate key
   conflict on the target collection.
 
@@ -97,7 +98,7 @@ complete with that request's outcome.
 Uses include:
 
 - Stamping per-stream version numbers onto event documents before commit.
-- Implementing idempotent commits by detecting and skipping already-applied requests.
+- Implementing idempotent commits by detecting already-applied requests and completing them.
 - Completing requests early based on pre-commit validation.
 - Implementing optimistic concurrency checks.
 

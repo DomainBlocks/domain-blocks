@@ -17,7 +17,9 @@ public interface IMongoSequencedAppender<in TDocument, in TContext> : IAsyncDisp
     /// complete with its outcome.
     /// </param>
     /// <param name="options">Optional per-call options.</param>
-    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <param name="cancellationToken">
+    /// A token to cancel the operation. If the operation is canceled, the documents may still be appended.
+    /// </param>
     Task AppendAsync(
         IEnumerable<TDocument> documents,
         TContext context,
