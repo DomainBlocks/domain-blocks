@@ -107,7 +107,7 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
             return;
 
         options ??= new AppendOptions();
-        var request = new AppendRequest<TContext>(bsonDocuments, context, requestId ?? Guid.NewGuid());
+        var request = new AppendRequest<TContext>(bsonDocuments, context, requestId);
 
         using var linkedTimeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         linkedTimeoutCts.CancelAfter(options.Timeout);

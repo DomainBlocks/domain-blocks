@@ -10,12 +10,7 @@ public sealed class AppendRequest<TContext>
     private readonly TaskCompletionSource _tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private AppendRequest<TContext>? _next;
 
-    public AppendRequest(IReadOnlyList<BsonDocument> documents, TContext context)
-        : this(documents, context, Guid.NewGuid())
-    {
-    }
-
-    internal AppendRequest(IReadOnlyList<BsonDocument> documents, TContext context, Guid id)
+    public AppendRequest(IReadOnlyList<BsonDocument> documents, TContext context, Guid? id = null)
     {
         ArgumentNullException.ThrowIfNull(documents);
 
@@ -24,7 +19,7 @@ public sealed class AppendRequest<TContext>
 
         Documents = documents;
         Context = context;
-        Id = id;
+        Id = id ?? Guid.NewGuid();
     }
 
     /// <summary>
