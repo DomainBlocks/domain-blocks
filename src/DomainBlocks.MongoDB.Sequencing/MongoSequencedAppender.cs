@@ -115,7 +115,7 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
 
         try
         {
-            await _channel.Writer.WriteAsync(request, linkedTimeoutCts.Token);
+            await _channel.Writer.WriteAsync(request, linkedTimeoutCts.Token).ConfigureAwait(false);
             await request.Completion.WaitAsync(linkedTimeoutCts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -259,7 +259,7 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
 
         GroupById(batch);
 
-        await _appenderPolicy.OnBatchCommittingAsync(batch, ct);
+        await _appenderPolicy.OnBatchCommittingAsync(batch, ct).ConfigureAwait(false);
 
         // A completed request is never written, so a conflict prepares the batch again without it.
         var count = 0;
