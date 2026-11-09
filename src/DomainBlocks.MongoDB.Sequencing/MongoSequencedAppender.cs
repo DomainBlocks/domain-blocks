@@ -1,5 +1,4 @@
 ﻿using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -257,7 +256,7 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
         _buffers.Documents.Clear();
         _buffers.RequestByDocumentIndex.Clear();
 
-        GroupById(batch);
+        GroupByRequestId(batch);
 
         await _appenderPolicy.OnBatchCommittingAsync(batch, ct).ConfigureAwait(false);
 
@@ -287,7 +286,7 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
     }
 
     // Keeps the first request for each ID and makes the others complete with it, so the policy sees each ID once.
-    private void GroupById(List<AppendRequest<TContext>> batch)
+    private void GroupByRequestId(List<AppendRequest<TContext>> batch)
     {
         var count = 0;
 
@@ -295,18 +294,12 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
         {
             var request = batch[i];
 
-            ref var first = ref CollectionsMarshal.GetValueRefOrAddDefault(
-                _buffers.Requests,
-                request.Id,
-                out var exists);
-
-            if (exists)
+            if (!_buffers.Requests.TryAdd(request.Id, request))
             {
-                request.CompleteWith(first!);
+                request.CompleteWith(_buffers.Requests[request.Id]);
                 continue;
             }
 
-            first = request;
             batch[count++] = request;
         }
 

@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using DomainBlocks.EventStore.Internal;
 using Microsoft.Extensions.Logging;
@@ -170,18 +169,12 @@ internal sealed class BatchingAppender : IAppender
     {
         while (batch.Count < _maxBatchSize && _channel.Reader.TryRead(out var request))
         {
-            ref var first = ref CollectionsMarshal.GetValueRefOrAddDefault(
-                _batchRequests,
-                request.CommitId,
-                out var exists);
-
-            if (exists)
+            if (!_batchRequests.TryAdd(request.CommitId, request))
             {
-                request.CompleteWith(first!);
+                request.CompleteWith(_batchRequests[request.CommitId]);
                 continue;
             }
 
-            first = request;
             batch.Add(request);
         }
     }
