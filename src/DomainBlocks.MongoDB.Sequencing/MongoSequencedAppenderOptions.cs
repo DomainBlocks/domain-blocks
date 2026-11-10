@@ -23,8 +23,7 @@ public class MongoSequencedAppenderOptions
     /// </summary>
     /// <remarks>
     /// The delay depends on the system clock, so a delay shorter than the clock's resolution lasts about as long as the
-    /// resolution. On Windows, the resolution is about 15 ms by default, and an application can raise it, e.g., with
-    /// <c>timeBeginPeriod</c>.
+    /// resolution. On Windows, the resolution is about 15 ms by default.
     /// </remarks>
     public TimeSpan BatchingDelay { get; set; }
 
