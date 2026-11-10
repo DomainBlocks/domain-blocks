@@ -53,7 +53,7 @@ public sealed class PostgresEventStoreOptions
     /// A batch that is not full waits for up to this long before it commits, so a delay longer than an append's
     /// <see cref="AppendOptions.Timeout"/> can make the append time out. The delay depends on the system clock, so a
     /// delay shorter than the clock's resolution lasts about as long as the resolution. On Windows, the resolution is
-    /// about 15 ms by default, and an application can raise it, e.g., with <c>timeBeginPeriod</c>.
+    /// about 15 ms by default.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
     public TimeSpan AppendBatchingDelay
