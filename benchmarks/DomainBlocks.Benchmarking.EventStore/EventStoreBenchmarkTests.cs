@@ -71,7 +71,7 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
     [Explicit("Benchmark")]
     [CancelAfter(BenchmarkTimeouts.DefaultMillis)]
     public Task AppendAsync_MeasureThroughput(int instanceCount, int inFlight, CancellationToken ct) =>
-        MeasureAppendThroughputAsync(instanceCount, inFlight, DefaultEventsPerStream, ct);
+        MeasureAppendThroughputAsync(instanceCount, inFlight, DefaultEventsPerStream, nameCount: null, ct);
 
     /// <summary>
     /// Append throughput as a function of stream length, with one instance and 1,000 in flight. With one event per
@@ -83,7 +83,22 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
     [Explicit("Benchmark")]
     [CancelAfter(BenchmarkTimeouts.DefaultMillis)]
     public Task AppendAsync_MeasureThroughput_StreamLengthSweep(int eventsPerStream, CancellationToken ct) =>
-        MeasureAppendThroughputAsync(instanceCount: 1, inFlight: 1_000, eventsPerStream, ct);
+        MeasureAppendThroughputAsync(instanceCount: 1, inFlight: 1_000, eventsPerStream, nameCount: null, ct);
+
+    /// <summary>
+    /// Append throughput as a function of how many names new streams draw from, with one instance and 1,000 in flight.
+    /// Names are drawn at random, so the 1,000 streams being appended to at any moment have about 632 distinct names
+    /// when there are 1,000, and about 952 when there are 10,000. With one name, streams sit together as in the other
+    /// append tests, which gives the sweep a baseline from the same run.
+    /// </summary>
+    [TestCase(1)]
+    [TestCase(100)]
+    [TestCase(1_000)]
+    [TestCase(10_000)]
+    [Explicit("Benchmark")]
+    [CancelAfter(BenchmarkTimeouts.DefaultMillis)]
+    public Task AppendAsync_MeasureThroughput_StreamNameSweep(int nameCount, CancellationToken ct) =>
+        MeasureAppendThroughputAsync(instanceCount: 1, inFlight: 1_000, DefaultEventsPerStream, nameCount, ct);
 
     /// <summary>
     /// Read throughput: one reader reads a log of a hundred streams from start to end, several times over. The median
@@ -123,6 +138,7 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
         int instanceCount,
         int inFlight,
         int eventsPerStream,
+        int? nameCount,
         CancellationToken ct)
     {
         var instances = new IEventStore<object, string, TStreamPos, TLogPos>[instanceCount];
@@ -131,7 +147,7 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
 
         try
         {
-            var streamIdGenerator = new StreamIdGenerator(inFlight, eventsPerStream);
+            var streamIdGenerator = new StreamIdGenerator(inFlight, eventsPerStream, nameCount);
             var runner = new BenchmarkRunner();
 
             var result = await runner.MeasureThroughputAsync(
@@ -144,9 +160,11 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
 
             await BenchmarkReport.WriteEnvironmentAsync(instances[0].GetType(), await Harness.DescribeAsync());
 
+            var names = nameCount is { } count ? $", {count:N0} stream name(s)" : "";
+
             await BenchmarkReport.WriteThroughputAsync(
                 $"append throughput, {instanceCount} instance(s), {inFlight:N0} in flight, " +
-                $"1 event per append, {eventsPerStream:N0} event(s) per stream",
+                $"1 event per append, {eventsPerStream:N0} event(s) per stream{names}",
                 result);
 
             result.Errors.ShouldBe(0, "a throughput figure with failed appends is not meaningful");
