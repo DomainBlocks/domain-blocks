@@ -26,7 +26,14 @@ public static class MongoEventStoreAdmin
                     Unique = true
                 }),
 
-            new(builder.Ascending(x => x.CommitId), new CreateIndexOptions { Name = EventLogIndexNames.CommitId })
+            // Only appends whose caller supplied a commit ID store one, so the index holds just the IDs that a retry
+            // can repeat. The pre-commit lookup's $in on commit IDs implies the filter, so it can use the index.
+            new(builder.Ascending(x => x.CommitId),
+                new CreateIndexOptions<EventLogEntry>
+                {
+                    Name = EventLogIndexNames.CommitId,
+                    PartialFilterExpression = Builders<EventLogEntry>.Filter.Exists(x => x.CommitId)
+                })
         ];
 
         await eventLog.Indexes.CreateManyAsync(indexModels, cancellationToken).ConfigureAwait(false);

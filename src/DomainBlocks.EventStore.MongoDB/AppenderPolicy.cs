@@ -22,9 +22,7 @@ internal sealed class AppenderPolicy(IMongoCollection<BsonDocument> eventLog) :
             var firstEvent = request.Documents[0];
             _preCommitQuery.AddStreamId(firstEvent[EventLogEntry.FieldNames.StreamId]);
 
-            // Only commit IDs that callers supply need checking. A generated commit ID is new, and will therefore not
-            // exist in the event log.
-            if (!request.Context.IsCommitIdGenerated)
+            if (request.Context.CommitId is not null)
                 _preCommitQuery.AddCommitId(firstEvent[EventLogEntry.FieldNames.CommitId]);
         }
 
@@ -36,7 +34,7 @@ internal sealed class AppenderPolicy(IMongoCollection<BsonDocument> eventLog) :
 
         foreach (var request in batch)
         {
-            if (_buffers.ExistingCommitIds.Contains(request.Context.CommitId))
+            if (request.Context.CommitId is { } commitId && _buffers.ExistingCommitIds.Contains(commitId))
             {
                 request.TryComplete();
                 continue;

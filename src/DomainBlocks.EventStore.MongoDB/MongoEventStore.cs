@@ -122,35 +122,31 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         CancellationToken cancellationToken = default)
     {
         expectedState ??= ExpectedStreamState.Any<StreamPosition>();
-        var isCommitIdGenerated = commitId is null;
-        // Version 7 GUIDs are time-ordered, so new commit IDs sort to the end of the commit ID index instead of landing
-        // on random pages.
-        commitId ??= Guid.CreateVersion7();
         options ??= new AppendOptions();
 
         // The sequencing library passes the timeout to CancelAfter without checking it.
         CancellationTokenSource.ThrowIfDelayOutOfRange(options.Timeout);
 
         var bsonStreamId = new BsonString(streamId);
-        var bsonCommitId = new BsonBinaryData(commitId.Value, GuidRepresentation.Standard);
+        var bsonCommitId = commitId is { } id ? new BsonBinaryData(id, GuidRepresentation.Standard) : null;
 
         var eventDocuments = _eventCodec
             .Encode(events)
             .Select((x, i) => new BsonDocument
             {
                 { FieldNames.StreamId, bsonStreamId },
-                { FieldNames.CommitId, bsonCommitId },
+                { FieldNames.CommitId, bsonCommitId, bsonCommitId is not null },
                 { FieldNames.CommitIndex, i },
                 { FieldNames.EventName, x.EventName },
                 { FieldNames.EventData, x.EventData },
                 { FieldNames.Metadata, x.Metadata ?? BsonNull.Value }
             });
 
-        var context = new AppendContext(commitId.Value, isCommitIdGenerated, streamId, expectedState.Value);
+        var context = new AppendContext(commitId, streamId, expectedState.Value);
         var appendOptions = new DomainBlocks.MongoDB.Sequencing.AppendOptions { Timeout = options.Timeout };
 
         await _sequencedAppender
-            .AppendAsync(eventDocuments, context, commitId.Value, appendOptions, cancellationToken)
+            .AppendAsync(eventDocuments, context, commitId, appendOptions, cancellationToken)
             .ConfigureAwait(false);
     }
 

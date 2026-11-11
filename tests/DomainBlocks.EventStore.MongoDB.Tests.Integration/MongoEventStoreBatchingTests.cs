@@ -43,18 +43,18 @@ public class MongoEventStoreBatchingTests
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task AppendAsync_CommittedAndGeneratedCommitIdsInBatch_WritesOnlyGenerated(CancellationToken ct)
+    public async Task AppendAsync_CommittedAndNullCommitIdsInBatch_WritesOnlyNull(CancellationToken ct)
     {
         await using var scenario = await BatchingScenario.StartAsync(ct);
         var commitId = Guid.NewGuid();
         await scenario.AppendAsync("stream-1", ExpectedStreamState.Any<StreamPosition>(), commitId, ct);
 
-        var (generated, repeat) = await scenario.AppendInOneBatchAsync(
+        var (withoutCommitId, repeat) = await scenario.AppendInOneBatchAsync(
             new BatchedAppend("stream-2", ExpectedStreamState.Any<StreamPosition>(), CommitId: null),
             new BatchedAppend("stream-1", ExpectedStreamState.Any<StreamPosition>(), commitId),
             ct);
 
-        await generated;
+        await withoutCommitId;
         await repeat;
         (await scenario.CountEventsAsync("stream-1", ct)).ShouldBe(1);
         (await scenario.CountEventsAsync("stream-2", ct)).ShouldBe(1);
