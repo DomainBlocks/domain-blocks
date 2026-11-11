@@ -48,9 +48,28 @@ internal sealed class PreCommitQuery(IMongoCollection<BsonDocument> eventLog)
         Dictionary<string, long> headStreamVersions,
         CancellationToken cancellationToken = default)
     {
-        var commitIdFilter = Builders<BsonDocument>.Filter.In(EventLogEntry.FieldNames.CommitId, _commitIds);
+        var commitIdsTask = FindExistingCommitIdsAsync(existingCommitIds, cancellationToken);
+        var versionsTask = FindHeadStreamVersionsAsync(headStreamVersions, cancellationToken);
 
-        var streamHeadsPipeline = new[]
+        await Task.WhenAll(commitIdsTask, versionsTask).ConfigureAwait(false);
+    }
+
+    private async Task FindExistingCommitIdsAsync(HashSet<Guid> existingCommitIds, CancellationToken cancellationToken)
+    {
+        var filter = Builders<BsonDocument>.Filter.In(EventLogEntry.FieldNames.CommitId, _commitIds);
+
+        var cursor = await _eventLog
+            .DistinctAsync<BsonValue>(EventLogEntry.FieldNames.CommitId, filter, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+        await cursor.ForEachAsync(x => existingCommitIds.Add(x.AsGuid), cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task FindHeadStreamVersionsAsync(
+        Dictionary<string, long> headStreamVersions,
+        CancellationToken cancellationToken)
+    {
+        var pipeline = new[]
         {
             new BsonDocument(
                 "$match",
@@ -60,17 +79,12 @@ internal sealed class PreCommitQuery(IMongoCollection<BsonDocument> eventLog)
             StreamHeadsGroupStage
         };
 
-        var commitIdsTask = _eventLog
-            .Distinct<BsonValue>(
-                EventLogEntry.FieldNames.CommitId,
-                commitIdFilter,
-                cancellationToken: cancellationToken)
-            .ForEachAsync(x => existingCommitIds.Add(x.AsGuid), cancellationToken);
+        var cursor = await _eventLog
+            .AggregateAsync<BsonDocument>(pipeline, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
 
-        var versionsTask = _eventLog
-            .Aggregate<BsonDocument>(streamHeadsPipeline, cancellationToken: cancellationToken)
-            .ForEachAsync(x => headStreamVersions[x["_id"].AsString] = x["version"].AsInt64, cancellationToken);
-
-        await Task.WhenAll(commitIdsTask, versionsTask).ConfigureAwait(false);
+        await cursor
+            .ForEachAsync(x => headStreamVersions[x["_id"].AsString] = x["version"].AsInt64, cancellationToken)
+            .ConfigureAwait(false);
     }
 }
