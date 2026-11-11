@@ -63,7 +63,7 @@ internal sealed class BatchingScenario : IAsyncDisposable
     public Task AppendAsync(
         string streamId,
         ExpectedStreamState<StreamPosition> expectedState,
-        Guid commitId,
+        Guid? commitId,
         CancellationToken ct)
     {
         TestEvent[] events = [new() { Value = "e" }];
@@ -71,25 +71,39 @@ internal sealed class BatchingScenario : IAsyncDisposable
     }
 
     /// <summary>
-    /// Makes the same append twice in one batch: both queue up while the policy holds the batch before them.
+    /// Makes the same append twice in one batch.
     /// </summary>
-    public async Task<(Task First, Task Repeat)> AppendTwiceInOneBatchAsync(
+    public Task<(Task First, Task Repeat)> AppendTwiceInOneBatchAsync(
         string streamId,
         ExpectedStreamState<StreamPosition> expectedState,
         Guid commitId,
+        CancellationToken ct)
+    {
+        return AppendInOneBatchAsync(
+            () => AppendAsync(streamId, expectedState, commitId, ct),
+            () => AppendAsync(streamId, expectedState, commitId, ct),
+            ct);
+    }
+
+    /// <summary>
+    /// Makes two appends in one batch: both queue up while the policy holds the batch before them.
+    /// </summary>
+    public async Task<(Task First, Task Second)> AppendInOneBatchAsync(
+        Func<Task> appendFirst,
+        Func<Task> appendSecond,
         CancellationToken ct)
     {
         _policy.HoldNextBatch();
         var held = AppendAsync("held", ExpectedStreamState.Any<StreamPosition>(), Guid.NewGuid(), ct);
         await _policy.BatchHeld.WaitAsync(ct);
 
-        var first = AppendAsync(streamId, expectedState, commitId, ct);
-        var repeat = AppendAsync(streamId, expectedState, commitId, ct);
+        var first = appendFirst();
+        var second = appendSecond();
 
         _policy.ReleaseBatch();
         await held;
 
-        return (first, repeat);
+        return (first, second);
     }
 
     public Task<long> CountEventsAsync(string streamId, CancellationToken ct)

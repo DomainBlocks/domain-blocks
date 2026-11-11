@@ -20,9 +20,12 @@ internal sealed class AppenderPolicy(IMongoCollection<BsonDocument> eventLog) :
         foreach (var request in batch)
         {
             var firstEvent = request.Documents[0];
-            var bsonCommitId = firstEvent[EventLogEntry.FieldNames.CommitId];
-            var bsonStreamId = firstEvent[EventLogEntry.FieldNames.StreamId];
-            _preCommitQuery.AddInput(bsonCommitId, bsonStreamId);
+            _preCommitQuery.AddStreamId(firstEvent[EventLogEntry.FieldNames.StreamId]);
+
+            // Only commit IDs that callers supplied need looking up. A generated commit ID is new, and this method only
+            // runs before its batch commits, so the log can't hold it yet.
+            if (!request.Context.IsCommitIdGenerated)
+                _preCommitQuery.AddCommitId(firstEvent[EventLogEntry.FieldNames.CommitId]);
         }
 
         await _preCommitQuery
