@@ -40,4 +40,23 @@ public class MongoEventStoreBatchingTests
         (await repeat.ShouldThrowAsync<StreamAppendConflictException<StreamPosition>>()).ShouldBeSameAs(conflict);
         (await scenario.CountEventsAsync("stream-1", ct)).ShouldBe(1);
     }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task AppendAsync_CommittedAndGeneratedCommitIdsInBatch_WritesOnlyGenerated(CancellationToken ct)
+    {
+        await using var scenario = await BatchingScenario.StartAsync(ct);
+        var commitId = Guid.NewGuid();
+        await scenario.AppendAsync("stream-1", ExpectedStreamState.Any<StreamPosition>(), commitId, ct);
+
+        var (generated, repeat) = await scenario.AppendInOneBatchAsync(
+            () => scenario.AppendAsync("stream-2", ExpectedStreamState.Any<StreamPosition>(), commitId: null, ct),
+            () => scenario.AppendAsync("stream-1", ExpectedStreamState.Any<StreamPosition>(), commitId, ct),
+            ct);
+
+        await generated;
+        await repeat;
+        (await scenario.CountEventsAsync("stream-1", ct)).ShouldBe(1);
+        (await scenario.CountEventsAsync("stream-2", ct)).ShouldBe(1);
+    }
 }

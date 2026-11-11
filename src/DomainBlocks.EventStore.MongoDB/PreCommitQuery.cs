@@ -27,11 +27,14 @@ internal sealed class PreCommitQuery(IMongoCollection<BsonDocument> eventLog)
     private readonly BsonArray _commitIds = [];
     private readonly BsonArray _streamIds = [];
 
-    public void AddInput(BsonValue commitId, BsonValue streamId)
+    public void AddCommitId(BsonValue commitId)
     {
         if (_dedup.Add(commitId))
             _commitIds.Add(commitId);
+    }
 
+    public void AddStreamId(BsonValue streamId)
+    {
         if (_dedup.Add(streamId))
             _streamIds.Add(streamId);
     }
@@ -56,6 +59,9 @@ internal sealed class PreCommitQuery(IMongoCollection<BsonDocument> eventLog)
 
     private async Task FindExistingCommitIdsAsync(HashSet<Guid> existingCommitIds, CancellationToken cancellationToken)
     {
+        if (_commitIds.Count == 0)
+            return;
+
         var filter = Builders<BsonDocument>.Filter.In(EventLogEntry.FieldNames.CommitId, _commitIds);
 
         var cursor = await _eventLog
