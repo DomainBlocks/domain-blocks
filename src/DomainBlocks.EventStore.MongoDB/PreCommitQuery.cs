@@ -85,8 +85,13 @@ internal sealed class PreCommitQuery(IMongoCollection<BsonDocument> eventLog)
             StreamHeadsGroupStage
         };
 
+        // An aggregate's first batch holds 101 documents unless the command sets a batch size, and the server leaves
+        // the cursor open when the results fill the batch exactly. The query returns at most one head per stream, so a
+        // batch size one above the number of streams returns every head in the first reply and closes the cursor.
+        var options = new AggregateOptions { BatchSize = _streamIds.Count + 1 };
+
         var cursor = await _eventLog
-            .AggregateAsync<BsonDocument>(pipeline, cancellationToken: cancellationToken)
+            .AggregateAsync<BsonDocument>(pipeline, options, cancellationToken)
             .ConfigureAwait(false);
 
         await cursor
