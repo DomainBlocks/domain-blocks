@@ -33,11 +33,12 @@ public interface IEventStore<TEvent, TStreamId, TStreamPos, TLogPos> : IAsyncDis
     /// The state the stream must be in for the append to succeed, or <see langword="null"/> to accept any state.
     /// </param>
     /// <param name="commitId">
-    /// A commit ID that makes the append idempotent, or <see langword="null"/> to generate one. An append whose commit
-    /// ID is already committed succeeds without writing anything. On one store instance, an append made while another
-    /// with the same commit ID is in progress succeeds if the other succeeds, and may fail the same way if the other
-    /// fails. A retry typically comes from the same process, and so the same store instance. Across store instances,
-    /// concurrent appends with the same commit ID aren't guaranteed to be idempotent, and may fail with a conflict.
+    /// A commit ID that makes the append idempotent, or <see langword="null"/> if it needn't be, in which case a retry
+    /// may write the events again. An append whose commit ID is already committed succeeds without writing anything.
+    /// On one store instance, an append made while another with the same commit ID is in progress succeeds if the
+    /// other succeeds, and may fail the same way if the other fails. A retry typically comes from the same process, and
+    /// so the same store instance. Across store instances, concurrent appends with the same commit ID aren't
+    /// guaranteed to be idempotent, and may fail with a conflict.
     /// </param>
     /// <param name="options">The append options, or <see langword="null"/> for the defaults.</param>
     /// <param name="cancellationToken">

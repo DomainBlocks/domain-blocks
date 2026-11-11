@@ -1,7 +1,6 @@
 namespace DomainBlocks.EventStore.MongoDB;
 
 public record AppendContext(
-    Guid CommitId,
-    bool IsCommitIdGenerated,
+    Guid? CommitId,
     string StreamId,
     ExpectedStreamState<StreamPosition> ExpectedStreamState);
