@@ -24,19 +24,33 @@ public sealed class SubscriptionOptions
     public int QueueCapacity { get; init; } = 1_000;
 
     /// <summary>
-    /// Gets how long to retry the reads that start a subscription and catch it up, when they fail with transient errors
-    /// and make no progress, before failing the subscription with the last error, or
-    /// <see cref="System.Threading.Timeout.InfiniteTimeSpan"/> to retry without a limit. The default is 5 minutes.
+    /// Gets how long the subscription tries to recover from transient errors before it fails with the last error, or
+    /// <see cref="System.Threading.Timeout.InfiniteTimeSpan"/> to keep trying without a limit. The default is 5
+    /// minutes.
     /// </summary>
     /// <remarks>
-    /// Transient errors include a dropped connection and a failover. A read makes progress when it returns an event or
-    /// completes, and the time runs from the first failure after the last progress. The reads stop retrying at this
-    /// timeout or at <see cref="CatchUpMaxRetryAttempts"/>, whichever they reach first.
+    /// <para>
+    /// Transient errors include a dropped connection and a failover. The subscription fails at this timeout or at
+    /// <see cref="MaxRetryAttempts"/>, whichever it reaches first. Both apply to what the subscription depends on at
+    /// the time.
+    /// </para>
+    /// <para>
+    /// While it catches up, they apply to its reads. A read makes progress when it returns an event or completes, and
+    /// the time runs from the first failure after the last progress. The store's live feed may fail meanwhile without
+    /// counting, because it may recover before the replay ends.
+    /// </para>
+    /// <para>
+    /// Until the feed first connects, and once the subscription is live, they apply to the feed, which the store's
+    /// subscriptions share and which retries without a limit. The time runs from the first failure that the
+    /// subscription sees. The feed recovers only when a connection stays up for 2 minutes. Events don't count, so a
+    /// connection that keeps dropping fails the subscription even while events arrive. Each restart of the subscription
+    /// starts again, such as after it falls behind.
+    /// </para>
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">
     /// The value is zero, or negative and not <see cref="System.Threading.Timeout.InfiniteTimeSpan"/>.
     /// </exception>
-    public TimeSpan CatchUpRetryTimeout
+    public TimeSpan RetryTimeout
     {
         get;
         init
@@ -49,16 +63,16 @@ public sealed class SubscriptionOptions
     } = TimeSpan.FromMinutes(5);
 
     /// <summary>
-    /// Gets how many times in a row to retry the reads that start a subscription and catch it up, when they fail with
-    /// transient errors and make no progress, before failing the subscription with the last error. The default is
-    /// <see cref="int.MaxValue"/>, which retries without a limit.
+    /// Gets how many retries the subscription allows when recovering from transient errors, before it fails with the
+    /// last error. The default is <see cref="int.MaxValue"/>, which retries without a limit.
     /// </summary>
     /// <remarks>
-    /// A read makes progress when it returns an event or completes, and the count starts again after progress. The
-    /// reads stop retrying at this count or at <see cref="CatchUpRetryTimeout"/>, whichever they reach first.
+    /// <see cref="RetryTimeout"/> says what the limits apply to, and when they start again. A count applies to the
+    /// subscription's own reads, or to the retries of the live feed, whose backoff sets their pace. So
+    /// <see cref="RetryTimeout"/> is the better limit on how long the subscription waits for the feed.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
-    public int CatchUpMaxRetryAttempts
+    public int MaxRetryAttempts
     {
         get;
         init

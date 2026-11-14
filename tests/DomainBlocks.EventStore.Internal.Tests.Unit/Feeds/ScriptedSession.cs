@@ -16,6 +16,8 @@ internal sealed class ScriptedSession(string description, params ScriptedSession
         public sealed record Throw(Exception Exception) : Step;
 
         public sealed record End : Step;
+
+        public sealed record Do(Action Action) : Step;
     }
 
     private readonly Queue<Step> _steps = new(steps);
@@ -37,6 +39,8 @@ internal sealed class ScriptedSession(string description, params ScriptedSession
 
     public static Step.End End() => new();
 
+    public static Step.Do Do(Action action) => new(action);
+
     public async IAsyncEnumerable<(long Item, long Mark)> ReadAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
@@ -56,6 +60,10 @@ internal sealed class ScriptedSession(string description, params ScriptedSession
 
                 case Step.End:
                     yield break;
+
+                case Step.Do step:
+                    step.Action();
+                    break;
             }
         }
     }

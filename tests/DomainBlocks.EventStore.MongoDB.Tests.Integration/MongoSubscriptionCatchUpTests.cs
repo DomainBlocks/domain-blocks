@@ -181,7 +181,7 @@ public class MongoSubscriptionCatchUpTests
         // A find's first batch holds fewer events than this, so the replay reads the rest with getMore.
         var existing = await scenario.AppendAsync("existing", 150);
 
-        await using var subscription = scenario.SubscribeToAll(new SubscriptionOptions { CatchUpMaxRetryAttempts = 0 });
+        await using var subscription = scenario.SubscribeToAll(new SubscriptionOptions { MaxRetryAttempts = 0 });
 
         (await subscription.NextEventAsync()).ShouldBe(existing[0]);
 
@@ -256,6 +256,20 @@ public class MongoSubscriptionCatchUpTests
 
         exception.ShouldBeSameAs(error);
         scenario.ChangeStreamProbe.InitialOpenCount.ShouldBe(1);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_ChangeStreamLostWhileLiveWithoutRetries_Throws(CancellationToken ct)
+    {
+        await using var scenario = await CatchUpScenario.StartAsync(ct);
+        await using var subscription = scenario.SubscribeToAll(new SubscriptionOptions { MaxRetryAttempts = 0 });
+
+        (await subscription.NextAsync()).IsCaughtUp.ShouldBeTrue();
+
+        scenario.ChangeStreamProbe.SimulateDisconnect();
+
+        await Should.ThrowAsync<TimeoutException>(subscription.NextAsync);
     }
 
     [Test]

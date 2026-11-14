@@ -70,8 +70,7 @@ public static class PostgresEventStore
         var resumeOptions = new FeedResumeOptions
         {
             RetryDelay = replicationOptions.RetryDelay,
-            MaxRetryDelay = replicationOptions.MaxRetryDelay,
-            MaxRetryAttempts = replicationOptions.MaxRetryAttempts
+            MaxRetryDelay = replicationOptions.MaxRetryDelay
         };
 
         ReplicationEventLogFeed.ValidateOptions(replicationOptions);
@@ -275,7 +274,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
             catchUpReader,
             options.Filter,
             origin,
-            options.QueueCapacity,
+            options,
             correlationId,
             _logger);
     }
@@ -303,7 +302,7 @@ public sealed class PostgresEventStore<TEvent> : IEventStore<TEvent, string, Str
             catchUpReader,
             EventFilter.StreamIds(streamId) & options.Filter,
             origin,
-            options.QueueCapacity,
+            options,
             correlationId,
             _logger);
     }
