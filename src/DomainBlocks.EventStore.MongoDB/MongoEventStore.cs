@@ -122,7 +122,9 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         CancellationToken cancellationToken = default)
     {
         expectedState ??= ExpectedStreamState.Any<StreamPosition>();
-        commitId ??= Guid.NewGuid();
+        // Version 7 GUIDs are time-ordered, so new commit IDs sort to the end of the commit ID index instead of landing
+        // on random pages.
+        commitId ??= Guid.CreateVersion7();
         options ??= new AppendOptions();
 
         // The sequencing library passes the timeout to CancelAfter without checking it.
