@@ -44,10 +44,6 @@ public static class MongoEventStoreAdmin
         await SeedSequenceAsync(db, options, cancellationToken).ConfigureAwait(false);
     }
 
-    // Clustering the log on its position stores events in log order with no separate _id index, which saves an index
-    // write per event appended and lets reads in log order scan the log itself. A collection can be clustered only
-    // when it's created, so this runs before the indexes would create it unclustered. Creating it again with the same
-    // options succeeds, so repeated and concurrent calls are safe.
     private static Task CreateEventLogAsync(
         IMongoDatabase db,
         MongoEventStoreOptions options,
@@ -55,6 +51,10 @@ public static class MongoEventStoreAdmin
     {
         var createOptions = new CreateCollectionOptions<EventLogEntry>
         {
+            // Clustering the log on its position stores events in log order with no separate _id index, which saves
+            // an index write per event appended and lets reads in log order scan the log itself. A collection can be
+            // clustered only when it's created, so the log is created before its indexes, which would otherwise
+            // create it unclustered.
             ClusteredIndex = new ClusteredIndexOptions<EventLogEntry>
             {
                 Key = Builders<EventLogEntry>.IndexKeys.Ascending(x => x.Position)
