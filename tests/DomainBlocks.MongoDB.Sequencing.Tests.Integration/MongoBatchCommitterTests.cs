@@ -16,8 +16,11 @@ public class MongoBatchCommitterTests : MongoIntegrationTestBase
     {
         await CreateUniqueValueIndexAsync(ct);
         var committer = CreateCommitter();
+
+        // Succeeds, since no document has the value yet.
         await committer.CommitAsync([CreateDocument("taken")], ct);
 
+        // Conflicts at the second document, since the first commit took its value.
         var result = await committer.CommitAsync([CreateDocument("new"), CreateDocument("taken")], ct);
 
         result.ShouldBeOfType<CommitResult.Conflict>().DocumentIndex.ShouldBe(1);
@@ -29,12 +32,17 @@ public class MongoBatchCommitterTests : MongoIntegrationTestBase
     {
         await CreateUniqueValueIndexAsync(ct);
         var committer = CreateCommitter();
+
+        // Succeeds with sequence number 0, since no document has the value yet.
         await committer.CommitAsync([CreateDocument("taken")], ct);
+
+        // Conflicts at the second document, since the first commit took its value.
         await committer.CommitAsync([CreateDocument("new"), CreateDocument("taken")], ct);
 
-        await committer.CommitAsync([CreateDocument("new")], ct);
+        // Succeeds with sequence number 1, since the conflicting commit wrote nothing and claimed no sequence numbers.
+        var result = await committer.CommitAsync([CreateDocument("new")], ct);
 
-        // The conflicting commit wrote nothing and claimed no sequence numbers.
+        result.ShouldBeOfType<CommitResult.Success>();
         (await ReadSequenceAsync(ct)).ShouldBe([0, 1]);
     }
 
