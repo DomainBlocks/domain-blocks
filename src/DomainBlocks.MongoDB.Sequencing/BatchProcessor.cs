@@ -20,11 +20,11 @@ internal sealed class BatchProcessor<TContext>(
     private readonly Dictionary<Guid, int> _conflictRetryCounts = [];
 
     /// <summary>
-    /// Commits the queue's requests in batches until the queue completes, and completes each request that it reads. A
-    /// batch that fails completes its requests with the exception, and later batches go ahead. If this method throws,
-    /// it has completed every request that it read, and none left in the queue.
+    /// Commits the channel's requests in batches until the channel completes, and completes each request that it
+    /// reads. A batch that fails completes its requests with the exception, and later batches go ahead. If this method
+    /// throws, it has completed every request that it read, and none left in the channel.
     /// </summary>
-    public async Task RunAsync(ChannelReader<AppendRequest<TContext>> queue, CancellationToken cancellationToken)
+    public async Task RunAsync(ChannelReader<AppendRequest<TContext>> channel, CancellationToken cancellationToken)
     {
         var maxBatchSize = options.MaxBatchSize;
         var batchingDelay = options.BatchingDelay;
@@ -34,10 +34,10 @@ internal sealed class BatchProcessor<TContext>(
 
         try
         {
-            while (await queue.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
+            while (await channel.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
             {
                 // Drain what's already queued
-                while (batch.Count < maxBatchSize && queue.TryRead(out var request))
+                while (batch.Count < maxBatchSize && channel.TryRead(out var request))
                     batch.Add(request);
 
                 // If multiple requests arrived together, more are likely in-flight - wait up to the batching delay for
@@ -53,9 +53,9 @@ internal sealed class BatchProcessor<TContext>(
                     try
                     {
                         while (batch.Count < maxBatchSize &&
-                               await queue.WaitToReadAsync(delayCts.Token).ConfigureAwait(false))
+                               await channel.WaitToReadAsync(delayCts.Token).ConfigureAwait(false))
                         {
-                            while (batch.Count < maxBatchSize && queue.TryRead(out var request))
+                            while (batch.Count < maxBatchSize && channel.TryRead(out var request))
                                 batch.Add(request);
                         }
                     }
@@ -72,7 +72,7 @@ internal sealed class BatchProcessor<TContext>(
                     "Batched {BatchSize}/{MaxBatchSize} requests (~{QueueCount}) queued)",
                     batch.Count,
                     maxBatchSize,
-                    queue.Count);
+                    channel.Count);
 
                 try
                 {

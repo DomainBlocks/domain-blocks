@@ -203,14 +203,14 @@ public class BatchProcessorTests
         var firstRequest = CreateRequest("first", requestId: requestId);
         var repeatedRequest = CreateRequest("repeat", requestId: requestId);
 
-        var queue = Channel.CreateUnbounded<AppendRequest<string>>();
-        var run = batchProcessor.RunAsync(queue.Reader, ct);
+        var channel = Channel.CreateUnbounded<AppendRequest<string>>();
+        var run = batchProcessor.RunAsync(channel.Reader, ct);
 
         // The first request commits before the repeat is queued, so the two are in separate batches.
-        queue.Writer.TryWrite(firstRequest).ShouldBeTrue();
+        channel.Writer.TryWrite(firstRequest).ShouldBeTrue();
         await firstRequest.Completion.WaitAsync(ct);
-        queue.Writer.TryWrite(repeatedRequest).ShouldBeTrue();
-        queue.Writer.Complete();
+        channel.Writer.TryWrite(repeatedRequest).ShouldBeTrue();
+        channel.Writer.Complete();
         await run;
 
         await repeatedRequest.Completion.WaitAsync(ct);
@@ -231,17 +231,17 @@ public class BatchProcessorTests
             });
 
         var batchProcessor = CreateBatchProcessor(new FakeBatchCommitter(), policy);
-        var queue = Channel.CreateUnbounded<AppendRequest<string>>();
+        var channel = Channel.CreateUnbounded<AppendRequest<string>>();
         var readRequest = CreateRequest("read");
         var queuedRequest = CreateRequest("queued");
         using var stopCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
-        queue.Writer.TryWrite(readRequest).ShouldBeTrue();
-        var run = batchProcessor.RunAsync(queue.Reader, stopCts.Token);
+        channel.Writer.TryWrite(readRequest).ShouldBeTrue();
+        var run = batchProcessor.RunAsync(channel.Reader, stopCts.Token);
 
         // The processor has read the first request and is committing it when the second is queued.
         await committing.Task.WaitAsync(ct);
-        queue.Writer.TryWrite(queuedRequest).ShouldBeTrue();
+        channel.Writer.TryWrite(queuedRequest).ShouldBeTrue();
         await stopCts.CancelAsync();
 
         await run.ShouldThrowAsync<OperationCanceledException>();
@@ -250,20 +250,20 @@ public class BatchProcessorTests
         queuedRequest.IsCompleted.ShouldBeFalse();
     }
 
-    // Queues the requests before the processor runs, so that it reads them as one batch, and completes the queue, so
+    // Queues the requests before the processor runs, so that it reads them as one batch, and completes the channel, so
     // that the processor returns after committing them.
     private static async Task RunOneBatchAsync(
         BatchProcessor<string> batchProcessor,
         AppendRequest<string>[] requests,
         CancellationToken ct)
     {
-        var queue = Channel.CreateUnbounded<AppendRequest<string>>();
+        var channel = Channel.CreateUnbounded<AppendRequest<string>>();
 
         foreach (var request in requests)
-            queue.Writer.TryWrite(request).ShouldBeTrue();
+            channel.Writer.TryWrite(request).ShouldBeTrue();
 
-        queue.Writer.Complete();
-        await batchProcessor.RunAsync(queue.Reader, ct);
+        channel.Writer.Complete();
+        await batchProcessor.RunAsync(channel.Reader, ct);
     }
 
     private static BatchProcessor<string> CreateBatchProcessor(
