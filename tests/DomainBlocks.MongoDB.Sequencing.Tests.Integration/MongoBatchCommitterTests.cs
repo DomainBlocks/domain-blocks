@@ -55,7 +55,7 @@ public class MongoBatchCommitterTests : MongoIntegrationTestBase
     // A unique value stands in for a key that a policy owns, like a stream position in the event store.
     private Task CreateUniqueValueIndexAsync(CancellationToken ct)
     {
-        var uniqueValue = new CreateIndexModel<TargetDoc>(
+        var uniqueValueIndex = new CreateIndexModel<TargetDoc>(
             Builders<TargetDoc>.IndexKeys.Ascending(x => x.Value),
             new CreateIndexOptions { Unique = true });
 
@@ -63,7 +63,7 @@ public class MongoBatchCommitterTests : MongoIntegrationTestBase
             .GetDatabase(DatabaseName)
             .GetCollection<TargetDoc>(TargetNs.CollectionName)
             .Indexes
-            .CreateOneAsync(uniqueValue, cancellationToken: ct);
+            .CreateOneAsync(uniqueValueIndex, cancellationToken: ct);
     }
 
     private static BsonDocument CreateDocument(string value) => new TargetDoc { Value = value }.ToBsonDocument();

@@ -41,14 +41,14 @@ public class BatchProcessorTests
             onConflict: _ => ConflictResolution.Retry);
 
         var batchProcessor = CreateBatchProcessor(committer, policy);
-        var rejected = CreateRequest("rejected");
-        var pending = CreateRequest("pending", value: "taken");
+        var rejectedRequest = CreateRequest("rejected");
+        var pendingRequest = CreateRequest("pending", value: "taken");
 
-        await batchProcessor.ProcessAsync([rejected, pending], ct);
+        await batchProcessor.ProcessAsync([rejectedRequest, pendingRequest], ct);
 
-        var exception = await rejected.Completion.WaitAsync(ct).ShouldThrowAsync<InvalidOperationException>();
+        var exception = await rejectedRequest.Completion.WaitAsync(ct).ShouldThrowAsync<InvalidOperationException>();
         exception.ShouldBeSameAs(rejection);
-        await pending.Completion.WaitAsync(ct);
+        await pendingRequest.Completion.WaitAsync(ct);
 
         // The retry left out the request that the policy had already rejected.
         preparedBatches.ShouldBe(["rejected, pending", "pending"]);
@@ -62,14 +62,14 @@ public class BatchProcessorTests
         var committer = new FakeBatchCommitter(committedValues: ["taken"]);
         var options = new MongoSequencedAppenderOptions { MaxConflictRetries = 2, ConflictRetryDelay = TimeSpan.Zero };
         var batchProcessor = CreateBatchProcessor(committer, DefaultSequencedAppenderPolicy<string>.Shared, options);
-        var conflicting = CreateRequest("taken");
-        var other = CreateRequest("other");
+        var conflictingRequest = CreateRequest("taken");
+        var otherRequest = CreateRequest("other");
 
-        await batchProcessor.ProcessAsync([conflicting, other], ct);
+        await batchProcessor.ProcessAsync([conflictingRequest, otherRequest], ct);
 
-        var exception = await conflicting.Completion.WaitAsync(ct).ShouldThrowAsync<AppendConflictException>();
+        var exception = await conflictingRequest.Completion.WaitAsync(ct).ShouldThrowAsync<AppendConflictException>();
         exception.Message.ShouldBe("Conflict not resolved after 2 retries.");
-        await other.Completion.WaitAsync(ct);
+        await otherRequest.Completion.WaitAsync(ct);
         committer.CommitAttempts.ShouldBe(["taken, other", "taken, other", "taken, other", "other"]);
     }
 
@@ -81,13 +81,13 @@ public class BatchProcessorTests
         var rejection = new InvalidOperationException();
         var policy = new CallbackAppenderPolicy<string>(onConflict: _ => ConflictResolution.Fail(rejection));
         var batchProcessor = CreateBatchProcessor(committer, policy);
-        var other = CreateRequest("other");
-        var conflicting = CreateRequest("taken");
+        var otherRequest = CreateRequest("other");
+        var conflictingRequest = CreateRequest("taken");
 
-        await batchProcessor.ProcessAsync([other, conflicting], ct);
+        await batchProcessor.ProcessAsync([otherRequest, conflictingRequest], ct);
 
-        await other.Completion.WaitAsync(ct);
-        var exception = await conflicting.Completion.WaitAsync(ct).ShouldThrowAsync<InvalidOperationException>();
+        await otherRequest.Completion.WaitAsync(ct);
+        var exception = await conflictingRequest.Completion.WaitAsync(ct).ShouldThrowAsync<InvalidOperationException>();
         exception.ShouldBeSameAs(rejection);
         committer.CommitAttempts.ShouldBe(["other, taken", "other"]);
     }
@@ -99,11 +99,11 @@ public class BatchProcessorTests
         var committer = new FakeBatchCommitter(committedValues: ["taken"]);
         var policy = new CallbackAppenderPolicy<string>(onConflict: _ => ConflictResolution.Fail());
         var batchProcessor = CreateBatchProcessor(committer, policy);
-        var conflicting = CreateRequest("taken");
+        var conflictingRequest = CreateRequest("taken");
 
-        await batchProcessor.ProcessAsync([conflicting], ct);
+        await batchProcessor.ProcessAsync([conflictingRequest], ct);
 
-        var exception = await conflicting.Completion.WaitAsync(ct).ShouldThrowAsync<AppendConflictException>();
+        var exception = await conflictingRequest.Completion.WaitAsync(ct).ShouldThrowAsync<AppendConflictException>();
         exception.InnerException.ShouldNotBeNull().Message.ShouldBe("Duplicate value 'taken'.");
     }
 
@@ -123,12 +123,12 @@ public class BatchProcessorTests
 
         var batchProcessor = CreateBatchProcessor(committer, policy);
         var requestId = Guid.NewGuid();
-        var first = CreateRequest("first", requestId: requestId);
-        var repeat = CreateRequest("repeat", requestId: requestId);
+        var firstRequest = CreateRequest("first", requestId: requestId);
+        var repeatedRequest = CreateRequest("repeat", requestId: requestId);
 
-        await batchProcessor.ProcessAsync([first, repeat], ct);
+        await batchProcessor.ProcessAsync([firstRequest, repeatedRequest], ct);
 
-        await Task.WhenAll(first.Completion, repeat.Completion).WaitAsync(ct);
+        await Task.WhenAll(firstRequest.Completion, repeatedRequest.Completion).WaitAsync(ct);
         preparedBatches.ShouldBe(["first"]);
         committer.CommittedValues.ShouldBe(["first"]);
     }
@@ -149,13 +149,17 @@ public class BatchProcessorTests
 
         var batchProcessor = CreateBatchProcessor(committer, policy);
         var requestId = Guid.NewGuid();
-        var first = CreateRequest("first", requestId: requestId);
-        var repeat = CreateRequest("repeat", requestId: requestId);
+        var firstRequest = CreateRequest("first", requestId: requestId);
+        var repeatedRequest = CreateRequest("repeat", requestId: requestId);
 
-        await batchProcessor.ProcessAsync([first, repeat], ct);
+        await batchProcessor.ProcessAsync([firstRequest, repeatedRequest], ct);
 
-        (await first.Completion.WaitAsync(ct).ShouldThrowAsync<InvalidOperationException>()).ShouldBeSameAs(rejection);
-        (await repeat.Completion.WaitAsync(ct).ShouldThrowAsync<InvalidOperationException>()).ShouldBeSameAs(rejection);
+        var firstException = await firstRequest.Completion.WaitAsync(ct).ShouldThrowAsync<InvalidOperationException>();
+        firstException.ShouldBeSameAs(rejection);
+
+        var repeatException =
+            await repeatedRequest.Completion.WaitAsync(ct).ShouldThrowAsync<InvalidOperationException>();
+        repeatException.ShouldBeSameAs(rejection);
         committer.CommitAttempts.ShouldBeEmpty();
     }
 
@@ -168,13 +172,13 @@ public class BatchProcessorTests
         var committer = new FakeBatchCommitter();
         var batchProcessor = CreateBatchProcessor(committer, DefaultSequencedAppenderPolicy<string>.Shared);
         var requestId = Guid.NewGuid();
-        var first = CreateRequest("first", requestId: requestId);
-        var repeat = CreateRequest("repeat", requestId: requestId);
+        var firstRequest = CreateRequest("first", requestId: requestId);
+        var repeatedRequest = CreateRequest("repeat", requestId: requestId);
 
-        await batchProcessor.ProcessAsync([first], ct);
-        await batchProcessor.ProcessAsync([repeat], ct);
+        await batchProcessor.ProcessAsync([firstRequest], ct);
+        await batchProcessor.ProcessAsync([repeatedRequest], ct);
 
-        await Task.WhenAll(first.Completion, repeat.Completion).WaitAsync(ct);
+        await Task.WhenAll(firstRequest.Completion, repeatedRequest.Completion).WaitAsync(ct);
         committer.CommittedValues.ShouldBe(["first", "repeat"]);
     }
 
