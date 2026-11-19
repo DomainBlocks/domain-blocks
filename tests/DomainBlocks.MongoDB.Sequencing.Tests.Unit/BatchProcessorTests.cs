@@ -109,6 +109,33 @@ public class BatchProcessorTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
+    public async Task ProcessAsync_ConflictInLaterRequest_ReportsIndexWithinRequest(CancellationToken ct)
+    {
+        var committer = new FakeBatchCommitter(committedValues: ["taken"]);
+        var conflicts = new List<AppendConflict<string>>();
+
+        var policy = new CallbackAppenderPolicy<string>(
+            onConflict: conflict =>
+            {
+                conflicts.Add(conflict);
+                return ConflictResolution.Fail();
+            });
+
+        var batchProcessor = CreateBatchProcessor(committer, policy);
+        var otherRequest = CreateRequest("other");
+
+        var conflictingRequest = new AppendRequest<string>(
+            [FakeBatchCommitter.CreateDocument("new"), FakeBatchCommitter.CreateDocument("taken")],
+            "conflicting");
+
+        await batchProcessor.ProcessAsync([otherRequest, conflictingRequest], ct);
+
+        // The commit's third document is the conflicting request's second.
+        conflicts.ShouldHaveSingleItem().DocumentIndex.ShouldBe(1);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
     public async Task ProcessAsync_RepeatedRequestId_CommitsFirstOnly(CancellationToken ct)
     {
         var committer = new FakeBatchCommitter();

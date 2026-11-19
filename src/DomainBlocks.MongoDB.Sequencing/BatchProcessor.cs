@@ -113,10 +113,13 @@ internal sealed class BatchProcessor<TContext>(
     {
         var request = _requestByDocumentIndex[conflict.DocumentIndex];
 
+        // Each request's documents are contiguous in the commit, so its first entry marks its first document.
+        var firstDocumentIndex = _requestByDocumentIndex.IndexOf(request);
+
         var appendConflict = new AppendConflict<TContext>(
             request.Documents,
             request.Context,
-            conflict.DocumentIndex,
+            conflict.DocumentIndex - firstDocumentIndex,
             conflict.ErrorMessage,
             conflict.OriginatingException);
 
