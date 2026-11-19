@@ -52,17 +52,12 @@ public abstract class MongoIntegrationTestBase
         }
     }
 
-    protected MongoSequencedAppender<TargetDoc, TContext> CreateAppender<TContext>(
-        int index = 0,
-        IMongoSequencedAppenderPolicy<TContext>? policy = null,
-        MongoSequencedAppenderOptions? options = null)
+    protected MongoSequencedAppender<TargetDoc, TContext> CreateAppender<TContext>(int index)
     {
         return new MongoSequencedAppender<TargetDoc, TContext>(
             MongoClient,
             CreateBinding(),
-            policy,
-            options,
-            MongoTestEnvironment.LoggerFactory.CreateLogger($"appender_{index}"));
+            logger: MongoTestEnvironment.LoggerFactory.CreateLogger($"appender_{index}"));
     }
 
     protected MongoSequenceBinding<TargetDoc> CreateBinding()

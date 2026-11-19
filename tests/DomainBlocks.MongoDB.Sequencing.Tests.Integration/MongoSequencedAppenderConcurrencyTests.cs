@@ -19,7 +19,7 @@ public class MongoSequencedAppenderConcurrencyTests : MongoIntegrationTestBase
         [
             .. Enumerable
                 .Range(0, AppenderCount)
-                .Select(i => CreateAppender<object>(i))
+                .Select(CreateAppender<object>)
         ];
 
         return Task.CompletedTask;

@@ -34,16 +34,26 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
         MongoSequenceBinding<TDocument> binding,
         IMongoSequencedAppenderPolicy<TContext>? appendPolicy = null,
         MongoSequencedAppenderOptions? options = null,
-        ILogger? logger = null)
+        ILogger? logger = null) :
+        this(
+            new MongoBatchCommitter<TDocument>(mongoClient, binding, logger ?? NullLogger.Instance),
+            appendPolicy,
+            options,
+            logger)
     {
-        ArgumentNullException.ThrowIfNull(mongoClient);
-        ArgumentNullException.ThrowIfNull(binding);
+    }
 
+    internal MongoSequencedAppender(
+        IBatchCommitter batchCommitter,
+        IMongoSequencedAppenderPolicy<TContext>? appendPolicy,
+        MongoSequencedAppenderOptions? options,
+        ILogger? logger)
+    {
         _options = options ?? new MongoSequencedAppenderOptions();
         _logger = logger ?? NullLogger.Instance;
 
         _batchProcessor = new BatchProcessor<TContext>(
-            new MongoBatchCommitter<TDocument>(mongoClient, binding, _logger),
+            batchCommitter,
             appendPolicy ?? DefaultSequencedAppenderPolicy<TContext>.Shared,
             _options,
             _logger);

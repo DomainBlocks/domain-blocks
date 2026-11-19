@@ -34,6 +34,9 @@ internal sealed class MongoBatchCommitter<TDocument> : IBatchCommitter
 
     public MongoBatchCommitter(IMongoClient mongoClient, MongoSequenceBinding<TDocument> binding, ILogger logger)
     {
+        ArgumentNullException.ThrowIfNull(mongoClient);
+        ArgumentNullException.ThrowIfNull(binding);
+
         var serializerRegistry = BsonSerializer.SerializerRegistry;
         var documentSerializer = serializerRegistry.GetSerializer<TDocument>();
 
