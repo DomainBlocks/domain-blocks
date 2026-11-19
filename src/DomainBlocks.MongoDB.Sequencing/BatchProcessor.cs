@@ -1,11 +1,12 @@
 using System.Diagnostics;
+using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 
 namespace DomainBlocks.MongoDB.Sequencing;
 
 /// <summary>
-/// Commits batches of append requests, preparing each batch with the policy and resolving its conflicts.
+/// Commits queued append requests in batches, preparing each batch with the policy and resolving its conflicts.
 /// </summary>
 internal sealed class BatchProcessor<TContext>(
     IBatchCommitter committer,
@@ -19,11 +20,96 @@ internal sealed class BatchProcessor<TContext>(
     private readonly Dictionary<Guid, int> _conflictRetryCounts = [];
 
     /// <summary>
+    /// Commits the channel's requests in batches until the channel completes, and completes each request that it
+    /// reads. A batch that fails completes its requests with the exception, and later batches go ahead. If this method
+    /// throws, it has completed every request that it read, and none left in the channel.
+    /// </summary>
+    public async Task RunAsync(ChannelReader<AppendRequest<TContext>> channel, CancellationToken cancellationToken)
+    {
+        var maxBatchSize = options.MaxBatchSize;
+        var batchingDelay = options.BatchingDelay;
+        var batchingDelayThreshold = options.BatchingDelayMinCount;
+        // The batch grows as it fills, since the maximum batch size can be far larger than any real batch.
+        var batch = new List<AppendRequest<TContext>>();
+
+        try
+        {
+            while (await channel.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                // Drain what's already queued
+                while (batch.Count < maxBatchSize && channel.TryRead(out var request))
+                    batch.Add(request);
+
+                // If multiple requests arrived together, more are likely in-flight - wait up to the batching delay for
+                // additional requests to accumulate before committing (Nagle-style coalescing). Short-circuits as soon
+                // as the batch is full.
+                if (batchingDelay > TimeSpan.Zero &&
+                    batch.Count >= batchingDelayThreshold &&
+                    batch.Count < maxBatchSize)
+                {
+                    using var delayCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    delayCts.CancelAfter(batchingDelay);
+
+                    try
+                    {
+                        while (batch.Count < maxBatchSize &&
+                               await channel.WaitToReadAsync(delayCts.Token).ConfigureAwait(false))
+                        {
+                            while (batch.Count < maxBatchSize && channel.TryRead(out var request))
+                                batch.Add(request);
+                        }
+                    }
+                    catch (OperationCanceledException) when (delayCts.IsCancellationRequested)
+                    {
+                        // Delay elapsed - not a real cancellation, continue with what we have
+                    }
+                }
+
+                if (batch.Count == 0)
+                    continue;
+
+                logger.LogTrace(
+                    "Batched {BatchSize}/{MaxBatchSize} requests (~{QueueCount}) queued)",
+                    batch.Count,
+                    maxBatchSize,
+                    channel.Count);
+
+                try
+                {
+                    var start = Stopwatch.GetTimestamp();
+
+                    await ProcessAsync(batch, cancellationToken).ConfigureAwait(false);
+
+                    var elapsed = Stopwatch.GetElapsedTime(start);
+
+                    logger.LogTrace("Batch processed in {Elapsed:F2}ms", elapsed.TotalMilliseconds);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw; // Stop, rather than fail this batch and go on to the next.
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "An error occurred while processing a batch");
+                    FaultAll(batch, ex);
+                }
+
+                batch.Clear();
+            }
+        }
+        catch (Exception ex)
+        {
+            FaultAll(batch, ex);
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Commits the batch and completes its requests. Removes from the batch the requests that complete before the
     /// commit, and the repeats of a request ID, which complete with the first. If this method throws, failing the
     /// requests left in the batch completes every request that hasn't completed.
     /// </summary>
-    public async Task ProcessAsync(List<AppendRequest<TContext>> batch, CancellationToken cancellationToken)
+    private async Task ProcessAsync(List<AppendRequest<TContext>> batch, CancellationToken cancellationToken)
     {
         _conflictRetryCounts.Clear();
 
@@ -171,5 +257,11 @@ internal sealed class BatchProcessor<TContext>(
             request.TryComplete(exception);
             batch.Remove(request);
         }
+    }
+
+    private static void FaultAll(List<AppendRequest<TContext>> entries, Exception exception)
+    {
+        foreach (var request in entries)
+            request.TryComplete(exception);
     }
 }

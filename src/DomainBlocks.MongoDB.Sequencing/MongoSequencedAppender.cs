@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using System.Threading.Channels;
+﻿using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Bson;
@@ -10,7 +9,6 @@ namespace DomainBlocks.MongoDB.Sequencing;
 /// <inheritdoc/>
 public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequencedAppender<TDocument, TContext>
 {
-    private readonly MongoSequencedAppenderOptions _options;
     private readonly ILogger _logger;
     private readonly BatchProcessor<TContext> _batchProcessor;
     private readonly Channel<AppendRequest<TContext>> _channel;
@@ -49,16 +47,16 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
         MongoSequencedAppenderOptions? options,
         ILogger? logger)
     {
-        _options = options ?? new MongoSequencedAppenderOptions();
+        options ??= new MongoSequencedAppenderOptions();
         _logger = logger ?? NullLogger.Instance;
 
         _batchProcessor = new BatchProcessor<TContext>(
             batchCommitter,
             appendPolicy ?? DefaultSequencedAppenderPolicy<TContext>.Shared,
-            _options,
+            options,
             _logger);
 
-        _channel = Channel.CreateBounded<AppendRequest<TContext>>(new BoundedChannelOptions(_options.QueueCapacity)
+        _channel = Channel.CreateBounded<AppendRequest<TContext>>(new BoundedChannelOptions(options.QueueCapacity)
         {
             SingleWriter = false,
             SingleReader = true
@@ -113,97 +111,22 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
 
     private async Task RunAppendLoopAsync(CancellationToken ct)
     {
-        var maxBatchSize = _options.MaxBatchSize;
-        var batchingDelay = _options.BatchingDelay;
-        var batchingDelayThreshold = _options.BatchingDelayMinCount;
-        // The batch grows as it fills, since the maximum batch size can be far larger than any real batch.
-        var batch = new List<AppendRequest<TContext>>();
-
         try
         {
-            while (await _channel.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
-            {
-                // Drain what's already queued
-                while (batch.Count < maxBatchSize && _channel.Reader.TryRead(out var request))
-                    batch.Add(request);
-
-                // If multiple requests arrived together, more are likely in-flight - wait up to the batching delay for
-                // additional requests to accumulate before committing (Nagle-style coalescing). Short-circuits as soon
-                // as the batch is full.
-                if (batchingDelay > TimeSpan.Zero &&
-                    batch.Count >= batchingDelayThreshold &&
-                    batch.Count < maxBatchSize)
-                {
-                    using var delayCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                    delayCts.CancelAfter(batchingDelay);
-
-                    try
-                    {
-                        while (batch.Count < maxBatchSize &&
-                               await _channel.Reader.WaitToReadAsync(delayCts.Token).ConfigureAwait(false))
-                        {
-                            while (batch.Count < maxBatchSize && _channel.Reader.TryRead(out var request))
-                                batch.Add(request);
-                        }
-                    }
-                    catch (OperationCanceledException) when (delayCts.IsCancellationRequested)
-                    {
-                        // Delay elapsed - not a real cancellation, continue with what we have
-                    }
-                }
-
-                if (batch.Count == 0)
-                    continue;
-
-                _logger.LogTrace(
-                    "Batched {BatchSize}/{MaxBatchSize} requests (~{QueueCount}) queued)",
-                    batch.Count,
-                    maxBatchSize,
-                    _channel.Reader.Count);
-
-                try
-                {
-                    var start = Stopwatch.GetTimestamp();
-
-                    await _batchProcessor.ProcessAsync(batch, ct).ConfigureAwait(false);
-
-                    var elapsed = Stopwatch.GetElapsedTime(start);
-
-                    _logger.LogTrace("Batch processed in {Elapsed:F2}ms", elapsed.TotalMilliseconds);
-                }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested)
-                {
-                    throw; // Let the outer catch handle graceful stop.
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "An error occurred while processing a batch");
-                    FaultAll(batch, ex);
-                }
-
-                batch.Clear();
-            }
+            await _batchProcessor.RunAsync(_channel.Reader, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException ex) when (ct.IsCancellationRequested)
         {
             _logger.LogTrace("Append operation canceled");
             _channel.Writer.TryComplete();
-            FaultAll(batch, ex);
             DrainWithFault(_channel, ex);
         }
         catch (Exception ex)
         {
             _logger.LogCritical(ex, "A fatal error occurred while processing appends");
             _channel.Writer.TryComplete(ex);
-            FaultAll(batch, ex);
             DrainWithFault(_channel, ex);
         }
-    }
-
-    private static void FaultAll(List<AppendRequest<TContext>> entries, Exception exception)
-    {
-        foreach (var request in entries)
-            request.TryComplete(exception);
     }
 
     private static void DrainWithFault(ChannelReader<AppendRequest<TContext>> reader, Exception exception)

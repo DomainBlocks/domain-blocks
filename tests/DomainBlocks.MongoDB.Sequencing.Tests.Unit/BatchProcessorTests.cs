@@ -1,3 +1,4 @@
+using System.Threading.Channels;
 using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
 using Shouldly;
@@ -10,7 +11,7 @@ public class BatchProcessorTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task ProcessAsync_ConflictRetried_PreparesOnlyPendingRequests(CancellationToken ct)
+    public async Task RunAsync_ConflictRetried_PreparesOnlyPendingRequests(CancellationToken ct)
     {
         var committer = new FakeBatchCommitter(committedValues: ["taken"]);
         var rejection = new InvalidOperationException();
@@ -44,7 +45,7 @@ public class BatchProcessorTests
         var rejectedRequest = CreateRequest("rejected");
         var pendingRequest = CreateRequest("pending", value: "taken");
 
-        await batchProcessor.ProcessAsync([rejectedRequest, pendingRequest], ct);
+        await RunOneBatchAsync(batchProcessor, [rejectedRequest, pendingRequest], ct);
 
         var exception = await rejectedRequest.Completion.WaitAsync(ct).ShouldThrowAsync<InvalidOperationException>();
         exception.ShouldBeSameAs(rejection);
@@ -57,7 +58,7 @@ public class BatchProcessorTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task ProcessAsync_ConflictRetriesExhausted_FailsConflictingRequest(CancellationToken ct)
+    public async Task RunAsync_ConflictRetriesExhausted_FailsConflictingRequest(CancellationToken ct)
     {
         var committer = new FakeBatchCommitter(committedValues: ["taken"]);
         var options = new MongoSequencedAppenderOptions { MaxConflictRetries = 2, ConflictRetryDelay = TimeSpan.Zero };
@@ -65,7 +66,7 @@ public class BatchProcessorTests
         var conflictingRequest = CreateRequest("taken");
         var otherRequest = CreateRequest("other");
 
-        await batchProcessor.ProcessAsync([conflictingRequest, otherRequest], ct);
+        await RunOneBatchAsync(batchProcessor, [conflictingRequest, otherRequest], ct);
 
         var exception = await conflictingRequest.Completion.WaitAsync(ct).ShouldThrowAsync<AppendConflictException>();
         exception.Message.ShouldBe("Conflict not resolved after 2 retries.");
@@ -75,7 +76,7 @@ public class BatchProcessorTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task ProcessAsync_ConflictFailedByPolicy_FailsConflictingRequestOnly(CancellationToken ct)
+    public async Task RunAsync_ConflictFailedByPolicy_FailsConflictingRequestOnly(CancellationToken ct)
     {
         var committer = new FakeBatchCommitter(committedValues: ["taken"]);
         var rejection = new InvalidOperationException();
@@ -84,7 +85,7 @@ public class BatchProcessorTests
         var otherRequest = CreateRequest("other");
         var conflictingRequest = CreateRequest("taken");
 
-        await batchProcessor.ProcessAsync([otherRequest, conflictingRequest], ct);
+        await RunOneBatchAsync(batchProcessor, [otherRequest, conflictingRequest], ct);
 
         await otherRequest.Completion.WaitAsync(ct);
         var exception = await conflictingRequest.Completion.WaitAsync(ct).ShouldThrowAsync<InvalidOperationException>();
@@ -94,14 +95,14 @@ public class BatchProcessorTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task ProcessAsync_ConflictFailedWithoutException_ThrowsAppendConflictException(CancellationToken ct)
+    public async Task RunAsync_ConflictFailedWithoutException_ThrowsAppendConflictException(CancellationToken ct)
     {
         var committer = new FakeBatchCommitter(committedValues: ["taken"]);
         var policy = new CallbackAppenderPolicy<string>(onConflict: _ => ConflictResolution.Fail());
         var batchProcessor = CreateBatchProcessor(committer, policy);
         var conflictingRequest = CreateRequest("taken");
 
-        await batchProcessor.ProcessAsync([conflictingRequest], ct);
+        await RunOneBatchAsync(batchProcessor, [conflictingRequest], ct);
 
         var exception = await conflictingRequest.Completion.WaitAsync(ct).ShouldThrowAsync<AppendConflictException>();
         exception.InnerException.ShouldNotBeNull().Message.ShouldBe("Duplicate value 'taken'.");
@@ -109,7 +110,7 @@ public class BatchProcessorTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task ProcessAsync_ConflictInLaterRequest_ReportsIndexWithinRequest(CancellationToken ct)
+    public async Task RunAsync_ConflictInLaterRequest_ReportsIndexWithinRequest(CancellationToken ct)
     {
         var committer = new FakeBatchCommitter(committedValues: ["taken"]);
         var conflicts = new List<AppendConflict<string>>();
@@ -128,7 +129,7 @@ public class BatchProcessorTests
             [FakeBatchCommitter.CreateDocument("new"), FakeBatchCommitter.CreateDocument("taken")],
             "conflicting");
 
-        await batchProcessor.ProcessAsync([otherRequest, conflictingRequest], ct);
+        await RunOneBatchAsync(batchProcessor, [otherRequest, conflictingRequest], ct);
 
         // The commit's third document is the conflicting request's second.
         conflicts.ShouldHaveSingleItem().DocumentIndex.ShouldBe(1);
@@ -136,7 +137,7 @@ public class BatchProcessorTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task ProcessAsync_RepeatedRequestId_CommitsFirstOnly(CancellationToken ct)
+    public async Task RunAsync_RepeatedRequestId_CommitsFirstOnly(CancellationToken ct)
     {
         var committer = new FakeBatchCommitter();
         var preparedBatches = new List<string>();
@@ -153,7 +154,7 @@ public class BatchProcessorTests
         var firstRequest = CreateRequest("first", requestId: requestId);
         var repeatedRequest = CreateRequest("repeat", requestId: requestId);
 
-        await batchProcessor.ProcessAsync([firstRequest, repeatedRequest], ct);
+        await RunOneBatchAsync(batchProcessor, [firstRequest, repeatedRequest], ct);
 
         await Task.WhenAll(firstRequest.Completion, repeatedRequest.Completion).WaitAsync(ct);
         preparedBatches.ShouldBe(["first"]);
@@ -162,7 +163,7 @@ public class BatchProcessorTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task ProcessAsync_FirstOfRepeatedRequestIdRejected_RejectsRepeat(CancellationToken ct)
+    public async Task RunAsync_FirstOfRepeatedRequestIdRejected_RejectsRepeat(CancellationToken ct)
     {
         var committer = new FakeBatchCommitter();
         var rejection = new InvalidOperationException();
@@ -179,7 +180,7 @@ public class BatchProcessorTests
         var firstRequest = CreateRequest("first", requestId: requestId);
         var repeatedRequest = CreateRequest("repeat", requestId: requestId);
 
-        await batchProcessor.ProcessAsync([firstRequest, repeatedRequest], ct);
+        await RunOneBatchAsync(batchProcessor, [firstRequest, repeatedRequest], ct);
 
         var firstException = await firstRequest.Completion.WaitAsync(ct).ShouldThrowAsync<InvalidOperationException>();
         firstException.ShouldBeSameAs(rejection);
@@ -192,7 +193,7 @@ public class BatchProcessorTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task ProcessAsync_RequestIdRepeatedInLaterBatch_CommitsBoth(CancellationToken ct)
+    public async Task RunAsync_RequestIdRepeatedInLaterBatch_CommitsBoth(CancellationToken ct)
     {
         // The batch processor doesn't make appends idempotent: it only groups requests with the same ID in one batch,
         // so a repeat in a later batch is committed again. Making appends idempotent is up to the policy.
@@ -202,11 +203,67 @@ public class BatchProcessorTests
         var firstRequest = CreateRequest("first", requestId: requestId);
         var repeatedRequest = CreateRequest("repeat", requestId: requestId);
 
-        await batchProcessor.ProcessAsync([firstRequest], ct);
-        await batchProcessor.ProcessAsync([repeatedRequest], ct);
+        var channel = Channel.CreateUnbounded<AppendRequest<string>>();
+        var run = batchProcessor.RunAsync(channel.Reader, ct);
 
-        await Task.WhenAll(firstRequest.Completion, repeatedRequest.Completion).WaitAsync(ct);
+        // The first request commits before the repeat is queued, so the two are in separate batches.
+        channel.Writer.TryWrite(firstRequest).ShouldBeTrue();
+        await firstRequest.Completion.WaitAsync(ct);
+        channel.Writer.TryWrite(repeatedRequest).ShouldBeTrue();
+        channel.Writer.Complete();
+        await run;
+
+        await repeatedRequest.Completion.WaitAsync(ct);
         committer.CommittedValues.ShouldBe(["first", "repeat"]);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task RunAsync_CanceledDuringCommit_FailsReadRequestsOnly(CancellationToken ct)
+    {
+        var committing = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var policy = new CallbackAppenderPolicy<string>(
+            onBatchCommitting: async (_, token) =>
+            {
+                committing.SetResult();
+                await Task.Delay(Timeout.Infinite, token);
+            });
+
+        var batchProcessor = CreateBatchProcessor(new FakeBatchCommitter(), policy);
+        var channel = Channel.CreateUnbounded<AppendRequest<string>>();
+        var readRequest = CreateRequest("read");
+        var queuedRequest = CreateRequest("queued");
+        using var stopCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+        channel.Writer.TryWrite(readRequest).ShouldBeTrue();
+        var run = batchProcessor.RunAsync(channel.Reader, stopCts.Token);
+
+        // The processor has read the first request and is committing it when the second is queued.
+        await committing.Task.WaitAsync(ct);
+        channel.Writer.TryWrite(queuedRequest).ShouldBeTrue();
+        await stopCts.CancelAsync();
+
+        await run.ShouldThrowAsync<OperationCanceledException>();
+        readRequest.IsCompleted.ShouldBeTrue();
+        await readRequest.Completion.ShouldThrowAsync<OperationCanceledException>();
+        queuedRequest.IsCompleted.ShouldBeFalse();
+    }
+
+    // Queues the requests before the processor runs, so that it reads them as one batch, and completes the channel, so
+    // that the processor returns after committing them.
+    private static async Task RunOneBatchAsync(
+        BatchProcessor<string> batchProcessor,
+        AppendRequest<string>[] requests,
+        CancellationToken ct)
+    {
+        var channel = Channel.CreateUnbounded<AppendRequest<string>>();
+
+        foreach (var request in requests)
+            channel.Writer.TryWrite(request).ShouldBeTrue();
+
+        channel.Writer.Complete();
+        await batchProcessor.RunAsync(channel.Reader, ct);
     }
 
     private static BatchProcessor<string> CreateBatchProcessor(
