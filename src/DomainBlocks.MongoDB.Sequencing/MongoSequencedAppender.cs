@@ -57,7 +57,6 @@ public sealed class MongoSequencedAppender<TDocument, TContext> : IMongoSequence
         _runAppendLoopTask = RunAppendLoopAsync(_stopCts.Token);
     }
 
-
     public async Task AppendAsync(
         IEnumerable<TDocument> documents,
         TContext context,
