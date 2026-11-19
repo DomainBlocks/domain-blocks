@@ -110,7 +110,7 @@ internal sealed class BatchProcessor<TContext>(
     /// </summary>
     private async Task ProcessAsync(
         List<AppendRequest<TContext>> batch,
-        ChannelReader<AppendRequest<TContext>> queue,
+        ChannelReader<AppendRequest<TContext>> channel,
         CancellationToken cancellationToken)
     {
         _conflictRetryCounts.Clear();
@@ -145,18 +145,18 @@ internal sealed class BatchProcessor<TContext>(
                     // Commits serialize on the sequence document, so under contention throughput depends on how many
                     // requests each commit carries: the requests queued during the attempt join the retry. The aborted
                     // commit wrote nothing, so without them the preparation still holds.
-                    isPrepared = ReadQueued(batch, queue) == 0;
+                    isPrepared = ReadQueued(batch, channel) == 0;
                     break;
             }
         }
     }
 
     // Returns the number of requests read.
-    private int ReadQueued(List<AppendRequest<TContext>> batch, ChannelReader<AppendRequest<TContext>> queue)
+    private int ReadQueued(List<AppendRequest<TContext>> batch, ChannelReader<AppendRequest<TContext>> channel)
     {
         var count = batch.Count;
 
-        while (batch.Count < options.MaxBatchSize && queue.TryRead(out var request))
+        while (batch.Count < options.MaxBatchSize && channel.TryRead(out var request))
             batch.Add(request);
 
         return batch.Count - count;
