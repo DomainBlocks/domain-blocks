@@ -122,6 +122,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
         CancellationToken cancellationToken = default)
     {
         expectedState ??= ExpectedStreamState.Any<StreamPosition>();
+        var isCommitIdGenerated = commitId is null;
         // Version 7 GUIDs are time-ordered, so new commit IDs sort to the end of the commit ID index instead of landing
         // on random pages.
         commitId ??= Guid.CreateVersion7();
@@ -145,7 +146,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
                 { FieldNames.Metadata, x.Metadata ?? BsonNull.Value }
             });
 
-        var context = new AppendContext(commitId.Value, streamId, expectedState.Value);
+        var context = new AppendContext(commitId.Value, isCommitIdGenerated, streamId, expectedState.Value);
         var appendOptions = new DomainBlocks.MongoDB.Sequencing.AppendOptions { Timeout = options.Timeout };
 
         await _sequencedAppender
