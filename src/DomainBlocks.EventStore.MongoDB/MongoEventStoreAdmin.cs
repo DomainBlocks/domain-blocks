@@ -14,6 +14,9 @@ public static class MongoEventStoreAdmin
         CancellationToken cancellationToken = default)
     {
         var db = mongoClient.GetDatabase(options.DatabaseName);
+
+        await CreateEventLogAsync(db, options, cancellationToken).ConfigureAwait(false);
+
         var eventLog = db.GetCollection<EventLogEntry>(options.EventLogCollectionName);
         var builder = Builders<EventLogEntry>.IndexKeys;
 
@@ -39,6 +42,26 @@ public static class MongoEventStoreAdmin
         await eventLog.Indexes.CreateManyAsync(indexModels, cancellationToken).ConfigureAwait(false);
 
         await SeedSequenceAsync(db, options, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static Task CreateEventLogAsync(
+        IMongoDatabase db,
+        MongoEventStoreOptions options,
+        CancellationToken cancellationToken)
+    {
+        var createOptions = new CreateCollectionOptions<EventLogEntry>
+        {
+            // Clustering the log on its position stores events in log order with no separate _id index, which saves
+            // an index write per event appended and lets reads in log order scan the log itself. A collection can be
+            // clustered only when it's created, so the log is created before its indexes, which would otherwise
+            // create it unclustered.
+            ClusteredIndex = new ClusteredIndexOptions<EventLogEntry>
+            {
+                Key = Builders<EventLogEntry>.IndexKeys.Ascending(x => x.Position)
+            }
+        };
+
+        return db.CreateCollectionAsync(options.EventLogCollectionName, createOptions, cancellationToken);
     }
 
     // The appender claims log positions by incrementing a sequence document inside a transaction, and creates the
