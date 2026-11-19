@@ -79,26 +79,24 @@ internal sealed class BatchingScenario : IAsyncDisposable
         Guid commitId,
         CancellationToken ct)
     {
-        return AppendInOneBatchAsync(
-            () => AppendAsync(streamId, expectedState, commitId, ct),
-            () => AppendAsync(streamId, expectedState, commitId, ct),
-            ct);
+        var append = new BatchedAppend(streamId, expectedState, commitId);
+        return AppendInOneBatchAsync(append, append, ct);
     }
 
     /// <summary>
     /// Makes two appends in one batch: both queue up while the policy holds the batch before them.
     /// </summary>
     public async Task<(Task First, Task Second)> AppendInOneBatchAsync(
-        Func<Task> appendFirst,
-        Func<Task> appendSecond,
+        BatchedAppend firstAppend,
+        BatchedAppend secondAppend,
         CancellationToken ct)
     {
         _policy.HoldNextBatch();
         var held = AppendAsync("held", ExpectedStreamState.Any<StreamPosition>(), Guid.NewGuid(), ct);
         await _policy.BatchHeld.WaitAsync(ct);
 
-        var first = appendFirst();
-        var second = appendSecond();
+        var first = AppendAsync(firstAppend.StreamId, firstAppend.ExpectedState, firstAppend.CommitId, ct);
+        var second = AppendAsync(secondAppend.StreamId, secondAppend.ExpectedState, secondAppend.CommitId, ct);
 
         _policy.ReleaseBatch();
         await held;
@@ -117,6 +115,11 @@ internal sealed class BatchingScenario : IAsyncDisposable
         await _eventStore.DisposeAsync();
         await MongoTestEnvironment.MongoClient.DropDatabaseAsync(_options.DatabaseName);
     }
+
+    public sealed record BatchedAppend(
+        string StreamId,
+        ExpectedStreamState<StreamPosition> ExpectedState,
+        Guid? CommitId);
 
     private sealed class HoldingPolicy(IMongoSequencedAppenderPolicy<AppendContext> policy) :
         IMongoSequencedAppenderPolicy<AppendContext>
