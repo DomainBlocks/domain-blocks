@@ -87,8 +87,9 @@ An implementation of `IMongoSequencedAppenderPolicy<TContext>` can be provided t
 points:
 
 - **Before each batch is committed** - runs outside the transaction, before the sequence counter is incremented and
-  documents are inserted. Runs again with the requests that are still pending after a duplicate key conflict, but not
-  when the transaction is retried after a transient error.
+  documents are inserted. Runs again with the requests that are still pending after a duplicate key conflict. After a
+  transient error, such as a write conflict, runs again only if queued requests have joined the batch, and then with
+  the whole batch.
 - **After a duplicate key conflict** - runs outside the transaction, after it has been aborted due to a duplicate key
   conflict on the target collection.
 

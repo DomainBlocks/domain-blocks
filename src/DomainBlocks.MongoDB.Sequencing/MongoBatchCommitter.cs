@@ -68,45 +68,43 @@ internal sealed class MongoBatchCommitter<TDocument> : IBatchCommitter
     {
         var docCount = documents.Count;
 
-        while (true)
+        using var session = await _mongoClient
+            .StartSessionAsync(cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+        session.StartTransaction(MongoBatchCommitter.TransactionOptions);
+
+        try
         {
-            using var session = await _mongoClient
-                .StartSessionAsync(cancellationToken: cancellationToken)
+            var startSeq = await ClaimSequenceAsync(session, docCount, cancellationToken).ConfigureAwait(false);
+
+            for (var i = 0; i < docCount; i++)
+                SetSequenceField(documents[i], _targetFieldPathSegments, startSeq + i);
+
+            await _targetCollection
+                .InsertManyAsync(session, documents, MongoBatchCommitter.InsertManyOptions, cancellationToken)
                 .ConfigureAwait(false);
 
-            session.StartTransaction(MongoBatchCommitter.TransactionOptions);
+            await CommitWithRetryAsync(session, cancellationToken).ConfigureAwait(false);
+            return new CommitResult.Success();
+        }
+        catch (MongoException ex) when (ex.HasErrorLabel(MongoErrorLabels.TransientTransactionError))
+        {
+            await SafeAbortTransactionAsync(session, cancellationToken).ConfigureAwait(false);
+            _logger.LogTrace("Transient transaction error; aborted transaction (size={BatchSize})", docCount);
+            return new CommitResult.TransientError();
+        }
+        catch (MongoBulkWriteException ex) when (ex.WriteErrors.Any(x => x.Code == MongoErrorCodes.DuplicateKey))
+        {
+            await SafeAbortTransactionAsync(session, cancellationToken).ConfigureAwait(false);
 
-            try
-            {
-                var startSeq = await ClaimSequenceAsync(session, docCount, cancellationToken).ConfigureAwait(false);
-
-                for (var i = 0; i < docCount; i++)
-                    SetSequenceField(documents[i], _targetFieldPathSegments, startSeq + i);
-
-                await _targetCollection
-                    .InsertManyAsync(session, documents, MongoBatchCommitter.InsertManyOptions, cancellationToken)
-                    .ConfigureAwait(false);
-
-                await CommitWithRetryAsync(session, cancellationToken).ConfigureAwait(false);
-                return new CommitResult.Success();
-            }
-            catch (MongoException ex) when (ex.HasErrorLabel(MongoErrorLabels.TransientTransactionError))
-            {
-                await SafeAbortTransactionAsync(session, cancellationToken).ConfigureAwait(false);
-                _logger.LogTrace("Transient transaction error; retrying transaction (size={BatchSize})", docCount);
-            }
-            catch (MongoBulkWriteException ex) when (ex.WriteErrors.Any(x => x.Code == MongoErrorCodes.DuplicateKey))
-            {
-                await SafeAbortTransactionAsync(session, cancellationToken).ConfigureAwait(false);
-
-                var firstError = ex.WriteErrors.First(e => e.Code == MongoErrorCodes.DuplicateKey);
-                return new CommitResult.Conflict(firstError.Index, firstError.Message, ex);
-            }
-            catch (Exception)
-            {
-                await SafeAbortTransactionAsync(session, cancellationToken).ConfigureAwait(false);
-                throw;
-            }
+            var firstError = ex.WriteErrors.First(e => e.Code == MongoErrorCodes.DuplicateKey);
+            return new CommitResult.Conflict(firstError.Index, firstError.Message, ex);
+        }
+        catch (Exception)
+        {
+            await SafeAbortTransactionAsync(session, cancellationToken).ConfigureAwait(false);
+            throw;
         }
     }
 

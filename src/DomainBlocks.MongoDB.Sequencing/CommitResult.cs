@@ -12,6 +12,12 @@ internal abstract class CommitResult
     public sealed class Success : CommitResult;
 
     /// <summary>
+    /// Represents a commit that a transient error aborted, such as a write conflict with another commit, so that none
+    /// of the documents were committed and the same commit can be retried.
+    /// </summary>
+    public sealed class TransientError : CommitResult;
+
+    /// <summary>
     /// Represents a commit that a duplicate key aborted, so that none of the documents were committed.
     /// </summary>
     public sealed class Conflict(int documentIndex, string? errorMessage, Exception originatingException) :

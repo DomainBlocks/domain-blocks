@@ -37,8 +37,7 @@ internal sealed class BatchProcessor<TContext>(
             while (await channel.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
             {
                 // Drain what's already queued
-                while (batch.Count < maxBatchSize && channel.TryRead(out var request))
-                    batch.Add(request);
+                ReadQueued(batch, channel);
 
                 // If multiple requests arrived together, more are likely in-flight - wait up to the batching delay for
                 // additional requests to accumulate before committing (Nagle-style coalescing). Short-circuits as soon
@@ -55,8 +54,7 @@ internal sealed class BatchProcessor<TContext>(
                         while (batch.Count < maxBatchSize &&
                                await channel.WaitToReadAsync(delayCts.Token).ConfigureAwait(false))
                         {
-                            while (batch.Count < maxBatchSize && channel.TryRead(out var request))
-                                batch.Add(request);
+                            ReadQueued(batch, channel);
                         }
                     }
                     catch (OperationCanceledException) when (delayCts.IsCancellationRequested)
@@ -78,7 +76,7 @@ internal sealed class BatchProcessor<TContext>(
                 {
                     var start = Stopwatch.GetTimestamp();
 
-                    await ProcessAsync(batch, cancellationToken).ConfigureAwait(false);
+                    await ProcessAsync(batch, channel, cancellationToken).ConfigureAwait(false);
 
                     var elapsed = Stopwatch.GetElapsedTime(start);
 
@@ -105,21 +103,31 @@ internal sealed class BatchProcessor<TContext>(
     }
 
     /// <summary>
-    /// Commits the batch and completes its requests. Removes from the batch the requests that complete before the
-    /// commit, and the repeats of a request ID, which complete with the first. If this method throws, failing the
-    /// requests left in the batch completes every request that hasn't completed.
+    /// Commits the batch and completes its requests, adding queued requests to the batch when a transient error aborts
+    /// a commit. Removes from the batch the requests that complete before the commit, and the repeats of a request ID,
+    /// which complete with the first. If this method throws, failing the requests left in the batch completes every
+    /// request that hasn't completed.
     /// </summary>
-    private async Task ProcessAsync(List<AppendRequest<TContext>> batch, CancellationToken cancellationToken)
+    private async Task ProcessAsync(
+        List<AppendRequest<TContext>> batch,
+        ChannelReader<AppendRequest<TContext>> queue,
+        CancellationToken cancellationToken)
     {
         _conflictRetryCounts.Clear();
+        var isPrepared = false;
 
         while (batch.Count > 0)
         {
-            await PrepareCommitAsync(batch, cancellationToken).ConfigureAwait(false);
+            if (!isPrepared)
+            {
+                await PrepareCommitAsync(batch, cancellationToken).ConfigureAwait(false);
 
-            // The policy may have completed every request.
-            if (batch.Count == 0)
-                return;
+                // The policy may have completed every request.
+                if (batch.Count == 0)
+                    return;
+
+                isPrepared = true;
+            }
 
             var result = await committer.CommitAsync(_documents, cancellationToken).ConfigureAwait(false);
 
@@ -131,9 +139,27 @@ internal sealed class BatchProcessor<TContext>(
                     return;
                 case CommitResult.Conflict conflict:
                     await HandleConflictAsync(batch, conflict, cancellationToken).ConfigureAwait(false);
+                    isPrepared = false;
+                    break;
+                case CommitResult.TransientError:
+                    // Commits serialize on the sequence document, so under contention throughput depends on how many
+                    // requests each commit carries: the requests queued during the attempt join the retry. The aborted
+                    // commit wrote nothing, so without them the preparation still holds.
+                    isPrepared = ReadQueued(batch, queue) == 0;
                     break;
             }
         }
+    }
+
+    // Returns the number of requests read.
+    private int ReadQueued(List<AppendRequest<TContext>> batch, ChannelReader<AppendRequest<TContext>> queue)
+    {
+        var count = batch.Count;
+
+        while (batch.Count < options.MaxBatchSize && queue.TryRead(out var request))
+            batch.Add(request);
+
+        return batch.Count - count;
     }
 
     private async Task PrepareCommitAsync(List<AppendRequest<TContext>> batch, CancellationToken ct)

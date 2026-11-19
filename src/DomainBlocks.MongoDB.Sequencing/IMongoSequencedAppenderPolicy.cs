@@ -8,8 +8,9 @@ public interface IMongoSequencedAppenderPolicy<TContext>
 {
     /// <summary>
     /// Called before each batch is committed, and again with the requests that are still pending after a duplicate key
-    /// conflict. Implementations may inspect and mutate the documents in each append request, and choose to succeed or
-    /// fail individual requests early. Requests not completed here will be committed.
+    /// conflict, or after a transient error such as a write conflict when queued requests have joined the batch.
+    /// Implementations may inspect and mutate the documents in each append request, and choose to succeed or fail
+    /// individual requests early. Requests not completed here will be committed.
     /// </summary>
     Task OnBatchCommittingAsync(IReadOnlyList<AppendRequest<TContext>> batch, CancellationToken cancellationToken);
 

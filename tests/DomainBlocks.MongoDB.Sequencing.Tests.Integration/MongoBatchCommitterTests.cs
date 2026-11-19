@@ -46,6 +46,34 @@ public class MongoBatchCommitterTests : MongoIntegrationTestBase
         (await ReadSequenceAsync(ct)).ShouldBe([0, 1]);
     }
 
+    [Test]
+    [CancelAfter(TimeoutMillis)]
+    public async Task CommitAsync_SequenceHeldByOtherTransaction_ReturnsTransientError(CancellationToken ct)
+    {
+        var committer = CreateCommitter();
+
+        // Creates the sequence document, so that another transaction can hold it.
+        await committer.CommitAsync([CreateDocument("first")], ct);
+
+        using var otherSession = await MongoClient.StartSessionAsync(cancellationToken: ct);
+        otherSession.StartTransaction();
+
+        await MongoClient
+            .GetDatabase(DatabaseName)
+            .GetCollection<BsonDocument>(SequenceNs.CollectionName)
+            .UpdateOneAsync(
+                otherSession,
+                Builders<BsonDocument>.Filter.Eq("_id", SequenceId),
+                Builders<BsonDocument>.Update.Inc(SequenceFieldNames.Next, 1L),
+                cancellationToken: ct);
+
+        // Claiming the sequence conflicts with the other transaction's uncommitted update.
+        var result = await committer.CommitAsync([CreateDocument("second")], ct);
+
+        result.ShouldBeOfType<CommitResult.TransientError>();
+        await otherSession.AbortTransactionAsync(ct);
+    }
+
     private MongoBatchCommitter<TargetDoc> CreateCommitter()
     {
         var logger = MongoTestEnvironment.LoggerFactory.CreateLogger("committer");

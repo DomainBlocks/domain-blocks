@@ -12,6 +12,7 @@ internal sealed class FakeBatchCommitter(params string[] committedValues) : IBat
 
     private readonly List<string> _committedValues = [.. committedValues];
     private readonly List<string> _commitAttempts = [];
+    private readonly Queue<Action?> _abortedAttempts = [];
 
     /// <summary>
     /// Gets the values committed, in order.
@@ -25,10 +26,22 @@ internal sealed class FakeBatchCommitter(params string[] committedValues) : IBat
 
     public static BsonDocument CreateDocument(string value) => new(ValueFieldName, value);
 
+    /// <summary>
+    /// Makes the next commit attempt fail with a transient error, as a write conflict with another commit would, after
+    /// running the given action during the attempt.
+    /// </summary>
+    public void AbortNextAttempt(Action? duringAttempt = null) => _abortedAttempts.Enqueue(duringAttempt);
+
     public Task<CommitResult> CommitAsync(IReadOnlyList<BsonDocument> documents, CancellationToken cancellationToken)
     {
         string[] values = [.. documents.Select(x => x[ValueFieldName].AsString)];
         _commitAttempts.Add(string.Join(", ", values));
+
+        if (_abortedAttempts.TryDequeue(out var duringAttempt))
+        {
+            duringAttempt?.Invoke();
+            return Task.FromResult<CommitResult>(new CommitResult.TransientError());
+        }
 
         for (var i = 0; i < values.Length; i++)
         {
