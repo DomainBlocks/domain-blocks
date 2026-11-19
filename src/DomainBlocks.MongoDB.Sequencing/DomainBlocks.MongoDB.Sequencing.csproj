@@ -5,6 +5,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="DomainBlocks.MongoDB.Sequencing.Tests.Integration"/>
+    <InternalsVisibleTo Include="DomainBlocks.MongoDB.Sequencing.Tests.Unit"/>
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="MongoDB.Driver" />
   </ItemGroup>
 
