@@ -40,11 +40,11 @@ public class BatchProcessorTests
             },
             onConflict: _ => ConflictResolution.Retry);
 
-        var processor = CreateProcessor(committer, policy);
+        var batchProcessor = CreateBatchProcessor(committer, policy);
         var rejected = CreateRequest("rejected");
         var pending = CreateRequest("pending", value: "taken");
 
-        await processor.ProcessAsync([rejected, pending], ct);
+        await batchProcessor.ProcessAsync([rejected, pending], ct);
 
         var exception = await rejected.Completion.WaitAsync(ct).ShouldThrowAsync<InvalidOperationException>();
         exception.ShouldBeSameAs(rejection);
@@ -61,11 +61,11 @@ public class BatchProcessorTests
     {
         var committer = new FakeBatchCommitter(committedValues: ["taken"]);
         var options = new MongoSequencedAppenderOptions { MaxConflictRetries = 2, ConflictRetryDelay = TimeSpan.Zero };
-        var processor = CreateProcessor(committer, DefaultSequencedAppenderPolicy<string>.Shared, options);
+        var batchProcessor = CreateBatchProcessor(committer, DefaultSequencedAppenderPolicy<string>.Shared, options);
         var conflicting = CreateRequest("taken");
         var other = CreateRequest("other");
 
-        await processor.ProcessAsync([conflicting, other], ct);
+        await batchProcessor.ProcessAsync([conflicting, other], ct);
 
         var exception = await conflicting.Completion.WaitAsync(ct).ShouldThrowAsync<AppendConflictException>();
         exception.Message.ShouldBe("Conflict not resolved after 2 retries.");
@@ -80,11 +80,11 @@ public class BatchProcessorTests
         var committer = new FakeBatchCommitter(committedValues: ["taken"]);
         var rejection = new InvalidOperationException();
         var policy = new CallbackAppenderPolicy<string>(onConflict: _ => ConflictResolution.Fail(rejection));
-        var processor = CreateProcessor(committer, policy);
+        var batchProcessor = CreateBatchProcessor(committer, policy);
         var other = CreateRequest("other");
         var conflicting = CreateRequest("taken");
 
-        await processor.ProcessAsync([other, conflicting], ct);
+        await batchProcessor.ProcessAsync([other, conflicting], ct);
 
         await other.Completion.WaitAsync(ct);
         var exception = await conflicting.Completion.WaitAsync(ct).ShouldThrowAsync<InvalidOperationException>();
@@ -98,10 +98,10 @@ public class BatchProcessorTests
     {
         var committer = new FakeBatchCommitter(committedValues: ["taken"]);
         var policy = new CallbackAppenderPolicy<string>(onConflict: _ => ConflictResolution.Fail());
-        var processor = CreateProcessor(committer, policy);
+        var batchProcessor = CreateBatchProcessor(committer, policy);
         var conflicting = CreateRequest("taken");
 
-        await processor.ProcessAsync([conflicting], ct);
+        await batchProcessor.ProcessAsync([conflicting], ct);
 
         var exception = await conflicting.Completion.WaitAsync(ct).ShouldThrowAsync<AppendConflictException>();
         exception.InnerException.ShouldNotBeNull().Message.ShouldBe("Duplicate value 'taken'.");
@@ -121,12 +121,12 @@ public class BatchProcessorTests
                 return Task.CompletedTask;
             });
 
-        var processor = CreateProcessor(committer, policy);
+        var batchProcessor = CreateBatchProcessor(committer, policy);
         var requestId = Guid.NewGuid();
         var first = CreateRequest("first", requestId: requestId);
         var repeat = CreateRequest("repeat", requestId: requestId);
 
-        await processor.ProcessAsync([first, repeat], ct);
+        await batchProcessor.ProcessAsync([first, repeat], ct);
 
         await Task.WhenAll(first.Completion, repeat.Completion).WaitAsync(ct);
         preparedBatches.ShouldBe(["first"]);
@@ -147,12 +147,12 @@ public class BatchProcessorTests
                 return Task.CompletedTask;
             });
 
-        var processor = CreateProcessor(committer, policy);
+        var batchProcessor = CreateBatchProcessor(committer, policy);
         var requestId = Guid.NewGuid();
         var first = CreateRequest("first", requestId: requestId);
         var repeat = CreateRequest("repeat", requestId: requestId);
 
-        await processor.ProcessAsync([first, repeat], ct);
+        await batchProcessor.ProcessAsync([first, repeat], ct);
 
         (await first.Completion.WaitAsync(ct).ShouldThrowAsync<InvalidOperationException>()).ShouldBeSameAs(rejection);
         (await repeat.Completion.WaitAsync(ct).ShouldThrowAsync<InvalidOperationException>()).ShouldBeSameAs(rejection);
@@ -163,22 +163,22 @@ public class BatchProcessorTests
     [CancelAfter(TestTimeoutMillis)]
     public async Task ProcessAsync_RequestIdRepeatedInLaterBatch_CommitsBoth(CancellationToken ct)
     {
-        // The processor doesn't make appends idempotent: it only groups requests with the same ID in one batch, so a
-        // repeat in a later batch is committed again. Making appends idempotent is up to the policy.
+        // The batch processor doesn't make appends idempotent: it only groups requests with the same ID in one batch,
+        // so a repeat in a later batch is committed again. Making appends idempotent is up to the policy.
         var committer = new FakeBatchCommitter();
-        var processor = CreateProcessor(committer, DefaultSequencedAppenderPolicy<string>.Shared);
+        var batchProcessor = CreateBatchProcessor(committer, DefaultSequencedAppenderPolicy<string>.Shared);
         var requestId = Guid.NewGuid();
         var first = CreateRequest("first", requestId: requestId);
         var repeat = CreateRequest("repeat", requestId: requestId);
 
-        await processor.ProcessAsync([first], ct);
-        await processor.ProcessAsync([repeat], ct);
+        await batchProcessor.ProcessAsync([first], ct);
+        await batchProcessor.ProcessAsync([repeat], ct);
 
         await Task.WhenAll(first.Completion, repeat.Completion).WaitAsync(ct);
         committer.CommittedValues.ShouldBe(["first", "repeat"]);
     }
 
-    private static BatchProcessor<string> CreateProcessor(
+    private static BatchProcessor<string> CreateBatchProcessor(
         IBatchCommitter committer,
         IMongoSequencedAppenderPolicy<string> policy,
         MongoSequencedAppenderOptions? options = null)
